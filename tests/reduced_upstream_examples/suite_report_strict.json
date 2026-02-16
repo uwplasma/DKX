@@ -48,6 +48,7 @@
     "input_path": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/reduced_upstream_examples/filteredW7XNetCDF_2species_magneticDrifts_noEr/input.namelist",
     "promoted_input_path": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/reduced_inputs/filteredW7XNetCDF_2species_magneticDrifts_noEr.input.namelist",
     "fortran_h5": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/reduced_upstream_examples/filteredW7XNetCDF_2species_magneticDrifts_noEr/fortran_run/sfincsOutput.h5",
-    "jax_h5": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/reduced_upstream_examples/filteredW7XNetCDF_2species_magneticDrifts_noEr/sfincsOutput_jax.h5"
+    "jax_h5": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/reduced_upstream_examples/filteredW7XNetCDF_2species_magneticDrifts_noEr/sfincsOutput_jax.h5",
+    "compare_mode": "strict"
   }
 ]
