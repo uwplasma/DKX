@@ -149,6 +149,36 @@ def _rhs1_pas_dkes_gpu_xblock_allowed(
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
 
 
+def _rhs1_pas_tokamak_gpu_theta_allowed(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+) -> bool:
+    if not has_pas or has_fp:
+        return False
+    if str(backend).strip().lower() == "cpu":
+        return False
+    if not tokamak_like or not has_collisionless:
+        return False
+    if float(er_abs) <= float(schur_er_min):
+        return False
+    if has_magdrift:
+        return False
+    theta_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_MAX", "").strip()
+    try:
+        theta_max = int(theta_max_env) if theta_max_env else 8000
+    except ValueError:
+        theta_max = 8000
+    return int(active_size) <= max(1, int(theta_max))
+
+
 _PRECOND_SIZE_HINT: int | None = None
 
 
@@ -11178,6 +11208,28 @@ def solve_v3_full_system_linear_gmres(
                             and int(op.total_size) < fp_xmg_max
                         ):
                             rhs1_precond_kind = "xmg"
+                        elif _rhs1_pas_tokamak_gpu_theta_allowed(
+                            has_pas=op.fblock.pas is not None,
+                            has_fp=op.fblock.fp is not None,
+                            backend=jax.default_backend(),
+                            tokamak_like=tokamak_like,
+                            active_size=int(active_size),
+                            er_abs=float(er_abs),
+                            schur_er_min=float(schur_er_min),
+                            has_magdrift=(
+                                op.fblock.magdrift_theta is not None
+                                or op.fblock.magdrift_zeta is not None
+                                or op.fblock.magdrift_xidot is not None
+                            ),
+                            has_collisionless=op.fblock.collisionless is not None,
+                        ):
+                            rhs1_precond_kind = "pas_tokamak_theta"
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: GPU PAS tokamak "
+                                    "auto -> pas_tokamak_theta preconditioner",
+                                )
                         elif op.fblock.pas is not None and int(op.total_size) >= pas_xmg_min:
                             # Large constrained PAS+Er systems need stronger x/L coupling than
                             # collision/point/xmg alone, but a global Schur setup can dominate
