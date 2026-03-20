@@ -271,6 +271,44 @@ def test_pas_tokamak_gpu_theta_allowed_only_for_small_er_tokamak_pas() -> None:
         has_magdrift=False,
         has_collisionless=True,
     )
+
+
+def test_gpu_pas_tokamak_er_path_does_not_promote_to_pas_schur(tmp_path: Path, monkeypatch) -> None:
+    input_path = (
+        Path(__file__).parent
+        / "reduced_inputs"
+        / "tokamak_1species_PASCollisions_withEr_fullTrajectories.input.namelist"
+    )
+    out_path = tmp_path / "sfincsOutput_jax.h5"
+
+    txt = input_path.read_text()
+    txt = _patch_resolution_block(txt, ntheta=9, nzeta=1, nxi=11, nx=2, solver_tol=1e-6)
+    txt = _patch_export_block(txt)
+    patched = tmp_path / "input_tokamak_pas_gpu.namelist"
+    patched.write_text(txt)
+
+    logs: list[str] = []
+
+    def emit(_level: int, msg: str) -> None:
+        logs.append(msg)
+
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SOLVE_METHOD", "incremental")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF", "0")
+    monkeypatch.setattr(v3_driver.jax, "default_backend", lambda: "gpu")
+
+    write_sfincs_jax_output_h5(
+        input_namelist=patched,
+        output_path=out_path,
+        compute_solution=True,
+        emit=emit,
+        verbose=True,
+    )
+
+    joined = "\n".join(logs)
+    assert "GPU PAS tokamak auto -> pas_tokamak_theta preconditioner" in joined
+    assert "building RHSMode=1 preconditioner=pas_schur" not in joined
     assert not v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
         has_fp=False,
