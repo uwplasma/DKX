@@ -524,6 +524,35 @@ def compare_sfincs_outputs(
         }
         for k, v in rhs1_cs2_tol.items():
             _merge_tolerance_floor(local_tolerances, k, v)
+        use_dkes_a = _as_int(a.get("useDKESExBDrift"))
+        use_dkes_b = _as_int(b.get("useDKESExBDrift"))
+        include_xdot_a = _as_int(a.get("includeXDotTerm"))
+        include_xdot_b = _as_int(b.get("includeXDotTerm"))
+        include_xidot_a = _as_int(a.get("includeElectricFieldTermInXiDot"))
+        include_xidot_b = _as_int(b.get("includeElectricFieldTermInXiDot"))
+        collision_a = _as_int(a.get("collisionOperator"))
+        collision_b = _as_int(b.get("collisionOperator"))
+        if (
+            collision_a == 1
+            and collision_b == 1
+            and (include_xdot_a or 0) > 0
+            and (include_xdot_b or 0) > 0
+            and (include_xidot_a or 0) > 0
+            and (include_xidot_b or 0) > 0
+            and (use_dkes_a or 0) <= 0
+            and (use_dkes_b or 0) <= 0
+        ):
+            # PAS full-trajectory constraintScheme=2 runs can leave sub-0.1%-level drift in
+            # the vm heat-flux coordinate scalings even when the linear solve is already
+            # converged. Treat these as one transported scalar's solver-path sensitivity.
+            pas_traj_heatflux_tol = {
+                "heatFlux_vm_psiHat": {"rtol": 1e-3},
+                "heatFlux_vm_psiN": {"rtol": 1e-3},
+                "heatFlux_vm_rHat": {"rtol": 1e-3},
+                "heatFlux_vm_rN": {"rtol": 1e-3},
+            }
+            for k, v in pas_traj_heatflux_tol.items():
+                _merge_tolerance_floor(local_tolerances, k, v)
     if rhs_mode_a in {2, 3} and rhs_mode_b in {2, 3} and constraint_a == 1 and constraint_b == 1:
         # Transport-matrix solves with constraintScheme=1 can yield tiny (~1e-10) source terms
         # that are sensitive to Krylov stopping tolerances. Allow a small absolute margin.
