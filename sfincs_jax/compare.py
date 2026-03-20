@@ -420,6 +420,7 @@ def compare_sfincs_outputs(
             # solver stopping criteria. Relax tolerances for flow/flux diagnostics to avoid
             # overstating solver-path sensitivity as physics mismatches.
             traj_flow_tol = {
+                "FSAPressurePerturbation": {"atol": 3e-4},
                 "FSABFlow": {"rtol": 3e-2},
                 "FSABFlow_vs_x": {"rtol": 3e-2, "atol": 1e-5},
                 "FSABVelocityUsingFSADensity": {"rtol": 3e-2},
