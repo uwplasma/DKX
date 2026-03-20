@@ -305,9 +305,14 @@ def _stage_reference_fortran_artifacts(
         ref_case_dir / "last_success" / "sfincs_fortran.log",
         ref_case_dir / "fortran_run" / "sfincs.log",
     )
+    # Prefer the input that was actually used to produce the staged H5 artifact.
+    # Suite roots often keep a promoted `input.namelist` at the case root while the
+    # frozen Fortran artifact under `fortran_run/` was produced at a different
+    # reduced resolution. Using the root input here can stage an H5/input pair with
+    # mismatched grids and generate false geometry mismatches.
     input_candidates = (
-        ref_case_dir / "input.namelist",
         ref_case_dir / "fortran_run" / "input.namelist",
+        ref_case_dir / "input.namelist",
     )
     ref_h5 = next((path for path in h5_candidates if path.exists()), None)
     ref_log = next((path for path in log_candidates if path.exists()), None)
