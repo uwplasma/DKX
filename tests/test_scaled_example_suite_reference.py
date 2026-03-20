@@ -86,6 +86,43 @@ def test_stage_reference_fortran_artifacts_reuses_reference_resolution(tmp_path:
     assert (tmp_path / "out" / "fortran_run" / "input.namelist").read_text(encoding="utf-8") == text
 
 
+def test_stage_reference_fortran_artifacts_prefers_fortran_input_over_case_root_input(tmp_path: Path) -> None:
+    case_name = "tokamak_case"
+    ref_root = tmp_path / "reference"
+    case_root = ref_root / case_name
+    (case_root / "fortran_run").mkdir(parents=True)
+    (case_root / "fortran_run" / "sfincsOutput.h5").write_text("fortran-h5", encoding="utf-8")
+    (case_root / "fortran_run" / "input.namelist").write_text(
+        "&general\n/\n&resolutionParameters\n  NTHETA = 19\n  NZETA = 1\n  NX = 7\n  NXI = 39\n/\n",
+        encoding="utf-8",
+    )
+    (case_root / "input.namelist").write_text(
+        "&general\n/\n&resolutionParameters\n  NTHETA = 21\n  NZETA = 1\n  NX = 8\n  NXI = 40\n/\n",
+        encoding="utf-8",
+    )
+
+    case_input = tmp_path / "input.namelist"
+    case_input.write_text(
+        "&general\n/\n&resolutionParameters\n  NTHETA = 21\n  NZETA = 1\n  NX = 8\n  NXI = 40\n/\n",
+        encoding="utf-8",
+    )
+
+    staged, effective_input = _stage_reference_fortran_artifacts(
+        case_name=case_name,
+        case_input=case_input,
+        case_out_dir=tmp_path / "out",
+        reference_results_root=ref_root,
+    )
+
+    assert staged is True
+    assert effective_input != case_input
+    text = effective_input.read_text(encoding="utf-8")
+    assert "  NTHETA = 19" in text
+    assert "  NX = 7" in text
+    assert "  NXI = 39" in text
+    assert (tmp_path / "out" / "fortran_run" / "input.namelist").read_text(encoding="utf-8") == text
+
+
 def _case_result(case: str, *, status: str = "parity_ok", strict_mismatches: int = 0) -> CaseResult:
     return CaseResult(
         case=case,
