@@ -349,7 +349,7 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 ## 14) Roadmap
 
 ### 14.1 Short-term (next 1-3 weeks)
-- [~] Ensure all reduced-suite rows are complete for CPU and GPU lanes (no missing runtime/memory cells).
+- [~] Ensure the runtime-windowed full example-suite audit is complete for CPU and GPU lanes against upstream-reference resolutions (CPU merged root now complete; GPU lane still pending).
 - [~] Replace blind global example-suite downscaling with original-reference, Fortran-runtime-window benchmarking so tiny Fortran rows are not artifacts of over-reduction.
 - [ ] Re-run additional high-resolution example on CPU+GPU and integrate into comparison reporting.
 - [ ] Close remaining worst runtime/memory offenders (especially PAS-heavy cases) while preserving tolerances.
@@ -422,6 +422,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-03-20
+- Scope: Close the remaining CPU runtime-windowed example-suite parity gaps on the fast explicit branch, repair the interrupted subset reruns, merge the CPU artifacts into one `39/39` practical-parity report, and refresh the README fast-branch audit from that merged CPU root.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/io.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/compare.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_phi1_history_alignment.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_compare_reference_corruption.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_phi1_history_alignment.py`; `pytest -q tests/test_compare_reference_corruption.py`; `python -m py_compile sfincs_jax/io.py sfincs_jax/compare.py tests/test_phi1_history_alignment.py tests/test_compare_reference_corruption.py`; direct CPU parity rechecks for `tokamak_1species_PASCollisions_noEr_withQN`, `monoenergetic_geometryScheme1`, `HSX_FPCollisions_DKESTrajectories`, and `HSX_FPCollisions_fullTrajectories`; merged CPU runtime-windowed root `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_cpu_rtwindow_v4_merged_final`; `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_fast_cpu_rtwindow_v4_merged_final`.
+- Runtime/memory delta: the merged CPU runtime-windowed example audit is now `39/39` `parity_ok` in practical mode. The largest runtime offenders in that merged root are `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (`342.142s`), `HSX_PASCollisions_DKESTrajectories` (`177.111s`), and `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`111.560s`). The largest memory offenders are `monoenergetic_geometryScheme5_ASCII` (`2663.0 MB`), `geometryScheme4_2species_PAS_noEr` (`1995.6 MB`), and `tokamak_2species_PASCollisions_noEr` (`1943.6 MB`).
+- Remaining risks: the merged CPU root still has one strict-only survivor, `HSX_PASCollisions_fullTrajectories`, with `4/193` strict heat-flux deltas while practical parity is clean. The matching frozen-reference GPU lane and the final CPU+GPU artifact refresh are still pending.
+- Next actions: rerun the matching GPU lane against the frozen CPU reference flow, decide whether the strict-only `HSX_PASCollisions_fullTrajectories` heat-flux deltas need a physics/solver change or just documentation, and then regenerate the fast-branch audit from the final CPU+GPU artifact set.
 
 ### 2026-03-14
 - Scope: Close the remaining CPU HSX full-FP blocker by preferring a sparse-LU-preconditioned GMRES rescue over immediate direct LU in the RHSMode=1 full-FP `constraintScheme=1` CPU path, and document the remaining VMEC full-FP FSA-moment solver-path sensitivity in the generic compare floors.
