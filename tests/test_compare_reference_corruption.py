@@ -207,6 +207,38 @@ def test_compare_applies_transport_momentum_flux_floor(tmp_path: Path) -> None:
     assert results[0].ok, results
 
 
+def test_compare_applies_rhsmode3_constraint2_sources_floor(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_transport_sources.h5"
+    jax_path = tmp_path / "jax_transport_sources.h5"
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=3,
+        constraint_scheme=2,
+        geometry_scheme=1,
+        fields={"sources": np.asarray([[[-8.11042861e-15, 1.85079290e-09]]], dtype=np.float64)},
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=3,
+        constraint_scheme=2,
+        geometry_scheme=1,
+        fields={"sources": np.asarray([[[1.57713320e-19, -1.53522989e-14]]], dtype=np.float64)},
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=["sources"],
+        rtol=5.0e-4,
+        atol=1.0e-9,
+        tolerances=None,
+    )
+
+    assert len(results) == 1
+    assert results[0].ok, results
+
+
 def test_compare_applies_rhs1_fsabflow_vs_x_floor(tmp_path: Path) -> None:
     ref_path = tmp_path / "fortran_rhs1_flow.h5"
     jax_path = tmp_path / "jax_rhs1_flow.h5"
