@@ -185,3 +185,42 @@ def test_pas_auto_strong_retry_skips_after_strong_base(tmp_path: Path, monkeypat
         target=1.0,
         ratio=10.0,
     )
+
+
+def test_pas_dkes_gpu_xblock_allowed_only_for_moderate_gpu_blocks() -> None:
+    assert v3_driver._rhs1_pas_dkes_gpu_xblock_allowed(
+        has_pas=True,
+        use_dkes=True,
+        backend="gpu",
+        n_theta=9,
+        n_zeta=11,
+        max_l=21,
+        xblock_tz_limit=2500,
+    )
+    assert not v3_driver._rhs1_pas_dkes_gpu_xblock_allowed(
+        has_pas=True,
+        use_dkes=True,
+        backend="cpu",
+        n_theta=9,
+        n_zeta=11,
+        max_l=21,
+        xblock_tz_limit=2500,
+    )
+    assert not v3_driver._rhs1_pas_dkes_gpu_xblock_allowed(
+        has_pas=True,
+        use_dkes=True,
+        backend="gpu",
+        n_theta=17,
+        n_zeta=23,
+        max_l=36,
+        xblock_tz_limit=2500,
+    )
+    assert not v3_driver._rhs1_pas_dkes_gpu_xblock_allowed(
+        has_pas=False,
+        use_dkes=True,
+        backend="gpu",
+        n_theta=9,
+        n_zeta=11,
+        max_l=21,
+        xblock_tz_limit=2500,
+    )

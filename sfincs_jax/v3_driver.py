@@ -128,6 +128,27 @@ def _pas_auto_skip_strong_retry(
     return float(residual_norm) <= float(target) * float(ratio)
 
 
+def _rhs1_pas_dkes_gpu_xblock_allowed(
+    *,
+    has_pas: bool,
+    use_dkes: bool,
+    backend: str,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    if not has_pas or not use_dkes:
+        return False
+    if str(backend).strip().lower() == "cpu":
+        return False
+    if int(n_theta) <= 1:
+        return False
+    if int(xblock_tz_limit) <= 0:
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
 _PRECOND_SIZE_HINT: int | None = None
 
 
@@ -11058,6 +11079,11 @@ def solve_v3_full_system_linear_gmres(
                     schur_er_min = float(schur_er_env) if schur_er_env else 1.0e-12
                 except ValueError:
                     schur_er_min = 1.0e-12
+                pas_dkes_gpu_xblock_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_XBLOCK_TZ_MAX", "").strip()
+                try:
+                    pas_dkes_gpu_xblock_max = int(pas_dkes_gpu_xblock_env) if pas_dkes_gpu_xblock_env else 2500
+                except ValueError:
+                    pas_dkes_gpu_xblock_max = 2500
                 pas_xdiag_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_XDIAG_MIN", "").strip()
                 try:
                     pas_xdiag_min = int(pas_xdiag_env) if pas_xdiag_env else 1000000000
@@ -11222,6 +11248,22 @@ def solve_v3_full_system_linear_gmres(
                                 1,
                                 "solve_v3_full_system_linear_gmres: sharded PAS near-zero-Er "
                                 "schur_auto -> xmg preconditioner",
+                            )
+                    elif _rhs1_pas_dkes_gpu_xblock_allowed(
+                        has_pas=op.fblock.pas is not None,
+                        use_dkes=bool(use_dkes),
+                        backend=jax.default_backend(),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        max_l=int(max_l),
+                        xblock_tz_limit=max(int(xblock_tz_max), int(pas_dkes_gpu_xblock_max)),
+                    ):
+                        rhs1_precond_kind = "xblock_tz"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: GPU PAS DKES "
+                                "schur_auto -> xblock_tz preconditioner",
                             )
                     else:
                         rhs1_precond_kind = "schur"
