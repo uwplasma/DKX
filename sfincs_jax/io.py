@@ -8,7 +8,7 @@ import shutil
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 import h5py
 import numpy as np
@@ -123,6 +123,40 @@ def _select_phi1_newton_linear_solve_method(
     if env_override in {"dense", "incremental", "batched", "sparse_direct"}:
         method = env_override
     return method
+
+
+def _align_phi1_history_for_output(
+    *,
+    history: Sequence[Any],
+    result_x: Any,
+    x0_state: Any,
+    use_frozen_linearization: bool,
+    min_iters: int,
+    n_newton: int,
+) -> list[Any]:
+    """Return the nonlinear-state history used for output diagnostics/H5.
+
+    The Newton solver history is defined in terms of accepted iterates, excluding the
+    initial guess. Frozen-linearization paths may still prepend `x0` temporarily for
+    debugging or fixture-shape control; when aligning to the recorded Newton count,
+    keep the most recent accepted iterates so one-step converged runs do not regress
+    to the initial state in output diagnostics.
+    """
+
+    xs = list(history) if history else [result_x]
+    if use_frozen_linearization and x0_state is not None:
+        xs = [x0_state, *xs]
+
+    if min_iters > 0:
+        while len(xs) < int(min_iters):
+            xs.append(xs[-1])
+
+    n_newton_use = max(1, int(n_newton))
+    if len(xs) > n_newton_use:
+        xs = xs[-n_newton_use:]
+    elif len(xs) < n_newton_use:
+        xs.extend([xs[-1]] * (n_newton_use - len(xs)))
+    return xs
 
 
 def _output_cache_dir() -> Path | None:
@@ -2659,12 +2693,10 @@ def write_sfincs_jax_output_h5(
             )
             _mark("rhs1_solve_done")
             xs = x_hist if x_hist else [result.x]
-            if use_frozen_linearization:
-                x0_diag = x0_state if x0_state is not None else jnp.zeros_like(result.x)
-                xs = [jnp.asarray(x0_diag, dtype=jnp.float64), *xs]
             # Optional override: force a minimum number of recorded nonlinear iterates.
             # By default keep the naturally accepted-iterate history, which aligns
             # better with upstream SNES output dimensionality across reduced examples.
+            min_iters = 0
             if use_frozen_linearization:
                 min_iters_env = os.environ.get("SFINCS_JAX_PHI1_MIN_ITERS", "").strip()
                 # For QN-only runs (includePhi1InKineticEquation=false), some v3 fixtures
@@ -2676,16 +2708,18 @@ def write_sfincs_jax_output_h5(
                         min_iters = max(0, int(min_iters_env))
                     except ValueError:
                         min_iters = 1
-                if min_iters > 0:
-                    while len(xs) < min_iters:
-                        xs.append(xs[-1])
-            # Match v3's Newton-iteration axis length: use the recorded Newton count and
-            # pad/trim the accepted-iterate list accordingly so diagnostics align.
-            n_newton = max(1, int(getattr(result, "n_newton", 1)))
-            if len(xs) > n_newton:
-                xs = xs[:n_newton]
-            elif len(xs) < n_newton:
-                xs.extend([xs[-1]] * (n_newton - len(xs)))
+            # Match v3's Newton-iteration axis length while preserving the accepted iterate
+            # sequence used by the nonlinear solver. Frozen-linearization paths may
+            # temporarily prepend x0, so align on the tail rather than the prefix.
+            x0_diag = x0_state if x0_state is not None else jnp.zeros_like(result.x)
+            xs = _align_phi1_history_for_output(
+                history=xs,
+                result_x=result.x,
+                x0_state=jnp.asarray(x0_diag, dtype=jnp.float64),
+                use_frozen_linearization=use_frozen_linearization,
+                min_iters=min_iters,
+                n_newton=int(getattr(result, "n_newton", 1)),
+            )
         else:
             _mark("rhs1_solve_start")
             result = solve_v3_full_system_linear_gmres(
