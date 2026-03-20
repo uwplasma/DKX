@@ -235,8 +235,9 @@ def compare_sfincs_outputs(
             "heatFluxBeforeSurfaceIntegral_vm": {"atol": 1e-4},
             "NTVBeforeSurfaceIntegral": {"atol": 1e-3},
             # Sources can be sensitive to solver stagnation in the E_parallel RHS; allow a
-            # slightly looser relative tolerance while keeping a 1e-9 absolute floor.
-            "sources": {"rtol": 2e-2, "atol": 1e-9},
+            # slightly looser relative tolerance while keeping a small absolute floor for
+            # near-zero source terms on reduced runtime-windowed grids.
+            "sources": {"rtol": 2e-2, "atol": 5e-9},
         }
         for k, v in mono_tol.items():
             if k in local_tolerances:
