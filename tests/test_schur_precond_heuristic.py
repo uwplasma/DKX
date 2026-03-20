@@ -224,3 +224,61 @@ def test_pas_dkes_gpu_xblock_allowed_only_for_moderate_gpu_blocks() -> None:
         max_l=21,
         xblock_tz_limit=2500,
     )
+
+
+def test_pas_tokamak_gpu_theta_allowed_only_for_small_er_tokamak_pas() -> None:
+    assert v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+    )
+    assert not v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=True,
+        has_fp=False,
+        backend="cpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+    )
+    assert not v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=True,
+        has_fp=True,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+    )
+    assert not v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=12000,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+    )
+    assert not v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=0.0,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+    )
