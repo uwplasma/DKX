@@ -11557,6 +11557,21 @@ def solve_v3_full_system_linear_gmres(
         and op.fblock.fp is None
         and (not _pas_tz_preconditioner_applicable(op))
         and (not _pas_tokamak_theta_preconditioner_applicable(op))
+        and (not _rhs1_pas_tokamak_gpu_theta_allowed(
+            has_pas=op.fblock.pas is not None,
+            has_fp=op.fblock.fp is not None,
+            backend=jax.default_backend(),
+            tokamak_like=tokamak_like,
+            active_size=int(active_size),
+            er_abs=float(er_abs),
+            schur_er_min=float(schur_er_min),
+            has_magdrift=(
+                op.fblock.magdrift_theta is not None
+                or op.fblock.magdrift_zeta is not None
+                or op.fblock.magdrift_xidot is not None
+            ),
+            has_collisionless=op.fblock.collisionless is not None,
+        ))
     ):
         rhs1_precond_kind = "pas_schur"
     if (
