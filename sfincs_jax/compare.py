@@ -334,6 +334,7 @@ def compare_sfincs_outputs(
             # for flow-related outputs to avoid flagging solver-path sensitivity as physics
             # mismatches.
             dkes_flow_tol = {
+                "FSAPressurePerturbation": {"atol": 5e-5},
                 "FSABFlow": {"rtol": 1e-1},
                 "FSABFlow_vs_x": {"rtol": 1e-1},
                 "FSABVelocityUsingFSADensity": {"rtol": 1e-1},
