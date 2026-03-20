@@ -355,6 +355,63 @@ def test_compare_applies_rhs1_fulltraj_fp_fsa_pressure_floor(tmp_path: Path) -> 
     assert all(result.ok for result in results), results
 
 
+def test_compare_applies_rhs1_fulltraj_pas_heatflux_rtol(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_rhs1_fulltraj_pas.h5"
+    jax_path = tmp_path / "jax_rhs1_fulltraj_pas.h5"
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        geometry_scheme=11,
+        collision_operator=1,
+        fields={
+            "useDKESExBDrift": np.asarray(0, dtype=np.int32),
+            "includeXDotTerm": np.asarray(1, dtype=np.int32),
+            "includeElectricFieldTermInXiDot": np.asarray(1, dtype=np.int32),
+            "heatFlux_vm_psiHat": np.asarray([[8.8089e-04], [1.5274e-04]], dtype=np.float64),
+            "heatFlux_vm_psiN": np.asarray([[1.4041302e-01], [2.434723e-02]], dtype=np.float64),
+            "heatFlux_vm_rHat": np.asarray([[3.757115e-02], [6.51473e-03]], dtype=np.float64),
+            "heatFlux_vm_rN": np.asarray([[3.0922759e-01], [5.361920e-02]], dtype=np.float64),
+        },
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        geometry_scheme=11,
+        collision_operator=1,
+        fields={
+            "useDKESExBDrift": np.asarray(0, dtype=np.int32),
+            "includeXDotTerm": np.asarray(1, dtype=np.int32),
+            "includeElectricFieldTermInXiDot": np.asarray(1, dtype=np.int32),
+            "heatFlux_vm_psiHat": np.asarray([[8.8089150667321e-04], [1.5289160356812458e-04]], dtype=np.float64),
+            "heatFlux_vm_psiN": np.asarray([[1.40413260162031e-01], [2.4371395439945133e-02]], dtype=np.float64),
+            "heatFlux_vm_rHat": np.asarray([[3.75712142615942e-02], [6.521196091610801e-03]], dtype=np.float64),
+            "heatFlux_vm_rN": np.asarray([[3.0922811890201e-01], [5.367241886099425e-02]], dtype=np.float64),
+        },
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=[
+            "heatFlux_vm_psiHat",
+            "heatFlux_vm_psiN",
+            "heatFlux_vm_rHat",
+            "heatFlux_vm_rN",
+            "useDKESExBDrift",
+            "includeXDotTerm",
+            "includeElectricFieldTermInXiDot",
+        ],
+        rtol=5.0e-4,
+        atol=1.0e-9,
+        tolerances=None,
+    )
+
+    assert all(result.ok for result in results), results
+
+
 def test_compare_applies_rhs1_vmec_fp_constraint1_fsa_floors(tmp_path: Path) -> None:
     ref_path = tmp_path / "fortran_rhs1_vmec_fp.h5"
     jax_path = tmp_path / "jax_rhs1_vmec_fp.h5"
