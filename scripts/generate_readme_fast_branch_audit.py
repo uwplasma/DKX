@@ -10,6 +10,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 README = REPO_ROOT / "README.md"
 DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_fast_cpu_v1"
+DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_fast_gpu_full_v2"
 BASELINE_REPORT = REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_v4" / "suite_report.json"
 EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
 EXTRA_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
@@ -96,6 +97,20 @@ def _status_counts(rows: list[dict[str, object]], prefix: str) -> Counter[str]:
     return counts
 
 
+def _strict_status_counts(rows: list[dict[str, object]]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for row in rows:
+        strict_mismatch = int(row.get("strict_n_mismatch_common", 0))
+        strict_common = int(row.get("strict_n_common_keys", 0))
+        strict_status = "parity_ok"
+        if strict_common > 0 and strict_mismatch > 0:
+            strict_status = "parity_mismatch"
+        elif row.get("status") not in {"parity_ok", "parity_mismatch"}:
+            strict_status = str(row.get("status"))
+        counts[str(strict_status)] += 1
+    return counts
+
+
 def _top_rows(
     rows: list[dict[str, object]],
     *,
@@ -162,6 +177,12 @@ def main() -> int:
         default=BASELINE_REPORT,
         help="Optional baseline report used for improvement summaries.",
     )
+    parser.add_argument(
+        "--gpu-out-root",
+        type=Path,
+        default=DEFAULT_GPU_OUT_ROOT,
+        help="Optional GPU suite output root containing suite_report.json.",
+    )
     args = parser.parse_args()
 
     out_root = Path(args.out_root)
@@ -170,6 +191,9 @@ def main() -> int:
         raise SystemExit(f"Missing report: {report_path}")
     manifest_path = out_root / "run_manifest.json"
     manifest = _load_json(manifest_path) if manifest_path.exists() else {}
+    gpu_out_root = Path(args.gpu_out_root)
+    gpu_report_path = gpu_out_root / "suite_report.json"
+    gpu_rows = list(_load_json(gpu_report_path)) if gpu_report_path.exists() else []
 
     rows = list(_load_json(report_path))
     case_order = _expected_cases()
@@ -177,22 +201,18 @@ def main() -> int:
     rows_by_case = {str(row["case"]): row for row in rows}
     missing_cases = [case for case in case_order if case not in rows_by_case]
 
-    strict_counts: Counter[str] = Counter()
-    for row in rows:
-        strict_mismatch = int(row.get("strict_n_mismatch_common", 0))
-        strict_common = int(row.get("strict_n_common_keys", 0))
-        strict_status = "parity_ok"
-        if strict_common > 0 and strict_mismatch > 0:
-            strict_status = "parity_mismatch"
-        elif row.get("status") not in {"parity_ok", "parity_mismatch"}:
-            strict_status = str(row.get("status"))
-        strict_counts[str(strict_status)] += 1
+    strict_counts = _strict_status_counts(rows)
+    gpu_status_counts = Counter(str(row.get("status", "unknown")) for row in gpu_rows)
+    gpu_strict_counts = _strict_status_counts(gpu_rows)
 
     status_counts = Counter(str(row.get("status", "unknown")) for row in rows)
     mismatches = [row for row in rows if str(row.get("status")) != "parity_ok"]
+    gpu_mismatches = [row for row in gpu_rows if str(row.get("status")) != "parity_ok"]
 
     runtime_top = _top_rows(rows, key="jax_runtime_s")
     memory_top = _top_rows(rows, key="jax_max_rss_mb")
+    gpu_runtime_top = _top_rows(gpu_rows, key="jax_runtime_s")
+    gpu_memory_top = _top_rows(gpu_rows, key="jax_max_rss_mb")
 
     improvements_runtime: list[str] = []
     improvements_memory: list[str] = []
@@ -219,11 +239,23 @@ def main() -> int:
     lines = [
         BEGIN,
         f"Current fast explicit CPU audit comes from `{_repo_rel(out_root)}`.",
+        (
+            f"Matching frozen-reference GPU audit comes from `{_repo_rel(gpu_out_root)}`."
+            if gpu_rows
+            else "Matching frozen-reference GPU audit: not available."
+        ),
         "",
         f"- Recorded cases: `{len(rows)}/{total_cases}`",
         f"- Practical status counts: `{', '.join(f'{k}={status_counts[k]}' for k in sorted(status_counts))}`",
         f"- Strict status counts: `{', '.join(f'{k}={strict_counts[k]}' for k in sorted(strict_counts))}`",
     ]
+    if gpu_rows:
+        lines.append(
+            f"- GPU practical status counts: `{', '.join(f'{k}={gpu_status_counts[k]}' for k in sorted(gpu_status_counts))}`"
+        )
+        lines.append(
+            f"- GPU strict status counts: `{', '.join(f'{k}={gpu_strict_counts[k]}' for k in sorted(gpu_strict_counts))}`"
+        )
     if manifest:
         resolution_policy = manifest.get("resolution_policy")
         scale_factor = manifest.get("scale_factor")
@@ -240,6 +272,13 @@ def main() -> int:
         lines.append(f"- Remaining cases: `{', '.join(missing_cases)}`")
     else:
         lines.append("- Remaining cases: none")
+    cpu_additional = rows_by_case.get("additional_examples")
+    gpu_rows_by_case = {str(row["case"]): row for row in gpu_rows}
+    gpu_additional = gpu_rows_by_case.get("additional_examples")
+    if cpu_additional is not None and gpu_additional is not None:
+        lines.append(
+            f"- Additional example: `{cpu_additional.get('status', '-')}` on CPU and `{gpu_additional.get('status', '-')}` on GPU"
+        )
 
     lines.extend(
         [
@@ -251,6 +290,17 @@ def main() -> int:
             *[_format_row_summary(row, metric_key="jax_max_rss_mb", digits=1) for row in memory_top],
         ]
     )
+    if gpu_rows:
+        lines.extend(
+            [
+                "",
+                "Top GPU runtime offenders:",
+                *[_format_row_summary(row, metric_key="jax_runtime_s", digits=3) for row in gpu_runtime_top],
+                "",
+                "Top GPU memory offenders:",
+                *[_format_row_summary(row, metric_key="jax_max_rss_mb", digits=1) for row in gpu_memory_top],
+            ]
+        )
 
     if mismatches:
         lines.extend(
@@ -258,6 +308,23 @@ def main() -> int:
                 "",
                 "Current mismatches:",
                 *[_format_mismatch(row) for row in mismatches],
+            ]
+        )
+    elif gpu_rows:
+        lines.extend(
+            [
+                "",
+                "Current mismatches:",
+                "- CPU practical mismatches: none",
+                (
+                    "- CPU strict-only survivor: "
+                    f"`{next(row['case'] for row in rows if int(row.get('strict_n_mismatch_common', 0)) > 0)}` "
+                    f"(`{next(int(row.get('strict_n_mismatch_common', 0)) for row in rows if int(row.get('strict_n_mismatch_common', 0)) > 0)}/"
+                    f"{next(int(row.get('strict_n_common_keys', 0)) for row in rows if int(row.get('strict_n_mismatch_common', 0)) > 0)}`)"
+                    if any(int(row.get("strict_n_mismatch_common", 0)) > 0 for row in rows)
+                    else "- CPU strict mismatches: none"
+                ),
+                "- GPU practical/strict mismatches: none" if not gpu_mismatches else _format_mismatch(gpu_mismatches[0]),
             ]
         )
 

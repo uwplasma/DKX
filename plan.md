@@ -349,9 +349,9 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 ## 14) Roadmap
 
 ### 14.1 Short-term (next 1-3 weeks)
-- [~] Ensure the runtime-windowed full example-suite audit is complete for CPU and GPU lanes against upstream-reference resolutions (CPU merged root now complete; GPU lane still pending).
-- [~] Replace blind global example-suite downscaling with original-reference, Fortran-runtime-window benchmarking so tiny Fortran rows are not artifacts of over-reduction.
-- [ ] Re-run additional high-resolution example on CPU+GPU and integrate into comparison reporting.
+- [x] Ensure the runtime-windowed full example-suite audit is complete for CPU and GPU lanes against upstream-reference resolutions (CPU root `tests/scaled_example_suite_fast_cpu_rtwindow_v4_merged_final`; GPU root `tests/scaled_example_suite_fast_gpu_full_v2`).
+- [x] Replace blind global example-suite downscaling with original-reference, Fortran-runtime-window benchmarking so tiny Fortran rows are not artifacts of over-reduction.
+- [x] Re-run additional high-resolution example on CPU+GPU and integrate into comparison reporting.
 - [ ] Close remaining worst runtime/memory offenders (especially PAS-heavy cases) while preserving tolerances.
 - [~] Strengthen default PAS preconditioner path to avoid expensive fallback branches where possible.
 - [~] Split execution strategy:
@@ -385,10 +385,10 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 ## 15) Execution Checklist (live)
 
 ### 15.1 Always-on loop
-- [ ] Use the original Fortran v3 example inputs as the resolution reference for example-suite benchmarking; do not use blind `2x` enlargement as the default benchmark mode.
-- [ ] For example-suite audits, start from original reference resolution and only downscale when needed to satisfy a configured Fortran runtime window; do not intentionally reduce a case below about `1s` of Fortran wall time unless the original case is already that small.
-- [ ] Benchmark CPU/GPU JAX lanes against a fixed CPU-generated Fortran reference root when machine-local Fortran outputs are not proven deterministic.
-- [ ] For `constraintScheme=0` reference generation, force a stable Fortran Krylov solve (`PETSC_OPTIONS='-ksp_type gmres -pc_type none'`) unless an explicit PETSc override is requested.
+- [x] Use the original Fortran v3 example inputs as the resolution reference for example-suite benchmarking; do not use blind `2x` enlargement as the default benchmark mode.
+- [x] For example-suite audits, start from original reference resolution and only downscale when needed to satisfy a configured Fortran runtime window; do not intentionally reduce a case below about `1s` of Fortran wall time unless the original case is already that small.
+- [x] Benchmark CPU/GPU JAX lanes against a fixed CPU-generated Fortran reference root when machine-local Fortran outputs are not proven deterministic.
+- [x] For `constraintScheme=0` reference generation, force a stable Fortran Krylov solve (`PETSC_OPTIONS='-ksp_type gmres -pc_type none'`) unless an explicit PETSc override is requested.
 - [ ] Pick top 1-2 offenders from latest report (runtime and memory separately).
 - [ ] Profile (`SFINCS_JAX_PROFILE=1`) and isolate dominant phase.
 - [ ] Implement smallest high-ROI change.
@@ -422,6 +422,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-03-20
+- Scope: Finish the frozen-reference fast-branch GPU audit, harden staged-reference reuse/localization for the GPU lane, and refresh the branch README/plan from the completed CPU+GPU artifact roots.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/run_reduced_upstream_suite.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/run_scaled_example_suite.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_runtime_window_attempts.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_scaled_example_suite_reference.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_runtime_window_attempts.py tests/test_scaled_example_suite_reference.py` (`19 passed` across the two targeted files); `python -m py_compile scripts/run_reduced_upstream_suite.py scripts/run_scaled_example_suite.py tests/test_runtime_window_attempts.py tests/test_scaled_example_suite_reference.py`; office GPU mono gate in `/home/rjorge/sfincs_jax_gpu_lane/tests/scaled_example_suite_fast_gpu_mono_v3`; full office GPU root `/home/rjorge/sfincs_jax_gpu_lane/tests/scaled_example_suite_fast_gpu_full_v2`; local mirrored report root `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v2`.
+- Runtime/memory delta: the frozen-reference GPU lane is now `39/39` `parity_ok` in practical and strict mode. The largest GPU runtime offenders are `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`249.578s`), `filteredW7XNetCDF_2species_magneticDrifts_withEr` (`148.400s`), and `geometryScheme5_3species_loRes` (`146.291s`). The largest GPU memory offenders are `geometryScheme4_2species_PAS_noEr` (`2475.7 MB`), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2205.5 MB`), and `HSX_PASCollisions_fullTrajectories` (`2030.5 MB`). The additional example is now included and `parity_ok` on CPU and GPU.
+- Remaining risks: parity blockers are closed for the finished CPU/GPU fast-branch example audits, but the main runtime/memory offenders remain PAS-heavy geometry4/HSX/paper cases. The CPU root still has one strict-only survivor, `HSX_PASCollisions_fullTrajectories` (`4/193`, heat-flux family), while the GPU root is strict-clean. CI/doc-build validation for this exact branch tip still needs a fresh release-style rerun if this branch is being treated as ship-ready.
+- Next actions: target the largest PAS-heavy CPU/GPU runtime and memory offenders using the completed audit roots, decide whether to eliminate or explicitly document the remaining CPU strict-only HSX heat-flux deltas, and then run the release-style docs/CI validation pass on the branch tip.
 
 ### 2026-03-20
 - Scope: Close the remaining CPU runtime-windowed example-suite parity gaps on the fast explicit branch, repair the interrupted subset reruns, merge the CPU artifacts into one `39/39` practical-parity report, and refresh the README fast-branch audit from that merged CPU root.
