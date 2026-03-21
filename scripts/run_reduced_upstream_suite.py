@@ -1639,12 +1639,24 @@ def _run_case(
         # If a reduction happened, rerun Fortran so the outputs match the new input.
         if bool(reuse_fortran) and out_fortran_existing.exists() and attempts == 1 and reductions == 0:
             fortran_input = fortran_dir / "input.namelist"
-            if fortran_input.exists() and fortran_input.read_text() == dst_input.read_text():
-                fortran_h5_this_attempt = out_fortran_existing
-                fortran_log_path = fortran_log if fortran_log.exists() else None
-                if fortran_runtime is None and fortran_log_path is not None:
-                    fortran_runtime = _parse_fortran_runtime_from_log(fortran_log_path)
-                    fortran_max_rss_mb = _parse_max_rss_mb_from_time_log(fortran_log_path)
+            if fortran_input.exists():
+                staged_text = fortran_input.read_text()
+                current_text = dst_input.read_text()
+                if staged_text != current_text and not fortran_exe.exists():
+                    # When benchmarking against a frozen reference lane with no live
+                    # Fortran executable available, the staged reference input is the
+                    # authoritative source of truth for the comparison. Align the
+                    # current attempt to that exact staged input instead of falling
+                    # through to a dummy Fortran rerun.
+                    dst_input.write_text(staged_text)
+                    final_res = _resolution_from_namelist(dst_input)
+                    current_text = staged_text
+                if staged_text == current_text:
+                    fortran_h5_this_attempt = out_fortran_existing
+                    fortran_log_path = fortran_log if fortran_log.exists() else None
+                    if fortran_runtime is None and fortran_log_path is not None:
+                        fortran_runtime = _parse_fortran_runtime_from_log(fortran_log_path)
+                        fortran_max_rss_mb = _parse_max_rss_mb_from_time_log(fortran_log_path)
         else:
             if fortran_dir.exists():
                 shutil.rmtree(fortran_dir)
