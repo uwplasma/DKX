@@ -182,49 +182,26 @@ The benchmark policy on this branch is now:
 
 - start from the original Fortran v3 example resolution,
 - only downscale when a case is too expensive for a practical suite run,
+- benchmark JAX CPU and GPU against a frozen CPU-generated Fortran reference root,
 - and never intentionally push a reduced case below about `1s` of Fortran wall time unless
   the original example is already that small.
 
-That avoids the misleading sub-second Fortran rows that came from blind global downscaling.
-The next full fast-branch README refresh should therefore come from the runtime-windowed
-audit command above, not from the older fixed-scale partial reruns.
-
-Since that partial audit, targeted fast-path reruns have already moved one of the listed
-transport blockers: `transportMatrix_geometryScheme11` is now `parity_ok` on the branch
-with explicit CPU sparse-LU factorization promoted to float64 on large transport solves
-(`~185.3s`, `~5.17 GB` peak RSS on the stored scaled input). `geometryScheme4_2species_noEr`
-has also moved materially: the default fast explicit CPU path now promotes the large sparse
-rescue to exact host sparse-LU when the x-block seed is already strong on this x-coupled FP
-case. On the stored scaled input that produces practical parity with only 4 tiny strict-only
-velocity/Mach deltas, at about `456.7s` and about `8.7 GB` peak RSS. So the remaining known
-fast-path mismatch is now concentrated primarily in `monoenergetic_geometryScheme1`; the
-geometry4 CPU blocker is no longer on the old wrong-flow branch, though its memory cost is
-still a real offender.
-
-Additional targeted original-resolution work on `monoenergetic_geometryScheme1` has narrowed
-that remaining mismatch substantially. The fast explicit branch now reproduces the dumped
-Fortran Jacobian exactly on sampled columns and vectors, and the exact sparse solve of that
-Jacobian lands on the same branch as the branch's host-GMRES fast path. In other words, the
-remaining scheme-1 delta on this branch is no longer an operator-assembly bug. It is a real
-solver-semantics divergence between:
-
-- the fast explicit branch's true-residual solution of the dumped Jacobian system, and
-- the original Fortran/PETSc lane's accepted preconditioned-residual iterate for this
-  ill-conditioned monoenergetic transport case.
-
-That means the next fast-branch step for `monoenergetic_geometryScheme1` is not more sparse
-assembly work. It is an explicit policy decision about which solution concept the CLI/default
-fast path should prefer for structurally singular or near-singular monoenergetic transport
-systems.
+That avoids the misleading sub-second Fortran rows that came from blind global downscaling,
+keeps the GPU lane tied to a deterministic reference, and makes the additional example part
+of the same artifact set as the standard suite.
 
 <!-- BEGIN FAST_BRANCH_AUDIT -->
 Current fast explicit CPU audit comes from `tests/scaled_example_suite_fast_cpu_rtwindow_v4_merged_final`.
+Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_fast_gpu_full_v2`.
 
 - Recorded cases: `39/39`
 - Practical status counts: `parity_ok=39`
 - Strict status counts: `parity_mismatch=1, parity_ok=38`
+- GPU practical status counts: `parity_ok=39`
+- GPU strict status counts: `parity_ok=39`
 - Resolution policy: `reference_first_runtime_window, scale_factor=1.0, runtime_basis=fortran, fortran_min=1.0, fortran_max=5.0, adjust_iters=3`
 - Remaining cases: none
+- Additional example: `parity_ok` on CPU and `parity_ok` on GPU
 
 Top CPU runtime offenders:
 - `geometryScheme4_1species_PAS_withEr_DKESTrajectories`: jax=342.142s fortran=1.523s ratio=224.70x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 3, 'NXI': 24}
@@ -239,6 +216,25 @@ Top CPU memory offenders:
 - `tokamak_2species_PASCollisions_noEr`: jax=1943.6 MB fortran=123.6 MB ratio=15.73x status=parity_ok, res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39}
 - `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: jax=1750.4 MB fortran=144.6 MB ratio=12.11x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
 - `HSX_PASCollisions_fullTrajectories`: jax=1406.8 MB fortran=179.2 MB ratio=7.85x status=parity_ok, res={'NTHETA': 6, 'NZETA': 15, 'NX': 3, 'NXI': 20}
+
+Top GPU runtime offenders:
+- `tokamak_1species_PASCollisions_withEr_fullTrajectories`: jax=249.578s fortran=0.017s ratio=14681.08x status=parity_ok, res={'NTHETA': 10, 'NZETA': 1, 'NX': 3, 'NXI': 14}
+- `filteredW7XNetCDF_2species_magneticDrifts_withEr`: jax=148.400s fortran=95.440s ratio=1.55x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
+- `geometryScheme5_3species_loRes`: jax=146.291s fortran=98.976s ratio=1.48x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
+- `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories`: jax=145.897s fortran=93.439s ratio=1.56x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
+- `geometryScheme4_2species_withEr_fullTrajectories`: jax=145.456s fortran=58.053s ratio=2.51x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
+
+Top GPU memory offenders:
+- `geometryScheme4_2species_PAS_noEr`: jax=2475.7 MB fortran=162.7 MB ratio=15.22x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: jax=2205.5 MB fortran=144.6 MB ratio=15.25x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
+- `HSX_PASCollisions_fullTrajectories`: jax=2030.5 MB fortran=179.2 MB ratio=11.33x status=parity_ok, res={'NTHETA': 6, 'NZETA': 15, 'NX': 3, 'NXI': 20}
+- `tokamak_2species_PASCollisions_noEr`: jax=1623.9 MB fortran=123.6 MB ratio=13.14x status=parity_ok, res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39}
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`: jax=1540.1 MB fortran=130.7 MB ratio=11.78x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
+
+Current mismatches:
+- CPU practical mismatches: none
+- CPU strict-only survivor: `HSX_PASCollisions_fullTrajectories` (`4/193`)
+- GPU practical/strict mismatches: none
 <!-- END FAST_BRANCH_AUDIT -->
 
 ## Documentation
