@@ -338,6 +338,11 @@ def _stage_reference_fortran_artifacts(
     staged_dir = case_out_dir / "fortran_run"
     staged_dir.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(effective_input, staged_dir / "input.namelist")
+    # Match the same localization pass that `_run_case()` applies to `dst_input` before
+    # checking whether a staged Fortran artifact can be reused. Without this, analytic
+    # geometry / equilibrium-path localization can make the text differ even when the
+    # staged H5 already matches the intended frozen-reference resolution.
+    localize_equilibrium_file_in_place(input_namelist=staged_dir / "input.namelist", overwrite=False)
     shutil.copyfile(ref_h5, staged_dir / "sfincsOutput.h5")
     if ref_log is not None:
         shutil.copyfile(ref_log, staged_dir / "sfincs.log")
