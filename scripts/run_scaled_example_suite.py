@@ -341,8 +341,23 @@ def _stage_reference_fortran_artifacts(
     # Match the same localization pass that `_run_case()` applies to `dst_input` before
     # checking whether a staged Fortran artifact can be reused. Without this, analytic
     # geometry / equilibrium-path localization can make the text differ even when the
-    # staged H5 already matches the intended frozen-reference resolution.
-    localize_equilibrium_file_in_place(input_namelist=staged_dir / "input.namelist", overwrite=False)
+    # staged H5 already matches the intended frozen-reference resolution. Reuse the
+    # current case directory as an additional equilibrium search root so extra examples
+    # with locally copied VMEC files can be localized before `_run_prepared_case()`
+    # installs its usual `SFINCS_JAX_EQUILIBRIA_DIRS` override.
+    prev_equilibria_dirs = os.environ.get("SFINCS_JAX_EQUILIBRIA_DIRS", "")
+    os.environ["SFINCS_JAX_EQUILIBRIA_DIRS"] = (
+        str(case_input.parent)
+        if not prev_equilibria_dirs
+        else os.pathsep.join((str(case_input.parent), prev_equilibria_dirs))
+    )
+    try:
+        localize_equilibrium_file_in_place(input_namelist=staged_dir / "input.namelist", overwrite=False)
+    finally:
+        if prev_equilibria_dirs:
+            os.environ["SFINCS_JAX_EQUILIBRIA_DIRS"] = prev_equilibria_dirs
+        else:
+            os.environ.pop("SFINCS_JAX_EQUILIBRIA_DIRS", None)
     shutil.copyfile(ref_h5, staged_dir / "sfincsOutput.h5")
     if ref_log is not None:
         shutil.copyfile(ref_log, staged_dir / "sfincs.log")
