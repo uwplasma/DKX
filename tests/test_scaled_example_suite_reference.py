@@ -50,7 +50,9 @@ def test_stage_reference_fortran_artifacts_uses_last_success(tmp_path: Path) -> 
     assert (out_dir / "fortran_run" / "sfincs.log").read_text(encoding="utf-8") == "fortran-log"
 
 
-def test_stage_reference_fortran_artifacts_reuses_reference_resolution(tmp_path: Path) -> None:
+def test_stage_reference_fortran_artifacts_reuses_reference_resolution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     case_name = "tokamak_case"
     ref_root = tmp_path / "reference"
     case_dir = ref_root / case_name / "fortran_run"
@@ -67,6 +69,8 @@ def test_stage_reference_fortran_artifacts_reuses_reference_resolution(tmp_path:
         "&resolutionParameters\n  NTHETA = 21\n  NZETA = 7\n  NX = 3\n  NXI = 18\n/\n",
         encoding="utf-8",
     )
+
+    monkeypatch.setattr(_MODULE, "localize_equilibrium_file_in_place", lambda **_: None)
 
     staged, effective_input = _stage_reference_fortran_artifacts(
         case_name=case_name,
@@ -121,6 +125,40 @@ def test_stage_reference_fortran_artifacts_prefers_fortran_input_over_case_root_
     assert "  NX = 7" in text
     assert "  NXI = 39" in text
     assert (tmp_path / "out" / "fortran_run" / "input.namelist").read_text(encoding="utf-8") == text
+
+
+def test_stage_reference_fortran_artifacts_localizes_staged_input(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    case_name = "tokamak_case"
+    ref_root = tmp_path / "reference"
+    case_dir = ref_root / case_name / "fortran_run"
+    case_dir.mkdir(parents=True)
+    (case_dir / "sfincsOutput.h5").write_text("fortran-h5", encoding="utf-8")
+    (case_dir / "input.namelist").write_text(
+        "&general\n/\n&geometryParameters\n  equilibriumFile = '/office/path/w7x.nc'\n/\n",
+        encoding="utf-8",
+    )
+
+    def fake_localize(*, input_namelist: Path, overwrite: bool) -> None:
+        text = input_namelist.read_text(encoding="utf-8")
+        input_namelist.write_text(text.replace("/office/path/w7x.nc", "./w7x.nc"), encoding="utf-8")
+
+    monkeypatch.setattr(_MODULE, "localize_equilibrium_file_in_place", fake_localize)
+
+    case_input = tmp_path / "input.namelist"
+    case_input.write_text(
+        "&general\n/\n&geometryParameters\n  equilibriumFile = '/office/path/w7x.nc'\n/\n",
+        encoding="utf-8",
+    )
+
+    staged, _effective_input = _stage_reference_fortran_artifacts(
+        case_name=case_name,
+        case_input=case_input,
+        case_out_dir=tmp_path / "out",
+        reference_results_root=ref_root,
+    )
+
+    assert staged is True
+    assert "./w7x.nc" in (tmp_path / "out" / "fortran_run" / "input.namelist").read_text(encoding="utf-8")
 
 
 def _case_result(case: str, *, status: str = "parity_ok", strict_mismatches: int = 0) -> CaseResult:
