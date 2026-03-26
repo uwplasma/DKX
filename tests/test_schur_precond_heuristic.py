@@ -187,8 +187,8 @@ def test_pas_auto_strong_retry_skips_after_strong_base(tmp_path: Path, monkeypat
     )
 
 
-def test_pas_dkes_gpu_xblock_allowed_only_for_moderate_gpu_blocks() -> None:
-    assert v3_driver._rhs1_pas_dkes_gpu_xblock_allowed(
+def test_pas_dkes_xblock_allowed_only_for_moderate_blocks() -> None:
+    assert v3_driver._rhs1_pas_dkes_xblock_allowed(
         has_pas=True,
         use_dkes=True,
         backend="gpu",
@@ -197,7 +197,7 @@ def test_pas_dkes_gpu_xblock_allowed_only_for_moderate_gpu_blocks() -> None:
         max_l=21,
         xblock_tz_limit=2500,
     )
-    assert not v3_driver._rhs1_pas_dkes_gpu_xblock_allowed(
+    assert v3_driver._rhs1_pas_dkes_xblock_allowed(
         has_pas=True,
         use_dkes=True,
         backend="cpu",
@@ -206,7 +206,7 @@ def test_pas_dkes_gpu_xblock_allowed_only_for_moderate_gpu_blocks() -> None:
         max_l=21,
         xblock_tz_limit=2500,
     )
-    assert not v3_driver._rhs1_pas_dkes_gpu_xblock_allowed(
+    assert not v3_driver._rhs1_pas_dkes_xblock_allowed(
         has_pas=True,
         use_dkes=True,
         backend="gpu",
@@ -215,7 +215,7 @@ def test_pas_dkes_gpu_xblock_allowed_only_for_moderate_gpu_blocks() -> None:
         max_l=36,
         xblock_tz_limit=2500,
     )
-    assert not v3_driver._rhs1_pas_dkes_gpu_xblock_allowed(
+    assert not v3_driver._rhs1_pas_dkes_xblock_allowed(
         has_pas=False,
         use_dkes=True,
         backend="gpu",
@@ -237,6 +237,70 @@ def test_pas_tokamak_gpu_theta_allowed_only_for_small_er_tokamak_pas() -> None:
         schur_er_min=1.0e-12,
         has_magdrift=False,
         has_collisionless=True,
+    )
+
+
+def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", raising=False)
+    assert v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+        n_theta=10,
+        n_zeta=1,
+        max_l=14,
+        xblock_tz_limit=1200,
+    )
+    assert not v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
+        has_pas=True,
+        has_fp=False,
+        backend="cpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+        n_theta=10,
+        n_zeta=1,
+        max_l=14,
+        xblock_tz_limit=1200,
+    )
+    assert not v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=15001,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+        n_theta=10,
+        n_zeta=1,
+        max_l=14,
+        xblock_tz_limit=1200,
+    )
+    assert not v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+        n_theta=10,
+        n_zeta=1,
+        max_l=140,
+        xblock_tz_limit=1200,
     )
     assert not v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
@@ -307,7 +371,8 @@ def test_gpu_pas_tokamak_er_path_does_not_promote_to_pas_schur(tmp_path: Path, m
     )
 
     joined = "\n".join(logs)
-    assert "GPU PAS tokamak auto -> pas_tokamak_theta preconditioner" in joined
+    assert "GPU PAS tokamak auto -> xblock_tz preconditioner" in joined
+    assert "building RHSMode=1 preconditioner=xblock_tz" in joined
     assert "building RHSMode=1 preconditioner=pas_schur" not in joined
     assert not v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
