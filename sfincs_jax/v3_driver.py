@@ -128,7 +128,7 @@ def _pas_auto_skip_strong_retry(
     return float(residual_norm) <= float(target) * float(ratio)
 
 
-def _rhs1_pas_dkes_gpu_xblock_allowed(
+def _rhs1_pas_dkes_xblock_allowed(
     *,
     has_pas: bool,
     use_dkes: bool,
@@ -140,7 +140,8 @@ def _rhs1_pas_dkes_gpu_xblock_allowed(
 ) -> bool:
     if not has_pas or not use_dkes:
         return False
-    if str(backend).strip().lower() == "cpu":
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in {"cpu", "gpu", "tpu"}:
         return False
     if int(n_theta) <= 1:
         return False
@@ -177,6 +178,46 @@ def _rhs1_pas_tokamak_gpu_theta_allowed(
     except ValueError:
         theta_max = 8000
     return int(active_size) <= max(1, int(theta_max))
+
+
+def _rhs1_pas_tokamak_gpu_xblock_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    if not _rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=has_pas,
+        has_fp=has_fp,
+        backend=backend,
+        tokamak_like=tokamak_like,
+        active_size=active_size,
+        er_abs=er_abs,
+        schur_er_min=schur_er_min,
+        has_magdrift=has_magdrift,
+        has_collisionless=has_collisionless,
+    ):
+        return False
+    if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
+        return False
+    prefer_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "").strip()
+    try:
+        prefer_max = int(prefer_max_env) if prefer_max_env else 12000
+    except ValueError:
+        prefer_max = 12000
+    if int(active_size) > max(1, int(prefer_max)):
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
 
 
 _PRECOND_SIZE_HINT: int | None = None
@@ -11208,6 +11249,32 @@ def solve_v3_full_system_linear_gmres(
                             and int(op.total_size) < fp_xmg_max
                         ):
                             rhs1_precond_kind = "xmg"
+                        elif _rhs1_pas_tokamak_gpu_xblock_preferred(
+                            has_pas=op.fblock.pas is not None,
+                            has_fp=op.fblock.fp is not None,
+                            backend=jax.default_backend(),
+                            tokamak_like=tokamak_like,
+                            active_size=int(active_size),
+                            er_abs=float(er_abs),
+                            schur_er_min=float(schur_er_min),
+                            has_magdrift=(
+                                op.fblock.magdrift_theta is not None
+                                or op.fblock.magdrift_zeta is not None
+                                or op.fblock.magdrift_xidot is not None
+                            ),
+                            has_collisionless=op.fblock.collisionless is not None,
+                            n_theta=int(op.n_theta),
+                            n_zeta=int(op.n_zeta),
+                            max_l=int(max_l),
+                            xblock_tz_limit=max(int(xblock_tz_max), int(pas_dkes_gpu_xblock_max)),
+                        ):
+                            rhs1_precond_kind = "xblock_tz"
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: GPU PAS tokamak "
+                                    "auto -> xblock_tz preconditioner",
+                                )
                         elif _rhs1_pas_tokamak_gpu_theta_allowed(
                             has_pas=op.fblock.pas is not None,
                             has_fp=op.fblock.fp is not None,
@@ -11301,7 +11368,7 @@ def solve_v3_full_system_linear_gmres(
                                 "solve_v3_full_system_linear_gmres: sharded PAS near-zero-Er "
                                 "schur_auto -> xmg preconditioner",
                             )
-                    elif _rhs1_pas_dkes_gpu_xblock_allowed(
+                    elif _rhs1_pas_dkes_xblock_allowed(
                         has_pas=op.fblock.pas is not None,
                         use_dkes=bool(use_dkes),
                         backend=jax.default_backend(),
