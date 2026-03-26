@@ -156,3 +156,84 @@ def test_frozen_reference_reuse_aligns_to_staged_input_without_live_fortran(
     assert result.status == "parity_ok"
     assert result.final_resolution == {"NTHETA": 8, "NZETA": 9, "NX": 2, "NXI": 23}
     assert (case_out_dir / "input.namelist").read_text(encoding="utf-8") == staged_input
+
+
+def test_frozen_reference_reuse_survives_jax_retry_without_live_fortran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case_input = tmp_path / "seed.namelist"
+    reference_input = tmp_path / "reference.namelist"
+    case_input.write_text(
+        "&general\n/\n&resolutionParameters\n  NTHETA = 27\n  NZETA = 29\n  NX = 2\n  NXI = 70\n/\n",
+        encoding="utf-8",
+    )
+    reference_input.write_text(case_input.read_text(encoding="utf-8"), encoding="utf-8")
+
+    case_out_dir = tmp_path / "out"
+    fortran_dir = case_out_dir / "fortran_run"
+    fortran_dir.mkdir(parents=True)
+    staged_input = (
+        "&general\n/\n&resolutionParameters\n  NTHETA = 8\n  NZETA = 9\n  NX = 2\n  NXI = 23\n/\n"
+    )
+    (fortran_dir / "input.namelist").write_text(staged_input, encoding="utf-8")
+    (fortran_dir / "sfincsOutput.h5").write_text("fortran-h5", encoding="utf-8")
+    (fortran_dir / "sfincs.log").write_text("Time to solve: 0.5 seconds\n", encoding="utf-8")
+
+    monkeypatch.setattr(suite, "localize_equilibrium_file_in_place", lambda *args, **kwargs: None)
+
+    def fail_fortran(**kwargs):
+        raise AssertionError("frozen reference retry should not rerun Fortran")
+
+    attempts = {"n": 0}
+
+    def fake_jax(
+        *,
+        input_path: Path,
+        output_path: Path,
+        timeout_s: float,
+        log_path: Path,
+        compute_solution: bool,
+        compute_transport_matrix: bool,
+        collect_iterations: bool = True,
+        repeats: int = 1,
+        cache_dir: Path | None = None,
+    ):
+        attempts["n"] += 1
+        assert input_path.read_text(encoding="utf-8") == staged_input
+        if attempts["n"] == 1:
+            raise RuntimeError("transient GPU allocator failure")
+        output_path.write_text("jax-h5", encoding="utf-8")
+        log_path.write_text("elapsed_s=0.5\n", encoding="utf-8")
+        return 0.5, None, 200.0
+
+    monkeypatch.setattr(suite, "_run_fortran_direct", fail_fortran)
+    monkeypatch.setattr(suite, "_run_jax_cli", fake_jax)
+    monkeypatch.setattr(suite, "_compare_outputs", lambda *args, **kwargs: (10, 0, 0.0, []))
+    monkeypatch.setattr(suite, "_compute_print_parity", lambda *args, **kwargs: (0, 0, []))
+    monkeypatch.setattr(suite, "_parse_ksp_iterations", lambda *args, **kwargs: ([], []))
+
+    result = suite._run_case(
+        case_name="mono",
+        case_input=case_input,
+        reference_input=reference_input,
+        case_out_dir=case_out_dir,
+        fortran_exe=tmp_path / "__unused_sfincs__",
+        timeout_s=1.0,
+        rtol=5e-4,
+        atol=1e-9,
+        max_attempts=2,
+        target_runtime_s=None,
+        target_runtime_max_s=None,
+        target_runtime_max_iters=0,
+        target_runtime_basis="fortran",
+        use_seed_resolution=True,
+        reuse_fortran=True,
+        collect_iterations=False,
+        jax_repeats=1,
+        jax_cache_dir=None,
+    )
+
+    assert attempts["n"] == 2
+    assert result.status == "parity_ok"
+    assert result.final_resolution == {"NTHETA": 8, "NZETA": 9, "NX": 2, "NXI": 23}
+    assert (case_out_dir / "input.namelist").read_text(encoding="utf-8") == staged_input
