@@ -18,6 +18,7 @@ _SPEC.loader.exec_module(_MODULE)
 _stage_reference_fortran_artifacts = _MODULE._stage_reference_fortran_artifacts
 _run_prepared_case = _MODULE._run_prepared_case
 _write_suite_outputs = _MODULE._write_suite_outputs
+_iter_inputs = _MODULE._iter_inputs
 
 from run_reduced_upstream_suite import CaseResult
 from run_reduced_upstream_suite import _classify_blocker
@@ -199,6 +200,19 @@ def test_stage_reference_fortran_artifacts_uses_case_search_dir_for_localization
 
     assert staged is True
     assert "./wout_extra.nc" in (tmp_path / "out" / "fortran_run" / "input.namelist").read_text(encoding="utf-8")
+
+
+def test_iter_inputs_ignores_staged_artifact_directories(tmp_path: Path) -> None:
+    (tmp_path / "real_case").mkdir()
+    (tmp_path / "real_case" / "input.namelist").write_text("&general\n/\n", encoding="utf-8")
+    (tmp_path / "real_case" / "fortran_run").mkdir()
+    (tmp_path / "real_case" / "fortran_run" / "input.namelist").write_text("&general\n/\n", encoding="utf-8")
+    (tmp_path / "real_case" / "last_success").mkdir()
+    (tmp_path / "real_case" / "last_success" / "input.namelist").write_text("&general\n/\n", encoding="utf-8")
+
+    inputs = _iter_inputs(tmp_path)
+
+    assert inputs == [tmp_path / "real_case" / "input.namelist"]
 
 
 def _case_result(case: str, *, status: str = "parity_ok", strict_mismatches: int = 0) -> CaseResult:

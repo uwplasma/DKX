@@ -297,7 +297,12 @@ PHYSICS_MISMATCH_HINTS = (
 
 
 def _iter_inputs(examples_root: Path) -> list[Path]:
-    return sorted(examples_root.rglob("input.namelist"))
+    ignored_dirnames = {"fortran_run", "last_success"}
+    return sorted(
+        path
+        for path in examples_root.rglob("input.namelist")
+        if not any(part in ignored_dirnames for part in path.parts)
+    )
 
 
 def _half_round_int(v: int, *, minimum: int = 1) -> int:
