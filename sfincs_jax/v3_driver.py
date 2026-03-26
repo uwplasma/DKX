@@ -220,6 +220,21 @@ def _rhs1_pas_tokamak_gpu_xblock_preferred(
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
 
 
+def _rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
+    return rhs1_precond_kind in {
+        None,
+        "point",
+        "point_xdiag",
+        "theta_line",
+        "theta_line_xdiag",
+        "zeta_line",
+        "xmg",
+        "collision",
+        "pas_lite",
+        "pas_hybrid",
+    }
+
+
 def _is_resource_exhausted_error(exc: Exception) -> bool:
     text = f"{type(exc).__name__}: {exc}"
     cause = getattr(exc, "__cause__", None)
@@ -11754,21 +11769,11 @@ def solve_v3_full_system_linear_gmres(
             force_schwarz = bool(schwarz_auto_min_env) and int(schwarz_auto_min) <= 0
             if force_schwarz:
                 rhs1_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-            elif rhs1_precond_kind in {
-                None,
-                "point",
-                "point_xdiag",
-                "theta_line",
-                "theta_line_xdiag",
-                "zeta_line",
-                "xmg",
-                "collision",
-                "pas_lite",
-                "pas_hybrid",
-                "pas_tz",
-                "pas_tokamak_theta",
-                "pas_ilu",
-            }:
+            elif _rhs1_sharded_line_override_allowed(rhs1_precond_kind):
+                # Preserve dedicated PAS preconditioners on sharded runs. Demoting
+                # pas_tz/pas_tokamak_theta/pas_ilu to pure line blocks can turn a
+                # parity-clean moderate PAS solve into a long line-preconditioned
+                # Krylov run with no robustness benefit.
                 if rhs1_precond_kind in {"theta_line", "zeta_line"} and rhs1_precond_kind != f"{shard_axis}_line":
                     pass
                 elif keep_xmg_for_large_pas_er or keep_xmg_for_large_fp:
