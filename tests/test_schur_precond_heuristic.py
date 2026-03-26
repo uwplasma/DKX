@@ -391,3 +391,11 @@ def test_gpu_pas_tokamak_er_path_does_not_promote_to_pas_schur(tmp_path: Path, m
         has_magdrift=False,
         has_collisionless=True,
     )
+
+
+def test_sharded_line_override_preserves_dedicated_pas_preconditioners() -> None:
+    assert v3_driver._rhs1_sharded_line_override_allowed("zeta_line")
+    assert v3_driver._rhs1_sharded_line_override_allowed("pas_hybrid")
+    assert not v3_driver._rhs1_sharded_line_override_allowed("pas_tz")
+    assert not v3_driver._rhs1_sharded_line_override_allowed("pas_tokamak_theta")
+    assert not v3_driver._rhs1_sharded_line_override_allowed("pas_ilu")
