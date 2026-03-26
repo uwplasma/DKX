@@ -191,49 +191,48 @@ keeps the GPU lane tied to a deterministic reference, and makes the additional e
 of the same artifact set as the standard suite.
 
 <!-- BEGIN FAST_BRANCH_AUDIT -->
-Current fast explicit CPU audit comes from `tests/scaled_example_suite_fast_cpu_rtwindow_v4_merged_final`.
-Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_fast_gpu_full_v2`.
+Current fast explicit CPU audit comes from `tests/scaled_example_suite_fast_cpu_full_v6_merged`.
+Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_fast_gpu_full_v5`.
 
 - Recorded cases: `39/39`
 - Practical status counts: `parity_ok=39`
-- Strict status counts: `parity_mismatch=1, parity_ok=38`
+- Strict status counts: `parity_ok=39`
 - GPU practical status counts: `parity_ok=39`
 - GPU strict status counts: `parity_ok=39`
-- Resolution policy: `reference_first_runtime_window, scale_factor=1.0, runtime_basis=fortran, fortran_min=1.0, fortran_max=5.0, adjust_iters=3`
 - Remaining cases: none
 - Additional example: `parity_ok` on CPU and `parity_ok` on GPU
 
 Top CPU runtime offenders:
-- `geometryScheme4_1species_PAS_withEr_DKESTrajectories`: jax=342.142s fortran=1.523s ratio=224.70x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 3, 'NXI': 24}
-- `HSX_PASCollisions_DKESTrajectories`: jax=177.111s fortran=1.459s ratio=121.43x status=parity_ok, res={'NTHETA': 5, 'NZETA': 15, 'NX': 2, 'NXI': 20}
-- `tokamak_1species_PASCollisions_withEr_fullTrajectories`: jax=111.560s fortran=0.186s ratio=601.10x status=parity_ok, res={'NTHETA': 10, 'NZETA': 1, 'NX': 3, 'NXI': 14}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`: jax=34.663s fortran=1.429s ratio=24.26x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
-- `geometryScheme4_2species_PAS_noEr`: jax=26.892s fortran=1.078s ratio=24.94x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
+- `tokamak_1species_PASCollisions_withEr_fullTrajectories`: jax=37.747s fortran=0.017s ratio=2220.43x status=parity_ok, res={'NTHETA': 10, 'NZETA': 1, 'NX': 3, 'NXI': 14}
+- `HSX_PASCollisions_DKESTrajectories`: jax=4.900s fortran=0.994s ratio=4.93x status=parity_ok, res={'NTHETA': 5, 'NZETA': 15, 'NX': 2, 'NXI': 20}
+- `HSX_PASCollisions_fullTrajectories`: jax=4.563s fortran=2.510s ratio=1.82x status=parity_ok, res={'NTHETA': 6, 'NZETA': 15, 'NX': 3, 'NXI': 20}
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`: jax=4.550s fortran=1.104s ratio=4.12x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
+- `geometryScheme4_2species_PAS_noEr`: jax=3.685s fortran=0.953s ratio=3.87x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
 
 Top CPU memory offenders:
-- `monoenergetic_geometryScheme5_ASCII`: jax=2663.0 MB fortran=142.1 MB ratio=18.74x status=parity_ok, res={'NTHETA': 10, 'NZETA': 20, 'NX': 1, 'NXI': 16}
-- `geometryScheme4_2species_PAS_noEr`: jax=1995.6 MB fortran=162.7 MB ratio=12.27x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
-- `tokamak_2species_PASCollisions_noEr`: jax=1943.6 MB fortran=123.6 MB ratio=15.73x status=parity_ok, res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: jax=1750.4 MB fortran=144.6 MB ratio=12.11x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
-- `HSX_PASCollisions_fullTrajectories`: jax=1406.8 MB fortran=179.2 MB ratio=7.85x status=parity_ok, res={'NTHETA': 6, 'NZETA': 15, 'NX': 3, 'NXI': 20}
+- `monoenergetic_geometryScheme5_ASCII`: jax=2773.9 MB fortran=142.1 MB ratio=19.52x status=parity_ok, res={'NTHETA': 10, 'NZETA': 20, 'NX': 1, 'NXI': 16}
+- `geometryScheme4_2species_PAS_noEr`: jax=2623.4 MB fortran=162.7 MB ratio=16.12x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
+- `HSX_PASCollisions_DKESTrajectories`: jax=2128.6 MB fortran=112.0 MB ratio=19.00x status=parity_ok, res={'NTHETA': 5, 'NZETA': 15, 'NX': 2, 'NXI': 20}
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: jax=2075.7 MB fortran=144.6 MB ratio=14.36x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
+- `tokamak_2species_PASCollisions_noEr`: jax=1940.7 MB fortran=123.6 MB ratio=15.70x status=parity_ok, res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39}
 
 Top GPU runtime offenders:
-- `tokamak_1species_PASCollisions_withEr_fullTrajectories`: jax=249.578s fortran=0.017s ratio=14681.08x status=parity_ok, res={'NTHETA': 10, 'NZETA': 1, 'NX': 3, 'NXI': 14}
-- `filteredW7XNetCDF_2species_magneticDrifts_withEr`: jax=148.400s fortran=95.440s ratio=1.55x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
-- `geometryScheme5_3species_loRes`: jax=146.291s fortran=98.976s ratio=1.48x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
-- `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories`: jax=145.897s fortran=93.439s ratio=1.56x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
-- `geometryScheme4_2species_withEr_fullTrajectories`: jax=145.456s fortran=58.053s ratio=2.51x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
+- `filteredW7XNetCDF_2species_magneticDrifts_noEr`: jax=144.240s fortran=89.052s ratio=1.62x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
+- `HSX_FPCollisions_fullTrajectories`: jax=143.108s fortran=88.504s ratio=1.62x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
+- `geometryScheme5_3species_loRes`: jax=141.190s fortran=98.976s ratio=1.43x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
+- `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories`: jax=140.152s fortran=93.439s ratio=1.50x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
+- `geometryScheme4_2species_withEr_fullTrajectories`: jax=139.721s fortran=58.053s ratio=2.41x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
 
 Top GPU memory offenders:
-- `geometryScheme4_2species_PAS_noEr`: jax=2475.7 MB fortran=162.7 MB ratio=15.22x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: jax=2205.5 MB fortran=144.6 MB ratio=15.25x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
-- `HSX_PASCollisions_fullTrajectories`: jax=2030.5 MB fortran=179.2 MB ratio=11.33x status=parity_ok, res={'NTHETA': 6, 'NZETA': 15, 'NX': 3, 'NXI': 20}
-- `tokamak_2species_PASCollisions_noEr`: jax=1623.9 MB fortran=123.6 MB ratio=13.14x status=parity_ok, res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`: jax=1540.1 MB fortran=130.7 MB ratio=11.78x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
+- `geometryScheme4_2species_PAS_noEr`: jax=2554.9 MB fortran=162.7 MB ratio=15.70x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: jax=2353.7 MB fortran=144.6 MB ratio=16.28x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
+- `HSX_PASCollisions_fullTrajectories`: jax=2105.8 MB fortran=179.2 MB ratio=11.75x status=parity_ok, res={'NTHETA': 6, 'NZETA': 15, 'NX': 3, 'NXI': 20}
+- `tokamak_2species_PASCollisions_noEr`: jax=1703.5 MB fortran=123.6 MB ratio=13.78x status=parity_ok, res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39}
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`: jax=1655.6 MB fortran=130.7 MB ratio=12.67x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
 
 Current mismatches:
 - CPU practical mismatches: none
-- CPU strict-only survivor: `HSX_PASCollisions_fullTrajectories` (`4/193`)
+- CPU strict mismatches: none
 - GPU practical/strict mismatches: none
 <!-- END FAST_BRANCH_AUDIT -->
 
