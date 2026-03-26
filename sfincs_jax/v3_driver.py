@@ -220,6 +220,22 @@ def _rhs1_pas_tokamak_gpu_xblock_preferred(
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
 
 
+def _is_resource_exhausted_error(exc: Exception) -> bool:
+    text = f"{type(exc).__name__}: {exc}"
+    cause = getattr(exc, "__cause__", None)
+    if cause is not None:
+        text += f" | cause={type(cause).__name__}: {cause}"
+    text = text.lower()
+    markers = (
+        "resource_exhausted",
+        "out of memory",
+        "allocator",
+        "memory allocation",
+        "cudaerrormemoryallocation",
+    )
+    return any(marker in text for marker in markers)
+
+
 _PRECOND_SIZE_HINT: int | None = None
 
 
@@ -12946,6 +12962,35 @@ def solve_v3_full_system_linear_gmres(
             _mark("rhs1_precond_build_done")
             return precond
 
+        def _build_rhs1_preconditioner_reduced_with_fallback():
+            nonlocal rhs1_precond_kind, pas_precond_force_collision, bicgstab_preconditioner_reduced
+            try:
+                return _build_rhs1_preconditioner_reduced()
+            except Exception as exc:  # noqa: BLE001
+                if (
+                    jax.default_backend() != "cpu"
+                    and op.fblock.pas is not None
+                    and rhs1_precond_kind not in {"collision", "point"}
+                    and _is_resource_exhausted_error(exc)
+                ):
+                    if emit is not None:
+                        emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: accelerator PAS preconditioner "
+                            f"OOM for kind={rhs1_precond_kind}; falling back to collision preconditioner",
+                        )
+                    rhs1_precond_kind = "collision"
+                    pas_precond_force_collision = True
+                    precond = _build_rhsmode1_collision_preconditioner(
+                        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                    )
+                    if use_pas_projection:
+                        precond = _wrap_pas_precond(precond)
+                    if rhs1_bicgstab_kind == "rhs1":
+                        bicgstab_preconditioner_reduced = precond
+                    return precond
+                raise
+
         if rhs1_precond_enabled:
             solver_kind = _solver_kind(solve_method)[0]
             build_rhs1 = (
@@ -12953,7 +12998,7 @@ def solve_v3_full_system_linear_gmres(
                 or (rhs1_bicgstab_kind == "rhs1" and solve_method_kind != "dense")
             )
             if build_rhs1 and preconditioner_reduced is None:
-                preconditioner_reduced = _build_rhs1_preconditioner_reduced()
+                preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
                 if rhs1_bicgstab_kind == "rhs1":
                     bicgstab_preconditioner_reduced = preconditioner_reduced
         if preconditioner_reduced is None and bicgstab_preconditioner_reduced is not None:
@@ -13532,7 +13577,7 @@ def solve_v3_full_system_linear_gmres(
                         f"{force_full_ratio:.1f}x target)",
                     )
                 rhs1_precond_kind = forced_kind
-                preconditioner_reduced = _build_rhs1_preconditioner_reduced()
+                preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
                 if use_pas_projection:
                     preconditioner_reduced = _wrap_pas_precond(preconditioner_reduced)
                 res_full = _solve_linear(
@@ -13675,7 +13720,7 @@ def solve_v3_full_system_linear_gmres(
                     f"(residual={float(res_reduced.residual_norm):.3e} > target={bicgstab_fallback_target:.3e})",
                 )
             if preconditioner_reduced is None and rhs1_precond_enabled:
-                preconditioner_reduced = _build_rhs1_preconditioner_reduced()
+                preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
             res_reduced = _solve_linear(
                 matvec_fn=mv_reduced,
                 b_vec=rhs_reduced,
@@ -13718,7 +13763,7 @@ def solve_v3_full_system_linear_gmres(
             and t.elapsed_s() < stage2_time_cap_s
         ):
             if preconditioner_reduced is None and rhs1_precond_enabled:
-                preconditioner_reduced = _build_rhs1_preconditioner_reduced()
+                preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
             stage2_maxiter_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_MAXITER", "")
             stage2_restart_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RESTART", "")
             stage2_maxiter = int(stage2_maxiter_env or str(max(600, int(maxiter or 400) * 2)))
