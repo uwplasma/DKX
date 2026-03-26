@@ -415,7 +415,8 @@ def _rhsmode1_host_dense_shortcut_allowed(
         return False
     if op.fblock.fp is None:
         return False
-    if not _rhsmode1_host_dense_fallback_allowed():
+    host_dense_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "").strip().lower()
+    if host_dense_env in {"0", "false", "no", "off"}:
         return False
     shortcut_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", "").strip()
     try:
