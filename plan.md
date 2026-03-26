@@ -438,6 +438,14 @@ Current latest notable changes before this handoff:
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
 
 ### 2026-03-26
+- Scope: Add an explicit accelerator-safe host-dense shortcut for small RHSMode=1 FP solves, validate it on the real office GPU offender, and keep the change restricted to the non-implicit fast path.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/v3_driver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/io.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_rhs1_sparse_first_heuristic.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_rhs1_sparse_first_heuristic.py` (`62 passed` before the full-branch mirror and again after the default-enable follow-up); `python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/io.py tests/test_rhs1_sparse_first_heuristic.py`; office GPU probe `/home/rjorge/sfincs_jax_gpu_lane/tests/probe_gpu_smallfp_hostdense_v3` for `filteredW7XNetCDF_2species_magneticDrifts_noEr`.
+- Runtime/memory delta: on the real office GPU probe, `filteredW7XNetCDF_2species_magneticDrifts_noEr` stayed `parity_ok`/strict-clean while JAX runtime dropped from the previous `45.747s` ladder (`xmg -> sparse_lu`) to a direct host-dense path with solve elapsed `0.974s` and total run `2.867s`. RSS also dropped from about `976.6 MB` to `952.8 MB`.
+- Remaining risks: the change is validated on the small GPU FP offender, but the large PAS-heavy memory offenders still need separate heuristic or chunking work. A geometry4 PAS probe for lower-memory auto-preconditioning is still running/unfinished locally and has not been promoted into default logic.
+- Next actions: fold the small-FP host-dense shortcut into the next frozen-reference GPU rerun, finish the geometry4 PAS memory probe, then retune the PAS auto path and rerun the CPU/GPU offender subset before the next full-suite refresh.
+
+### 2026-03-26
 - Scope: Finish the clean frozen-reference GPU rerun on office, mirror the completed GPU artifact root locally, and refresh the fast-branch README/plan from the final CPU and GPU reports.
 - Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
 - Validation run: office full GPU root `/home/rjorge/sfincs_jax_gpu_lane/tests/scaled_example_suite_fast_gpu_full_v5`; local mirrored GPU root `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v5`; local CPU root `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_cpu_full_v6_merged`; `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged --gpu-out-root tests/scaled_example_suite_fast_gpu_full_v5`.
