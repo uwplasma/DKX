@@ -8,6 +8,7 @@ from sfincs_jax.v3_driver import (
     _rhsmode1_constraint0_dense_fallback_allowed,
     _rhsmode1_constraint0_petsc_compat,
     _rhsmode1_host_sparse_direct_allowed,
+    _rhsmode1_host_dense_shortcut_allowed,
     _rhsmode1_sparse_operator_preconditioned_rescue_allowed,
     _rhsmode1_host_factor_probe_ok,
     _rhsmode1_constraint0_sparse_first,
@@ -48,6 +49,52 @@ def test_constraint0_sparse_first_enabled_for_fp_auto_path(monkeypatch) -> None:
         sparse_precond_mode="auto",
         active_size=3276,
         sparse_max_size=6000,
+    )
+
+
+def test_host_dense_shortcut_enabled_for_small_accelerator_fp(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "1")
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    assert _rhsmode1_host_dense_shortcut_allowed(
+        op=_op(constraint_scheme=1),
+        active_size=404,
+        use_implicit=False,
+        solve_method_kind="incremental",
+    )
+
+
+def test_host_dense_shortcut_respects_guards(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "1")
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    assert not _rhsmode1_host_dense_shortcut_allowed(
+        op=_op(constraint_scheme=1),
+        active_size=601,
+        use_implicit=False,
+        solve_method_kind="incremental",
+    )
+    assert not _rhsmode1_host_dense_shortcut_allowed(
+        op=_op(constraint_scheme=1),
+        active_size=404,
+        use_implicit=True,
+        solve_method_kind="incremental",
+    )
+    assert not _rhsmode1_host_dense_shortcut_allowed(
+        op=_op(constraint_scheme=1),
+        active_size=404,
+        use_implicit=False,
+        solve_method_kind="dense",
+    )
+    assert not _rhsmode1_host_dense_shortcut_allowed(
+        op=_op(constraint_scheme=1, has_fp=False),
+        active_size=404,
+        use_implicit=False,
+        solve_method_kind="incremental",
     )
 
 

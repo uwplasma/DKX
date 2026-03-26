@@ -395,6 +395,39 @@ def _rhsmode1_host_dense_fallback_allowed() -> bool:
     return env in {"1", "true", "yes", "on"}
 
 
+def _rhsmode1_host_dense_shortcut_allowed(
+    *,
+    op: V3FullSystemOperator,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+) -> bool:
+    env = os.environ.get("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", "").strip().lower()
+    if env in {"0", "false", "no", "off"}:
+        return False
+    if bool(use_implicit):
+        return False
+    if jax.default_backend() == "cpu":
+        return False
+    if solve_method_kind in {"dense", "dense_ksp"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if op.fblock.fp is None:
+        return False
+    if not _rhsmode1_host_dense_fallback_allowed():
+        return False
+    shortcut_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", "").strip()
+    try:
+        shortcut_max = int(shortcut_max_env) if shortcut_max_env else 600
+    except ValueError:
+        shortcut_max = 600
+    dense_cap = min(max(0, int(shortcut_max)), max(0, int(_rhsmode1_dense_fallback_max(op))))
+    if dense_cap <= 0:
+        return False
+    return int(active_size) <= dense_cap
+
+
 def _rhsmode1_dense_krylov_allowed() -> bool:
     env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV", "").strip().lower()
     if env in {"0", "false", "no", "off"}:
@@ -12657,6 +12690,62 @@ def solve_v3_full_system_linear_gmres(
         strong_preconditioner_reduced = None
         bicgstab_preconditioner_reduced = None
         pas_precond_force_collision = False
+        host_dense_shortcut = _rhsmode1_host_dense_shortcut_allowed(
+            op=op,
+            active_size=int(active_size),
+            use_implicit=bool(use_implicit),
+            solve_method_kind=str(solve_method_kind),
+        )
+
+        def _solve_host_dense_reduced(*, x0_dense: jnp.ndarray | None = None) -> GMRESSolveResult:
+            use_row_scaled = bool(
+                int(op.constraint_scheme) == 0
+                or (int(op.constraint_scheme) == 1 and op.fblock.fp is not None)
+            )
+            import scipy.linalg as sla  # noqa: PLC0415
+
+            if dense_matrix_cache is not None:
+                a_np = np.asarray(dense_matrix_cache, dtype=np.float64)
+            else:
+                a_dense_jnp = assemble_dense_matrix_from_matvec(
+                    matvec=mv_reduced, n=int(active_size), dtype=rhs_reduced.dtype
+                )
+                a_np = np.asarray(a_dense_jnp, dtype=np.float64)
+            a_np = np.array(a_np, dtype=np.float64, copy=True)
+            if a_np.ndim != 2:
+                a_np = np.squeeze(a_np)
+
+            mv_dense = mv_reduced
+            b_dense = jnp.asarray(rhs_reduced, dtype=jnp.float64)
+            if use_row_scaled:
+                diag_floor = 1e-12
+                diag = np.diag(a_np).astype(np.float64, copy=False)
+                diag_abs = np.abs(diag)
+                diag_safe = np.where(diag_abs > diag_floor, diag, np.sign(diag) * diag_floor)
+                diag_safe = np.where(diag_safe != 0.0, diag_safe, diag_floor)
+                scale = (1.0 / diag_safe).astype(np.float64, copy=False)
+                a_np = a_np * scale[:, None]
+                scale_jnp = jnp.asarray(scale, dtype=jnp.float64)
+                b_dense = b_dense * scale_jnp
+
+                def mv_dense(x: jnp.ndarray) -> jnp.ndarray:
+                    return scale_jnp * mv_reduced(x)
+
+            if a_np.ndim != 2 or a_np.shape[0] != a_np.shape[1]:
+                x_np = np.asarray(
+                    np.linalg.lstsq(a_np, np.asarray(b_dense, dtype=np.float64), rcond=None)[0],
+                    dtype=np.float64,
+                )
+                x_dense = jnp.asarray(x_np, dtype=jnp.float64)
+            else:
+                lu, piv = sla.lu_factor(a_np)
+                x_np = np.asarray(sla.lu_solve((lu, piv), np.asarray(b_dense, dtype=np.float64)), dtype=np.float64)
+                if x0_dense is not None and x0_dense.shape == rhs_reduced.shape:
+                    x_np = x_np + 0.0 * np.asarray(x0_dense, dtype=np.float64)
+                x_dense = jnp.asarray(x_np, dtype=jnp.float64)
+
+            r_dense = rhs_reduced - mv_reduced(x_dense)
+            return GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(r_dense))
         if rhs1_bicgstab_kind is not None:
             if emit is not None:
                 emit(1, f"solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner={rhs1_bicgstab_kind}")
@@ -12996,7 +13085,7 @@ def solve_v3_full_system_linear_gmres(
                     return precond
                 raise
 
-        if rhs1_precond_enabled:
+        if rhs1_precond_enabled and (not host_dense_shortcut):
             solver_kind = _solver_kind(solve_method)[0]
             build_rhs1 = (
                 (solver_kind != "bicgstab" and solve_method_kind != "dense")
@@ -13006,9 +13095,9 @@ def solve_v3_full_system_linear_gmres(
                 preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
                 if rhs1_bicgstab_kind == "rhs1":
                     bicgstab_preconditioner_reduced = preconditioner_reduced
-        if preconditioner_reduced is None and bicgstab_preconditioner_reduced is not None:
+        if (not host_dense_shortcut) and preconditioner_reduced is None and bicgstab_preconditioner_reduced is not None:
             preconditioner_reduced = bicgstab_preconditioner_reduced
-        if preconditioner_reduced is not None and rhs1_precond_kind in {
+        if (not host_dense_shortcut) and preconditioner_reduced is not None and rhs1_precond_kind in {
             "pas_hybrid",
             "pas_lite",
             "pas_tz",
@@ -13043,6 +13132,8 @@ def solve_v3_full_system_linear_gmres(
         # FP-only large systems: optionally augment the base preconditioner with a
         # low-L block correction to improve flow/Mach convergence without dense fallback.
         if (
+            not host_dense_shortcut
+            and
             preconditioner_reduced is not None
             and int(op.rhs_mode) == 1
             and (not bool(op.include_phi1))
@@ -13103,6 +13194,24 @@ def solve_v3_full_system_linear_gmres(
                                 "solve_v3_full_system_linear_gmres: FP L1 hybrid precond failed "
                                 f"({type(exc).__name__}: {exc})",
                             )
+        if host_dense_shortcut:
+            _mark("rhs1_host_dense_shortcut_start")
+            if emit is not None:
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+                    f"using host dense shortcut (size={int(active_size)})",
+                )
+            res_reduced = _solve_host_dense_reduced(x0_dense=x0_reduced)
+            _mark("rhs1_host_dense_shortcut_done")
+            early_dense_shortcut = True
+            probe_shortcut = True
+            ksp_matvec = mv_reduced
+            ksp_b = rhs_reduced
+            ksp_precond = None
+            ksp_x0 = x0_reduced
+            ksp_precond_side = "none"
+            ksp_solver_kind = _solver_kind("incremental")[0]
         sparse_operator_use = False
         if sparse_operator_mode == "on":
             sparse_operator_use = True
