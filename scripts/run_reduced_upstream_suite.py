@@ -1635,14 +1635,23 @@ def _run_case(
         fortran_log = fortran_dir / "sfincs.log"
         fortran_h5_this_attempt: Path | None = None
         out_fortran_existing = fortran_dir / "sfincsOutput.h5"
-        # Only reuse Fortran outputs when the input resolution has not been reduced.
-        # If a reduction happened, rerun Fortran so the outputs match the new input.
-        if bool(reuse_fortran) and out_fortran_existing.exists() and attempts == 1 and reductions == 0:
+        # Keep reusing staged frozen-reference artifacts across retries when no live
+        # Fortran executable is available. In that mode, the staged input/H5 pair is
+        # the authoritative comparison target, so later JAX-only retries must realign
+        # the working input back to the staged input instead of falling through to a
+        # dummy Fortran rerun path.
+        frozen_reference_only = bool(reuse_fortran) and out_fortran_existing.exists() and not fortran_exe.exists()
+        # Otherwise, only reuse Fortran outputs when the input resolution has not been
+        # reduced. If a reduction happened and a real Fortran executable exists, rerun
+        # Fortran so the outputs match the new input.
+        if bool(reuse_fortran) and out_fortran_existing.exists() and (
+            frozen_reference_only or (attempts == 1 and reductions == 0)
+        ):
             fortran_input = fortran_dir / "input.namelist"
             if fortran_input.exists():
                 staged_text = fortran_input.read_text()
                 current_text = dst_input.read_text()
-                if staged_text != current_text and not fortran_exe.exists():
+                if staged_text != current_text and frozen_reference_only:
                     # When benchmarking against a frozen reference lane with no live
                     # Fortran executable available, the staged reference input is the
                     # authoritative source of truth for the comparison. Align the
