@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-03-14 (America/New_York)
+Last updated: 2026-03-26 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -118,18 +118,20 @@ Core requirement right now:
 
 ---
 
-## 5) Current State Snapshot (as of 2026-03-05)
+## 5) Current State Snapshot (as of 2026-03-26)
 
 ### 5.1 Recent validated status
-- Reduced suite practical status currently reports all cases as `parity_ok` at suite tolerances.
-- README reduced-suite table now included as the primary comparison section.
-- README reduced-suite table was regenerated from the lane-specific suite reports so the
-  checked-in table now matches the stored report artifacts.
+- Full fast explicit CPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_cpu_full_v6_merged` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
+- Full frozen-reference GPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v5` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
+- `additional_examples` is included in both final lanes and is `parity_ok` on CPU and GPU.
+- README fast-branch audit block now reflects the completed CPU and GPU artifact roots instead of an intermediate partial sweep.
 - `write_sfincs_jax_output_h5(..., return_results=True)` now returns in-memory result dictionary for immediate inspection.
+- Release-style validation has been rerun on the fast branch tip: `pytest -q` passed and `sphinx-build -W -b html docs docs/_build/html` passed.
 
 ### 5.2 Known pain points that still matter
-- Runtime ratio is still high for several PAS-heavy and tiny-Fortran-time cases (some ratios are inflated by very short Fortran runtimes).
-- Memory ratio remains high on select large PAS/FP cases.
+- Runtime ratio is still high for PAS-heavy CPU cases with tiny Fortran times, especially `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`37.747s` JAX CPU vs `0.017s` Fortran), plus HSX / geometry4 PAS cases in the `3.7-4.9s` range on the final CPU root.
+- GPU wall time is now robust and parity-clean, but the worst runtime offenders remain `filteredW7XNetCDF_2species_magneticDrifts_noEr` (`144.240s`), `HSX_FPCollisions_fullTrajectories` (`143.108s`), `geometryScheme5_3species_loRes` (`141.190s`), `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` (`140.152s`), and `geometryScheme4_2species_withEr_fullTrajectories` (`139.721s`).
+- Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`) and `geometryScheme4_2species_PAS_noEr` (`2623.4 MB`), while current worst GPU RSS offenders are `geometryScheme4_2species_PAS_noEr` (`2554.9 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2353.7 MB`).
 - Parallel strong-scaling beyond a few cores is not yet consistently strong for single-RHS large solves.
 
 ### 5.3 Product posture
@@ -349,7 +351,7 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 ## 14) Roadmap
 
 ### 14.1 Short-term (next 1-3 weeks)
-- [x] Ensure the runtime-windowed full example-suite audit is complete for CPU and GPU lanes against upstream-reference resolutions (CPU root `tests/scaled_example_suite_fast_cpu_rtwindow_v4_merged_final`; GPU root `tests/scaled_example_suite_fast_gpu_full_v2`).
+- [x] Ensure the runtime-windowed/full example-suite audit is complete for CPU and GPU lanes against upstream-reference resolutions (final roots `tests/scaled_example_suite_fast_cpu_full_v6_merged` and `tests/scaled_example_suite_fast_gpu_full_v5`).
 - [x] Replace blind global example-suite downscaling with original-reference, Fortran-runtime-window benchmarking so tiny Fortran rows are not artifacts of over-reduction.
 - [x] Re-run additional high-resolution example on CPU+GPU and integrate into comparison reporting.
 - [ ] Close remaining worst runtime/memory offenders (especially PAS-heavy cases) while preserving tolerances.
@@ -422,6 +424,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-03-26
+- Scope: Finish the clean frozen-reference GPU rerun on office, mirror the completed GPU artifact root locally, and refresh the fast-branch README/plan from the final CPU and GPU reports.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: office full GPU root `/home/rjorge/sfincs_jax_gpu_lane/tests/scaled_example_suite_fast_gpu_full_v5`; local mirrored GPU root `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v5`; local CPU root `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_cpu_full_v6_merged`; `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged --gpu-out-root tests/scaled_example_suite_fast_gpu_full_v5`.
+- Runtime/memory delta: no new solver-path code landed in this documentation pass, but the finished audit roots now pin the current worst offenders. CPU runtime tops out at `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`37.747s`) and CPU RSS tops out at `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`). GPU runtime tops out at `filteredW7XNetCDF_2species_magneticDrifts_noEr` (`144.240s`) and GPU RSS tops out at `geometryScheme4_2species_PAS_noEr` (`2554.9 MB`).
+- Remaining risks: parity blockers are closed on both final lanes, but the worst PAS-heavy and large-geometry runtime/memory offenders are still too expensive for a final “ship” decision against the original performance target.
+- Next actions: profile the top CPU and GPU offenders from the finished roots, reduce runtime and RSS without regressing parity, then rerun the same frozen-reference CPU and GPU lanes to confirm the deltas.
 
 ### 2026-03-26
 - Scope: Run the release-style validation pass on the finished fast-branch tip, audit the remaining CPU strict-only HSX heat-flux deltas, and convert the final ship decision from “parity pending” to “performance/documentation pending”.
