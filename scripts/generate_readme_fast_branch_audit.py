@@ -90,6 +90,37 @@ def _fmt_memory_ratio(row: dict[str, object]) -> str:
     return f"{float(jax) / float(fort):.2f}x"
 
 
+def _fmt_ratio(jax: object | None, fort: object | None) -> str:
+    if jax is None or fort in (None, 0):
+        return "-"
+    return f"{float(jax) / float(fort):.2f}x"
+
+
+def _fmt_status(row: dict[str, object] | None) -> str:
+    if row is None:
+        return "-"
+    status = str(row.get("status", "")).strip()
+    return status or "-"
+
+
+def _fmt_mismatch_pair(row: dict[str, object] | None) -> str:
+    if row is None:
+        return "-"
+    return (
+        f"{int(row.get('n_mismatch_common', 0))}/{int(row.get('n_common_keys', 0))}"
+        f" (strict {int(row.get('strict_n_mismatch_common', 0))}/{int(row.get('strict_n_common_keys', 0))})"
+    )
+
+
+def _fmt_print_parity(row: dict[str, object] | None) -> str:
+    if row is None:
+        return "-"
+    total = int(row.get("print_parity_total", 0))
+    if total <= 0:
+        return "-"
+    return f"{int(row.get('print_parity_signals', 0))}/{total}"
+
+
 def _status_counts(rows: list[dict[str, object]], prefix: str) -> Counter[str]:
     counts: Counter[str] = Counter()
     for row in rows:
@@ -143,6 +174,54 @@ def _format_mismatch(row: dict[str, object]) -> str:
         f"strict={row.get('strict_n_mismatch_common', 0)}/{row.get('strict_n_common_keys', 0)}, "
         f"sample={','.join(row.get('mismatch_keys_sample', [])[:4]) or '-'}"
     )
+
+
+def _format_case_table(
+    case_order: list[str],
+    rows_by_case: dict[str, dict[str, object]],
+    gpu_rows_by_case: dict[str, dict[str, object]],
+) -> list[str]:
+    lines = [
+        "| Case | Fortran CPU(s) | JAX CPU(s) | CPU x | JAX GPU(s) | GPU x | Fortran MB | JAX CPU MB | CPU MB x | JAX GPU MB | GPU MB x | CPU mismatch | GPU mismatch | CPU print | GPU print | CPU status | GPU status |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |",
+    ]
+    for case in case_order:
+        cpu_row = rows_by_case.get(case)
+        gpu_row = gpu_rows_by_case.get(case)
+        if cpu_row is None and gpu_row is None:
+            continue
+        fort_runtime = cpu_row.get("fortran_runtime_s") if cpu_row else None
+        fort_memory = cpu_row.get("fortran_max_rss_mb") if cpu_row else None
+        cpu_runtime = cpu_row.get("jax_runtime_s") if cpu_row else None
+        gpu_runtime = gpu_row.get("jax_runtime_s") if gpu_row else None
+        cpu_memory = cpu_row.get("jax_max_rss_mb") if cpu_row else None
+        gpu_memory = gpu_row.get("jax_max_rss_mb") if gpu_row else None
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    f"`{case}`",
+                    _fmt_float(fort_runtime, 3),
+                    _fmt_float(cpu_runtime, 3),
+                    _fmt_ratio(cpu_runtime, fort_runtime),
+                    _fmt_float(gpu_runtime, 3),
+                    _fmt_ratio(gpu_runtime, fort_runtime),
+                    _fmt_float(fort_memory, 1),
+                    _fmt_float(cpu_memory, 1),
+                    _fmt_ratio(cpu_memory, fort_memory),
+                    _fmt_float(gpu_memory, 1),
+                    _fmt_ratio(gpu_memory, fort_memory),
+                    _fmt_mismatch_pair(cpu_row),
+                    _fmt_mismatch_pair(gpu_row),
+                    _fmt_print_parity(cpu_row),
+                    _fmt_print_parity(gpu_row),
+                    _fmt_status(cpu_row),
+                    _fmt_status(gpu_row),
+                ]
+            )
+            + " |"
+        )
+    return lines
 
 
 def _format_improvement(
@@ -302,6 +381,8 @@ def main() -> int:
             ]
         )
 
+    gpu_rows_by_case = {str(row["case"]): row for row in gpu_rows}
+
     if mismatches:
         lines.extend(
             [
@@ -327,6 +408,14 @@ def main() -> int:
                 "- GPU practical/strict mismatches: none" if not gpu_mismatches else _format_mismatch(gpu_mismatches[0]),
             ]
         )
+
+    lines.extend(
+        [
+            "",
+            "Full per-case runtime / memory table:",
+            *_format_case_table(case_order, rows_by_case, gpu_rows_by_case),
+        ]
+    )
 
     if improvements_runtime:
         lines.extend(
