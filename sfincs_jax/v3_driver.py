@@ -16496,6 +16496,37 @@ def solve_v3_full_system_linear_gmres(
         else:
             preconditioner_full = None
             bicgstab_preconditioner_full = None
+            host_dense_shortcut_full = _rhsmode1_host_dense_shortcut_allowed(
+                op=op,
+                active_size=int(op.total_size),
+                use_implicit=bool(use_implicit),
+                solve_method_kind=str(solve_method_kind),
+            )
+
+            def _solve_host_dense_full(*, x0_dense: jnp.ndarray | None = None) -> tuple[GMRESSolveResult, jnp.ndarray]:
+                import scipy.linalg as sla  # noqa: PLC0415
+
+                a_dense_jnp = assemble_dense_matrix_from_matvec(matvec=mv, n=int(op.total_size), dtype=rhs.dtype)
+                a_np = np.asarray(a_dense_jnp, dtype=np.float64)
+                a_np = np.array(a_np, dtype=np.float64, copy=True)
+                if a_np.ndim != 2:
+                    a_np = np.squeeze(a_np)
+                if a_np.ndim != 2 or a_np.shape[0] != a_np.shape[1]:
+                    x_np = np.asarray(
+                        np.linalg.lstsq(a_np, np.asarray(rhs, dtype=np.float64), rcond=None)[0],
+                        dtype=np.float64,
+                    )
+                else:
+                    lu, piv = sla.lu_factor(a_np)
+                    x_np = np.asarray(sla.lu_solve((lu, piv), np.asarray(rhs, dtype=np.float64)), dtype=np.float64)
+                if x0_dense is not None and x0_dense.shape == rhs.shape:
+                    x_np = x_np + 0.0 * np.asarray(x0_dense, dtype=np.float64)
+                x_dense = jnp.asarray(x_np, dtype=jnp.float64)
+                residual_vec_dense = rhs - mv(x_dense)
+                return (
+                    GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(residual_vec_dense)),
+                    residual_vec_dense,
+                )
 
             if rhs1_bicgstab_kind is not None:
                 if emit is not None:
@@ -16608,7 +16639,7 @@ def solve_v3_full_system_linear_gmres(
                 _mark("rhs1_precond_build_done")
                 return precond
 
-            if rhs1_precond_enabled:
+            if rhs1_precond_enabled and (not host_dense_shortcut_full):
                 solver_kind = _solver_kind(solve_method)[0]
                 build_rhs1 = (
                     (solver_kind != "bicgstab" and solve_method_kind != "dense")
@@ -16618,9 +16649,9 @@ def solve_v3_full_system_linear_gmres(
                     preconditioner_full = _build_rhs1_preconditioner_full()
                     if rhs1_bicgstab_kind == "rhs1":
                         bicgstab_preconditioner_full = preconditioner_full
-            if preconditioner_full is None and bicgstab_preconditioner_full is not None:
+            if (not host_dense_shortcut_full) and preconditioner_full is None and bicgstab_preconditioner_full is not None:
                 preconditioner_full = bicgstab_preconditioner_full
-            if preconditioner_full is not None and rhs1_precond_kind in {
+            if (not host_dense_shortcut_full) and preconditioner_full is not None and rhs1_precond_kind in {
                 "pas_hybrid",
                 "pas_lite",
                 "pas_tz",
@@ -16648,7 +16679,23 @@ def solve_v3_full_system_linear_gmres(
                             1,
                             "solve_v3_full_system_linear_gmres: PAS precond non-finite -> collision",
                         )
-            if recycle_basis_use:
+            if host_dense_shortcut_full:
+                _mark("rhs1_host_dense_shortcut_start")
+                if emit is not None:
+                    emit(
+                        0,
+                        "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+                        f"using host dense shortcut (size={int(op.total_size)})",
+                    )
+                result, residual_vec = _solve_host_dense_full(x0_dense=x0)
+                _mark("rhs1_host_dense_shortcut_done")
+                ksp_matvec = mv
+                ksp_b = rhs
+                ksp_precond = None
+                ksp_x0 = x0
+                ksp_precond_side = "none"
+                ksp_solver_kind = _solver_kind("incremental")[0]
+            if recycle_basis_use and (not host_dense_shortcut_full):
                 basis_full: list[jnp.ndarray] = []
                 for vec in recycle_basis_use:
                     if vec.shape == (op.total_size,):
@@ -16664,30 +16711,31 @@ def solve_v3_full_system_linear_gmres(
                             r1 = jnp.linalg.norm(mv(x0_recycled) - rhs)
                             if jnp.isfinite(r1) and (not jnp.isfinite(r0) or float(r1) < float(r0)):
                                 x0 = x0_recycled
-            if emit is not None and progress_large_rhs1 and (not progress_notes_emitted["solve"]):
-                emit(0, " solve_v3_full_system_linear_gmres: starting Krylov iterations.")
-                progress_notes_emitted["solve"] = True
-            _mark("rhs1_krylov_solve_start")
-            result, residual_vec = _solve_linear_with_residual(
-                matvec_fn=mv,
-                b_vec=rhs,
-                precond_fn=preconditioner_full,
-                x0_vec=x0,
-                tol_val=tol,
-                atol_val=atol,
-                restart_val=restart,
-                maxiter_val=maxiter,
-                solve_method_val=solve_method,
-                precond_side=gmres_precond_side,
-            )
-            _mark("rhs1_krylov_solve_done")
-            ksp_matvec = mv
-            ksp_b = rhs
-            ksp_precond = preconditioner_full
-            ksp_x0 = x0
-            ksp_precond_side = gmres_precond_side
-            ksp_solver_kind = _solver_kind(solve_method)[0]
-            if preconditioner_full is not None and (not _gmres_result_is_finite(result)):
+            if not host_dense_shortcut_full:
+                if emit is not None and progress_large_rhs1 and (not progress_notes_emitted["solve"]):
+                    emit(0, " solve_v3_full_system_linear_gmres: starting Krylov iterations.")
+                    progress_notes_emitted["solve"] = True
+                _mark("rhs1_krylov_solve_start")
+                result, residual_vec = _solve_linear_with_residual(
+                    matvec_fn=mv,
+                    b_vec=rhs,
+                    precond_fn=preconditioner_full,
+                    x0_vec=x0,
+                    tol_val=tol,
+                    atol_val=atol,
+                    restart_val=restart,
+                    maxiter_val=maxiter,
+                    solve_method_val=solve_method,
+                    precond_side=gmres_precond_side,
+                )
+                _mark("rhs1_krylov_solve_done")
+                ksp_matvec = mv
+                ksp_b = rhs
+                ksp_precond = preconditioner_full
+                ksp_x0 = x0
+                ksp_precond_side = gmres_precond_side
+                ksp_solver_kind = _solver_kind(solve_method)[0]
+            if (not host_dense_shortcut_full) and preconditioner_full is not None and (not _gmres_result_is_finite(result)):
                 if emit is not None:
                     emit(0, "solve_v3_full_system_linear_gmres: preconditioned GMRES returned non-finite result; retrying without preconditioner")
                 _mark("rhs1_krylov_solve_retry_start")
