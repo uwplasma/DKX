@@ -302,6 +302,12 @@ def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypa
         max_l=140,
         xblock_tz_limit=1200,
     )
+
+
+def test_resource_exhausted_error_detection() -> None:
+    assert v3_driver._is_resource_exhausted_error(RuntimeError("RESOURCE_EXHAUSTED: Out of memory"))
+    assert v3_driver._is_resource_exhausted_error(RuntimeError("Allocator ran out of memory"))
+    assert not v3_driver._is_resource_exhausted_error(RuntimeError("shape mismatch"))
     assert not v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
         has_fp=False,
