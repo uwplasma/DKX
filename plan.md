@@ -374,6 +374,18 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 - [ ] Stabilize one-node multi-GPU strategy for large-case throughput.
 - [ ] Add benchmark suite for representative 2-4 minute cases (warm/cold timing and memory baselines).
 - [ ] Add explicit solver-path provenance in logs/output metadata.
+- [ ] Borrow `yancc`-style block smoothers / Krylov patterns:
+  - explicit block-diagonal or banded block smoothers on natural folded axes,
+  - JAX-native FGMRES / LGMRES / GCROT-style right-preconditioned paths,
+  - multigrid-ready smoother interfaces for geometry / pitch / speed coarsening.
+- [ ] Borrow `MONKES`-style structural sparsity:
+  - preserve and exploit block-tridiagonal / near-block-tridiagonal structure in the stiff velocity couplings,
+  - prefer factor-and-reuse of repeated block solves over repeated generic Krylov on the full flattened state,
+  - push low-memory Schur / elimination paths that store only the minimal blocks needed for backward substitution.
+- [ ] Add chunked explicit kernels for large PAS/FP assembly and diagnostics:
+  - chunk over species, `x`, `xi`, or `(theta,zeta)` tiles,
+  - cap peak device memory without changing numerics,
+  - keep chunking off the differentiable reference path unless explicitly enabled.
 
 ### 14.3 Long-term (3-12 months)
 - [ ] Extend beyond strict SFINCS replication: broader equation/model options and modern numerical variants.
@@ -432,6 +444,14 @@ Current latest notable changes before this handoff:
 - Runtime/memory delta: no new solver-path code landed in this documentation pass, but the finished audit roots now pin the current worst offenders. CPU runtime tops out at `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`37.747s`) and CPU RSS tops out at `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`). GPU runtime tops out at `filteredW7XNetCDF_2species_magneticDrifts_noEr` (`144.240s`) and GPU RSS tops out at `geometryScheme4_2species_PAS_noEr` (`2554.9 MB`).
 - Remaining risks: parity blockers are closed on both final lanes, but the worst PAS-heavy and large-geometry runtime/memory offenders are still too expensive for a final “ship” decision against the original performance target.
 - Next actions: profile the top CPU and GPU offenders from the finished roots, reduce runtime and RSS without regressing parity, then rerun the same frozen-reference CPU and GPU lanes to confirm the deltas.
+
+### 2026-03-26
+- Scope: Audit `yancc` and `MONKES` as primary-source references for chunking, block sparsity, smoother design, and Krylov structure, then translate those patterns into a concrete `sfincs_jax` performance plan.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: local audit of `/Users/rogeriojorge/local/tests/MONKES` (`main` only); remote branch audit of `https://github.com/f0uriest/yancc` (`actions`, `ambipolar`, `fdspeed`, `krylov`, `smoothers`, `master`); code-path inspection of `yancc/smoothers.py`, `yancc/krylov.py`, `yancc/trajectories_scipy.py`, `yancc/multigrid.py`, and `MONKES/sources/libraries/DKE_BTD_Solution_Legendre.f90`.
+- Runtime/memory delta: planning-only pass. The main actionable ideas are axis-folded block smoothers, explicit sparse/scipy assembly for heavy fallback paths, custom right-preconditioned Krylov variants, and block-tridiagonal elimination that stores only the minimum backward-substitution blocks.
+- Remaining risks: `yancc` targets a different DKE/MDKE structure and `MONKES` is monoenergetic, so their techniques cannot be copied mechanically into multi-species full-SFINCS solves. The adaptation has to preserve SFINCS numerics and current parity guarantees.
+- Next actions: prototype chunked PAS/FP assembly on the worst CPU/GPU offenders, prototype a batched block-diagonal / banded smoother path for RHSMode=1 explicit solves, and test a host sparse explicit operator path for the current GPU OOM-sensitive heavy cases.
 
 ### 2026-03-26
 - Scope: Run the release-style validation pass on the finished fast-branch tip, audit the remaining CPU strict-only HSX heat-flux deltas, and convert the final ship decision from “parity pending” to “performance/documentation pending”.
