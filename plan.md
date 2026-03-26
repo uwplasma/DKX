@@ -400,7 +400,7 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 - [ ] Differentiability on JAX-native solver paths.
 - [ ] Standalone behavior (no hidden Fortran-output dependencies).
 - [ ] Robust defaults for unseen inputs.
-- [ ] CI/doc builds passing.
+- [x] CI/doc builds passing.
 
 ---
 
@@ -422,6 +422,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-03-26
+- Scope: Run the release-style validation pass on the finished fast-branch tip, audit the remaining CPU strict-only HSX heat-flux deltas, and convert the final ship decision from “parity pending” to “performance/documentation pending”.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q` (`336 passed in 282.33s`); `sphinx-build -W -b html docs docs/_build/html`; targeted HDF5 audit of `HSX_PASCollisions_fullTrajectories` from `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_cpu_rtwindow_v4_merged_final`.
+- Runtime/memory delta: no new solver-path changes in this pass. The remaining CPU strict-only survivor is limited to `heatFlux_vm_psiHat`, `heatFlux_vm_psiN`, `heatFlux_vm_rHat`, and `heatFlux_vm_rN`, all at a coherent relative offset of about `9.93e-4`, with maximum absolute mismatch `5.32e-05`.
+- Remaining risks: the fast-branch CPU/GPU example audits are release-clean in practical mode and the GPU audit is strict-clean, but the largest PAS-heavy runtime and memory offenders remain far from the “best-in-class” target. The fast CLI branch is therefore viable as a documented preview/release-candidate path, not yet the final product release against the original performance goals.
+- Next actions: target the PAS-heavy runtime/memory offenders from the completed audit roots, decide whether the fast CLI branch should be merged to `main` as an explicitly performance-first mode, and keep the differentiable/reference Python path as the stricter parity surface.
 
 ### 2026-03-20
 - Scope: Finish the frozen-reference fast-branch GPU audit, harden staged-reference reuse/localization for the GPU lane, and refresh the branch README/plan from the completed CPU+GPU artifact roots.
