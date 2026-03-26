@@ -2355,7 +2355,12 @@ def write_sfincs_jax_output_h5(
             v3_rhsmode1_output_fields_vm_only_phi1_batch_jit,
             v3_rhsmode1_output_fields_vm_only_jit,
         )
-        from .v3_driver import solve_v3_full_system_linear_gmres, solve_v3_full_system_newton_krylov_history
+        from .v3_driver import (
+            _resolve_use_implicit,
+            _rhsmode1_host_dense_shortcut_allowed,
+            solve_v3_full_system_linear_gmres,
+            solve_v3_full_system_newton_krylov_history,
+        )
         from .v3_system import full_system_operator_from_namelist, precompile_v3_full_system
 
         if emit is not None:
@@ -2493,13 +2498,26 @@ def write_sfincs_jax_output_h5(
             and active_total_size <= dense_fp_cutoff
             and (not force_krylov)
             and (not dense_auto_ok)
-            and emit is not None
         ):
-            emit(
-                1,
-                "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> skipping dense auto mode on "
-                f"backend={dense_auto_backend}; falling through to Krylov policy",
+            host_dense_shortcut = _rhsmode1_host_dense_shortcut_allowed(
+                op=op0,
+                active_size=int(active_total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind="incremental",
             )
+            if host_dense_shortcut:
+                if emit is not None:
+                    emit(
+                        1,
+                        "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> "
+                        f"using host dense shortcut on backend={dense_auto_backend}",
+                    )
+            elif emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> skipping dense auto mode on "
+                    f"backend={dense_auto_backend}; falling through to Krylov policy",
+                )
         elif op0.fblock.fp is not None and (not include_phi1):
             epar_val = phys_params.get("EPARALLELHAT", phys_params.get("EParallelHat", None))
             try:
