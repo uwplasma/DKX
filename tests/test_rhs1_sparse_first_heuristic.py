@@ -27,6 +27,7 @@ from sfincs_jax.v3_driver import (
     _rhsmode1_sparse_sxblock_rescue_allowed,
     _rhsmode1_sparse_exact_lu_requested,
     _rhsmode1_sparse_xblock_rescue_allowed,
+    _rhsmode1_pas_adaptive_smoother_allowed,
 )
 
 
@@ -37,6 +38,16 @@ def _op(*, constraint_scheme: int, has_fp: bool = True, has_phi1: bool = False, 
         constraint_scheme=constraint_scheme,
         point_at_x0=False,
         fblock=SimpleNamespace(fp=object() if has_fp else None, pas=None),
+    )
+
+
+def _pas_op(*, constraint_scheme: int = 1, has_phi1: bool = False, rhs_mode: int = 1):
+    return SimpleNamespace(
+        rhs_mode=rhs_mode,
+        include_phi1=has_phi1,
+        constraint_scheme=constraint_scheme,
+        point_at_x0=False,
+        fblock=SimpleNamespace(fp=None, pas=object()),
     )
 
 
@@ -63,6 +74,49 @@ def test_host_dense_shortcut_enabled_for_small_accelerator_fp(monkeypatch) -> No
         active_size=404,
         use_implicit=False,
         solve_method_kind="incremental",
+    )
+
+
+def test_pas_adaptive_smoother_allowed_for_large_pas_cpu(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER", raising=False)
+    assert _rhsmode1_pas_adaptive_smoother_allowed(
+        op=_pas_op(),
+        active_size=4000,
+        residual_norm=1.0e-2,
+        target=1.0e-8,
+        use_implicit=False,
+    )
+
+
+def test_pas_adaptive_smoother_respects_guards(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER", raising=False)
+    assert not _rhsmode1_pas_adaptive_smoother_allowed(
+        op=_pas_op(has_phi1=True),
+        active_size=4000,
+        residual_norm=1.0e-2,
+        target=1.0e-8,
+        use_implicit=False,
+    )
+    assert not _rhsmode1_pas_adaptive_smoother_allowed(
+        op=_pas_op(),
+        active_size=4000,
+        residual_norm=1.0e-10,
+        target=1.0e-8,
+        use_implicit=False,
+    )
+    assert not _rhsmode1_pas_adaptive_smoother_allowed(
+        op=_pas_op(),
+        active_size=1000,
+        residual_norm=1.0e-2,
+        target=1.0e-8,
+        use_implicit=False,
+    )
+    assert not _rhsmode1_pas_adaptive_smoother_allowed(
+        op=_pas_op(),
+        active_size=4000,
+        residual_norm=1.0e-2,
+        target=1.0e-8,
+        use_implicit=True,
     )
 
 

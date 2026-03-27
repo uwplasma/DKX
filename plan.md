@@ -371,7 +371,7 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
   - stop when smoother residuals turn upward,
   - use the smoother as a bounded preconditioner stage instead of paying for full failed retries,
   - validate on `tokamak_1species_PASCollisions_withEr_fullTrajectories` and `geometryScheme4_2species_PAS_noEr`.
-- [ ] Prototype `MONKES`-style block-tridiagonal / factor-and-reuse solves on monoenergetic or weakly coupled subproblems:
+- [x] Prototype `MONKES`-style block-tridiagonal / factor-and-reuse solves on monoenergetic or weakly coupled subproblems:
   - avoid flattening structured low-coupling cases into generic full-system Krylov problems,
   - target `geometryScheme5_3species_loRes` and the monoenergetic offenders first.
 - [ ] Add explicit sparse host/device split for GPU-heavy cases inspired by `yancc/trajectories_scipy.py`:
@@ -477,6 +477,14 @@ Current latest notable changes before this handoff:
 - Runtime/memory delta: planning-only pass. The immediate implementation order is now fixed: adaptive PAS smoother first, sparse host/device split second, structured monoenergetic block solve third, Krylov upgrade fourth.
 - Remaining risks: steps 1 and 2 both touch the current RHSMode=1 driver flow, so helper-level ownership has to stay disjoint and the final `v3_driver.py` integration should be done centrally after worker results are in.
 - Next actions: dispatch three implementation workers plus one design-only Krylov worker, integrate the first landed helper path locally, and start targeted parity/performance gates before broader rollout.
+
+### 2026-03-27
+- Scope: Land the step-3 structured monoenergetic / weak-coupling prototype as a reusable helper module, add dense-equivalence and reverse-factorization tests, and document the factor-and-reuse derivation in `docs/method.rst`.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/structured_velocity.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_structured_velocity.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/method.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `python -m py_compile /Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/structured_velocity.py /Users/rogeriojorge/local/tests/sfincs_jax/tests/test_structured_velocity.py`; `pytest -q /Users/rogeriojorge/local/tests/sfincs_jax/tests/test_structured_velocity.py` (`4 passed`)
+- Runtime/memory delta: prototype-only pass. The new helper reuses one block-tridiagonal factorization across repeated RHS solves and includes a reverse-order path for singular-leading-block cases; no production driver path uses it yet.
+- Remaining risks: the helper is not yet wired into `v3_driver.py`, so the performance win is latent until the monoenergetic / weak-coupling call sites adopt it.
+- Next actions: integrate this helper into the targeted structured subproblem path, then benchmark on `monoenergetic_geometryScheme1` and `geometryScheme5_3species_loRes` before the Krylov-stack upgrade.
 
 ### 2026-03-27
 - Scope: Final release-facing docs and README cleanup on `main`, removing stale branch-era and reduced-suite language while keeping real technical scope boundaries explicit.

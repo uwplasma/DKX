@@ -219,6 +219,56 @@ BiCGStab is short recurrence with memory ~ :math:`O(n)`.
 IDR(s) is another short-recurrence family used for nonsymmetric systems and is a
 candidate for future low-memory solves.
 
+Adaptive PAS smoother stage
+---------------------------
+
+For PAS-heavy ``RHSMode=1`` solves, the expensive part of the fallback ladder is
+often not the base Krylov solve itself, but the sequence of progressively stronger
+preconditioner builds that follow when the residual is still above target. The new
+adaptive PAS smoother stage inserts a bounded Richardson-like correction before
+that escalation:
+
+.. math::
+
+   x_{k+1} = x_k + \omega P^{-1}(b - A x_k),
+
+where :math:`P^{-1}` is the already-built PAS preconditioner application and
+:math:`\omega` is a relaxation factor.
+
+**Implementation.**
+
+- Smoother kernel: ``sfincs_jax.pas_smoother.adaptive_pas_smoother``.
+- Driver gate: ``sfincs_jax.v3_driver._rhsmode1_pas_adaptive_smoother_allowed``.
+- Current integration point: immediately after the base PAS solve and before the
+  strong-preconditioner tail in the linear RHSMode=1 driver.
+
+**Why this helps.**
+
+The smoother is much cheaper than building a new ``pas_hybrid`` / ``pas_schur`` /
+``xblock_tz`` fallback, because it reuses the preconditioner that is already in
+memory. The algorithm keeps the best iterate seen so far and stops as soon as:
+
+- the target residual is reached,
+- the residual worsens by more than a configured factor, or
+- the relative improvement plateaus.
+
+This makes it safe as a default explicit-path optimization: if the smoother does
+not help, the driver falls back to the existing ladder unchanged.
+
+**Knobs.**
+
+- ``SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER``: enable/disable the stage.
+- ``SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_MIN``: minimum active size for activation.
+- ``SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS``: maximum smoothing sweeps.
+- ``SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA``: Richardson relaxation factor.
+
+**Compared to Fortran v3.**
+
+This is not a PETSc feature copied from v3. It is an explicit-path optimization
+for `sfincs_jax`: the physics operator is unchanged, but the fallback ladder is
+made more selective by trying a bounded cheap correction before paying for a much
+heavier preconditioner build.
+
 **Implementation.**
 
 - ``_solve_linear`` and ``_solve_linear_with_residual`` in ``sfincs_jax.v3_driver``.
@@ -422,9 +472,11 @@ for the later PAS driver integration without hard-coding case-specific logic.
 
 Implementation: ``sfincs_jax.pas_smoother`` (``append_residual``,
 ``summarize_residual_history``, ``decide_pas_smoother_action``,
-``advance_pas_smoother``). The returned metadata includes the residual history,
-best-so-far residual, trailing ratio trend, and the stop reason so the driver
-can decide whether to continue smoothing or fall back to the next solver stage.
+``advance_pas_smoother``, ``adaptive_pas_smoother_allowed``, and
+``adaptive_pas_smoother``). The returned metadata includes the residual
+history, best-so-far residual, trailing ratio trend, the number of accepted
+sweeps, and the stop reason so the driver can decide whether to continue
+smoothing or fall back to the next solver stage.
 
 Controls:
 
