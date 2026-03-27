@@ -28,6 +28,7 @@ from sfincs_jax.v3_driver import (
     _rhsmode1_sparse_exact_lu_requested,
     _rhsmode1_sparse_xblock_rescue_allowed,
     _rhsmode1_pas_adaptive_smoother_allowed,
+    _rhsmode1_explicit_sparse_host_direct_allowed,
 )
 
 
@@ -117,6 +118,40 @@ def test_pas_adaptive_smoother_respects_guards(monkeypatch) -> None:
         residual_norm=1.0e-2,
         target=1.0e-8,
         use_implicit=True,
+    )
+
+
+def test_explicit_sparse_host_direct_allowed_for_exact_lu(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", raising=False)
+    assert _rhsmode1_explicit_sparse_host_direct_allowed(
+        sparse_exact_lu=True,
+        use_implicit=False,
+        active_size=8000,
+    )
+
+
+def test_explicit_sparse_host_direct_respects_guards(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", raising=False)
+    assert not _rhsmode1_explicit_sparse_host_direct_allowed(
+        sparse_exact_lu=False,
+        use_implicit=False,
+        active_size=8000,
+    )
+    assert not _rhsmode1_explicit_sparse_host_direct_allowed(
+        sparse_exact_lu=True,
+        use_implicit=True,
+        active_size=8000,
+    )
+    assert not _rhsmode1_explicit_sparse_host_direct_allowed(
+        sparse_exact_lu=True,
+        use_implicit=False,
+        active_size=50000,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", "0")
+    assert not _rhsmode1_explicit_sparse_host_direct_allowed(
+        sparse_exact_lu=True,
+        use_implicit=False,
+        active_size=8000,
     )
 
 

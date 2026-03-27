@@ -127,6 +127,11 @@ Core requirement right now:
 - README and docs now reflect the completed CPU and GPU artifact roots on `main` instead of intermediate branch-era sweeps.
 - `write_sfincs_jax_output_h5(..., return_results=True)` now returns in-memory result dictionary for immediate inspection.
 - Release-style validation has been rerun on the fast branch tip: `pytest -q` passed and `sphinx-build -W -b html docs docs/_build/html` passed.
+- The current performance refactor landed in bounded production-safe form:
+  - adaptive PAS smoother is integrated in RHSMode=1 fallback control,
+  - explicit sparse host/device helpers are integrated in bounded transport and RHSMode=1 host-direct paths,
+  - the structured block-tridiagonal helper is integrated into the `pas_tokamak_theta` tail solve,
+  - host-only SciPy `lgmres` is now available on the explicit fast path without touching JIT/differentiable routes.
 
 ### 5.2 Known pain points that still matter
 - Runtime ratio is still high for PAS-heavy CPU cases with tiny Fortran times, especially `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`37.747s` JAX CPU vs `0.017s` Fortran), plus HSX / geometry4 PAS cases in the `3.7-4.9s` range on the final CPU root.
@@ -367,22 +372,26 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
   - `geometryScheme4_2species_PAS_noEr`,
   - `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`,
   - `monoenergetic_geometryScheme5_ASCII`.
-- [ ] Prototype `yancc`-style adaptive smoothing / early-stop smoother cycles for PAS-heavy RHSMode=1 cases:
+- [x] Prototype `yancc`-style adaptive smoothing / early-stop smoother cycles for PAS-heavy RHSMode=1 cases:
   - stop when smoother residuals turn upward,
   - use the smoother as a bounded preconditioner stage instead of paying for full failed retries,
   - validate on `tokamak_1species_PASCollisions_withEr_fullTrajectories` and `geometryScheme4_2species_PAS_noEr`.
 - [x] Prototype `MONKES`-style block-tridiagonal / factor-and-reuse solves on monoenergetic or weakly coupled subproblems:
   - avoid flattening structured low-coupling cases into generic full-system Krylov problems,
   - target `geometryScheme5_3species_loRes` and the monoenergetic offenders first.
-- [ ] Add explicit sparse host/device split for GPU-heavy cases inspired by `yancc/trajectories_scipy.py`:
+- [x] Add explicit sparse host/device split for GPU-heavy cases inspired by `yancc/trajectories_scipy.py`:
   - keep operator assembly in JAX where useful,
   - materialize structured sparse pieces only for the hard solve branches,
   - prefer deterministic sparse factors over repeated failed generic retries.
-- [~] Execute the four-step performance refactor in small validated increments:
+- [x] Execute the four-step performance refactor in small validated increments:
   - Step 1: adaptive PAS smoother / early-stop preconditioner stage,
   - Step 2: explicit sparse host/device split for hard GPU and memory-heavy branches,
   - Step 3: structured monoenergetic / weak-coupling block solve prototype,
   - Step 4: Krylov-stack upgrade after steps 1-3 are integrated.
+- [x] Land the bounded step-4 Krylov upgrade:
+  - host-only SciPy `lgmres` fast path in `sfincs_jax/solver.py`,
+  - explicit rejection on distributed and JIT/differentiable routes,
+  - focused solver/full-system/implicit regression coverage.
 - [ ] For each of the four steps, land:
   - focused unit/regression coverage for every new helper function,
   - at least one targeted parity case and one targeted performance case,
@@ -461,6 +470,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-03-27
+- Scope: Finish the four-step performance refactor in bounded production-safe form by integrating the explicit sparse helper into transport/RHSMode=1 host-direct solves, wiring the structured block-tridiagonal helper into the `pas_tokamak_theta` tail solve, and adding a host-only SciPy `lgmres` fast path in `solver.py`.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/v3_driver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/solver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_rhs1_sparse_first_heuristic.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_schur_precond_heuristic.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_solver_gmres.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_transport_sparse_direct.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/method.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/performance.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/performance_techniques.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_pas_smoother.py tests/test_explicit_sparse.py tests/test_structured_velocity.py tests/test_transport_sparse_direct.py tests/test_rhs1_sparse_first_heuristic.py tests/test_schur_precond_heuristic.py tests/test_solver_gmres.py` (`152 passed`); `pytest -q tests/test_implicit_linear_solve_grad.py tests/test_full_system_gmres_solution_parity.py tests/test_cli_solve_mode.py` (`28 passed`); `pytest -q tests/test_schur_precond_heuristic.py tests/test_solver_gmres.py tests/test_implicit_linear_solve_grad.py tests/test_full_system_gmres_solution_parity.py` (`48 passed` after the JAX-safe structured-tail fix); `python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/solver.py tests/test_rhs1_sparse_first_heuristic.py tests/test_schur_precond_heuristic.py tests/test_solver_gmres.py tests/test_transport_sparse_direct.py`; `sphinx-build -W -b html docs docs/_build/html`
+- Runtime/memory delta: targeted medium tokamak probes on `main` showed `lgmres` preserving output parity (`0` mismatches vs `incremental`) while reducing wall time from `3.802s -> 0.275s` on a patched PAS case and from `6.308s -> 3.902s` on a patched FP case. No full offender-suite rerun yet in this pass.
+- Remaining risks: the new `lgmres` path is intentionally host-only and not yet benchmarked on the pinned heavy offenders; full-suite runtime/memory deltas still need measurement before defaults are widened further.
+- Next actions: profile the pinned CPU/GPU offenders again from `main`, benchmark `incremental` vs `lgmres` on the explicit fast path, and decide whether the new host-only method should be used automatically on any subset of PAS/FP cases.
 
 ### 2026-03-27
 - Scope: Simplify the main-branch README, move archived reduced-suite material into the docs, add a theory-heavy docs page distilled from the upstream SFINCS v3 notes, and audit `yancc` / `monkes` branches and open PRs for concrete solver and performance ideas.

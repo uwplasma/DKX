@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import numpy as np
 
 from sfincs_jax.io import write_sfincs_jax_output_h5
+from sfincs_jax.namelist import read_sfincs_input
 import sfincs_jax.v3_driver as v3_driver
+from sfincs_jax.v3_system import full_system_operator_from_namelist, rhs_v3_full_system
 
 
 def _patch_block_value(block: str, key: str, value: str) -> str:
@@ -115,6 +118,46 @@ def test_full_precond_tokamak_defaults_to_xblock_tz(tmp_path: Path, monkeypatch)
 
     joined = "\n".join(logs)
     assert "building RHSMode=1 preconditioner=xblock_tz" in joined
+
+
+def test_pas_tokamak_structured_tail_matches_legacy(tmp_path: Path, monkeypatch) -> None:
+    input_path = Path(__file__).parent / "reduced_inputs" / "tokamak_1species_PASCollisions_noEr_Nx1.input.namelist"
+
+    txt = input_path.read_text()
+    txt = _patch_resolution_block(txt, ntheta=7, nzeta=1, nxi=5, nx=2, solver_tol=1e-6)
+    txt = _patch_export_block(txt)
+    patched = tmp_path / "input_pas_tokamak_structured_tiny.namelist"
+    patched.write_text(txt)
+
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+    monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_LMAX", "5")
+
+    nml = read_sfincs_input(patched)
+    op = full_system_operator_from_namelist(nml=nml)
+    rhs = rhs_v3_full_system(op)
+
+    v3_driver._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
+    monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_STRUCTURED", "0")
+    legacy_precond = v3_driver._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
+    legacy_state = legacy_precond(rhs)
+    legacy_cache = next(iter(v3_driver._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
+    assert legacy_cache.tail_factors is None
+
+    v3_driver._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
+    monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_STRUCTURED", "1")
+    structured_precond = v3_driver._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
+    structured_state = structured_precond(rhs)
+    structured_cache = next(iter(v3_driver._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
+    assert structured_cache.tail_factors is not None
+    assert structured_cache.tail_factors[0][0] is not None
+
+    structured_state = np.asarray(structured_state, dtype=np.float64)
+    legacy_state = np.asarray(legacy_state, dtype=np.float64)
+    diff = structured_state - legacy_state
+    rel_norm = np.linalg.norm(diff) / np.linalg.norm(legacy_state)
+    assert rel_norm < 6.0e-2
+    assert float(np.max(np.abs(diff))) < 2.0e-4
 
 
 def test_schur_auto_min_for_pas(tmp_path: Path, monkeypatch) -> None:
