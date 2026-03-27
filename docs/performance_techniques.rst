@@ -260,7 +260,7 @@ overrides on one promoted suite case without disturbing the full-suite artifacts
 .. code-block:: bash
 
    python scripts/benchmark_case_variants.py \
-     --case-dir tests/scaled_example_suite_fast_cpu_full_v6_merged/geometryScheme5_3species_loRes \
+     --case-dir tests/scaled_example_suite_fast_cpu_full_v7_refresh/geometryScheme5_3species_loRes \
      --variant 'lgmres=SFINCS_JAX_RHSMODE1_SOLVE_METHOD=lgmres'
 
 The helper runs the default variant plus any requested overrides, records wall

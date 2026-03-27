@@ -121,7 +121,7 @@ Core requirement right now:
 
 ### 5.1 Recent validated status
 - Full fast explicit CPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_cpu_full_v7_refresh` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
-- Full frozen-reference GPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v8` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
+- Full frozen-reference GPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v11_refresh` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
 - `additional_examples` is included in both final lanes and is `parity_ok` on CPU and GPU.
 - README and docs now reflect the completed CPU and GPU artifact roots on `main` instead of intermediate branch-era sweeps.
 - `write_sfincs_jax_output_h5(..., return_results=True)` now returns in-memory result dictionary for immediate inspection.
@@ -135,17 +135,17 @@ Core requirement right now:
   - `tokamak_1species_PASCollisions_withEr_fullTrajectories` is parity-clean on the current CPU tokamak-xblock path at about `3.56s` on the frozen suite input, versus the older frozen-suite artifact at `37.75s`,
   - the adaptive PAS smoother and structured `pas_tokamak_theta` tail are not active on the current top tokamak/geometry4 offenders,
   - `lgmres` is now wired through the CLI and safely downgraded on traced/JIT/distributed paths, but it is slower than the current defaults on `geometryScheme4_2species_PAS_noEr` and `geometryScheme5_3species_loRes`, and effectively neutral on the tokamak PAS+Er case,
-  - current-tip office GPU probes on frozen final inputs show `geometryScheme5_3species_loRes` parity-clean at about `3.83s` on the bounded host-dense shortcut, versus the pinned `144.597s` GPU artifact,
+  - the fresh current `main` GPU full-suite refresh now captures the big bounded-solver wins directly in the release artifact root: `geometryScheme5_3species_loRes` is down to `4.294s`, `tokamak_1species_PASCollisions_withEr_fullTrajectories` to `18.300s`, `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` to `7.420s`, and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` to `6.314s`, all strict-clean,
   - forcing transport sparse-direct first on `monoenergetic_geometryScheme5_ASCII` is parity-clean but only marginally faster on the pinned final CPU input, so it is not yet a compelling default change,
-  - current-tip office GPU probes on frozen final inputs show `monoenergetic_geometryScheme5_ASCII` parity-clean at about `16.92s` on the bounded accelerator `tzfft` iterative path, versus the pinned `17.433s` GPU artifact,
-  - and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` parity-clean at about `11.31s` after skipping the unnecessary sparse-ILU tail after a converged GPU `schur` accept, versus the pinned `58.198s` GPU artifact.
+  - the fresh GPU full-suite root also records `monoenergetic_geometryScheme5_ASCII` parity-clean at `3.938s` on the current bounded accelerator `tzfft` path,
+  - and `geometryScheme4_2species_PAS_noEr` remains parity-clean at `7.019s` but is still the worst GPU RSS case at `2477.1 MB`.
   - `lineax` has been gated and is not admitted yet: on a small real SFINCS operator it matched the current residual and ran faster locally (`~0.54s` vs `~3.29s`), but on a generic nonsymmetric test matrix its default GMRES configuration stagnated, so it is still a bounded differentiable/reference-path candidate rather than a production CLI dependency.
 
 ### 5.2 Known pain points that still matter
 - The pinned full-suite CPU root still records a stale pre-optimization `tokamak_1species_PASCollisions_withEr_fullTrajectories` artifact (`37.747s` JAX CPU vs `0.017s` Fortran), but current-tip frozen-case reruns on the same input are now down to about `3.56s` with parity preserved. A full-suite refresh is still needed before README tables can claim that improvement.
 - Runtime ratio is still high for the heavier PAS / geometry-rich CPU cases, especially HSX / geometry4 PAS branches in the `3.5-4.9s` range on current targeted reruns.
-- GPU wall time is now robust and parity-clean, but the pinned `v8` artifact still shows the worst runtime offenders as `geometryScheme5_3species_loRes` (`144.597s`), `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`87.134s`), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`58.198s`), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (`25.291s`), and `monoenergetic_geometryScheme5_ASCII` (`17.433s`). Current-tip targeted probes have already improved `geometryScheme5_3species_loRes`, `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`, and `monoenergetic_geometryScheme5_ASCII`; a fresh full GPU refresh is still needed before the benchmark tables can claim those new numbers.
-- Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`) and `geometryScheme4_2species_PAS_noEr` (`2623.4 MB`), while current worst GPU RSS offenders are `geometryScheme4_2species_PAS_noEr` (`2552.1 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2354.4 MB`).
+- GPU wall time is now robust and parity-clean in the refreshed `v11` root. The remaining runtime offenders are `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`18.300s`), `monoenergetic_geometryScheme1` (`14.621s`), `HSX_PASCollisions_DKESTrajectories` (`11.142s`), and `HSX_PASCollisions_fullTrajectories` (`9.584s`).
+- Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`) and `geometryScheme4_2species_PAS_noEr` (`2623.4 MB`), while current worst GPU RSS offenders are `geometryScheme4_2species_PAS_noEr` (`2477.1 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2070.4 MB`).
 - Parallel strong-scaling beyond a few cores is not yet consistently strong for single-RHS large solves.
 
 ### 5.3 Product posture
@@ -366,7 +366,7 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 ## 14) Roadmap
 
 ### 14.1 Short-term (next 1-3 weeks)
-- [x] Ensure the runtime-windowed/full example-suite audit is complete for CPU and GPU lanes against upstream-reference resolutions (final roots `tests/scaled_example_suite_fast_cpu_full_v6_merged` and `tests/scaled_example_suite_fast_gpu_full_v8`).
+- [x] Ensure the runtime-windowed/full example-suite audit is complete for CPU and GPU lanes against upstream-reference resolutions (current release roots `tests/scaled_example_suite_fast_cpu_full_v7_refresh` and `tests/scaled_example_suite_fast_gpu_full_v11_refresh`).
 - [x] Replace blind global example-suite downscaling with original-reference, Fortran-runtime-window benchmarking so tiny Fortran rows are not artifacts of over-reduction.
 - [x] Re-run additional high-resolution example on CPU+GPU and integrate into comparison reporting.
 - [ ] Close remaining worst runtime/memory offenders (especially PAS-heavy cases) while preserving tolerances.
