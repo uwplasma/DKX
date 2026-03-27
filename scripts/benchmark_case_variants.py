@@ -175,6 +175,7 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_kb": resource.
 
     text = json.dumps(rows, indent=2)
     if args.json_out is not None:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(text + "\n")
     print(text)
     return 0

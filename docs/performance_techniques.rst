@@ -245,10 +245,11 @@ time rebuilding a Krylov basis on hard nonsymmetric systems.
 This makes the new method safe as a CLI performance option: it can accelerate
 explicit host solves without contaminating the differentiable reference route.
 Frozen-case offender probes on ``main`` still support keeping this as an explicit
-tuning knob rather than an automatic default. It now runs correctly on the real
-CLI surface for the pinned geometry4 PAS case and preserves parity there, with a
-modest CPU improvement (`~5.6 s -> ~4.6 s` on the frozen scaled case), but it is
-not yet the right default for every large RHSMode=1 branch.
+tuning knob rather than an automatic default. On the current pinned heavy cases,
+``lgmres`` preserves parity but is not yet a general win: it is only marginally
+different on the tokamak PAS+Er offender and is slower on the current frozen
+geometry4 and geometry5 full-system examples. The method is therefore kept
+available, but opt-in.
 
 Frozen-case variant benchmarking
 --------------------------------
