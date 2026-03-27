@@ -18,7 +18,7 @@ Current release snapshot
 
 The current ``main`` branch release artifacts are:
 
-- CPU: ``tests/scaled_example_suite_fast_cpu_full_v6_merged``
+- CPU: ``tests/scaled_example_suite_fast_cpu_full_v7_refresh``
 - GPU: ``tests/scaled_example_suite_fast_gpu_full_v8``
 
 These report:
@@ -38,12 +38,17 @@ The performance story is therefore:
 
 Current top offenders from the release artifacts are:
 
-- CPU runtime: ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` at ``37.747 s``
-- CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``2773.9 MB``
+- CPU runtime: ``HSX_PASCollisions_DKESTrajectories`` at ``7.220 s``
+- CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``2916.8 MB``
 - GPU runtime: ``geometryScheme5_3species_loRes`` at ``144.597 s``
 - GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2552.1 MB``
 
 In other words, all examples run on CPU and GPU, but a handful of cases remain the clear optimization targets.
+
+Two current-tip frozen-case GPU probes already improve the pinned ``v8`` story and are expected to land in the next full GPU refresh:
+
+- ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue and completed parity-clean in about ``16.92 s`` on office, versus the pinned ``17.433 s`` suite artifact.
+- ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` now skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``11.31 s`` on office, versus the pinned ``58.198 s`` suite artifact.
 
 
 What is differentiable today?

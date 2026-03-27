@@ -9,8 +9,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 README = REPO_ROOT / "README.md"
-DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_fast_cpu_v1"
-DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_fast_gpu_full_v2"
+DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_fast_cpu_full_v7_refresh"
+DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_fast_gpu_full_v8"
 BASELINE_REPORT = REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_v4" / "suite_report.json"
 EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
 EXTRA_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
