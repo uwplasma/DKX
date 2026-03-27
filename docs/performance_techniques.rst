@@ -401,6 +401,43 @@ Implementation: ``sfincs_jax.v3_driver`` (``use_pas_projection`` and
 ``N_\zeta=1`` tokamak-like runs **except** ``geometryScheme=1`` analytic tokamak
 cases).
 
+**Adaptive PAS smoother gate (standalone helper).** For PAS-heavy runs it is
+useful to stop an early smoother pass before it burns time on a bad branch. If
+the residual history is :math:`r_0, r_1, \dots, r_k`, define the one-step ratio
+
+.. math::
+
+   \rho_k = \frac{r_k}{r_{k-1}},
+
+and a trailing log-slope over the last :math:`m` ratios,
+
+.. math::
+
+   s_m = \frac{1}{m} \sum_{i=k-m+1}^{k} \log\left(\frac{r_i}{r_{i-1}}\right).
+
+The helper accepts a candidate smoother state when the latest residual is still
+improving and stops when either the single-step ratio or trailing log-slope
+crosses the configured worsening threshold. This provides a deterministic gate
+for the later PAS driver integration without hard-coding case-specific logic.
+
+Implementation: ``sfincs_jax.pas_smoother`` (``append_residual``,
+``summarize_residual_history``, ``decide_pas_smoother_action``,
+``advance_pas_smoother``). The returned metadata includes the residual history,
+best-so-far residual, trailing ratio trend, and the stop reason so the driver
+can decide whether to continue smoothing or fall back to the next solver stage.
+
+Controls:
+
+- ``PasSmootherConfig.window`` (trailing ratio window, default ``3``)
+- ``PasSmootherConfig.accept_ratio`` (minimum ratio for accepting a step, default
+  ``1.0``)
+- ``PasSmootherConfig.worsen_ratio`` (ratio threshold that triggers early stop,
+  default ``1.05``)
+- ``PasSmootherConfig.stagnation_ratio`` (window-level stagnation threshold,
+  default ``0.995``)
+- ``PasSmootherConfig.max_consecutive_increases`` (limit on consecutive worsening
+  steps, default ``1``)
+
 **RHSMode=1 angular DD / overlap Schwarz.** ``sfincs_jax`` now exposes
 theta/zeta domain-decomposition preconditioners for RHSMode=1:
 ``SFINCS_JAX_RHSMODE1_PRECONDITIONER=theta_dd`` / ``zeta_dd`` (block-Jacobi) and

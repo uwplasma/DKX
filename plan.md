@@ -378,6 +378,15 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
   - keep operator assembly in JAX where useful,
   - materialize structured sparse pieces only for the hard solve branches,
   - prefer deterministic sparse factors over repeated failed generic retries.
+- [~] Execute the four-step performance refactor in small validated increments:
+  - Step 1: adaptive PAS smoother / early-stop preconditioner stage,
+  - Step 2: explicit sparse host/device split for hard GPU and memory-heavy branches,
+  - Step 3: structured monoenergetic / weak-coupling block solve prototype,
+  - Step 4: Krylov-stack upgrade after steps 1-3 are integrated.
+- [ ] For each of the four steps, land:
+  - focused unit/regression coverage for every new helper function,
+  - at least one targeted parity case and one targeted performance case,
+  - docs updates with equations, algorithm notes, and source-code locations.
 - [~] Keep docs and README synchronized with measured reality (no stale claims).
 - [ ] Keep CI wall-time under control without reducing scientific coverage.
 
@@ -420,6 +429,9 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 - [~] Profile (`SFINCS_JAX_PROFILE=1`) and isolate dominant phase.
 - [~] Implement smallest high-ROI change.
 - [~] Re-run targeted case(s), verify tolerances and print diagnostics.
+- [~] Keep the four-step refactor gated:
+  - step 4 design may proceed in parallel,
+  - step 4 code should not land until steps 1-3 are integrated and revalidated.
 - [x] Re-run reduced-suite subset, then full suite when stable.
 - [x] Regenerate table + docs + this plan.
 
@@ -457,6 +469,14 @@ Current latest notable changes before this handoff:
 - Runtime/memory delta: no `sfincs_jax` numerics changed in this pass. The new roadmap priority is driven by the current pinned offenders plus ideas confirmed in `yancc` and `monkes`: adaptive smoothers, more stable Krylov orthogonalization/recycling, explicit sparse host paths for hard GPU/CPU branches, and block-tridiagonal factor-and-reuse solves for monoenergetic or weakly coupled subproblems.
 - Remaining risks: parity remains closed, but the heavy PAS and structured monoenergetic cases still need algorithmic changes to bring runtime and memory down materially.
 - Next actions: implement and gate one adaptive PAS smoother path, one explicit sparse host/device split for the top GPU offenders, and one structured block solve prototype for the monoenergetic / low-coupling path.
+
+### 2026-03-27
+- Scope: Convert the `yancc` / `monkes` audit into an explicit four-step implementation program, with worker-level ownership split, tests for each new helper, and documentation gates for every algorithmic change.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: code-ownership audit of `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/v3_driver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/solver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/transport_matrix.py`, and focused test inventory under `/Users/rogeriojorge/local/tests/sfincs_jax/tests`
+- Runtime/memory delta: planning-only pass. The immediate implementation order is now fixed: adaptive PAS smoother first, sparse host/device split second, structured monoenergetic block solve third, Krylov upgrade fourth.
+- Remaining risks: steps 1 and 2 both touch the current RHSMode=1 driver flow, so helper-level ownership has to stay disjoint and the final `v3_driver.py` integration should be done centrally after worker results are in.
+- Next actions: dispatch three implementation workers plus one design-only Krylov worker, integrate the first landed helper path locally, and start targeted parity/performance gates before broader rollout.
 
 ### 2026-03-27
 - Scope: Final release-facing docs and README cleanup on `main`, removing stale branch-era and reduced-suite language while keeping real technical scope boundaries explicit.
