@@ -101,8 +101,8 @@ Current scope limits
 
 - The release-facing parity claim is the current full example-suite audit:
 
-  - ``tests/scaled_example_suite_fast_cpu_full_v6_merged``
-  - ``tests/scaled_example_suite_fast_gpu_full_v8``
+  - ``tests/scaled_example_suite_fast_cpu_full_v7_refresh``
+  - ``tests/scaled_example_suite_fast_gpu_full_v11_refresh``
 
   The older reduced-suite artifacts remain useful for debugging, fixture history, and faster local
   triage, but they are no longer the primary release status.
@@ -143,8 +143,8 @@ Release-facing parity status (source of truth)
 
 The release-facing parity inventory is the full current example-suite audit:
 
-- ``tests/scaled_example_suite_fast_cpu_full_v6_merged/suite_report.json``
-- ``tests/scaled_example_suite_fast_gpu_full_v8/suite_report.json``
+- ``tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json``
+- ``tests/scaled_example_suite_fast_gpu_full_v11_refresh/suite_report.json``
 
 Use these artifacts for README and release claims. The reduced upstream parity inventory remains
 useful for faster debugging and historical comparison:
@@ -162,7 +162,7 @@ Regenerate the full release-facing suite:
      --examples-root examples/sfincs_examples \
      --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
      --fortran-exe /Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs \
-     --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged \
+     --out-root tests/scaled_example_suite_fast_cpu_full_v7_refresh \
      --scale-factor 1.0 \
      --runtime-target-basis fortran \
      --fortran-min-runtime-s 1.0 \
