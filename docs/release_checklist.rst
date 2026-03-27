@@ -15,8 +15,8 @@ On the current ``main`` branch, `sfincs_jax` can claim:
 
 The authoritative release-facing artifacts for this state are:
 
-- ``tests/scaled_example_suite_fast_cpu_full_v6_merged``
-- ``tests/scaled_example_suite_fast_gpu_full_v8``
+- ``tests/scaled_example_suite_fast_cpu_full_v7_refresh``
+- ``tests/scaled_example_suite_fast_gpu_full_v11_refresh``
 
 What should still be stated carefully:
 
@@ -61,7 +61,7 @@ Release-facing full suite run (vendored upstream inputs):
      --examples-root examples/sfincs_examples \
      --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
      --fortran-exe /Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs \
-     --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged \
+     --out-root tests/scaled_example_suite_fast_cpu_full_v7_refresh \
      --scale-factor 1.0 \
      --runtime-target-basis fortran \
      --fortran-min-runtime-s 1.0 \

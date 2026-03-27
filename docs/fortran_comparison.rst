@@ -9,8 +9,8 @@ reference implementation.
 On the current ``main`` branch, the release-facing comparison is the full vendored
 example-suite audit:
 
-- CPU: ``tests/scaled_example_suite_fast_cpu_full_v6_merged``
-- GPU: ``tests/scaled_example_suite_fast_gpu_full_v8``
+- CPU: ``tests/scaled_example_suite_fast_cpu_full_v7_refresh``
+- GPU: ``tests/scaled_example_suite_fast_gpu_full_v11_refresh``
 
 Those artifacts currently report:
 
