@@ -102,7 +102,7 @@ Core requirement right now:
 
 ### 4.3 Validation and reporting
 - Reduced suite runner: `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/run_reduced_upstream_suite.py`
-- README table generator: `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/generate_readme_reduced_suite_table.py`
+- Reduced-suite archive note generator: `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/generate_readme_reduced_suite_table.py`
 - Reduced inputs: `/Users/rogeriojorge/local/tests/sfincs_jax/tests/reduced_inputs`
 - Reduced outputs/report dir: `/Users/rogeriojorge/local/tests/sfincs_jax/tests/reduced_upstream_examples`
 - Tests root: `/Users/rogeriojorge/local/tests/sfincs_jax/tests`
@@ -274,6 +274,7 @@ python scripts/run_reduced_upstream_suite.py \
 - `/Users/rogeriojorge/local/tests/sfincs_jax/docs/index.rst`
 - `/Users/rogeriojorge/local/tests/sfincs_jax/docs/system_equations.rst`
 - `/Users/rogeriojorge/local/tests/sfincs_jax/docs/method.rst`
+- `/Users/rogeriojorge/local/tests/sfincs_jax/docs/theory_from_upstream.rst`
 - `/Users/rogeriojorge/local/tests/sfincs_jax/docs/normalizations.rst`
 - `/Users/rogeriojorge/local/tests/sfincs_jax/docs/performance.rst`
 - `/Users/rogeriojorge/local/tests/sfincs_jax/docs/performance_techniques.rst`
@@ -366,6 +367,17 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
   - `geometryScheme4_2species_PAS_noEr`,
   - `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`,
   - `monoenergetic_geometryScheme5_ASCII`.
+- [ ] Prototype `yancc`-style adaptive smoothing / early-stop smoother cycles for PAS-heavy RHSMode=1 cases:
+  - stop when smoother residuals turn upward,
+  - use the smoother as a bounded preconditioner stage instead of paying for full failed retries,
+  - validate on `tokamak_1species_PASCollisions_withEr_fullTrajectories` and `geometryScheme4_2species_PAS_noEr`.
+- [ ] Prototype `MONKES`-style block-tridiagonal / factor-and-reuse solves on monoenergetic or weakly coupled subproblems:
+  - avoid flattening structured low-coupling cases into generic full-system Krylov problems,
+  - target `geometryScheme5_3species_loRes` and the monoenergetic offenders first.
+- [ ] Add explicit sparse host/device split for GPU-heavy cases inspired by `yancc/trajectories_scipy.py`:
+  - keep operator assembly in JAX where useful,
+  - materialize structured sparse pieces only for the hard solve branches,
+  - prefer deterministic sparse factors over repeated failed generic retries.
 - [~] Keep docs and README synchronized with measured reality (no stale claims).
 - [ ] Keep CI wall-time under control without reducing scientific coverage.
 
@@ -437,6 +449,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-03-27
+- Scope: Simplify the main-branch README, move archived reduced-suite material into the docs, add a theory-heavy docs page distilled from the upstream SFINCS v3 notes, and audit `yancc` / `monkes` branches and open PRs for concrete solver and performance ideas.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/index.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/fortran_examples.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/theory_from_upstream.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/upstream_docs.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/generate_readme_fast_branch_audit.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/generate_readme_reduced_suite_table.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `python scripts/generate_readme_reduced_suite_table.py`; `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged --gpu-out-root tests/scaled_example_suite_fast_gpu_full_v8`; `python -m py_compile scripts/generate_readme_reduced_suite_table.py scripts/generate_readme_fast_branch_audit.py`; `sphinx-build -W -b html docs docs/_build/html`; remote branch/PR audit of `https://github.com/f0uriest/yancc` and `https://github.com/f0uriest/monkes` plus local code inspection of `/tmp/yancc_audit` and `/tmp/monkes_audit`
+- Runtime/memory delta: no `sfincs_jax` numerics changed in this pass. The new roadmap priority is driven by the current pinned offenders plus ideas confirmed in `yancc` and `monkes`: adaptive smoothers, more stable Krylov orthogonalization/recycling, explicit sparse host paths for hard GPU/CPU branches, and block-tridiagonal factor-and-reuse solves for monoenergetic or weakly coupled subproblems.
+- Remaining risks: parity remains closed, but the heavy PAS and structured monoenergetic cases still need algorithmic changes to bring runtime and memory down materially.
+- Next actions: implement and gate one adaptive PAS smoother path, one explicit sparse host/device split for the top GPU offenders, and one structured block solve prototype for the monoenergetic / low-coupling path.
 
 ### 2026-03-27
 - Scope: Final release-facing docs and README cleanup on `main`, removing stale branch-era and reduced-suite language while keeping real technical scope boundaries explicit.

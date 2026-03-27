@@ -60,6 +60,22 @@ maintained and auto-generated:
 
 .. include:: _generated/fortran_examples_table.rst
 
+Archived reduced-suite artifacts
+--------------------------------
+
+The reduced-suite runner is still kept for faster local debugging, solver triage, and
+historical milestone comparison. It is no longer the release-facing status page for
+``main``.
+
+Regenerate the archived note and file list with:
+
+.. code-block:: bash
+
+   python scripts/run_reduced_upstream_suite.py --timeout-s 30 --max-attempts 6
+   python scripts/generate_readme_reduced_suite_table.py
+
+.. include:: _generated/reduced_suite_archive_note.rst
+
 Historical reduced-runtime parity sweep (case-by-case)
 ------------------------------------------------------
 

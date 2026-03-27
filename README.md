@@ -14,8 +14,6 @@ It is designed for:
 
 The figure above shows a representative transport benchmark. In the full 39-case example-suite audit below, all cases complete on CPU and GPU with no `jax_error`, no `max_attempts`, no practical mismatches, and no strict mismatches.
 
-For many FP and magnetic-drift examples, the JAX paths are already competitive with or faster than the frozen Fortran reference runs used in the suite. The remaining slow cases are concentrated in PAS-heavy and geometry-rich examples, and they are explicitly documented in the performance table below.
-
 ## Installation
 
 Install from PyPI:
@@ -109,48 +107,6 @@ Advanced CLI/solver options are documented in `docs/usage.rst` and `docs/perform
 
 The detailed equations and normalization conventions are documented in `docs/system_equations.rst`, `docs/normalizations.rst`, and `docs/method.rst`. CPU/GPU-specific implementation notes are documented in `docs/performance.rst` and `docs/performance_techniques.rst`.
 
-## Historical Reduced-Suite Artifacts
-
-Reproduce the table:
-
-```bash
-python scripts/run_reduced_upstream_suite.py \
-  --fortran-exe /path/to/sfincs \
-  --reuse-fortran \
-  --max-attempts 1 \
-  --rtol 5e-4 \
-  --atol 1e-9 \
-  --jax-repeats 2
-python scripts/generate_readme_reduced_suite_table.py
-```
-
-Artifacts:
-
-- `tests/reduced_upstream_examples/suite_report.json`
-- `tests/reduced_upstream_examples/suite_report_strict.json`
-- `docs/_generated/reduced_upstream_suite_status.rst`
-- `docs/_generated/reduced_upstream_suite_status_strict.rst`
-
-These reduced-suite artifacts are archived for reproducibility and debugging only.
-They are not the release-facing parity status for `main`.
-
-The current release-facing comparison for all examples, CPU/GPU runtimes,
-memory, and mismatch/error status is the full example-suite table in the section below.
-
-<!-- BEGIN REDUCED_SUITE_TABLE -->
-Archived reduced-suite reports are kept in:
-
-- `tests/reduced_upstream_examples/suite_report.json`
-- `tests/reduced_upstream_examples/suite_report_strict.json`
-- `tests/reduced_upstream_examples/suite_report_cpu.json`
-- `tests/reduced_upstream_examples/suite_report_gpu.json`
-- `docs/_generated/reduced_upstream_suite_status.rst`
-- `docs/_generated/reduced_upstream_suite_status_strict.rst`
-
-Use these only for historical debugging and comparison against older milestones.
-The release-facing parity status for `main` is the full example-suite table below.
-<!-- END REDUCED_SUITE_TABLE -->
-
 ## Current Example-Suite Audit
 
 Regenerate this block from the current `main` working tree with:
@@ -193,34 +149,6 @@ Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_fast_
 - GPU strict status counts: `parity_ok=39`
 - Remaining cases: none
 - Additional example: `parity_ok` on CPU and `parity_ok` on GPU
-
-Top CPU runtime offenders:
-- `tokamak_1species_PASCollisions_withEr_fullTrajectories`: jax=37.747s fortran=0.017s ratio=2220.43x status=parity_ok, res={'NTHETA': 10, 'NZETA': 1, 'NX': 3, 'NXI': 14}
-- `HSX_PASCollisions_DKESTrajectories`: jax=4.900s fortran=0.994s ratio=4.93x status=parity_ok, res={'NTHETA': 5, 'NZETA': 15, 'NX': 2, 'NXI': 20}
-- `HSX_PASCollisions_fullTrajectories`: jax=4.563s fortran=2.510s ratio=1.82x status=parity_ok, res={'NTHETA': 6, 'NZETA': 15, 'NX': 3, 'NXI': 20}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`: jax=4.550s fortran=1.104s ratio=4.12x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
-- `geometryScheme4_2species_PAS_noEr`: jax=3.685s fortran=0.953s ratio=3.87x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
-
-Top CPU memory offenders:
-- `monoenergetic_geometryScheme5_ASCII`: jax=2773.9 MB fortran=142.1 MB ratio=19.52x status=parity_ok, res={'NTHETA': 10, 'NZETA': 20, 'NX': 1, 'NXI': 16}
-- `geometryScheme4_2species_PAS_noEr`: jax=2623.4 MB fortran=162.7 MB ratio=16.12x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
-- `HSX_PASCollisions_DKESTrajectories`: jax=2128.6 MB fortran=112.0 MB ratio=19.00x status=parity_ok, res={'NTHETA': 5, 'NZETA': 15, 'NX': 2, 'NXI': 20}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: jax=2075.7 MB fortran=144.6 MB ratio=14.36x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
-- `tokamak_2species_PASCollisions_noEr`: jax=1940.7 MB fortran=123.6 MB ratio=15.70x status=parity_ok, res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39}
-
-Top GPU runtime offenders:
-- `geometryScheme5_3species_loRes`: jax=144.597s fortran=98.976s ratio=1.46x status=parity_ok, res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4}
-- `tokamak_1species_PASCollisions_withEr_fullTrajectories`: jax=87.134s fortran=0.017s ratio=5125.56x status=parity_ok, res={'NTHETA': 10, 'NZETA': 1, 'NX': 3, 'NXI': 14}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: jax=58.198s fortran=1.706s ratio=34.11x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`: jax=25.291s fortran=1.104s ratio=22.91x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
-- `monoenergetic_geometryScheme5_ASCII`: jax=17.433s fortran=1.052s ratio=16.57x status=parity_ok, res={'NTHETA': 10, 'NZETA': 20, 'NX': 1, 'NXI': 16}
-
-Top GPU memory offenders:
-- `geometryScheme4_2species_PAS_noEr`: jax=2552.1 MB fortran=162.7 MB ratio=15.69x status=parity_ok, res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: jax=2354.4 MB fortran=144.6 MB ratio=16.28x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
-- `HSX_PASCollisions_fullTrajectories`: jax=2105.3 MB fortran=179.2 MB ratio=11.75x status=parity_ok, res={'NTHETA': 6, 'NZETA': 15, 'NX': 3, 'NXI': 20}
-- `tokamak_2species_PASCollisions_noEr`: jax=1702.6 MB fortran=123.6 MB ratio=13.78x status=parity_ok, res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39}
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`: jax=1671.2 MB fortran=130.7 MB ratio=12.79x status=parity_ok, res={'NTHETA': 6, 'NZETA': 19, 'NX': 2, 'NXI': 20}
 
 Current mismatches:
 - CPU practical mismatches: none
