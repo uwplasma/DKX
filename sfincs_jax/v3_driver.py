@@ -42,6 +42,7 @@ from .solver import (
     gmres_solve_with_history_scipy,
 )
 from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
+from .pas_smoother import adaptive_pas_smoother, adaptive_pas_smoother_allowed
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -645,6 +646,33 @@ def _rhsmode1_pas_fast_accept(
         return False
     accept_thresh = max(float(target) * max(1.0, float(ratio)), max(0.0, float(abs_floor)))
     return float(residual_norm) <= float(accept_thresh)
+
+
+def _rhsmode1_pas_adaptive_smoother_allowed(
+    *,
+    op: V3FullSystemOperator,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    use_implicit: bool,
+) -> bool:
+    env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER", "").strip().lower()
+    enabled = env not in {"0", "false", "no", "off"}
+    min_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_MIN", "").strip()
+    try:
+        min_size = int(min_env) if min_env else 2000
+    except ValueError:
+        min_size = 2000
+    return adaptive_pas_smoother_allowed(
+        enabled=enabled,
+        use_implicit=bool(use_implicit),
+        has_pas=op.fblock.pas is not None,
+        include_phi1=bool(op.include_phi1),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        active_size=int(active_size),
+        min_size=int(min_size),
+    )
 
 
 def _rhsmode1_constraint0_sparse_first(
@@ -13983,6 +14011,57 @@ def solve_v3_full_system_linear_gmres(
             and (not bool(op.include_phi1))
             and float(res_reduced.residual_norm) > float(fp_strong_abs)
         )
+        if (
+            rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
+            and preconditioner_reduced is not None
+            and _rhsmode1_pas_adaptive_smoother_allowed(
+                op=op,
+                active_size=int(active_size),
+                residual_norm=float(res_reduced.residual_norm),
+                target=float(target_reduced),
+                use_implicit=bool(use_implicit),
+            )
+        ):
+            smoother_max_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", "").strip()
+            smoother_omega_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", "").strip()
+            try:
+                smoother_max = int(smoother_max_env) if smoother_max_env else 3
+            except ValueError:
+                smoother_max = 3
+            try:
+                smoother_omega = float(smoother_omega_env) if smoother_omega_env else 1.0
+            except ValueError:
+                smoother_omega = 1.0
+            smoother = adaptive_pas_smoother(
+                matvec=mv_reduced,
+                rhs=rhs_reduced,
+                preconditioner=preconditioner_reduced,
+                x0=res_reduced.x,
+                target=float(target_reduced),
+                omega=float(smoother_omega),
+                max_sweeps=int(smoother_max),
+            )
+            if float(smoother.residual_norm) < float(res_reduced.residual_norm):
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: PAS adaptive smoother "
+                        f"accepted {int(smoother.accepted_sweeps)} sweep(s), "
+                        f"reason={smoother.stop_reason}, "
+                        f"residual={float(res_reduced.residual_norm):.3e}->{float(smoother.residual_norm):.3e}",
+                    )
+                res_reduced = GMRESSolveResult(
+                    x=smoother.x,
+                    residual_norm=jnp.asarray(smoother.residual_norm, dtype=jnp.float64),
+                )
+                ksp_matvec = mv_reduced
+                ksp_b = rhs_reduced
+                ksp_precond = preconditioner_reduced
+                ksp_x0 = res_reduced.x
+                ksp_restart = restart
+                ksp_maxiter = maxiter
+                ksp_precond_side = gmres_precond_side
+                ksp_solver_kind = _solver_kind("incremental")[0]
         if fp_force_strong:
             strong_precond_trigger = True
         if (
@@ -16908,6 +16987,58 @@ def solve_v3_full_system_linear_gmres(
         except ValueError:
             strong_ratio = 1.0
         strong_precond_trigger = bool(res_ratio > strong_ratio) if strong_ratio > 0 else True
+        if (
+            rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
+            and preconditioner_full is not None
+            and _rhsmode1_pas_adaptive_smoother_allowed(
+                op=op,
+                active_size=int(op.total_size),
+                residual_norm=float(result.residual_norm),
+                target=float(target),
+                use_implicit=bool(use_implicit),
+            )
+        ):
+            smoother_max_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", "").strip()
+            smoother_omega_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", "").strip()
+            try:
+                smoother_max = int(smoother_max_env) if smoother_max_env else 3
+            except ValueError:
+                smoother_max = 3
+            try:
+                smoother_omega = float(smoother_omega_env) if smoother_omega_env else 1.0
+            except ValueError:
+                smoother_omega = 1.0
+            smoother = adaptive_pas_smoother(
+                matvec=mv,
+                rhs=rhs,
+                preconditioner=preconditioner_full,
+                x0=result.x,
+                target=float(target),
+                omega=float(smoother_omega),
+                max_sweeps=int(smoother_max),
+            )
+            if float(smoother.residual_norm) < float(result.residual_norm):
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: PAS adaptive smoother "
+                        f"accepted {int(smoother.accepted_sweeps)} sweep(s), "
+                        f"reason={smoother.stop_reason}, "
+                        f"residual={float(result.residual_norm):.3e}->{float(smoother.residual_norm):.3e}",
+                    )
+                result = GMRESSolveResult(
+                    x=smoother.x,
+                    residual_norm=jnp.asarray(smoother.residual_norm, dtype=jnp.float64),
+                )
+                residual_vec = rhs - mv(result.x)
+                ksp_matvec = mv
+                ksp_b = rhs
+                ksp_precond = preconditioner_full
+                ksp_x0 = result.x
+                ksp_restart = restart
+                ksp_maxiter = maxiter
+                ksp_precond_side = gmres_precond_side
+                ksp_solver_kind = _solver_kind("incremental")[0]
         if (
             float(result.residual_norm) > target
             and int(op.rhs_mode) == 1
