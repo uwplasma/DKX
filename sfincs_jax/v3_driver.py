@@ -262,6 +262,34 @@ def _rhs1_pas_tokamak_cpu_xblock_preferred(
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
 
 
+def _rhs1_gpu_sparse_fallback_skip_allowed(
+    *,
+    op: V3FullSystemOperator,
+    rhs1_precond_kind: str | None,
+    use_active_dof_mode: bool,
+    residual_norm: float,
+    target: float,
+) -> bool:
+    if jax.default_backend() == "cpu":
+        return False
+    if not bool(use_active_dof_mode):
+        return False
+    if int(getattr(op, "rhs_mode", 0) or 0) != 1 or bool(getattr(op, "include_phi1", False)):
+        return False
+    if getattr(getattr(op, "fblock", None), "pas", None) is None:
+        return False
+    if str(rhs1_precond_kind or "").strip().lower() not in {"schur", "pas_schur"}:
+        return False
+    skip_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", "").strip()
+    try:
+        skip_ratio = float(skip_ratio_env) if skip_ratio_env else 10.0
+    except ValueError:
+        skip_ratio = 10.0
+    if skip_ratio <= 0.0:
+        return False
+    return float(residual_norm) <= float(skip_ratio) * max(float(target), 1.0e-300)
+
+
 def _rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
     return rhs1_precond_kind in {
         None,
@@ -15178,6 +15206,21 @@ def solve_v3_full_system_linear_gmres(
             )
         if pas_fast_accept:
             sparse_enabled = False
+        gpu_sparse_skip = _rhs1_gpu_sparse_fallback_skip_allowed(
+            op=op,
+            rhs1_precond_kind=rhs1_precond_kind,
+            use_active_dof_mode=True,
+            residual_norm=float(res_reduced.residual_norm),
+            target=float(target_reduced),
+        )
+        if gpu_sparse_skip and sparse_enabled and emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
+                f"{rhs1_precond_kind} accept (residual={float(res_reduced.residual_norm):.3e})",
+            )
+        if gpu_sparse_skip:
+            sparse_enabled = False
         if sparse_enabled and float(res_reduced.residual_norm) > target_reduced:
             if sparse_xblock_rescue_active:
                 try:
@@ -17935,6 +17978,21 @@ def solve_v3_full_system_linear_gmres(
                 f"(residual={float(result.residual_norm):.3e}) -> skip sparse rescue tail",
             )
         if pas_fast_accept:
+            sparse_enabled = False
+        gpu_sparse_skip = _rhs1_gpu_sparse_fallback_skip_allowed(
+            op=op,
+            rhs1_precond_kind=rhs1_precond_kind,
+            use_active_dof_mode=False,
+            residual_norm=float(result.residual_norm),
+            target=float(target),
+        )
+        if gpu_sparse_skip and sparse_enabled and emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
+                f"{rhs1_precond_kind} accept (residual={float(result.residual_norm):.3e})",
+            )
+        if gpu_sparse_skip:
             sparse_enabled = False
         if sparse_enabled and float(result.residual_norm) > target:
             if sparse_kind_use == "jax":

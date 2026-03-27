@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+from types import SimpleNamespace
 import numpy as np
 
 from sfincs_jax.io import write_sfincs_jax_output_h5
@@ -543,6 +544,62 @@ def test_pas_tokamak_cpu_xblock_allowed_only_for_bounded_cases() -> None:
         n_zeta=1,
         max_l=14,
         xblock_tz_limit=6000,
+    )
+
+
+def test_gpu_sparse_fallback_skip_allowed_for_bounded_pas_schur_accept(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    op = SimpleNamespace(
+        rhs_mode=1,
+        include_phi1=False,
+        fblock=SimpleNamespace(pas=object()),
+    )
+    assert v3_driver._rhs1_gpu_sparse_fallback_skip_allowed(
+        op=op,
+        rhs1_precond_kind="schur",
+        use_active_dof_mode=True,
+        residual_norm=4.0e-10,
+        target=1.0e-10,
+    )
+    assert not v3_driver._rhs1_gpu_sparse_fallback_skip_allowed(
+        op=op,
+        rhs1_precond_kind="xblock_tz",
+        use_active_dof_mode=True,
+        residual_norm=4.0e-10,
+        target=1.0e-10,
+    )
+
+
+def test_gpu_sparse_fallback_skip_rejects_cpu_or_large_residual(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", raising=False)
+    op = SimpleNamespace(
+        rhs_mode=1,
+        include_phi1=False,
+        fblock=SimpleNamespace(pas=object()),
+    )
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    assert not v3_driver._rhs1_gpu_sparse_fallback_skip_allowed(
+        op=op,
+        rhs1_precond_kind="schur",
+        use_active_dof_mode=True,
+        residual_norm=4.0e-10,
+        target=1.0e-10,
+    )
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    assert not v3_driver._rhs1_gpu_sparse_fallback_skip_allowed(
+        op=op,
+        rhs1_precond_kind="schur",
+        use_active_dof_mode=False,
+        residual_norm=4.0e-10,
+        target=1.0e-10,
+    )
+    assert not v3_driver._rhs1_gpu_sparse_fallback_skip_allowed(
+        op=op,
+        rhs1_precond_kind="schur",
+        use_active_dof_mode=True,
+        residual_norm=2.0e-9,
+        target=1.0e-10,
     )
 
 
