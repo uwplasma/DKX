@@ -2,11 +2,19 @@
 
 `sfincs_jax` is a JAX implementation of SFINCS v3 that solves the same neoclassical drift-kinetic problem with matching normalizations, geometry conventions, and output format (`sfincsOutput.h5`).
 
+On the current `main` branch, the full vendored example suite runs cleanly on CPU and GPU with dataset-level parity against SFINCS Fortran v3. The default CLI path is tuned for robust explicit solves and practical throughput, while the Python API can opt into differentiable solve paths when gradients matter.
+
 It is designed for:
 
 - high-performance runs on CPU/GPU,
 - memory-efficient large solves,
 - end-to-end differentiable workflows.
+
+![Runtime and parity snapshot](docs/_static/figures/sfincs_vs_sfincs_jax_l11_runtime_2x2.png)
+
+The figure above shows a representative transport benchmark. In the full 39-case example-suite audit below, all cases complete on CPU and GPU with no `jax_error`, no `max_attempts`, no practical mismatches, and no strict mismatches.
+
+For many FP and magnetic-drift examples, the JAX paths are already competitive with or faster than the frozen Fortran reference runs used in the suite. The remaining slow cases are concentrated in PAS-heavy and geometry-rich examples, and they are explicitly documented in the performance table below.
 
 ## Installation
 
@@ -53,8 +61,8 @@ print("Available datasets:", len(results))
 print("Example key:", "particleFlux_vm_psiHat" in results)
 ```
 
-`sfincs_jax write-output` and `write_sfincs_jax_output_h5(...)` use the fast explicit
-solve path by default. Request the implicit/differentiable linear-solve path only when
+`sfincs_jax write-output` and `write_sfincs_jax_output_h5(...)` use the explicit
+performance-oriented solve path by default. Request the implicit/differentiable linear-solve path only when
 you need it:
 
 ```python
@@ -89,6 +97,18 @@ sfincs_jax compare-h5 --a sfincsOutput_jax.h5 --b sfincsOutput_fortran.h5
 
 Advanced CLI/solver options are documented in `docs/usage.rst` and `docs/performance_techniques.rst`.
 
+## What Differs From Fortran v3
+
+`sfincs_jax` reproduces the SFINCS v3 equations, normalizations, geometry conventions, and output datasets for the supported examples, but the implementation strategy differs in a few important ways:
+
+- the default CLI path uses an explicit performance-oriented solve strategy instead of trying to mirror every PETSc iteration path exactly,
+- the Python API can switch to differentiable solve paths when end-to-end sensitivities are needed,
+- CPU runs lean on JIT-cached kernels and selected host sparse factorizations for hard linear branches,
+- GPU runs keep operator applications on device, then fall back to accelerator-safe or host rescue paths only when conditioning or memory demands it,
+- and terminal output is intentionally a superset of Fortran SFINCS output so debugging information is available without losing Fortran-visible signals.
+
+The detailed equations and normalization conventions are documented in `docs/system_equations.rst`, `docs/normalizations.rst`, and `docs/method.rst`. CPU/GPU-specific implementation notes are documented in `docs/performance.rst` and `docs/performance_techniques.rst`.
+
 ## Historical Reduced-Suite Artifacts
 
 Reproduce the table:
@@ -114,7 +134,7 @@ Artifacts:
 These reduced-suite artifacts are archived for reproducibility and debugging only.
 They are not the release-facing parity status for `main`.
 
-The current authoritative branch-state comparison for all examples, CPU/GPU runtimes,
+The current release-facing comparison for all examples, CPU/GPU runtimes,
 memory, and mismatch/error status is the full example-suite table in the section below.
 
 <!-- BEGIN REDUCED_SUITE_TABLE -->
@@ -127,16 +147,13 @@ Archived reduced-suite reports are kept in:
 - `docs/_generated/reduced_upstream_suite_status.rst`
 - `docs/_generated/reduced_upstream_suite_status_strict.rst`
 
-Historical reduced-suite snapshot counts: CPU practical `parity_ok=38/38`, strict `parity_ok=38/38`.
-Historical reduced-suite GPU rows archived: `0`.
-
 Use these only for historical debugging and comparison against older milestones.
 The release-facing parity status for `main` is the full example-suite table below.
 <!-- END REDUCED_SUITE_TABLE -->
 
-## Fast Explicit Branch Audit
+## Current Example-Suite Audit
 
-Regenerate this block on the fast-path branch with:
+Regenerate this block from the current `main` working tree with:
 
 ```bash
 python scripts/run_scaled_example_suite.py \
@@ -153,7 +170,7 @@ python scripts/generate_readme_fast_branch_audit.py \
   --out-root tests/scaled_example_suite_fast_cpu_rtwindow_v1
 ```
 
-The benchmark policy on this branch is now:
+The benchmark policy on `main` is:
 
 - start from the original Fortran v3 example resolution,
 - only downscale when a case is too expensive for a practical suite run,
@@ -166,7 +183,7 @@ keeps the GPU lane tied to a deterministic reference, and makes the additional e
 of the same artifact set as the standard suite.
 
 <!-- BEGIN FAST_BRANCH_AUDIT -->
-Current fast explicit CPU audit comes from `tests/scaled_example_suite_fast_cpu_full_v6_merged`.
+Current `main` CPU audit comes from `tests/scaled_example_suite_fast_cpu_full_v6_merged`.
 Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_fast_gpu_full_v8`.
 
 - Recorded cases: `39/39`
