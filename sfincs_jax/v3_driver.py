@@ -434,6 +434,9 @@ def _transport_tzfft_accelerator_auto_allowed(op: V3FullSystemOperator) -> bool:
     """Allow accelerator tzfft only for bounded collisionless transport branches."""
     if jax.default_backend() == "cpu":
         return True
+    n_theta = int(getattr(op, "n_theta", 0) or 0)
+    n_zeta = int(getattr(op, "n_zeta", 0) or 0)
+    total_size = int(getattr(op, "total_size", 0) or 0)
     if bool(op.include_phi1):
         return False
     if int(op.rhs_mode) not in {2, 3}:
@@ -442,14 +445,16 @@ def _transport_tzfft_accelerator_auto_allowed(op: V3FullSystemOperator) -> bool:
         return False
     if int(op.n_x) > 2:
         return False
-    if int(op.n_theta) * int(op.n_zeta) < 64:
+    if n_theta <= 0 or n_zeta <= 0 or total_size <= 0:
+        return False
+    if n_theta * n_zeta < 64:
         return False
     max_env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", "").strip()
     try:
         max_size = int(max_env) if max_env else 5000
     except ValueError:
         max_size = 5000
-    return int(op.total_size) <= max(1, int(max_size))
+    return total_size <= max(1, int(max_size))
 
 
 def _rhsmode1_host_dense_fallback_allowed() -> bool:
@@ -1504,6 +1509,12 @@ def _transport_sparse_direct_first_attempt_allowed(
                 return True
         return True
     if jax.default_backend() != "cpu":
+        if _transport_tzfft_accelerator_auto_allowed(op):
+            # For bounded collisionless accelerator transport cases we now have a
+            # viable tzfft iterative branch. Let that cheaper path run first and
+            # keep host sparse LU as a rescue instead of paying the host factorization
+            # cost up front on every solve.
+            return False
         return _transport_sparse_direct_rescue_allowed(
             op=op,
             size=size_int,

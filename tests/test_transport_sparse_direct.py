@@ -170,6 +170,26 @@ def test_transport_sparse_direct_first_attempt_allowed_for_gpu_explicit_transpor
     )
 
 
+def test_transport_sparse_direct_first_attempt_disabled_for_gpu_tzfft_auto_case(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    op = SimpleNamespace(
+        rhs_mode=3,
+        include_phi1=False,
+        n_x=1,
+        n_theta=37,
+        n_zeta=5,
+        total_size=3697,
+        fblock=SimpleNamespace(fp=None),
+    )
+    assert not _transport_sparse_direct_first_attempt_allowed(
+        op=op,
+        size=3697,
+        use_implicit=False,
+    )
+
+
 def test_transport_sparse_direct_first_attempt_disabled_for_cpu_collisionless_mono_medium_size(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST_CPU_MIN", raising=False)
