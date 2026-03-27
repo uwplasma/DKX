@@ -336,8 +336,10 @@ forward and backward substitutions:
    x_k = y_k - C_k x_{k+1}.
 
 This is the same factor-and-reuse pattern that makes the MONKES linear algebra kernels
-memory-efficient. In `sfincs_jax`, the reusable prototype lives in
-`sfincs_jax/structured_velocity.py` and is currently kept separate from the main driver
-until the helper is integrated and benchmarked on the monoenergetic and weak-coupling
-paths. A reverse factorization is available for cases where the leading block is singular
-or badly conditioned, so the solve can start from the opposite end of the block chain.
+memory-efficient. In `sfincs_jax`, the reusable implementation lives in
+`sfincs_jax/structured_velocity.py`. It is now used in the weakly coupled
+`pas_tokamak_theta` tail solve for the `L>=2` block chain, while the
+special `(L=0,1)` entrance block remains handled explicitly in
+`sfincs_jax/v3_driver.py`. A reverse factorization is available for cases where
+the leading block is singular or badly conditioned, so the solve can start from
+the opposite end of the block chain.
