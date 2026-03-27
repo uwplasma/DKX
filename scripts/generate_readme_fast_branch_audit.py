@@ -288,11 +288,6 @@ def main() -> int:
     mismatches = [row for row in rows if str(row.get("status")) != "parity_ok"]
     gpu_mismatches = [row for row in gpu_rows if str(row.get("status")) != "parity_ok"]
 
-    runtime_top = _top_rows(rows, key="jax_runtime_s")
-    memory_top = _top_rows(rows, key="jax_max_rss_mb")
-    gpu_runtime_top = _top_rows(gpu_rows, key="jax_runtime_s")
-    gpu_memory_top = _top_rows(gpu_rows, key="jax_max_rss_mb")
-
     improvements_runtime: list[str] = []
     improvements_memory: list[str] = []
     baseline_report = Path(args.baseline_report)
@@ -357,28 +352,6 @@ def main() -> int:
     if cpu_additional is not None and gpu_additional is not None:
         lines.append(
             f"- Additional example: `{cpu_additional.get('status', '-')}` on CPU and `{gpu_additional.get('status', '-')}` on GPU"
-        )
-
-    lines.extend(
-        [
-            "",
-            "Top CPU runtime offenders:",
-            *[_format_row_summary(row, metric_key="jax_runtime_s", digits=3) for row in runtime_top],
-            "",
-            "Top CPU memory offenders:",
-            *[_format_row_summary(row, metric_key="jax_max_rss_mb", digits=1) for row in memory_top],
-        ]
-    )
-    if gpu_rows:
-        lines.extend(
-            [
-                "",
-                "Top GPU runtime offenders:",
-                *[_format_row_summary(row, metric_key="jax_runtime_s", digits=3) for row in gpu_runtime_top],
-                "",
-                "Top GPU memory offenders:",
-                *[_format_row_summary(row, metric_key="jax_max_rss_mb", digits=1) for row in gpu_memory_top],
-            ]
         )
 
     gpu_rows_by_case = {str(row["case"]): row for row in gpu_rows}

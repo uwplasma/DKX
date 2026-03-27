@@ -7,6 +7,14 @@ that document the physics models and numerical algorithms used in the Fortran co
 To make `sfincs_jax` self-contained on Read the Docs, selected upstream documents are vendored in
 ``docs/upstream/`` and linked here for convenient browsing and download.
 
+The most important physics and numerical content from these notes is now also transcribed into the
+main documentation set, especially:
+
+- :doc:`theory_from_upstream`
+- :doc:`physics_reference`
+- :doc:`system_equations`
+- :doc:`method`
+
 Papers
 ------
 
