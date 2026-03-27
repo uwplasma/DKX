@@ -6,6 +6,7 @@ import numpy as np
 
 from sfincs_jax.v3_driver import (
     _host_sparse_factor_dtype,
+    _transport_tzfft_accelerator_auto_allowed,
     _transport_dense_backend_allowed,
     _transport_host_gmres_accepts_preconditioned_residual,
     _transport_host_gmres_first_attempt_allowed,
@@ -430,6 +431,46 @@ def test_transport_tzfft_backend_allowed_respects_env(monkeypatch) -> None:
     assert _transport_tzfft_backend_allowed()
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_ALLOW_ACCELERATOR", "0")
     assert not _transport_tzfft_backend_allowed()
+
+
+def test_transport_tzfft_accelerator_auto_allowed_for_bounded_collisionless_gpu_case(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    op = SimpleNamespace(
+        rhs_mode=3,
+        include_phi1=False,
+        n_x=1,
+        n_theta=37,
+        n_zeta=5,
+        total_size=3697,
+        fblock=SimpleNamespace(fp=None),
+    )
+    assert _transport_tzfft_accelerator_auto_allowed(op)
+
+
+def test_transport_tzfft_accelerator_auto_rejects_large_or_fp_gpu_case(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    large_op = SimpleNamespace(
+        rhs_mode=3,
+        include_phi1=False,
+        n_x=1,
+        n_theta=37,
+        n_zeta=5,
+        total_size=7000,
+        fblock=SimpleNamespace(fp=None),
+    )
+    fp_op = SimpleNamespace(
+        rhs_mode=2,
+        include_phi1=False,
+        n_x=1,
+        n_theta=37,
+        n_zeta=5,
+        total_size=3697,
+        fblock=SimpleNamespace(fp=object()),
+    )
+    assert not _transport_tzfft_accelerator_auto_allowed(large_op)
+    assert not _transport_tzfft_accelerator_auto_allowed(fp_op)
 
 
 def test_transport_sparse_direct_rescue_first_defaults_on(monkeypatch) -> None:
