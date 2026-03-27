@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-03-26 (America/Chicago)
+Last updated: 2026-03-27 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -124,7 +124,7 @@ Core requirement right now:
 - Full fast explicit CPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_cpu_full_v6_merged` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
 - Full frozen-reference GPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v8` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
 - `additional_examples` is included in both final lanes and is `parity_ok` on CPU and GPU.
-- README fast-branch audit block now reflects the completed CPU and GPU artifact roots instead of an intermediate partial sweep.
+- README and docs now reflect the completed CPU and GPU artifact roots on `main` instead of intermediate branch-era sweeps.
 - `write_sfincs_jax_output_h5(..., return_results=True)` now returns in-memory result dictionary for immediate inspection.
 - Release-style validation has been rerun on the fast branch tip: `pytest -q` passed and `sphinx-build -W -b html docs docs/_build/html` passed.
 
@@ -135,8 +135,9 @@ Core requirement right now:
 - Parallel strong-scaling beyond a few cores is not yet consistently strong for single-RHS large solves.
 
 ### 5.3 Product posture
-- Usable and scientifically functional,
-- Still in active optimization/scaling hardening phase,
+- Release-ready for the currently supported example-suite scope on CPU and GPU,
+- Scientifically functional and parity-clean on the audited `main` release artifacts,
+- Still in active optimization/scaling hardening phase for runtime, memory, and multi-device throughput,
 - Needs continued runtime/memory and distributed-solve work to reach “best-in-class” HPC behavior.
 
 ### 5.4 Execution modes
@@ -172,7 +173,7 @@ Mark completed milestones as `[x]`, active as `[~]`, pending as `[ ]`.
 ### 6.3 Documentation and examples
 - [x] Major docs expansion (equations, models, methods, performance notes, references).
 - [x] Added examples for parity, transport, autodiff, optimization, performance.
-- [x] README recently simplified to focus on install + quick start + CLI + reduced-suite table.
+- [x] README and docs now present the full example-suite CPU/GPU audit as the release-facing status, with reduced-suite artifacts explicitly archived for debugging only.
 - [x] Python quick-start now includes in-memory result access via `return_results=True`.
 
 ### 6.4 CI/CD hardening
@@ -356,15 +357,15 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 - [x] Re-run additional high-resolution example on CPU+GPU and integrate into comparison reporting.
 - [ ] Close remaining worst runtime/memory offenders (especially PAS-heavy cases) while preserving tolerances.
 - [~] Strengthen default PAS preconditioner path to avoid expensive fallback branches where possible.
-- [~] Split execution strategy:
+- [x] Split execution strategy:
   - CLI/default explicit path optimized for runtime and memory first,
   - reference/differentiable parity path selected explicitly from Python.
-- [~] Start fast-path performance branch from full-suite offender data:
-  - `monoenergetic_geometryScheme1`,
-  - `transportMatrix_geometryScheme11`,
-  - `geometryScheme4_1species_PAS_withEr_DKESTrajectories`,
-  - `transportMatrix_geometryScheme2`,
-  - `geometryScheme5_3species_loRes`.
+- [~] Continue performance-first optimization from the pinned final full-suite offender data:
+  - `tokamak_1species_PASCollisions_withEr_fullTrajectories`,
+  - `geometryScheme5_3species_loRes`,
+  - `geometryScheme4_2species_PAS_noEr`,
+  - `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`,
+  - `monoenergetic_geometryScheme5_ASCII`.
 - [~] Keep docs and README synchronized with measured reality (no stale claims).
 - [ ] Keep CI wall-time under control without reducing scientific coverage.
 
@@ -403,17 +404,17 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 - [x] For example-suite audits, start from original reference resolution and only downscale when needed to satisfy a configured Fortran runtime window; do not intentionally reduce a case below about `1s` of Fortran wall time unless the original case is already that small.
 - [x] Benchmark CPU/GPU JAX lanes against a fixed CPU-generated Fortran reference root when machine-local Fortran outputs are not proven deterministic.
 - [x] For `constraintScheme=0` reference generation, force a stable Fortran Krylov solve (`PETSC_OPTIONS='-ksp_type gmres -pc_type none'`) unless an explicit PETSc override is requested.
-- [ ] Pick top 1-2 offenders from latest report (runtime and memory separately).
-- [ ] Profile (`SFINCS_JAX_PROFILE=1`) and isolate dominant phase.
-- [ ] Implement smallest high-ROI change.
-- [ ] Re-run targeted case(s), verify tolerances and print diagnostics.
+- [~] Pick top 1-2 offenders from latest report (runtime and memory separately).
+- [~] Profile (`SFINCS_JAX_PROFILE=1`) and isolate dominant phase.
+- [~] Implement smallest high-ROI change.
+- [~] Re-run targeted case(s), verify tolerances and print diagnostics.
 - [x] Re-run reduced-suite subset, then full suite when stable.
 - [x] Regenerate table + docs + this plan.
 
 ### 15.2 "Do not regress" list
-- [ ] Differentiability on JAX-native solver paths.
-- [ ] Standalone behavior (no hidden Fortran-output dependencies).
-- [ ] Robust defaults for unseen inputs.
+- [~] Differentiability on JAX-native solver paths.
+- [x] Standalone behavior (no hidden Fortran-output dependencies).
+- [~] Robust defaults for unseen inputs.
 - [x] CI/doc builds passing.
 
 ---
@@ -436,6 +437,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-03-27
+- Scope: Final release-facing docs and README cleanup on `main`, removing stale branch-era and reduced-suite language while keeping real technical scope boundaries explicit.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/index.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/parity.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/performance.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/fortran_examples.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/fortran_comparison.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/release_checklist.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/generate_readme_fast_branch_audit.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/generate_readme_reduced_suite_table.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `python scripts/generate_readme_reduced_suite_table.py`; `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged --gpu-out-root tests/scaled_example_suite_fast_gpu_full_v8`; `python -m py_compile scripts/generate_readme_reduced_suite_table.py scripts/generate_readme_fast_branch_audit.py`; `sphinx-build -W -b html docs docs/_build/html`
+- Runtime/memory delta: no solver numerics changed in this pass. Release-facing documentation now points at the final `39/39` CPU and GPU example-suite artifacts and the current top runtime/memory offenders instead of stale branch-era or reduced-suite milestones.
+- Remaining risks: no parity or robustness blockers remain in the current release-facing example-suite scope. Open risks are performance, memory, scaling, and broader unsupported feature expansion beyond the audited scope.
+- Next actions: ship from `main` for the audited supported scope, then start a performance-only pass from the pinned offender roots.
 
 ### 2026-03-27
 - Scope: Finish the current-tip frozen-reference GPU verification pass, fix the remaining staged-reference suite harness failure modes, and refresh the branch artifacts from the completed CPU/GPU roots.
@@ -933,9 +942,9 @@ python scripts/run_scaled_example_suite.py \
 ## 19) Definition Of Done (current release gate)
 
 Release-ready means:
-1. Reduced-suite practical comparisons all pass and table is fully populated.
-2. Additional high-resolution example(s) run successfully with validated outputs.
-3. No hidden external-file dependence for correctness in default path.
+1. Full release-facing example-suite CPU and GPU comparisons are `39/39 parity_ok`, strict-clean, and free of `jax_error` / `max_attempts`.
+2. `additional_examples` runs successfully on CPU and GPU with validated outputs.
+3. No hidden external-file dependence for correctness in the default path.
 4. CI/docs/tests are green.
 5. Runtime/memory and solver defaults are documented with reproducible commands.
-6. This `plan.md` reflects current truth and next executable steps.
+6. README/docs/plan all reflect the current `main` truth.
