@@ -118,11 +118,11 @@ Core requirement right now:
 
 ---
 
-## 5) Current State Snapshot (as of 2026-03-26)
+## 5) Current State Snapshot (as of 2026-03-27)
 
 ### 5.1 Recent validated status
 - Full fast explicit CPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_cpu_full_v6_merged` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
-- Full frozen-reference GPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v5` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
+- Full frozen-reference GPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v8` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
 - `additional_examples` is included in both final lanes and is `parity_ok` on CPU and GPU.
 - README fast-branch audit block now reflects the completed CPU and GPU artifact roots instead of an intermediate partial sweep.
 - `write_sfincs_jax_output_h5(..., return_results=True)` now returns in-memory result dictionary for immediate inspection.
@@ -130,8 +130,8 @@ Core requirement right now:
 
 ### 5.2 Known pain points that still matter
 - Runtime ratio is still high for PAS-heavy CPU cases with tiny Fortran times, especially `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`37.747s` JAX CPU vs `0.017s` Fortran), plus HSX / geometry4 PAS cases in the `3.7-4.9s` range on the final CPU root.
-- GPU wall time is now robust and parity-clean, but the worst runtime offenders remain `filteredW7XNetCDF_2species_magneticDrifts_noEr` (`144.240s`), `HSX_FPCollisions_fullTrajectories` (`143.108s`), `geometryScheme5_3species_loRes` (`141.190s`), `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` (`140.152s`), and `geometryScheme4_2species_withEr_fullTrajectories` (`139.721s`).
-- Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`) and `geometryScheme4_2species_PAS_noEr` (`2623.4 MB`), while current worst GPU RSS offenders are `geometryScheme4_2species_PAS_noEr` (`2554.9 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2353.7 MB`).
+- GPU wall time is now robust and parity-clean, but the worst runtime offenders remain `geometryScheme5_3species_loRes` (`144.597s`), `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`87.134s`), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`58.198s`), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (`25.291s`), and `monoenergetic_geometryScheme5_ASCII` (`17.433s`).
+- Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`) and `geometryScheme4_2species_PAS_noEr` (`2623.4 MB`), while current worst GPU RSS offenders are `geometryScheme4_2species_PAS_noEr` (`2552.1 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2354.4 MB`).
 - Parallel strong-scaling beyond a few cores is not yet consistently strong for single-RHS large solves.
 
 ### 5.3 Product posture
@@ -351,7 +351,7 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 ## 14) Roadmap
 
 ### 14.1 Short-term (next 1-3 weeks)
-- [x] Ensure the runtime-windowed/full example-suite audit is complete for CPU and GPU lanes against upstream-reference resolutions (final roots `tests/scaled_example_suite_fast_cpu_full_v6_merged` and `tests/scaled_example_suite_fast_gpu_full_v5`).
+- [x] Ensure the runtime-windowed/full example-suite audit is complete for CPU and GPU lanes against upstream-reference resolutions (final roots `tests/scaled_example_suite_fast_cpu_full_v6_merged` and `tests/scaled_example_suite_fast_gpu_full_v8`).
 - [x] Replace blind global example-suite downscaling with original-reference, Fortran-runtime-window benchmarking so tiny Fortran rows are not artifacts of over-reduction.
 - [x] Re-run additional high-resolution example on CPU+GPU and integrate into comparison reporting.
 - [ ] Close remaining worst runtime/memory offenders (especially PAS-heavy cases) while preserving tolerances.
@@ -436,6 +436,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-03-27
+- Scope: Finish the current-tip frozen-reference GPU verification pass, fix the remaining staged-reference suite harness failure modes, and refresh the branch artifacts from the completed CPU/GPU roots.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/run_reduced_upstream_suite.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_runtime_window_attempts.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_scaled_example_suite_reference.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_runtime_window_attempts.py tests/test_scaled_example_suite_reference.py` (`13 passed`); `python -m py_compile scripts/run_reduced_upstream_suite.py tests/test_runtime_window_attempts.py tests/test_scaled_example_suite_reference.py`; office frozen-reference GPU failed-subset rerun in `/home/rjorge/sfincs_jax_gpu_lane/tests/probe_gpu_frozen_failed_subset_v3` (`7/7 parity_ok`); office full GPU root `/home/rjorge/sfincs_jax_gpu_lane/tests/scaled_example_suite_fast_gpu_full_v8` mirrored to `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v8`; `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged --gpu-out-root tests/scaled_example_suite_fast_gpu_full_v8`.
+- Runtime/memory delta: no new solver-path numerics landed in this pass, but the final current-tip GPU verification root is now `39/39 parity_ok` and strict-clean with no `jax_error` and no `max_attempts`. The final GPU runtime offenders are `geometryScheme5_3species_loRes` (`144.597s`), `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`87.134s`), and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`58.198s`). The final GPU RSS offenders are `geometryScheme4_2species_PAS_noEr` (`2552.1 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2354.4 MB`).
+- Remaining risks: parity and robustness blockers are closed on the final CPU/GPU audit roots, but the top PAS-heavy runtime and memory offenders are still well above the long-term performance target.
+- Next actions: merge the branch once the final README/plan refresh is committed, then continue performance work from the pinned final roots rather than from partial or stale suite artifacts.
 
 ### 2026-03-26
 - Scope: Add an explicit accelerator-safe host-dense shortcut for small RHSMode=1 FP solves, validate it on the real office GPU offender, and keep the change restricted to the non-implicit fast path.
