@@ -13,6 +13,39 @@ For a full, technique-by-technique breakdown (equations, derivations, knobs, and
 implementation notes), see :doc:`performance_techniques`.
 
 
+Current release snapshot
+------------------------
+
+The current ``main`` branch release artifacts are:
+
+- CPU: ``tests/scaled_example_suite_fast_cpu_full_v6_merged``
+- GPU: ``tests/scaled_example_suite_fast_gpu_full_v8``
+
+These report:
+
+- ``39/39 parity_ok`` on CPU,
+- ``39/39 parity_ok`` on GPU,
+- no strict mismatches,
+- no ``jax_error``,
+- no ``max_attempts``.
+
+The performance story is therefore:
+
+- correctness and robustness are release-ready for the current vendored example suite,
+- the default CLI path is explicit and tuned for throughput and reliable convergence,
+- the differentiable path is available from Python when gradients are needed,
+- and the remaining work is to reduce runtime and memory on a small number of heavy PAS and geometry-rich cases.
+
+Current top offenders from the release artifacts are:
+
+- CPU runtime: ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` at ``37.747 s``
+- CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``2773.9 MB``
+- GPU runtime: ``geometryScheme5_3species_loRes`` at ``144.597 s``
+- GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2552.1 MB``
+
+In other words, all examples run on CPU and GPU, but a handful of cases remain the clear optimization targets.
+
+
 What is differentiable today?
 -----------------------------
 
@@ -30,10 +63,10 @@ differentiate objectives with respect to them. For example:
 - Differentiate **through a linear solve** via implicit differentiation (see
   ``examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py``).
 
-By default, linear solves in RHSMode=1 and transport-matrix workflows use implicit
-differentiation (`jax.lax.custom_linear_solve`). You can opt out by setting
-``SFINCS_JAX_IMPLICIT_SOLVE=0`` if you need to debug or compare explicit Krylov
-iteration gradients.
+The release-facing CLI defaults do not force the differentiable path. For Python workflows,
+you can request implicit differentiation through the solve using ``differentiable=True``
+or the corresponding lower-level solve configuration. When the differentiable path is active,
+linear solves use implicit differentiation (``jax.lax.custom_linear_solve``).
 
 
 JAX-native performance patterns used in `sfincs_jax`
@@ -110,11 +143,11 @@ JAX-native performance patterns used in `sfincs_jax`
 - **Auto active-DOF reduction for RHSMode=1 (no Phi1)**: when ``Nxi_for_x`` truncates
   the pitch basis, the linear solve now reduces to active unknowns by default, cutting
   both matrix-free solve cost and JIT work on upstream-style reduced cases.
-- **Persistent cache in reduced-suite automation**: ``scripts/run_reduced_upstream_suite.py``
-  now runs `sfincs_jax` subprocesses with a persistent JAX compilation cache, reducing
+- **Persistent cache in automated suite runs**: ``scripts/run_reduced_upstream_suite.py`` and
+  the full example-suite runners can reuse a persistent JAX compilation cache, reducing
   repeated-iteration benchmarking overhead.
-- **Warm runtime reporting**: use ``--jax-repeats 2`` (or higher) in the reduced-suite runner
-  to record steady-state `sfincs_jax` runtime from repeats after the first (cold-compile) run.
+- **Warm runtime reporting**: use repeated JAX runs in the reduced-suite or full example-suite
+  runners when you want steady-state runtime after the first (cold-compile) run.
 - **Remove dead Jacobian work in hot matvec paths**: direct-Phi1 ``factorJ`` kinetic-row terms
   that are absent in v3 ``whichMatrix=3`` are not assembled, improving parity and avoiding
   unnecessary FLOPs in includePhi1-in-kinetic matrix applications.
@@ -177,18 +210,12 @@ Solver defaults (Phi1 + sharding)
   but only one device is available, sharding constraints are skipped and the standard
   unsharded matvec path is used (no functional change, just a no‑op).
 
-Profiling snapshots (Feb 2026)
-------------------------------
+Historical profiling notes
+--------------------------
 
-The reduced-suite profiling runs below capture the current hot spots and
-highlight where further solver work provides the best ROI. The timings were
-captured with ``SFINCS_JAX_PROFILE=1`` (wall time for the JAX run, cold start)
-and compared to the Fortran runtime from the same reduced-suite run.
-
-**Note on reduced-suite sizing.** To avoid JIT‑dominated ratios on tiny inputs,
-several PAS-heavy cases are retuned so the Fortran runtime is at least ~2 s.
-See the corresponding ``tests/reduced_inputs/*.input.namelist`` entries and
-``tests/reduced_upstream_examples/suite_report.json`` for the exact grid sizes.
+The case studies below are still useful because they explain where time is spent inside the
+solver stack, but they are historical profiling notes rather than the release-facing status
+summary. For current release claims, use the full example-suite artifacts listed above.
 
 **PAS, tokamak, no Er (``tokamak_1species_PASCollisions_noEr``)**:
 
@@ -242,7 +269,7 @@ Krylov solver strategy (memory + recycling)
 `sfincs_jax` defaults RHSMode=1 linear solves to GMRES (parity-first) and supports BiCGStab as an
 opt-in low-memory option with GMRES fallback on stagnation. For RHSMode=2/3 transport-matrix solves we
 default to BiCGStab and apply the collision-diagonal preconditioner by default, with GMRES as the
-fallback. This keeps memory usage low while preserving reduced-suite parity. [#petsc-bcgs]_
+fallback. This keeps memory usage low while preserving the current release-facing parity guarantees. [#petsc-bcgs]_
 
 For RHSMode=2/3 transport matrices, the ``whichRHS`` loop solves a sequence of linear systems with
 nearly identical operators. We prototype a lightweight recycling hook that reuses the last ``k``
@@ -316,7 +343,7 @@ BiCGStab can optionally reuse the RHSMode=1 preconditioner:
 Future optimization ideas (optional)
 ------------------------------------
 
-Parity is now achieved at the reduced-suite tolerances, so remaining performance work is
+Parity is now achieved for the current full CPU and GPU example-suite audits, so remaining performance work is
 profiling-driven and optional. High-ROI ideas to revisit if runtime becomes a bottleneck:
 
 1. **Deeper Krylov recycling/deflation** (GCRO-DR / GMRES-DR) for long transport scans.
@@ -517,7 +544,7 @@ paths we use to guide performance work:
   becomes dominant, since GMRES stores all previous Krylov vectors. [#gmres-memory]_
 
 These sources inform our memory and compilation roadmap; any algorithmic change is still
-validated against the reduced-suite parity and physics tests before it becomes a default.
+validated against unit tests, physics checks, and the current CPU/GPU example-suite parity artifacts before it becomes a default.
 
 .. [#jax-profiler] JAX profiling and device memory tools:
    https://docs.jax.dev/en/latest/device_memory_profiling.html

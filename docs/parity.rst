@@ -22,20 +22,20 @@ High-level summary (parity-tested)
      - Yes
      - Output parity fixtures
    * - Geometry scheme ``5`` (VMEC ``wout_*.nc``)
-     - Partial
-     - Core arrays + output parity fixture for a small case
+     - Yes
+     - End-to-end output parity in the current full example-suite audit, plus frozen fixture coverage
    * - Geometry schemes ``11/12`` (Boozer ``.bc``)
      - Yes
      - Geometry + transport-matrix end-to-end fixtures
    * - Linear runs (RHSMode=1)
-     - Partial
-     - Matrix-free GMRES parity on a growing set of tiny fixtures
+     - Yes
+     - Explicit CPU/GPU release lanes are parity-clean across the current vendored example suite
    * - Transport matrices (RHSMode=2/3)
      - Yes
      - End-to-end ``sfincsOutput.h5`` parity for 2×2 and 3×3 cases
    * - Full upstream v3 example suite
-     - Partial
-     - Reduced-suite practical status is ``38/38 parity_ok``. Strict mode is ``38/38 parity_ok``. For cases that emit stdout signals, print parity is 38/38.
+     - Yes
+     - Current ``main`` release audit is ``39/39 parity_ok`` on CPU and ``39/39 parity_ok`` on GPU, with no strict mismatches, no ``jax_error``, and no ``max_attempts``.
 
 Implemented (parity-tested)
 ---------------------------
@@ -99,29 +99,27 @@ Implemented (parity-tested)
 Current scope limits
 --------------------
 
-- Reduced-suite parity (``docs/_generated/reduced_upstream_suite_status*.rst``) reports
-  38/38 parity_ok in practical mode and 38/38 parity_ok in strict mode (strict ignores
-  per-case tolerance overrides).
-- Reduced-suite reports now include **JAX solver iteration counts** (mean/min/max when multiple
-  ``whichRHS`` solves are present). Collection is enabled by default in
-  ``scripts/run_reduced_upstream_suite.py`` and can be disabled with
-  ``--no-collect-iterations`` or ``SFINCS_JAX_SOLVER_ITER_STATS=0``.
+- The release-facing parity claim is the current full example-suite audit:
+
+  - ``tests/scaled_example_suite_fast_cpu_full_v6_merged``
+  - ``tests/scaled_example_suite_fast_gpu_full_v8``
+
+  The older reduced-suite artifacts remain useful for debugging, fixture history, and faster local
+  triage, but they are no longer the primary release status.
 - The unconstrained ``constraintScheme=0`` branch is rank-deficient, so different solvers can select different nullspace
   components. For comparisons, sfincs_jax treats a small set of density/pressure-like outputs as gauge-dependent and
   skips them when ``constraintScheme=0`` (see ``sfincs_jax/compare.py``).
+- The default CLI and ``write-output`` path use an explicit performance-oriented solve strategy.
+  End-to-end differentiable solves remain available from Python via the implicit/differentiable path when requested.
 - Full Phi1 coupling end-to-end (nonlinear residual assembly + collision operator contributions) is still being expanded beyond the currently parity-tested subset.
 - VMEC-based geometry schemes beyond the current ``geometryScheme=5`` parity subset.
 - Rosenbluth response matrices for FP cross-species coupling are computed with QUADPACK (matching v3). We added strict
   scalar-order accumulation for the collocation-to-modal projection, but the remaining ~1e-10 deltas appear dominated by
   quadrature rounding differences rather than matrix-ordering effects.
-- A small number of RHSMode=1 reduced cases (notably filtered-W7X netCDF and sfincsPaper fig. 3) are ill-conditioned:
-  PETSc's GMRES+LU preconditioning can converge to a slightly different solution than an exact linear solve. We capture
-  these solver-branch differences via per-case tolerances on flow/jHat diagnostics in the reduced-suite reports, while
-  maintaining full reduced-suite parity at the current tolerances.
 - VMEC geometryScheme=5 full Fokker–Planck fixtures exhibit small (~1e-6 absolute) differences in local flow/Mach
   diagnostics at isolated grid points. These deltas are well below the physics tolerance but can trip strict relative
   checks when the true value is near zero, so we apply a dedicated absolute-floor override for the VMEC FP subset in
-  ``sfincs_jax/compare.py``. Strict parity runs still pass at the reduced-suite tolerances.
+  ``sfincs_jax/compare.py``. The current release-facing CPU and GPU example-suite audits remain strict-clean.
 
 Near-zero tolerances
 --------------------
@@ -140,24 +138,44 @@ datasets include an iteration axis, even if Fortran and sfincs_jax record differ
 ``NIterations`` metadata. This keeps parity focused on the final physical state instead of
 intermediate Newton-history bookkeeping.
 
-Reduced-suite parity status (source of truth)
----------------------------------------------
+Release-facing parity status (source of truth)
+----------------------------------------------
 
-The reduced upstream parity inventory is auto-generated and should be treated as the
-authoritative status:
+The release-facing parity inventory is the full current example-suite audit:
+
+- ``tests/scaled_example_suite_fast_cpu_full_v6_merged/suite_report.json``
+- ``tests/scaled_example_suite_fast_gpu_full_v8/suite_report.json``
+
+Use these artifacts for README and release claims. The reduced upstream parity inventory remains
+useful for faster debugging and historical comparison:
 
 - ``docs/_generated/reduced_upstream_suite_status.rst``
 - ``docs/_generated/reduced_upstream_suite_status_strict.rst``
 - ``tests/reduced_upstream_examples/suite_report.json``
 - ``tests/reduced_upstream_examples/suite_report_strict.json``
 
-Regenerate these files:
+Regenerate the full release-facing suite:
+
+.. code-block:: bash
+
+   python scripts/run_scaled_example_suite.py \
+     --examples-root examples/sfincs_examples \
+     --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
+     --fortran-exe /Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs \
+     --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged \
+     --scale-factor 1.0 \
+     --runtime-target-basis fortran \
+     --fortran-min-runtime-s 1.0 \
+     --fortran-max-runtime-s 20.0 \
+     --runtime-adjustment-iters 3
+
+For faster targeted debugging, regenerate the reduced-suite files:
 
 .. code-block:: bash
 
    python scripts/run_reduced_upstream_suite.py --timeout-s 120 --max-attempts 1
 
-Default tolerances are ``rtol=5e-4`` and ``atol=1e-9``; override with ``--rtol``/``--atol``.
+Reduced-suite default tolerances are ``rtol=5e-4`` and ``atol=1e-9``; override with ``--rtol``/``--atol``.
 
 Target a single case family:
 

@@ -2,13 +2,22 @@ Fortran v3 example suite status
 ===============================
 
 This page tracks the vendored upstream SFINCS Fortran v3 example suite
-(``examples/sfincs_examples``) from the perspective of **end-to-end output parity**.
+(``examples/sfincs_examples``) from the perspective of **exact-input frozen-fixture parity**.
+
+For the current release-facing status on ``main`` use the full scaled example-suite audit instead:
+
+- ``tests/scaled_example_suite_fast_cpu_full_v6_merged``
+- ``tests/scaled_example_suite_fast_gpu_full_v8``
+
+That audit is the one reflected in ``README.md`` and the release-facing parity claims. This page is
+still useful because it answers a different question: whether a vendored upstream input has an
+exact content match to a frozen in-repo Fortran fixture.
 
 For each upstream example input we report:
 
 1. whether ``sfincs_jax`` successfully writes ``sfincsOutput.h5`` for that exact input,
 2. whether that exact input has a frozen Fortran output fixture in-repo and matches it,
-3. and the reason when parity is not currently verified.
+3. and the reason when exact-input frozen-fixture parity is not currently verified.
 
 How this table is generated
 ---------------------------
@@ -29,10 +38,10 @@ Generation logic:
 
 .. note::
 
-   In this repository snapshot, most upstream examples are marked ``unverified`` because
-   there is no exact-matching frozen Fortran ``sfincsOutput.h5`` fixture for that specific
-   input file. This is different from ``unsupported``: many of those cases do run and write
-   output with ``sfincs_jax``.
+   ``unverified`` on this page does not mean the example fails in the current release. It only
+   means there is no exact content-matched frozen Fortran ``sfincsOutput.h5`` fixture for that
+   specific vendored input file. The release-facing scaled suite on ``main`` runs all vendored
+   examples plus ``additional_examples`` cleanly on CPU and GPU.
 
 Output parity table
 -------------------
@@ -51,8 +60,8 @@ maintained and auto-generated:
 
 .. include:: _generated/fortran_examples_table.rst
 
-Reduced-runtime parity sweep (case-by-case)
--------------------------------------------
+Historical reduced-runtime parity sweep (case-by-case)
+------------------------------------------------------
 
 For rapid parity iteration, we also keep a reduced-resolution sweep generated with:
 
@@ -60,7 +69,7 @@ For rapid parity iteration, we also keep a reduced-resolution sweep generated wi
 
    python scripts/run_reduced_upstream_suite.py --timeout-s 30 --max-attempts 6
 
-This workflow:
+This workflow is still useful for fast local debugging and solver triage:
 
 1. copies each upstream input into ``tests/reduced_upstream_examples/<case>/input.namelist``,
 2. halves resolution axes adaptively until both Fortran and ``sfincs_jax`` runs are under 30s,
@@ -117,10 +126,11 @@ Current promoted fixtures:
 - ``tests/reduced_inputs/monoenergetic_geometryScheme5_netCDF.input.namelist``
 - ``tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist``
 
-These are intended as fast, reusable parity gates for CI and local development.
+These are intended as fast, reusable parity gates for CI and local development, not as the
+release-facing source of truth.
 
-Blocker typing used for failing reduced cases
----------------------------------------------
+Historical blocker typing used for reduced-case triage
+------------------------------------------------------
 
 The reduced runner classifies non-parity cases into:
 
