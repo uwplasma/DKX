@@ -6,8 +6,8 @@ This page tracks the vendored upstream SFINCS Fortran v3 example suite
 
 For the current release-facing status on ``main`` use the full scaled example-suite audit instead:
 
-- ``tests/scaled_example_suite_fast_cpu_full_v6_merged``
-- ``tests/scaled_example_suite_fast_gpu_full_v8``
+- ``tests/scaled_example_suite_fast_cpu_full_v7_refresh``
+- ``tests/scaled_example_suite_fast_gpu_full_v11_refresh``
 
 That audit is the one reflected in ``README.md`` and the release-facing parity claims. This page is
 still useful because it answers a different question: whether a vendored upstream input has an
