@@ -621,10 +621,10 @@ validated against unit tests, physics checks, and the current CPU/GPU example-su
    https://mathworld.wolfram.com/GeneralizedMinimalResidualMethod.html
 
 
-Connection to MONKES / adjoint methods
---------------------------------------
+Connection to reduced-model adjoint methods
+-------------------------------------------
 
-The MONKES approach (see the MONKES code/paper materials and related thesis work, external to this repository) emphasizes:
+Reduced-model neoclassical workflows often emphasize:
 
 - a **monoenergetic drift-kinetic equation** as a reduced model,
 - a **Legendre basis** representation,
