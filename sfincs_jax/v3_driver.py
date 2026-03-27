@@ -517,9 +517,9 @@ def _rhsmode1_host_dense_shortcut_allowed(
         return False
     shortcut_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", "").strip()
     try:
-        shortcut_max = int(shortcut_max_env) if shortcut_max_env else 600
+        shortcut_max = int(shortcut_max_env) if shortcut_max_env else 900
     except ValueError:
-        shortcut_max = 600
+        shortcut_max = 900
     dense_cap = min(max(0, int(shortcut_max)), max(0, int(_rhsmode1_dense_fallback_max(op))))
     if dense_cap <= 0:
         return False

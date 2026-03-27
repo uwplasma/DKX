@@ -76,6 +76,12 @@ def test_host_dense_shortcut_enabled_for_small_accelerator_fp(monkeypatch) -> No
         use_implicit=False,
         solve_method_kind="incremental",
     )
+    assert _rhsmode1_host_dense_shortcut_allowed(
+        op=_op(constraint_scheme=1),
+        active_size=606,
+        use_implicit=False,
+        solve_method_kind="incremental",
+    )
 
 
 def test_pas_adaptive_smoother_allowed_for_large_pas_cpu(monkeypatch) -> None:
@@ -163,7 +169,7 @@ def test_host_dense_shortcut_respects_guards(monkeypatch) -> None:
     monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
     assert not _rhsmode1_host_dense_shortcut_allowed(
         op=_op(constraint_scheme=1),
-        active_size=601,
+        active_size=901,
         use_implicit=False,
         solve_method_kind="incremental",
     )
