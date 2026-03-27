@@ -293,3 +293,51 @@ The implementations live in:
 
 - `sfincs_jax/solver.py` (Krylov wrappers and history tracking),
 - `sfincs_jax/v3_driver.py` (preconditioners, projections, and fallback logic).
+
+Structured block solves for monoenergetic and weakly coupled subproblems
+-------------------------------------------------------------------------
+
+The monoenergetic examples and some weakly coupled velocity-space subproblems have a
+structure that is closer to block tridiagonal than to a fully dense unstructured solve.
+That makes them a good fit for a factor-and-reuse strategy.
+
+For blocks :math:`D_k` on the diagonal and couplings :math:`L_k` and :math:`U_k`
+between neighboring blocks, the matrix can be written schematically as
+
+.. math::
+
+   A =
+   \begin{bmatrix}
+   D_0 & U_0 \\
+   L_0 & D_1 & U_1 \\
+   & \ddots & \ddots & \ddots \\
+   & & L_{n-2} & D_{n-1}
+   \end{bmatrix}.
+
+The block-Schur recursion used by `sfincs_jax.structured_velocity` is
+
+.. math::
+
+   S_0 = D_0, \qquad C_0 = S_0^{-1} U_0,
+
+.. math::
+
+   S_k = D_k - L_{k-1} C_{k-1}, \qquad C_k = S_k^{-1} U_k \quad (k \ge 1).
+
+Once the factorization :math:`\{S_k, C_k\}` is available, repeated solves only need
+forward and backward substitutions:
+
+.. math::
+
+   y_0 = S_0^{-1} b_0, \qquad y_k = S_k^{-1}(b_k - L_{k-1} y_{k-1}),
+
+.. math::
+
+   x_k = y_k - C_k x_{k+1}.
+
+This is the same factor-and-reuse pattern that makes the MONKES linear algebra kernels
+memory-efficient. In `sfincs_jax`, the reusable prototype lives in
+`sfincs_jax/structured_velocity.py` and is currently kept separate from the main driver
+until the helper is integrated and benchmarked on the monoenergetic and weak-coupling
+paths. A reverse factorization is available for cases where the leading block is singular
+or badly conditioned, so the solve can start from the opposite end of the block chain.

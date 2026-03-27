@@ -162,6 +162,54 @@ JAX-native performance patterns used in `sfincs_jax`
 - **JIT-compiled Krylov solves (default)**: `sfincs_jax` now JIT-compiles the GMRES/BiCGStab wrappers
   to reduce Python overhead for iterative solves; set ``SFINCS_JAX_SOLVER_JIT=0`` to disable.
 
+Explicit sparse host/device split helper
+----------------------------------------
+
+The reusable helper module ``sfincs_jax.explicit_sparse`` keeps the explicit sparse
+policy separate from the solver driver. It is intended for the performance-first
+CLI path and for future integration of sparse host-side rescues, not for the
+default differentiable reference path.
+
+It accepts dense JAX/NumPy matrices, sparse-like block tables, or matrix-free
+callbacks and chooses one of three storage kinds:
+
+- ``dense``: keep a host dense array,
+- ``csr``: materialize a host SciPy CSR matrix,
+- ``linear_operator``: keep only a host ``LinearOperator`` when a materialized
+  matrix would exceed the configured budget.
+
+The decision is deterministic and based on simple byte estimates:
+
+.. math::
+
+   \text{dense bytes} = N_{\text{rows}} N_{\text{cols}} \cdot \text{itemsize}
+
+and for CSR,
+
+.. math::
+
+   \text{csr bytes} \approx \text{nnz} \cdot (\text{data itemsize} + \text{index itemsize})
+   + (N_{\text{rows}} + 1) \cdot \text{index itemsize}.
+
+Implementation: ``sfincs_jax.explicit_sparse``.
+
+Public entry points:
+
+- ``choose_storage_kind``
+- ``build_operator_from_dense``
+- ``build_operator_from_blocks``
+- ``build_operator_from_matvec``
+- ``factorize_host_sparse_operator``
+
+The helper can be used to:
+
+- materialize structured sparse operators on the host when that is cheaper than
+  carrying a full dense matrix,
+- factor the host-side sparse operator with SciPy ``splu`` or ``spilu`` for a
+  deterministic explicit fallback,
+- or keep only a ``LinearOperator`` when even sparse materialization would exceed
+  the configured budget.
+
 Solver defaults (Phi1 + sharding)
 ---------------------------------
 
