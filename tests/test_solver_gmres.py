@@ -4,6 +4,7 @@ import numpy as np
 import jax.numpy as jnp
 import pytest
 
+from sfincs_jax.v3_driver import _rhs_krylov_method_for_context
 from sfincs_jax.solver import (
     _materialize_distributed_input,
     _distributed_solver_kind,
@@ -358,6 +359,36 @@ def test_gmres_solve_jit_rejects_host_only_lgmres() -> None:
             maxiter=4,
             solve_method="lgmres",
         )
+
+
+def test_rhs_krylov_method_for_context_keeps_lgmres_on_plain_host_path() -> None:
+    assert _rhs_krylov_method_for_context(
+        gmres_method="lgmres",
+        use_implicit=False,
+        distributed_axis=None,
+        solver_jit=False,
+    ) == "lgmres"
+
+
+@pytest.mark.parametrize(
+    ("use_implicit", "distributed_axis", "solver_jit"),
+    [
+        (True, None, False),
+        (False, "theta", False),
+        (False, None, True),
+    ],
+)
+def test_rhs_krylov_method_for_context_downgrades_host_only_lgmres(
+    use_implicit: bool,
+    distributed_axis: str | None,
+    solver_jit: bool,
+) -> None:
+    assert _rhs_krylov_method_for_context(
+        gmres_method="lgmres",
+        use_implicit=use_implicit,
+        distributed_axis=distributed_axis,
+        solver_jit=solver_jit,
+    ) == "incremental"
 
 
 def test_materialize_distributed_input_preserves_values_and_dtype() -> None:

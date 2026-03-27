@@ -238,10 +238,33 @@ time rebuilding a Krylov basis on hard nonsymmetric systems.
 - Uses SciPy ``lgmres`` on the host with the same left/right preconditioning
   semantics already used by the existing SciPy GMRES wrappers.
 - Remains disabled for distributed solves.
-- Raises on JIT/differentiable tracing instead of silently leaving the JAX path.
+- If the requested solve still routes through an implicit, JITed, or distributed
+  context, `sfincs_jax` downgrades to traced-safe ``incremental`` GMRES instead of
+  failing at runtime.
 
 This makes the new method safe as a CLI performance option: it can accelerate
 explicit host solves without contaminating the differentiable reference route.
+Frozen-case offender probes on ``main`` still support keeping this as an explicit
+tuning knob rather than an automatic default. It now runs correctly on the real
+CLI surface for the pinned geometry4 PAS case and preserves parity there, with a
+modest CPU improvement (`~5.6 s -> ~4.6 s` on the frozen scaled case), but it is
+not yet the right default for every large RHSMode=1 branch.
+
+Frozen-case variant benchmarking
+--------------------------------
+
+Use ``scripts/benchmark_case_variants.py`` to compare solver/preconditioner env
+overrides on one promoted suite case without disturbing the full-suite artifacts:
+
+.. code-block:: bash
+
+   python scripts/benchmark_case_variants.py \
+     --case-dir tests/scaled_example_suite_fast_cpu_full_v6_merged/geometryScheme5_3species_loRes \
+     --variant 'lgmres=SFINCS_JAX_RHSMODE1_SOLVE_METHOD=lgmres'
+
+The helper runs the default variant plus any requested overrides, records wall
+time and ``ru_maxrss``, and compares each output H5 against both the frozen
+Fortran output (when present) and the default variant.
 
 Adaptive PAS smoother stage
 ---------------------------
@@ -608,7 +631,13 @@ When the input requests a fully coupled preconditioner (``preconditioner_species
 preserving the constraint coupling. For tokamak-like cases (``N_zeta=1``) with
 ``|Er|`` below ``SFINCS_JAX_RHSMODE1_SCHUR_ER_ABS_MIN`` (default: ``0``),
 the default switches to the cheaper ``xblock_tz`` preconditioner to reduce setup time.
-Set ``SFINCS_JAX_RHSMODE1_SCHUR_TOKAMAK=1`` to force Schur in these cases.
+For bounded CPU tokamak PAS+Er branches with magnetic-drift coupling, the default
+now also promotes directly to ``xblock_tz`` instead of first forcing ``pas_schur``
+when the active system is below
+``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_CPU_XBLOCK_ACTIVE_MAX`` and the angular block
+fits inside ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX``. Set
+``SFINCS_JAX_RHSMODE1_SCHUR_TOKAMAK=1`` to force Schur in the no-Er tokamak-like
+cases that still use that gate.
 
 **Sparse ILU (FP-heavy RHSMode=1).** For FP-heavy RHSMode=1 systems, a PETSc‑like
 incomplete factorization is available to avoid dense fallback while retaining

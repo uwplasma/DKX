@@ -76,3 +76,42 @@ def test_custom_linear_solve_bicgstab_grad_matches_finite_difference() -> None:
 
     assert np.isfinite(g)
     assert abs(g - fd) < 5e-6
+
+
+def test_custom_linear_solve_lgmres_falls_back_to_traced_safe_solver() -> None:
+    a0 = jnp.asarray(
+        [
+            [4.0, 1.0, 0.0, 0.0],
+            [1.0, 3.0, 1.0, 0.0],
+            [0.0, 1.0, 2.5, 1.0],
+            [0.0, 0.0, 1.0, 2.0],
+        ],
+        dtype=jnp.float64,
+    )
+    b = jnp.asarray([1.0, 2.0, -1.0, 0.5], dtype=jnp.float64)
+
+    def objective(p: jnp.ndarray) -> jnp.ndarray:
+        p = jnp.asarray(p, dtype=jnp.float64)
+        a = a0 + p * jnp.eye(4, dtype=jnp.float64)
+
+        def mv(x: jnp.ndarray) -> jnp.ndarray:
+            return a @ x
+
+        x = linear_custom_solve(
+            matvec=mv,
+            b=b,
+            tol=1e-12,
+            restart=20,
+            maxiter=50,
+            solver="lgmres",
+        ).x
+        return 0.5 * jnp.vdot(x, x)
+
+    p0 = jnp.asarray(0.2, dtype=jnp.float64)
+    g = float(jax.grad(objective)(p0))
+
+    eps = 1e-6
+    fd = (float(objective(p0 + eps)) - float(objective(p0 - eps))) / (2.0 * eps)
+
+    assert np.isfinite(g)
+    assert abs(g - fd) < 5e-6

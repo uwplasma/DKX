@@ -160,6 +160,29 @@ def test_pas_tokamak_structured_tail_matches_legacy(tmp_path: Path, monkeypatch)
     assert float(np.max(np.abs(diff))) < 2.0e-4
 
 
+def test_pas_tokamak_structured_tail_is_opt_in_by_default(tmp_path: Path, monkeypatch) -> None:
+    input_path = Path(__file__).parent / "reduced_inputs" / "tokamak_1species_PASCollisions_noEr_Nx1.input.namelist"
+
+    txt = input_path.read_text()
+    txt = _patch_resolution_block(txt, ntheta=7, nzeta=1, nxi=5, nx=2, solver_tol=1e-6)
+    txt = _patch_export_block(txt)
+    patched = tmp_path / "input_pas_tokamak_structured_default.namelist"
+    patched.write_text(txt)
+
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+    monkeypatch.setenv("SFINCS_JAX_PAS_TOKAMAK_LMAX", "5")
+    monkeypatch.delenv("SFINCS_JAX_PAS_TOKAMAK_STRUCTURED", raising=False)
+
+    nml = read_sfincs_input(patched)
+    op = full_system_operator_from_namelist(nml=nml)
+
+    v3_driver._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.clear()
+    _ = v3_driver._build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
+    cache = next(iter(v3_driver._RHSMODE1_PAS_TOKAMAK_THETA_CACHE.values()))
+    assert cache.tail_factors is None
+
+
 def test_schur_auto_min_for_pas(tmp_path: Path, monkeypatch) -> None:
     """Auto Schur selection should respect SFINCS_JAX_RHSMODE1_SCHUR_AUTO_MIN."""
     input_path = Path(__file__).parent / "reduced_inputs" / "geometryScheme4_2species_PAS_noEr.input.namelist"
@@ -433,6 +456,93 @@ def test_gpu_pas_tokamak_er_path_does_not_promote_to_pas_schur(tmp_path: Path, m
         schur_er_min=1.0e-12,
         has_magdrift=False,
         has_collisionless=True,
+    )
+
+
+def test_cpu_pas_tokamak_er_path_prefers_xblock_tz(tmp_path: Path, monkeypatch) -> None:
+    input_path = (
+        Path(__file__).parent
+        / "reduced_inputs"
+        / "tokamak_1species_PASCollisions_withEr_fullTrajectories.input.namelist"
+    )
+    out_path = tmp_path / "sfincsOutput_jax.h5"
+
+    txt = input_path.read_text()
+    txt = _patch_resolution_block(txt, ntheta=9, nzeta=1, nxi=11, nx=2, solver_tol=1e-6)
+    txt = _patch_export_block(txt)
+    patched = tmp_path / "input_tokamak_pas_cpu.namelist"
+    patched.write_text(txt)
+
+    logs: list[str] = []
+
+    def emit(_level: int, msg: str) -> None:
+        logs.append(msg)
+
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SOLVE_METHOD", "incremental")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF", "0")
+    monkeypatch.setattr(v3_driver.jax, "default_backend", lambda: "cpu")
+
+    write_sfincs_jax_output_h5(
+        input_namelist=patched,
+        output_path=out_path,
+        compute_solution=True,
+        emit=emit,
+        verbose=True,
+    )
+
+    joined = "\n".join(logs)
+    assert "CPU PAS tokamak auto -> xblock_tz preconditioner" in joined
+    assert "building RHSMode=1 preconditioner=xblock_tz" in joined
+    assert "building RHSMode=1 preconditioner=pas_schur" not in joined
+
+
+def test_pas_tokamak_cpu_xblock_allowed_only_for_bounded_cases() -> None:
+    assert v3_driver._rhs1_pas_tokamak_cpu_xblock_preferred(
+        has_pas=True,
+        has_fp=False,
+        backend="cpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=True,
+        has_collisionless=True,
+        n_theta=10,
+        n_zeta=1,
+        max_l=14,
+        xblock_tz_limit=6000,
+    )
+    assert not v3_driver._rhs1_pas_tokamak_cpu_xblock_preferred(
+        has_pas=True,
+        has_fp=False,
+        backend="cpu",
+        tokamak_like=True,
+        active_size=6001,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=True,
+        has_collisionless=True,
+        n_theta=10,
+        n_zeta=1,
+        max_l=14,
+        xblock_tz_limit=6000,
+    )
+    assert not v3_driver._rhs1_pas_tokamak_cpu_xblock_preferred(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=True,
+        has_collisionless=True,
+        n_theta=10,
+        n_zeta=1,
+        max_l=14,
+        xblock_tz_limit=6000,
     )
 
 

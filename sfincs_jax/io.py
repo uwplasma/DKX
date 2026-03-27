@@ -57,6 +57,32 @@ _OUTPUT_GEOM_CACHE: dict[tuple[object, ...], dict[str, np.ndarray]] = {}
 _OUTPUT_CACHE_FIELDS = ("gpsiHatpsiHat", "uHat", "diotadpsiHat")
 
 
+def _select_rhsmode1_linear_solve_method(
+    *,
+    default_method: str,
+    env_override: str,
+    emit=None,
+) -> str:
+    allowed = {
+        "auto",
+        "bicgstab",
+        "dense",
+        "dense_row_scaled",
+        "dense_ksp",
+        "incremental",
+        "batched",
+        "lgmres",
+        "lgmres_scipy",
+    }
+    method = str(default_method).strip().lower()
+    override = str(env_override).strip().lower()
+    if override in allowed:
+        method = override
+        if emit is not None:
+            emit(1, f"write_sfincs_jax_output_h5: solve method forced by env -> {method}")
+    return method
+
+
 def _output_cache_enabled() -> bool:
     cache_env = os.environ.get("SFINCS_JAX_OUTPUT_CACHE", "").strip().lower()
     if cache_env in {"0", "false", "no", "off"}:
@@ -2475,11 +2501,13 @@ def write_sfincs_jax_output_h5(
             dense_auto_ok = dense_auto_backend == "cpu"
         except Exception:  # noqa: BLE001
             dense_auto_ok = True
-        if solve_method_env in {"auto", "bicgstab", "dense", "dense_row_scaled", "dense_ksp", "incremental", "batched"}:
-            solve_method = solve_method_env
-            if emit is not None:
-                emit(1, f"write_sfincs_jax_output_h5: solve method forced by env -> {solve_method}")
-        elif (
+        solve_method = _select_rhsmode1_linear_solve_method(
+            default_method=solve_method,
+            env_override=solve_method_env,
+            emit=emit,
+        )
+        solve_method_forced = bool(solve_method_env) and solve_method == solve_method_env
+        if (not solve_method_forced) and (
             op0.fblock.fp is not None
             and (not include_phi1)
             and active_total_size <= dense_fp_cutoff
