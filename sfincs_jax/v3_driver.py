@@ -430,6 +430,28 @@ def _transport_tzfft_backend_allowed() -> bool:
     return jax.default_backend() == "cpu"
 
 
+def _transport_tzfft_accelerator_auto_allowed(op: V3FullSystemOperator) -> bool:
+    """Allow accelerator tzfft only for bounded collisionless transport branches."""
+    if jax.default_backend() == "cpu":
+        return True
+    if bool(op.include_phi1):
+        return False
+    if int(op.rhs_mode) not in {2, 3}:
+        return False
+    if op.fblock.fp is not None:
+        return False
+    if int(op.n_x) > 2:
+        return False
+    if int(op.n_theta) * int(op.n_zeta) < 64:
+        return False
+    max_env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", "").strip()
+    try:
+        max_size = int(max_env) if max_env else 5000
+    except ValueError:
+        max_size = 5000
+    return int(op.total_size) <= max(1, int(max_size))
+
+
 def _rhsmode1_host_dense_fallback_allowed() -> bool:
     if jax.default_backend() == "cpu":
         return True
@@ -20482,7 +20504,7 @@ def solve_v3_transport_matrix_linear_gmres(
         transport_sparse_max_mb = float(transport_sparse_max_env) if transport_sparse_max_env else 128.0
     except ValueError:
         transport_sparse_max_mb = 128.0
-    tzfft_backend_allowed = _transport_tzfft_backend_allowed()
+    tzfft_backend_allowed = _transport_tzfft_backend_allowed() or _transport_tzfft_accelerator_auto_allowed(op0)
     if transport_precond_kind is not None and int(rhs_mode) in {2, 3}:
         precond_kind = transport_precond_kind
         if precond_kind == "auto":
