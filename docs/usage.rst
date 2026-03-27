@@ -163,7 +163,8 @@ performance without changing the input file:
   - ``lgmres``: host-only SciPy LGMRES fast path for explicit, non-differentiable solves. It keeps
     the same left/right preconditioner semantics as GMRES, augments the restart space internally,
     and is intended for harder restarted solves where ``incremental`` stalls or restarts too often.
-    Distributed and JIT-traced solves reject this mode.
+    If a requested solve still routes through an implicit, JITed, or distributed branch,
+    ``sfincs_jax`` downgrades it to ``incremental`` instead of erroring.
   - ``incremental`` or ``batched``: matrix-free GMRES (higher memory, often robust).
 
 - ``SFINCS_JAX_LGMRES_OUTER_K``: number of augmentation vectors carried between LGMRES restart
@@ -637,7 +638,13 @@ performance without changing the input file:
   selected by default (set to ``1`` to force Schur).
 - ``SFINCS_JAX_RHSMODE1_SCHUR_ER_ABS_MIN``: minimum ``|Er|`` for which tokamak-like
   cases default to Schur. When ``|Er|`` is below this threshold (default: ``0``),
-  ``sfincs_jax`` uses the cheaper theta-line preconditioner for ``N_zeta=1`` cases.
+  ``sfincs_jax`` can use the cheaper ``xblock_tz`` path for bounded tokamak-like
+  PAS cases instead of forcing the heavier Schur branch.
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_CPU_XBLOCK_ACTIVE_MAX``: active-size cap for the
+  bounded CPU tokamak PAS+Er auto-promotion to ``xblock_tz`` before ``pas_schur``
+  (default: ``4000``). This is intended for explicit CLI/default solves on moderate
+  tokamak PAS branches where ``xblock_tz`` is parity-clean and much cheaper than
+  the old ``pas_schur -> xblock_tz`` fallback ladder.
 
 - ``SFINCS_JAX_PAS_PROJECT_CONSTRAINTS``: enable PAS-specific constraint projection for
   ``constraintScheme=2`` RHSMode=1 solves (drop explicit source unknowns and enforce the
