@@ -342,4 +342,7 @@ memory-efficient. In `sfincs_jax`, the reusable implementation lives in
 special `(L=0,1)` entrance block remains handled explicitly in
 `sfincs_jax/v3_driver.py`. A reverse factorization is available for cases where
 the leading block is singular or badly conditioned, so the solve can start from
-the opposite end of the block chain.
+the opposite end of the block chain. The structured tail is currently an
+explicit opt-in experiment (`SFINCS_JAX_PAS_TOKAMAK_STRUCTURED=1`), since the
+shipped tokamak PAS fixtures on `main` still favor the legacy tail on runtime
+and RSS.
