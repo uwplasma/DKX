@@ -9,6 +9,7 @@ import numpy as np
 
 from sfincs_jax import cli
 from sfincs_jax.io import (
+    _select_rhsmode1_linear_solve_method,
     _select_phi1_newton_linear_solve_method,
     read_sfincs_h5,
     write_sfincs_jax_output_h5,
@@ -149,6 +150,32 @@ def test_phi1_newton_auto_method_uses_dense_on_cpu() -> None:
 
     assert method == "dense"
     assert any("using dense Newton step" in msg for msg in msgs)
+
+
+def test_rhsmode1_solve_method_env_accepts_lgmres() -> None:
+    msgs: list[str] = []
+
+    method = _select_rhsmode1_linear_solve_method(
+        default_method="incremental",
+        env_override="lgmres",
+        emit=lambda _lvl, msg: msgs.append(str(msg)),
+    )
+
+    assert method == "lgmres"
+    assert any("solve method forced by env -> lgmres" in msg for msg in msgs)
+
+
+def test_rhsmode1_solve_method_env_ignores_unknown_override() -> None:
+    msgs: list[str] = []
+
+    method = _select_rhsmode1_linear_solve_method(
+        default_method="incremental",
+        env_override="not_a_method",
+        emit=lambda _lvl, msg: msgs.append(str(msg)),
+    )
+
+    assert method == "incremental"
+    assert msgs == []
 
 
 def test_phi1_newton_auto_method_skips_dense_on_gpu() -> None:
