@@ -187,7 +187,9 @@ performance without changing the input file:
   - ``pas_tz``: PAS 3D block‑tridiagonal preconditioner in :math:`L` with dense
     :math:`(\theta,\zeta)` blocks (cheaper than full ``xblock_tz`` for large grids).
   - ``pas_tokamak_theta``: tokamak‑style PAS :math:`(\theta,L)` block‑tridiagonal preconditioner
-    (``N_\zeta=1`` or zeta‑invariant geometries).
+    (``N_\zeta=1`` or zeta‑invariant geometries). The optional structured
+    ``L>=2`` tail is available via ``SFINCS_JAX_PAS_TOKAMAK_STRUCTURED=1`` and
+    remains opt-in on ``main``.
   - ``pas_lite``: lightweight PAS preconditioner (angular/L block + x‑coarse + collision).
   - ``pas_hybrid``: stronger PAS line/x‑coarse hybrid (truncated‑:math:`L` angular block + x‑coarse).
   - ``pas_schur``: PAS‑specific block‑Schur composition (angular/L block + x‑coarse + collision);
