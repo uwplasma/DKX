@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import html
 import json
 from pathlib import Path
 
@@ -24,57 +23,6 @@ def _load(path: Path) -> dict[str, dict]:
     return {row["case"]: row for row in data}
 
 
-def _format_row(case: str, row_cpu: dict, row_gpu: dict | None, row_strict: dict | None) -> str:
-    n_common = int(row_cpu.get("n_common_keys", 0))
-    n_bad = int(row_cpu.get("n_mismatch_common", 0))
-    if row_strict is None:
-        n_common_strict = n_common
-        n_bad_strict = n_bad
-    else:
-        n_common_strict = int(row_strict.get("n_common_keys", n_common))
-        n_bad_strict = int(row_strict.get("n_mismatch_common", n_bad))
-
-    if n_common > 0:
-        mismatch = f"{n_bad}/{n_common} (strict {n_bad_strict}/{n_common_strict})"
-    else:
-        mismatch = row_cpu.get("status", "-")
-
-    pp_total = int(row_cpu.get("print_parity_total", 0))
-    if pp_total > 0:
-        pp = f"{row_cpu.get('print_parity_signals', 0)}/{pp_total}"
-    else:
-        pp = "-"
-
-    def _fmt_float(v: object, ndigits: int) -> str:
-        if v is None:
-            return ""
-        return f"{float(v):.{ndigits}f}"
-
-    def _status_or_default(row: dict | None, default: str) -> str:
-        if row is None:
-            return default
-        status = str(row.get("status", "")).strip()
-        return status or default
-
-    ft = row_cpu.get("fortran_runtime_s")
-    jt_cpu = row_cpu.get("jax_runtime_s")
-    jt_gpu = row_gpu.get("jax_runtime_s") if row_gpu is not None else None
-    ft_s = _fmt_float(ft, 3) or _status_or_default(row_cpu, "not-run")
-    jt_cpu_s = _fmt_float(jt_cpu, 3) or _status_or_default(row_cpu, "not-run")
-    jt_gpu_s = _fmt_float(jt_gpu, 3) or _status_or_default(row_gpu, "not-run")
-    fm = row_cpu.get("fortran_max_rss_mb")
-    jm_cpu = row_cpu.get("jax_max_rss_mb")
-    jm_gpu = row_gpu.get("jax_max_rss_mb") if row_gpu is not None else None
-    fm_s = _fmt_float(fm, 1) or _status_or_default(row_cpu, "not-run")
-    jm_cpu_s = _fmt_float(jm_cpu, 1) or _status_or_default(row_cpu, "not-run")
-    jm_gpu_s = _fmt_float(jm_gpu, 1) or _status_or_default(row_gpu, "not-run")
-
-    case_cell = html.escape(case)
-    return (
-        f"| {case_cell} | {ft_s} | {jt_cpu_s} | {jt_gpu_s} | {fm_s} | {jm_cpu_s} | {jm_gpu_s} | {mismatch} | {pp} |"
-    )
-
-
 def main() -> int:
     if REPORT_CPU.exists():
         rows_cpu = _load(REPORT_CPU)
@@ -93,19 +41,38 @@ def main() -> int:
     else:
         rows_strict = {}
 
-    table_lines = [
-        "| Case | Fortran CPU(s) | sfincs_jax CPU(s) | sfincs_jax GPU(s) | Fortran CPU MB | sfincs_jax CPU MB | sfincs_jax GPU MB | Mismatches (practical/strict) | Print comparison |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+    practical_ok = sum(1 for row in rows_cpu.values() if str(row.get("status", "")).strip() == "parity_ok")
+    strict_ok = sum(
+        1
+        for case, row in rows_cpu.items()
+        if int(rows_strict.get(case, row).get("n_mismatch_common", 0)) == 0
+        and str(row.get("status", "")).strip() in {"", "parity_ok", "parity_mismatch"}
+    )
+    total = len(rows_cpu)
+    gpu_rows = len(rows_gpu)
+    block_lines = [
+        "Archived reduced-suite reports are kept in:",
+        "",
+        "- `tests/reduced_upstream_examples/suite_report.json`",
+        "- `tests/reduced_upstream_examples/suite_report_strict.json`",
+        "- `tests/reduced_upstream_examples/suite_report_cpu.json`",
+        "- `tests/reduced_upstream_examples/suite_report_gpu.json`",
+        "- `docs/_generated/reduced_upstream_suite_status.rst`",
+        "- `docs/_generated/reduced_upstream_suite_status_strict.rst`",
+        "",
+        f"Historical reduced-suite snapshot counts: CPU practical `parity_ok={practical_ok}/{total}`, strict `parity_ok={strict_ok}/{total}`.",
+        f"Historical reduced-suite GPU rows archived: `{gpu_rows}`.",
+        "",
+        "Use these only for historical debugging and comparison against older milestones.",
+        "The release-facing parity status for `main` is the full example-suite table below.",
     ]
-    for case in sorted(rows_cpu):
-        table_lines.append(_format_row(case, rows_cpu[case], rows_gpu.get(case), rows_strict.get(case)))
 
     readme = README.read_text()
     if BEGIN not in readme or END not in readme:
         raise SystemExit("README markers not found.")
     prefix, rest = readme.split(BEGIN, 1)
     _table, suffix = rest.split(END, 1)
-    new_block = "\n".join([BEGIN, *table_lines, END])
+    new_block = "\n".join([BEGIN, *block_lines, END])
     README.write_text(prefix + new_block + suffix)
     print("Updated README reduced-suite table.")
     return 0
