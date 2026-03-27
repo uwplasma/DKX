@@ -39,6 +39,7 @@ On the current ``main`` branch:
    installation
    normalizations
    method
+   theory_from_upstream
    physics_models
    physics_reference
    paper_figures
