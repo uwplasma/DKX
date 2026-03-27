@@ -19,7 +19,7 @@ Current release snapshot
 The current ``main`` branch release artifacts are:
 
 - CPU: ``tests/scaled_example_suite_fast_cpu_full_v7_refresh``
-- GPU: ``tests/scaled_example_suite_fast_gpu_full_v8``
+- GPU: ``tests/scaled_example_suite_fast_gpu_full_v11_refresh``
 
 These report:
 
@@ -40,16 +40,16 @@ Current top offenders from the release artifacts are:
 
 - CPU runtime: ``HSX_PASCollisions_DKESTrajectories`` at ``7.220 s``
 - CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``2916.8 MB``
-- GPU runtime: ``geometryScheme5_3species_loRes`` at ``144.597 s``
-- GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2552.1 MB``
+- GPU runtime: ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` at ``18.300 s``
+- GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2477.1 MB``
 
 In other words, all examples run on CPU and GPU, but a handful of cases remain the clear optimization targets.
 
-Two current-tip frozen-case GPU probes already improve the pinned ``v8`` story and are expected to land in the next full GPU refresh:
+Recent current-tip GPU fixes that are now reflected in the release artifacts:
 
-- ``geometryScheme5_3species_loRes`` now takes the bounded host-dense shortcut on the small GPU full-FP branch and completed parity-clean in about ``3.83 s`` on office, versus the pinned ``144.597 s`` suite artifact.
-- ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue and completed parity-clean in about ``16.92 s`` on office, versus the pinned ``17.433 s`` suite artifact.
-- ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` now skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``11.31 s`` on office, versus the pinned ``58.198 s`` suite artifact.
+- ``geometryScheme5_3species_loRes`` now takes the bounded host-dense shortcut on the small GPU full-FP branch and completed parity-clean in about ``3.99 s``, down from the older ``144.597 s`` artifact.
+- ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue and completed parity-clean in about ``3.94 s``.
+- ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` now skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``7.42 s``.
 
 External solver-library gates
 -----------------------------
