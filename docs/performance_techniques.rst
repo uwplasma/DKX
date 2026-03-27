@@ -219,6 +219,30 @@ BiCGStab is short recurrence with memory ~ :math:`O(n)`.
 IDR(s) is another short-recurrence family used for nonsymmetric systems and is a
 candidate for future low-memory solves.
 
+Host-only LGMRES fast path
+--------------------------
+
+For explicit host-side solves, ``sfincs_jax`` now exposes a bounded SciPy
+``lgmres`` path. This is intended for the fast CLI / explicit branch where
+differentiability is not required, and where restarted GMRES can spend too much
+time rebuilding a Krylov basis on hard nonsymmetric systems.
+
+**Implementation.**
+
+- Wrapper: ``sfincs_jax.solver.lgmres_solve_with_history_scipy``.
+- Dispatch point: ``sfincs_jax.solver._gmres_solve_core``.
+- Accepted methods: ``solve_method in {"lgmres", "lgmres_scipy"}``.
+
+**Behavior.**
+
+- Uses SciPy ``lgmres`` on the host with the same left/right preconditioning
+  semantics already used by the existing SciPy GMRES wrappers.
+- Remains disabled for distributed solves.
+- Raises on JIT/differentiable tracing instead of silently leaving the JAX path.
+
+This makes the new method safe as a CLI performance option: it can accelerate
+explicit host solves without contaminating the differentiable reference route.
+
 Adaptive PAS smoother stage
 ---------------------------
 

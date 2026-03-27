@@ -16,6 +16,7 @@ from sfincs_jax.v3_driver import (
     _transport_sparse_direct_first_attempt_allowed,
     _transport_sparse_direct_rescue_allowed,
     _transport_sparse_direct_rescue_first,
+    _transport_sparse_direct_use_explicit_helper,
     _transport_tzfft_backend_allowed,
 )
 
@@ -205,6 +206,24 @@ def test_transport_sparse_direct_first_attempt_disabled_for_small_cpu_or_implici
         size=16382,
         use_implicit=True,
     )
+
+
+def test_transport_sparse_direct_helper_auto_prefers_gpu_and_large_cpu(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CPU_MIN", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    assert _transport_sparse_direct_use_explicit_helper(size=2048)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    assert _transport_sparse_direct_use_explicit_helper(size=12000)
+    assert not _transport_sparse_direct_use_explicit_helper(size=8000)
+
+
+def test_transport_sparse_direct_helper_env_overrides(monkeypatch) -> None:
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", "0")
+    assert not _transport_sparse_direct_use_explicit_helper(size=50000)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", "1")
+    assert _transport_sparse_direct_use_explicit_helper(size=1024)
 
 
 def test_host_sparse_factor_dtype_defaults_to_float32_for_large_explicit_cpu_lu(monkeypatch) -> None:

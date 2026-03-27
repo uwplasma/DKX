@@ -160,7 +160,14 @@ performance without changing the input file:
   - ``bicgstab``: force BiCGStab for a low-memory Krylov solve (with GMRES fallback on stagnation).
   - ``dense``: assemble the dense operator from matvecs and solve directly (fast for tiny fixtures,
     but scales poorly).
+  - ``lgmres``: host-only SciPy LGMRES fast path for explicit, non-differentiable solves. It keeps
+    the same left/right preconditioner semantics as GMRES, augments the restart space internally,
+    and is intended for harder restarted solves where ``incremental`` stalls or restarts too often.
+    Distributed and JIT-traced solves reject this mode.
   - ``incremental`` or ``batched``: matrix-free GMRES (higher memory, often robust).
+
+- ``SFINCS_JAX_LGMRES_OUTER_K``: number of augmentation vectors carried between LGMRES restart
+  cycles (default: ``3``). Only used when ``solve_method=lgmres`` on the host explicit path.
 
 - ``SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX``: force GMRES for RHSMode=1 when the total
   system size is below this threshold (default: ``600``). Set to ``0`` to disable.

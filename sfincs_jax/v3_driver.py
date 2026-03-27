@@ -42,7 +42,9 @@ from .solver import (
     gmres_solve_with_history_scipy,
 )
 from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
+from .structured_velocity import factor_block_tridiagonal
 from .pas_smoother import adaptive_pas_smoother, adaptive_pas_smoother_allowed
+from .explicit_sparse import build_operator_from_matvec, factorize_host_sparse_operator
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -551,6 +553,34 @@ def _host_sparse_direct_solve_with_refinement(
     return x_np, residual_norm
 
 
+def _host_direct_solve_with_refinement(
+    *,
+    factor_solve: Callable[[np.ndarray], np.ndarray],
+    operator_matrix,
+    rhs_vec: jnp.ndarray,
+    factor_dtype: np.dtype,
+    refine_steps: int,
+) -> tuple[np.ndarray, float]:
+    rhs64 = np.asarray(rhs_vec, dtype=np.float64).reshape((-1,))
+    rhs_factor = np.asarray(rhs_vec, dtype=factor_dtype).reshape((-1,))
+    x_np = np.asarray(factor_solve(rhs_factor), dtype=np.float64)
+    residual_np = rhs64 - operator_matrix @ x_np
+    residual_norm = float(np.linalg.norm(residual_np))
+    for _ in range(max(0, int(refine_steps))):
+        if not np.isfinite(residual_norm) or residual_norm == 0.0:
+            break
+        dx_np = np.asarray(factor_solve(np.asarray(residual_np, dtype=factor_dtype)), dtype=np.float64)
+        x_trial = x_np + dx_np
+        residual_trial = rhs64 - operator_matrix @ x_trial
+        residual_norm_trial = float(np.linalg.norm(residual_trial))
+        if not np.isfinite(residual_norm_trial) or residual_norm_trial >= residual_norm:
+            break
+        x_np = x_trial
+        residual_np = residual_trial
+        residual_norm = residual_norm_trial
+    return x_np, residual_norm
+
+
 def _host_sparse_direct_polish(
     *,
     matvec_fn,
@@ -592,6 +622,86 @@ def _rhsmode1_host_sparse_skip_dense_ratio() -> float:
         return float(env) if env else 1.0e4
     except ValueError:
         return 1.0e4
+
+
+def _rhsmode1_explicit_sparse_host_direct_allowed(
+    *,
+    sparse_exact_lu: bool,
+    use_implicit: bool,
+    active_size: int,
+) -> bool:
+    env = os.environ.get("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", "").strip().lower()
+    if env in {"0", "false", "no", "off"}:
+        return False
+    if bool(use_implicit) or (not bool(sparse_exact_lu)):
+        return False
+    max_env = os.environ.get("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER_MAX", "").strip()
+    try:
+        max_size = int(max_env) if max_env else 20000
+    except ValueError:
+        max_size = 20000
+    return int(active_size) <= max(1, int(max_size))
+
+
+def _build_host_sparse_direct_factor_from_matvec(
+    *,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    n: int,
+    dtype: jnp.dtype,
+    factor_dtype: np.dtype,
+    emit: Callable[[int, str], None] | None = None,
+):
+    block_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS", "").strip()
+    dense_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DENSE_MAX_MB", "").strip()
+    csr_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "").strip()
+    drop_tol_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "").strip()
+    try:
+        block_cols = int(block_cols_env) if block_cols_env else 32
+    except ValueError:
+        block_cols = 32
+    try:
+        dense_max_mb = float(dense_max_env) if dense_max_env else 128.0
+    except ValueError:
+        dense_max_mb = 128.0
+    try:
+        csr_max_mb = float(csr_max_env) if csr_max_env else 512.0
+    except ValueError:
+        csr_max_mb = 512.0
+    try:
+        drop_tol = float(drop_tol_env) if drop_tol_env else 0.0
+    except ValueError:
+        drop_tol = 0.0
+
+    def _matvec_np(x_np: np.ndarray) -> np.ndarray:
+        return np.asarray(matvec(jnp.asarray(x_np, dtype=dtype)), dtype=np.float64)
+
+    def _matmat_np(cols_np: np.ndarray) -> np.ndarray:
+        cols = jnp.asarray(cols_np, dtype=dtype)
+        out = jax.vmap(matvec, in_axes=1, out_axes=1)(cols)
+        return np.asarray(out, dtype=np.float64)
+
+    operator_bundle = build_operator_from_matvec(
+        _matvec_np,
+        n=int(n),
+        dtype=np.float64,
+        backend=jax.default_backend(),
+        block_cols=int(block_cols),
+        dense_max_mb=float(dense_max_mb),
+        csr_max_mb=float(csr_max_mb),
+        prefer_sparse_on_gpu=True,
+        drop_tol=float(drop_tol),
+        matmat=_matmat_np,
+        allow_operator_only=False,
+    )
+    if emit is not None:
+        emit(
+            1,
+            "explicit_sparse: "
+            f"storage={operator_bundle.metadata.storage_kind} "
+            f"reason={operator_bundle.metadata.reason}",
+        )
+    factor_bundle = factorize_host_sparse_operator(operator_bundle, kind="lu")
+    return operator_bundle, factor_bundle
 
 
 def _rhs1_pas_auto_large_base_kind(*, active_size: int) -> str:
@@ -1494,6 +1604,22 @@ def _transport_sparse_factor_dtype(*, size: int, use_implicit: bool) -> np.dtype
         if int(size) >= max(1, int(float64_min)):
             return np.dtype(np.float64)
     return factor_dtype
+
+
+def _transport_sparse_direct_use_explicit_helper(*, size: int) -> bool:
+    env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", "").strip().lower()
+    if env in {"0", "false", "no", "off"}:
+        return False
+    if env in {"1", "true", "yes", "on"}:
+        return True
+    min_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CPU_MIN", "").strip()
+    try:
+        cpu_min = int(min_env) if min_env else 12000
+    except ValueError:
+        cpu_min = 12000
+    if jax.default_backend() != "cpu":
+        return True
+    return int(size) >= max(1, int(cpu_min))
 
 
 def _gmres_solve_dispatch(*, distributed_axis: str | None = None, **kwargs):
@@ -2966,6 +3092,7 @@ class _PasTokamakThetaPrecondCache:
     mirror_factor: jnp.ndarray  # (S, T) diagonal mirror factor in theta
     mask_active: jnp.ndarray  # (X, L) float mask (1.0 active, 0.0 inactive)
     n_l_build: int  # L truncation used for the preconditioner
+    tail_factors: tuple[tuple[object | None, ...], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -4601,6 +4728,11 @@ def _build_rhsmode1_pas_tokamak_theta_preconditioner(
         g01 = np.zeros((n_species, n_x, twot, n_theta), dtype=np.float64)
         inv_a = np.zeros((n_species, n_x, max(0, n_l_build - 2), n_theta, n_theta), dtype=np.float64)
         g = np.zeros((n_species, n_x, max(0, n_l_build - 3), n_theta, n_theta), dtype=np.float64)
+        structured_tail_env = os.environ.get("SFINCS_JAX_PAS_TOKAMAK_STRUCTURED", "").strip().lower()
+        structured_tail_enabled = structured_tail_env not in {"0", "false", "no", "off"}
+        tail_factors_build: list[list[object | None]] | None = (
+            [[None for _ in range(n_x)] for _ in range(n_species)] if structured_tail_enabled and n_l_build > 2 else None
+        )
 
         for s in range(n_species):
             m_s = m_theta[s, :, :]
@@ -4661,6 +4793,23 @@ def _build_rhsmode1_pas_tokamak_theta_preconditioner(
                         g[s, ix, l - 2, :, :] = g_l
                         g_prev = g_l
 
+                if tail_factors_build is not None:
+                    n_tail = n_l_build - 2
+                    diag_tail = np.zeros((n_tail, n_theta, n_theta), dtype=np.float64)
+                    lower_tail = np.zeros((max(0, n_tail - 1), n_theta, n_theta), dtype=np.float64)
+                    upper_tail = np.zeros((max(0, n_tail - 1), n_theta, n_theta), dtype=np.float64)
+                    for l in range(2, n_l_build):
+                        diag_tail[l - 2, :, :] = float(diag_vals[s, ix, l]) * eye_t
+                        if l < n_l_build - 1:
+                            upper_tail[l - 2, :, :] = float(b_stream[ix, l]) * m_s + float(b_mirror[ix, l]) * mir_s
+                        if l > 2:
+                            lower_tail[l - 3, :, :] = float(c_stream[ix, l]) * m_s + float(c_mirror[ix, l]) * mir_s
+                    tail_factors_build[s][ix] = factor_block_tridiagonal(
+                        jnp.asarray(diag_tail, dtype=precond_dtype),
+                        jnp.asarray(lower_tail, dtype=precond_dtype),
+                        jnp.asarray(upper_tail, dtype=precond_dtype),
+                    )
+
         cached = _PasTokamakThetaPrecondCache(
             inv_a01=jnp.asarray(inv_a01, dtype=precond_dtype),
             g01=jnp.asarray(g01, dtype=precond_dtype),
@@ -4672,6 +4821,7 @@ def _build_rhsmode1_pas_tokamak_theta_preconditioner(
             mirror_factor=jnp.asarray(mirror_factor, dtype=precond_dtype),
             mask_active=jnp.asarray(mask_active_full, dtype=precond_dtype),
             n_l_build=int(n_l_build),
+            tail_factors=None if tail_factors_build is None else tuple(tuple(row) for row in tail_factors_build),
         )
         _RHSMODE1_PAS_TOKAMAK_THETA_CACHE[cache_key] = cached
 
@@ -4685,6 +4835,7 @@ def _build_rhsmode1_pas_tokamak_theta_preconditioner(
     mirror_factor = cached.mirror_factor
     mask_active = cached.mask_active
     n_l_build = int(cached.n_l_build)
+    tail_factors = cached.tail_factors
 
     f_shape = op.fblock.f_shape  # (S,X,L,T,Z)
     n_l_total = int(f_shape[2])
@@ -4710,6 +4861,30 @@ def _build_rhsmode1_pas_tokamak_theta_preconditioner(
                 f0 = d01[:, :, :n_theta]
                 f1 = d01[:, :, n_theta:]
                 f_all = jnp.concatenate([f0[:, :, None, :], f1[:, :, None, :]], axis=2)  # (S,X,2,T)
+            elif tail_factors is not None:
+                f_rest_rows: list[list[jnp.ndarray]] = []
+                for s in range(int(op.n_species)):
+                    species_rows: list[jnp.ndarray] = []
+                    for ix in range(int(op.n_x)):
+                        factor = tail_factors[s][ix]
+                        assert factor is not None
+                        rhs_tail = jnp.asarray(f_rhs[s, ix, 2:n_l_build, :], dtype=precond_dtype)
+                        d_prev = d01[s, ix, n_theta:]
+                        corr2 = c_stream[ix, 2] * (m_theta[s] @ d_prev)
+                        corr2 = corr2 + c_mirror[ix, 2] * (mirror_factor[s] * d_prev)
+                        rhs_tail = rhs_tail.at[0, :].add(-corr2)
+                        sol_tail = factor.solve(rhs_tail)
+                        species_rows.append(jnp.asarray(sol_tail, dtype=precond_dtype))
+                    f_rest_rows.append(jnp.stack(species_rows, axis=0))
+                f_rest_all = jnp.stack(f_rest_rows, axis=0)  # (S,X,L-2,T)
+                f2 = f_rest_all[:, :, 0, :]
+                u01 = d01 - jnp.einsum("sxij,sxj->sxi", g01, f2)
+                f0 = u01[:, :, :n_theta]
+                f1 = u01[:, :, n_theta:]
+                f_all = jnp.concatenate(
+                    [f0[:, :, None, :], f1[:, :, None, :], f_rest_all],
+                    axis=2,
+                )
             else:
                 d_prev = d01[:, :, n_theta:]  # (S,X,T)
 
@@ -4776,6 +4951,33 @@ def _build_rhsmode1_pas_tokamak_theta_preconditioner(
                 f0 = d01[:, :, :, :n_theta]
                 f1 = d01[:, :, :, n_theta:]
                 f_all = jnp.concatenate([f0[:, :, :, None, :], f1[:, :, :, None, :]], axis=3)  # (Z,S,X,2,T)
+            elif tail_factors is not None:
+                z_rows: list[list[list[jnp.ndarray]]] = []
+                for iz in range(n_zeta):
+                    z_species: list[list[jnp.ndarray]] = []
+                    for s in range(int(op.n_species)):
+                        species_rows: list[jnp.ndarray] = []
+                        for ix in range(int(op.n_x)):
+                            factor = tail_factors[s][ix]
+                            assert factor is not None
+                            rhs_tail = jnp.asarray(f_rhs_z[iz, s, ix, 2:n_l_build, :], dtype=precond_dtype)
+                            d_prev = d01[iz, s, ix, n_theta:]
+                            corr2 = c_stream[ix, 2] * (m_theta[s] @ d_prev)
+                            corr2 = corr2 + c_mirror[ix, 2] * (mirror_factor[s] * d_prev)
+                            rhs_tail = rhs_tail.at[0, :].add(-corr2)
+                            sol_tail = factor.solve(rhs_tail)
+                            species_rows.append(jnp.asarray(sol_tail, dtype=precond_dtype))
+                        z_species.append(species_rows)
+                    z_rows.append(z_species)
+                f_rest_all = jnp.asarray(z_rows, dtype=precond_dtype)  # (Z,S,X,L-2,T)
+                f2 = f_rest_all[:, :, :, 0, :]
+                u01 = d01 - jnp.einsum("sxij,zsxj->zsxi", g01, f2)
+                f0 = u01[:, :, :, :n_theta]
+                f1 = u01[:, :, :, n_theta:]
+                f_all = jnp.concatenate(
+                    [f0[:, :, :, None, :], f1[:, :, :, None, :], f_rest_all],
+                    axis=3,
+                )
             else:
                 d_prev = d01[:, :, :, n_theta:]  # (Z,S,X,T)
 
@@ -15251,23 +15453,45 @@ def solve_v3_full_system_linear_gmres(
                         and int(active_size) <= int(sparse_ilu_dense_max)
                     )
                     store_dense = int(active_size) <= int(sparse_dense_cache_max)
-                    a_csr_full, _a_csr_drop, ilu, a_dense_cache, l_dense, u_dense, l_unit_diag = _build_sparse_ilu_from_matvec(
-                        matvec=mv_reduced,
-                        n=int(active_size),
-                        dtype=rhs_reduced.dtype,
-                        cache_key=cache_key_use,
-                        factor_dtype=factor_dtype,
-                        drop_tol=sparse_drop_tol,
-                        drop_rel=sparse_drop_rel,
-                        ilu_drop_tol=sparse_ilu_drop_tol,
-                        fill_factor=sparse_ilu_fill,
-                        build_dense_factors=build_dense_factors,
-                        build_jax_factors=bool(use_implicit) and (not host_sparse_direct_wanted),
-                        build_ilu=True,
-                        store_dense=store_dense,
-                        factorization="lu" if sparse_exact_lu else "ilu",
-                        emit=emit,
-                    )
+                    explicit_sparse_operator = None
+                    explicit_sparse_factor = None
+                    if host_sparse_direct_wanted and _rhsmode1_explicit_sparse_host_direct_allowed(
+                        sparse_exact_lu=sparse_exact_lu,
+                        use_implicit=bool(use_implicit),
+                        active_size=int(active_size),
+                    ):
+                        explicit_sparse_operator, explicit_sparse_factor = _build_host_sparse_direct_factor_from_matvec(
+                            matvec=mv_reduced,
+                            n=int(active_size),
+                            dtype=rhs_reduced.dtype,
+                            factor_dtype=factor_dtype,
+                            emit=emit,
+                        )
+                        a_csr_full = explicit_sparse_operator.matrix
+                        _a_csr_drop = a_csr_full
+                        ilu = explicit_sparse_factor.factor
+                        a_dense_cache = None
+                        l_dense = None
+                        u_dense = None
+                        l_unit_diag = False
+                    else:
+                        a_csr_full, _a_csr_drop, ilu, a_dense_cache, l_dense, u_dense, l_unit_diag = _build_sparse_ilu_from_matvec(
+                            matvec=mv_reduced,
+                            n=int(active_size),
+                            dtype=rhs_reduced.dtype,
+                            cache_key=cache_key_use,
+                            factor_dtype=factor_dtype,
+                            drop_tol=sparse_drop_tol,
+                            drop_rel=sparse_drop_rel,
+                            ilu_drop_tol=sparse_ilu_drop_tol,
+                            fill_factor=sparse_ilu_fill,
+                            build_dense_factors=build_dense_factors,
+                            build_jax_factors=bool(use_implicit) and (not host_sparse_direct_wanted),
+                            build_ilu=True,
+                            store_dense=store_dense,
+                            factorization="lu" if sparse_exact_lu else "ilu",
+                            emit=emit,
+                        )
                     dense_matrix_cache = a_dense_cache
                     _mark("rhs1_sparse_precond_build_done")
                     host_sparse_direct = host_sparse_direct_wanted
@@ -15280,16 +15504,28 @@ def solve_v3_full_system_linear_gmres(
                                 "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
                                 f"on backend={jax.default_backend()}",
                             )
-                        x_np, residual_norm_sparse = _host_sparse_direct_solve_with_refinement(
-                            ilu=ilu,
-                            a_csr_full=a_csr_full,
-                            rhs_vec=rhs_reduced,
-                            factor_dtype=factor_dtype,
-                            refine_steps=_host_sparse_direct_refine_steps(
-                                "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                                default=2,
-                            ),
-                        )
+                        if explicit_sparse_factor is not None and explicit_sparse_operator is not None:
+                            x_np, residual_norm_sparse = _host_direct_solve_with_refinement(
+                                factor_solve=explicit_sparse_factor.solve,
+                                operator_matrix=explicit_sparse_operator.matrix,
+                                rhs_vec=rhs_reduced,
+                                factor_dtype=factor_dtype,
+                                refine_steps=_host_sparse_direct_refine_steps(
+                                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                                    default=2,
+                                ),
+                            )
+                        else:
+                            x_np, residual_norm_sparse = _host_sparse_direct_solve_with_refinement(
+                                ilu=ilu,
+                                a_csr_full=a_csr_full,
+                                rhs_vec=rhs_reduced,
+                                factor_dtype=factor_dtype,
+                                refine_steps=_host_sparse_direct_refine_steps(
+                                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                                    default=2,
+                                ),
+                            )
                         res_sparse = GMRESSolveResult(
                             x=jnp.asarray(x_np, dtype=jnp.float64),
                             residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
@@ -17673,23 +17909,45 @@ def solve_v3_full_system_linear_gmres(
                         and int(op.total_size) <= int(sparse_ilu_dense_max)
                     )
                     store_dense = int(op.total_size) <= int(sparse_dense_cache_max)
-                    a_csr_full, _a_csr_drop, ilu, a_dense_cache, l_dense, u_dense, l_unit_diag = _build_sparse_ilu_from_matvec(
-                        matvec=sparse_factor_matvec,
-                        n=int(op.total_size),
-                        dtype=rhs.dtype,
-                        cache_key=cache_key_use,
-                        factor_dtype=factor_dtype,
-                        drop_tol=sparse_drop_tol,
-                        drop_rel=sparse_drop_rel,
-                        ilu_drop_tol=sparse_ilu_drop_tol,
-                        fill_factor=sparse_ilu_fill,
-                        build_dense_factors=build_dense_factors,
-                        build_jax_factors=bool(use_implicit) and (not host_sparse_direct_wanted),
-                        build_ilu=True,
-                        store_dense=store_dense,
-                        factorization="lu" if sparse_exact_lu else "ilu",
-                        emit=emit,
-                    )
+                    explicit_sparse_operator = None
+                    explicit_sparse_factor = None
+                    if host_sparse_direct_wanted and _rhsmode1_explicit_sparse_host_direct_allowed(
+                        sparse_exact_lu=sparse_exact_lu,
+                        use_implicit=bool(use_implicit),
+                        active_size=int(op.total_size),
+                    ):
+                        explicit_sparse_operator, explicit_sparse_factor = _build_host_sparse_direct_factor_from_matvec(
+                            matvec=sparse_factor_matvec,
+                            n=int(op.total_size),
+                            dtype=rhs.dtype,
+                            factor_dtype=factor_dtype,
+                            emit=emit,
+                        )
+                        a_csr_full = explicit_sparse_operator.matrix
+                        _a_csr_drop = a_csr_full
+                        ilu = explicit_sparse_factor.factor
+                        a_dense_cache = None
+                        l_dense = None
+                        u_dense = None
+                        l_unit_diag = False
+                    else:
+                        a_csr_full, _a_csr_drop, ilu, a_dense_cache, l_dense, u_dense, l_unit_diag = _build_sparse_ilu_from_matvec(
+                            matvec=sparse_factor_matvec,
+                            n=int(op.total_size),
+                            dtype=rhs.dtype,
+                            cache_key=cache_key_use,
+                            factor_dtype=factor_dtype,
+                            drop_tol=sparse_drop_tol,
+                            drop_rel=sparse_drop_rel,
+                            ilu_drop_tol=sparse_ilu_drop_tol,
+                            fill_factor=sparse_ilu_fill,
+                            build_dense_factors=build_dense_factors,
+                            build_jax_factors=bool(use_implicit) and (not host_sparse_direct_wanted),
+                            build_ilu=True,
+                            store_dense=store_dense,
+                            factorization="lu" if sparse_exact_lu else "ilu",
+                            emit=emit,
+                        )
                     dense_matrix_cache = a_dense_cache
                     _mark("rhs1_sparse_precond_build_done")
                     host_sparse_direct = host_sparse_direct_wanted
@@ -17756,16 +18014,28 @@ def solve_v3_full_system_linear_gmres(
                                     "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
                                     f"on backend={jax.default_backend()}",
                                 )
-                            x_np, residual_norm_sparse = _host_sparse_direct_solve_with_refinement(
-                                ilu=ilu,
-                                a_csr_full=a_csr_full,
-                                rhs_vec=rhs,
-                                factor_dtype=factor_dtype,
-                                refine_steps=_host_sparse_direct_refine_steps(
-                                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                                    default=2,
-                                ),
-                            )
+                            if explicit_sparse_factor is not None and explicit_sparse_operator is not None:
+                                x_np, residual_norm_sparse = _host_direct_solve_with_refinement(
+                                    factor_solve=explicit_sparse_factor.solve,
+                                    operator_matrix=explicit_sparse_operator.matrix,
+                                    rhs_vec=rhs,
+                                    factor_dtype=factor_dtype,
+                                    refine_steps=_host_sparse_direct_refine_steps(
+                                        "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                                        default=2,
+                                    ),
+                                )
+                            else:
+                                x_np, residual_norm_sparse = _host_sparse_direct_solve_with_refinement(
+                                    ilu=ilu,
+                                    a_csr_full=a_csr_full,
+                                    rhs_vec=rhs,
+                                    factor_dtype=factor_dtype,
+                                    refine_steps=_host_sparse_direct_refine_steps(
+                                        "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                                        default=2,
+                                    ),
+                                )
                             res_sparse = GMRESSolveResult(
                                 x=jnp.asarray(x_np, dtype=jnp.float64),
                                 residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
@@ -20557,26 +20827,79 @@ def solve_v3_transport_matrix_linear_gmres(
         precondition_side_val: str,
     ) -> GMRESSolveResult:
         def _solve_with_factor_dtype(factor_dtype_use: np.dtype) -> tuple[np.ndarray, float]:
-            cache_key_use = _sparse_factor_cache_key(cache_key, factor_dtype_use)
-            a_csr_full, _a_csr_drop, ilu, _a_dense, _l_dense, _u_dense, _l_unit = _build_sparse_ilu_from_matvec(
-                matvec=matvec_fn,
-                n=int(n),
-                dtype=dtype,
-                cache_key=cache_key_use,
-                factor_dtype=factor_dtype_use,
-                drop_tol=transport_sparse_drop_tol,
-                drop_rel=transport_sparse_drop_rel,
-                ilu_drop_tol=0.0,
-                fill_factor=1.0,
-                build_dense_factors=False,
-                build_jax_factors=False,
-                build_ilu=True,
-                store_dense=False,
-                factorization="lu",
-                emit=emit,
-            )
-            if ilu is None:
-                raise RuntimeError("transport sparse_lu: factors unavailable")
+            if _transport_sparse_direct_use_explicit_helper(size=int(n)):
+                block_cols_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_BLOCK_COLS", "").strip()
+                dense_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_DENSE_MAX_MB", "").strip()
+                csr_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CSR_MAX_MB", "").strip()
+                try:
+                    block_cols = int(block_cols_env) if block_cols_env else 32
+                except ValueError:
+                    block_cols = 32
+                try:
+                    dense_max_mb = float(dense_max_env) if dense_max_env else 128.0
+                except ValueError:
+                    dense_max_mb = 128.0
+                try:
+                    csr_max_mb = float(csr_max_env) if csr_max_env else 512.0
+                except ValueError:
+                    csr_max_mb = 512.0
+
+                def _matvec_host(x_np: np.ndarray) -> np.ndarray:
+                    return np.asarray(
+                        matvec_fn(jnp.asarray(x_np, dtype=dtype)),
+                        dtype=factor_dtype_use,
+                        copy=True,
+                    )
+
+                operator_bundle = build_operator_from_matvec(
+                    _matvec_host,
+                    n=int(n),
+                    dtype=factor_dtype_use,
+                    backend=jax.default_backend(),
+                    block_cols=max(1, int(block_cols)),
+                    dense_max_mb=float(dense_max_mb),
+                    csr_max_mb=float(csr_max_mb),
+                    prefer_sparse_on_gpu=True,
+                    force_sparse=(jax.default_backend() != "cpu"),
+                    drop_tol=0.0,
+                    allow_operator_only=False,
+                )
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_transport_matrix_linear_gmres: explicit sparse helper "
+                        f"storage={operator_bundle.metadata.storage_kind} "
+                        f"reason={operator_bundle.metadata.reason}",
+                    )
+                factor_bundle = factorize_host_sparse_operator(
+                    operator_bundle,
+                    kind="lu",
+                    drop_tol=0.0,
+                    fill_factor=1.0,
+                )
+                a_csr_full = factor_bundle.operator.matrix
+                ilu = factor_bundle.factor
+            else:
+                cache_key_use = _sparse_factor_cache_key(cache_key, factor_dtype_use)
+                a_csr_full, _a_csr_drop, ilu, _a_dense, _l_dense, _u_dense, _l_unit = _build_sparse_ilu_from_matvec(
+                    matvec=matvec_fn,
+                    n=int(n),
+                    dtype=dtype,
+                    cache_key=cache_key_use,
+                    factor_dtype=factor_dtype_use,
+                    drop_tol=transport_sparse_drop_tol,
+                    drop_rel=transport_sparse_drop_rel,
+                    ilu_drop_tol=0.0,
+                    fill_factor=1.0,
+                    build_dense_factors=False,
+                    build_jax_factors=False,
+                    build_ilu=True,
+                    store_dense=False,
+                    factorization="lu",
+                    emit=emit,
+                )
+                if ilu is None:
+                    raise RuntimeError("transport sparse_lu: factors unavailable")
             x_local, residual_local = _host_sparse_direct_solve_with_refinement(
                 ilu=ilu,
                 a_csr_full=a_csr_full,

@@ -12,8 +12,10 @@ from sfincs_jax.solver import (
     dense_krylov_solve_from_matrix,
     dense_solve_from_matrix,
     explicit_left_preconditioned_gmres_scipy,
+    gmres_solve_jit,
     gmres_solve,
     gmres_solve_with_residual,
+    lgmres_solve_with_history_scipy,
 )
 
 
@@ -87,6 +89,27 @@ def test_dense_krylov_solve_from_matrix_matches_numpy() -> None:
         restart=n,
         maxiter=8,
         solve_method="incremental",
+    )
+
+    np.testing.assert_allclose(np.asarray(x), x_ref, rtol=1e-8, atol=1e-8)
+    assert float(rn) < 1e-8
+
+
+def test_dense_krylov_lgmres_matches_numpy_on_nonsymmetric_matrix() -> None:
+    rng = np.random.default_rng(17)
+    n = 18
+    a = rng.normal(size=(n, n)).astype(np.float64)
+    a += 6.0 * np.eye(n)
+    b = rng.normal(size=(n,)).astype(np.float64)
+    x_ref = np.linalg.solve(a, b)
+
+    x, rn = dense_krylov_solve_from_matrix(
+        a=jnp.asarray(a),
+        b=jnp.asarray(b),
+        tol=1e-12,
+        restart=8,
+        maxiter=40,
+        solve_method="lgmres",
     )
 
     np.testing.assert_allclose(np.asarray(x), x_ref, rtol=1e-8, atol=1e-8)
@@ -240,6 +263,66 @@ def test_explicit_left_preconditioned_gmres_scipy_zero_preconditioned_rhs_is_fin
     assert history == [0.0]
 
 
+def test_lgmres_solve_with_history_matches_numpy_on_nonsymmetric_matrix() -> None:
+    rng = np.random.default_rng(29)
+    n = 15
+    a = rng.normal(size=(n, n)).astype(np.float64)
+    a += 5.0 * np.eye(n)
+    b = rng.normal(size=(n,)).astype(np.float64)
+    x_ref = np.linalg.solve(a, b)
+    a_j = jnp.asarray(a)
+
+    def mv(x):
+        return a_j @ x
+
+    x, rn, history = lgmres_solve_with_history_scipy(
+        matvec=mv,
+        b=jnp.asarray(b),
+        tol=1e-12,
+        restart=7,
+        maxiter=30,
+    )
+
+    np.testing.assert_allclose(x, x_ref, rtol=1e-8, atol=1e-8)
+    assert rn < 1e-8
+    assert history
+
+
+def test_lgmres_right_preconditioning_matches_true_solution() -> None:
+    a = np.array(
+        [
+            [4.0, -2.0, 1.0],
+            [1.0, 3.5, -0.5],
+            [0.0, 2.0, 2.5],
+        ],
+        dtype=np.float64,
+    )
+    b = np.array([1.0, -2.0, 3.0], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    inv_diag = 1.0 / np.diag(a)
+    a_j = jnp.asarray(a)
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x):
+        return jnp.asarray(inv_diag, dtype=jnp.float64) * x
+
+    result = gmres_solve(
+        matvec=mv,
+        b=jnp.asarray(b),
+        preconditioner=precond,
+        tol=1e-12,
+        restart=6,
+        maxiter=20,
+        solve_method="lgmres",
+        precondition_side="right",
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1e-10, atol=1e-10)
+    assert float(result.residual_norm) < 1e-10
+
+
 def test_distributed_solver_kind_auto_defaults_to_bicgstab(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_DISTRIBUTED_KRYLOV", raising=False)
     kind, method = _distributed_solver_kind("auto")
@@ -252,6 +335,29 @@ def test_distributed_solver_kind_auto_can_force_gmres(monkeypatch: pytest.Monkey
     kind, method = _distributed_solver_kind("auto")
     assert kind == "gmres"
     assert method == "incremental"
+
+
+def test_distributed_solver_kind_rejects_host_only_lgmres() -> None:
+    with pytest.raises(ValueError, match="host-only"):
+        _distributed_solver_kind("lgmres")
+
+
+def test_gmres_solve_jit_rejects_host_only_lgmres() -> None:
+    a = jnp.asarray([[2.0, 1.0], [0.0, 1.5]], dtype=jnp.float64)
+    b = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
+
+    def mv(x):
+        return a @ x
+
+    with pytest.raises(ValueError, match="host-only"):
+        gmres_solve_jit(
+            matvec=mv,
+            b=b,
+            tol=1e-12,
+            restart=4,
+            maxiter=4,
+            solve_method="lgmres",
+        )
 
 
 def test_materialize_distributed_input_preserves_values_and_dtype() -> None:

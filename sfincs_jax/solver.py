@@ -11,6 +11,7 @@ _jax_config.update("jax_enable_x64", True)
 
 import jax
 import jax.numpy as jnp
+from jax import core as jax_core
 from jax import tree_util as jtu
 from jax import vmap
 from jax.scipy.sparse.linalg import bicgstab, gmres
@@ -25,6 +26,7 @@ except Exception:  # noqa: BLE001
 from scipy.sparse.linalg import LinearOperator as _LinearOperator
 from scipy.sparse.linalg import gmres as _scipy_gmres
 from scipy.sparse.linalg import bicgstab as _scipy_bicgstab
+from scipy.sparse.linalg import lgmres as _scipy_lgmres
 
 
 @jtu.register_pytree_node_class
@@ -43,6 +45,26 @@ class GMRESSolveResult:
         del aux
         x, residual_norm = children
         return cls(x=x, residual_norm=residual_norm)
+
+
+_HOST_SCIPY_KRYLOV_METHODS = frozenset({"lgmres", "lgmres_scipy"})
+
+
+def _contains_tracer(*values) -> bool:
+    for value in values:
+        if value is None:
+            continue
+        for leaf in jtu.tree_leaves(value):
+            if isinstance(leaf, jax_core.Tracer):
+                return True
+    return False
+
+
+def _normalize_krylov_method(solve_method: str) -> str:
+    method = str(solve_method).strip().lower()
+    if method in {"auto", "default"}:
+        return "bicgstab"
+    return method
 
 
 def _maybe_limit_restart(n: int, restart: int, dtype: jnp.dtype) -> int:
@@ -140,6 +162,80 @@ def gmres_solve_with_history_scipy(
         M=M,
         callback=_cb,
         callback_type="pr_norm",
+    )
+
+    if side == "right" and preconditioner is not None:
+        x_np = _prec(x_np)
+
+    res = b_np - _mv(x_np)
+    rn = float(np.linalg.norm(res))
+    return x_np, rn, history
+
+
+def lgmres_solve_with_history_scipy(
+    *,
+    matvec,
+    b: jnp.ndarray,
+    preconditioner=None,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1e-10,
+    atol: float = 0.0,
+    restart: int = 50,
+    maxiter: int | None = None,
+    precondition_side: str = "left",
+) -> tuple[np.ndarray, float, list[float]]:
+    """Run SciPy LGMRES for restart-robust host solves on non-differentiable paths."""
+    b_np = np.array(b, dtype=np.float64, copy=True).reshape((-1,))
+    n = int(b_np.size)
+    x0_np = np.array(x0, dtype=np.float64, copy=True).reshape((-1,)) if x0 is not None else None
+    restart_use = _maybe_limit_restart(n, int(restart), np.dtype(np.float64))
+    outer_k_env = os.environ.get("SFINCS_JAX_LGMRES_OUTER_K", "").strip()
+    try:
+        outer_k = int(outer_k_env) if outer_k_env else 3
+    except ValueError:
+        outer_k = 3
+    outer_k = max(0, int(outer_k))
+
+    def _mv(x_np: np.ndarray) -> np.ndarray:
+        return np.array(matvec(jnp.asarray(x_np, dtype=jnp.float64)), dtype=np.float64, copy=True)
+
+    def _prec(x_np: np.ndarray) -> np.ndarray:
+        if preconditioner is None:
+            return np.array(x_np, dtype=np.float64, copy=True)
+        return np.array(preconditioner(jnp.asarray(x_np, dtype=jnp.float64)), dtype=np.float64, copy=True)
+
+    side = str(precondition_side).strip().lower()
+    if side not in {"left", "right", "none"}:
+        side = "left"
+
+    if side == "right" and preconditioner is not None:
+
+        def _mv_right(y_np: np.ndarray) -> np.ndarray:
+            return _mv(_prec(y_np))
+
+        A = _LinearOperator((n, n), matvec=_mv_right, dtype=np.float64)
+        M = None
+    else:
+        A = _LinearOperator((n, n), matvec=_mv, dtype=np.float64)
+        M = _LinearOperator((n, n), matvec=_prec, dtype=np.float64) if preconditioner is not None else None
+
+    history: list[float] = []
+
+    def _cb(xk: np.ndarray) -> None:
+        x_state = _prec(xk) if side == "right" and preconditioner is not None else xk
+        history.append(float(np.linalg.norm(b_np - _mv(x_state))))
+
+    x_np, _info = _scipy_lgmres(
+        A,
+        b_np,
+        x0=x0_np,
+        rtol=float(tol),
+        atol=float(atol),
+        maxiter=int(maxiter) if maxiter is not None else None,
+        M=M,
+        inner_m=int(restart_use),
+        outer_k=int(outer_k),
+        callback=_cb,
     )
 
     if side == "right" and preconditioner is not None:
@@ -622,9 +718,7 @@ def _gmres_solve_core(
     if x0 is not None:
         x0 = jnp.asarray(x0)
 
-    method = str(solve_method).lower()
-    if method in {"auto", "default"}:
-        method = "bicgstab"
+    method = _normalize_krylov_method(solve_method)
     if method in {"bicgstab", "bicgstab_jax"}:
         res, r = bicgstab_solve_with_residual(
             matvec=matvec,
@@ -652,6 +746,25 @@ def _gmres_solve_core(
                 precondition_side=precondition_side,
             )
         return res.x, r
+    if method in _HOST_SCIPY_KRYLOV_METHODS:
+        if _contains_tracer(b, x0):
+            raise ValueError(f"solve_method={method} is host-only and cannot run inside JIT/differentiable tracing.")
+        if maxiter is None:
+            maxiter = max(1, int(np.ceil(int(b.size) / max(1, int(restart)))))
+        x_np, _rn, _history = lgmres_solve_with_history_scipy(
+            matvec=matvec,
+            b=b,
+            preconditioner=preconditioner,
+            x0=x0,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            precondition_side=precondition_side,
+        )
+        x = jnp.asarray(x_np, dtype=b.dtype)
+        r = b - matvec(x)
+        return x, r
     if method == "dense":
         n = int(b.size)
         if b.ndim != 1:
@@ -827,6 +940,8 @@ def _distributed_krylov_preference() -> str:
 
 def _distributed_solver_kind(solve_method: str) -> tuple[str, str]:
     method = str(solve_method).strip().lower()
+    if method in _HOST_SCIPY_KRYLOV_METHODS:
+        raise ValueError(f"solve_method={method} is host-only and unsupported for distributed solves.")
     if method in {"bicgstab", "bicgstab_jax"}:
         return "bicgstab", "batched"
     if method in {"auto", "default"}:
