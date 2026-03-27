@@ -243,7 +243,7 @@ def _format_improvement(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Update README fast-branch audit block.")
+    parser = argparse.ArgumentParser(description="Update README full example-suite audit block.")
     parser.add_argument(
         "--out-root",
         type=Path,
@@ -317,7 +317,7 @@ def main() -> int:
 
     lines = [
         BEGIN,
-        f"Current fast explicit CPU audit comes from `{_repo_rel(out_root)}`.",
+        f"Current `main` CPU audit comes from `{_repo_rel(out_root)}`.",
         (
             f"Matching frozen-reference GPU audit comes from `{_repo_rel(gpu_out_root)}`."
             if gpu_rows
@@ -442,7 +442,7 @@ def main() -> int:
     prefix, rest = readme.split(BEGIN, 1)
     _old, suffix = rest.split(END, 1)
     README.write_text(prefix + "\n".join(lines) + suffix)
-    print("Updated README fast-branch audit block.")
+    print("Updated README full example-suite audit block.")
     return 0
 
 

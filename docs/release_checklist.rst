@@ -6,12 +6,23 @@ This page is intended for maintainers preparing a tagged release (PyPI + Read th
 What this project can and cannot claim
 --------------------------------------
 
-`sfincs_jax` is not yet a full end-to-end replacement for SFINCS Fortran v3 across the
-entire upstream example suite:
+On the current ``main`` branch, `sfincs_jax` can claim:
 
-- We only claim parity for features explicitly covered by tests/fixtures (see `Parity status`).
-- The upstream example audit (`Fortran v3 example suite (audit)`) summarizes which example inputs
-  currently reach grids/geometry/output writing without errors.
+- full CPU and GPU parity for the vendored 39-case example suite, including
+  ``examples/additional_examples/input.namelist``,
+- no ``jax_error`` or ``max_attempts`` in the current release-facing suite artifacts,
+- and matching ``sfincsOutput.h5`` datasets and required terminal-output signals for the supported examples.
+
+The authoritative release-facing artifacts for this state are:
+
+- ``tests/scaled_example_suite_fast_cpu_full_v6_merged``
+- ``tests/scaled_example_suite_fast_gpu_full_v8``
+
+What should still be stated carefully:
+
+- the CLI defaults are explicit and performance-oriented, not differentiable by default,
+- differentiable solve paths are available from Python when requested,
+- and remaining work is concentrated on runtime and memory optimization of the heaviest PAS and geometry-rich cases.
 
 Before shipping a release, make sure `README.md` and `docs/parity.rst` accurately reflect the
 current state of the port.
@@ -36,21 +47,29 @@ Smoke-run the examples that do not require optional dependencies:
    python examples/getting_started/write_sfincs_output_cli.py
    python examples/autodiff/matrix_free_residual_and_jvp.py
 
-Regenerate the upstream example audit table if upstream inputs or support levels change:
+Regenerate the exact-input upstream fixture audit if upstream inputs or support levels change:
 
 .. code-block:: bash
 
    python scripts/generate_fortran_example_audit.py
 
-Best-effort suite smoke run (vendored upstream inputs):
+Release-facing full suite run (vendored upstream inputs):
 
 .. code-block:: bash
 
-   # Write outputs only:
-   python scripts/compare_v3_example_suite.py --limit 10
+   python scripts/run_scaled_example_suite.py \
+     --examples-root examples/sfincs_examples \
+     --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
+     --fortran-exe /Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs \
+     --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged \
+     --scale-factor 1.0 \
+     --runtime-target-basis fortran \
+     --fortran-min-runtime-s 1.0 \
+     --fortran-max-runtime-s 20.0 \
+     --runtime-adjustment-iters 3
 
-   # Optionally include RHSMode=1 solves (can be slow):
-   python scripts/compare_v3_example_suite.py --limit 10 --compute-solution
+Sync or regenerate the matching frozen-reference GPU lane against that CPU root before updating
+release-facing README or docs claims.
 
 Packaging sanity check
 ----------------------
