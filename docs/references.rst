@@ -38,10 +38,10 @@ The solver stack in `sfincs_jax` draws on standard Krylov and preconditioning re
 - M. Benzi, “Preconditioning techniques for large linear systems: a survey,” *J. Comput. Phys.*
   182(2), 2002.
 
-MONKES and optimization-focused neoclassical workflows
-------------------------------------------------------
+Optimization-focused neoclassical workflows
+-------------------------------------------
 
-The MONKES ecosystem and related thesis/paper materials (external to this repository) are useful for:
+Related reduced-model thesis and paper materials are useful for:
 
 - adjoint properties of drift-kinetic equations,
 - derivative-aware workflows for optimization,

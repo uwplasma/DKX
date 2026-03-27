@@ -130,7 +130,7 @@ important even in a multispecies code:
   repeatedly.
 
 In this limit the kinetic problem becomes smaller and more structured. That is exactly
-why MONKES and DKES-style codes can exploit specialized solvers that are not natural for
+why reduced monoenergetic and DKES-style codes can exploit specialized solvers that are not natural for
 the full SFINCS state. For ``sfincs_jax``, this is a strong hint that the worst
 monoenergetic and low-energy-coupling offenders should not necessarily be treated with
 the same generic flattened solver path used for full FP runs.
@@ -158,7 +158,7 @@ Two consequences matter directly for ``sfincs_jax``:
   are often more promising than repeated generic Krylov iterations on the full flattened
   state.
 
-This is exactly the direction suggested by MONKES-style block elimination and by the
+This is exactly the direction suggested by structured block elimination and by the
 existing species-by-:math:`x` block preconditioners already present in ``sfincs_jax``.
 
 Phi1, quasineutrality, and poloidally varying collisions

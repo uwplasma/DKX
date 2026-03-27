@@ -19,7 +19,7 @@ Primary mission (phase 1):
 Primary mission (phase 2+):
 - Extend beyond strict SFINCS replication toward modern neoclassical workflows,
 - Integrate/benchmark alternative numerical formulations and optimization-oriented methods,
-- Borrow and generalize ideas from modern tools (e.g., MONKES, KNOSOS, NEO ecosystems),
+- Borrow and generalize ideas from modern neoclassical toolchains where they survive direct validation,
 - Preserve scientific correctness while improving throughput, scalability, and usability.
 
 Non-negotiable engineering constraints:
@@ -33,7 +33,6 @@ Working directories and references:
 - sfincs_jax repo: /Users/rogeriojorge/local/tests/sfincs_jax
 - Fortran SFINCS v3 executable: /Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs
 - Original SFINCS source tree: /Users/rogeriojorge/local/tests/sfincs_original
-- MONKES reference repo: /Users/rogeriojorge/local/tests/MONKES
 - Main thesis/pdf refs: /Users/rogeriojorge/local/tests/Escoto_Thesis.pdf and /Users/rogeriojorge/local/tests/*.pdf
 - sfincs_jax docs upstream refs: /Users/rogeriojorge/local/tests/sfincs_jax/docs/upstream
 
@@ -88,7 +87,6 @@ Core requirement right now:
 - Active repo: `/Users/rogeriojorge/local/tests/sfincs_jax`
 - Fortran executable: `/Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs`
 - Fortran source: `/Users/rogeriojorge/local/tests/sfincs_original`
-- MONKES: `/Users/rogeriojorge/local/tests/MONKES`
 - Thesis/PDF refs: `/Users/rogeriojorge/local/tests/Escoto_Thesis.pdf`, `/Users/rogeriojorge/local/tests/*.pdf`
 
 ### 4.2 sfincs_jax key code files
@@ -318,7 +316,6 @@ This project sits in a rapidly evolving fusion-computation ecosystem.
 
 ### 11.1 Relevant neoclassical or adjacent tools
 - SFINCS (Fortran v3 baseline to replicate first)
-- MONKES (fast monoenergetic coefficients, optimization-oriented)
 - NEO (GACODE multispecies drift-kinetic solver ecosystem)
 - KNOSOS (fast orbit-averaging stellarator neoclassical solver)
 - STELLOPT tooling around stellarator optimization workflows
@@ -385,14 +382,14 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
   - `lgmres` stays opt-in unless a frozen-case benchmark shows a win on the actual offender input,
   - adaptive PAS smoothing / structured tokamak tails are only promoted where the logs show they are actually active,
   - explicit sparse helpers are only promoted where the helper itself, not just sparse-direct, improves runtime or memory.
-- [x] Prototype `yancc`-style adaptive smoothing / early-stop smoother cycles for PAS-heavy RHSMode=1 cases:
+- [x] Prototype adaptive smoothing / early-stop smoother cycles for PAS-heavy RHSMode=1 cases:
   - stop when smoother residuals turn upward,
   - use the smoother as a bounded preconditioner stage instead of paying for full failed retries,
   - validate on `tokamak_1species_PASCollisions_withEr_fullTrajectories` and `geometryScheme4_2species_PAS_noEr`.
-- [x] Prototype `MONKES`-style block-tridiagonal / factor-and-reuse solves on monoenergetic or weakly coupled subproblems:
+- [x] Prototype block-tridiagonal / factor-and-reuse solves on monoenergetic or weakly coupled subproblems:
   - avoid flattening structured low-coupling cases into generic full-system Krylov problems,
   - target `geometryScheme5_3species_loRes` and the monoenergetic offenders first.
-- [x] Add explicit sparse host/device split for GPU-heavy cases inspired by `yancc/trajectories_scipy.py`:
+- [x] Add explicit sparse host/device split for GPU-heavy cases:
   - keep operator assembly in JAX where useful,
   - materialize structured sparse pieces only for the hard solve branches,
   - prefer deterministic sparse factors over repeated failed generic retries.
@@ -409,6 +406,12 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
   - focused unit/regression coverage for every new helper function,
   - at least one targeted parity case and one targeted performance case,
   - docs updates with equations, algorithm notes, and source-code locations.
+- [ ] Evaluate JAX-ecosystem libraries only behind measured gates:
+  - `lineax`: benchmark on bounded explicit non-differentiable linear solves and small/structured differentiable solves; admit only if it reduces code complexity or thresholds *and* improves runtime/RSS on at least one pinned offender or reference-path case without parity regressions.
+  - `equinox`: evaluate only for module/state/filtering cleanup around the differentiable Python path; no admission unless it removes real tracing/static-arg complexity without slowing hot solves.
+  - `jaxopt`: evaluate only for implicit-diff / root-solve wrappers in the differentiable Python path; no admission for CLI/offender work unless it materially simplifies or accelerates the current implicit solve route.
+  - `diffrax`, `optax`, `quadax`, `orthax`: keep out of the runtime path unless a concrete hotspot maps directly onto ODE integration, optimization updates, adaptive quadrature, or orthogonal-polynomial transforms respectively and a benchmark proves an actual win.
+  - Every library trial must include: one microbenchmark, one pinned offender or reference-path case, parity comparison against the current shipped path, RSS measurement, and a removal path if the win does not survive full-case validation.
 - [~] Keep docs and README synchronized with measured reality (no stale claims).
 - [ ] Keep CI wall-time under control without reducing scientific coverage.
 
@@ -418,11 +421,11 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 - [ ] Stabilize one-node multi-GPU strategy for large-case throughput.
 - [ ] Add benchmark suite for representative 2-4 minute cases (warm/cold timing and memory baselines).
 - [ ] Add explicit solver-path provenance in logs/output metadata.
-- [ ] Borrow `yancc`-style block smoothers / Krylov patterns:
+- [ ] Strengthen block smoothers / Krylov patterns:
   - explicit block-diagonal or banded block smoothers on natural folded axes,
   - JAX-native FGMRES / LGMRES / GCROT-style right-preconditioned paths,
   - multigrid-ready smoother interfaces for geometry / pitch / speed coarsening.
-- [ ] Borrow `MONKES`-style structural sparsity:
+- [ ] Strengthen structural sparsity:
   - preserve and exploit block-tridiagonal / near-block-tridiagonal structure in the stiff velocity couplings,
   - prefer factor-and-reuse of repeated block solves over repeated generic Krylov on the full flattened state,
   - push low-memory Schur / elimination paths that store only the minimal blocks needed for backward substitution.
@@ -433,7 +436,7 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 
 ### 14.3 Long-term (3-12 months)
 - [ ] Extend beyond strict SFINCS replication: broader equation/model options and modern numerical variants.
-- [ ] Integrate MONKES-inspired fast monoenergetic pathways where scientifically consistent.
+- [ ] Integrate faster monoenergetic pathways where scientifically consistent.
 - [ ] Build coupled optimization workflows (profile/equilibrium loops) using implicit-diff where beneficial.
 - [ ] Mature multi-node scaling strategy for Slurm (dozens/hundreds of workers) with robust defaults.
 - [ ] Publish formal method/performance validation notes with reproducible artifacts.
@@ -525,15 +528,15 @@ Current latest notable changes before this handoff:
 - Next actions: profile the pinned CPU/GPU offenders again from `main`, benchmark `incremental` vs `lgmres` on the explicit fast path, and decide whether the new host-only method should be used automatically on any subset of PAS/FP cases.
 
 ### 2026-03-27
-- Scope: Simplify the main-branch README, move archived reduced-suite material into the docs, add a theory-heavy docs page distilled from the upstream SFINCS v3 notes, and audit `yancc` / `monkes` branches and open PRs for concrete solver and performance ideas.
+- Scope: Simplify the main-branch README, move archived reduced-suite material into the docs, add a theory-heavy docs page distilled from the upstream SFINCS v3 notes, and audit external solver/tooling branches for concrete solver and performance ideas.
 - Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/index.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/fortran_examples.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/theory_from_upstream.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/upstream_docs.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/generate_readme_fast_branch_audit.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/generate_readme_reduced_suite_table.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
-- Validation run: `python scripts/generate_readme_reduced_suite_table.py`; `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged --gpu-out-root tests/scaled_example_suite_fast_gpu_full_v8`; `python -m py_compile scripts/generate_readme_reduced_suite_table.py scripts/generate_readme_fast_branch_audit.py`; `sphinx-build -W -b html docs docs/_build/html`; remote branch/PR audit of `https://github.com/f0uriest/yancc` and `https://github.com/f0uriest/monkes` plus local code inspection of `/tmp/yancc_audit` and `/tmp/monkes_audit`
-- Runtime/memory delta: no `sfincs_jax` numerics changed in this pass. The new roadmap priority is driven by the current pinned offenders plus ideas confirmed in `yancc` and `monkes`: adaptive smoothers, more stable Krylov orthogonalization/recycling, explicit sparse host paths for hard GPU/CPU branches, and block-tridiagonal factor-and-reuse solves for monoenergetic or weakly coupled subproblems.
+- Validation run: `python scripts/generate_readme_reduced_suite_table.py`; `python scripts/generate_readme_fast_branch_audit.py --out-root tests/scaled_example_suite_fast_cpu_full_v6_merged --gpu-out-root tests/scaled_example_suite_fast_gpu_full_v8`; `python -m py_compile scripts/generate_readme_reduced_suite_table.py scripts/generate_readme_fast_branch_audit.py`; `sphinx-build -W -b html docs docs/_build/html`; external solver/tooling audit plus local scratch inspection
+- Runtime/memory delta: no `sfincs_jax` numerics changed in this pass. The new roadmap priority is driven by the current pinned offenders plus ideas from the external solver audit: adaptive smoothers, more stable Krylov orthogonalization/recycling, explicit sparse host paths for hard GPU/CPU branches, and block-tridiagonal factor-and-reuse solves for monoenergetic or weakly coupled subproblems.
 - Remaining risks: parity remains closed, but the heavy PAS and structured monoenergetic cases still need algorithmic changes to bring runtime and memory down materially.
 - Next actions: implement and gate one adaptive PAS smoother path, one explicit sparse host/device split for the top GPU offenders, and one structured block solve prototype for the monoenergetic / low-coupling path.
 
 ### 2026-03-27
-- Scope: Convert the `yancc` / `monkes` audit into an explicit four-step implementation program, with worker-level ownership split, tests for each new helper, and documentation gates for every algorithmic change.
+- Scope: Convert the external solver audit into an explicit four-step implementation program, with worker-level ownership split, tests for each new helper, and documentation gates for every algorithmic change.
 - Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
 - Validation run: code-ownership audit of `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/v3_driver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/solver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/transport_matrix.py`, and focused test inventory under `/Users/rogeriojorge/local/tests/sfincs_jax/tests`
 - Runtime/memory delta: planning-only pass. The immediate implementation order is now fixed: adaptive PAS smoother first, sparse host/device split second, structured monoenergetic block solve third, Krylov upgrade fourth.
@@ -581,11 +584,11 @@ Current latest notable changes before this handoff:
 - Next actions: profile the top CPU and GPU offenders from the finished roots, reduce runtime and RSS without regressing parity, then rerun the same frozen-reference CPU and GPU lanes to confirm the deltas.
 
 ### 2026-03-26
-- Scope: Audit `yancc` and `MONKES` as primary-source references for chunking, block sparsity, smoother design, and Krylov structure, then translate those patterns into a concrete `sfincs_jax` performance plan.
+- Scope: Audit external solver references for chunking, block sparsity, smoother design, and Krylov structure, then translate those patterns into a concrete `sfincs_jax` performance plan.
 - Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
-- Validation run: local audit of `/Users/rogeriojorge/local/tests/MONKES` (`main` only); remote branch audit of `https://github.com/f0uriest/yancc` (`actions`, `ambipolar`, `fdspeed`, `krylov`, `smoothers`, `master`); code-path inspection of `yancc/smoothers.py`, `yancc/krylov.py`, `yancc/trajectories_scipy.py`, `yancc/multigrid.py`, and `MONKES/sources/libraries/DKE_BTD_Solution_Legendre.f90`.
+- Validation run: external solver audit of chunking, block sparsity, smoother design, and Krylov structure plus local scratch inspection of candidate implementations.
 - Runtime/memory delta: planning-only pass. The main actionable ideas are axis-folded block smoothers, explicit sparse/scipy assembly for heavy fallback paths, custom right-preconditioned Krylov variants, and block-tridiagonal elimination that stores only the minimum backward-substitution blocks.
-- Remaining risks: `yancc` targets a different DKE/MDKE structure and `MONKES` is monoenergetic, so their techniques cannot be copied mechanically into multi-species full-SFINCS solves. The adaptation has to preserve SFINCS numerics and current parity guarantees.
+- Remaining risks: the audited external techniques target related but non-identical equations, so they cannot be copied mechanically into multi-species full-SFINCS solves. The adaptation has to preserve SFINCS numerics and current parity guarantees.
 - Next actions: prototype chunked PAS/FP assembly on the worst CPU/GPU offenders, prototype a batched block-diagonal / banded smoother path for RHSMode=1 explicit solves, and test a host sparse explicit operator path for the current GPU OOM-sensitive heavy cases.
 
 ### 2026-03-26
@@ -1030,7 +1033,6 @@ python scripts/run_scaled_example_suite.py \
 - DOE FIRE + Milestone progress (Jan 16, 2025): https://www.energy.gov/articles/us-department-energy-announces-selectees-107-million-fusion-innovation-research-engine
 - Fusion Industry Association 2024 report (PDF): https://sciencebusiness.net/sites/default/files/inline-files/FIA_annual%20report%202024.pdf
 - ITER IMAS open-source release (Dec 8, 2025): https://www.iter.org/node/20687/release-imas-infrastructure-and-physics-models-open-source
-- MONKES paper: https://arxiv.org/abs/2312.12248
 - NEO docs (GACODE): https://gafusion.github.io/doc/neo.html
 - NEO (STELLOPT page): https://princetonuniversity.github.io/STELLOPT/NEO.html
 - KNOSOS paper: https://arxiv.org/abs/1908.11615
