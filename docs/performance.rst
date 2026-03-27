@@ -210,6 +210,14 @@ The helper can be used to:
 - or keep only a ``LinearOperator`` when even sparse materialization would exceed
   the configured budget.
 
+Current integration points:
+
+- transport sparse-direct host solves now use the helper when
+  ``SFINCS_JAX_TRANSPORT_SPARSE_HELPER`` selects the explicit path,
+- RHSMode=1 host sparse-direct rescues can opt into the same explicit factor path
+  through ``SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER``,
+- both paths remain outside the differentiable reference solve stack.
+
 Solver defaults (Phi1 + sharding)
 ---------------------------------
 
