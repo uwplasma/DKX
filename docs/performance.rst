@@ -286,17 +286,17 @@ summary. For current release claims, use the full example-suite artifacts listed
 **PAS, tokamak, with Er, full trajectories
 (``tokamak_1species_PASCollisions_withEr_fullTrajectories``)**:
 
-- Fortran: ~1.34 s; JAX: ~90–95 s (current).
-- Dominant cost: RHSMode=1 GMRES with **collision preconditioner only**.
-  The PAS probe is skipped at large size (``total_size≈95k``), so no stronger
-  block preconditioner is built. The solve terminates with residual above the
-  target, but still yields parity in the reduced suite.
-- Attempts to force large block preconditioners (theta‑line, theta‑zeta, full
-  preconditioner builds) **increased runtime** or **blew up peak RSS** (>8–10 GB).
-  Experimental lighter PAS options (``point_xdiag`` and truncated‑L
-  ``xblock_tz_lmax``) are implemented but did **not** improve this case in
-  profiling; they are therefore opt‑in only. This case remains the top PAS
-  preconditioning target (see :doc:`performance_techniques`).
+- Frozen full-suite artifact on ``main`` before the current bounded retune:
+  Fortran ``~0.017 s``; JAX CPU ``~37.7 s``.
+- Current bounded CPU benchmark on the same frozen scaled case:
+  default auto path now promotes to ``xblock_tz`` and runs in ``~3.6 s`` with
+  ``0`` mismatches versus the pinned output artifact.
+- The key change is not a new equation or solver family. It is a better default
+  branch choice for bounded tokamak PAS+Er CPU cases: prefer ``xblock_tz`` before
+  ``pas_schur`` when the active system and :math:`(L,\theta,\zeta)` block stay
+  inside the configured cap.
+- This removes the old ``pas_schur -> xblock_tz`` fallback ladder on the pinned
+  offender and turns it into a direct parity-clean solve.
 
 **PAS, W7‑X paper Fig. 3 case
 (``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories``)**:

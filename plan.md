@@ -103,6 +103,7 @@ Core requirement right now:
 ### 4.3 Validation and reporting
 - Reduced suite runner: `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/run_reduced_upstream_suite.py`
 - Reduced-suite archive note generator: `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/generate_readme_reduced_suite_table.py`
+- Frozen-case variant benchmark helper: `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/benchmark_case_variants.py`
 - Reduced inputs: `/Users/rogeriojorge/local/tests/sfincs_jax/tests/reduced_inputs`
 - Reduced outputs/report dir: `/Users/rogeriojorge/local/tests/sfincs_jax/tests/reduced_upstream_examples`
 - Tests root: `/Users/rogeriojorge/local/tests/sfincs_jax/tests`
@@ -132,9 +133,15 @@ Core requirement right now:
   - explicit sparse host/device helpers are integrated in bounded transport and RHSMode=1 host-direct paths,
   - the structured block-tridiagonal helper is integrated into the `pas_tokamak_theta` tail solve,
   - host-only SciPy `lgmres` is now available on the explicit fast path without touching JIT/differentiable routes.
+- Follow-up offender probes on current `main` now show where those four changes matter:
+  - `tokamak_1species_PASCollisions_withEr_fullTrajectories` is parity-clean on the current CPU tokamak-xblock path at about `3.56s` on the frozen suite input, versus the older frozen-suite artifact at `37.75s`,
+  - the adaptive PAS smoother and structured `pas_tokamak_theta` tail are not active on the current top tokamak/geometry4 offenders,
+  - `lgmres` is now wired through the CLI and safely downgraded on traced/JIT/distributed paths, but it is slower than the current defaults on `geometryScheme4_2species_PAS_noEr` and `geometryScheme5_3species_loRes`, and effectively neutral on the tokamak PAS+Er case,
+  - forcing transport sparse-direct first on `monoenergetic_geometryScheme5_ASCII` is parity-clean but only marginally faster on the pinned final CPU input, so it is not yet a compelling default change.
 
 ### 5.2 Known pain points that still matter
-- Runtime ratio is still high for PAS-heavy CPU cases with tiny Fortran times, especially `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`37.747s` JAX CPU vs `0.017s` Fortran), plus HSX / geometry4 PAS cases in the `3.7-4.9s` range on the final CPU root.
+- The pinned full-suite CPU root still records a stale pre-optimization `tokamak_1species_PASCollisions_withEr_fullTrajectories` artifact (`37.747s` JAX CPU vs `0.017s` Fortran), but current-tip frozen-case reruns on the same input are now down to about `3.56s` with parity preserved. A full-suite refresh is still needed before README tables can claim that improvement.
+- Runtime ratio is still high for the heavier PAS / geometry-rich CPU cases, especially HSX / geometry4 PAS branches in the `3.5-4.9s` range on current targeted reruns.
 - GPU wall time is now robust and parity-clean, but the worst runtime offenders remain `geometryScheme5_3species_loRes` (`144.597s`), `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`87.134s`), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`58.198s`), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (`25.291s`), and `monoenergetic_geometryScheme5_ASCII` (`17.433s`).
 - Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`) and `geometryScheme4_2species_PAS_noEr` (`2623.4 MB`), while current worst GPU RSS offenders are `geometryScheme4_2species_PAS_noEr` (`2552.1 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2354.4 MB`).
 - Parallel strong-scaling beyond a few cores is not yet consistently strong for single-RHS large solves.
@@ -372,6 +379,10 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
   - `geometryScheme4_2species_PAS_noEr`,
   - `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`,
   - `monoenergetic_geometryScheme5_ASCII`.
+- [~] Keep the new fast-path components evidence-based:
+  - `lgmres` stays opt-in unless a frozen-case benchmark shows a win on the actual offender input,
+  - adaptive PAS smoothing / structured tokamak tails are only promoted where the logs show they are actually active,
+  - explicit sparse helpers are only promoted where the helper itself, not just sparse-direct, improves runtime or memory.
 - [x] Prototype `yancc`-style adaptive smoothing / early-stop smoother cycles for PAS-heavy RHSMode=1 cases:
   - stop when smoother residuals turn upward,
   - use the smoother as a bounded preconditioner stage instead of paying for full failed retries,
@@ -470,6 +481,22 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-03-27
+- Scope: Close the top CPU tokamak PAS+Er runtime gap by fixing the default preconditioner branch, validate the pending CLI `lgmres` compatibility changes, and audit whether the four recently landed fast-path features are actually exercised on the pinned offender cases.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/v3_driver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/io.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/implicit_solve.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_schur_precond_heuristic.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_cli_solve_mode.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_implicit_linear_solve_grad.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/performance.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/performance_techniques.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/usage.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_schur_precond_heuristic.py` (`13 passed`); `pytest -q tests/test_cli_solve_mode.py tests/test_implicit_linear_solve_grad.py` (`14 passed`); `python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/io.py sfincs_jax/implicit_solve.py tests/test_schur_precond_heuristic.py tests/test_cli_solve_mode.py tests/test_implicit_linear_solve_grad.py`; frozen-case CLI probes on `tests/scaled_example_suite_fast_cpu_full_v6_merged/tokamak_1species_PASCollisions_withEr_fullTrajectories` and `tests/scaled_example_suite_fast_cpu_full_v6_merged/geometryScheme4_2species_PAS_noEr`; office GPU probe on `monoenergetic_geometryScheme5_ASCII` with `SFINCS_JAX_TRANSPORT_TZFFT_ALLOW_ACCELERATOR=1`.
+- Runtime/memory delta: tokamak PAS+Er CPU frozen scaled case now auto-selects `xblock_tz`, runs in `~3.3 s`, and stays `0` mismatches versus the pinned output artifact, compared with the older full-suite baseline of `37.75 s`; geometry4 PAS CLI `lgmres` is now parity-clean and modestly faster on the frozen scaled case (`~5.6 s -> ~4.6 s`); office monoenergetic GPU probe improves from `~16.3 s` with `block` to `~14.3 s` with accelerator `tzfft`.
+- Remaining risks: the full suite and README tables are still based on the older pinned artifacts, so they do not yet include the new tokamak CPU branch improvement; the four-step fast-path additions are still mostly *not* the active defaults on the remaining offender cases (`geometryScheme4_2species_PAS_noEr`, `geometryScheme5_3species_loRes`, `monoenergetic_geometryScheme5_ASCII`).
+- Next actions: rerun a bounded offender subset from current `main` to refresh the tokamak CPU row, decide whether CLI `lgmres` should auto-enable for any PAS subset, and finish the parity check for accelerator `tzfft` before changing the GPU transport default.
+
+### 2026-03-27
+- Scope: Validate whether the newly landed four-step fast-path features are actually exercised on the current pinned offender cases, wire `lgmres` through the CLI env path safely, and benchmark the remaining top CPU offenders with frozen-case variant probes.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/io.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/implicit_solve.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/v3_driver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_cli_solve_mode.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_implicit_linear_solve_grad.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_solver_gmres.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_schur_precond_heuristic.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/scripts/benchmark_case_variants.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_cli_solve_mode.py tests/test_solver_gmres.py tests/test_implicit_linear_solve_grad.py tests/test_schur_precond_heuristic.py` (`49 passed`); `python -m py_compile sfincs_jax/io.py sfincs_jax/implicit_solve.py sfincs_jax/v3_driver.py tests/test_cli_solve_mode.py tests/test_implicit_linear_solve_grad.py tests/test_solver_gmres.py`; frozen-case variant probes via `python scripts/benchmark_case_variants.py ...` on `tokamak_1species_PASCollisions_withEr_fullTrajectories`, `geometryScheme4_2species_PAS_noEr`, `geometryScheme5_3species_loRes`, and `monoenergetic_geometryScheme5_ASCII`.
+- Runtime/memory delta: current-tip tokamak PAS+Er CPU rerun on the frozen suite input is about `3.56s` / `586-601 MB` and remains parity-clean, versus the older frozen-suite artifact at `37.75s`; `lgmres` is parity-clean but neutral on the tokamak case (`3.58s` vs `3.56s`) and slower/heavier on `geometryScheme4_2species_PAS_noEr` (`6.17s` vs `3.55s`) and `geometryScheme5_3species_loRes` (`13.23s` vs `1.56s`); forcing transport sparse-direct first on `monoenergetic_geometryScheme5_ASCII` is parity-clean and only marginally faster on the pinned final input (`0.157s` vs `0.169s`).
+- Remaining risks: the README full-suite table is now stale for the improved CPU tokamak PAS+Er path until the full suite is rerun on this tip; the four-step refactor is real, but most of the new pieces are not the actual wins on the current top offenders.
+- Next actions: refresh the full CPU suite on current `main`, then rerun the GPU lane from the refreshed CPU reference root; keep `lgmres` opt-in; continue profiling the remaining true offenders instead of widening heuristics that the frozen-case probes do not justify.
 
 ### 2026-03-27
 - Scope: Finish the four-step performance refactor in bounded production-safe form by integrating the explicit sparse helper into transport/RHSMode=1 host-direct solves, wiring the structured block-tridiagonal helper into the `pas_tokamak_theta` tail solve, and adding a host-only SciPy `lgmres` fast path in `solver.py`.

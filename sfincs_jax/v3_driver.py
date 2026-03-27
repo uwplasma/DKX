@@ -79,6 +79,8 @@ from .v3_system import (
 )
 from .profiling import maybe_profiler
 
+_HOST_SCIPY_KRYLOV_METHODS = frozenset({"lgmres", "lgmres_scipy"})
+
 
 def _use_solver_jit(size_hint: int | None = None) -> bool:
     env = os.environ.get("SFINCS_JAX_SOLVER_JIT", "").strip().lower()
@@ -218,6 +220,43 @@ def _rhs1_pas_tokamak_gpu_xblock_preferred(
         prefer_max = int(prefer_max_env) if prefer_max_env else 12000
     except ValueError:
         prefer_max = 12000
+    if int(active_size) > max(1, int(prefer_max)):
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
+def _rhs1_pas_tokamak_cpu_xblock_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    """Prefer xblock_tz for bounded CPU tokamak PAS+Er branches before pas_schur."""
+    if not has_pas or has_fp:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if not tokamak_like or not has_collisionless:
+        return False
+    if float(er_abs) <= float(schur_er_min) and (not has_magdrift):
+        return False
+    if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
+        return False
+    prefer_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_CPU_XBLOCK_ACTIVE_MAX", "").strip()
+    try:
+        prefer_max = int(prefer_max_env) if prefer_max_env else 4000
+    except ValueError:
+        prefer_max = 4000
     if int(active_size) > max(1, int(prefer_max)):
         return False
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
@@ -1622,15 +1661,53 @@ def _transport_sparse_direct_use_explicit_helper(*, size: int) -> bool:
     return int(size) >= max(1, int(cpu_min))
 
 
-def _gmres_solve_dispatch(*, distributed_axis: str | None = None, **kwargs):
+def _host_scipy_krylov_requested(solve_method: str | None) -> bool:
+    return str(solve_method or "").strip().lower() in _HOST_SCIPY_KRYLOV_METHODS
+
+
+def _gmres_solve_dispatch(*, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs):
+    solve_method = kwargs.get("solve_method")
+    if _host_scipy_krylov_requested(solve_method):
+        if distributed_axis is not None or distributed_gmres_enabled():
+            raise ValueError(f"solve_method={solve_method} is host-only and incompatible with distributed GMRES.")
+        return gmres_solve(**kwargs)
     if distributed_axis is not None:
         with sharding_constraints(True):
             return gmres_solve_distributed(axis_name=distributed_axis, **kwargs)
     if distributed_gmres_enabled():
         with sharding_constraints(True):
             return gmres_solve_distributed(**kwargs)
-    solver_fn = gmres_solve_jit if _use_solver_jit() else gmres_solve
+    solver_fn = gmres_solve_jit if _use_solver_jit(size_hint) else gmres_solve
     return solver_fn(**kwargs)
+
+
+def _gmres_solve_with_residual_dispatch(*, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs):
+    solve_method = kwargs.get("solve_method")
+    if _host_scipy_krylov_requested(solve_method):
+        if distributed_axis is not None or distributed_gmres_enabled():
+            raise ValueError(f"solve_method={solve_method} is host-only and incompatible with distributed GMRES.")
+        return gmres_solve_with_residual(**kwargs)
+    if distributed_axis is not None:
+        with sharding_constraints(True):
+            return gmres_solve_with_residual_distributed(axis_name=distributed_axis, **kwargs)
+    if distributed_gmres_enabled():
+        with sharding_constraints(True):
+            return gmres_solve_with_residual_distributed(**kwargs)
+    solver_fn = gmres_solve_with_residual_jit if _use_solver_jit(size_hint) else gmres_solve_with_residual
+    return solver_fn(**kwargs)
+
+
+def _rhs_krylov_method_for_context(
+    *,
+    gmres_method: str,
+    use_implicit: bool,
+    distributed_axis: str | None,
+    solver_jit: bool,
+) -> str:
+    method = str(gmres_method).strip().lower()
+    if method in {"lgmres", "lgmres_scipy"} and (bool(use_implicit) or distributed_axis is not None or bool(solver_jit)):
+        return "incremental"
+    return method
 
 
 def _resolve_distributed_gmres_axis(
@@ -4729,7 +4806,9 @@ def _build_rhsmode1_pas_tokamak_theta_preconditioner(
         inv_a = np.zeros((n_species, n_x, max(0, n_l_build - 2), n_theta, n_theta), dtype=np.float64)
         g = np.zeros((n_species, n_x, max(0, n_l_build - 3), n_theta, n_theta), dtype=np.float64)
         structured_tail_env = os.environ.get("SFINCS_JAX_PAS_TOKAMAK_STRUCTURED", "").strip().lower()
-        structured_tail_enabled = structured_tail_env not in {"0", "false", "no", "off"}
+        # Keep the structured tail available for experiments, but do not enable it by default:
+        # on the current shipped tokamak PAS examples, the legacy tail is both faster and lower-RSS.
+        structured_tail_enabled = structured_tail_env in {"1", "true", "yes", "on"}
         tail_factors_build: list[list[object | None]] | None = (
             [[None for _ in range(n_x)] for _ in range(n_species)] if structured_tail_enabled and n_l_build > 2 else None
         )
@@ -11935,7 +12014,34 @@ def solve_v3_full_system_linear_gmres(
             has_collisionless=op.fblock.collisionless is not None,
         ))
     ):
-        rhs1_precond_kind = "pas_schur"
+        if _rhs1_pas_tokamak_cpu_xblock_preferred(
+            has_pas=op.fblock.pas is not None,
+            has_fp=op.fblock.fp is not None,
+            backend=jax.default_backend(),
+            tokamak_like=tokamak_like,
+            active_size=int(active_size),
+            er_abs=float(er_abs),
+            schur_er_min=float(schur_er_min),
+            has_magdrift=(
+                op.fblock.magdrift_theta is not None
+                or op.fblock.magdrift_zeta is not None
+                or op.fblock.magdrift_xidot is not None
+            ),
+            has_collisionless=op.fblock.collisionless is not None,
+            n_theta=int(op.n_theta),
+            n_zeta=int(op.n_zeta),
+            max_l=int(max_l),
+            xblock_tz_limit=max(1, int(xblock_tz_max)),
+        ):
+            rhs1_precond_kind = "xblock_tz"
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: CPU PAS tokamak "
+                    "auto -> xblock_tz preconditioner",
+                )
+        else:
+            rhs1_precond_kind = "pas_schur"
     if (
         (not rhs1_precond_env)
         and op.fblock.pas is not None
@@ -12439,7 +12545,13 @@ def solve_v3_full_system_linear_gmres(
                 size_hint=int(b_vec.shape[0]),
             )
         solver_kind, gmres_method = _solver_kind(solve_method_val)
-        solve_method_dispatch = "bicgstab" if solver_kind == "bicgstab" else gmres_method
+        solver_jit_active = _use_solver_jit()
+        solve_method_dispatch = "bicgstab" if solver_kind == "bicgstab" else _rhs_krylov_method_for_context(
+            gmres_method=gmres_method,
+            use_implicit=use_implicit,
+            distributed_axis=distributed_axis,
+            solver_jit=solver_jit_active,
+        )
         return _gmres_solve_dispatch(
             matvec=matvec_fn,
             b=b_vec,
@@ -12510,6 +12622,13 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=maxiter_val,
                 precondition_side=precond_side,
             )
+        solver_jit_active = _use_solver_jit()
+        gmres_method_dispatch = _rhs_krylov_method_for_context(
+            gmres_method=gmres_method,
+            use_implicit=use_implicit,
+            distributed_axis=distributed_axis,
+            solver_jit=solver_jit_active,
+        )
         if distributed_axis is not None:
             with sharding_constraints(True):
                 return gmres_solve_with_residual_distributed(
@@ -12521,11 +12640,11 @@ def solve_v3_full_system_linear_gmres(
                     atol=atol_val,
                     restart=restart_val,
                     maxiter=maxiter_val,
-                    solve_method=gmres_method,
+                    solve_method=gmres_method_dispatch,
                     precondition_side=precond_side,
                     axis_name=distributed_axis,
                 )
-        solver_fn = gmres_solve_with_residual_jit if _use_solver_jit() else gmres_solve_with_residual
+        solver_fn = gmres_solve_with_residual_jit if solver_jit_active else gmres_solve_with_residual
         return solver_fn(
             matvec=matvec_fn,
             b=b_vec,
@@ -12535,7 +12654,7 @@ def solve_v3_full_system_linear_gmres(
             atol=atol_val,
             restart=restart_val,
             maxiter=maxiter_val,
-            solve_method=gmres_method,
+            solve_method=gmres_method_dispatch,
             precondition_side=precond_side,
         )
 

@@ -159,6 +159,14 @@ def _linear_custom_solve_core(
     if solver_kind in {"auto", "default"}:
         solver_kind = "bicgstab"
 
+    solve_method_kind = str(solve_method).lower()
+    if solve_method_kind in {"lgmres", "lgmres_scipy"}:
+        # Host-only Krylov methods cannot run from custom_linear_solve callbacks because
+        # JAX supplies traced values there. Keep the public solver rejection in solver.py,
+        # but downgrade to traced-safe GMRES inside the implicit path so CLI fast-mode
+        # overrides do not fail on cases that still route through custom linear solves.
+        solve_method_kind = "incremental"
+
     if solver_jit is None:
         use_solver_jit = _use_solver_jit(size_hint=size_hint)
     else:
@@ -187,7 +195,7 @@ def _linear_custom_solve_core(
             atol=atol,
             restart=restart,
             maxiter=maxiter,
-            solve_method=solve_method,
+            solve_method=solve_method_kind,
             precondition_side=precondition_side,
         )
 
@@ -218,7 +226,7 @@ def _linear_custom_solve_core(
             atol=atol,
             restart=restart,
             maxiter=maxiter,
-            solve_method=solve_method,
+            solve_method=solve_method_kind,
             precondition_side=precondition_side,
         ).x
 
