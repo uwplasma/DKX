@@ -47,8 +47,24 @@ In other words, all examples run on CPU and GPU, but a handful of cases remain t
 
 Two current-tip frozen-case GPU probes already improve the pinned ``v8`` story and are expected to land in the next full GPU refresh:
 
+- ``geometryScheme5_3species_loRes`` now takes the bounded host-dense shortcut on the small GPU full-FP branch and completed parity-clean in about ``3.83 s`` on office, versus the pinned ``144.597 s`` suite artifact.
 - ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue and completed parity-clean in about ``16.92 s`` on office, versus the pinned ``17.433 s`` suite artifact.
 - ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` now skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``11.31 s`` on office, versus the pinned ``58.198 s`` suite artifact.
+
+External solver-library gates
+-----------------------------
+
+Additional JAX-ecosystem solver libraries are evaluated behind measured gates, not adopted on sight.
+
+- ``lineax`` is the strongest current candidate for small differentiable solves, but it is not part of the default CLI path.
+- On a small real SFINCS linear operator, a bounded local benchmark reached the same residual as the current in-tree GMRES path and was faster (`~0.54 s` versus `~3.29 s`).
+- On a generic nonsymmetric test matrix, the same ``lineax.GMRES`` setup stagnated while the current solver remained the more reliable baseline.
+
+So the current policy is:
+
+- do not add ``lineax`` to the production CLI solve ladder yet,
+- keep it as a candidate for explicitly bounded differentiable/reference-path experiments,
+- require a pinned real-case runtime/RSS/parity win before any production integration.
 
 
 What is differentiable today?
