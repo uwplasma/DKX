@@ -59,6 +59,17 @@ print("Available datasets:", len(results))
 print("Example key:", "particleFlux_vm_psiHat" in results)
 ```
 
+If you need to override the equilibrium file without editing the namelist, pass
+``equilibrium_file=...`` or the VMEC-friendly alias ``wout_path=...``:
+
+```python
+write_sfincs_jax_output_h5(
+    input_namelist=input_namelist,
+    output_path=Path("sfincsOutput.h5"),
+    wout_path=Path("/path/to/wout.nc"),
+)
+```
+
 `sfincs_jax write-output` and `write_sfincs_jax_output_h5(...)` use the explicit
 performance-oriented solve path by default. Request the implicit/differentiable linear-solve path only when
 you need it:
@@ -86,6 +97,18 @@ Write output explicitly:
 ```bash
 sfincs_jax write-output --input /path/to/input.namelist --out /path/to/sfincsOutput.h5
 ```
+
+Override the equilibrium file at the CLI without changing ``input.namelist``:
+
+```bash
+sfincs_jax write-output \
+  --input /path/to/input.namelist \
+  --out /path/to/sfincsOutput.h5 \
+  --wout-path /path/to/wout.nc
+```
+
+The bare ``sfincs_jax /path/to/input.namelist`` form accepts the same
+``--equilibrium-file`` and ``--wout-path`` overrides.
 
 Compare two outputs:
 

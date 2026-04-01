@@ -5,12 +5,14 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.input_compat import (
+    canonical_equilibrium_override,
     effective_equilibrium_file,
     effective_r_n_wish,
     effective_use_iterative_linear_solver,
     infer_phi_input_radial_coordinate_for_gradients,
     infer_input_radial_coordinate_for_gradients,
     infer_species_input_radial_coordinate_for_gradients,
+    with_equilibrium_override,
 )
 from sfincs_jax.io import localize_equilibrium_file_in_place, sfincs_jax_output_dict
 from sfincs_jax.namelist import read_sfincs_input
@@ -100,6 +102,39 @@ def test_effective_equilibrium_file_supports_legacy_jgboozer_alias() -> None:
     nml = read_sfincs_input(input_path)
     equilibrium_file = effective_equilibrium_file(geom_params=nml.group("geometryParameters"))
     assert str(equilibrium_file).strip('"').strip("'").endswith("hsx3free.bc")
+
+
+def test_canonical_equilibrium_override_accepts_matching_wout_alias() -> None:
+    assert (
+        canonical_equilibrium_override(
+            equilibrium_file="wout_test.nc",
+            wout_path="wout_test.nc",
+        )
+        == "wout_test.nc"
+    )
+
+
+def test_canonical_equilibrium_override_rejects_conflicting_values() -> None:
+    try:
+        canonical_equilibrium_override(
+            equilibrium_file="a.nc",
+            wout_path="b.nc",
+        )
+    except ValueError as exc:
+        assert "conflicting equilibrium overrides" in str(exc)
+    else:
+        raise AssertionError("expected conflicting override values to raise")
+
+
+def test_with_equilibrium_override_preserves_source_path_and_updates_text() -> None:
+    input_path = Path(__file__).parent / "ref" / "output_scheme5_1species_tiny.input.namelist"
+    nml = read_sfincs_input(input_path)
+    updated = with_equilibrium_override(nml=nml, wout_path="override_wout.nc")
+    equilibrium_file = effective_equilibrium_file(geom_params=updated.group("geometryParameters"))
+    assert equilibrium_file == "override_wout.nc"
+    assert updated.source_path == nml.source_path
+    assert updated.source_text is not None
+    assert 'equilibriumFile = "override_wout.nc"' in updated.source_text
 
 
 def test_effective_r_n_wish_supports_legacy_normradius_alias() -> None:
