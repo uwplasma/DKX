@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from sfincs_jax import cli
+from sfincs_jax.input_compat import effective_equilibrium_file
 from sfincs_jax.io import (
     _select_rhsmode1_linear_solve_method,
     _select_phi1_newton_linear_solve_method,
@@ -45,6 +46,8 @@ def test_cmd_write_output_forces_explicit_mode(monkeypatch, tmp_path: Path) -> N
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
         out=str(tmp_path / "sfincsOutput.h5"),
+        equilibrium_file=None,
+        wout_path=None,
         fortran_layout=True,
         overwrite=True,
         compute_transport_matrix=False,
@@ -70,6 +73,8 @@ def test_cmd_solve_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
         out_state=str(tmp_path / "state.npy"),
+        equilibrium_file=None,
+        wout_path=None,
         tol=1e-8,
         atol=0.0,
         restart=20,
@@ -101,6 +106,8 @@ def test_cmd_transport_matrix_v3_forces_explicit_mode(monkeypatch, tmp_path: Pat
         input=str(tmp_path / "input.namelist"),
         out_matrix=str(tmp_path / "tm.npy"),
         out_state_prefix=None,
+        equilibrium_file=None,
+        wout_path=None,
         tol=1e-8,
         atol=0.0,
         restart=20,
@@ -224,3 +231,73 @@ def test_apply_runtime_env_defaults_respects_existing_preallocation(monkeypatch)
     monkeypatch.setenv("XLA_PYTHON_CLIENT_PREALLOCATE", "true")
     cli._apply_runtime_env_defaults()
     assert os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] == "true"
+
+
+def test_normalize_default_argv_keeps_wout_path_override() -> None:
+    argv = ["input.namelist", "--wout-path", "override.nc", "--out", "sfincsOutput.h5"]
+    assert cli._normalize_default_argv(argv) == [
+        "write-output",
+        "--input",
+        "input.namelist",
+        "--wout-path",
+        "override.nc",
+        "--out",
+        "sfincsOutput.h5",
+    ]
+
+
+def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch) -> None:
+    input_path = Path(__file__).parent / "ref" / "output_scheme5_1species_tiny.input.namelist"
+    captured: dict[str, object] = {}
+
+    def _fake_solve(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(x=np.zeros((2,), dtype=np.float64), residual_norm=np.float64(0.0))
+
+    monkeypatch.setattr("sfincs_jax.v3_driver.solve_v3_full_system_linear_gmres", _fake_solve)
+
+    args = Namespace(
+        input=str(input_path),
+        out_state=str(input_path.parent / "state.npy"),
+        equilibrium_file=None,
+        wout_path="override_wout.nc",
+        tol=1e-8,
+        atol=0.0,
+        restart=20,
+        maxiter=40,
+        solve_method="incremental",
+        which_rhs=None,
+        quiet=True,
+        verbose=0,
+    )
+    assert cli._cmd_solve_v3(args) == 0
+    nml = captured["nml"]
+    assert effective_equilibrium_file(geom_params=nml.group("geometryParameters")) == "override_wout.nc"
+
+
+def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["output_path"] == Path(tmp_path / "sfincsOutput.h5")
