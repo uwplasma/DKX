@@ -91,6 +91,7 @@ Running the Fortran v3 executable
 
    All CLI subcommands support ``-v/--verbose`` (repeatable), ``-q/--quiet``,
    and ``--fortran-stdout``/``--no-fortran-stdout`` for strict stdout mirroring.
+   These shared flags can be given either before or after the subcommand.
 
 If you are developing from a source checkout and have not installed the console script,
 you can invoke the CLI module directly:
@@ -709,6 +710,17 @@ Writing `sfincsOutput.h5` with `sfincs_jax`
 
 .. code-block:: bash
 
+   sfincs_jax write-output \
+     --input /path/to/input.namelist \
+     --out sfincsOutput.h5 \
+     --equilibrium-file /path/to/equilibrium.bc
+
+.. code-block:: bash
+
+   sfincs_jax /path/to/input.namelist --wout-path /path/to/wout.nc --out sfincsOutput.h5
+
+.. code-block:: bash
+
    python -m sfincs_jax write-output --input /path/to/input.namelist --out sfincsOutput.h5
 
 .. code-block:: python
@@ -719,6 +731,22 @@ Writing `sfincsOutput.h5` with `sfincs_jax`
    write_sfincs_jax_output_h5(
        input_namelist=Path("input.namelist"),
        output_path=Path("sfincsOutput.h5"),
+   )
+
+.. code-block:: python
+
+   write_sfincs_jax_output_h5(
+       input_namelist=Path("input.namelist"),
+       output_path=Path("sfincsOutput.h5"),
+       equilibrium_file=Path("/path/to/equilibrium.bc"),
+   )
+
+.. code-block:: python
+
+   write_sfincs_jax_output_h5(
+       input_namelist=Path("input.namelist"),
+       output_path=Path("sfincsOutput.h5"),
+       wout_path=Path("/path/to/wout.nc"),
    )
 
 The CLI ``write-output`` command uses the fast explicit linear-solve path by default.
@@ -744,6 +772,10 @@ Inspect results immediately (without reading H5 back from disk):
    )
    print(out_path)
    print(results["Ntheta"])
+
+When an equilibrium override is used, the embedded ``input.namelist`` dataset in
+``sfincsOutput.h5`` is patched to reflect the effective file path so downstream
+diagnostics and bug reports see the actual run configuration.
 
 Silence stdout (useful for batch runs):
 

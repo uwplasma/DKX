@@ -9,6 +9,7 @@ import time
 
 import numpy as np
 
+from .input_compat import with_equilibrium_override
 from .namelist import read_sfincs_input
 
 
@@ -74,11 +75,62 @@ def _emit_runtime_info(*, args: argparse.Namespace) -> None:
         return
 
 
+def _nml_with_cli_equilibrium_override(nml, args: argparse.Namespace):
+    return with_equilibrium_override(
+        nml=nml,
+        equilibrium_file=getattr(args, "equilibrium_file", None),
+        wout_path=getattr(args, "wout_path", None),
+    )
+
+
+def _add_equilibrium_override_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--equilibrium-file",
+        default=None,
+        help="Override geometryParameters.equilibriumFile without editing input.namelist.",
+    )
+    parser.add_argument(
+        "--wout-path",
+        default=None,
+        help="Compatibility alias for --equilibrium-file, commonly used for geometryScheme=5 VMEC runs.",
+    )
+
+
+def _add_common_cli_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=1,
+        help="Increase verbosity (repeatable).",
+    )
+    parser.add_argument("-q", "--quiet", action="store_true", help="Reduce output to a minimum.")
+    parser.add_argument(
+        "--cores",
+        type=int,
+        default=None,
+        help="Number of host CPU devices/cores to use (sets SFINCS_JAX_CORES).",
+    )
+    parser.add_argument(
+        "--fortran-stdout",
+        dest="fortran_stdout",
+        action="store_true",
+        help="Mirror upstream v3 stdout line-for-line (including KSP/SNES iteration lines).",
+    )
+    parser.add_argument(
+        "--no-fortran-stdout",
+        dest="fortran_stdout",
+        action="store_false",
+        help="Disable strict Fortran-style stdout mirroring.",
+    )
+    parser.set_defaults(fortran_stdout=None)
+
+
 def _cmd_solve_v3(args: argparse.Namespace) -> int:
     t0 = _now()
     from .v3_driver import solve_v3_full_system_linear_gmres  # noqa: PLC0415
 
-    nml = read_sfincs_input(Path(args.input))
+    nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
     _emit("################################################################", level=0, args=args)
     _emit(" sfincs_jax solve-v3", level=0, args=args)
     _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
@@ -128,7 +180,7 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
     t0 = _now()
     from .io import write_sfincs_jax_output_h5  # noqa: PLC0415
 
-    nml = read_sfincs_input(Path(args.input))
+    nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
     rhs_mode = int(nml.group("general").get("RHSMODE", 1))
 
     # Default to upstream v3 behavior: full solve/write appropriate to RHSMode.
@@ -139,6 +191,8 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
     out_path = write_sfincs_jax_output_h5(
         input_namelist=Path(args.input),
         output_path=Path(args.out),
+        equilibrium_file=getattr(args, "equilibrium_file", None),
+        wout_path=getattr(args, "wout_path", None),
         fortran_layout=bool(args.fortran_layout),
         overwrite=bool(args.overwrite),
         compute_transport_matrix=bool(compute_transport_matrix),
@@ -155,7 +209,7 @@ def _cmd_transport_matrix_v3(args: argparse.Namespace) -> int:
     t0 = _now()
     from .v3_driver import solve_v3_transport_matrix_linear_gmres  # noqa: PLC0415
 
-    nml = read_sfincs_input(Path(args.input))
+    nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
     _emit("################################################################", level=0, args=args)
     _emit(" sfincs_jax transport-matrix-v3", level=0, args=args)
     _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
@@ -409,36 +463,11 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:]) if argv is None else list(argv)
     argv = _normalize_default_argv(argv)
     parser = argparse.ArgumentParser(prog="sfincs_jax")
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=1,
-        help="Increase verbosity (repeatable).",
-    )
-    parser.add_argument("-q", "--quiet", action="store_true", help="Reduce output to a minimum.")
-    parser.add_argument(
-        "--cores",
-        type=int,
-        default=None,
-        help="Number of host CPU devices/cores to use (sets SFINCS_JAX_CORES).",
-    )
-    parser.add_argument(
-        "--fortran-stdout",
-        dest="fortran_stdout",
-        action="store_true",
-        help="Mirror upstream v3 stdout line-for-line (including KSP/SNES iteration lines).",
-    )
-    parser.add_argument(
-        "--no-fortran-stdout",
-        dest="fortran_stdout",
-        action="store_false",
-        help="Disable strict Fortran-style stdout mirroring.",
-    )
-    parser.set_defaults(fortran_stdout=None)
+    _add_common_cli_args(parser)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_solve = sub.add_parser("solve-v3", help="Solve a supported v3 linear problem matrix-free and write stateVector.npy.")
+    _add_common_cli_args(p_solve)
     p_solve.add_argument("--input", required=True, help="Path to input.namelist")
     p_solve.add_argument("--out-state", default="stateVector.npy", help="Where to write the solution vector (NumPy .npy)")
     p_solve.add_argument("--tol", default="1e-10", help="GMRES relative tolerance")
@@ -455,12 +484,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="For RHSMode=2/3 transport-matrix runs, select whichRHS (v3 loops over multiple RHS).",
     )
+    _add_equilibrium_override_args(p_solve)
     p_solve.set_defaults(func=_cmd_solve_v3)
 
     p_scan = sub.add_parser(
         "scan-er",
         help="Run an Er (or dPhiHatd*) scan by writing sfincsOutput.h5 in multiple run directories.",
     )
+    _add_common_cli_args(p_scan)
     p_scan.add_argument("--input", required=True, help="Path to input.namelist (template).")
     p_scan.add_argument("--out-dir", required=True, help="Directory to create scan subdirectories inside.")
     p_scan.add_argument(
@@ -486,17 +517,20 @@ def main(argv: list[str] | None = None) -> int:
         "ambipolar-solve",
         help="Given an existing scan-er directory, solve for ambipolar Er roots and write ambipolarSolutions.dat.",
     )
+    _add_common_cli_args(p_ambi)
     p_ambi.add_argument("--scan-dir", required=True, help="Scan directory produced by `sfincs_jax scan-er`.")
     p_ambi.add_argument("--n-fine", default="500", help="Number of fine-grid points for bracketing (default: 500).")
     p_ambi.set_defaults(func=_cmd_ambipolar_solve)
 
     p_run = sub.add_parser("run-fortran", help="Run the compiled Fortran SFINCS v3 executable.")
+    _add_common_cli_args(p_run)
     p_run.add_argument("--input", required=True, help="Path to input.namelist")
     p_run.add_argument("--exe", default=None, help="Path to Fortran v3 sfincs executable")
     p_run.add_argument("--workdir", default=None, help="Directory to run in (default: temp dir)")
     p_run.set_defaults(func=_cmd_run_fortran)
 
     p_out = sub.add_parser("write-output", help="Write a SFINCS-style sfincsOutput.h5 using sfincs_jax.")
+    _add_common_cli_args(p_out)
     p_out.add_argument("--input", required=True, help="Path to input.namelist")
     p_out.add_argument("--out", default="sfincsOutput.h5", help="Where to write sfincsOutput.h5")
     p_out.add_argument(
@@ -528,9 +562,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Only write geometry/grid outputs (skip RHSMode=1 solve and RHSMode=2/3 transport-matrix loop).",
     )
+    _add_equilibrium_override_args(p_out)
     p_out.set_defaults(func=_cmd_write_output)
 
     p_tm = sub.add_parser("transport-matrix-v3", help="Solve RHSMode=2/3 transport-matrix systems and write transportMatrix.npy.")
+    _add_common_cli_args(p_tm)
     p_tm.add_argument("--input", required=True, help="Path to input.namelist (must have RHSMode=2 or 3)")
     p_tm.add_argument("--out-matrix", default="transportMatrix.npy", help="Where to write the transport matrix (NumPy .npy)")
     p_tm.add_argument(
@@ -547,15 +583,18 @@ def main(argv: list[str] | None = None) -> int:
         default="auto",
         help="Linear solver mode for transport matrix (auto|bicgstab|batched|incremental|dense)",
     )
+    _add_equilibrium_override_args(p_tm)
     p_tm.set_defaults(func=_cmd_transport_matrix_v3)
 
     p_dump = sub.add_parser("dump-h5", help="Dump SFINCS HDF5 output to JSON (small files only).")
+    _add_common_cli_args(p_dump)
     p_dump.add_argument("--sfincs-output", required=True, help="Path to sfincsOutput.h5")
     p_dump.add_argument("--out-json", required=True, help="Where to write JSON")
     p_dump.add_argument("--keys-only", action="store_true", help="Only print dataset names")
     p_dump.set_defaults(func=_cmd_dump_h5)
 
     p_cmp = sub.add_parser("compare-h5", help="Compare two SFINCS HDF5 output files.")
+    _add_common_cli_args(p_cmp)
     p_cmp.add_argument("--a", required=True, help="First sfincsOutput.h5")
     p_cmp.add_argument("--b", required=True, help="Second sfincsOutput.h5")
     p_cmp.add_argument("--rtol", default="1e-12")
@@ -568,6 +607,7 @@ def main(argv: list[str] | None = None) -> int:
         "postprocess-upstream",
         help="Run a vendored upstream v3 utils/ postprocessing script (best-effort, requires sfincsOutput.h5).",
     )
+    _add_common_cli_args(p_pp)
     p_pp.add_argument("--case-dir", required=True, help="Directory containing sfincsOutput.h5")
     p_pp.add_argument("--util", required=True, help="Upstream util script name (e.g. sfincsScanPlot_1)")
     p_pp.add_argument("--utils-dir", default=None, help="Override utils/ directory (else auto-detect / env var)")

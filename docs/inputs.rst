@@ -39,6 +39,21 @@ Practical notes for users
 - If you want differentiability, prefer workflows that construct a `V3FullSystemOperator` once and then
   treat its fields as differentiable parameters (see ``docs/performance.rst``).
 
+- Equilibrium-file resolution uses the same practical search order in the CLI and Python API:
+
+  - absolute path from the namelist or override,
+  - relative to the input namelist directory,
+  - relative to the current working directory,
+  - directories listed in ``SFINCS_JAX_EQUILIBRIA_DIRS``,
+  - and then bundled reference/data directories used by tests and packaged examples.
+
+- If you need to point a run at a different equilibrium without editing ``input.namelist``,
+  use:
+
+  - CLI: ``--equilibrium-file /path/to/equilibrium`` or ``--wout-path /path/to/wout.nc``
+  - Python: ``equilibrium_file=...`` or ``wout_path=...`` in
+    :func:`sfincs_jax.io.write_sfincs_jax_output_h5`
+
 Transport-matrix modes (``RHSMode=2/3``)
 ----------------------------------------------------------------------
 
