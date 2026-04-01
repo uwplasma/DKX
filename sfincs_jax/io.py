@@ -18,12 +18,14 @@ from .diagnostics import fsab_hat2 as fsab_hat2_jax
 from .diagnostics import u_hat_np
 from .diagnostics import vprime_hat as vprime_hat_jax
 from .input_compat import (
+    canonical_equilibrium_override,
     effective_equilibrium_file,
     effective_psi_a_hat,
     effective_r_n_wish,
     effective_use_iterative_linear_solver,
     infer_input_radial_coordinate_for_gradients,
     infer_phi_input_radial_coordinate_for_gradients,
+    with_equilibrium_override,
 )
 from .namelist import Namelist, read_sfincs_input
 from .paths import resolve_existing_path
@@ -464,7 +466,7 @@ def _write_transport_h5_streaming(
     # Prepare base data for streaming write.
     base_data: dict[str, Any] = {k: v for k, v in data.items() if k not in transport_keys}
     base_data["NIterations"] = np.asarray(n_rhs, dtype=np.int32)
-    base_data["input.namelist"] = input_namelist.read_text()
+    base_data["input.namelist"] = nml.source_text if nml.source_text is not None else input_namelist.read_text()
 
     if output_path.exists() and not overwrite:
         raise FileExistsError(str(output_path))
@@ -2113,6 +2115,8 @@ def write_sfincs_jax_output_h5(
     *,
     input_namelist: Path,
     output_path: Path,
+    equilibrium_file: str | Path | None = None,
+    wout_path: str | Path | None = None,
     fortran_layout: bool = True,
     overwrite: bool = True,
     compute_transport_matrix: bool = False,
@@ -2134,6 +2138,9 @@ def write_sfincs_jax_output_h5(
         When set, explicitly choose the differentiable implicit solve path
         (``True``) or the faster explicit path (``False``) instead of deferring
         to ``SFINCS_JAX_IMPLICIT_SOLVE``.
+    equilibrium_file, wout_path
+        Optional equilibrium-path override applied on top of the namelist.
+        ``wout_path`` is a compatibility alias for VMEC-centric workflows.
     """
 
     if not verbose:
@@ -2176,6 +2183,12 @@ def write_sfincs_jax_output_h5(
     output_path = Path(output_path)
 
     nml = read_sfincs_input(input_namelist)
+    eq_override = canonical_equilibrium_override(
+        equilibrium_file=equilibrium_file,
+        wout_path=wout_path,
+    )
+    if eq_override is not None:
+        nml = with_equilibrium_override(nml=nml, equilibrium_file=eq_override)
     result = None
     _mark("read_namelist")
     geom_params_hint = nml.group("geometryParameters")
@@ -4013,7 +4026,7 @@ def write_sfincs_jax_output_h5(
 
     _maybe_overlay_fortran_large_pas_fp_diag_parity(data)
 
-    data["input.namelist"] = input_namelist.read_text()
+    data["input.namelist"] = nml.source_text if nml.source_text is not None else input_namelist.read_text()
     if emit is not None:
         emit(0, " Saving diagnostics to h5 file for iteration            1")
     _mark("write_h5_start")

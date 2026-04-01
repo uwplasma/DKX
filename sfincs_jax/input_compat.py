@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+import re
 from typing import Any, Mapping
+
+from .namelist import Namelist
 
 
 def _group_get(group: Mapping[str, Any], *keys: str) -> Any | None:
@@ -23,6 +27,87 @@ def effective_equilibrium_file(*, geom_params: Mapping[str, Any]) -> Any | None:
     if geometry_scheme == 12:
         return _group_get(geom_params, "JGboozer_file_NonStelSym")
     return None
+
+
+def canonical_equilibrium_override(
+    *,
+    equilibrium_file: str | Path | None = None,
+    wout_path: str | Path | None = None,
+) -> str | None:
+    """Return a single canonical equilibrium override string.
+
+    ``wout_path`` is kept as a compatibility alias for VMEC-centric callers. When
+    both arguments are provided they must resolve to the same textual path.
+    """
+
+    def _norm(value: str | Path | None) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    eq = _norm(equilibrium_file)
+    wout = _norm(wout_path)
+    if eq is None:
+        return wout
+    if wout is None:
+        return eq
+    if eq != wout:
+        raise ValueError(
+            "Received conflicting equilibrium overrides: "
+            f"equilibrium_file={eq!r} and wout_path={wout!r}"
+        )
+    return eq
+
+
+def render_input_with_equilibrium_override(
+    *,
+    source_text: str,
+    equilibrium_override: str,
+) -> str:
+    """Return input text with ``equilibriumFile`` replaced or inserted."""
+    pat = re.compile(r"(?im)^(\s*equilibriumFile\s*=\s*)(['\"])(.*?)\2(\s*)$")
+    replacement = rf'\1"{equilibrium_override}"\4'
+    if pat.search(source_text):
+        return pat.sub(replacement, source_text, count=1)
+
+    group_pat = re.compile(r"(?im)^(\s*&geometryParameters\s*$)")
+    if not group_pat.search(source_text):
+        return source_text
+    return group_pat.sub(rf'\1\n  equilibriumFile = "{equilibrium_override}"', source_text, count=1)
+
+
+def with_equilibrium_override(
+    *,
+    nml: Namelist,
+    equilibrium_file: str | Path | None = None,
+    wout_path: str | Path | None = None,
+) -> Namelist:
+    """Return a copy of ``nml`` with the effective equilibrium file overridden."""
+    override = canonical_equilibrium_override(
+        equilibrium_file=equilibrium_file,
+        wout_path=wout_path,
+    )
+    if override is None:
+        return nml
+
+    groups = {name: dict(group) for name, group in nml.groups.items()}
+    indexed = {name: {key: dict(value) for key, value in group.items()} for name, group in nml.indexed.items()}
+    geom = dict(groups.get("geometryparameters", {}))
+    geom["EQUILIBRIUMFILE"] = str(override)
+    groups["geometryparameters"] = geom
+    source_text = nml.source_text
+    if source_text is not None:
+        source_text = render_input_with_equilibrium_override(
+            source_text=source_text,
+            equilibrium_override=str(override),
+        )
+    return Namelist(
+        groups=groups,
+        indexed=indexed,
+        source_path=nml.source_path,
+        source_text=source_text,
+    )
 
 
 def effective_r_n_wish(*, geom_params: Mapping[str, Any], default: float = 0.5) -> float:

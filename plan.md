@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-03-27 (America/Chicago)
+Last updated: 2026-04-01 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -488,6 +488,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-04-01
+- Scope: Harden the public CLI/output API by adding documented equilibrium overrides (`equilibrium_file`, `wout_path`), make shared CLI flags usable after subcommands, and ensure the embedded `input.namelist` in `sfincsOutput.h5` reflects the effective run configuration.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/input_compat.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/io.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/cli.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_input_compat.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_cli_solve_mode.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_write_output_return_results.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/usage.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/outputs.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/inputs.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_input_compat.py tests/test_cli_solve_mode.py tests/test_write_output_return_results.py` (`32 passed`); `python -m py_compile sfincs_jax/input_compat.py sfincs_jax/io.py sfincs_jax/cli.py tests/test_input_compat.py tests/test_cli_solve_mode.py tests/test_write_output_return_results.py`
+- Runtime/memory delta: no solver-path changes in this pass. The change removes a CLI/API failure mode around equilibrium-file overrides and makes the effective override visible in output artifacts, which improves reproducibility and debugging without changing numerics.
+- Remaining risks: this pass did not rerun the full example suite because the implementation is confined to CLI/API plumbing and exercised on the existing scheme-5 parity fixture plus unit coverage. If future complaints involve scan orchestration rather than single-case runs, `scan-er` may need the same explicit override surface.
+- Next actions: run a small release-smoke subset through the CLI entry points after the docs refresh, then keep any further CLI changes scoped to proven user pain points instead of widening the public surface gratuitously.
 
 ### 2026-03-27
 - Scope: Make the bounded accelerator `tzfft` transport path a real default win on GPU, skip unnecessary GPU sparse rescue after converged PAS `schur` accepts, and harden the benchmark/auto-selection test surface around those branches.

@@ -14,6 +14,16 @@ CLI
 
    sfincs_jax write-output --input input.namelist --out sfincsOutput.h5
 
+.. code-block:: bash
+
+   sfincs_jax write-output \
+     --input input.namelist \
+     --out sfincsOutput.h5 \
+     --wout-path /path/to/wout.nc
+
+Use ``--equilibrium-file`` for a generic Boozer or VMEC override, or ``--wout-path``
+as a compatibility alias for VMEC-centered workflows.
+
 For transport-matrix runs (``RHSMode=2`` or ``RHSMode=3``), the Fortran code loops over
 multiple right-hand sides (``whichRHS``) and assembles a ``transportMatrix`` in the output.
 To replicate that end-to-end behavior in `sfincs_jax`, enable:
@@ -43,6 +53,14 @@ Python
 
 .. code-block:: python
 
+   write_sfincs_jax_output_h5(
+       input_namelist=Path("input.namelist"),
+       output_path=Path("sfincsOutput.h5"),
+       wout_path=Path("/path/to/wout.nc"),
+   )
+
+.. code-block:: python
+
    out_path, results = write_sfincs_jax_output_h5(
        input_namelist=Path("input.namelist"),
        output_path=Path("sfincsOutput.h5"),
@@ -50,6 +68,10 @@ Python
    )
    print(out_path)
    print(results["Ntheta"])
+
+When an equilibrium override is supplied, ``sfincs_jax`` updates the embedded
+``input.namelist`` dataset in ``sfincsOutput.h5`` to match the effective run
+configuration.
 
 Current coverage
 ----------------
