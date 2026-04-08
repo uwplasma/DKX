@@ -246,7 +246,7 @@ def test_normalize_default_argv_keeps_wout_path_override() -> None:
     ]
 
 
-def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch) -> None:
+def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) -> None:
     input_path = Path(__file__).parent / "ref" / "output_scheme5_1species_tiny.input.namelist"
     captured: dict[str, object] = {}
 
@@ -258,7 +258,7 @@ def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch) -> None:
 
     args = Namespace(
         input=str(input_path),
-        out_state=str(input_path.parent / "state.npy"),
+        out_state=str(tmp_path / "state.npy"),
         equilibrium_file=None,
         wout_path="override_wout.nc",
         tol=1e-8,
