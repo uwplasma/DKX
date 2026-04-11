@@ -139,7 +139,9 @@ For sharded single-RHS solves on CPU or GPU:
    python examples/performance/benchmark_sharded_solve_scaling.py \
      --backend cpu \
      --input examples/performance/rhsmode1_sharded.input.namelist \
-     --devices 1 2 4 8
+     --devices 1 2 4 8 \
+     --rhs1-precond theta_schwarz \
+     --schwarz-coarse-levels 2
 
 .. note::
 
