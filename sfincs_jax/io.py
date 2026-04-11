@@ -3777,7 +3777,12 @@ def write_sfincs_jax_output_h5(
             except ValueError:
                 diag_chunk = None
             fields = result.transport_output_fields
-            if fields is None:
+            needs_full_transport_fields = (
+                fields is None
+                or "pressurePerturbation" not in fields
+                or "momentumFluxBeforeSurfaceIntegral_vm" not in fields
+            )
+            if needs_full_transport_fields:
                 fields = v3_transport_output_fields_vm_only(
                     op0=result.op0,
                     state_vectors_by_rhs=result.state_vectors_by_rhs,
@@ -3799,7 +3804,7 @@ def write_sfincs_jax_output_h5(
             # the number of RHS solves for RHSMode=2/3.
             data["NIterations"] = np.asarray(n_rhs, dtype=np.int32)
 
-            if result.transport_output_fields is None:
+            if needs_full_transport_fields:
                 def _alloc_ztsn() -> "jnp.ndarray":
                     return jnp.zeros((z, t, s, n_rhs), dtype=jnp.float64)
 

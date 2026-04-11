@@ -26,6 +26,17 @@ At a high level:
 - **Full-system solve parity**: matrix-free matvec/RHS/residual/GMRES parity is available for a growing
   subset of fixtures (see ``docs/parity.rst``).
 
+Geometry examples you can run immediately:
+
+- analytic tokamak ``geometryScheme=1``:
+  ``examples/getting_started/write_sfincs_output_tokamak.py``
+- VMEC ``geometryScheme=5``:
+  ``examples/getting_started/write_sfincs_output_vmec.py``
+
+The public CLI/API does not currently expose a separate Miller-parameter
+geometry mode. Tokamak examples therefore use the supported analytic Boozer
+tokamak inputs that mirror the upstream v3 example family.
+
 Practical notes for users
 -------------------------
 

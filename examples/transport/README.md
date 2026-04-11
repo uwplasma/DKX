@@ -10,4 +10,4 @@ Examples:
 - `transport_matrix_rhsmode2_and_rhsmode3.py` — compute transport matrices and compare to fixtures.
 - `postprocess_upstream_scanplot_1_transport_matrix.py` — reproduce upstream postprocessing.
 - `transport_matrix_er_scan_upstream_scanplot2.py` — an Er scan with transport-matrix postprocessing.
-
+- `transport_matrix_recycle_demo.py` — transport solves with Krylov recycling/warm starts.

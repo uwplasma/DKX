@@ -160,15 +160,15 @@ path; outputs are merged deterministically by column.
 macOS uses `spawn` for multiprocessing. Run from a file/module (not `python - <<EOF`)
 so worker processes can import the main module cleanly.
 
-**Measured scaling (Macbook M3 Max, 14‑core)**
+**Measured CPU transport scaling (MacBook Pro M3 Max)**
 
 Benchmark case: `examples/performance/transport_parallel_2min.input.namelist`
 (RHSMode=2, geometryScheme=2, Ntheta=21, Nzeta=21, Nxi=6, NL=6, Nx=6).
 
 Benchmark preconditioner: `SFINCS_JAX_TRANSPORT_PRECOND=xmg`.
 
-Latest cache‑warm sweep (1–4 workers):
-1 worker 147.4s, 2 workers 122.3s, 3 workers 115.8s, 4 workers 114.8s.
+Latest cache-warm sweep (1, 2, 4 workers):
+1 worker 252.5s, 2 workers 169.2s, 4 workers 93.7s.
 
 Process‑parallel workers automatically disable sharded matvec and cap
 XLA CPU threads per worker to avoid oversubscription when `SFINCS_JAX_CORES`
@@ -180,7 +180,7 @@ Reproduce:
 
    python examples/performance/benchmark_transport_parallel_scaling.py \
      --input examples/performance/transport_parallel_2min.input.namelist \
-     --workers 1 2 3 4 \
+     --workers 1 2 4 \
      --repeats 1 \
      --warmup 0 \
      --global-warmup 1
@@ -195,12 +195,12 @@ parallel behavior instead of full diagnostics/H5 field assembly.
 
    Parallel whichRHS scaling (runtime + speedup vs workers).
 
-For this larger case, scaling reaches ~1.28× (4 workers).
-The plateau reflects that the current process-parallel transport path only
-parallelizes the per-`whichRHS` solves; shared setup/build costs remain serial
-and dominate for this case on a laptop-class CPU.
-Note: RHSMode=2 has only **3** right‑hand sides, so speedup naturally saturates
-near 3–4 workers.
+For this larger case, scaling reaches about ``2.69x`` at ``4`` workers.
+This is the current production CPU-parallel story in ``sfincs_jax``: use
+process-parallel transport and scan workloads first, and keep single-case
+multi-device sharding as an advanced path for very large RHSMode=1 solves.
+Note: RHSMode=2 has only **3** right-hand sides, so speedup naturally
+saturates once there are more workers than independent ``whichRHS`` solves.
 
 Earlier runs (smaller grids)
 ----------------------------

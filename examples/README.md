@@ -48,11 +48,16 @@ Common entry points:
 
 - Write `sfincsOutput.h5` via Python: `examples/getting_started/write_sfincs_output_python.py`
 - Write `sfincsOutput.h5` via CLI: `examples/getting_started/write_sfincs_output_cli.py`
+- Analytic tokamak example (`geometryScheme=1`): `examples/getting_started/write_sfincs_output_tokamak.py`
+- VMEC example (`geometryScheme=5`, `wout_path` override): `examples/getting_started/write_sfincs_output_vmec.py`
+- Plot `sfincsOutput.h5`: `examples/getting_started/plot_sfincs_output.py`
 - Output parity vs Fortran fixture: `examples/parity/output_parity_vs_fortran_fixture.py`
 - Transport matrices (RHSMode 2/3): `examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py`
 - Transport matrices with Krylov recycling: `examples/transport/transport_matrix_recycle_demo.py`
 - Differentiate a residual norm w.r.t. `nu_n`: `examples/autodiff/autodiff_gradient_nu_n_residual.py`
 - Implicit differentiation through BiCGStab: `examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab`
+- CPU sharding benchmark: `examples/performance/benchmark_sharded_solve_scaling.py --backend cpu --devices 1 2 4 8`
+- Transport-worker benchmark: `examples/performance/benchmark_transport_parallel_scaling.py --workers 1 2 4`
 
 ### Scaled upstream example sweep
 
