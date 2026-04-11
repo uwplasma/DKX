@@ -780,6 +780,12 @@ about ``4.07 s`` on current ``main``. This does not make 8-way CPU sharding
 ideal yet, but it removes the worst broken region of the previous heuristic and
 gives a safer base for the next two-level/domain-decomposition pass.
 
+Current ``main`` also adds a bounded two-level correction on top of the
+theta/zeta Schwarz patches when the solve is actually sharded across many
+devices. The added coarse step reuses a wider theta/zeta block-diagonal
+preconditioner as a single residual correction, which improves the worst
+high-device fragmentation cases without changing the operator or output parity.
+
 The sharded solve benchmark driver also now supports explicit backend
 selection:
 
