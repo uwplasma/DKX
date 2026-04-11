@@ -6097,6 +6097,38 @@ def _rhs1_dd_coarse_block_size(*, n: int, block: int, overlap: int) -> int:
     return max(1, min(n, int(coarse)))
 
 
+def _rhs1_dd_coarse_level_count(*, n_dev: int) -> int:
+    """Choose how many coarse residual-correction levels to apply."""
+    n_dev = max(1, int(n_dev))
+    coarse_levels_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS", "").strip()
+    if coarse_levels_env:
+        try:
+            return max(0, int(coarse_levels_env))
+        except ValueError:
+            return 1
+    if n_dev >= 8:
+        return 2
+    if n_dev >= 4:
+        return 1
+    return 0
+
+
+def _rhs1_dd_coarse_block_sizes(*, n: int, block: int, overlap: int, levels: int) -> tuple[int, ...]:
+    """Choose one or more increasingly wider coarse theta/zeta block sizes."""
+    n = max(1, int(n))
+    current = max(1, min(n, int(block)))
+    out: list[int] = []
+    for _ in range(max(0, int(levels))):
+        next_block = _rhs1_dd_coarse_block_size(n=n, block=current, overlap=overlap)
+        if next_block <= current:
+            break
+        out.append(int(next_block))
+        current = int(next_block)
+        if current >= n:
+            break
+    return tuple(out)
+
+
 def _build_rhsmode1_preconditioner_operator_point(op: V3FullSystemOperator) -> V3FullSystemOperator:
     """Return a simplified RHSMode=1 operator for point-block preconditioning.
 
@@ -8116,20 +8148,26 @@ def _build_rhsmode1_theta_schwarz_preconditioner(
         coarse_damp = 1.0
 
     apply_full_raw = _apply_full
-    if coarse_auto and jax.device_count() >= 4 and _matvec_shard_axis(op) == "theta":
-        coarse_block = _rhs1_dd_coarse_block_size(
+    n_dev = max(1, int(jax.device_count()))
+    if coarse_auto and n_dev >= 4 and _matvec_shard_axis(op) == "theta":
+        coarse_blocks = _rhs1_dd_coarse_block_sizes(
             n=int(op.n_theta),
             block=int(block),
             overlap=int(overlap),
+            levels=_rhs1_dd_coarse_level_count(n_dev=n_dev),
         )
-        coarse_precond = _build_rhsmode1_theta_dd_preconditioner(op=op, block=coarse_block)
-        apply_full_raw = _compose_residual_correction_preconditioner(
-            base=apply_full_raw,
-            coarse=coarse_precond,
-            matvec=lambda v: apply_v3_full_system_operator_cached(op, v),
-            damping=coarse_damp,
-            steps=coarse_steps,
-        )
+        if coarse_blocks:
+            coarse_levels = tuple(
+                _build_rhsmode1_theta_dd_preconditioner(op=op, block=coarse_block)
+                for coarse_block in coarse_blocks
+            )
+            apply_full_raw = _compose_multilevel_residual_correction_preconditioner(
+                base=apply_full_raw,
+                coarse_levels=coarse_levels,
+                matvec=lambda v: apply_v3_full_system_operator_cached(op, v),
+                damping=coarse_damp,
+                steps=coarse_steps,
+            )
 
     apply_full_safe = _safe_preconditioner(apply_full_raw)
     if reduce_full is None or expand_reduced is None:
@@ -8317,20 +8355,26 @@ def _build_rhsmode1_zeta_schwarz_preconditioner(
         coarse_damp = 1.0
 
     apply_full_raw = _apply_full
-    if coarse_auto and jax.device_count() >= 4 and _matvec_shard_axis(op) == "zeta":
-        coarse_block = _rhs1_dd_coarse_block_size(
+    n_dev = max(1, int(jax.device_count()))
+    if coarse_auto and n_dev >= 4 and _matvec_shard_axis(op) == "zeta":
+        coarse_blocks = _rhs1_dd_coarse_block_sizes(
             n=int(op.n_zeta),
             block=int(block),
             overlap=int(overlap),
+            levels=_rhs1_dd_coarse_level_count(n_dev=n_dev),
         )
-        coarse_precond = _build_rhsmode1_zeta_dd_preconditioner(op=op, block=coarse_block)
-        apply_full_raw = _compose_residual_correction_preconditioner(
-            base=apply_full_raw,
-            coarse=coarse_precond,
-            matvec=lambda v: apply_v3_full_system_operator_cached(op, v),
-            damping=coarse_damp,
-            steps=coarse_steps,
-        )
+        if coarse_blocks:
+            coarse_levels = tuple(
+                _build_rhsmode1_zeta_dd_preconditioner(op=op, block=coarse_block)
+                for coarse_block in coarse_blocks
+            )
+            apply_full_raw = _compose_multilevel_residual_correction_preconditioner(
+                base=apply_full_raw,
+                coarse_levels=coarse_levels,
+                matvec=lambda v: apply_v3_full_system_operator_cached(op, v),
+                damping=coarse_damp,
+                steps=coarse_steps,
+            )
 
     apply_full_safe = _safe_preconditioner(apply_full_raw)
     if reduce_full is None or expand_reduced is None:
@@ -8621,16 +8665,36 @@ def _compose_residual_correction_preconditioner(
     steps: int = 1,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Apply a small multiplicative coarse correction after a base preconditioner."""
+    return _compose_multilevel_residual_correction_preconditioner(
+        base=base,
+        coarse_levels=(coarse,),
+        matvec=matvec,
+        damping=damping,
+        steps=steps,
+    )
+
+
+def _compose_multilevel_residual_correction_preconditioner(
+    *,
+    base: Callable[[jnp.ndarray], jnp.ndarray],
+    coarse_levels: Sequence[Callable[[jnp.ndarray], jnp.ndarray]],
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    damping: float = 1.0,
+    steps: int = 1,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Apply one or more bounded residual-correction levels after a base preconditioner."""
     steps = max(0, int(steps))
     damping = float(damping)
-    if steps <= 0:
+    coarse_levels = tuple(coarse_levels)
+    if steps <= 0 or not coarse_levels:
         return base
 
     def _apply(v: jnp.ndarray) -> jnp.ndarray:
         z = base(v)
         for _ in range(steps):
-            r = v - matvec(z)
-            z = z + damping * coarse(r)
+            for coarse in coarse_levels:
+                r = v - matvec(z)
+                z = z + damping * coarse(r)
         return z
 
     return _apply

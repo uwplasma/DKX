@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
 import sfincs_jax.v3_driver as vd
@@ -136,6 +137,17 @@ def test_rhs1_dd_coarse_block_size_widens_local_patch() -> None:
     assert coarse > 12
 
 
+def test_rhs1_dd_coarse_level_count_auto() -> None:
+    assert vd._rhs1_dd_coarse_level_count(n_dev=2) == 0
+    assert vd._rhs1_dd_coarse_level_count(n_dev=4) == 1
+    assert vd._rhs1_dd_coarse_level_count(n_dev=8) == 2
+
+
+def test_rhs1_dd_coarse_block_sizes_build_multiple_levels() -> None:
+    coarse_blocks = vd._rhs1_dd_coarse_block_sizes(n=63, block=12, overlap=1, levels=2)
+    assert coarse_blocks == (20, 30)
+
+
 def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
     base = lambda v: 0.5 * v
     coarse = lambda v: 0.25 * v
@@ -149,3 +161,19 @@ def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
     )
     out = precond(np.array([4.0]))
     assert np.allclose(np.asarray(out), np.array([2.0]))
+
+
+def test_compose_multilevel_residual_correction_preconditioner_applies_levels_in_order() -> None:
+    base = lambda v: jnp.zeros_like(v)
+    coarse_1 = lambda v: 0.25 * v
+    coarse_2 = lambda v: 0.125 * v
+    matvec = lambda v: 2.0 * v
+    precond = vd._compose_multilevel_residual_correction_preconditioner(
+        base=base,
+        coarse_levels=(coarse_1, coarse_2),
+        matvec=matvec,
+        damping=1.0,
+        steps=1,
+    )
+    out = precond(np.array([4.0]))
+    assert np.allclose(np.asarray(out), np.array([1.25]))
