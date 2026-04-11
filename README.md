@@ -149,6 +149,10 @@ Current recommendation:
 - Use one GPU per case or scan point for production throughput today.
 - Multi-GPU single-case sharding is available for benchmarking and very large
   runs, but it remains experimental and is not yet the default recommendation.
+- The sharded-solve benchmark helper supports both `--backend cpu` and
+  `--backend gpu`; the GPU path uses `CUDA_VISIBLE_DEVICES` and disables JAX
+  preallocation in the subprocess so one-node GPU scaling experiments are
+  reproducible.
 
 ![Parallel scaling snapshot](docs/_static/figures/parallel/strong_scaling_snapshot.png)
 
