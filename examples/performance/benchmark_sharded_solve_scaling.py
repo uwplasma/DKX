@@ -15,6 +15,26 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
 
 
+def _normalized_backend(backend: str) -> str:
+    value = str(backend).strip().lower()
+    if value in {"", "auto"}:
+        return "auto"
+    if value in {"cpu", "gpu"}:
+        return value
+    raise ValueError(f"Unsupported backend {backend!r}")
+
+
+def _configure_backend_env(*, env: dict[str, str], devices: int, backend: str) -> None:
+    backend_norm = _normalized_backend(backend)
+    if backend_norm == "gpu":
+        env.pop("SFINCS_JAX_CPU_DEVICES", None)
+        env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(max(1, int(devices))))
+        return
+    env["SFINCS_JAX_CPU_DEVICES"] = str(int(devices))
+    if backend_norm == "cpu":
+        env.pop("CUDA_VISIBLE_DEVICES", None)
+
+
 def _run_once(
     input_path: Path,
     *,
@@ -24,7 +44,9 @@ def _run_once(
     periodic_stencil_on_sharded: str,
     nsolve: int,
     rhs1_precond: str,
+    backend: str,
 ) -> float:
+    _normalized_backend(backend)
     os.environ["SFINCS_JAX_FORTRAN_STDOUT"] = "0"
     os.environ["SFINCS_JAX_SOLVER_ITER_STATS"] = "0"
     os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] = shard_axis
@@ -65,9 +87,10 @@ def _run_once_subprocess(
     periodic_stencil_on_sharded: str,
     nsolve: int,
     rhs1_precond: str,
+    backend: str,
 ) -> float:
     env = os.environ.copy()
-    env["SFINCS_JAX_CPU_DEVICES"] = str(int(devices))
+    _configure_backend_env(env=env, devices=devices, backend=backend)
     env["SFINCS_JAX_MATVEC_SHARD_AXIS"] = shard_axis
     env["SFINCS_JAX_GMRES_DISTRIBUTED"] = gmres_distributed
     env["SFINCS_JAX_DISTRIBUTED_KRYLOV"] = distributed_krylov
@@ -189,6 +212,13 @@ def main() -> None:
         default="",
         help="Optional SFINCS_JAX_RHSMODE1_PRECONDITIONER override for this benchmark.",
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default="auto",
+        choices=("auto", "cpu", "gpu"),
+        help="Benchmark backend. 'cpu' uses SFINCS_JAX_CPU_DEVICES; 'gpu' uses CUDA_VISIBLE_DEVICES.",
+    )
     args = parser.parse_args()
 
     input_path = args.input
@@ -204,6 +234,7 @@ def main() -> None:
             periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
             nsolve=int(args.nsolve),
             rhs1_precond=str(args.rhs1_precond),
+            backend=str(args.backend),
         )
         print(f"{dt:.6f}")
         return
@@ -227,6 +258,7 @@ def main() -> None:
                 periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
                 nsolve=int(args.nsolve),
                 rhs1_precond=str(args.rhs1_precond),
+                backend=str(args.backend),
             )
 
     results = []
@@ -236,7 +268,8 @@ def main() -> None:
             f"shard_axis={args.shard_axis} gmres_distributed={args.gmres_distributed} "
             f"distributed_krylov={args.distributed_krylov} "
             f"stencil_on_sharded={args.periodic_stencil_on_sharded} "
-            f"nsolve={int(args.nsolve)} rhs1_precond={args.rhs1_precond or 'auto'}",
+            f"nsolve={int(args.nsolve)} rhs1_precond={args.rhs1_precond or 'auto'} "
+            f"backend={args.backend}",
             flush=True,
         )
         for i in range(max(args.warmup, 0)):
@@ -251,6 +284,7 @@ def main() -> None:
                 periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
                 nsolve=int(args.nsolve),
                 rhs1_precond=str(args.rhs1_precond),
+                backend=str(args.backend),
             )
             print(f"[device {d}] warmup {i + 1}/{max(args.warmup, 0)} done", flush=True)
         times = []
@@ -266,6 +300,7 @@ def main() -> None:
                 periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
                 nsolve=int(args.nsolve),
                 rhs1_precond=str(args.rhs1_precond),
+                backend=str(args.backend),
             )
             times.append(dt)
             print(f"[device {d}] repeat {i + 1}/{max(args.repeats, 1)} done in {dt:.3f}s", flush=True)
@@ -299,6 +334,7 @@ def main() -> None:
         "periodic_stencil_on_sharded": str(args.periodic_stencil_on_sharded),
         "nsolve": int(args.nsolve),
         "rhs1_precond": str(args.rhs1_precond),
+        "backend": str(args.backend),
     }
 
     json_path = out_dir / "sharded_solve_scaling.json"
