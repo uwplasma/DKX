@@ -75,6 +75,71 @@ def _emit_runtime_info(*, args: argparse.Namespace) -> None:
         return
 
 
+def _emit_parallel_runtime_info(*, args: argparse.Namespace) -> None:
+    def _env(name: str, default: str = "") -> str:
+        return os.environ.get(name, default).strip()
+
+    cores = _env("SFINCS_JAX_CORES")
+    cpu_devices = _env("SFINCS_JAX_CPU_DEVICES")
+    shard_axis = _env("SFINCS_JAX_MATVEC_SHARD_AXIS")
+    auto_shard = _env("SFINCS_JAX_AUTO_SHARD")
+    shard_pad = _env("SFINCS_JAX_SHARD_PAD")
+    transport_parallel = _env("SFINCS_JAX_TRANSPORT_PARALLEL", "off") or "off"
+    transport_workers = _env("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", "1") or "1"
+    gmres_distributed = _env("SFINCS_JAX_GMRES_DISTRIBUTED")
+    distributed_krylov = _env("SFINCS_JAX_DISTRIBUTED_KRYLOV")
+    distributed = _env("SFINCS_JAX_DISTRIBUTED")
+
+    if not any(
+        (
+            cores,
+            cpu_devices,
+            shard_axis,
+            auto_shard,
+            shard_pad,
+            transport_parallel not in {"", "off"},
+            gmres_distributed,
+            distributed_krylov,
+            distributed,
+        )
+    ):
+        return
+
+    _emit(
+        " parallel:"
+        f" cores={cores or '-'}"
+        f" cpu_devices={cpu_devices or '-'}"
+        f" shard_axis={shard_axis or '-'}"
+        f" auto_shard={auto_shard or '-'}"
+        f" shard_pad={shard_pad or '-'}",
+        level=1,
+        args=args,
+    )
+    _emit(
+        f" transport_parallel: mode={transport_parallel} workers={transport_workers}",
+        level=1,
+        args=args,
+    )
+    _emit(
+        " distributed_solver:"
+        f" gmres={gmres_distributed or '-'}"
+        f" krylov={distributed_krylov or '-'}",
+        level=1,
+        args=args,
+    )
+    if distributed in {"1", "true", "yes", "on"}:
+        _emit(
+            " multi_host:"
+            " enabled=1"
+            f" process_id={_env('SFINCS_JAX_PROCESS_ID', '-') or '-'}"
+            f" process_count={_env('SFINCS_JAX_PROCESS_COUNT', '-') or '-'}"
+            f" coordinator={_env('SFINCS_JAX_COORDINATOR_ADDRESS', '-') or '-'}"
+            f" port={_env('SFINCS_JAX_COORDINATOR_PORT', '-') or '-'}",
+            level=1,
+            args=args,
+        )
+
+
 def _nml_with_cli_equilibrium_override(nml, args: argparse.Namespace):
     return with_equilibrium_override(
         nml=nml,
@@ -192,6 +257,7 @@ def _cmd_solve_v3(args: argparse.Namespace) -> int:
     _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
     _emit_namelist_summary(nml=nml, args=args)
     _emit_runtime_info(args=args)
+    _emit_parallel_runtime_info(args=args)
     _emit(f" tol={args.tol} atol={args.atol} restart={args.restart} maxiter={args.maxiter} solve_method={args.solve_method}", level=1, args=args)
     if args.which_rhs is not None:
         _emit(f" whichRHS={args.which_rhs}", level=0, args=args)
@@ -238,6 +304,12 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
 
     nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
     rhs_mode = int(nml.group("general").get("RHSMODE", 1))
+    _emit("################################################################", level=0, args=args)
+    _emit(" sfincs_jax write-output", level=0, args=args)
+    _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
+    _emit_namelist_summary(nml=nml, args=args)
+    _emit_runtime_info(args=args)
+    _emit_parallel_runtime_info(args=args)
 
     # Default to upstream v3 behavior: full solve/write appropriate to RHSMode.
     geometry_only = bool(getattr(args, "geometry_only", False))
@@ -271,6 +343,7 @@ def _cmd_transport_matrix_v3(args: argparse.Namespace) -> int:
     _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
     _emit_namelist_summary(nml=nml, args=args)
     _emit_runtime_info(args=args)
+    _emit_parallel_runtime_info(args=args)
     _emit(f" tol={args.tol} atol={args.atol} restart={args.restart} maxiter={args.maxiter} solve_method={args.solve_method}", level=1, args=args)
     result = solve_v3_transport_matrix_linear_gmres(
         nml=nml,
@@ -351,6 +424,7 @@ def _cmd_scan_er(args: argparse.Namespace) -> int:
     _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
     _emit(f" out-dir={Path(args.out_dir).resolve()}", level=0, args=args)
     _emit_runtime_info(args=args)
+    _emit_parallel_runtime_info(args=args)
 
     if args.values is not None:
         values = [float(x) for x in args.values]
@@ -380,6 +454,7 @@ def _cmd_ambipolar_solve(args: argparse.Namespace) -> int:
     _emit(" sfincs_jax ambipolar-solve", level=0, args=args)
     _emit(f" scan-dir={Path(args.scan_dir).resolve()}", level=0, args=args)
     _emit_runtime_info(args=args)
+    _emit_parallel_runtime_info(args=args)
 
     res = solve_ambipolar_from_scan_dir(
         scan_dir=Path(args.scan_dir),
