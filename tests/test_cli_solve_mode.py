@@ -394,6 +394,86 @@ def test_emit_parallel_runtime_info_suppresses_empty_state(monkeypatch, capsys) 
     assert capsys.readouterr().out == ""
 
 
+def test_maybe_reexec_for_early_runtime_reexecs_for_cores(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_CORES", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_CPU_DEVICES", raising=False)
+    captured: dict[str, object] = {}
+
+    def _fake_execvpe(executable, argv, env):
+        captured["executable"] = executable
+        captured["argv"] = list(argv)
+        captured["env"] = dict(env)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli.os, "execvpe", _fake_execvpe)
+
+    try:
+        cli._maybe_reexec_for_early_runtime(["--cores", "4", "write-output", "--input", "input.namelist"])
+    except SystemExit:
+        pass
+
+    assert captured["argv"] == [cli.sys.executable, "-m", "sfincs_jax", "--cores", "4", "write-output", "--input", "input.namelist"]
+    env = captured["env"]
+    assert env["SFINCS_JAX_CORES"] == "4"
+    assert env["SFINCS_JAX_CPU_DEVICES"] == "4"
+    assert env["SFINCS_JAX_CLI_BOOTSTRAPPED"] == "1"
+
+
+def test_maybe_reexec_for_early_runtime_skips_when_env_matches(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_CORES", "4")
+    monkeypatch.setenv("SFINCS_JAX_CPU_DEVICES", "4")
+    called = []
+    monkeypatch.setattr(cli.os, "execvpe", lambda *args, **kwargs: called.append((args, kwargs)))
+    cli._maybe_reexec_for_early_runtime(["--cores", "4", "write-output", "--input", "input.namelist"])
+    assert called == []
+
+
+def test_maybe_reexec_for_early_runtime_reexecs_for_distributed(monkeypatch) -> None:
+    for name in (
+        "SFINCS_JAX_DISTRIBUTED",
+        "SFINCS_JAX_PROCESS_ID",
+        "SFINCS_JAX_PROCESS_COUNT",
+        "SFINCS_JAX_COORDINATOR_ADDRESS",
+        "SFINCS_JAX_COORDINATOR_PORT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    captured: dict[str, object] = {}
+
+    def _fake_execvpe(executable, argv, env):
+        captured["argv"] = list(argv)
+        captured["env"] = dict(env)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli.os, "execvpe", _fake_execvpe)
+
+    try:
+        cli._maybe_reexec_for_early_runtime(
+            [
+                "--distributed",
+                "--process-id",
+                "1",
+                "--process-count",
+                "2",
+                "--coordinator-address",
+                "node0",
+                "--coordinator-port",
+                "1234",
+                "write-output",
+                "--input",
+                "input.namelist",
+            ]
+        )
+    except SystemExit:
+        pass
+
+    env = captured["env"]
+    assert env["SFINCS_JAX_DISTRIBUTED"] == "1"
+    assert env["SFINCS_JAX_PROCESS_ID"] == "1"
+    assert env["SFINCS_JAX_PROCESS_COUNT"] == "2"
+    assert env["SFINCS_JAX_COORDINATOR_ADDRESS"] == "node0"
+    assert env["SFINCS_JAX_COORDINATOR_PORT"] == "1234"
+
+
 def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) -> None:
     input_path = Path(__file__).parent / "ref" / "output_scheme5_1species_tiny.input.namelist"
     captured: dict[str, object] = {}
