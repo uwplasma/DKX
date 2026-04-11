@@ -121,7 +121,7 @@ sfincs_jax transport-matrix-v3 \
   --input /path/to/input.namelist \
   --transport-workers 4
 
-# One-node multi-GPU sharded solve
+# One-node multi-GPU sharded solve (experimental for very large single-RHS cases)
 CUDA_VISIBLE_DEVICES=0,1 \
 sfincs_jax write-output \
   --input /path/to/input.namelist \
@@ -141,6 +141,14 @@ sfincs_jax write-output \
 Use `-v` to have the executable print the active parallel runtime summary
 (cores, shard axis, transport workers, distributed Krylov mode, and multi-host
 bootstrap fields) before the solve starts.
+
+Current recommendation:
+
+- CPU host sharding is supported and deterministic, but the measured speedup is
+  still case-dependent.
+- Use one GPU per case or scan point for production throughput today.
+- Multi-GPU single-case sharding is available for benchmarking and very large
+  runs, but it remains experimental and is not yet the default recommendation.
 
 Compare two outputs:
 

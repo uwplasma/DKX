@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-04-10 (America/Chicago)
+Last updated: 2026-04-11 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -382,6 +382,19 @@ Immediate hardware baseline:
   - JAX currently sees `2` CUDA devices,
   - this is the current one-node multi-GPU validation target.
 
+Current validated executable-side status:
+
+- CLI parallel flags are now first-class and survive bootstrap/re-exec correctly.
+- Large PAS sharded runs no longer crash by trying to build impossible dense
+  `pas_tz` preconditioners; they fall back to shard-local Schwarz / lighter PAS
+  paths instead.
+- One-node CPU and one-node GPU parallel paths are usable and deterministic.
+- Strong scaling is still weak on the current challenging single-RHS cases, so
+  the production recommendation remains:
+  - one GPU per case / scan point,
+  - bounded CPU host sharding,
+  - multi-GPU single-case sharding only as an experimental benchmark path for now.
+
 Implementation principle:
 
 1. expose the real parallel runtime through the public CLI first,
@@ -550,6 +563,14 @@ Current latest notable changes before this handoff:
 - Runtime/memory delta: no solver-kernel change in this pass; this is parallel-runtime surfacing, provenance, and deployment hardening. Hardware baseline confirmed in this pass: local JAX sees `1` CPU device by default; office JAX sees `2` CUDA devices. Local executable-path sharded RHSMode=1 probe on `examples/performance/rhsmode1_sharded_scaling.input.namelist` still shows weak scaling (`1 device: 2.303 s`, `2 devices: 2.084 s` for `nsolve=1`; `1 device: 9.874 s`, `2 devices: 11.806 s` for `nsolve=2`), and A/B probes show `auto`, forced `pas_tz`, and forced distributed-GMRES all within a few percent on this ~49k-unknown PAS case, so there is no evidence yet for a threshold-only default change.
 - Remaining risks: office 1-GPU vs 2-GPU sharded current-tip benchmark is still in progress, so this pass improves usability and deployment control but does not yet claim a fresh multi-GPU speedup. Multi-host bootstrap is now public and documented, but it still needs measured Slurm-scale validation before calling it production-grade.
 - Next actions: finish the office 1-GPU vs 2-GPU baseline probe, record those numbers in the docs/plan, then prioritize the first real scaling algorithm work on sharded single-RHS solves: stronger domain decomposition, local block smoothers, and communication-avoiding Krylov.
+
+### 2026-04-11
+- Scope: fix executable CLI global-parallel flag handling so `--cores`, `--shard-axis`, and `--transport-workers` work regardless of placement relative to the subcommand; add a PAS sharded-memory guard so very large GPU PAS runs do not try to build impossible dense `pas_tz` preconditioners; benchmark larger CPU, GPU, and Fortran MPI scaling cases.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/cli.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/v3_driver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_cli_solve_mode.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_rhs1_schwarz_heuristic.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/parallelism.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_cli_solve_mode.py tests/test_rhs1_schwarz_heuristic.py` (`27 passed`); `python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/cli.py tests/test_cli_solve_mode.py tests/test_rhs1_schwarz_heuristic.py`; CLI smoke `python -m sfincs_jax -v --cores 4 --shard-axis theta write-output ... --geometry-only`; fresh larger-case parity check `python -m sfincs_jax compare-h5 --a /tmp/sfincs_jax_rhsmode1_sharded_large.h5 --b <fortran-rank1>/sfincsOutput.h5 --rtol 5e-4 --atol 1e-9` (`0` mismatches).
+- Runtime/memory delta: local CPU sharded RHSMode=1 benchmark on `examples/performance/rhsmode1_sharded_scaling.input.namelist` gives `1 device: 4.91 s`, `2 devices: 4.45 s`, `4 devices: 7.00 s`; local CPU transport-worker benchmark on `examples/performance/transport_parallel_xlarge.input.namelist` gives `1 worker: 5.00 s`, `2 workers: 9.17 s`, `4 workers: 7.90 s`; local Fortran MPI on the same simplified RHSMode=1 scaling input gives `1 rank: 1.18 s`, `2 ranks: 0.26 s`, `4 ranks: 0.39 s`; office GPU sharded benchmark on `examples/performance/rhsmode1_sharded_scaling.input.namelist` gives `1 GPU: 44.91 s`, `2 GPUs: 67.48 s`; on the larger `examples/performance/rhsmode1_sharded.input.namelist`, current `main` now runs on `1 GPU` in `16.58 s` instead of crashing with a `~155 GiB` PAS dense allocation attempt.
+- Remaining risks: executable-side parallel controls are now correct and large PAS sharded runs are robust, but strong scaling is still weak on the current one-node single-RHS benchmarks. The current production recommendation remains one GPU per case / scan point rather than multi-GPU single-case sharding.
+- Next actions: implement the first actual scaling algorithm change for sharded single-RHS solves (stronger local domain decomposition / block smoothers), then re-benchmark office `1 GPU` vs `2 GPU` on the larger PAS case and only promote multi-GPU single-case sharding if the new path materially reduces wall time.
 
 ### 2026-04-01
 - Scope: Harden the public CLI/output API by adding documented equilibrium overrides (`equilibrium_file`, `wout_path`), make shared CLI flags usable after subcommands, and ensure the embedded `input.namelist` in `sfincsOutput.h5` reflects the effective run configuration.

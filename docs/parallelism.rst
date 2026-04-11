@@ -705,6 +705,56 @@ Performance notes
   or when running many scan points.
 - Sharded matvec helps most when a *single RHS* is large and dominates runtime.
 
+Measured large-case scaling snapshot
+------------------------------------
+
+The current executable-side scaling story is functional but not yet the final
+research-grade result. On the challenging geometryScheme=2 benchmark inputs used
+in this repository, the current `main` branch produced the following measurements:
+
+- Local CPU sharded RHSMode=1 benchmark on
+  ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
+
+  - `1` device: `4.91 s`
+  - `2` devices: `4.45 s`
+  - `4` devices: `7.00 s`
+
+- Local Fortran v3 MPI benchmark on the same input:
+
+  - `mpirun -n 1`: `1.18 s`
+  - `mpirun -n 2`: `0.26 s`
+  - `mpirun -n 4`: `0.39 s`
+
+- Local CPU transport-worker benchmark on
+  ``examples/performance/transport_parallel_xlarge.input.namelist``:
+
+  - `1` worker: `5.00 s`
+  - `2` workers: `9.17 s`
+  - `4` workers: `7.90 s`
+
+- Office workstation GPU sharded RHSMode=1 benchmark on the medium-large input
+  ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
+
+  - `1` GPU: `44.91 s`
+  - `2` GPUs: `67.48 s`
+
+- Office workstation GPU sharded RHSMode=1 benchmark on the larger input
+  ``examples/performance/rhsmode1_sharded.input.namelist``:
+
+  - `1` GPU: `16.58 s`
+  - previous code path failed by trying to allocate a `pas_tz` block of about
+    `155 GiB`
+  - current `main` now guards that path and falls back to shard-local Schwarz /
+    lighter PAS alternatives instead of crashing
+
+These results support the current deployment recommendation:
+
+- CPU and GPU executable paths are parallel-capable and deterministic.
+- The robust production throughput path today is still **one GPU per case / scan
+  point** and bounded **CPU host sharding**.
+- Multi-GPU single-case sharding remains experimental until stronger local
+  domain decomposition and communication-avoiding Krylov are in place.
+
 See also:
 
 - `docs/performance_techniques.rst`
