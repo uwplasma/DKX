@@ -21,6 +21,21 @@ Building v3 grids and geometry
    grids = grids_from_namelist(nml)
    geom = geometry_from_namelist(nml=nml, grids=grids)
 
+Supported geometry examples
+---------------------------
+
+The quickest runnable geometry-specific entry points in the repository are:
+
+.. code-block:: bash
+
+   python examples/getting_started/write_sfincs_output_tokamak.py
+   python examples/getting_started/write_sfincs_output_vmec.py
+
+These cover the supported analytic tokamak ``geometryScheme=1`` path and the
+VMEC ``geometryScheme=5`` workflow with an explicit ``wout_path`` override.
+For simplified Boozer and `.bc` workflows, use the examples under
+``examples/sfincs_examples/`` or the tiny parity fixtures under ``tests/ref``.
+
 Applying operator building blocks
 ---------------------------------
 
@@ -187,6 +202,10 @@ Relevant CLI flags:
   multi-host JAX distributed initialization from the CLI.
 - ``--shard-pad`` / ``--no-shard-pad``: control neutral padding when the sharded
   dimension is not divisible by the visible device count.
+
+For actual scaling measurements, prefer the benchmark scripts in
+``examples/performance`` over ad hoc shell timing. They handle warmup, backend
+selection, cache reuse, and output JSON/figure generation consistently.
 
 At verbosity level ``-v`` or higher, the CLI now prints the active parallel
 runtime summary (requested cores, host-device count, shard axis, transport

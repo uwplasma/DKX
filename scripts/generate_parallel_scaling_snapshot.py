@@ -29,7 +29,7 @@ def main() -> None:
     repo = Path(__file__).resolve().parents[1]
     cpu_json = repo / "examples" / "performance" / "output" / "sharded_scaling_large_cpu" / "sharded_solve_scaling.json"
     fortran_json = repo / "examples" / "performance" / "output" / "fortran_mpi_rhsmode1_sharded_scaling" / "fortran_mpi_scaling.json"
-    transport_json = repo / "examples" / "performance" / "output" / "transport_parallel_xlarge_cpu" / "transport_parallel_scaling.json"
+    transport_json = repo / "examples" / "performance" / "output" / "transport_parallel_2min_cpu" / "transport_parallel_scaling.json"
     gpu_json = repo / "examples" / "performance" / "output" / "gpu_sharded_scaling_snapshot.json"
 
     cpu = _load_json(cpu_json)
