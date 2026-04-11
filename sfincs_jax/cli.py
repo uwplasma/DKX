@@ -657,9 +657,54 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
     return [*global_args, "write-output", "--input", input_path, *rest]
 
 
+def _maybe_reexec_for_early_runtime(argv: list[str]) -> None:
+    """Re-exec with early runtime env so host device count/bootstrap take effect.
+
+    The CLI is imported after the package, so JAX may already be imported before
+    flags like `--cores` or `--distributed` are parsed. When those flags would
+    change pre-import runtime state, restart the process once with the relevant
+    env vars set before package import.
+    """
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--cores", type=int, default=None)
+    pre.add_argument("--distributed", action="store_true")
+    pre.add_argument("--process-id", type=int, default=None)
+    pre.add_argument("--process-count", type=int, default=None)
+    pre.add_argument("--coordinator-address", default=None)
+    pre.add_argument("--coordinator-port", type=int, default=None)
+    args, _ = pre.parse_known_args(argv)
+
+    desired: dict[str, str] = {}
+    if args.cores is not None and int(args.cores) > 0:
+        desired["SFINCS_JAX_CORES"] = str(int(args.cores))
+        desired["SFINCS_JAX_CPU_DEVICES"] = str(int(args.cores))
+    if bool(args.distributed):
+        desired["SFINCS_JAX_DISTRIBUTED"] = "1"
+        if args.process_id is not None:
+            desired["SFINCS_JAX_PROCESS_ID"] = str(int(args.process_id))
+        if args.process_count is not None:
+            desired["SFINCS_JAX_PROCESS_COUNT"] = str(int(args.process_count))
+        if args.coordinator_address is not None:
+            desired["SFINCS_JAX_COORDINATOR_ADDRESS"] = str(args.coordinator_address)
+        if args.coordinator_port is not None:
+            desired["SFINCS_JAX_COORDINATOR_PORT"] = str(int(args.coordinator_port))
+
+    if not desired:
+        return
+
+    if all(os.environ.get(key, "") == value for key, value in desired.items()):
+        return
+
+    env = os.environ.copy()
+    env.update(desired)
+    env["SFINCS_JAX_CLI_BOOTSTRAPPED"] = "1"
+    os.execvpe(sys.executable, [sys.executable, "-m", "sfincs_jax", *argv], env)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:]) if argv is None else list(argv)
     argv = _normalize_default_argv(argv)
+    _maybe_reexec_for_early_runtime(argv)
     parser = argparse.ArgumentParser(prog="sfincs_jax")
     _add_common_cli_args(parser)
     _add_parallel_cli_args(parser)
