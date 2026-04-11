@@ -763,6 +763,45 @@ These results support the current deployment recommendation:
 - Multi-GPU single-case sharding remains experimental until stronger local
   domain decomposition and communication-avoiding Krylov are in place.
 
+Recent sharded-solve updates
+----------------------------
+
+The current RHSMode=1 theta/zeta Schwarz auto path no longer clamps the local
+patch width to a single sharded slice. On the measured CPU benchmark
+``examples/performance/rhsmode1_sharded_scaling.input.namelist``, that old rule
+caused an 8-device collapse because the additive-Schwarz patches became too
+small to capture cross-shard angular coupling. The current auto rule grows each
+patch to roughly one local shard plus one DOF-target angular span, which keeps
+the preconditioner local but avoids that fragmentation failure mode.
+
+On the same benchmark, the cold 8-device one-shot measurement for forced
+``theta_schwarz`` improved from about ``7.53 s`` on the old auto patch rule to
+about ``4.07 s`` on current ``main``. This does not make 8-way CPU sharding
+ideal yet, but it removes the worst broken region of the previous heuristic and
+gives a safer base for the next two-level/domain-decomposition pass.
+
+The sharded solve benchmark driver also now supports explicit backend
+selection:
+
+.. code-block:: bash
+
+   # CPU host-sharded benchmark
+   python examples/performance/benchmark_sharded_solve_scaling.py \
+     --backend cpu \
+     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
+     --devices 1 2 4 8
+
+   # One-node GPU benchmark
+   PYTHONPATH=. python examples/performance/benchmark_sharded_solve_scaling.py \
+     --backend gpu \
+     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
+     --devices 1 2
+
+For the GPU benchmark path, the runner now uses ``CUDA_VISIBLE_DEVICES`` and
+disables JAX preallocation by default in the subprocess so multi-GPU
+benchmarking does not fail immediately by reserving the full device memory
+before the solve starts.
+
 See also:
 
 - `docs/performance_techniques.rst`
