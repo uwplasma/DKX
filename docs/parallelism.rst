@@ -712,6 +712,14 @@ The current executable-side scaling story is functional but not yet the final
 research-grade result. On the challenging geometryScheme=2 benchmark inputs used
 in this repository, the current `main` branch produced the following measurements:
 
+.. figure:: _static/figures/parallel/strong_scaling_snapshot.png
+   :alt: Publication-style strong scaling summary for sfincs_jax and SFINCS v3
+   :width: 96%
+
+   Current measured scaling snapshot. The figure compares matched CPU strong
+   scaling against Fortran MPI, shows the current transport-worker behavior,
+   and records the current office GPU status including the large-case timeout.
+
 - Local CPU sharded RHSMode=1 benchmark on
   ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
 
