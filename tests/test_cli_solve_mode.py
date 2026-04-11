@@ -529,3 +529,70 @@ def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> Non
 
     assert rc == 0
     assert captured["output_path"] == Path(tmp_path / "sfincsOutput.h5")
+
+
+def test_main_preserves_shard_axis_before_subcommand(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured["shard_axis"] = os.environ.get("SFINCS_JAX_MATVEC_SHARD_AXIS")
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+    monkeypatch.setenv("SFINCS_JAX_CORES", "4")
+    monkeypatch.setenv("SFINCS_JAX_CPU_DEVICES", "4")
+
+    rc = cli.main(
+        [
+            "--cores",
+            "4",
+            "--shard-axis",
+            "theta",
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--geometry-only",
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["shard_axis"] == "theta"
+
+
+def test_main_preserves_transport_workers_before_subcommand(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured["parallel_mode"] = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL")
+        captured["workers"] = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS")
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            "--transport-workers",
+            "3",
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["parallel_mode"] == "process"
+    assert captured["workers"] == "3"
