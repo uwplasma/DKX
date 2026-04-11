@@ -36,6 +36,50 @@ def _configure_backend_env(*, env: dict[str, str], devices: int, backend: str) -
         env.pop("CUDA_VISIBLE_DEVICES", None)
 
 
+def _configure_solver_env(
+    *,
+    env: dict[str, str],
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    rhs1_precond: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+) -> None:
+    env["SFINCS_JAX_MATVEC_SHARD_AXIS"] = shard_axis
+    env["SFINCS_JAX_GMRES_DISTRIBUTED"] = gmres_distributed
+    env["SFINCS_JAX_DISTRIBUTED_KRYLOV"] = distributed_krylov
+    env["SFINCS_JAX_AUTO_SHARD"] = "0"
+    env["SFINCS_JAX_IMPLICIT_SOLVE"] = "1"
+    env["SFINCS_JAX_SHARD_PAD"] = "1"
+    env["SFINCS_JAX_FORTRAN_STDOUT"] = "0"
+    env["SFINCS_JAX_SOLVER_ITER_STATS"] = "0"
+    if rhs1_precond:
+        env["SFINCS_JAX_RHSMODE1_PRECONDITIONER"] = rhs1_precond
+    else:
+        env.pop("SFINCS_JAX_RHSMODE1_PRECONDITIONER", None)
+    if periodic_stencil_on_sharded == "off":
+        env["SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED"] = "0"
+    elif periodic_stencil_on_sharded == "on":
+        env["SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED"] = "1"
+    else:
+        env.pop("SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED", None)
+    if schwarz_coarse_levels is None:
+        env.pop("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS", None)
+    else:
+        env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS"] = str(int(schwarz_coarse_levels))
+    if schwarz_coarse_steps is None:
+        env.pop("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS", None)
+    else:
+        env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS"] = str(int(schwarz_coarse_steps))
+    if schwarz_coarse_damp is None:
+        env.pop("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP", None)
+    else:
+        env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP"] = str(float(schwarz_coarse_damp))
+
+
 def _run_once(
     input_path: Path,
     *,
@@ -46,26 +90,22 @@ def _run_once(
     nsolve: int,
     rhs1_precond: str,
     backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
 ) -> float:
     _normalized_backend(backend)
-    os.environ["SFINCS_JAX_FORTRAN_STDOUT"] = "0"
-    os.environ["SFINCS_JAX_SOLVER_ITER_STATS"] = "0"
-    os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] = shard_axis
-    os.environ["SFINCS_JAX_GMRES_DISTRIBUTED"] = gmres_distributed
-    os.environ["SFINCS_JAX_DISTRIBUTED_KRYLOV"] = distributed_krylov
-    os.environ["SFINCS_JAX_AUTO_SHARD"] = "0"
-    os.environ["SFINCS_JAX_IMPLICIT_SOLVE"] = "1"
-    os.environ["SFINCS_JAX_SHARD_PAD"] = "1"
-    if rhs1_precond:
-        os.environ["SFINCS_JAX_RHSMODE1_PRECONDITIONER"] = rhs1_precond
-    else:
-        os.environ.pop("SFINCS_JAX_RHSMODE1_PRECONDITIONER", None)
-    if periodic_stencil_on_sharded == "off":
-        os.environ["SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED"] = "0"
-    elif periodic_stencil_on_sharded == "on":
-        os.environ["SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED"] = "1"
-    else:
-        os.environ.pop("SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED", None)
+    _configure_solver_env(
+        env=os.environ,
+        shard_axis=shard_axis,
+        gmres_distributed=gmres_distributed,
+        distributed_krylov=distributed_krylov,
+        periodic_stencil_on_sharded=periodic_stencil_on_sharded,
+        rhs1_precond=rhs1_precond,
+        schwarz_coarse_levels=schwarz_coarse_levels,
+        schwarz_coarse_steps=schwarz_coarse_steps,
+        schwarz_coarse_damp=schwarz_coarse_damp,
+    )
     nml = read_sfincs_input(input_path)
     t0 = time.perf_counter()
     for _ in range(max(1, int(nsolve))):
@@ -89,27 +129,23 @@ def _run_once_subprocess(
     nsolve: int,
     rhs1_precond: str,
     backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
 ) -> float:
     env = os.environ.copy()
     _configure_backend_env(env=env, devices=devices, backend=backend)
-    env["SFINCS_JAX_MATVEC_SHARD_AXIS"] = shard_axis
-    env["SFINCS_JAX_GMRES_DISTRIBUTED"] = gmres_distributed
-    env["SFINCS_JAX_DISTRIBUTED_KRYLOV"] = distributed_krylov
-    env["SFINCS_JAX_AUTO_SHARD"] = "0"
-    env["SFINCS_JAX_IMPLICIT_SOLVE"] = "1"
-    env["SFINCS_JAX_SHARD_PAD"] = "1"
-    env["SFINCS_JAX_FORTRAN_STDOUT"] = "0"
-    env["SFINCS_JAX_SOLVER_ITER_STATS"] = "0"
-    if rhs1_precond:
-        env["SFINCS_JAX_RHSMODE1_PRECONDITIONER"] = rhs1_precond
-    else:
-        env.pop("SFINCS_JAX_RHSMODE1_PRECONDITIONER", None)
-    if periodic_stencil_on_sharded == "off":
-        env["SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED"] = "0"
-    elif periodic_stencil_on_sharded == "on":
-        env["SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED"] = "1"
-    else:
-        env.pop("SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED", None)
+    _configure_solver_env(
+        env=env,
+        shard_axis=shard_axis,
+        gmres_distributed=gmres_distributed,
+        distributed_krylov=distributed_krylov,
+        periodic_stencil_on_sharded=periodic_stencil_on_sharded,
+        rhs1_precond=rhs1_precond,
+        schwarz_coarse_levels=schwarz_coarse_levels,
+        schwarz_coarse_steps=schwarz_coarse_steps,
+        schwarz_coarse_damp=schwarz_coarse_damp,
+    )
     if cache_dir is not None:
         env["JAX_COMPILATION_CACHE_DIR"] = str(cache_dir)
 
@@ -220,6 +256,24 @@ def main() -> None:
         choices=("auto", "cpu", "gpu"),
         help="Benchmark backend. 'cpu' uses SFINCS_JAX_CPU_DEVICES; 'gpu' uses CUDA_VISIBLE_DEVICES.",
     )
+    parser.add_argument(
+        "--schwarz-coarse-levels",
+        type=int,
+        default=None,
+        help="Optional override for SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS.",
+    )
+    parser.add_argument(
+        "--schwarz-coarse-steps",
+        type=int,
+        default=None,
+        help="Optional override for SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS.",
+    )
+    parser.add_argument(
+        "--schwarz-coarse-damp",
+        type=float,
+        default=None,
+        help="Optional override for SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP.",
+    )
     args = parser.parse_args()
 
     input_path = args.input
@@ -236,6 +290,9 @@ def main() -> None:
             nsolve=int(args.nsolve),
             rhs1_precond=str(args.rhs1_precond),
             backend=str(args.backend),
+            schwarz_coarse_levels=args.schwarz_coarse_levels,
+            schwarz_coarse_steps=args.schwarz_coarse_steps,
+            schwarz_coarse_damp=args.schwarz_coarse_damp,
         )
         print(f"{dt:.6f}")
         return
@@ -260,6 +317,9 @@ def main() -> None:
                 nsolve=int(args.nsolve),
                 rhs1_precond=str(args.rhs1_precond),
                 backend=str(args.backend),
+                schwarz_coarse_levels=args.schwarz_coarse_levels,
+                schwarz_coarse_steps=args.schwarz_coarse_steps,
+                schwarz_coarse_damp=args.schwarz_coarse_damp,
             )
 
     results = []
@@ -270,7 +330,9 @@ def main() -> None:
             f"distributed_krylov={args.distributed_krylov} "
             f"stencil_on_sharded={args.periodic_stencil_on_sharded} "
             f"nsolve={int(args.nsolve)} rhs1_precond={args.rhs1_precond or 'auto'} "
-            f"backend={args.backend}",
+            f"backend={args.backend} coarse_levels={args.schwarz_coarse_levels if args.schwarz_coarse_levels is not None else 'auto'} "
+            f"coarse_steps={args.schwarz_coarse_steps if args.schwarz_coarse_steps is not None else 'auto'} "
+            f"coarse_damp={args.schwarz_coarse_damp if args.schwarz_coarse_damp is not None else 'auto'}",
             flush=True,
         )
         for i in range(max(args.warmup, 0)):
@@ -286,6 +348,9 @@ def main() -> None:
                 nsolve=int(args.nsolve),
                 rhs1_precond=str(args.rhs1_precond),
                 backend=str(args.backend),
+                schwarz_coarse_levels=args.schwarz_coarse_levels,
+                schwarz_coarse_steps=args.schwarz_coarse_steps,
+                schwarz_coarse_damp=args.schwarz_coarse_damp,
             )
             print(f"[device {d}] warmup {i + 1}/{max(args.warmup, 0)} done", flush=True)
         times = []
@@ -302,6 +367,9 @@ def main() -> None:
                 nsolve=int(args.nsolve),
                 rhs1_precond=str(args.rhs1_precond),
                 backend=str(args.backend),
+                schwarz_coarse_levels=args.schwarz_coarse_levels,
+                schwarz_coarse_steps=args.schwarz_coarse_steps,
+                schwarz_coarse_damp=args.schwarz_coarse_damp,
             )
             times.append(dt)
             print(f"[device {d}] repeat {i + 1}/{max(args.repeats, 1)} done in {dt:.3f}s", flush=True)
@@ -336,6 +404,9 @@ def main() -> None:
         "nsolve": int(args.nsolve),
         "rhs1_precond": str(args.rhs1_precond),
         "backend": str(args.backend),
+        "schwarz_coarse_levels": args.schwarz_coarse_levels,
+        "schwarz_coarse_steps": args.schwarz_coarse_steps,
+        "schwarz_coarse_damp": args.schwarz_coarse_damp,
     }
 
     json_path = out_dir / "sharded_solve_scaling.json"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from examples.performance.benchmark_sharded_solve_scaling import _configure_backend_env
+from examples.performance.benchmark_sharded_solve_scaling import _configure_backend_env, _configure_solver_env
 
 
 def test_configure_backend_env_cpu() -> None:
@@ -22,3 +22,22 @@ def test_configure_backend_env_auto_defaults_to_cpu_devices() -> None:
     env: dict[str, str] = {}
     _configure_backend_env(env=env, devices=8, backend="auto")
     assert env["SFINCS_JAX_CPU_DEVICES"] == "8"
+
+
+def test_configure_solver_env_sets_multilevel_schwarz_controls() -> None:
+    env: dict[str, str] = {}
+    _configure_solver_env(
+        env=env,
+        shard_axis="theta",
+        gmres_distributed="0",
+        distributed_krylov="auto",
+        periodic_stencil_on_sharded="auto",
+        rhs1_precond="theta_schwarz",
+        schwarz_coarse_levels=2,
+        schwarz_coarse_steps=1,
+        schwarz_coarse_damp=0.8,
+    )
+    assert env["SFINCS_JAX_RHSMODE1_PRECONDITIONER"] == "theta_schwarz"
+    assert env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS"] == "2"
+    assert env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP"] == "0.8"
