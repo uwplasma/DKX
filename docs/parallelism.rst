@@ -723,9 +723,13 @@ in this repository, the current `main` branch produced the following measurement
 - Local CPU sharded RHSMode=1 benchmark on
   ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
 
-  - `1` device: `4.91 s`
-  - `2` devices: `4.45 s`
-  - `4` devices: `7.00 s`
+  - `1` device: `3.99 s`
+  - `2` devices: `3.56 s`
+  - `4` devices: `3.97 s`
+  - `8` devices: `4.46 s`
+
+  These runs use the current bounded multilevel Schwarz correction path
+  (``--rhs1-precond theta_schwarz --schwarz-coarse-levels 2``).
 
 - Local Fortran v3 MPI benchmark on the same input:
 
@@ -734,11 +738,11 @@ in this repository, the current `main` branch produced the following measurement
   - `mpirun -n 4`: `0.39 s`
 
 - Local CPU transport-worker benchmark on
-  ``examples/performance/transport_parallel_xlarge.input.namelist``:
+  ``examples/performance/transport_parallel_2min.input.namelist``:
 
-  - `1` worker: `5.00 s`
-  - `2` workers: `9.17 s`
-  - `4` workers: `7.90 s`
+  - `1` worker: `252.5 s`
+  - `2` workers: `169.2 s`
+  - `4` workers: `93.7 s`
 
 - Office workstation GPU sharded RHSMode=1 benchmark on the medium-large input
   ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
@@ -761,7 +765,7 @@ These results support the current deployment recommendation:
 - The robust production throughput path today is still **one GPU per case / scan
   point** and bounded **CPU host sharding**.
 - Multi-GPU single-case sharding remains experimental until stronger local
-  domain decomposition and communication-avoiding Krylov are in place.
+  domain decomposition and lower-synchronization Krylov are in place.
 
 Recent sharded-solve updates
 ----------------------------
@@ -774,16 +778,29 @@ small to capture cross-shard angular coupling. The current auto rule grows each
 patch to roughly one local shard plus one DOF-target angular span, which keeps
 the preconditioner local but avoids that fragmentation failure mode.
 
-On the same benchmark, the cold 8-device one-shot measurement for forced
-``theta_schwarz`` improved from about ``7.53 s`` on the old auto patch rule to
-about ``4.07 s`` on current ``main``. This does not make 8-way CPU sharding
-ideal yet, but it removes the worst broken region of the previous heuristic and
-gives a safer base for the next two-level/domain-decomposition pass.
+On the same benchmark, the older published multi-device timings were:
 
-Current ``main`` also adds a bounded two-level correction on top of the
+- `1` device: `4.91 s`
+- `2` devices: `4.45 s`
+- `4` devices: `7.00 s`
+
+Current ``main`` with the wider auto patch rule and the bounded multilevel
+residual correction now measures:
+
+- `1` device: `3.99 s`
+- `2` devices: `3.56 s`
+- `4` devices: `3.97 s`
+- `8` devices: `4.46 s`
+
+This is still not ideal strong scaling, but it removes the old 4-device
+collapse and makes the 8-device CPU path usable for real benchmarking instead of
+pathological.
+
+Current ``main`` also adds a bounded multilevel correction on top of the
 theta/zeta Schwarz patches when the solve is actually sharded across many
-devices. The added coarse step reuses a wider theta/zeta block-diagonal
-preconditioner as a single residual correction, which improves the worst
+devices. The first coarse step reuses a wider theta/zeta block-diagonal
+preconditioner as a residual correction; on 8-device runs, a second still-wider
+correction level can be enabled automatically. This improves the worst
 high-device fragmentation cases without changing the operator or output parity.
 
 The sharded solve benchmark driver also now supports explicit backend
@@ -795,18 +812,23 @@ selection:
    python examples/performance/benchmark_sharded_solve_scaling.py \
      --backend cpu \
      --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 4 8
+     --devices 1 2 4 8 \
+     --rhs1-precond theta_schwarz \
+     --schwarz-coarse-levels 2
 
    # One-node GPU benchmark
    PYTHONPATH=. python examples/performance/benchmark_sharded_solve_scaling.py \
      --backend gpu \
      --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2
+     --devices 1 2 \
+     --rhs1-precond theta_schwarz \
+     --schwarz-coarse-levels 2
 
 For the GPU benchmark path, the runner now uses ``CUDA_VISIBLE_DEVICES`` and
-disables JAX preallocation by default in the subprocess so multi-GPU
-benchmarking does not fail immediately by reserving the full device memory
-before the solve starts.
+disables JAX preallocation by default in the subprocess. It also enables the
+``cuda_malloc_async`` allocator in the benchmark subprocess so multi-GPU
+benchmarking is less sensitive to fragmentation than the plain default allocator
+path.
 
 See also:
 
