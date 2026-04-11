@@ -128,3 +128,24 @@ def test_rhs1_dd_auto_block_size_respects_global_extent() -> None:
     )
     assert block == 24
     assert block <= 31
+
+
+def test_rhs1_dd_coarse_block_size_widens_local_patch() -> None:
+    coarse = vd._rhs1_dd_coarse_block_size(n=31, block=12, overlap=1)
+    assert coarse == 20
+    assert coarse > 12
+
+
+def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
+    base = lambda v: 0.5 * v
+    coarse = lambda v: 0.25 * v
+    matvec = lambda v: 2.0 * v
+    precond = vd._compose_residual_correction_preconditioner(
+        base=base,
+        coarse=coarse,
+        matvec=matvec,
+        damping=1.0,
+        steps=1,
+    )
+    out = precond(np.array([4.0]))
+    assert np.allclose(np.asarray(out), np.array([2.0]))

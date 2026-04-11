@@ -6088,6 +6088,15 @@ def _rhs1_dd_auto_block_size(
     return max(1, min(n, int(block)))
 
 
+def _rhs1_dd_coarse_block_size(*, n: int, block: int, overlap: int) -> int:
+    """Choose a wider coarse theta/zeta block for two-level Schwarz correction."""
+    n = max(1, int(n))
+    block = max(1, min(n, int(block)))
+    overlap = max(0, int(overlap))
+    coarse = block + max(8, block // 2, 2 * overlap)
+    return max(1, min(n, int(coarse)))
+
+
 def _build_rhsmode1_preconditioner_operator_point(op: V3FullSystemOperator) -> V3FullSystemOperator:
     """Return a simplified RHSMode=1 operator for point-block preconditioning.
 
@@ -8093,7 +8102,36 @@ def _build_rhsmode1_theta_schwarz_preconditioner(
             z_full = z_full.at[extra_idx_jnp].set(z_extra, unique_indices=True)
         return jnp.asarray(z_full, dtype=jnp.float64)
 
-    apply_full_safe = _safe_preconditioner(_apply_full)
+    coarse_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE", "").strip().lower()
+    coarse_auto = coarse_env not in {"0", "false", "no", "off"}
+    coarse_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS", "").strip()
+    try:
+        coarse_steps = int(coarse_steps_env) if coarse_steps_env else 1
+    except ValueError:
+        coarse_steps = 1
+    coarse_damp_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP", "").strip()
+    try:
+        coarse_damp = float(coarse_damp_env) if coarse_damp_env else 1.0
+    except ValueError:
+        coarse_damp = 1.0
+
+    apply_full_raw = _apply_full
+    if coarse_auto and jax.device_count() >= 4 and _matvec_shard_axis(op) == "theta":
+        coarse_block = _rhs1_dd_coarse_block_size(
+            n=int(op.n_theta),
+            block=int(block),
+            overlap=int(overlap),
+        )
+        coarse_precond = _build_rhsmode1_theta_dd_preconditioner(op=op, block=coarse_block)
+        apply_full_raw = _compose_residual_correction_preconditioner(
+            base=apply_full_raw,
+            coarse=coarse_precond,
+            matvec=lambda v: apply_v3_full_system_operator_cached(op, v),
+            damping=coarse_damp,
+            steps=coarse_steps,
+        )
+
+    apply_full_safe = _safe_preconditioner(apply_full_raw)
     if reduce_full is None or expand_reduced is None:
         return apply_full_safe
 
@@ -8265,7 +8303,36 @@ def _build_rhsmode1_zeta_schwarz_preconditioner(
             z_full = z_full.at[extra_idx_jnp].set(z_extra, unique_indices=True)
         return jnp.asarray(z_full, dtype=jnp.float64)
 
-    apply_full_safe = _safe_preconditioner(_apply_full)
+    coarse_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE", "").strip().lower()
+    coarse_auto = coarse_env not in {"0", "false", "no", "off"}
+    coarse_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS", "").strip()
+    try:
+        coarse_steps = int(coarse_steps_env) if coarse_steps_env else 1
+    except ValueError:
+        coarse_steps = 1
+    coarse_damp_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP", "").strip()
+    try:
+        coarse_damp = float(coarse_damp_env) if coarse_damp_env else 1.0
+    except ValueError:
+        coarse_damp = 1.0
+
+    apply_full_raw = _apply_full
+    if coarse_auto and jax.device_count() >= 4 and _matvec_shard_axis(op) == "zeta":
+        coarse_block = _rhs1_dd_coarse_block_size(
+            n=int(op.n_zeta),
+            block=int(block),
+            overlap=int(overlap),
+        )
+        coarse_precond = _build_rhsmode1_zeta_dd_preconditioner(op=op, block=coarse_block)
+        apply_full_raw = _compose_residual_correction_preconditioner(
+            base=apply_full_raw,
+            coarse=coarse_precond,
+            matvec=lambda v: apply_v3_full_system_operator_cached(op, v),
+            damping=coarse_damp,
+            steps=coarse_steps,
+        )
+
+    apply_full_safe = _safe_preconditioner(apply_full_raw)
     if reduce_full is None or expand_reduced is None:
         return apply_full_safe
 
@@ -8541,6 +8608,30 @@ def _compose_preconditioners(
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     def _apply(v: jnp.ndarray) -> jnp.ndarray:
         return second(first(v))
+
+    return _apply
+
+
+def _compose_residual_correction_preconditioner(
+    *,
+    base: Callable[[jnp.ndarray], jnp.ndarray],
+    coarse: Callable[[jnp.ndarray], jnp.ndarray],
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    damping: float = 1.0,
+    steps: int = 1,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Apply a small multiplicative coarse correction after a base preconditioner."""
+    steps = max(0, int(steps))
+    damping = float(damping)
+    if steps <= 0:
+        return base
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        z = base(v)
+        for _ in range(steps):
+            r = v - matvec(z)
+            z = z + damping * coarse(r)
+        return z
 
     return _apply
 

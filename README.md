@@ -146,6 +146,9 @@ Current recommendation:
 
 - CPU host sharding is supported and deterministic, but the measured speedup is
   still case-dependent.
+- The current sharded RHSMode=1 CPU path uses a wider Schwarz patch rule plus a
+  bounded coarse residual correction to avoid the worst 8-device fragmentation
+  failures seen in earlier releases.
 - Use one GPU per case or scan point for production throughput today.
 - Multi-GPU single-case sharding is available for benchmarking and very large
   runs, but it remains experimental and is not yet the default recommendation.
