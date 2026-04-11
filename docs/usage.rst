@@ -188,6 +188,12 @@ Relevant CLI flags:
 - ``--shard-pad`` / ``--no-shard-pad``: control neutral padding when the sharded
   dimension is not divisible by the visible device count.
 
+At verbosity level ``-v`` or higher, the CLI now prints the active parallel
+runtime summary (requested cores, host-device count, shard axis, transport
+worker mode, distributed Krylov settings, and multi-host bootstrap fields).
+This is the supported way to verify what the executable is actually doing on a
+workstation or cluster launch.
+
 Solver controls (environment variables)
 ---------------------------------------
 
