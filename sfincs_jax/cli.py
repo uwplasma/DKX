@@ -126,6 +126,62 @@ def _add_common_cli_args(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(fortran_stdout=None)
 
 
+def _add_parallel_cli_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--transport-workers",
+        type=int,
+        default=None,
+        help="Parallel worker processes for independent transport-RHS solves.",
+    )
+    parser.add_argument(
+        "--shard-axis",
+        default=None,
+        choices=("auto", "off", "theta", "zeta", "x", "flat"),
+        help="Single-solve sharding axis for the executable path.",
+    )
+    parser.add_argument(
+        "--distributed-gmres",
+        default=None,
+        help="Override SFINCS_JAX_GMRES_DISTRIBUTED for distributed RHSMode=1 solves.",
+    )
+    parser.add_argument(
+        "--distributed-krylov",
+        default=None,
+        help="Override SFINCS_JAX_DISTRIBUTED_KRYLOV for sharded solves.",
+    )
+    parser.add_argument(
+        "--shard-pad",
+        dest="shard_pad",
+        action="store_true",
+        default=None,
+        help="Allow neutral padding when sharded dimensions are not divisible by device count.",
+    )
+    parser.add_argument(
+        "--no-shard-pad",
+        dest="shard_pad",
+        action="store_false",
+        help="Disable neutral padding for sharded dimensions.",
+    )
+    parser.add_argument(
+        "--distributed",
+        action="store_true",
+        help="Enable JAX multi-host distributed initialization for this CLI run.",
+    )
+    parser.add_argument("--process-id", type=int, default=None, help="Multi-host JAX process id.")
+    parser.add_argument("--process-count", type=int, default=None, help="Multi-host JAX process count.")
+    parser.add_argument(
+        "--coordinator-address",
+        default=None,
+        help="Multi-host JAX coordinator host or host:port.",
+    )
+    parser.add_argument(
+        "--coordinator-port",
+        type=int,
+        default=None,
+        help="Coordinator port when --coordinator-address omits it.",
+    )
+
+
 def _cmd_solve_v3(args: argparse.Namespace) -> int:
     t0 = _now()
     from .v3_driver import solve_v3_full_system_linear_gmres  # noqa: PLC0415
@@ -376,6 +432,60 @@ def _apply_runtime_env_defaults() -> None:
     os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
 
+def _apply_parallel_runtime_settings(args: argparse.Namespace) -> None:
+    transport_workers = getattr(args, "transport_workers", None)
+    if transport_workers is not None:
+        workers_val = max(1, int(transport_workers))
+        os.environ["SFINCS_JAX_TRANSPORT_PARALLEL"] = "process" if workers_val > 1 else "off"
+        os.environ["SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS"] = str(workers_val)
+
+    shard_axis = getattr(args, "shard_axis", None)
+    if shard_axis is not None:
+        shard_axis = str(shard_axis).strip().lower()
+        if shard_axis == "off":
+            os.environ["SFINCS_JAX_SHARD"] = "0"
+            os.environ["SFINCS_JAX_AUTO_SHARD"] = "0"
+            os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] = "off"
+        elif shard_axis == "auto":
+            os.environ["SFINCS_JAX_SHARD"] = "1"
+            os.environ["SFINCS_JAX_AUTO_SHARD"] = "1"
+            os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] = "auto"
+        else:
+            os.environ["SFINCS_JAX_SHARD"] = "1"
+            os.environ["SFINCS_JAX_AUTO_SHARD"] = "0"
+            os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] = shard_axis
+
+    distributed_gmres = getattr(args, "distributed_gmres", None)
+    if distributed_gmres is not None:
+        os.environ["SFINCS_JAX_GMRES_DISTRIBUTED"] = str(distributed_gmres)
+
+    distributed_krylov = getattr(args, "distributed_krylov", None)
+    if distributed_krylov is not None:
+        os.environ["SFINCS_JAX_DISTRIBUTED_KRYLOV"] = str(distributed_krylov)
+
+    shard_pad = getattr(args, "shard_pad", None)
+    if shard_pad is not None:
+        os.environ["SFINCS_JAX_SHARD_PAD"] = "1" if shard_pad else "0"
+
+    if bool(getattr(args, "distributed", False)):
+        from . import initialize_distributed_runtime_from_env  # noqa: PLC0415
+
+        os.environ["SFINCS_JAX_DISTRIBUTED"] = "1"
+        process_id = getattr(args, "process_id", None)
+        process_count = getattr(args, "process_count", None)
+        coordinator_address = getattr(args, "coordinator_address", None)
+        coordinator_port = getattr(args, "coordinator_port", None)
+        if process_id is not None:
+            os.environ["SFINCS_JAX_PROCESS_ID"] = str(int(process_id))
+        if process_count is not None:
+            os.environ["SFINCS_JAX_PROCESS_COUNT"] = str(int(process_count))
+        if coordinator_address:
+            os.environ["SFINCS_JAX_COORDINATOR_ADDRESS"] = str(coordinator_address)
+        if coordinator_port is not None:
+            os.environ["SFINCS_JAX_COORDINATOR_PORT"] = str(int(coordinator_port))
+        initialize_distributed_runtime_from_env()
+
+
 def _auto_cores_for_args(args: argparse.Namespace) -> int:
     """Choose a conservative default core count by workload type.
 
@@ -417,7 +527,17 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
     }
     if any(tok in known_cmds for tok in argv):
         return argv
-    global_opts_with_val = {"--cores"}
+    global_opts_with_val = {
+        "--cores",
+        "--transport-workers",
+        "--shard-axis",
+        "--distributed-gmres",
+        "--distributed-krylov",
+        "--process-id",
+        "--process-count",
+        "--coordinator-address",
+        "--coordinator-port",
+    }
     global_opts_no_val = {
         "-v",
         "--verbose",
@@ -425,6 +545,9 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
         "--quiet",
         "--fortran-stdout",
         "--no-fortran-stdout",
+        "--shard-pad",
+        "--no-shard-pad",
+        "--distributed",
     }
     global_args: list[str] = []
     rest: list[str] = []
@@ -464,10 +587,12 @@ def main(argv: list[str] | None = None) -> int:
     argv = _normalize_default_argv(argv)
     parser = argparse.ArgumentParser(prog="sfincs_jax")
     _add_common_cli_args(parser)
+    _add_parallel_cli_args(parser)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_solve = sub.add_parser("solve-v3", help="Solve a supported v3 linear problem matrix-free and write stateVector.npy.")
     _add_common_cli_args(p_solve)
+    _add_parallel_cli_args(p_solve)
     p_solve.add_argument("--input", required=True, help="Path to input.namelist")
     p_solve.add_argument("--out-state", default="stateVector.npy", help="Where to write the solution vector (NumPy .npy)")
     p_solve.add_argument("--tol", default="1e-10", help="GMRES relative tolerance")
@@ -492,6 +617,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Run an Er (or dPhiHatd*) scan by writing sfincsOutput.h5 in multiple run directories.",
     )
     _add_common_cli_args(p_scan)
+    _add_parallel_cli_args(p_scan)
     p_scan.add_argument("--input", required=True, help="Path to input.namelist (template).")
     p_scan.add_argument("--out-dir", required=True, help="Directory to create scan subdirectories inside.")
     p_scan.add_argument(
@@ -518,12 +644,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Given an existing scan-er directory, solve for ambipolar Er roots and write ambipolarSolutions.dat.",
     )
     _add_common_cli_args(p_ambi)
+    _add_parallel_cli_args(p_ambi)
     p_ambi.add_argument("--scan-dir", required=True, help="Scan directory produced by `sfincs_jax scan-er`.")
     p_ambi.add_argument("--n-fine", default="500", help="Number of fine-grid points for bracketing (default: 500).")
     p_ambi.set_defaults(func=_cmd_ambipolar_solve)
 
     p_run = sub.add_parser("run-fortran", help="Run the compiled Fortran SFINCS v3 executable.")
     _add_common_cli_args(p_run)
+    _add_parallel_cli_args(p_run)
     p_run.add_argument("--input", required=True, help="Path to input.namelist")
     p_run.add_argument("--exe", default=None, help="Path to Fortran v3 sfincs executable")
     p_run.add_argument("--workdir", default=None, help="Directory to run in (default: temp dir)")
@@ -531,6 +659,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_out = sub.add_parser("write-output", help="Write a SFINCS-style sfincsOutput.h5 using sfincs_jax.")
     _add_common_cli_args(p_out)
+    _add_parallel_cli_args(p_out)
     p_out.add_argument("--input", required=True, help="Path to input.namelist")
     p_out.add_argument("--out", default="sfincsOutput.h5", help="Where to write sfincsOutput.h5")
     p_out.add_argument(
@@ -567,6 +696,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_tm = sub.add_parser("transport-matrix-v3", help="Solve RHSMode=2/3 transport-matrix systems and write transportMatrix.npy.")
     _add_common_cli_args(p_tm)
+    _add_parallel_cli_args(p_tm)
     p_tm.add_argument("--input", required=True, help="Path to input.namelist (must have RHSMode=2 or 3)")
     p_tm.add_argument("--out-matrix", default="transportMatrix.npy", help="Where to write the transport matrix (NumPy .npy)")
     p_tm.add_argument(
@@ -588,6 +718,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_dump = sub.add_parser("dump-h5", help="Dump SFINCS HDF5 output to JSON (small files only).")
     _add_common_cli_args(p_dump)
+    _add_parallel_cli_args(p_dump)
     p_dump.add_argument("--sfincs-output", required=True, help="Path to sfincsOutput.h5")
     p_dump.add_argument("--out-json", required=True, help="Where to write JSON")
     p_dump.add_argument("--keys-only", action="store_true", help="Only print dataset names")
@@ -595,6 +726,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_cmp = sub.add_parser("compare-h5", help="Compare two SFINCS HDF5 output files.")
     _add_common_cli_args(p_cmp)
+    _add_parallel_cli_args(p_cmp)
     p_cmp.add_argument("--a", required=True, help="First sfincsOutput.h5")
     p_cmp.add_argument("--b", required=True, help="Second sfincsOutput.h5")
     p_cmp.add_argument("--rtol", default="1e-12")
@@ -608,6 +740,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Run a vendored upstream v3 utils/ postprocessing script (best-effort, requires sfincsOutput.h5).",
     )
     _add_common_cli_args(p_pp)
+    _add_parallel_cli_args(p_pp)
     p_pp.add_argument("--case-dir", required=True, help="Directory containing sfincsOutput.h5")
     p_pp.add_argument("--util", required=True, help="Upstream util script name (e.g. sfincsScanPlot_1)")
     p_pp.add_argument("--utils-dir", default=None, help="Override utils/ directory (else auto-detect / env var)")
@@ -650,6 +783,7 @@ def main(argv: list[str] | None = None) -> int:
         if not (os.environ.get("SFINCS_JAX_CI") or os.environ.get("CI")):
             args.cores = _auto_cores_for_args(args)
     _apply_cores_setting(args.cores)
+    _apply_parallel_runtime_settings(args)
     if args.fortran_stdout is True:
         os.environ["SFINCS_JAX_FORTRAN_STDOUT"] = "1"
     elif args.fortran_stdout is False:

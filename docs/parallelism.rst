@@ -625,6 +625,70 @@ Recommended workflows
      export SFINCS_JAX_COORDINATOR_PORT=1234
 
 
+Executable-first rollout
+------------------------
+
+The near-term parallelization program is split into two explicit tracks:
+
+- **Executable / CLI path first**: prioritize throughput, memory, and scalable
+  deployment on one node and then many nodes. This path may use explicit
+  host-side solvers, process pools, or non-differentiable orchestration when
+  that materially improves practical HPC performance.
+- **Differentiable Python path second**: preserve JAX-native operator structure,
+  sharding, and implicit-diff compatibility for workflows that genuinely need
+  gradients.
+
+That split matters because the fastest cluster path and the cleanest
+end-to-end differentiable path are not always the same implementation.
+
+The current hardware targets are:
+
+- **Local MacBook Pro M3**: one visible JAX CPU device by default; host-device
+  parallelism is activated with ``--cores N`` or ``SFINCS_JAX_CORES=N``.
+- **Office workstation**: two visible CUDA devices, suitable for one-node
+  multi-GPU sharded benchmark and fallback validation.
+
+The immediate executable-facing milestones are:
+
+1. make the CLI surface the actual parallel runtime controls directly,
+2. benchmark one-node multi-core CPU and one-node multi-GPU sharded solves from
+   the executable path,
+3. stabilize multi-host bootstrap and Slurm launch patterns,
+4. then push stronger domain decomposition and communication-avoiding Krylov for
+   strong scaling on large single-RHS solves.
+
+The corresponding differentiable-Python milestones are:
+
+1. keep operator partitioning and residual evaluation JAX-native,
+2. validate sharded JAX solves on one node before widening to multi-host,
+3. then evaluate implicit-diff and gradient correctness across the distributed
+   path.
+
+The new CLI flags are the public entry point for that rollout:
+
+.. code-block:: bash
+
+   sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
+
+   sfincs_jax transport-matrix-v3 \
+     --input /path/to/input.namelist \
+     --transport-workers 4
+
+   CUDA_VISIBLE_DEVICES=0,1 \
+   sfincs_jax write-output \
+     --input /path/to/input.namelist \
+     --shard-axis theta \
+     --distributed-gmres auto
+
+   sfincs_jax write-output \
+     --input /path/to/input.namelist \
+     --distributed \
+     --process-count 8 \
+     --process-id ${RANK} \
+     --coordinator-address node0 \
+     --coordinator-port 1234
+
+
 Parity and determinism
 ----------------------
 

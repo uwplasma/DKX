@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-04-01 (America/Chicago)
+Last updated: 2026-04-10 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -361,6 +361,34 @@ Implication for sfincs_jax:
 
 Perlmutter references indicate heterogeneous CPU/GPU architecture and high-parallel-concurrency workflows.
 
+### 13.3 Research-grade parallelization program
+
+Parallelization work is now split into two explicit tracks:
+
+- `Executable / CLI track`:
+  - primary target for one-node and cluster throughput,
+  - does **not** need to remain fully differentiable,
+  - may use process pools, explicit sparse/direct solves, host-side orchestration, or backend-specific launch choices if they improve wall time and memory.
+- `Differentiable Python track`:
+  - preserves JAX-native operator structure and autodiff-compatible solve paths,
+  - adopts distributed/sharded execution only when gradient correctness is still defensible and tested.
+
+Immediate hardware baseline:
+
+- Local MacBook Pro M3:
+  - JAX currently sees `1` CPU device by default,
+  - host-device parallelism must be requested with `--cores N` / `SFINCS_JAX_CORES=N`.
+- Office workstation:
+  - JAX currently sees `2` CUDA devices,
+  - this is the current one-node multi-GPU validation target.
+
+Implementation principle:
+
+1. expose the real parallel runtime through the public CLI first,
+2. benchmark one-node multi-core CPU and one-node multi-GPU scaling from the executable path,
+3. stabilize multi-host bootstrap and cluster launch recipes,
+4. only then widen the same model into autodiff-sensitive Python workflows.
+
 ---
 
 ## 14) Roadmap
@@ -408,6 +436,19 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
   - focused unit/regression coverage for every new helper function,
   - at least one targeted parity case and one targeted performance case,
   - docs updates with equations, algorithm notes, and source-code locations.
+- [~] Make executable parallelism first-class and reproducible:
+  - add public CLI controls for transport workers, sharding, distributed Krylov, and multi-host bootstrap,
+  - document one-node CPU, one-node GPU, and multi-host launch patterns,
+  - validate the new CLI surface with focused tests.
+- [ ] Benchmark current executable-path parallel scaling from `main`:
+  - local multi-core CPU using `--cores` + sharded RHSMode=1 and process-parallel transport,
+  - office 2-GPU one-node sharded solves,
+  - record baseline speedups and memory deltas in docs/plan before changing algorithms.
+- [ ] Turn existing prototype parallel features into the default research path in bounded stages:
+  - stage A: transport `whichRHS` / scan throughput,
+  - stage B: one-node sharded single-RHS solves,
+  - stage C: multi-host bootstrap and Slurm recipes,
+  - stage D: stronger domain decomposition and communication-avoiding Krylov.
 - [ ] Evaluate JAX-ecosystem libraries only behind measured gates:
   - `lineax`: benchmark on bounded explicit non-differentiable linear solves and small/structured differentiable solves; admit only if it reduces code complexity or thresholds *and* improves runtime/RSS on at least one pinned offender or reference-path case without parity regressions.
   - `equinox`: evaluate only for module/state/filtering cleanup around the differentiable Python path; no admission unless it removes real tracing/static-arg complexity without slowing hot solves.
@@ -435,6 +476,14 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
   - chunk over species, `x`, `xi`, or `(theta,zeta)` tiles,
   - cap peak device memory without changing numerics,
   - keep chunking off the differentiable reference path unless explicitly enabled.
+- [ ] Make one-node parallelism production-grade:
+  - robust device-mesh selection for CPU and GPU from the CLI,
+  - consistent sharded-preconditioner selection on multi-device runs,
+  - stable performance baselines on local workstation and office hardware.
+- [ ] Make multi-host / many-core launch practical:
+  - Slurm-ready launcher docs and helper scripts,
+  - reproducible coordinator/process bootstrap,
+  - measured scaling targets on tens of ranks before claiming hundreds.
 
 ### 14.3 Long-term (3-12 months)
 - [ ] Extend beyond strict SFINCS replication: broader equation/model options and modern numerical variants.
@@ -456,6 +505,11 @@ Perlmutter references indicate heterogeneous CPU/GPU architecture and high-paral
 - [~] Profile (`SFINCS_JAX_PROFILE=1`) and isolate dominant phase.
 - [~] Implement smallest high-ROI change.
 - [~] Re-run targeted case(s), verify tolerances and print diagnostics.
+- [~] For parallel changes, always measure:
+  - 1-device baseline,
+  - 2+ device/process speedup,
+  - RSS delta,
+  - parity delta.
 - [~] Keep the four-step refactor gated:
   - step 4 design may proceed in parallel,
   - step 4 code should not land until steps 1-3 are integrated and revalidated.
@@ -488,6 +542,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-04-10
+- Scope: add a research-grade parallelization program to the release plan, split executable-first parallel rollout from differentiable Python rollout, expose the existing parallel runtime through the public CLI, and update the parallelism/user docs to match the actual supported controls.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/__init__.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/cli.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_cli_solve_mode.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/usage.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/parallelism.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_cli_solve_mode.py tests/test_transport_parallel.py` (`27 passed`); `python -m py_compile sfincs_jax/__init__.py sfincs_jax/cli.py tests/test_cli_solve_mode.py`; `sphinx-build -W -b html docs docs/_build/html`
+- Runtime/memory delta: no solver-kernel change in this pass; this is parallel-runtime surfacing and deployment hardening. Hardware baseline confirmed in this pass: local JAX sees `1` CPU device by default; office JAX sees `2` CUDA devices. Local executable-path sharded RHSMode=1 probe on `examples/performance/rhsmode1_sharded_scaling.input.namelist` currently shows `2` host CPU devices slower than `1` (`11.806 s` vs `9.874 s` for `nsolve=2`), reinforcing that the next win must come from stronger local work / less distributed-Krylov synchronization rather than simply turning on more devices.
+- Remaining risks: office 1-GPU vs 2-GPU sharded current-tip benchmark is still in progress, so this pass improves usability and deployment control but does not yet claim a fresh multi-GPU speedup. Multi-host bootstrap is now public and documented, but it still needs measured Slurm-scale validation before calling it production-grade.
+- Next actions: finish the office 1-GPU vs 2-GPU baseline probe, record those numbers in the docs/plan, then prioritize the first real scaling algorithm work on sharded single-RHS solves: stronger domain decomposition, local block smoothers, and communication-avoiding Krylov.
 
 ### 2026-04-01
 - Scope: Harden the public CLI/output API by adding documented equilibrium overrides (`equilibrium_file`, `wout_path`), make shared CLI flags usable after subcommands, and ensure the embedded `input.namelist` in `sfincsOutput.h5` reflects the effective run configuration.

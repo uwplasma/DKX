@@ -12,31 +12,52 @@ from __future__ import annotations
 import os
 import tempfile
 
-# Optional JAX multi-host bootstrap (must run before any JAX device use).
-_distributed_env = os.environ.get("SFINCS_JAX_DISTRIBUTED", "").strip().lower()
-if _distributed_env in {"1", "true", "yes", "on"}:
+_distributed_runtime_initialized = False
+
+def initialize_distributed_runtime_from_env() -> bool:
+    """Best-effort JAX multi-host bootstrap from SFINCS_JAX_* env vars.
+
+    This helper is called at import time for env-driven workflows and again by the
+    CLI after parsing explicit multi-host flags. Repeated calls are safe.
+    """
+    global _distributed_runtime_initialized
+    if _distributed_runtime_initialized:
+        return True
+
+    distributed_env = os.environ.get("SFINCS_JAX_DISTRIBUTED", "").strip().lower()
+    if distributed_env not in {"1", "true", "yes", "on"}:
+        return False
+
     try:
         import jax.distributed as _jax_distributed  # noqa: PLC0415
 
-        _process_id_env = os.environ.get("SFINCS_JAX_PROCESS_ID", "").strip()
-        _process_count_env = os.environ.get("SFINCS_JAX_PROCESS_COUNT", "").strip()
-        _coord_addr = os.environ.get("SFINCS_JAX_COORDINATOR_ADDRESS", "").strip()
-        _coord_port_env = os.environ.get("SFINCS_JAX_COORDINATOR_PORT", "").strip()
+        process_id_env = os.environ.get("SFINCS_JAX_PROCESS_ID", "").strip()
+        process_count_env = os.environ.get("SFINCS_JAX_PROCESS_COUNT", "").strip()
+        coord_addr = os.environ.get("SFINCS_JAX_COORDINATOR_ADDRESS", "").strip()
+        coord_port_env = os.environ.get("SFINCS_JAX_COORDINATOR_PORT", "").strip()
 
-        _process_id = int(_process_id_env) if _process_id_env else 0
-        _process_count = int(_process_count_env) if _process_count_env else 1
-        _coord_port = int(_coord_port_env) if _coord_port_env else 1234
+        process_id = int(process_id_env) if process_id_env else 0
+        process_count = int(process_count_env) if process_count_env else 1
+        coord_port = int(coord_port_env) if coord_port_env else 1234
 
-        if _coord_addr:
-            _jax_distributed.initialize(
-                coordinator_address=_coord_addr,
-                coordinator_port=_coord_port,
-                num_processes=_process_count,
-                process_id=_process_id,
-            )
+        if not coord_addr:
+            return False
+
+        _jax_distributed.initialize(
+            coordinator_address=coord_addr,
+            coordinator_port=coord_port,
+            num_processes=process_count,
+            process_id=process_id,
+        )
+        _distributed_runtime_initialized = True
+        return True
     except Exception:
         # Best-effort: avoid hard failures when distributed runtime is unavailable.
-        pass
+        return False
+
+
+# Optional JAX multi-host bootstrap (must run before any JAX device use).
+initialize_distributed_runtime_from_env()
 
 # High-level cores knob: set this before importing JAX to request N CPU devices
 # and enable auto-sharding by default.
@@ -139,6 +160,7 @@ except Exception:
 
 __all__ = [
     "__version__",
+    "initialize_distributed_runtime_from_env",
 ]
 
 __version__ = "0.0.1"
