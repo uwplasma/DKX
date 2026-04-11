@@ -246,6 +246,106 @@ def test_normalize_default_argv_keeps_wout_path_override() -> None:
     ]
 
 
+def test_normalize_default_argv_keeps_parallel_flags() -> None:
+    argv = [
+        "--cores",
+        "8",
+        "--shard-axis",
+        "theta",
+        "--distributed-gmres",
+        "auto",
+        "--transport-workers",
+        "3",
+        "input.namelist",
+        "--out",
+        "sfincsOutput.h5",
+    ]
+    assert cli._normalize_default_argv(argv) == [
+        "--cores",
+        "8",
+        "--shard-axis",
+        "theta",
+        "--distributed-gmres",
+        "auto",
+        "--transport-workers",
+        "3",
+        "write-output",
+        "--input",
+        "input.namelist",
+        "--out",
+        "sfincsOutput.h5",
+    ]
+
+
+def test_apply_parallel_runtime_settings_sets_transport_and_sharding(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_MATVEC_SHARD_AXIS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_AUTO_SHARD", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_GMRES_DISTRIBUTED", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_DISTRIBUTED_KRYLOV", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_SHARD_PAD", raising=False)
+
+    cli._apply_parallel_runtime_settings(
+        Namespace(
+            transport_workers=4,
+            shard_axis="theta",
+            distributed_gmres="auto",
+            distributed_krylov="gmres",
+            shard_pad=False,
+            distributed=False,
+            process_id=None,
+            process_count=None,
+            coordinator_address=None,
+            coordinator_port=None,
+        )
+    )
+
+    assert os.environ["SFINCS_JAX_TRANSPORT_PARALLEL"] == "process"
+    assert os.environ["SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS"] == "4"
+    assert os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] == "theta"
+    assert os.environ["SFINCS_JAX_AUTO_SHARD"] == "0"
+    assert os.environ["SFINCS_JAX_GMRES_DISTRIBUTED"] == "auto"
+    assert os.environ["SFINCS_JAX_DISTRIBUTED_KRYLOV"] == "gmres"
+    assert os.environ["SFINCS_JAX_SHARD_PAD"] == "0"
+
+
+def test_apply_parallel_runtime_settings_initializes_distributed(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.delenv("SFINCS_JAX_DISTRIBUTED", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PROCESS_ID", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PROCESS_COUNT", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_COORDINATOR_ADDRESS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_COORDINATOR_PORT", raising=False)
+    monkeypatch.setattr(
+        "sfincs_jax.initialize_distributed_runtime_from_env",
+        lambda: calls.append("init") or True,
+    )
+
+    cli._apply_parallel_runtime_settings(
+        Namespace(
+            transport_workers=None,
+            shard_axis=None,
+            distributed_gmres=None,
+            distributed_krylov=None,
+            shard_pad=None,
+            distributed=True,
+            process_id=1,
+            process_count=2,
+            coordinator_address="worker0",
+            coordinator_port=2345,
+        )
+    )
+
+    assert os.environ["SFINCS_JAX_DISTRIBUTED"] == "1"
+    assert os.environ["SFINCS_JAX_PROCESS_ID"] == "1"
+    assert os.environ["SFINCS_JAX_PROCESS_COUNT"] == "2"
+    assert os.environ["SFINCS_JAX_COORDINATOR_ADDRESS"] == "worker0"
+    assert os.environ["SFINCS_JAX_COORDINATOR_PORT"] == "2345"
+    assert calls == ["init"]
+
+
 def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) -> None:
     input_path = Path(__file__).parent / "ref" / "output_scheme5_1species_tiny.input.namelist"
     captured: dict[str, object] = {}
