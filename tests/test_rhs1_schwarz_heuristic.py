@@ -106,3 +106,25 @@ def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe(monkeypat
     monkeypatch.setattr(vd, "_build_rhsmode1_theta_schwarz_preconditioner", lambda **_kwargs: sentinel)
 
     assert vd._build_rhsmode1_pas_tz_preconditioner(op=_Op()) is sentinel
+
+
+def test_rhs1_dd_auto_block_size_spans_more_than_one_local_shard() -> None:
+    block = vd._rhs1_dd_auto_block_size(
+        n=31,
+        n_dev=8,
+        sum_nxi=144,
+        dof_target=1200,
+    )
+    assert block == 12
+    assert block > 4
+
+
+def test_rhs1_dd_auto_block_size_respects_global_extent() -> None:
+    block = vd._rhs1_dd_auto_block_size(
+        n=31,
+        n_dev=2,
+        sum_nxi=144,
+        dof_target=1200,
+    )
+    assert block == 24
+    assert block <= 31

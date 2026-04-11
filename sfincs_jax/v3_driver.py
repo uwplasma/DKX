@@ -6062,6 +6062,32 @@ def _dd_core_patch_ranges(n: int, block: int, overlap: int) -> list[tuple[int, i
     return ranges
 
 
+def _rhs1_dd_auto_block_size(
+    *,
+    n: int,
+    n_dev: int,
+    sum_nxi: int,
+    dof_target: int,
+) -> int:
+    """Choose a shard-local Schwarz block that spans more than one local shard.
+
+    A single local shard is often too narrow once theta/zeta sharding is active,
+    especially on 4-8 CPU devices. Using ``local_n`` alone over-fragments the
+    restricted additive Schwarz patches and increases synchronization overhead.
+    The auto rule below keeps the original DOF target, but adds one target-width
+    of coupled angular DOFs on top of the local shard width so each patch can
+    capture cross-shard angular coupling without becoming nearly global.
+    """
+    n = max(1, int(n))
+    n_dev = max(1, int(n_dev))
+    sum_nxi = max(1, int(sum_nxi))
+    dof_target = max(128, int(dof_target))
+    local_n = max(1, (n + n_dev - 1) // n_dev)
+    dof_cap = max(2, int(dof_target) // int(sum_nxi))
+    block = max(dof_cap, local_n + dof_cap)
+    return max(1, min(n, int(block)))
+
+
 def _build_rhsmode1_preconditioner_operator_point(op: V3FullSystemOperator) -> V3FullSystemOperator:
     """Return a simplified RHSMode=1 operator for point-block preconditioning.
 
@@ -11481,11 +11507,13 @@ def solve_v3_full_system_linear_gmres(
             block = 0
         if block <= 0 and _rhs1_dd_sharded_axis() == axis:
             n_dev = max(1, int(jax.device_count()))
-            local_n = (int(n) + n_dev - 1) // n_dev
             sum_nxi = _rhs1_dd_sum_nxi()
-            dof_cap = max(2, int(_rhs1_dd_patch_dof_target()) // max(1, int(sum_nxi)))
-            block = min(int(n), int(local_n), int(dof_cap))
-            block = max(2, int(block))
+            block = _rhs1_dd_auto_block_size(
+                n=int(n),
+                n_dev=n_dev,
+                sum_nxi=sum_nxi,
+                dof_target=_rhs1_dd_patch_dof_target(),
+            )
         if block <= 0:
             block = 8
         return max(1, min(max(1, n), int(block)))
