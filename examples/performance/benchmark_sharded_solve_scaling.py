@@ -30,6 +30,7 @@ def _configure_backend_env(*, env: dict[str, str], devices: int, backend: str) -
         env.pop("SFINCS_JAX_CPU_DEVICES", None)
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(max(1, int(devices))))
         env.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+        env.setdefault("TF_GPU_ALLOCATOR", "cuda_malloc_async")
         return
     env["SFINCS_JAX_CPU_DEVICES"] = str(int(devices))
     if backend_norm == "cpu":
