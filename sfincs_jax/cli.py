@@ -701,6 +701,38 @@ def _maybe_reexec_for_early_runtime(argv: list[str]) -> None:
     os.execvpe(sys.executable, [sys.executable, "-m", "sfincs_jax", *argv], env)
 
 
+def _merge_global_cli_args(argv: list[str], args: argparse.Namespace) -> argparse.Namespace:
+    """Preserve global CLI flags regardless of whether they appear before or after the subcommand.
+
+    Argparse defaults on both the root parser and subparsers can otherwise cause
+    root-level values to be overwritten by subparser defaults when a flag is
+    supplied before the subcommand. Parse the shared global options once more
+    from the full argv and reapply them onto the final namespace.
+    """
+    pre = argparse.ArgumentParser(add_help=False)
+    _add_common_cli_args(pre)
+    _add_parallel_cli_args(pre)
+    pre_args, _ = pre.parse_known_args(argv)
+    for name in (
+        "verbose",
+        "quiet",
+        "cores",
+        "fortran_stdout",
+        "transport_workers",
+        "shard_axis",
+        "distributed_gmres",
+        "distributed_krylov",
+        "shard_pad",
+        "distributed",
+        "process_id",
+        "process_count",
+        "coordinator_address",
+        "coordinator_port",
+    ):
+        setattr(args, name, getattr(pre_args, name))
+    return args
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:]) if argv is None else list(argv)
     argv = _normalize_default_argv(argv)
@@ -898,6 +930,7 @@ def main(argv: list[str] | None = None) -> int:
     p_pp.set_defaults(func=_cmd_postprocess_upstream)
 
     args = parser.parse_args(argv)
+    args = _merge_global_cli_args(argv, args)
     _apply_runtime_env_defaults()
     if args.cores is None and not os.environ.get("SFINCS_JAX_CORES"):
         if not (os.environ.get("SFINCS_JAX_CI") or os.environ.get("CI")):

@@ -5209,6 +5209,69 @@ def _pas_tz_preconditioner_applicable(op: V3FullSystemOperator) -> bool:
     return True
 
 
+def _rhs1_pas_tz_max_bytes() -> int:
+    env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_MAX_BYTES", "").strip()
+    try:
+        return int(env) if env else 2 * 1024 * 1024 * 1024
+    except ValueError:
+        return 2 * 1024 * 1024 * 1024
+
+
+def _estimate_rhs1_pas_tz_build_bytes(op: V3FullSystemOperator) -> int:
+    if not _pas_tz_preconditioner_applicable(op):
+        return 0
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_l_full = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    n_tz = int(n_theta * n_zeta)
+    if n_tz <= 1 or n_l_full < 2:
+        return 0
+
+    pas_tz_lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX", "").strip()
+    try:
+        pas_tz_lmax = int(pas_tz_lmax_env) if pas_tz_lmax_env else 0
+    except ValueError:
+        pas_tz_lmax = 0
+    if pas_tz_lmax <= 0:
+        if n_tz <= 192:
+            pas_tz_lmax = n_l_full
+        elif n_tz >= 256:
+            pas_tz_lmax = 6
+        elif n_tz >= 128:
+            pas_tz_lmax = 8
+        else:
+            pas_tz_lmax = 12
+        if (
+            op.fblock.exb_theta is None
+            and op.fblock.exb_zeta is None
+            and op.fblock.magdrift_theta is None
+            and op.fblock.magdrift_zeta is None
+            and op.fblock.magdrift_xidot is None
+            and op.fblock.er_xdot is None
+            and op.fblock.er_xidot is None
+        ):
+            if n_tz <= 256:
+                pas_tz_lmax = n_l_full
+    n_l_use = min(n_l_full, max(2, int(pas_tz_lmax)))
+    tz = int(n_tz)
+    twotz = int(2 * tz)
+
+    inv_a01 = n_species * n_x * twotz * twotz
+    g01 = n_species * n_x * twotz * tz
+    inv_a = n_species * n_x * max(n_l_use - 2, 0) * tz * tz
+    g = n_species * n_x * max(n_l_use - 3, 0) * tz * tz
+    return int((inv_a01 + g01 + inv_a + g) * 8)
+
+
+def _pas_tz_preconditioner_memory_safe(op: V3FullSystemOperator) -> bool:
+    estimate = _estimate_rhs1_pas_tz_build_bytes(op)
+    if estimate <= 0:
+        return True
+    return estimate <= max(0, _rhs1_pas_tz_max_bytes())
+
+
 def _build_rhsmode1_pas_tz_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -5228,6 +5291,29 @@ def _build_rhsmode1_pas_tz_preconditioner(
     """
     if not _pas_tz_preconditioner_applicable(op):
         return _build_rhsmode1_pas_hybrid_preconditioner(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if not _pas_tz_preconditioner_memory_safe(op):
+        shard_axis = _matvec_shard_axis(op)
+        if shard_axis in {"theta", "zeta"} and jax.device_count() > 1:
+            dd_block_env = os.environ.get(f"SFINCS_JAX_RHSMODE1_{shard_axis.upper()}_DD_BLOCK", "").strip()
+            dd_overlap_env = os.environ.get(f"SFINCS_JAX_RHSMODE1_{shard_axis.upper()}_DD_OVERLAP", "").strip()
+            try:
+                dd_block = int(dd_block_env) if dd_block_env else 64
+            except ValueError:
+                dd_block = 64
+            try:
+                dd_overlap = int(dd_overlap_env) if dd_overlap_env else 1
+            except ValueError:
+                dd_overlap = 1
+            return _build_rhsmode1_theta_schwarz_preconditioner(
+                op=op,
+                block=dd_block,
+                overlap=dd_overlap,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            )
+        return _build_rhsmode1_pas_hybrid_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
 
     precond_dtype = _precond_dtype()
     cl = op.fblock.collisionless
@@ -12172,6 +12258,8 @@ def solve_v3_full_system_linear_gmres(
     if rhs1_precond_env == "":
         shard_axis = _matvec_shard_axis(op)
         if shard_axis in {"theta", "zeta"} and jax.device_count() > 1:
+            pas_tz_estimate = _estimate_rhs1_pas_tz_build_bytes(op)
+            pas_tz_max_bytes = _rhs1_pas_tz_max_bytes()
             pas_shard_xmg_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SHARD_XMG_MIN", "").strip()
             try:
                 pas_shard_xmg_min = int(pas_shard_xmg_min_env) if pas_shard_xmg_min_env else 80000
@@ -12209,6 +12297,18 @@ def solve_v3_full_system_linear_gmres(
                     pass
                 elif keep_xmg_for_large_pas_er or keep_xmg_for_large_fp:
                     pass
+                elif (
+                    op.fblock.pas is not None
+                    and pas_tz_estimate > max(0, int(pas_tz_max_bytes))
+                ):
+                    rhs1_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: sharded PAS large pas_tz "
+                            f"(est={pas_tz_estimate / 2**30:.2f} GiB > cap={pas_tz_max_bytes / 2**30:.2f} GiB) -> "
+                            f"{rhs1_precond_kind}",
+                        )
                 elif int(op.total_size) >= max(1, int(schwarz_auto_min)):
                     rhs1_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
                 else:
