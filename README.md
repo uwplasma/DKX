@@ -150,6 +150,8 @@ Current recommendation:
 - Multi-GPU single-case sharding is available for benchmarking and very large
   runs, but it remains experimental and is not yet the default recommendation.
 
+![Parallel scaling snapshot](docs/_static/figures/parallel/strong_scaling_snapshot.png)
+
 Compare two outputs:
 
 ```bash
