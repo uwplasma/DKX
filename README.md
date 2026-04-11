@@ -82,6 +82,14 @@ write_sfincs_jax_output_h5(
 )
 ```
 
+Repository examples that map directly onto common first tasks:
+
+- write a tiny tokamak output: `python examples/getting_started/write_sfincs_output_tokamak.py`
+- write a tiny VMEC output with `wout_path`: `python examples/getting_started/write_sfincs_output_vmec.py`
+- plot an output file: `python examples/getting_started/plot_sfincs_output.py`
+- run autodiff examples: `python examples/autodiff/autodiff_gradient_nu_n_residual.py`
+- benchmark CPU/GPU parallel solves: `python examples/performance/benchmark_sharded_solve_scaling.py ...`
+
 ## Executable (CLI)
 
 You can run `sfincs_jax` from anywhere in your terminal. You do not need to be inside the repository folder.

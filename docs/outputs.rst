@@ -110,6 +110,20 @@ There is also a multi-species parity test against the upstream v3 example output
 (``quick_2species_FPCollisions_noEr``), implemented in
 ``tests/test_output_h5_scheme4_quick2species_parity.py``.
 
+Plotting output files
+---------------------
+
+For a minimal end-to-end plotting example, run:
+
+.. code-block:: bash
+
+   python examples/getting_started/plot_sfincs_output.py
+
+The script reads ``sfincsOutput.h5`` datasets directly and writes a compact PNG
+summary showing representative radial diagnostics and the geometry field
+``BHat(theta, zeta)``. It accepts any existing output file via
+``--input-h5 /path/to/sfincsOutput.h5``.
+
 .. note::
 
    ``uHat`` depends on many transcendental evaluations (cos/sin) and long floating-point

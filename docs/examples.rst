@@ -25,6 +25,19 @@ Writing `sfincsOutput.h5` (Python + CLI):
    python examples/getting_started/write_sfincs_output_python.py
    python examples/getting_started/write_sfincs_output_cli.py
 
+Geometry-specific write-output examples:
+
+.. code-block:: bash
+
+   python examples/getting_started/write_sfincs_output_tokamak.py
+   python examples/getting_started/write_sfincs_output_vmec.py
+
+Plotting a generated or frozen output file:
+
+.. code-block:: bash
+
+   python examples/getting_started/plot_sfincs_output.py
+
 Matrix-free linear solve demo (using frozen Fortran PETSc binaries):
 
 .. code-block:: bash
@@ -107,6 +120,33 @@ optimization loop using implicit differentiation through the linear solve:
 .. code-block:: bash
 
    python examples/autodiff/optimize_nu_n_implicit.py
+
+Parallel and scaling examples
+-----------------------------
+
+For transport-matrix throughput on CPUs:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_transport_parallel_scaling.py \
+     --input examples/performance/transport_parallel_2min.input.namelist \
+     --workers 1 2 4
+
+For sharded single-RHS solves on CPU or GPU:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_sharded_solve_scaling.py \
+     --backend cpu \
+     --input examples/performance/rhsmode1_sharded.input.namelist \
+     --devices 1 2 4 8
+
+.. note::
+
+   ``geometryScheme=5`` (VMEC) and analytic tokamak ``geometryScheme=1`` are
+   supported public examples today. `sfincs_jax` does not currently expose a
+   separate Miller-parameter geometry mode in the public CLI/API, so tokamak
+   examples use the supported analytic Boozer tokamak path instead.
 
 It builds a cached operator once, treats :math:`\\nu_n` as a differentiable parameter,
 and minimizes :math:`0.5\\|x(\\nu_n)\\|^2` where :math:`A(\\nu_n)x=b(\\nu_n)` is solved
