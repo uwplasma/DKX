@@ -346,6 +346,54 @@ def test_apply_parallel_runtime_settings_initializes_distributed(monkeypatch) ->
     assert calls == ["init"]
 
 
+def test_emit_parallel_runtime_info_reports_active_parallel_env(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("SFINCS_JAX_CORES", "8")
+    monkeypatch.setenv("SFINCS_JAX_CPU_DEVICES", "8")
+    monkeypatch.setenv("SFINCS_JAX_MATVEC_SHARD_AXIS", "theta")
+    monkeypatch.setenv("SFINCS_JAX_AUTO_SHARD", "1")
+    monkeypatch.setenv("SFINCS_JAX_SHARD_PAD", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "process")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", "4")
+    monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED", "auto")
+    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED_KRYLOV", "bicgstab")
+    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "1")
+    monkeypatch.setenv("SFINCS_JAX_PROCESS_ID", "1")
+    monkeypatch.setenv("SFINCS_JAX_PROCESS_COUNT", "2")
+    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_ADDRESS", "node0")
+    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_PORT", "1234")
+
+    cli._emit_parallel_runtime_info(args=Namespace(verbose=1, quiet=False))
+    out = capsys.readouterr().out
+
+    assert "parallel: cores=8 cpu_devices=8 shard_axis=theta auto_shard=1 shard_pad=1" in out
+    assert "transport_parallel: mode=process workers=4" in out
+    assert "distributed_solver: gmres=auto krylov=bicgstab" in out
+    assert "multi_host: enabled=1 process_id=1 process_count=2 coordinator=node0 port=1234" in out
+
+
+def test_emit_parallel_runtime_info_suppresses_empty_state(monkeypatch, capsys) -> None:
+    for name in (
+        "SFINCS_JAX_CORES",
+        "SFINCS_JAX_CPU_DEVICES",
+        "SFINCS_JAX_MATVEC_SHARD_AXIS",
+        "SFINCS_JAX_AUTO_SHARD",
+        "SFINCS_JAX_SHARD_PAD",
+        "SFINCS_JAX_TRANSPORT_PARALLEL",
+        "SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS",
+        "SFINCS_JAX_GMRES_DISTRIBUTED",
+        "SFINCS_JAX_DISTRIBUTED_KRYLOV",
+        "SFINCS_JAX_DISTRIBUTED",
+        "SFINCS_JAX_PROCESS_ID",
+        "SFINCS_JAX_PROCESS_COUNT",
+        "SFINCS_JAX_COORDINATOR_ADDRESS",
+        "SFINCS_JAX_COORDINATOR_PORT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    cli._emit_parallel_runtime_info(args=Namespace(verbose=1, quiet=False))
+    assert capsys.readouterr().out == ""
+
+
 def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) -> None:
     input_path = Path(__file__).parent / "ref" / "output_scheme5_1species_tiny.input.namelist"
     captured: dict[str, object] = {}

@@ -138,6 +138,10 @@ sfincs_jax write-output \
   --coordinator-port 1234
 ```
 
+Use `-v` to have the executable print the active parallel runtime summary
+(cores, shard axis, transport workers, distributed Krylov mode, and multi-host
+bootstrap fields) before the solve starts.
+
 Compare two outputs:
 
 ```bash
