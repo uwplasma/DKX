@@ -110,6 +110,34 @@ sfincs_jax write-output \
 The bare ``sfincs_jax /path/to/input.namelist`` form accepts the same
 ``--equilibrium-file`` and ``--wout-path`` overrides.
 
+Parallel CLI controls are now first-class:
+
+```bash
+# Multi-core CPU host sharding on one node
+sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
+
+# Parallel transport-matrix RHS solves
+sfincs_jax transport-matrix-v3 \
+  --input /path/to/input.namelist \
+  --transport-workers 4
+
+# One-node multi-GPU sharded solve
+CUDA_VISIBLE_DEVICES=0,1 \
+sfincs_jax write-output \
+  --input /path/to/input.namelist \
+  --shard-axis theta \
+  --distributed-gmres auto
+
+# Multi-host JAX distributed bootstrap
+sfincs_jax write-output \
+  --input /path/to/input.namelist \
+  --distributed \
+  --process-count 8 \
+  --process-id ${RANK} \
+  --coordinator-address node0 \
+  --coordinator-port 1234
+```
+
 Compare two outputs:
 
 ```bash

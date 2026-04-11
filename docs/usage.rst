@@ -139,6 +139,55 @@ Solving a supported v3 linear run (matrix-free)
    default to reduce Krylov iterations. For strict PETSc-style iteration histories, use
    ``--solve-method incremental``.
 
+Parallel CLI controls
+---------------------
+
+The executable path now exposes the main parallel runtime controls directly, so
+you do not need to rely on undocumented shell environment setup for common
+one-node and multi-host runs.
+
+.. code-block:: bash
+
+   # Multi-core CPU host devices + auto sharding
+   sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
+
+   # Independent RHS transport parallelism
+   sfincs_jax transport-matrix-v3 \
+     --input /path/to/input.namelist \
+     --transport-workers 4
+
+   # One-node multi-GPU sharded solve
+   CUDA_VISIBLE_DEVICES=0,1 \
+   sfincs_jax write-output \
+     --input /path/to/input.namelist \
+     --shard-axis theta \
+     --distributed-gmres auto \
+     --distributed-krylov auto
+
+   # Multi-host JAX bootstrap for sharded solves
+   sfincs_jax write-output \
+     --input /path/to/input.namelist \
+     --distributed \
+     --process-count 8 \
+     --process-id ${RANK} \
+     --coordinator-address node0 \
+     --coordinator-port 1234
+
+Relevant CLI flags:
+
+- ``--cores``: request multiple host CPU devices before JAX loads.
+- ``--transport-workers``: run independent ``whichRHS`` solves in parallel
+  worker processes.
+- ``--shard-axis {auto,off,theta,zeta,x,flat}``: choose the single-solve sharding
+  mode for the executable path.
+- ``--distributed-gmres`` and ``--distributed-krylov``: control distributed
+  Krylov selection on sharded RHSMode=1 solves.
+- ``--distributed``, ``--process-id``, ``--process-count``,
+  ``--coordinator-address``, and ``--coordinator-port``: enable one-node or
+  multi-host JAX distributed initialization from the CLI.
+- ``--shard-pad`` / ``--no-shard-pad``: control neutral padding when the sharded
+  dimension is not divisible by the visible device count.
+
 Solver controls (environment variables)
 ---------------------------------------
 
