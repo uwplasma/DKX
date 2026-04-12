@@ -143,6 +143,14 @@ For sharded single-RHS solves on CPU or GPU:
      --rhs1-precond theta_schwarz \
      --schwarz-coarse-levels 2
 
+For the current one-GPU-per-case throughput benchmark on a 2-GPU node:
+
+.. code-block:: bash
+
+   PYTHONPATH=. python examples/performance/benchmark_multi_gpu_case_throughput.py \
+     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
+     --nsolve 4
+
 .. note::
 
    ``geometryScheme=5`` (VMEC) and analytic tokamak ``geometryScheme=1`` are
