@@ -58,6 +58,7 @@ Common entry points:
 - Implicit differentiation through BiCGStab: `examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab`
 - CPU sharding benchmark: `examples/performance/benchmark_sharded_solve_scaling.py --backend cpu --devices 1 2 4 8`
 - Transport-worker benchmark: `examples/performance/benchmark_transport_parallel_scaling.py --workers 1 2 4`
+- Two-GPU throughput benchmark: `examples/performance/benchmark_multi_gpu_case_throughput.py`
 
 ### Scaled upstream example sweep
 

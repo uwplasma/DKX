@@ -165,6 +165,9 @@ Current recommendation:
   preallocation in the subprocess, with `cuda_malloc_async` enabled for the
   benchmark subprocess allocator, so one-node GPU scaling experiments are more
   reproducible.
+- For practical multi-GPU usage today, prefer one GPU per case or scan point
+  and benchmark that throughput directly with
+  `python examples/performance/benchmark_multi_gpu_case_throughput.py`.
 
 ![Parallel scaling snapshot](docs/_static/figures/parallel/strong_scaling_snapshot.png)
 

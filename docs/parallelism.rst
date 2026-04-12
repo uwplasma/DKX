@@ -747,8 +747,9 @@ in this repository, the current `main` branch produced the following measurement
 - Office workstation GPU sharded RHSMode=1 benchmark on the medium-large input
   ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
 
-  - `1` GPU: `44.91 s`
-  - `2` GPUs: `67.48 s`
+  - older stable snapshot: `1` GPU `44.91 s`, `2` GPUs `67.48 s`
+  - fresh current-tip rerun with bounded multilevel Schwarz and distributed GMRES:
+    `1` GPU `56.70 s`, `2` GPUs `169.36 s`
 
 - Office workstation GPU sharded RHSMode=1 benchmark on the larger input
   ``examples/performance/rhsmode1_sharded.input.namelist``:
@@ -766,6 +767,40 @@ These results support the current deployment recommendation:
   point** and bounded **CPU host sharding**.
 - Multi-GPU single-case sharding remains experimental until stronger local
   domain decomposition and lower-synchronization Krylov are in place.
+
+Fresh two-GPU throughput rerun
+------------------------------
+
+We also reran the practical production-style GPU lane on office by comparing
+two sequential one-GPU runs against two concurrent one-GPU runs on the same
+2-GPU workstation, using:
+
+.. code-block:: bash
+
+   PYTHONPATH=. python examples/performance/benchmark_multi_gpu_case_throughput.py \
+     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
+     --nsolve 4 \
+     --rhs1-precond theta_schwarz \
+     --schwarz-coarse-levels 2
+
+The fresh measured result on current ``main`` was still below ideal:
+
+- sequential 1-GPU execution of two cases: ``107.65 s`` wall time
+- two concurrent 1-GPU runs on two GPUs: ``194.08 s`` wall time
+- measured throughput speedup: ``0.55x``
+
+.. figure:: _static/figures/parallel/gpu_case_throughput.png
+   :alt: Two-GPU throughput comparison on office
+   :width: 88%
+
+   Fresh office rerun of the production-style two-case GPU throughput lane.
+
+This confirms the current technical state more clearly than the older snapshot:
+the code is correct and reproducible on multi-GPU launches, but the current
+single-node GPU parallel path is still not publication-grade from a scaling
+standpoint. That is why the release-facing recommendation stays conservative:
+use GPU acceleration per case today, and treat multi-GPU parallelism as an
+active research path rather than a proven default.
 
 Recent sharded-solve updates
 ----------------------------
