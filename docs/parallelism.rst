@@ -744,6 +744,14 @@ in this repository, the current `main` branch produced the following measurement
   - `2` workers: `169.2 s`
   - `4` workers: `93.7 s`
 
+- Office workstation GPU transport-worker benchmark on
+  ``examples/performance/transport_parallel_2min.input.namelist``:
+
+  - `1` GPU worker: `351.1 s`
+  - `2` GPU workers: `237.7 s`
+  - measured speedup: `1.48x`
+  - finite-task ideal for this 3-RHS case: `1.50x`
+
 - Office workstation GPU sharded RHSMode=1 benchmark on the medium-large input
   ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
 
@@ -763,8 +771,11 @@ in this repository, the current `main` branch produced the following measurement
 These results support the current deployment recommendation:
 
 - CPU and GPU executable paths are parallel-capable and deterministic.
-- The robust production throughput path today is still **one GPU per case / scan
-  point** and bounded **CPU host sharding**.
+- The robust production GPU-parallel path today is **transport-worker
+  parallelism**, with one worker per GPU for independent RHSMode=2/3 solves.
+- The robust production CPU-parallel path today is bounded **CPU host
+  sharding** for single-RHS solves and process-parallel transport workers for
+  RHSMode=2/3 solves.
 - Multi-GPU single-case sharding remains experimental until stronger local
   domain decomposition and lower-synchronization Krylov are in place.
 
@@ -801,6 +812,43 @@ single-node GPU parallel path is still not publication-grade from a scaling
 standpoint. That is why the release-facing recommendation stays conservative:
 use GPU acceleration per case today, and treat multi-GPU parallelism as an
 active research path rather than a proven default.
+
+Fresh two-GPU transport-worker rerun
+------------------------------------
+
+The stronger current multi-GPU result comes from independent transport workers,
+not from single-case sharding. On office we reran:
+
+.. code-block:: bash
+
+   PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py \
+     --backend gpu \
+     --input examples/performance/transport_parallel_2min.input.namelist \
+     --workers 1 2 \
+     --repeats 1 \
+     --warmup 0 \
+     --global-warmup 1 \
+     --precond xmg
+
+Measured result on current ``main``:
+
+- `1` GPU worker: ``351.05 s``
+- `2` GPU workers: ``237.75 s``
+- measured speedup: ``1.48x``
+- finite-task ideal for `3` independent ``whichRHS`` solves on `2` workers:
+  ``1.50x``
+
+.. figure:: _static/figures/parallel/transport_parallel_scaling_gpu.png
+   :alt: Two-point GPU transport-worker scaling benchmark
+   :width: 88%
+
+   Fresh office rerun of the publication-facing GPU transport-worker lane.
+
+This is the release-quality GPU scaling result in ``sfincs_jax`` today:
+parallelize independent transport RHS solves across GPUs. It is deterministic,
+parity-preserving, and close to the finite-task ideal on the tested 2-GPU node.
+That is a materially stronger story than the current single-case sharded GPU
+lane, which remains experimental.
 
 Recent sharded-solve updates
 ----------------------------

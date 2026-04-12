@@ -132,6 +132,15 @@ For transport-matrix throughput on CPUs:
      --input examples/performance/transport_parallel_2min.input.namelist \
      --workers 1 2 4
 
+For transport-matrix throughput on a 2-GPU node:
+
+.. code-block:: bash
+
+   PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py \
+     --backend gpu \
+     --input examples/performance/transport_parallel_2min.input.namelist \
+     --workers 1 2
+
 For sharded single-RHS solves on CPU or GPU:
 
 .. code-block:: bash
