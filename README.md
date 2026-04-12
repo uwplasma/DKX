@@ -165,11 +165,17 @@ Current recommendation:
   preallocation in the subprocess, with `cuda_malloc_async` enabled for the
   benchmark subprocess allocator, so one-node GPU scaling experiments are more
   reproducible.
-- For practical multi-GPU usage today, prefer one GPU per case or scan point
-  and benchmark that throughput directly with
-  `python examples/performance/benchmark_multi_gpu_case_throughput.py`.
+- For practical multi-GPU usage today, the strongest measured path is
+  transport-worker parallelism with one worker per GPU on RHSMode=2/3 runs.
+  On the fresh office 2-GPU rerun of
+  `examples/performance/transport_parallel_2min.input.namelist`, this path
+  measured `351.1s -> 237.7s` from `1 -> 2` GPU workers, i.e. `1.48x` speedup
+  on a 3-RHS case, essentially at the finite-task ideal of `1.5x`.
+- Multi-GPU single-case sharding remains experimental. Use it for research and
+  benchmarking, not as the default production scaling path.
 
 ![Parallel scaling snapshot](docs/_static/figures/parallel/strong_scaling_snapshot.png)
+![GPU transport scaling](docs/_static/figures/parallel/transport_parallel_scaling_gpu.png)
 
 Compare two outputs:
 
