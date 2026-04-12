@@ -395,6 +395,12 @@ Current validated executable-side status:
     same 3-RHS transport benchmark, essentially at the finite-task ideal
     `1.50x`.
 - Strong scaling is still weak on the challenging single-RHS sharded GPU cases,
+  including the final office "last-shot" rerun on the medium-large
+  `examples/performance/rhsmode1_sharded_scaling.input.namelist` case:
+  - implicit sharded path with `theta_schwarz` and 2 coarse levels: `1 GPU 40.8 s`,
+    `2 GPUs 61.8 s`,
+  - explicit non-differentiable sharded path did not improve the 2-GPU result and
+    remained slower than the 1-GPU baseline,
   so the production recommendation remains:
   - transport workers for RHSMode=2/3 throughput,
   - one GPU per case / scan point for embarrassingly parallel scans,
@@ -593,6 +599,14 @@ Current latest notable changes before this handoff:
 - Runtime/memory delta: no solver-kernel delta in this pass. The public parallel docs now point to the current measured CPU transport-worker benchmark on `examples/performance/transport_parallel_2min.input.namelist` (`1 worker: 252.5 s`, `2 workers: 169.2 s`, `4 workers: 93.7 s`, about `2.69x` speedup at `4` workers). The two-level sharded RHSMode=1 path remains parity-clean but still experimental for strong scaling.
 - Remaining risks: single-case sharded 4/8-device CPU scaling is still not strong enough to market as the default production parallel path. The large `rhsmode1_sharded.input.namelist` xlarge benchmark remains too expensive/noisy to use as the headline scaling figure without a stronger coarse correction or lower-synchronization Krylov step.
 - Next actions: keep the current production recommendation centered on transport workers / scan-point throughput and one-device-per-case GPU throughput; return to single-case sharded scaling only with either a second coarser correction level or a communication-avoiding Krylov implementation.
+
+### 2026-04-12
+- Scope: give the single-case multi-GPU sharded RHSMode=1 lane one final A/B pass on office using the current `main` code path, comparing the shipped implicit path against bounded Krylov/preconditioner variants and an explicit non-differentiable executable-style solve.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: office GPU sharded benchmark sweep on `examples/performance/rhsmode1_sharded_scaling.input.namelist` via `examples/performance/benchmark_sharded_solve_scaling.py`; direct explicit-path office probes with `SFINCS_JAX_IMPLICIT_SOLVE=0`; local targeted validation `pytest -q tests/test_transport_parallel.py tests/test_benchmark_transport_parallel_scaling.py tests/test_transport_matrix_write_output_end_to_end.py tests/test_full_system_gmres_solution_parity.py` (`39 passed in 53.53s`).
+- Runtime/memory delta: current shipped implicit sharded GPU lane measured `1 GPU 40.787 s` and `2 GPUs 61.766 s` on the medium-large benchmark case. Forcing distributed GMRES remained weak (`44.803 s` vs `62.052 s`). `x`-axis sharding and deeper coarse hierarchy both hit GPU OOM on this node. The explicit non-differentiable executable path also failed to produce a better 2-GPU result and was terminated after running well past the 1-GPU baseline.
+- Remaining risks: strong single-case multi-GPU scaling is still not a release-quality claim on the current solver architecture. The robust publication-facing GPU scaling result remains transport-worker parallelism, not single-case sharding.
+- Next actions: keep the release-facing GPU parallel story centered on transport workers and case-parallel throughput; treat single-case multi-GPU sharding as an active research item requiring a materially different algorithmic step, e.g. lower-synchronization Krylov or a stronger coarse/global correction.
 
 ### 2026-04-10
 - Scope: add a research-grade parallelization program to the release plan, split executable-first parallel rollout from differentiable Python rollout, expose the existing parallel runtime through the public CLI, and add CLI-side parallel provenance so workstation/cluster launches report the active sharding / worker / distributed settings.
