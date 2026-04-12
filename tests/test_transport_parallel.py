@@ -371,6 +371,21 @@ def test_transport_parallel_pool_rebuilds_on_worker_change(monkeypatch: pytest.M
     assert _DummyPool.shutdown_calls == 2
 
 
+def test_transport_parallel_backend_gpu_visible_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5")
+    assert v3_driver._transport_parallel_backend() == "gpu"
+    assert v3_driver._transport_parallel_visible_gpu_ids(4) == ["3", "5"]
+
+
+def test_transport_parallel_pool_key_tracks_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "cpu")
+    key_cpu = v3_driver._transport_parallel_pool_key(2)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
+    key_gpu = v3_driver._transport_parallel_pool_key(2)
+    assert key_cpu != key_gpu
+
+
 def test_apply_cores_setting_does_not_force_transport_parallel(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", raising=False)

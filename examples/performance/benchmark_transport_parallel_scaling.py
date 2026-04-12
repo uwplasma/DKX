@@ -13,12 +13,28 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
 
 
+def _configure_backend_env(*, workers: int, backend: str) -> None:
+    backend_l = str(backend).strip().lower()
+    if backend_l not in {"cpu", "gpu"}:
+        raise ValueError(f"Unsupported backend {backend!r}")
+    os.environ["SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND"] = backend_l
+    if backend_l == "gpu":
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(max(1, int(workers))))
+        os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+        os.environ["TF_GPU_ALLOCATOR"] = "cuda_malloc_async"
+        os.environ.pop("SFINCS_JAX_CPU_DEVICES", None)
+    else:
+        os.environ["SFINCS_JAX_CPU_DEVICES"] = "1"
+        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+
+
 def _run_once(
     input_path: Path,
     *,
     workers: int,
     cache_dir: Path | None,
     precond: str | None,
+    backend: str,
 ) -> float:
     os.environ["SFINCS_JAX_FORTRAN_STDOUT"] = "0"
     os.environ["SFINCS_JAX_SOLVER_ITER_STATS"] = "0"
@@ -32,6 +48,7 @@ def _run_once(
     else:
         os.environ["SFINCS_JAX_TRANSPORT_PARALLEL"] = "off"
         os.environ["SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS"] = "1"
+    _configure_backend_env(workers=workers, backend=backend)
 
     nml = read_sfincs_input(input_path)
     t0 = time.perf_counter()
@@ -80,6 +97,13 @@ def main() -> None:
         help="Transport preconditioner to use during the benchmark (default: xmg).",
     )
     parser.add_argument(
+        "--backend",
+        type=str,
+        default="cpu",
+        choices=("cpu", "gpu"),
+        help="Parallel transport backend to benchmark.",
+    )
+    parser.add_argument(
         "--out-dir",
         type=Path,
         default=default_out,
@@ -110,7 +134,7 @@ def main() -> None:
                 f"[warmup-global {i + 1}/{int(args.global_warmup)}] workers=1 starting",
                 flush=True,
             )
-            _run_once(input_path, workers=1, cache_dir=cache_dir, precond=args.precond)
+            _run_once(input_path, workers=1, cache_dir=cache_dir, precond=args.precond, backend=args.backend)
             print(
                 f"[warmup-global {i + 1}/{int(args.global_warmup)}] workers=1 done",
                 flush=True,
@@ -121,12 +145,12 @@ def main() -> None:
         print(f"[worker {w}] starting warmups={max(args.warmup, 0)} repeats={max(args.repeats, 1)}", flush=True)
         for i in range(max(args.warmup, 0)):
             print(f"[worker {w}] warmup {i + 1}/{max(args.warmup, 0)} starting", flush=True)
-            _run_once(input_path, workers=w, cache_dir=cache_dir, precond=args.precond)
+            _run_once(input_path, workers=w, cache_dir=cache_dir, precond=args.precond, backend=args.backend)
             print(f"[worker {w}] warmup {i + 1}/{max(args.warmup, 0)} done", flush=True)
         times = []
         for i in range(max(args.repeats, 1)):
             print(f"[worker {w}] repeat {i + 1}/{max(args.repeats, 1)} starting", flush=True)
-            dt = _run_once(input_path, workers=w, cache_dir=cache_dir, precond=args.precond)
+            dt = _run_once(input_path, workers=w, cache_dir=cache_dir, precond=args.precond, backend=args.backend)
             times.append(dt)
             print(f"[worker {w}] repeat {i + 1}/{max(args.repeats, 1)} done in {dt:.3f}s", flush=True)
         times = np.asarray(times, dtype=float)
@@ -155,6 +179,7 @@ def main() -> None:
         "workers": workers,
         "results": results,
         "precond": args.precond,
+        "backend": args.backend,
     }
 
     json_path = out_dir / "transport_parallel_scaling.json"
@@ -182,7 +207,7 @@ def main() -> None:
         axes[1].grid(True, alpha=0.3)
         axes[1].legend(frameon=False)
 
-        fig.suptitle(f"Parallel whichRHS scaling: {payload['case']}", y=1.02)
+        fig.suptitle(f"Parallel whichRHS scaling ({args.backend}): {payload['case']}", y=1.02)
         fig.tight_layout()
         fig_path = out_dir / "transport_parallel_scaling.png"
         fig.savefig(fig_path, dpi=200)
