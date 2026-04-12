@@ -20382,7 +20382,10 @@ def solve_v3_transport_matrix_linear_gmres(
             rhs_vals = [int(v) for v in res.get("which_rhs_values", [])]
             idxs = [v - 1 for v in rhs_vals]
             elapsed_chunk = np.asarray(res.get("elapsed_time_s", np.zeros((n,))), dtype=np.float64)
-            elapsed_s[idxs] = elapsed_chunk[idxs]
+            if elapsed_chunk.shape[0] == len(rhs_vals):
+                elapsed_s[idxs] = elapsed_chunk
+            else:
+                elapsed_s[idxs] = elapsed_chunk[idxs]
             residual_norms.update({int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in res.get("residual_norms_by_rhs", {}).items()})
             for which_rhs, x_state in res.get("state_vectors_by_rhs", {}).items():
                 state_vectors[int(which_rhs)] = jnp.asarray(x_state, dtype=jnp.float64)
