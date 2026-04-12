@@ -389,11 +389,17 @@ Current validated executable-side status:
   `pas_tz` preconditioners; they fall back to shard-local Schwarz / lighter PAS
   paths instead.
 - One-node CPU and one-node GPU parallel paths are usable and deterministic.
-- Strong scaling is still weak on the current challenging single-RHS cases, so
-  the production recommendation remains:
-  - one GPU per case / scan point,
-  - bounded CPU host sharding,
-  - multi-GPU single-case sharding only as an experimental benchmark path for now.
+- Publication-grade parallel scaling now exists on the transport-worker lane:
+  - CPU transport workers scale strongly on the large 3-RHS transport benchmark,
+  - GPU transport workers now scale to `1.48x` on a 2-GPU office rerun of the
+    same 3-RHS transport benchmark, essentially at the finite-task ideal
+    `1.50x`.
+- Strong scaling is still weak on the challenging single-RHS sharded GPU cases,
+  so the production recommendation remains:
+  - transport workers for RHSMode=2/3 throughput,
+  - one GPU per case / scan point for embarrassingly parallel scans,
+  - bounded CPU host sharding for single-RHS solves,
+  - multi-GPU single-case sharding only as an experimental benchmark path.
 
 Implementation principle:
 
@@ -555,6 +561,14 @@ Current latest notable changes before this handoff:
 - README simplified; quick-start now includes in-memory results API.
 - `write_sfincs_jax_output_h5(..., return_results=True)` added.
 - Reduced-suite runner now retries after JAX exceptions with resolution reduction before final `jax_error`.
+
+### 2026-04-11
+- Scope: add a real GPU transport-worker backend that pins independent transport workers one-per-GPU, fix worker result merging, benchmark the fresh 1-vs-2 GPU transport scaling lane on office, and promote that measured lane into the release-facing docs.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/v3_driver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/transport_parallel_worker.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/examples/performance/benchmark_transport_parallel_scaling.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_transport_parallel.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_benchmark_transport_parallel_scaling.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/examples/performance/README.md`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/examples.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/parallelism.rst`, `/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/parallel/transport_parallel_scaling_gpu.png`, `/Users/rogeriojorge/local/tests/sfincs_jax/examples/performance/output/transport_parallel_scaling_gpu.json`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_transport_parallel.py tests/test_benchmark_transport_parallel_scaling.py` (`15 passed` after the merge hardening); `python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/transport_parallel_worker.py examples/performance/benchmark_transport_parallel_scaling.py tests/test_benchmark_transport_parallel_scaling.py`; office GPU benchmark `PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py --backend gpu --input examples/performance/transport_parallel_2min.input.namelist --workers 1 2 --repeats 1 --warmup 0 --global-warmup 1 --precond xmg`
+- Runtime/memory delta: the new GPU transport-worker lane measured `1` GPU worker `351.05 s` and `2` GPU workers `237.75 s` on `examples/performance/transport_parallel_2min.input.namelist`, i.e. `1.48x` speedup on a `3`-RHS workload, essentially at the finite-task ideal of `1.50x`. This becomes the new publication-facing multi-GPU scaling result. Single-case sharded GPU scaling remains weak and unchanged in recommendation.
+- Remaining risks: single-case multi-GPU sharded RHSMode=1 still does not provide publication-grade strong scaling. The transport-worker result is strong, but it is a different parallel lane than sharded single-RHS solves.
+- Next actions: keep the release-facing parallel story centered on transport workers and case-parallel throughput; revisit sharded single-RHS GPU scaling only with a lower-synchronization Krylov or stronger domain-decomposition correction.
 
 ### 2026-04-11
 - Scope: add a bounded multilevel Schwarz residual correction for sharded RHSMode=1 solves, expose its benchmark controls in the sharded-scaling driver, and refresh the publication-facing parallel scaling docs from current measured CPU data.
