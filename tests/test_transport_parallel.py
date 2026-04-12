@@ -60,6 +60,65 @@ def test_transport_parallel_whichrhs_matches_sequential(tmp_path, monkeypatch) -
         np.testing.assert_allclose(np.asarray(seq[key]), np.asarray(par[key]), rtol=5e-4, atol=1e-10)
 
 
+def test_transport_parallel_gpu_backend_merges_subset_elapsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    here = Path(__file__).parent
+    input_path = here / "ref" / "transportMatrix_PAS_tiny_rhsMode2_scheme2.input.namelist"
+    assert input_path.exists()
+    nml = read_sfincs_input(input_path)
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "off")
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+    seq = solve_v3_transport_matrix_linear_gmres(
+        nml=nml,
+        tol=1e-10,
+        input_namelist=input_path,
+        collect_transport_output_fields=False,
+    )
+
+    fake_results = [
+        {
+            "which_rhs_values": [1, 3],
+            "state_vectors_by_rhs": {
+                1: np.asarray(seq.state_vectors_by_rhs[1]),
+                3: np.asarray(seq.state_vectors_by_rhs[3]),
+            },
+            "residual_norms_by_rhs": {
+                1: float(np.asarray(seq.residual_norms_by_rhs[1])),
+                3: float(np.asarray(seq.residual_norms_by_rhs[3])),
+            },
+            "elapsed_time_s": np.asarray(
+                [
+                    float(np.asarray(seq.elapsed_time_s[0])),
+                    float(np.asarray(seq.elapsed_time_s[2])),
+                ],
+                dtype=np.float64,
+            ),
+        },
+        {
+            "which_rhs_values": [2],
+            "state_vectors_by_rhs": {2: np.asarray(seq.state_vectors_by_rhs[2])},
+            "residual_norms_by_rhs": {2: float(np.asarray(seq.residual_norms_by_rhs[2]))},
+            "elapsed_time_s": np.asarray([float(np.asarray(seq.elapsed_time_s[1]))], dtype=np.float64),
+        },
+    ]
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "process")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", "2")
+    monkeypatch.setattr(v3_driver, "_run_transport_parallel_gpu_subprocesses", lambda **_kwargs: fake_results)
+
+    par = solve_v3_transport_matrix_linear_gmres(
+        nml=nml,
+        tol=1e-10,
+        input_namelist=input_path,
+        collect_transport_output_fields=False,
+    )
+
+    np.testing.assert_allclose(np.asarray(par.transport_matrix), np.asarray(seq.transport_matrix), rtol=5e-4, atol=1e-10)
+    np.testing.assert_allclose(np.asarray(par.elapsed_time_s), np.asarray(seq.elapsed_time_s), rtol=0.0, atol=1e-12)
+
+
 def test_transport_scheme1_monoenergetic_write_output_regression(tmp_path, monkeypatch) -> None:
     """Scheme-1 monoenergetic transport output should not fail on an undefined distributed axis."""
     here = Path(__file__).parent
