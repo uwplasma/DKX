@@ -4,7 +4,11 @@ from dataclasses import dataclass, replace
 import atexit
 import contextlib
 import hashlib
+import json
 import multiprocessing as mp
+import subprocess
+import sys
+import tempfile
 import threading
 
 from jax import config as _jax_config
@@ -19855,6 +19859,15 @@ def _transport_parallel_start_method() -> str:
     return "spawn"
 
 
+def _transport_parallel_backend() -> str:
+    env = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "").strip().lower()
+    if env in {"", "auto", "cpu", "process"}:
+        return "cpu"
+    if env in {"gpu", "gpu_process", "process_gpu"}:
+        return "gpu"
+    return "cpu"
+
+
 def _transport_parallel_persistent_pool_enabled() -> bool:
     env = os.environ.get("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "").strip().lower()
     return env not in {"0", "false", "no", "off"}
@@ -19863,10 +19876,110 @@ def _transport_parallel_persistent_pool_enabled() -> bool:
 def _transport_parallel_pool_key(parallel_workers: int) -> tuple[object, ...]:
     return (
         int(parallel_workers),
+        _transport_parallel_backend(),
         _transport_parallel_start_method(),
         os.environ.get("SFINCS_JAX_TRANSPORT_PIN_THREADS", "").strip().lower(),
         os.environ.get("SFINCS_JAX_CORES", "").strip(),
     )
+
+
+def _transport_parallel_visible_gpu_ids(parallel_workers: int) -> list[str]:
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+    if visible:
+        ids = [token.strip() for token in visible.split(",") if token.strip()]
+    else:
+        ids = [str(i) for i in range(max(1, int(parallel_workers)))]
+    return ids
+
+
+def _transport_parallel_gpu_worker_env(*, gpu_id: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    env["SFINCS_JAX_TRANSPORT_PARALLEL"] = "off"
+    env["SFINCS_JAX_TRANSPORT_PARALLEL_CHILD"] = "1"
+    env["SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND"] = "gpu"
+    env["SFINCS_JAX_SHARD"] = "0"
+    env["SFINCS_JAX_MATVEC_SHARD_AXIS"] = "off"
+    env["SFINCS_JAX_AUTO_SHARD"] = "0"
+    env.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+    env.setdefault("TF_GPU_ALLOCATOR", "cuda_malloc_async")
+    return env
+
+
+def _run_transport_parallel_gpu_subprocesses(
+    *,
+    payloads: list[dict[str, object]],
+    parallel_workers: int,
+    emit: Callable[[int, str], None] | None = None,
+) -> list[dict[str, object]]:
+    gpu_ids = _transport_parallel_visible_gpu_ids(parallel_workers)
+    if not gpu_ids:
+        raise RuntimeError("GPU transport parallel backend requested but no visible GPU ids were found.")
+    use_workers = min(int(parallel_workers), len(payloads), len(gpu_ids))
+    gpu_ids = gpu_ids[:use_workers]
+    if emit is not None and use_workers < int(parallel_workers):
+        emit(
+            1,
+            "solve_v3_transport_matrix_linear_gmres: GPU transport workers capped by visible devices "
+            f"({use_workers}/{int(parallel_workers)})",
+        )
+
+    results: list[dict[str, object]] = []
+    with tempfile.TemporaryDirectory(prefix="sfincs_jax_transport_gpu_") as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        procs: list[tuple[subprocess.Popen[str], Path, list[int], str]] = []
+        for i, payload in enumerate(payloads[:use_workers]):
+            rhs_vals = [int(v) for v in payload.get("which_rhs_values", [])]
+            payload_path = tmpdir_path / f"payload_{i}.json"
+            output_path = tmpdir_path / f"result_{i}.npz"
+            payload_path.write_text(json.dumps(payload))
+            gpu_id = gpu_ids[i]
+            env = _transport_parallel_gpu_worker_env(gpu_id=gpu_id)
+            cmd = [
+                sys.executable,
+                "-m",
+                "sfincs_jax.transport_parallel_worker",
+                "--payload",
+                str(payload_path),
+                "--output",
+                str(output_path),
+            ]
+            proc = subprocess.Popen(
+                cmd,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            procs.append((proc, output_path, rhs_vals, gpu_id))
+
+        for proc, output_path, rhs_vals, gpu_id in procs:
+            out, err = proc.communicate()
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    "GPU transport worker failed "
+                    f"(gpu={gpu_id} whichRHS={rhs_vals} code={proc.returncode})\n"
+                    f"stdout:\n{out}\n"
+                    f"stderr:\n{err}"
+                )
+            data = np.load(output_path)
+            rhs_values = [int(v) for v in np.asarray(data["which_rhs_values"], dtype=np.int32)]
+            state_vectors = np.asarray(data["state_vectors"], dtype=np.float64)
+            residual_norms = np.asarray(data["residual_norms"], dtype=np.float64)
+            elapsed_time_s = np.asarray(data["elapsed_time_s"], dtype=np.float64)
+            results.append(
+                {
+                    "which_rhs_values": rhs_values,
+                    "state_vectors_by_rhs": {
+                        int(rhs): state_vectors[idx] for idx, rhs in enumerate(rhs_values)
+                    },
+                    "residual_norms_by_rhs": {
+                        int(rhs): float(residual_norms[idx]) for idx, rhs in enumerate(rhs_values)
+                    },
+                    "elapsed_time_s": elapsed_time_s,
+                }
+            )
+    return results
 
 
 def _transport_parallel_pool_executor_kwargs(
@@ -20149,6 +20262,12 @@ def solve_v3_transport_matrix_linear_gmres(
         parallel_workers = max(1, int(parallel_workers))
     if parallel_workers > 1:
         parallel_workers = min(int(parallel_workers), len(which_rhs_values))
+    parallel_backend = _transport_parallel_backend()
+    if parallel_backend == "gpu" and parallel_workers > 1:
+        visible_gpu_ids = _transport_parallel_visible_gpu_ids(parallel_workers)
+        parallel_workers = min(int(parallel_workers), len(visible_gpu_ids))
+        if parallel_workers <= 1:
+            parallel_backend = "cpu"
 
     if (
         (not parallel_child)
@@ -20160,7 +20279,7 @@ def solve_v3_transport_matrix_linear_gmres(
             emit(
                 0,
                 "solve_v3_transport_matrix_linear_gmres: parallel whichRHS "
-                f"(workers={int(parallel_workers)} rhs_count={len(which_rhs_values)}/{n})",
+                f"(backend={parallel_backend} workers={int(parallel_workers)} rhs_count={len(which_rhs_values)}/{n})",
             )
 
         def _partition(values: list[int], workers: int) -> list[list[int]]:
@@ -20190,7 +20309,13 @@ def solve_v3_transport_matrix_linear_gmres(
 
         results: list[dict[str, object]] = []
         use_persistent_pool = _transport_parallel_persistent_pool_enabled()
-        if use_persistent_pool:
+        if parallel_backend == "gpu":
+            results = _run_transport_parallel_gpu_subprocesses(
+                payloads=payloads,
+                parallel_workers=int(parallel_workers),
+                emit=emit,
+            )
+        elif use_persistent_pool:
             try:
                 pool = _get_transport_parallel_pool(parallel_workers=int(parallel_workers), emit=emit)
                 futures = [pool.submit(_transport_parallel_worker, payload) for payload in payloads]
