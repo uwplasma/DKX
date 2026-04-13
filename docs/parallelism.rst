@@ -1,8 +1,9 @@
 Parallelism
 ===========
 
-This page explains how parallelism works in **SFINCS** and **sfincs_jax**, and how to
-use it on a laptop (multi‑core CPU) and on clusters (multi‑CPU / multi‑GPU).
+This page explains how parallelism works in `sfincs_jax`, how it relates to more
+traditional MPI-distributed neoclassical solves, and how to use it on a laptop
+(multi-core CPU) or on clusters (multi-CPU / multi-GPU).
 
 Why parallelism matters
 -----------------------

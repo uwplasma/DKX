@@ -82,6 +82,12 @@ The repository is kept buildable and testable through standard CI-style commands
    pytest -q
    sphinx-build -W -b html docs docs/_build/html
 
+The same checks are also represented in the repository CI/CD configuration:
+
+- ``.github/workflows/ci.yml`` runs the test matrix and example smoke tests,
+- ``.github/workflows/docs.yml`` builds the Sphinx documentation,
+- ``.github/workflows/publish.yml`` handles packaging/release publication.
+
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
 treated as a real regression.
