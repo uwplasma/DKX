@@ -1,26 +1,27 @@
-System of equations (v3)
-========================
+System of equations
+===================
 
-In its most general configuration, SFINCS v3 solves a coupled system consisting of:
+In its most general supported configuration, `sfincs_jax` solves a coupled system consisting of:
 
 1) a drift-kinetic equation (DKE) for each kinetic species,
 2) an optional quasineutrality equation for the flux-surface variation of the electrostatic potential
    :math:`\Phi_1(\theta,\zeta)`,
 3) auxiliary constraints that remove nullspaces and enforce moment conditions.
 
-This page summarizes the block structure and the equations most relevant to the *linear system* that
-`sfincs_jax` is assembling matrix-free.
+This page summarizes the block structure and the equations most relevant to the linear
+system that `sfincs_jax` assembles and solves.
 For physics background and literature references, see :doc:`physics_models`
 and :doc:`physics_reference`.
 
 For full upstream context and derivations, see the vendored v3 manual and technical docs in
 ``docs/upstream/`` (linked from :doc:`upstream_docs`).
 
-Unknown ordering (PETSc / indices.F90)
---------------------------------------
+Unknown ordering
+----------------
 
-The Fortran v3 code defines a global ordering for the state vector and the rows/columns of the master
-matrix in ``sfincs/fortran/version3/indices.F90``.
+The operator uses a global ordering for the state vector and the rows/columns of the
+master system that follows the mature SFINCS-style block layout because that structure
+is physically natural and convenient for diagnostics, comparison, and testing.
 
 For the common ``readExternalPhi1 = .false.`` case:
 
@@ -69,9 +70,8 @@ and a source term :math:`S_s` that includes the background thermodynamic drives
 (:math:`\partial_\psi n_s`, :math:`\partial_\psi T_s`), the inductive electric field
 (:math:`E_\parallel`), and (in transport-matrix modes) the v3 `whichRHS` overwrites.
 
-The detailed normalized coefficients are the same as in upstream v3
-(``populateMatrix.F90``), with the explicit expressions for the ExB and magnetic-drift
-prefactors summarized in :doc:`method`.
+The explicit expressions for the ExB and magnetic-drift prefactors are summarized in
+:doc:`method`, with longer-form derivations in :doc:`physics_reference`.
 
 Term-to-input switch mapping
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -126,8 +126,8 @@ RHS matches v3 ``evaluateResidual(f=0)`` exactly.
 Quasineutrality and Phi1 constraint
 -----------------------------------
 
-In the upstream v3 manual (see ``docs/upstream/manual/version3/equations.tex``), the coupled system includes
-a quasineutrality condition and the constraint :math:`\langle \Phi_1 \rangle = 0`:
+The coupled system includes a quasineutrality condition and the constraint
+:math:`\langle \Phi_1 \rangle = 0`:
 
 .. math::
 
@@ -138,12 +138,10 @@ a quasineutrality condition and the constraint :math:`\langle \Phi_1 \rangle = 0
 In the fully nonlinear v3 configuration, the quasineutrality equation contains additional
 nonlinear dependence through :math:`f_{s0}(\Phi_1)` and (depending on options) adiabatic responses.
 
-Current `sfincs_jax` status
----------------------------
+Implementation note
+-------------------
 
-`sfincs_jax` currently supports the **linear** QN/lambda block needed for matrix-free operator application,
-but does not yet include the full set of Phi1-coupling terms inside the kinetic equation and collision
-operator.
-
-This is sufficient to represent v3 configurations in which Phi1 is present as an auxiliary solve but
-does not enter the kinetic operator (and to support block-wise fixture validation).
+Not every optional Phi1 coupling that appears in the extended literature is active in
+every public workflow. The supported scope is documented in :doc:`inputs`,
+:doc:`outputs`, and :doc:`fortran_comparison`, and the code paths that construct these
+blocks live primarily in ``sfincs_jax/v3_system.py`` and ``sfincs_jax/collisions.py``.

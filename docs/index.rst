@@ -1,27 +1,40 @@
 sfincs_jax
 ==========
 
-`sfincs_jax` is a JAX implementation of **SFINCS Fortran v3** focused on
-output compatibility, matrix-free performance, and differentiability.
+`sfincs_jax` is a production neoclassical transport code for radially local
+drift-kinetic calculations in stellarator and tokamak geometry. It combines
+high-fidelity kinetic models, CPU/GPU execution, matrix-free numerics, and optional
+differentiable solve paths in one codebase.
 
 Current release snapshot
 ------------------------
 
 On the current ``main`` branch:
 
-- the full vendored 39-case example suite runs cleanly on CPU and GPU,
-- the default CLI and ``write-output`` path match Fortran v3 outputs with no practical or strict mismatches,
+- the full audited 39-case example suite runs cleanly on CPU and GPU,
+- the default CLI and ``write-output`` path are validated across the release-facing scope with no practical or strict mismatches,
 - the Python API can switch to differentiable solve paths when end-to-end sensitivities are needed,
-- and the remaining open work is performance and memory tuning on the heaviest PAS and geometry-rich cases, not correctness.
+- and the remaining open work is performance and memory tuning on the heaviest cases, not correctness of the documented workflows.
+
+What this documentation covers
+------------------------------
+
+This manual is organized around the actual user and developer workflows:
+
+- :doc:`installation`, :doc:`usage`, :doc:`examples`
+- :doc:`physics_models`, :doc:`system_equations`, :doc:`geometry`
+- :doc:`method`, :doc:`numerics`, :doc:`source_map`
+- :doc:`inputs`, :doc:`outputs`, :doc:`applications`
+- :doc:`parallelism`, :doc:`performance`, :doc:`testing`
+- :doc:`fortran_comparison` and :doc:`references`
 
 .. figure:: _static/figures/sfincs_vs_sfincs_jax_l11_runtime_2x2.png
    :alt: Relative L11 difference and runtime comparison across four monoenergetic cases.
    :align: center
    :width: 90%
 
-   Relative ``ΔL11`` (``(JAX − Fortran) / Fortran``) and runtime comparison for
-   four monoenergetic fixtures. ``sfincs_jax`` runtime excludes JIT compilation
-   (warm-up not timed). Reproduce with
+   Representative transport validation and runtime snapshot for four monoenergetic
+   cases. ``sfincs_jax`` runtime excludes first-time compilation. Reproduce with
    ``examples/performance/benchmark_transport_l11_vs_fortran.py``.
 
 .. figure:: _static/figures/transport_compile_runtime_cache_2x2.png
@@ -37,22 +50,27 @@ On the current ``main`` branch:
    :caption: Contents
 
    installation
-   normalizations
-   method
-   theory_from_upstream
-   physics_models
-   physics_reference
-   paper_figures
-   system_equations
-   parallelism
-   performance_techniques
+   applications
+   examples
    usage
    inputs
    outputs
+   normalizations
+   geometry
+   method
+   numerics
+   source_map
+   theory_from_upstream
+   physics_models
+   physics_reference
+   system_equations
+   parallelism
    performance
+   performance_techniques
+   testing
+   paper_figures
    upstream_docs
    fortran_examples
-   examples
    utils
    api
    fortran_comparison
