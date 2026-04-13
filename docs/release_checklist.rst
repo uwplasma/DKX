@@ -24,8 +24,8 @@ What should still be stated carefully:
 - differentiable solve paths are available from Python when requested,
 - and remaining work is concentrated on runtime and memory optimization of the heaviest PAS and geometry-rich cases.
 
-Before shipping a release, make sure `README.md` and `docs/parity.rst` accurately reflect the
-current state of the port.
+Before shipping a release, make sure `README.md`, `docs/fortran_comparison.rst`, and
+the performance/parallelism pages accurately reflect the current state of the code.
 
 Local validation (recommended)
 ------------------------------
@@ -36,6 +36,12 @@ From the repository root:
 
    pytest -q
    sphinx-build -W -b html docs docs/_build/html
+
+CI/CD also enforces this through:
+
+- ``.github/workflows/ci.yml``
+- ``.github/workflows/docs.yml``
+- ``.github/workflows/publish.yml``
 
 Smoke-run the examples that do not require optional dependencies:
 
