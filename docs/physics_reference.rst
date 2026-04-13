@@ -1,16 +1,17 @@
 Physics reference and code map
 ==============================
 
-This page consolidates the upstream SFINCS v3 notes (``docs/upstream``) into a single,
-code-linked reference. It is intentionally long-form: the goal is to make the physics,
-approximations, and numerics navigable without jumping between PDFs.
+This page consolidates the neoclassical model assumptions, normalization choices, and
+implementation notes that inform `sfincs_jax`. It draws on the long-form derivations
+bundled in ``docs/upstream`` and maps them onto the current source tree so users do not
+have to reconstruct the theory from scattered PDFs alone.
 
 Governing drift-kinetic equation
 --------------------------------
 
-SFINCS v3 starts from the steady-state, radially local drift-kinetic equation for the
-gyro-averaged distribution function :math:`f_s` (Hazeltine 1973; see the v3 technical note
-``20150507-01 Technical documentation for version 3 of SFINCS.pdf``). We split
+`sfincs_jax` starts from the steady-state, radially local drift-kinetic equation for the
+gyro-averaged distribution function :math:`f_s` (Hazeltine 1973; see the bundled
+technical notes). We split
 
 .. math::
 
@@ -298,7 +299,7 @@ Single- vs multi-species normalization
 The note ``20131003-02 Relating quantities in the 1-species and multi-species SFINCS.pdf``
 derives conversion factors between the single-species transport coefficients and the
 fully multi-species formulation. This is especially relevant for benchmarking against
-legacy single-species results and for interpreting monoenergetic (``RHSMode=3``) runs.
+earlier single-species results and for interpreting monoenergetic (``RHSMode=3``) runs.
 
 Code links:
 ``sfincs_jax/diagnostics.py`` (normalization of flux outputs),

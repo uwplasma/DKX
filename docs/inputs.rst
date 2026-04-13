@@ -1,20 +1,67 @@
 Inputs (namelist) reference
 ===========================
 
-`sfincs_jax` reads the same Fortran-style namelist files used by upstream SFINCS v3 (typically named
-``input.namelist``).
+`sfincs_jax` reads Fortran-style namelist files, typically named ``input.namelist``.
+The input surface is intentionally compatible with the mature SFINCS-style ecosystem so
+users can reuse equilibria, scans, and case descriptions, but this page documents the
+public `sfincs_jax` interface in its own right.
 
-Because upstream v3 supports a very large configuration space, this page focuses on:
+This page focuses on:
 
-1) **Where to find the complete upstream parameter definitions**, and
-2) **What subset of inputs is currently implemented end-to-end in `sfincs_jax`**.
+1) the most important public knobs,
+2) geometry and equilibrium-file handling,
+3) supported runtime overrides,
+4) where to find the exhaustive historical parameter definitions when needed.
 
-Full upstream parameter documentation
--------------------------------------
+Primary parameter families
+--------------------------
 
-For the authoritative definitions of all namelist groups/parameters and their meaning, see the vendored
-upstream technical documentation linked from ``docs/upstream_docs.rst`` (PDFs and TeX sources in
-``docs/upstream/``).
+The most important parameter groups in practice are:
+
+- **general / solve mode**:
+  ``RHSMode``, ``collisionOperator``, ``constraintScheme``, ``includePhi1``
+- **geometry**:
+  ``geometryScheme``, ``equilibriumFile``, radial-coordinate selectors
+- **resolution**:
+  ``Ntheta``, ``Nzeta``, ``Nxi``, ``Nx`` and related grid settings
+- **profiles and drives**:
+  densities, temperatures, gradients, electric-field quantities
+- **trajectory / physics switches**:
+  ``magneticDriftScheme``, ``useDKESExBDrift``, ``includeXDotTerm``,
+  ``includePhi1InKineticEquation``, ``includePhi1InCollisionOperator``
+
+For full historical parameter descriptions, see the bundled upstream manual and notes.
+
+Geometry and equilibrium inputs
+-------------------------------
+
+The public supported geometry families are documented in :doc:`geometry`. In practice,
+the most common input choices are:
+
+- analytic tokamak-style geometry with ``geometryScheme=1``,
+- VMEC with ``geometryScheme=5`` and ``equilibriumFile`` or ``wout_path``,
+- Boozer ``.bc`` geometry with ``geometryScheme=11`` or ``12``.
+
+The CLI and Python API use the same equilibrium search order:
+
+- absolute path from the namelist or explicit override,
+- relative to the input namelist directory,
+- relative to the current working directory,
+- directories listed in ``SFINCS_JAX_EQUILIBRIA_DIRS``,
+- then bundled test/example data directories.
+
+Runtime overrides
+-----------------
+
+Without editing the namelist, users can override the equilibrium source through:
+
+- CLI: ``--equilibrium-file ...`` or ``--wout-path ...``
+- Python:
+  :func:`sfincs_jax.io.write_sfincs_jax_output_h5` with ``equilibrium_file=...`` or
+  ``wout_path=...``
+
+When an override is used, the effective configuration is also reflected in the embedded
+``input.namelist`` dataset written to ``sfincsOutput.h5``.
 
 Current `sfincs_jax` support (high level)
 -----------------------------------------
@@ -23,8 +70,8 @@ At a high level:
 
 - **Geometry**: `geometryScheme` in `{1,2,4,5,11,12}` is supported for grid/geometry construction and for
   writing `sfincsOutput.h5` parity fixtures.
-- **Full-system solve parity**: matrix-free matvec/RHS/residual/GMRES parity is available for a growing
-  subset of fixtures (see ``docs/parity.rst``).
+- **Solve/output validation**: the release-facing audited scope is documented in
+  :doc:`fortran_comparison` and :doc:`testing`.
 
 Geometry examples you can run immediately:
 
@@ -33,19 +80,14 @@ Geometry examples you can run immediately:
 - VMEC ``geometryScheme=5``:
   ``examples/getting_started/write_sfincs_output_vmec.py``
 
-The public CLI/API does not currently expose a separate Miller-parameter
-geometry mode. Tokamak examples therefore use the supported analytic Boozer
-tokamak inputs that mirror the upstream v3 example family.
+There is not currently a separate public Miller-parameter geometry interface. Tokamak
+examples therefore use the supported analytic straight-field-line model family.
 
 Practical notes for users
 -------------------------
 
-- If you are starting from an upstream example input, the quickest way to see whether it is supported
-  end-to-end is:
-
-  - Try `sfincs_jax write-output ...` and compare the resulting ``sfincsOutput.h5`` with upstream.
-  - For solve parity status, consult ``docs/parity.rst`` (fixtures) and ``docs/fortran_examples.rst``
-    (the example audit).
+- If you are starting from an existing case, the quickest first check is usually
+  ``sfincs_jax write-output ...`` followed by inspection of ``sfincsOutput.h5``.
 
 - If you want differentiability, prefer workflows that construct a `V3FullSystemOperator` once and then
   treat its fields as differentiable parameters (see ``docs/performance.rst``).
@@ -66,11 +108,11 @@ Practical notes for users
     :func:`sfincs_jax.io.write_sfincs_jax_output_h5`
 
 Transport-matrix modes (``RHSMode=2/3``)
-----------------------------------------------------------------------
+----------------------------------------
 
-In upstream v3, ``RHSMode=2`` and ``RHSMode=3`` (transport-matrix modes) run a loop over ``whichRHS`` and
-overwrite the equilibrium gradients and/or inductive field **internally** before building each RHS via
-``evaluateResidual(f=0)``. `sfincs_jax` exposes the same behavior via
+For ``RHSMode=2`` and ``RHSMode=3`` (transport-matrix modes), `sfincs_jax` runs a loop
+over ``whichRHS`` and overwrites the relevant drives internally before building each RHS.
+This behavior is exposed via
 :func:`sfincs_jax.v3_system.with_transport_rhs_settings` so parity fixtures can reproduce the v3 solver
 RHS exactly.
 
