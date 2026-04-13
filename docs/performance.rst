@@ -343,7 +343,7 @@ summary. For current release claims, use the full example-suite artifacts listed
 Krylov solver strategy (memory + recycling)
 -------------------------------------------
 
-`sfincs_jax` defaults RHSMode=1 linear solves to GMRES (parity-first) and supports BiCGStab as an
+`sfincs_jax` defaults RHSMode=1 linear solves to GMRES and supports BiCGStab as an
 opt-in low-memory option with GMRES fallback on stagnation. For RHSMode=2/3 transport-matrix solves we
 default to BiCGStab and apply the collision-diagonal preconditioner by default, with GMRES as the
 fallback. This keeps memory usage low while preserving the current release-facing parity guarantees. [#petsc-bcgs]_

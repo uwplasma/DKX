@@ -1,18 +1,26 @@
 # sfincs_jax
 
-`sfincs_jax` is a JAX implementation of SFINCS v3 that solves the same neoclassical drift-kinetic problem with matching normalizations, geometry conventions, and output format (`sfincsOutput.h5`).
+`sfincs_jax` is a standalone neoclassical transport code for radially local
+drift-kinetic calculations in stellarator and tokamak geometry. It combines
+high-fidelity kinetic models, CPU/GPU execution, modern matrix-free numerics,
+parallel workflows, and optional differentiable solve paths in one codebase.
 
-On the current `main` branch, the full vendored example suite runs cleanly on CPU and GPU with dataset-level parity against SFINCS Fortran v3. The default CLI path is tuned for robust explicit solves and practical throughput, while the Python API can opt into differentiable solve paths when gradients matter.
+On the current `main` branch, the full audited example suite runs cleanly on CPU and GPU.
+The default CLI path is tuned for robust production solves and practical throughput,
+while the Python API can opt into differentiable solve paths when gradients matter.
 
 It is designed for:
 
 - high-performance runs on CPU/GPU,
+- research and production transport workflows,
 - memory-efficient large solves,
 - end-to-end differentiable workflows.
 
 ![Runtime and parity snapshot](docs/_static/figures/sfincs_vs_sfincs_jax_l11_runtime_2x2.png)
 
-The figure above shows a representative transport benchmark. In the full 39-case example-suite audit below, all cases complete on CPU and GPU with no `jax_error`, no `max_attempts`, no practical mismatches, and no strict mismatches.
+The figure above shows a representative transport benchmark. The release-facing
+validation and benchmark artifacts are documented in the docs and in the audit table
+below.
 
 ## Installation
 
@@ -94,7 +102,7 @@ Repository examples that map directly onto common first tasks:
 
 You can run `sfincs_jax` from anywhere in your terminal. You do not need to be inside the repository folder.
 
-Run an input file (default behavior, same invocation style as Fortran SFINCS):
+Run an input file:
 
 ```bash
 sfincs_jax /path/to/input.namelist
@@ -185,17 +193,25 @@ sfincs_jax compare-h5 --a sfincsOutput_jax.h5 --b sfincsOutput_fortran.h5
 
 Advanced CLI/solver options are documented in `docs/usage.rst` and `docs/performance_techniques.rst`.
 
-## What Differs From Fortran v3
+## Models, Numerics, and Validation
 
-`sfincs_jax` reproduces the SFINCS v3 equations, normalizations, geometry conventions, and output datasets for the supported examples, but the implementation strategy differs in a few important ways:
+`sfincs_jax` solves the same class of neoclassical drift-kinetic problems as mature
+SFINCS workflows, but it is documented and maintained as its own code. In particular:
 
-- the default CLI path uses an explicit performance-oriented solve strategy instead of trying to mirror every PETSc iteration path exactly,
+- the public executable favors bounded, performance-oriented solve strategies,
 - the Python API can switch to differentiable solve paths when end-to-end sensitivities are needed,
 - CPU runs lean on JIT-cached kernels and selected host sparse factorizations for hard linear branches,
 - GPU runs keep operator applications on device, then fall back to accelerator-safe or host rescue paths only when conditioning or memory demands it,
-- and terminal output is intentionally a superset of Fortran SFINCS output so debugging information is available without losing Fortran-visible signals.
+- and the documentation maps the governing equations directly onto the source tree.
 
-The detailed equations and normalization conventions are documented in `docs/system_equations.rst`, `docs/normalizations.rst`, and `docs/method.rst`. CPU/GPU-specific implementation notes are documented in `docs/performance.rst` and `docs/performance_techniques.rst`.
+The main documentation entry points are:
+
+- physics and equations: `docs/physics_models.rst`, `docs/system_equations.rst`, `docs/physics_reference.rst`
+- geometry and numerics: `docs/geometry.rst`, `docs/method.rst`, `docs/numerics.rst`
+- inputs and outputs: `docs/inputs.rst`, `docs/outputs.rst`
+- parallel and performance workflows: `docs/parallelism.rst`, `docs/performance.rst`
+- examples, applications, and testing: `docs/examples.rst`, `docs/applications.rst`, `docs/testing.rst`
+- external trust-building comparisons: `docs/fortran_comparison.rst`
 
 ## Current Example-Suite Audit
 
