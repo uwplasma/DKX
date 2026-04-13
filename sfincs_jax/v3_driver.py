@@ -11577,16 +11577,29 @@ def solve_v3_full_system_linear_gmres(
     )
 
     if int(op.rhs_mode) == 1 and str(solve_method).strip().lower() in {"auto", "default"}:
-        # Default RHSMode=1 to parity-robust GMRES, except for very large
-        # 1-species tokamak PAS systems where short-recurrence BiCGStab avoids
-        # expensive fallback stages while still matching outputs.
-        solve_method = "bicgstab" if pas_large_bicgstab_fastpath else "incremental"
-        if pas_large_bicgstab_fastpath and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: enabling PAS-large BiCGStab fastpath "
-                f"(active_size={int(active_size)} >= {int(pas_large_fastpath_min)})",
-            )
+        # Keep `auto` intact on explicit multi-device sharded runs so the later
+        # distributed solver dispatch can choose a short-recurrence Krylov method.
+        sharded_axis_hint = _matvec_shard_axis(op)
+        sharded_multidevice_hint = sharded_axis_hint in {"theta", "zeta"} and jax.device_count() > 1
+        if pas_large_bicgstab_fastpath:
+            solve_method = "bicgstab"
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: enabling PAS-large BiCGStab fastpath "
+                    f"(active_size={int(active_size)} >= {int(pas_large_fastpath_min)})",
+                )
+        elif sharded_multidevice_hint:
+            solve_method = "auto"
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: preserving auto solver selection for "
+                    f"multi-device sharded axis={sharded_axis_hint}",
+                )
+        else:
+            # Default RHSMode=1 to parity-robust GMRES on non-sharded paths.
+            solve_method = "incremental"
     if emit is not None:
         emit(1, f"solve_v3_full_system_linear_gmres: GMRES tol={tol} atol={atol} restart={restart} maxiter={maxiter} solve_method={solve_method}")
         emit(1, "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)")

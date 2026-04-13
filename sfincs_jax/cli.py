@@ -542,6 +542,14 @@ def _apply_parallel_runtime_settings(args: argparse.Namespace) -> None:
     if shard_pad is not None:
         os.environ["SFINCS_JAX_SHARD_PAD"] = "1" if shard_pad else "0"
 
+    effective_shard_axis = os.environ.get("SFINCS_JAX_MATVEC_SHARD_AXIS", "").strip().lower()
+    effective_distributed_gmres = os.environ.get("SFINCS_JAX_GMRES_DISTRIBUTED", "").strip().lower()
+    if (
+        effective_shard_axis in {"theta", "zeta"}
+        and effective_distributed_gmres not in {"", "0", "false", "no", "off"}
+    ):
+        os.environ.setdefault("SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR", "1")
+
     if bool(getattr(args, "distributed", False)):
         from . import initialize_distributed_runtime_from_env  # noqa: PLC0415
 
