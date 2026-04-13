@@ -399,6 +399,9 @@ Current validated executable-side status:
   `examples/performance/rhsmode1_sharded_scaling.input.namelist` case:
   - implicit sharded path with `theta_schwarz` and 2 coarse levels: `1 GPU 40.8 s`,
     `2 GPUs 61.8 s`,
+  - benchmark-only accelerator distributed sharding now reaches the true
+    multi-GPU execution path, but on the office node it currently trips a CUDA
+    launch-timeout failure instead of producing a usable 2-GPU speedup,
   - explicit non-differentiable sharded path did not improve the 2-GPU result and
     remained slower than the 1-GPU baseline,
   so the production recommendation remains:
@@ -607,6 +610,14 @@ Current latest notable changes before this handoff:
 - Runtime/memory delta: current shipped implicit sharded GPU lane measured `1 GPU 40.787 s` and `2 GPUs 61.766 s` on the medium-large benchmark case. Forcing distributed GMRES remained weak (`44.803 s` vs `62.052 s`). `x`-axis sharding and deeper coarse hierarchy both hit GPU OOM on this node. The explicit non-differentiable executable path also failed to produce a better 2-GPU result and was terminated after running well past the 1-GPU baseline.
 - Remaining risks: strong single-case multi-GPU scaling is still not a release-quality claim on the current solver architecture. The robust publication-facing GPU scaling result remains transport-worker parallelism, not single-case sharding.
 - Next actions: keep the release-facing GPU parallel story centered on transport workers and case-parallel throughput; treat single-case multi-GPU sharding as an active research item requiring a materially different algorithmic step, e.g. lower-synchronization Krylov or a stronger coarse/global correction.
+
+### 2026-04-13
+- Scope: fix the benchmark/runtime logic so accelerator distributed sharded solves are actually exercised when explicitly requested, then rerun the medium office single-case 1-vs-2 GPU benchmark on the real path.
+- Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/examples/performance/benchmark_sharded_solve_scaling.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/v3_driver.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_benchmark_sharded_solve_scaling.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_rhs1_schwarz_heuristic.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
+- Validation run: `pytest -q tests/test_benchmark_sharded_solve_scaling.py tests/test_cli_solve_mode.py tests/test_rhs1_schwarz_heuristic.py` (`41 passed in 23.41s`); `python -m py_compile examples/performance/benchmark_sharded_solve_scaling.py sfincs_jax/cli.py sfincs_jax/v3_driver.py tests/test_benchmark_sharded_solve_scaling.py tests/test_cli_solve_mode.py tests/test_rhs1_schwarz_heuristic.py`; fresh office medium benchmark on `examples/performance/rhsmode1_sharded_scaling.input.namelist` after enabling the actual accelerator distributed path.
+- Runtime/memory delta: the previous benchmark path understated the real problem because it was not reaching the actual accelerator distributed solve. After fixing that, the office medium benchmark hit the real multi-GPU path and failed with `CUDA_ERROR_LAUNCH_TIMEOUT` during the 1-GPU warmup/current-tip run instead of producing a better 2-GPU timing. The benchmark-side accelerator opt-in is therefore useful for research, but not safe to auto-enable in the shipped CLI/runtime path.
+- Remaining risks: true accelerator distributed single-case sharding is now known to be unstable on the office node for the medium benchmark case. This is a clearer result than the old weak-scaling measurement, but it means the item is still open and requires a deeper kernel/runtime redesign rather than more threshold tuning.
+- Next actions: keep accelerator distributed sharding benchmark-only; do not auto-enable it in the CLI. If this item must be closed in the future, the next pass should target a materially different implementation strategy, e.g. smaller compiled kernels / staged halo exchanges, or a different distributed Krylov implementation with less GPU watchdog exposure.
 
 ### 2026-04-10
 - Scope: add a research-grade parallelization program to the release plan, split executable-first parallel rollout from differentiable Python rollout, expose the existing parallel runtime through the public CLI, and add CLI-side parallel provenance so workstation/cluster launches report the active sharding / worker / distributed settings.
