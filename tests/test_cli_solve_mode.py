@@ -120,6 +120,25 @@ def test_cmd_transport_matrix_v3_forces_explicit_mode(monkeypatch, tmp_path: Pat
     assert captured["differentiable"] is False
 
 
+def test_apply_parallel_runtime_settings_enables_accelerator_distributed_gmres(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_MATVEC_SHARD_AXIS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_GMRES_DISTRIBUTED", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR", raising=False)
+
+    args = Namespace(
+        transport_workers=None,
+        shard_axis="theta",
+        distributed_gmres="1",
+        distributed_krylov=None,
+        shard_pad=True,
+        distributed=False,
+    )
+    cli._apply_parallel_runtime_settings(args)
+    assert os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] == "theta"
+    assert os.environ["SFINCS_JAX_GMRES_DISTRIBUTED"] == "1"
+    assert os.environ["SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR"] == "1"
+
+
 def test_write_output_full_system_regression(tmp_path: Path, monkeypatch) -> None:
     """Full-system write-output should not reference transport-only distributed state."""
     input_path = (
