@@ -1,8 +1,9 @@
 Outputs (sfincsOutput.h5)
 =========================
 
-SFINCS v3 writes results to an HDF5 file named ``sfincsOutput.h5``. `sfincs_jax` can now
-write a v3-style output file for supported modes (currently ``geometryScheme in {1,2,4,5,11,12}``).
+`sfincs_jax` writes results to an HDF5 file named ``sfincsOutput.h5``. The file layout
+is designed to remain compatible with the established SFINCS-style postprocessing
+ecosystem while also serving as the native public results format of `sfincs_jax`.
 
 Writing output with `sfincs_jax`
 --------------------------------
@@ -35,8 +36,8 @@ To replicate that end-to-end behavior in `sfincs_jax`, enable:
 In this mode, `sfincs_jax` also writes the RHSMode>1 diagnostics used by upstream scan plotting scripts:
 ``FSABFlow``, ``particleFlux_vm_psiHat``, and ``heatFlux_vm_psiHat``.
 
-The default output uses a **Fortran-compatible array layout**, which is recommended if
-you intend to compare against Fortran v3 output using ``sfincs_jax compare-h5``.
+The default output uses a Fortran-compatible array layout. This is useful both for
+existing postprocessing tools and for external validation with ``sfincs_jax compare-h5``.
 
 Python
 ^^^^^^
@@ -95,7 +96,7 @@ At the moment, `sfincs_jax` output writing supports:
   ``classicalParticleFluxNoPhi1_*`` / ``classicalHeatFluxNoPhi1_*`` (static) and
   ``classicalParticleFlux_*`` / ``classicalHeatFlux_*`` (per-iteration diagnostics)
 
-Output parity tests live in:
+Output-writing regression tests live in:
 
 - ``tests/test_output_h5_scheme4_parity.py`` (scheme 4)
 - ``tests/test_output_h5_scheme1_parity.py`` (scheme 1)
@@ -106,8 +107,8 @@ Output parity tests live in:
 
 and compare the datasets above against frozen Fortran v3 fixtures in ``tests/ref``.
 
-There is also a multi-species parity test against the upstream v3 example output
-(``quick_2species_FPCollisions_noEr``), implemented in
+There is also a multi-species regression against the established reference output for
+``quick_2species_FPCollisions_noEr``, implemented in
 ``tests/test_output_h5_scheme4_quick2species_parity.py``.
 
 Plotting output files

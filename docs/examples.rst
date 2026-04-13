@@ -3,8 +3,8 @@ Examples
 
 The repository includes a structured `examples/` tree:
 
-- `examples/getting_started/`: basic API usage (no Fortran required)
-- `examples/parity/`: parity checks and validation vs frozen Fortran v3 fixtures
+- `examples/getting_started/`: basic API usage (no external reference code required)
+- `examples/parity/`: focused validation scripts against frozen reference fixtures
 - `examples/transport/`: `RHSMode=2/3` transport-matrix workflows + upstream scanplot scripts
 - `examples/autodiff/`: autodiff + implicit-diff demonstrations
 - `examples/optimization/`: optimization patterns (may require extras)
@@ -38,7 +38,7 @@ Plotting a generated or frozen output file:
 
    python examples/getting_started/plot_sfincs_output.py
 
-Matrix-free linear solve demo (using frozen Fortran PETSc binaries):
+Matrix-free linear solve demo (using frozen PETSc binaries):
 
 .. code-block:: bash
 
@@ -61,7 +61,7 @@ right-hand sides (``whichRHS``) and assembling a matrix from diagnostic moments 
 Upstream postprocessing (utils/)
 --------------------------------
 
-SFINCS Fortran v3 includes a set of plotting scripts under `utils/`. `sfincs_jax` vendors these scripts
+The mature SFINCS ecosystem includes a set of plotting scripts under `utils/`. `sfincs_jax` vendors these scripts
 in `examples/sfincs_examples/utils/` and can run them non-interactively:
 
 .. code-block:: bash
@@ -184,11 +184,11 @@ To reuse recent Krylov solutions across ``whichRHS`` solves (RHSMode=2/3), use:
 Upstream SFINCS example inputs
 --------------------------------
 
-For convenience, `sfincs_jax` also vendors the original SFINCS example inputs (Fortran v3, multi-species,
+For convenience, `sfincs_jax` also vendors the original example-input families (multi-species,
 and MATLAB v3) in `examples/upstream/`. These files are intended as recognizable reference points for
 SFINCS users; not all of them are runnable end-to-end in `sfincs_jax` yet.
 
-The full upstream Fortran v3 example suite (plus the upstream postprocessing scripts) is also vendored in
+The full upstream-style example suite (plus the upstream postprocessing scripts) is also vendored in
 `examples/sfincs_examples/`. A best-effort runner is provided:
 
 .. code-block:: bash

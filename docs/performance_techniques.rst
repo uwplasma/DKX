@@ -209,7 +209,7 @@ if the basis truncation is explicit in the input.
 Krylov solver strategy (short recurrence + fallback)
 ----------------------------------------------------
 
-**Technique.** Use GMRES as the default for RHSMode=1 (parity-first) and BiCGStab
+**Technique.** Use GMRES as the default for RHSMode=1 and BiCGStab
 as the default for transport, with GMRES fallback on stagnation or non-finite residuals.
 
 **Motivation.**
@@ -1016,7 +1016,7 @@ rescue transport-matrix solves that stall.
 - RHSMode=1 dense fallback is **enabled for modest systems** (``total_size <= 3000``)
   when Krylov iterations stagnate in FP cases. The trigger uses the **true
   (unpreconditioned)** residual norm so the fallback still fires even if a
-  left-preconditioned norm appears small (parity-first behavior). PAS fallbacks
+  left-preconditioned norm appears small (strict residual-guard behavior). PAS fallbacks
   are disabled by default unless ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX`` is set.
 - For RHSMode=1 runs with ``includePhi1 = .true.``, small systems
   bypass the Newton–Krylov inner GMRES step and take a dense Newton step instead.

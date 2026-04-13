@@ -1,12 +1,15 @@
 Method overview
 ===============
 
-`sfincs_jax` implements the SFINCS Fortran v3 method stack in JAX, keeping
-the v3 model structure while exposing matrix-free and differentiable workflows.
+`sfincs_jax` implements a radially local neoclassical drift-kinetic solve stack with
+structured velocity-space discretization, matrix-free operator application, and
+CPU/GPU-capable solver orchestration.
 
-SFINCS (v3) computes neoclassical transport in stellarators by solving a drift-kinetic
-equation (DKE) for the non-adiabatic part of the distribution function on a flux surface.
-For a physics-first summary (with citations), see :doc:`physics_models`.
+The code solves for the non-adiabatic correction to the distribution function on a
+single flux surface. For the model and literature background, see
+:doc:`physics_models` and :doc:`physics_reference`. This page focuses on the
+discretization and implementation choices that turn that model into an efficient
+computational workflow.
 
 .. figure:: _static/figures/magdrift_bhat.png
    :alt: Example Boozer field magnitude BHat(θ, ζ)
@@ -227,7 +230,7 @@ see the vendored upstream note linked from `docs/upstream_docs.rst`.
 Why JAX?
 --------
 
-Porting to JAX enables:
+Using JAX enables:
 
 - **JIT compilation** (CPU/GPU) of the operator application and solver kernels.
 - **Automatic differentiation** through geometry, collision operators, and eventually the
@@ -240,22 +243,22 @@ Porting to JAX enables:
   - `optax` for gradient-based optimization loops (calibration, inverse problems).
   - `equinox` for clean, testable module organization and parameter handling.
 
-Parity-first strategy
----------------------
+Code design strategy
+--------------------
 
-The v3 codebase is large, so `sfincs_jax` is built in small parity-checked slices:
+The code is organized around a small number of principles:
 
-1. Port a well-scoped subsystem (grid, geometry piece, operator term).
-2. Add a test that compares against frozen Fortran v3 reference data.
-3. Only then expand functionality.
-
-This approach keeps the port correct and refactorable while still moving quickly.
+1. keep the physics terms explicit and inspectable,
+2. separate operator construction from solve-policy decisions,
+3. use JAX where it materially helps performance or differentiability,
+4. allow bounded host-side rescues when they are the practical production solution,
+5. validate every numerical change with targeted tests and audited case runs.
 
 Matrix-free residual and Jacobian application
 ---------------------------------------------
 
 For iterative solvers and implicit differentiation, it is useful to work with a residual
-function rather than an assembled sparse matrix. For the (linear) v3 F-block this residual is
+function rather than an assembled sparse matrix. For the linear kinetic block this residual is
 
 .. math::
 
@@ -280,7 +283,7 @@ SFINCS v3 systems are large, stiff, and often ill-conditioned due to collision o
 constraint nullspaces, and mixed dense/sparse structure. `sfincs_jax` mirrors the v3
 iterative strategy but keeps the operator matrix-free:
 
-- **GMRES** (Saad & Schultz, 1986) is the default for RHSMode=1 (parity-first) and is
+- **GMRES** (Saad & Schultz, 1986) is the default for RHSMode=1 robust implicit solves and is
   used as a robust fallback when short-recurrence solvers stagnate.
 - **BiCGStab** (van der Vorst, 1992) is the default for transport solves and is
   available for RHSMode=1 when low memory is preferred.
@@ -344,5 +347,5 @@ special `(L=0,1)` entrance block remains handled explicitly in
 the leading block is singular or badly conditioned, so the solve can start from
 the opposite end of the block chain. The structured tail is currently an
 explicit opt-in experiment (`SFINCS_JAX_PAS_TOKAMAK_STRUCTURED=1`), since the
-shipped tokamak PAS fixtures on `main` still favor the legacy tail on runtime
+shipped tokamak PAS fixtures on `main` still favor the established tail on runtime
 and RSS.
