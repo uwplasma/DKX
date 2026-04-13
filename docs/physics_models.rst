@@ -1,16 +1,17 @@
 Physics model and equations
 ===========================
 
-`sfincs_jax` follows the **radially local drift-kinetic formulation** used in SFINCS v3.
-This page summarizes the physics model, key terms, and how the model connects to the
-discretized operators described in :doc:`system_equations` and :doc:`method`.
-For full derivations, SFINCS v3 modeling notes, and a code-to-equation mapping, see
-:doc:`physics_reference`.
+`sfincs_jax` solves a **radially local, steady-state drift-kinetic problem** on a
+single flux surface. This page summarizes the governing model, the main approximations,
+and how the physics terms map onto the discretized operators documented in
+:doc:`system_equations`, :doc:`geometry`, and :doc:`numerics`.
+For full derivations and code-location detail, see :doc:`physics_reference` and
+:doc:`source_map`.
 
 Model overview
 --------------
 
-SFINCS evolves the non-adiabatic perturbation :math:`f_{s1}` about a Maxwellian
+`sfincs_jax` evolves the non-adiabatic perturbation :math:`f_{s1}` about a Maxwellian
 background :math:`f_{s0}` on a single flux surface:
 
 .. math::
@@ -28,6 +29,38 @@ where the operator :math:`\mathcal{L}_s` includes streaming, mirror force,
 linearized collision operator. The source :math:`S_s` contains thermodynamic drives,
 the inductive electric field, and the RHSMode-specific forcing used in transport
 matrix calculations. [#sfincs2015]_
+
+Background distribution and normalized variables
+------------------------------------------------
+
+The code uses the normalized variables
+
+.. math::
+
+   x_s = \frac{v}{\sqrt{2T_s/m_s}},
+   \qquad
+   \xi = \frac{v_\parallel}{v},
+   \qquad
+   \mu = \frac{v_\perp^2}{2B},
+
+with a background state
+
+.. math::
+
+   f_{s0} =
+   n_s \left(\frac{m_s}{2\pi T_s}\right)^{3/2}
+   \exp(-x_s^2)
+
+or, when the flux-surface-varying potential is included,
+
+.. math::
+
+   f_{s0} =
+   f_{sM}\exp\!\left(-\frac{Z_s e \Phi_1}{T_s}\right).
+
+The normalization conventions used for hats and dimensionless drives are summarized in
+:doc:`normalizations`. These conventions matter directly for the coefficients used in
+``sfincs_jax/v3_system.py`` and the diagnostics written by ``sfincs_jax/io.py``.
 
 Geometry and guiding-center drifts
 ----------------------------------
@@ -66,6 +99,29 @@ The linearized FP operator is the most accurate model for neoclassical transport
 SFINCS and is the basis for the collision-driven preconditioners used in `sfincs_jax`.
 [#sfincs2015]_
 
+Constraint closure and source/sink terms
+----------------------------------------
+
+The discrete linear system is closed by auxiliary constraints. In the common linear
+formulation these are equivalent to enforcing
+
+.. math::
+
+   \left\langle \int d^3v \, f_{s1} \right\rangle = 0,
+   \qquad
+   \left\langle \int d^3v \, v^2 f_{s1} \right\rangle = 0,
+
+with optional quasineutrality and gauge conditions when :math:`\Phi_1` is solved:
+
+.. math::
+
+   \lambda + \sum_s Z_s \int d^3v \, (f_{s0}+f_{s1}) = 0,
+   \qquad
+   \langle \Phi_1 \rangle = 0.
+
+These conditions remove nullspaces associated with conservation laws and determine the
+algebraic branch selected by the solve.
+
 Phi1 and quasineutrality
 ------------------------
 
@@ -83,13 +139,48 @@ right-hand sides and postprocess the solutions into particle/heat fluxes and FSA
 flows. These coefficients are the basis for neoclassical transport predictions and
 bootstrap current calculations in SFINCS. [#sfincs2015]_
 
+The main moments of interest are built from velocity-space and flux-surface integrals,
+schematically
+
+.. math::
+
+   \Gamma_s = \left\langle \int d^3v \, f_{s1}\,\mathbf{v}_{d,s}\cdot\nabla r \right\rangle,
+
+.. math::
+
+   Q_s = \left\langle \int d^3v \, \frac{m_s v^2}{2} f_{s1}\,\mathbf{v}_{d,s}\cdot\nabla r \right\rangle,
+
+.. math::
+
+   V_{\parallel,s} = \left\langle \int d^3v \, v_\parallel f_{s1} \right\rangle,
+   \qquad
+   j_\parallel = \sum_s Z_s e V_{\parallel,s}.
+
+`sfincs_jax` evaluates these moments in ``sfincs_jax/diagnostics.py`` and
+``sfincs_jax/transport_matrix.py``.
+
+Trajectory-model knobs
+----------------------
+
+The physical model is intentionally configurable. The most important switches are:
+
+- ``magneticDriftScheme`` for magnetic-drift terms,
+- ``useDKESExBDrift`` for DKES-like vs full :math:`E\times B` advection,
+- ``includeXDotTerm`` and the corresponding :math:`\dot \xi` electric-field term,
+- ``collisionOperator`` for PAS vs full FP,
+- ``includePhi1`` / ``includePhi1InKineticEquation`` /
+  ``includePhi1InCollisionOperator`` for flux-surface-varying electrostatic physics.
+
+The detailed switch-to-equation map is given in :doc:`system_equations`.
+
 Implementation notes
 --------------------
 
 - Term-by-term input switches are documented in :doc:`system_equations`.
 - Discretization details (Legendre modes, :math:`x` grid, angular finite differences)
-  are summarized in :doc:`method`.
+  are summarized in :doc:`method` and :doc:`numerics`.
 - Normalizations for all hat variables are listed in :doc:`normalizations`.
+- Source-file locations for the main operators are listed in :doc:`source_map`.
 
 References
 ----------

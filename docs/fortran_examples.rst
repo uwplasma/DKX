@@ -1,8 +1,9 @@
 Fortran v3 example suite status
 ===============================
 
-This page tracks the vendored upstream SFINCS Fortran v3 example suite
-(``examples/sfincs_examples``) from the perspective of **exact-input frozen-fixture parity**.
+This page tracks the vendored upstream example suite
+(``examples/sfincs_examples``) from the perspective of **exact-input frozen-fixture
+validation**.
 
 For the current release-facing status on ``main`` use the full scaled example-suite audit instead:
 
