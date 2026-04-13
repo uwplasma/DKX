@@ -141,7 +141,7 @@ Solving a supported v3 linear run (matrix-free)
 
 .. note::
 
-   The default ``--solve-method auto`` uses GMRES for RHSMode=1 (parity-first) and BiCGStab for
+   The default ``--solve-method auto`` uses GMRES for RHSMode=1 robust implicit solves and BiCGStab for
    RHSMode=2/3 transport solves. BiCGStab remains available for low-memory RHSMode=1 runs via
    ``--solve-method bicgstab``. Transport solves apply a cheap collision-diagonal
    preconditioner by default, while RHSMode=1 preconditioning follows the v3 namelist defaults
@@ -216,8 +216,7 @@ workstation or cluster launch.
 Solver controls (environment variables)
 ---------------------------------------
 
-Defaults are parity-first: running with the same input.namelist as v3 should produce
-matching outputs and stdout without extra flags. The environment variables below are
+Defaults are chosen for robust, validated production runs. The environment variables below are
 advanced tuning knobs for performance or debugging.
 
 Some solver options are intentionally exposed as environment variables so you can tune
@@ -231,7 +230,7 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_RHSMODE1_SOLVE_METHOD``: choose the RHSMode=1 linear solve backend:
 
-  - ``auto`` (default): GMRES (parity-first) with stage-2 fallback on stagnation.
+  - ``auto`` (default): GMRES with stage-2 fallback on stagnation.
   - ``bicgstab``: force BiCGStab for a low-memory Krylov solve (with GMRES fallback on stagnation).
   - ``dense``: assemble the dense operator from matvecs and solve directly (fast for tiny fixtures,
     but scales poorly).
@@ -362,7 +361,7 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_BICGSTAB_FALLBACK``: control when BiCGStab falls back to GMRES.
 
-  - ``strict``/``1`` (default): fallback if the residual exceeds tolerance (parity-first).
+  - ``strict``/``1`` (default): fallback if the residual exceeds tolerance.
   - ``0``/``loose``: fallback only on non-finite residuals (performance-first).
 
 - ``SFINCS_JAX_TRANSPORT_PRECOND``: RHSMode=2/3 transport preconditioner.

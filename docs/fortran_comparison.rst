@@ -1,9 +1,9 @@
 :orphan:
 
-Fortran Comparison
-==================
+Validation against reference implementations
+============================================
 
-This project validates outputs and solver behavior against SFINCS Fortran v3 as a
+`sfincs_jax` validates outputs and solver behavior against a mature Fortran SFINCS implementation as a
 reference implementation.
 
 On the current ``main`` branch, the release-facing comparison is the full vendored
