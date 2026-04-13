@@ -17,6 +17,7 @@ def test_configure_backend_env_gpu() -> None:
     assert env["CUDA_VISIBLE_DEVICES"] == "0,1"
     assert env["XLA_PYTHON_CLIENT_PREALLOCATE"] == "false"
     assert env["TF_GPU_ALLOCATOR"] == "cuda_malloc_async"
+    assert env["SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR"] == "1"
 
 
 def test_configure_backend_env_auto_defaults_to_cpu_devices() -> None:
@@ -42,3 +43,19 @@ def test_configure_solver_env_sets_multilevel_schwarz_controls() -> None:
     assert env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS"] == "2"
     assert env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS"] == "1"
     assert env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP"] == "0.8"
+
+
+def test_configure_solver_env_enables_accelerator_distributed_gmres_for_sharded_path() -> None:
+    env: dict[str, str] = {}
+    _configure_solver_env(
+        env=env,
+        shard_axis="theta",
+        gmres_distributed="1",
+        distributed_krylov="auto",
+        periodic_stencil_on_sharded="auto",
+        rhs1_precond="theta_schwarz",
+        schwarz_coarse_levels=2,
+        schwarz_coarse_steps=1,
+        schwarz_coarse_damp=0.8,
+    )
+    assert env["SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR"] == "1"

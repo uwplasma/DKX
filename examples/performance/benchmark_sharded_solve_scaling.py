@@ -31,6 +31,7 @@ def _configure_backend_env(*, env: dict[str, str], devices: int, backend: str) -
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(max(1, int(devices))))
         env.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
         env.setdefault("TF_GPU_ALLOCATOR", "cuda_malloc_async")
+        env.setdefault("SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR", "1")
         return
     env["SFINCS_JAX_CPU_DEVICES"] = str(int(devices))
     if backend_norm == "cpu":
@@ -61,6 +62,8 @@ def _configure_solver_env(
         env["SFINCS_JAX_RHSMODE1_PRECONDITIONER"] = rhs1_precond
     else:
         env.pop("SFINCS_JAX_RHSMODE1_PRECONDITIONER", None)
+    if shard_axis in {"theta", "zeta"} and str(gmres_distributed).strip().lower() not in {"", "0", "false", "no", "off"}:
+        env.setdefault("SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR", "1")
     if periodic_stencil_on_sharded == "off":
         env["SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED"] = "0"
     elif periodic_stencil_on_sharded == "on":
