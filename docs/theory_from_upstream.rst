@@ -1,10 +1,10 @@
 Theory from the upstream SFINCS notes
 =====================================
 
-This page pulls the core narrative from the upstream SFINCS v3 technical notes into the
-main documentation set. The goal is to keep the theory readable in the docs themselves,
-with the vendored PDFs in ``docs/upstream/`` serving as archival source material rather
-than the only place where the model is explained.
+This page pulls the core narrative from the bundled SFINCS technical notes into the main
+documentation set. The goal is to keep the theory readable in the docs themselves, with
+the vendored PDFs in ``docs/upstream/`` serving as archival source material rather than
+the only place where the model is explained.
 
 Ordering and reduction used by SFINCS v3
 ----------------------------------------
@@ -106,15 +106,15 @@ remove nullspaces associated with those conserved quantities. In practice this i
 SFINCS carries explicit constraints and why different ``constraintScheme`` choices can
 change the algebraic branch even when the physics is equivalent.
 
-The important implementation consequence for ``sfincs_jax`` is that parity is not only
-about matching matrix entries. It is also about matching:
+The important implementation consequence for ``sfincs_jax`` is that validation is not
+only about matching matrix entries. It is also about matching:
 
 - which nullspace or gauge is selected,
 - which moments are constrained directly,
 - and which post-processed diagnostics are treated as gauge-sensitive when the solve is
   intentionally rank-deficient.
 
-This is also why the fast CLI/default path and the differentiable reference path are
+This is also why the fast CLI/default path and the differentiable Python path are
 separated: the fast path can use different linear algebra as long as it converges to the
 same physically valid constrained state.
 
@@ -199,7 +199,7 @@ The upstream notes point to a consistent implementation strategy:
 
 That leads directly to the current engineering split in ``sfincs_jax``:
 
-- a parity-oriented reference path for explicit Python requests and differentiable
+- a validation-oriented differentiable path for explicit Python requests and gradient
   workflows,
 - a performance-oriented explicit CLI/default path,
 - and a continuing push to encode more of the true operator structure in the

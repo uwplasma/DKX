@@ -1,11 +1,12 @@
-Upstream SFINCS documentation (vendored)
-========================================
+Bundled source literature
+=========================
 
-The original SFINCS repository contains a collection of technical notes, papers, and LaTeX sources
-that document the physics models and numerical algorithms used in the Fortran codebase.
+The repository includes a bundled archive of technical notes, papers, and LaTeX sources
+that document the physics models and numerical algorithms from the mature SFINCS
+literature.
 
-To make `sfincs_jax` self-contained on Read the Docs, selected upstream documents are vendored in
-``docs/upstream/`` and linked here for convenient browsing and download.
+To make `sfincs_jax` self-contained on Read the Docs, selected source documents are
+vendored in ``docs/upstream/`` and linked here for convenient browsing and download.
 
 The most important physics and numerical content from these notes is now also transcribed into the
 main documentation set, especially:
