@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 from types import SimpleNamespace
 import numpy as np
+import pytest
 
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
@@ -294,6 +295,40 @@ def test_precond_dtype_auto_keeps_fp64_for_pas_dkes(monkeypatch) -> None:
     assert v3_driver._precond_dtype() == v3_driver.jnp.float64
     v3_driver._set_precond_policy_hints()
     v3_driver._set_precond_size_hint(None)
+
+
+@pytest.mark.parametrize("forced_precond", ["schur", "xblock_tz"])
+def test_forced_rhs1_preconditioner_does_not_crash_before_er_is_computed(
+    tmp_path: Path,
+    monkeypatch,
+    forced_precond: str,
+) -> None:
+    input_path = (
+        Path(__file__).parent
+        / "reduced_inputs"
+        / "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories.input.namelist"
+    )
+    out_path = tmp_path / f"forced_{forced_precond}.h5"
+
+    txt = input_path.read_text()
+    txt = _patch_resolution_block(txt, ntheta=5, nzeta=9, nxi=4, nx=2, solver_tol=1e-6)
+    txt = _patch_export_block(txt)
+    patched = tmp_path / f"input_forced_{forced_precond}.namelist"
+    patched.write_text(txt)
+
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SOLVE_METHOD", "incremental")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECONDITIONER", forced_precond)
+
+    write_sfincs_jax_output_h5(
+        input_namelist=patched,
+        output_path=out_path,
+        compute_solution=True,
+        verbose=True,
+    )
+
+    assert out_path.exists()
 
 
 def test_pas_dkes_xblock_allowed_only_for_moderate_blocks() -> None:
