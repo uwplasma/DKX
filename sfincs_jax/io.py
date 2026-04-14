@@ -7,6 +7,7 @@ import re
 import shutil
 import time
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
@@ -220,19 +221,49 @@ def _hashable_value(val) -> object:
     return val
 
 
+@lru_cache(maxsize=256)
+def _file_content_identity(path_resolved: str, mtime_ns: int, file_size: int) -> tuple[int, str]:
+    h = hashlib.blake2b(digest_size=16)
+    with Path(path_resolved).open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return int(file_size), h.hexdigest()
+
+
+def _equilibrium_cache_identity(path: str | Path) -> tuple[int, str] | None:
+    try:
+        p = Path(path).expanduser().resolve()
+        st = p.stat()
+    except OSError:
+        return None
+    return _file_content_identity(str(p), int(st.st_mtime_ns), int(st.st_size))
+
+
 def _output_geom_cache_key(*, nml: Namelist, grids: V3Grids) -> tuple[object, ...] | None:
     geom_params = nml.group("geometryParameters")
     geometry_scheme = int(_get_int(geom_params, "geometryScheme", -1))
-    geom_key = tuple(sorted((str(k).upper(), _hashable_value(v)) for k, v in geom_params.items()))
-    grid_key = (int(grids.theta.size), int(grids.zeta.size))
     eq_key = None
     if geometry_scheme in {5, 11, 12}:
         try:
             eq_path = _resolve_equilibrium_file_from_namelist(nml=nml)
-            st = eq_path.stat()
-            eq_key = (str(eq_path), int(st.st_mtime_ns), int(st.st_size))
+            eq_key = _equilibrium_cache_identity(eq_path)
         except Exception:  # noqa: BLE001
             eq_key = None
+    equilibrium_keys = {
+        "EQUILIBRIUMFILE",
+        "FORT996BOOZER_FILE",
+        "JGBOOZER_FILE",
+        "JGBOOZER_FILE_NONSTELSYM",
+    }
+    geom_key_items = []
+    for key, value in geom_params.items():
+        key_u = str(key).upper()
+        if eq_key is not None and key_u in equilibrium_keys:
+            geom_key_items.append((key_u, ("__equilibrium__", eq_key)))
+        else:
+            geom_key_items.append((key_u, _hashable_value(value)))
+    geom_key = tuple(sorted(geom_key_items))
+    grid_key = (int(grids.theta.size), int(grids.zeta.size))
     return ("output_geom", geometry_scheme, geom_key, eq_key, grid_key)
 
 

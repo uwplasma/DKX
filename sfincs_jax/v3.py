@@ -4,6 +4,7 @@ import hashlib
 import math
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from jax import config as _jax_config
@@ -85,7 +86,16 @@ def _group_key(group: dict, keys: list[str]) -> tuple[tuple[str, object], ...]:
     return tuple(items)
 
 
-def _equilibrium_file_key(*, nml: Namelist, geometry_scheme: int, geom_group: dict) -> tuple[str, float] | None:
+@lru_cache(maxsize=256)
+def _equilibrium_file_identity(path_resolved: str, mtime_ns: int, file_size: int) -> tuple[int, str]:
+    h = hashlib.blake2b(digest_size=16)
+    with Path(path_resolved).open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return int(file_size), h.hexdigest()
+
+
+def _equilibrium_file_key(*, nml: Namelist, geometry_scheme: int, geom_group: dict) -> tuple[int, str] | None:
     equilibrium_file = effective_equilibrium_file(geom_params=geom_group)
     if equilibrium_file is None:
         return None
@@ -97,10 +107,10 @@ def _equilibrium_file_key(*, nml: Namelist, geometry_scheme: int, geom_group: di
     else:
         path = resolve_existing_path(str(equilibrium_file), base_dir=base_dir, extra_search_dirs=extra).path
     try:
-        mtime = float(path.stat().st_mtime)
+        st = path.stat()
     except FileNotFoundError:
-        mtime = -1.0
-    return (str(path), mtime)
+        return None
+    return _equilibrium_file_identity(str(path.resolve()), int(st.st_mtime_ns), int(st.st_size))
 
 
 _GRIDS_CACHE: dict[tuple[object, ...], V3Grids] = {}

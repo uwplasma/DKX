@@ -159,6 +159,9 @@ so repeated cases that share the same equilibrium file reuse the computed data.
 - ``sfincs_jax.io.sfincs_jax_output_dict`` caches expensive output-only fields
   (``gpsiHatpsiHat``, ``uHat``, ``diotadpsiHat``) in
   ``~/.cache/sfincs_jax/output_cache``.
+- Both caches key equilibria by file content rather than staged temporary path, so
+  repeated suite reruns and copied-case benchmarks reuse cached HSX/W7-X data even
+  when the input tree is localized into a fresh directory.
 - Disable with ``SFINCS_JAX_GEOMETRY_CACHE=0`` / ``SFINCS_JAX_OUTPUT_CACHE=0`` or
   skip disk persistence with ``SFINCS_JAX_GEOMETRY_CACHE_PERSIST=0`` /
   ``SFINCS_JAX_OUTPUT_CACHE_PERSIST=0``.
@@ -169,7 +172,10 @@ so repeated cases that share the same equilibrium file reuse the computed data.
 
 Reduces ``sfincs_jax_output_dict`` time substantially for repeated runs on the
 same equilibrium, especially HSX/W7-X cases where ``gpsiHatpsiHat`` and ``uHat``
-are otherwise recomputed each run.
+are otherwise recomputed each run. On the copied-HSX offender probe, warming the
+cache on the original case and rerunning from a copied ``.bc`` path reduced
+``sfincs_jax_output_dict`` from ``1.554 s`` to ``1.257 s`` without changing the
+solve path or outputs.
 
 Active-DOF reduction (sparse pitch grid)
 ----------------------------------------
