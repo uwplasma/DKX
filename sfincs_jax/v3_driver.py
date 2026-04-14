@@ -183,9 +183,9 @@ def _rhs1_pas_tokamak_gpu_theta_allowed(
         return False
     theta_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_MAX", "").strip()
     try:
-        theta_max = int(theta_max_env) if theta_max_env else 8000
+        theta_max = int(theta_max_env) if theta_max_env else 9000
     except ValueError:
-        theta_max = 8000
+        theta_max = 9000
     return int(active_size) <= max(1, int(theta_max))
 
 
@@ -221,9 +221,52 @@ def _rhs1_pas_tokamak_gpu_xblock_preferred(
         return False
     prefer_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "").strip()
     try:
+        prefer_max = int(prefer_max_env) if prefer_max_env else 8000
+    except ValueError:
+        prefer_max = 8000
+    if int(active_size) > max(1, int(prefer_max)):
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
+def _rhs1_pas_tokamak_gpu_zero_er_xblock_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    if not has_pas or has_fp:
+        return False
+    if str(backend).strip().lower() == "cpu":
+        return False
+    if not tokamak_like or not has_collisionless or has_magdrift:
+        return False
+    if float(er_abs) > float(schur_er_min):
+        return False
+    if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
+        return False
+    prefer_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_ZERO_ER_XBLOCK_ACTIVE_MIN", "").strip()
+    prefer_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_ZERO_ER_XBLOCK_ACTIVE_MAX", "").strip()
+    try:
+        prefer_min = int(prefer_min_env) if prefer_min_env else 6000
+    except ValueError:
+        prefer_min = 6000
+    try:
         prefer_max = int(prefer_max_env) if prefer_max_env else 12000
     except ValueError:
         prefer_max = 12000
+    if int(active_size) < max(1, int(prefer_min)):
+        return False
     if int(active_size) > max(1, int(prefer_max)):
         return False
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
@@ -12099,6 +12142,32 @@ def solve_v3_full_system_linear_gmres(
                                     1,
                                     "solve_v3_full_system_linear_gmres: GPU PAS tokamak "
                                     "auto -> pas_tokamak_theta preconditioner",
+                                )
+                        elif _rhs1_pas_tokamak_gpu_zero_er_xblock_preferred(
+                            has_pas=op.fblock.pas is not None,
+                            has_fp=op.fblock.fp is not None,
+                            backend=jax.default_backend(),
+                            tokamak_like=tokamak_like,
+                            active_size=int(active_size),
+                            er_abs=float(er_abs),
+                            schur_er_min=float(schur_er_min),
+                            has_magdrift=(
+                                op.fblock.magdrift_theta is not None
+                                or op.fblock.magdrift_zeta is not None
+                                or op.fblock.magdrift_xidot is not None
+                            ),
+                            has_collisionless=op.fblock.collisionless is not None,
+                            n_theta=int(op.n_theta),
+                            n_zeta=int(op.n_zeta),
+                            max_l=int(max_l),
+                            xblock_tz_limit=max(int(xblock_tz_max), int(pas_dkes_gpu_xblock_max)),
+                        ):
+                            rhs1_precond_kind = "xblock_tz"
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: GPU PAS tokamak zero-Er "
+                                    "auto -> xblock_tz preconditioner",
                                 )
                         elif op.fblock.pas is not None and int(op.total_size) >= pas_xmg_min:
                             # Large constrained PAS+Er systems need stronger x/L coupling than
