@@ -32,6 +32,7 @@ from .input_compat import (
     infer_phi_input_radial_coordinate_for_gradients,
     infer_species_input_radial_coordinate_for_gradients,
 )
+from .geometry import BoozerGeometry
 from .namelist import Namelist
 from .paths import resolve_existing_path
 from .v3 import V3Grids, geometry_from_namelist, grids_from_namelist
@@ -1811,7 +1812,12 @@ def residual_v3_full_system(op: V3FullSystemOperator, x_full: jnp.ndarray) -> jn
 
 
 def full_system_operator_from_namelist(
-    *, nml: Namelist, identity_shift: float = 0.0, phi1_hat_base: jnp.ndarray | None = None
+    *,
+    nml: Namelist,
+    identity_shift: float = 0.0,
+    phi1_hat_base: jnp.ndarray | None = None,
+    grids: V3Grids | None = None,
+    geom: BoozerGeometry | None = None,
 ) -> V3FullSystemOperator:
     """Build the full-system operator (subset) from an input namelist."""
     general = nml.group("general")
@@ -1834,9 +1840,14 @@ def full_system_operator_from_namelist(
     if constraint_scheme < 0:
         constraint_scheme = 1 if collision_operator == 0 else 2
 
-    grids: V3Grids = grids_from_namelist(nml)
-    geom = geometry_from_namelist(nml=nml, grids=grids)
-    fblock: V3FBlockOperator = fblock_operator_from_namelist(nml=nml, identity_shift=identity_shift)
+    grids = grids_from_namelist(nml) if grids is None else grids
+    geom = geometry_from_namelist(nml=nml, grids=grids) if geom is None else geom
+    fblock: V3FBlockOperator = fblock_operator_from_namelist(
+        nml=nml,
+        identity_shift=identity_shift,
+        grids=grids,
+        geom=geom,
+    )
 
     x_grid_scheme = _get_int(other, "xGridScheme", 5)
     point_at_x0 = x_grid_scheme in {2, 6}

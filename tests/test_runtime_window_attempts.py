@@ -49,7 +49,7 @@ def test_runtime_window_max_attempts_returns_last_success(tmp_path: Path, monkey
     ):
         output_path.write_text("jax-h5", encoding="utf-8")
         log_path.write_text("elapsed_s=0.5\n", encoding="utf-8")
-        return 0.5, None, 200.0
+        return 0.5, None, 200.0, 0.5
 
     monkeypatch.setattr(suite, "_run_fortran_direct", fake_fortran)
     monkeypatch.setattr(suite, "_run_jax_cli", fake_jax)
@@ -124,7 +124,7 @@ def test_frozen_reference_reuse_aligns_to_staged_input_without_live_fortran(
         assert input_path.read_text(encoding="utf-8") == staged_input
         output_path.write_text("jax-h5", encoding="utf-8")
         log_path.write_text("elapsed_s=0.5\n", encoding="utf-8")
-        return 0.5, None, 200.0
+        return 0.5, None, 200.0, 0.5
 
     monkeypatch.setattr(suite, "_run_fortran_direct", fail_fortran)
     monkeypatch.setattr(suite, "_run_jax_cli", fake_jax)
@@ -204,7 +204,7 @@ def test_frozen_reference_reuse_survives_jax_retry_without_live_fortran(
             raise RuntimeError("transient GPU allocator failure")
         output_path.write_text("jax-h5", encoding="utf-8")
         log_path.write_text("elapsed_s=0.5\n", encoding="utf-8")
-        return 0.5, None, 200.0
+        return 0.5, None, 200.0, 0.5
 
     monkeypatch.setattr(suite, "_run_fortran_direct", fail_fortran)
     monkeypatch.setattr(suite, "_run_jax_cli", fake_jax)

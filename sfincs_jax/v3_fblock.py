@@ -533,9 +533,15 @@ class V3FBlockOperator:
         )
 
 
-def fblock_operator_from_namelist(*, nml: Namelist, identity_shift: float = 0.0) -> V3FBlockOperator:
-    grids = grids_from_namelist(nml)
-    geom = geometry_from_namelist(nml=nml, grids=grids)
+def fblock_operator_from_namelist(
+    *,
+    nml: Namelist,
+    identity_shift: float = 0.0,
+    grids: V3Grids | None = None,
+    geom: BoozerGeometry | None = None,
+) -> V3FBlockOperator:
+    grids = grids_from_namelist(nml) if grids is None else grids
+    geom = geometry_from_namelist(nml=nml, grids=grids) if geom is None else geom
     general = nml.group("general")
     phys = nml.group("physicsParameters")
     rhs_mode = _get_int(general, "RHSMode", 1)

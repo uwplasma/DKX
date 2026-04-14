@@ -201,6 +201,7 @@ SFINCS workflows, but it is documented and maintained as its own code. In partic
 - the public executable favors bounded, performance-oriented solve strategies,
 - the Python API can switch to differentiable solve paths when end-to-end sensitivities are needed,
 - CPU runs lean on JIT-cached kernels and selected host sparse factorizations for hard linear branches,
+- repeated RHSMode=1 output-writing runs reuse prebuilt grids, geometry, and operator state to cut setup cost on large HSX/geometry11 cases,
 - GPU runs keep operator applications on device, then fall back to accelerator-safe or host rescue paths only when conditioning or memory demands it,
 - and the documentation maps the governing equations directly onto the source tree.
 

@@ -169,6 +169,10 @@ so repeated cases that share the same equilibrium file reuse the computed data.
   switches such as ``useDKESExBDrift``. This allows DKES/full-trajectory pairs
   that share the same static physics inputs to reuse the same cached output-only
   payload safely.
+- The RHSMode=1 output-writing path also reuses the already-built ``grids``,
+  ``geom``, and full-system operator instead of rebuilding them again during the
+  solve handoff. This removes a full operator-construction pass from
+  ``write_sfincs_jax_output_h5(...)`` on staged HSX/geometry11 reruns.
 - Disable with ``SFINCS_JAX_GEOMETRY_CACHE=0`` / ``SFINCS_JAX_OUTPUT_CACHE=0`` or
   skip disk persistence with ``SFINCS_JAX_GEOMETRY_CACHE_PERSIST=0`` /
   ``SFINCS_JAX_OUTPUT_CACHE_PERSIST=0``.
@@ -183,6 +187,12 @@ and the static classical/no-Phi1 diagnostics are otherwise recomputed each run.
 On the copied-HSX offender probe, warming the cache on the original case and
 rerunning from a copied ``.bc`` path reduced ``sfincs_jax_output_dict`` from
 ``1.554 s`` to ``1.257 s`` without changing the solve path or outputs.
+On the narrowed RHSMode=1 PAS offenders, the reused setup path reduced the
+operator-build stage from ``1.928 s`` to ``0.002 s`` on
+``HSX_PASCollisions_DKESTrajectories``, from ``0.583 s`` to ``0.002 s`` on
+``HSX_PASCollisions_fullTrajectories``, and from ``0.218 s`` to ``0.002 s`` on
+``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories``,
+while keeping the outputs parity-clean against the frozen Fortran references.
 
 Active-DOF reduction (sparse pitch grid)
 ----------------------------------------
