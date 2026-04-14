@@ -202,6 +202,33 @@ def test_bicgstab_solve_with_residual_matches_matvec() -> None:
     )
 
 
+def test_gmres_solve_jit_bicgstab_method_matches_numpy() -> None:
+    rng = np.random.default_rng(231)
+    n = 12
+    m = rng.normal(size=(n, n)).astype(np.float64)
+    a = m.T @ m + 0.4 * np.eye(n)
+    b = rng.normal(size=(n,)).astype(np.float64)
+    x_ref = np.linalg.solve(a, b)
+
+    a_j = jnp.asarray(a)
+    b_j = jnp.asarray(b)
+
+    def mv(x):
+        return a_j @ x
+
+    result = gmres_solve_jit(
+        matvec=mv,
+        b=b_j,
+        tol=1e-12,
+        restart=30,
+        maxiter=200,
+        solve_method="bicgstab",
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1e-8, atol=1e-8)
+    assert float(result.residual_norm) < 1e-8
+
+
 def test_explicit_left_preconditioned_gmres_scipy_matches_numpy() -> None:
     a = np.array(
         [
