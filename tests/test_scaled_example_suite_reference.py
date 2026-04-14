@@ -227,6 +227,7 @@ def _case_result(case: str, *, status: str = "parity_ok", strict_mismatches: int
         jax_runtime_s=2.0,
         jax_runtime_s_cold=2.1,
         jax_runtime_s_warm=1.9,
+        jax_logged_elapsed_s=1.7,
         fortran_max_rss_mb=100.0,
         jax_max_rss_mb=200.0,
         jax_solver_iters_mean=5.0,
@@ -280,7 +281,9 @@ def test_write_suite_outputs_writes_incremental_reports(tmp_path: Path) -> None:
     strict_rows = json.loads(report_strict.read_text(encoding="utf-8"))
 
     assert [row["case"] for row in report_rows] == ["a_case", "b_case"]
+    assert report_rows[0]["jax_logged_elapsed_s"] == 1.7
     assert strict_rows[0]["status"] == "parity_mismatch"
+    assert strict_rows[0]["jax_logged_elapsed_s"] == 1.7
     assert strict_rows[0]["n_mismatch_common"] == 1
     assert "Scaled Example Suite Summary" in summary.read_text(encoding="utf-8")
 

@@ -195,6 +195,7 @@ class CaseResult:
     jax_runtime_s: float | None
     jax_runtime_s_cold: float | None
     jax_runtime_s_warm: float | None
+    jax_logged_elapsed_s: float | None
     fortran_max_rss_mb: float | None
     jax_max_rss_mb: float | None
     jax_solver_iters_mean: float | None
@@ -614,6 +615,8 @@ def _hydrate_last_success_metrics(success: dict[str, object] | None) -> dict[str
     fortran_log = _path_from_obj(success.get("fortran_log"))
     if success.get("jax_runtime") is None and jax_log is not None:
         success["jax_runtime"] = _parse_elapsed_s_from_log(jax_log)
+    if success.get("jax_logged_elapsed_s") is None and jax_log is not None:
+        success["jax_logged_elapsed_s"] = _parse_elapsed_s_from_log(jax_log)
     if success.get("jax_max_rss_mb") is None and jax_log is not None:
         success["jax_max_rss_mb"] = _parse_jax_max_rss_from_log(jax_log)
     if success.get("fortran_runtime") is None and fortran_log is not None:
@@ -634,7 +637,7 @@ def _run_jax_cli(
     collect_iterations: bool = True,
     repeats: int = 1,
     cache_dir: Path | None = None,
-) -> tuple[float, float | None, float | None]:
+ ) -> tuple[float, float | None, float | None, float | None]:
     cmd = [
         sys.executable,
         "-m",
@@ -700,7 +703,8 @@ def _run_jax_cli(
     if len(run_times) > 1:
         warm = float(np.mean(np.asarray(run_times[1:], dtype=np.float64)))
     rss_mb = _parse_jax_max_rss_from_log(log_path)
-    return cold, warm, rss_mb
+    logged_elapsed_s = _parse_elapsed_s_from_log(log_path)
+    return cold, warm, rss_mb, logged_elapsed_s
 
 
 _FORTRAN_V3_GENERAL_KEYS = {
@@ -1385,6 +1389,7 @@ def _load_existing_results(report_json: Path) -> dict[str, CaseResult]:
             jax_runtime_s=item.get("jax_runtime_s"),
             jax_runtime_s_cold=item.get("jax_runtime_s_cold"),
             jax_runtime_s_warm=item.get("jax_runtime_s_warm"),
+            jax_logged_elapsed_s=item.get("jax_logged_elapsed_s"),
             fortran_max_rss_mb=item.get("fortran_max_rss_mb"),
             jax_max_rss_mb=item.get("jax_max_rss_mb"),
             jax_solver_iters_mean=item.get("jax_solver_iters_mean"),
@@ -1566,6 +1571,7 @@ def _run_case(
     jax_runtime = None
     jax_runtime_cold = None
     jax_runtime_warm = None
+    jax_logged_elapsed_s = None
     fortran_max_rss_mb = None
     jax_max_rss_mb = None
     jax_solver_iters_mean = None
@@ -1772,7 +1778,7 @@ def _run_case(
         jax_log = case_out_dir / "sfincs_jax.log"
         jax_log_path = jax_log
         try:
-            jax_runtime_cold, jax_runtime_warm, jax_max_rss_mb = _run_jax_cli(
+            jax_runtime_cold, jax_runtime_warm, jax_max_rss_mb, jax_logged_elapsed_s = _run_jax_cli(
                 input_path=dst_input,
                 output_path=jax_h5,
                 timeout_s=timeout_s,
@@ -1912,6 +1918,7 @@ def _run_case(
                     "fortran_runtime": fortran_runtime,
                     "fortran_max_rss_mb": fortran_max_rss_mb,
                     "jax_runtime": jax_runtime,
+                    "jax_logged_elapsed_s": jax_logged_elapsed_s,
                     "jax_max_rss_mb": jax_max_rss_mb,
                 }
             except Exception:  # noqa: BLE001
@@ -2038,6 +2045,7 @@ def _run_case(
         jax_runtime_s=jax_runtime,
         jax_runtime_s_cold=jax_runtime_cold,
         jax_runtime_s_warm=jax_runtime_warm,
+        jax_logged_elapsed_s=jax_logged_elapsed_s,
         fortran_max_rss_mb=fortran_max_rss_mb,
         jax_max_rss_mb=jax_max_rss_mb,
         jax_solver_iters_mean=jax_solver_iters_mean,
@@ -2204,6 +2212,7 @@ def main() -> int:
                 "jax_runtime_s",
                 "jax_runtime_s_cold",
                 "jax_runtime_s_warm",
+                "jax_logged_elapsed_s",
                 "fortran_max_rss_mb",
                 "jax_max_rss_mb",
             ):
