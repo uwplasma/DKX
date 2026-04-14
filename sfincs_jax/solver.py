@@ -730,8 +730,32 @@ def _gmres_solve_core(
             maxiter=maxiter,
             precondition_side=precondition_side,
         )
-        target = max(float(atol), float(tol) * float(jnp.linalg.norm(b)))
-        if not bool(jnp.isfinite(res.residual_norm)) or float(res.residual_norm) > target:
+        target = jnp.maximum(
+            jnp.asarray(atol, dtype=b.dtype),
+            jnp.asarray(tol, dtype=b.dtype) * jnp.linalg.norm(b),
+        )
+        need_fallback = jnp.logical_or(~jnp.isfinite(res.residual_norm), res.residual_norm > target)
+        if _contains_tracer(b, x0, res.residual_norm):
+            # Keep the BiCGStab->GMRES rescue path available under JIT by avoiding
+            # Python-side scalar conversion on traced residuals.
+            return jax.lax.cond(
+                need_fallback,
+                lambda _: _gmres_solve_core(
+                    matvec=matvec,
+                    b=b,
+                    preconditioner=preconditioner,
+                    x0=x0,
+                    tol=tol,
+                    atol=atol,
+                    restart=restart,
+                    maxiter=maxiter,
+                    solve_method="incremental",
+                    precondition_side=precondition_side,
+                ),
+                lambda _: (res.x, r),
+                operand=None,
+            )
+        if bool(need_fallback):
             # Fallback to GMRES when BiCGStab stagnates or returns non-finite residuals.
             return _gmres_solve_core(
                 matvec=matvec,
