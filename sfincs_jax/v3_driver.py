@@ -221,9 +221,9 @@ def _rhs1_pas_tokamak_gpu_xblock_preferred(
         return False
     prefer_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "").strip()
     try:
-        prefer_max = int(prefer_max_env) if prefer_max_env else 6000
+        prefer_max = int(prefer_max_env) if prefer_max_env else 8000
     except ValueError:
-        prefer_max = 6000
+        prefer_max = 8000
     if int(active_size) > max(1, int(prefer_max)):
         return False
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
@@ -12425,25 +12425,6 @@ def solve_v3_full_system_linear_gmres(
             "xblock_tz_lmax",
             "theta_line_xdiag",
         }
-        and (not _rhs1_pas_tokamak_gpu_zero_er_xblock_preferred(
-            has_pas=op.fblock.pas is not None,
-            has_fp=op.fblock.fp is not None,
-            backend=jax.default_backend(),
-            tokamak_like=bool(geom_scheme == 1 or int(op.n_zeta) <= 5),
-            active_size=int(active_size),
-            er_abs=float(er_abs),
-            schur_er_min=float(schur_er_min),
-            has_magdrift=(
-                op.fblock.magdrift_theta is not None
-                or op.fblock.magdrift_zeta is not None
-                or op.fblock.magdrift_xidot is not None
-            ),
-            has_collisionless=op.fblock.collisionless is not None,
-            n_theta=int(op.n_theta),
-            n_zeta=int(op.n_zeta),
-            max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
-            xblock_tz_limit=max(1, int(xblock_tz_max)),
-        ))
     ):
         # PAS runs can stagnate with weak preconditioners; use the
         # PAS hybrid (line + x-coarse) preconditioner by default. For large systems,
