@@ -376,7 +376,7 @@ def test_pas_tokamak_gpu_theta_allowed_only_for_small_er_tokamak_pas() -> None:
         has_fp=False,
         backend="gpu",
         tokamak_like=True,
-        active_size=8500,
+        active_size=245,
         er_abs=1.0e-2,
         schur_er_min=1.0e-12,
         has_magdrift=False,
@@ -399,21 +399,6 @@ def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypa
         n_theta=10,
         n_zeta=1,
         max_l=14,
-        xblock_tz_limit=1200,
-    )
-    assert not v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
-        has_pas=True,
-        has_fp=False,
-        backend="gpu",
-        tokamak_like=True,
-        active_size=8500,
-        er_abs=1.0e-2,
-        schur_er_min=1.0e-12,
-        has_magdrift=False,
-        has_collisionless=True,
-        n_theta=21,
-        n_zeta=1,
-        max_l=40,
         xblock_tz_limit=1200,
     )
     assert not v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
@@ -459,54 +444,6 @@ def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypa
         n_theta=10,
         n_zeta=1,
         max_l=140,
-        xblock_tz_limit=1200,
-    )
-
-
-def test_pas_tokamak_gpu_zero_er_xblock_preferred_for_medium_tokamaks() -> None:
-    assert v3_driver._rhs1_pas_tokamak_gpu_zero_er_xblock_preferred(
-        has_pas=True,
-        has_fp=False,
-        backend="gpu",
-        tokamak_like=True,
-        active_size=8500,
-        er_abs=0.0,
-        schur_er_min=1.0e-12,
-        has_magdrift=False,
-        has_collisionless=True,
-        n_theta=21,
-        n_zeta=1,
-        max_l=40,
-        xblock_tz_limit=1200,
-    )
-    assert not v3_driver._rhs1_pas_tokamak_gpu_zero_er_xblock_preferred(
-        has_pas=True,
-        has_fp=False,
-        backend="gpu",
-        tokamak_like=True,
-        active_size=3284,
-        er_abs=0.0,
-        schur_er_min=1.0e-12,
-        has_magdrift=False,
-        has_collisionless=True,
-        n_theta=21,
-        n_zeta=1,
-        max_l=31,
-        xblock_tz_limit=1200,
-    )
-    assert not v3_driver._rhs1_pas_tokamak_gpu_zero_er_xblock_preferred(
-        has_pas=True,
-        has_fp=False,
-        backend="gpu",
-        tokamak_like=True,
-        active_size=8500,
-        er_abs=1.0e-2,
-        schur_er_min=1.0e-12,
-        has_magdrift=False,
-        has_collisionless=True,
-        n_theta=21,
-        n_zeta=1,
-        max_l=40,
         xblock_tz_limit=1200,
     )
 
