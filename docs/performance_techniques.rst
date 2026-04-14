@@ -813,7 +813,15 @@ only when strict per-iteration history is required.
 preconditioner blocks switch to float32 once the estimated system size exceeds
 ``SFINCS_JAX_PRECOND_FP32_MIN_SIZE`` (global) or the per-block size exceeds
 ``SFINCS_JAX_PRECOND_FP32_MIN_BLOCK`` (per-block), while Krylov iterations remain
-in float64.
+in float64. In addition, the current default auto policy enables float32
+preconditioner storage on the near-zero-:math:`E_r`, PAS-only, ``geometryScheme=4``
+Schur branch on CPU once the full system reaches
+``SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_MIN_SIZE`` (default ``15000``). This is a
+measured memory optimization for the Miller-like two-species PAS case family:
+the audited ``geometryScheme4_2species_PAS_noEr`` fixture dropped from roughly
+``2.95 GB`` RSS to ``1.98 GB`` while keeping ``0`` mismatches against the frozen
+Fortran reference. The policy stays off for PAS+DKES and other geometries because
+the same blanket float32 switch degraded HSX/geometry11 PAS branches.
 
 **Lightweight profiling.** Set ``SFINCS_JAX_PROFILE=1`` to emit coarse timing and
 memory marks during RHSMode=1 solves (operator build, RHS assembly, preconditioner

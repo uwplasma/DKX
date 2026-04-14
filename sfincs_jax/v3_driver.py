@@ -326,6 +326,14 @@ def _is_resource_exhausted_error(exc: Exception) -> bool:
 
 
 _PRECOND_SIZE_HINT: int | None = None
+_PRECOND_GEOM_SCHEME_HINT: int | None = None
+_PRECOND_USE_DKES_HINT: bool | None = None
+_PRECOND_RHS1_PRECOND_KIND_HINT: str | None = None
+_PRECOND_HAS_PAS_HINT: bool | None = None
+_PRECOND_HAS_FP_HINT: bool | None = None
+_PRECOND_INCLUDE_PHI1_HINT: bool | None = None
+_PRECOND_RHS_MODE_HINT: int | None = None
+_PRECOND_ER_ABS_HINT: float | None = None
 
 
 def _set_precond_size_hint(n: int | None) -> None:
@@ -334,6 +342,68 @@ def _set_precond_size_hint(n: int | None) -> None:
         _PRECOND_SIZE_HINT = None
     else:
         _PRECOND_SIZE_HINT = int(n)
+
+
+def _set_precond_policy_hints(
+    *,
+    geom_scheme: int | None = None,
+    use_dkes: bool | None = None,
+    rhs1_precond_kind: str | None = None,
+    has_pas: bool | None = None,
+    has_fp: bool | None = None,
+    include_phi1: bool | None = None,
+    rhs_mode: int | None = None,
+    er_abs: float | None = None,
+) -> None:
+    global _PRECOND_GEOM_SCHEME_HINT
+    global _PRECOND_USE_DKES_HINT
+    global _PRECOND_RHS1_PRECOND_KIND_HINT
+    global _PRECOND_HAS_PAS_HINT
+    global _PRECOND_HAS_FP_HINT
+    global _PRECOND_INCLUDE_PHI1_HINT
+    global _PRECOND_RHS_MODE_HINT
+    global _PRECOND_ER_ABS_HINT
+    _PRECOND_GEOM_SCHEME_HINT = None if geom_scheme is None else int(geom_scheme)
+    _PRECOND_USE_DKES_HINT = None if use_dkes is None else bool(use_dkes)
+    _PRECOND_RHS1_PRECOND_KIND_HINT = None if rhs1_precond_kind is None else str(rhs1_precond_kind)
+    _PRECOND_HAS_PAS_HINT = None if has_pas is None else bool(has_pas)
+    _PRECOND_HAS_FP_HINT = None if has_fp is None else bool(has_fp)
+    _PRECOND_INCLUDE_PHI1_HINT = None if include_phi1 is None else bool(include_phi1)
+    _PRECOND_RHS_MODE_HINT = None if rhs_mode is None else int(rhs_mode)
+    _PRECOND_ER_ABS_HINT = None if er_abs is None else float(er_abs)
+
+
+def _auto_pas_geom4_fp32_precond_allowed(*, size_hint: int) -> bool:
+    env = os.environ.get("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4", "").strip().lower()
+    if env in {"0", "false", "no", "off"}:
+        return False
+    if jax.default_backend() != "cpu":
+        return False
+    if _PRECOND_GEOM_SCHEME_HINT != 4:
+        return False
+    if _PRECOND_RHS_MODE_HINT != 1:
+        return False
+    if not bool(_PRECOND_HAS_PAS_HINT) or bool(_PRECOND_HAS_FP_HINT):
+        return False
+    if bool(_PRECOND_INCLUDE_PHI1_HINT) or bool(_PRECOND_USE_DKES_HINT):
+        return False
+    if str(_PRECOND_RHS1_PRECOND_KIND_HINT or "").strip().lower() not in {"schur", "pas_schur"}:
+        return False
+    er_abs = abs(float(_PRECOND_ER_ABS_HINT or 0.0))
+    er_max_env = os.environ.get("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_ER_MAX", "").strip()
+    try:
+        er_max = float(er_max_env) if er_max_env else 1.0e-12
+    except ValueError:
+        er_max = 1.0e-12
+    if er_abs > max(0.0, float(er_max)):
+        return False
+    policy_size = int(_PRECOND_SIZE_HINT or size_hint)
+    min_env = os.environ.get("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_MIN_SIZE", "").strip()
+    try:
+        min_size = int(min_env) if min_env else 15000
+    except ValueError:
+        min_size = 15000
+    return policy_size >= max(1, int(min_size))
 
 
 def _sparse_structural_tol() -> float:
@@ -350,6 +420,8 @@ def _precond_dtype(size_hint: int | None = None) -> jnp.dtype:
     if env in {"", "auto", "mixed"}:
         if size_hint is None:
             size_hint = _PRECOND_SIZE_HINT or 0
+            if _auto_pas_geom4_fp32_precond_allowed(size_hint=int(size_hint)):
+                return jnp.float32
             thresh_env = os.environ.get("SFINCS_JAX_PRECOND_FP32_MIN_SIZE", "").strip()
             # Parity/stability-first: fp32 preconditioner factors can break convergence for
             # stiff PAS/constraint systems (notably when L=0 PAS diagonals are near-singular).
@@ -357,6 +429,8 @@ def _precond_dtype(size_hint: int | None = None) -> jnp.dtype:
             # truly enormous systems or when explicitly requested via env vars.
             thresh_default = 5_000_000
         else:
+            if _auto_pas_geom4_fp32_precond_allowed(size_hint=int(size_hint)):
+                return jnp.float32
             thresh_env = os.environ.get("SFINCS_JAX_PRECOND_FP32_MIN_BLOCK", "").strip()
             # Default parity-first: keep block preconditioner factors in float64 unless
             # they are truly huge. Using fp32 factors can break convergence in stiff
@@ -11204,6 +11278,13 @@ def solve_v3_full_system_linear_gmres(
         emit(1, f"solve_v3_full_system_linear_gmres: VMEC operator build done elapsed_s={vmec_operator_timer.elapsed_s():.3f}")
     _mark("operator_built")
     _set_precond_size_hint(int(op.total_size))
+    _set_precond_policy_hints(
+        geom_scheme=geom_scheme_hint,
+        has_pas=getattr(op.fblock, "pas", None) is not None,
+        has_fp=getattr(op.fblock, "fp", None) is not None,
+        include_phi1=bool(op.include_phi1),
+        rhs_mode=int(op.rhs_mode),
+    )
     # FP-only large systems: tighten tolerance automatically to recover flow/Mach parity.
     # This avoids relying on dense fallbacks while keeping the default solverTolerance
     # unchanged for smaller cases.
@@ -12575,6 +12656,16 @@ def solve_v3_full_system_linear_gmres(
         rhs1_precond_kind is not None
         and int(op.rhs_mode) == 1
         and (not bool(op.include_phi1))
+    )
+    _set_precond_policy_hints(
+        geom_scheme=geom_scheme,
+        use_dkes=bool(use_dkes),
+        rhs1_precond_kind=rhs1_precond_kind,
+        has_pas=getattr(op.fblock, "pas", None) is not None,
+        has_fp=getattr(op.fblock, "fp", None) is not None,
+        include_phi1=bool(op.include_phi1),
+        rhs_mode=int(op.rhs_mode),
+        er_abs=float(er_abs),
     )
     if rhs1_bicgstab_env in {"0", "false", "no", "off"}:
         rhs1_bicgstab_kind = None
@@ -18976,7 +19067,12 @@ def solve_v3_full_system_newton_krylov(
     """
     op = full_system_operator_from_namelist(nml=nml, identity_shift=identity_shift)
     _set_precond_size_hint(int(op.total_size))
-    _set_precond_size_hint(int(op.total_size))
+    _set_precond_policy_hints(
+        has_pas=getattr(op.fblock, "pas", None) is not None,
+        has_fp=getattr(op.fblock, "fp", None) is not None,
+        include_phi1=bool(op.include_phi1),
+        rhs_mode=int(op.rhs_mode),
+    )
     if x0 is None:
         x = jnp.zeros((op.total_size,), dtype=jnp.float64)
     else:
@@ -20228,6 +20324,12 @@ def solve_v3_transport_matrix_linear_gmres(
         emit(0, "solve_v3_transport_matrix_linear_gmres: starting whichRHS loop")
     op0 = full_system_operator_from_namelist(nml=nml, identity_shift=identity_shift, phi1_hat_base=phi1_hat_base)
     _set_precond_size_hint(int(op0.total_size))
+    _set_precond_policy_hints(
+        has_pas=getattr(op0.fblock, "pas", None) is not None,
+        has_fp=getattr(op0.fblock, "fp", None) is not None,
+        include_phi1=bool(op0.include_phi1),
+        rhs_mode=int(op0.rhs_mode),
+    )
     state_in_env = os.environ.get("SFINCS_JAX_STATE_IN", "").strip()
     state_out_env = os.environ.get("SFINCS_JAX_STATE_OUT", "").strip()
     state_x_by_rhs: dict[int, jnp.ndarray] | None = None

@@ -78,6 +78,9 @@ def _write_lane_summary(rows: list[CaseResult], out_path: Path) -> None:
             return "-"
         return f"{float(v):.{places}f}"
 
+    def _jax_perf_runtime(row: CaseResult) -> float | None:
+        return row.jax_logged_elapsed_s if row.jax_logged_elapsed_s is not None else row.jax_runtime_s
+
     practical_counts: dict[str, int] = {}
     strict_counts: dict[str, int] = {}
     for row in rows:
@@ -86,15 +89,15 @@ def _write_lane_summary(rows: list[CaseResult], out_path: Path) -> None:
         strict_counts[strict_status] = strict_counts.get(strict_status, 0) + 1
 
     offenders_runtime = sorted(
-        (row for row in rows if row.jax_runtime_s is not None),
-        key=lambda row: float(row.jax_runtime_s),
+        (row for row in rows if _jax_perf_runtime(row) is not None),
+        key=lambda row: float(_jax_perf_runtime(row)),
         reverse=True,
     )[:10]
     offenders_runtime_ratio = sorted(
         (
-            (row, float(row.jax_runtime_s) / float(row.fortran_runtime_s))
+            (row, float(_jax_perf_runtime(row)) / float(row.fortran_runtime_s))
             for row in rows
-            if row.jax_runtime_s is not None and row.fortran_runtime_s not in (None, 0.0)
+            if _jax_perf_runtime(row) is not None and row.fortran_runtime_s not in (None, 0.0)
         ),
         key=lambda item: item[1],
         reverse=True,

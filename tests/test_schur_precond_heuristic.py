@@ -254,6 +254,48 @@ def test_pas_auto_strong_retry_skips_after_strong_base(tmp_path: Path, monkeypat
     )
 
 
+def test_precond_dtype_auto_promotes_geom4_pas_schur_cpu(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PRECOND_DTYPE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_MIN_SIZE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_ER_MAX", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    v3_driver._set_precond_policy_hints(
+        geom_scheme=4,
+        use_dkes=False,
+        rhs1_precond_kind="schur",
+        has_pas=True,
+        has_fp=False,
+        include_phi1=False,
+        rhs_mode=1,
+        er_abs=0.0,
+    )
+    v3_driver._set_precond_size_hint(30000)
+    assert v3_driver._precond_dtype() == v3_driver.jnp.float32
+    v3_driver._set_precond_policy_hints()
+    v3_driver._set_precond_size_hint(None)
+
+
+def test_precond_dtype_auto_keeps_fp64_for_pas_dkes(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PRECOND_DTYPE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    v3_driver._set_precond_policy_hints(
+        geom_scheme=11,
+        use_dkes=True,
+        rhs1_precond_kind="schur",
+        has_pas=True,
+        has_fp=False,
+        include_phi1=False,
+        rhs_mode=1,
+        er_abs=0.0,
+    )
+    v3_driver._set_precond_size_hint(30000)
+    assert v3_driver._precond_dtype() == v3_driver.jnp.float64
+    v3_driver._set_precond_policy_hints()
+    v3_driver._set_precond_size_hint(None)
+
+
 def test_pas_dkes_xblock_allowed_only_for_moderate_blocks() -> None:
     assert v3_driver._rhs1_pas_dkes_xblock_allowed(
         has_pas=True,
