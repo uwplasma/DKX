@@ -996,6 +996,13 @@ Current latest notable changes before this handoff:
 - Remaining risks: the remaining real CPU offenders are still HSX PAS DKES/full and the geometry11 PAS full-trajectory case; the current A/B evidence says the next win is not another Krylov-method flip, but rather more aggressive reduction of JAX compile/lowering overhead and residual pre-solve geometry work on fresh-process suite runs.
 - Next actions: target compile-amortization and pre-solve setup on the HSX/geometry11 offenders, likely by reducing fresh-process JAX compilation in the RHSMode=1 path and by widening cache reuse for staged suite runs before revisiting any new solver-preconditioner heuristics.
 
+### 2026-04-14
+- Scope: re-test the remaining GPU PAS offenders on office after the static-output cache expansion, with particular focus on the tokamak 2-species PAS cases.
+- Validation run: targeted office GPU variant sweeps on `tokamak_2species_PASCollisions_noEr` and `tokamak_2species_PASCollisions_withEr_fullTrajectories` against the frozen 2026-04-13 reference root, using `CUDA_VISIBLE_DEVICES=1` and `XLA_PYTHON_CLIENT_PREALLOCATE=false` to avoid unrelated workstation memory pressure.
+- Runtime/memory delta: on a free GPU, current default remained parity-clean and measured `15.904s` for `tokamak_2species_PASCollisions_noEr` and `9.200s` for `tokamak_2species_PASCollisions_withEr_fullTrajectories`. Forced variants still showed the same bounded directional wins (`xblock_tz` for `noEr`, `pas_tokamak_theta` for `withEr`), but the attempted automatic tokamak-GPU helper edits did not survive the full solver control flow and were reverted rather than shipped.
+- Remaining risks: the real shipped defaults are unchanged for the tokamak 2-species GPU PAS branch; the current code still needs a deeper solver-control-flow cleanup before those forced wins can be promoted safely.
+- Next actions: keep the validated static-output cache work on `main`, and continue the offender pass on the true remaining hot path: fresh-process compile/lowering and preconditioner-build overhead on the HSX and geometry11 RHSMode=1 PAS cases.
+
 ### 2026-03-09
 - Scope: Restore strict v3 default gradient-coordinate semantics for ambiguous legacy inputs that specify both `d*drHat` and `d*psiHat` fields, closing the tiny `includePhi1InKineticEquation=true` PAS parity regression before rerunning the broader verification gates.
 - Files changed: `/Users/rogeriojorge/local/tests/sfincs_jax/sfincs_jax/input_compat.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/tests/test_input_compat.py`, `/Users/rogeriojorge/local/tests/sfincs_jax/plan.md`
