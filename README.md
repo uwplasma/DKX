@@ -182,7 +182,15 @@ Current recommendation:
 - Multi-GPU single-case sharding remains experimental. Use it for research and
   benchmarking, not as the default production scaling path.
 
-![Parallel scaling snapshot](docs/_static/figures/parallel/strong_scaling_snapshot.png)
+You can reproduce the recommended multi-GPU transport-worker benchmark with:
+
+```bash
+python examples/performance/benchmark_transport_parallel_scaling.py \
+  --input examples/performance/transport_parallel_2min.input.namelist \
+  --backend gpu \
+  --workers 1 2
+```
+
 ![GPU transport scaling](docs/_static/figures/parallel/transport_parallel_scaling_gpu.png)
 
 Compare two outputs:
