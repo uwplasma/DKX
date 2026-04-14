@@ -82,3 +82,29 @@ def test_output_geom_cache_key_reuses_copied_equilibrium_content(tmp_path: Path)
         geom_group=nml_copy.group("geometryParameters"),
     )
     assert _output_geom_cache_key(nml=nml_src, grids=grids_src) == _output_geom_cache_key(nml=nml_copy, grids=grids_copy)
+
+
+def test_output_geom_cache_key_tracks_classical_flux_inputs_not_dkes_flag(tmp_path: Path) -> None:
+    here = Path(__file__).parent
+    src = here / "reduced_inputs" / "geometryScheme4_2species_PAS_noEr.input.namelist"
+
+    same_phys = tmp_path / "same_phys.namelist"
+    changed_species = tmp_path / "changed_species.namelist"
+    changed_irrelevant = tmp_path / "changed_irrelevant.namelist"
+
+    text = src.read_text(encoding="utf-8")
+    same_phys.write_text(text, encoding="utf-8")
+    changed_species.write_text(text.replace("THats = 1.0d+0 1.0d+0", "THats = 1.0d+0 1.1d+0"), encoding="utf-8")
+    changed_irrelevant.write_text(text.replace("useDKESExBDrift = .false.", "useDKESExBDrift = .true."), encoding="utf-8")
+
+    nml_base = read_sfincs_input(same_phys)
+    nml_species = read_sfincs_input(changed_species)
+    nml_irrelevant = read_sfincs_input(changed_irrelevant)
+    grids = grids_from_namelist(nml_base)
+
+    key_base = _output_geom_cache_key(nml=nml_base, grids=grids)
+    key_species = _output_geom_cache_key(nml=nml_species, grids=grids_from_namelist(nml_species))
+    key_irrelevant = _output_geom_cache_key(nml=nml_irrelevant, grids=grids_from_namelist(nml_irrelevant))
+
+    assert key_base != key_species
+    assert key_base == key_irrelevant

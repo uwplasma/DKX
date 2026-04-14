@@ -57,7 +57,22 @@ class ExportFConfig:
 
 
 _OUTPUT_GEOM_CACHE: dict[tuple[object, ...], dict[str, np.ndarray]] = {}
-_OUTPUT_CACHE_FIELDS = ("gpsiHatpsiHat", "uHat", "diotadpsiHat")
+_OUTPUT_CACHE_FIELDS = (
+    "gpsiHatpsiHat",
+    "uHat",
+    "diotadpsiHat",
+    "VPrimeHat",
+    "FSABHat2",
+    "BDotCurlB",
+    "classicalParticleFluxNoPhi1_psiHat",
+    "classicalParticleFluxNoPhi1_psiN",
+    "classicalParticleFluxNoPhi1_rHat",
+    "classicalParticleFluxNoPhi1_rN",
+    "classicalHeatFluxNoPhi1_psiHat",
+    "classicalHeatFluxNoPhi1_psiN",
+    "classicalHeatFluxNoPhi1_rHat",
+    "classicalHeatFluxNoPhi1_rN",
+)
 
 
 def _select_rhsmode1_linear_solve_method(
@@ -221,6 +236,10 @@ def _hashable_value(val) -> object:
     return val
 
 
+def _group_subset_key(group: dict, keys: tuple[str, ...]) -> tuple[tuple[str, object], ...]:
+    return tuple((key, _hashable_value(group.get(key, None))) for key in keys)
+
+
 @lru_cache(maxsize=256)
 def _file_content_identity(path_resolved: str, mtime_ns: int, file_size: int) -> tuple[int, str]:
     h = hashlib.blake2b(digest_size=16)
@@ -241,6 +260,9 @@ def _equilibrium_cache_identity(path: str | Path) -> tuple[int, str] | None:
 
 def _output_geom_cache_key(*, nml: Namelist, grids: V3Grids) -> tuple[object, ...] | None:
     geom_params = nml.group("geometryParameters")
+    species_params = nml.group("speciesParameters")
+    phys_params = nml.group("physicsParameters")
+    general_params = nml.group("general")
     geometry_scheme = int(_get_int(geom_params, "geometryScheme", -1))
     eq_key = None
     if geometry_scheme in {5, 11, 12}:
@@ -264,7 +286,19 @@ def _output_geom_cache_key(*, nml: Namelist, grids: V3Grids) -> tuple[object, ..
             geom_key_items.append((key_u, _hashable_value(value)))
     geom_key = tuple(sorted(geom_key_items))
     grid_key = (int(grids.theta.size), int(grids.zeta.size))
-    return ("output_geom", geometry_scheme, geom_key, eq_key, grid_key)
+    species_key = tuple(sorted((str(k).upper(), _hashable_value(v)) for k, v in species_params.items()))
+    phys_subset_key = _group_subset_key(
+        phys_params,
+        (
+            "DELTA",
+            "ALPHA",
+            "NU_N",
+            "NUPRIME",
+            "ESTAR",
+        ),
+    )
+    general_subset_key = _group_subset_key(general_params, ("RHSMODE",))
+    return ("output_geom", geometry_scheme, geom_key, eq_key, grid_key, species_key, phys_subset_key, general_subset_key)
 
 
 def _load_output_cache(cache_key: tuple[object, ...]) -> dict[str, np.ndarray] | None:
@@ -1984,8 +2018,22 @@ def sfincs_jax_output_dict(
         out["iota"] = np.asarray(float(geom.iota), dtype=np.float64)
         out["GHat"] = np.asarray(float(geom.g_hat), dtype=np.float64)
         out["IHat"] = np.asarray(float(geom.i_hat), dtype=np.float64)
-    out["VPrimeHat"] = np.asarray(float(np.asarray(vprime_hat_jax(grids=grids, geom=geom), dtype=np.float64)), dtype=np.float64)
-    out["FSABHat2"] = np.asarray(float(np.asarray(fsab_hat2_jax(grids=grids, geom=geom), dtype=np.float64)), dtype=np.float64)
+    cached_vprime = output_cache_payload.get("VPrimeHat") if output_cache_payload is not None else None
+    if cached_vprime is not None:
+        out["VPrimeHat"] = np.asarray(cached_vprime, dtype=np.float64)
+    else:
+        out["VPrimeHat"] = np.asarray(float(np.asarray(vprime_hat_jax(grids=grids, geom=geom), dtype=np.float64)), dtype=np.float64)
+        if output_cache_key is not None and output_cache_payload is not None:
+            output_cache_payload["VPrimeHat"] = out["VPrimeHat"]
+            output_cache_dirty = True
+    cached_fsab2 = output_cache_payload.get("FSABHat2") if output_cache_payload is not None else None
+    if cached_fsab2 is not None:
+        out["FSABHat2"] = np.asarray(cached_fsab2, dtype=np.float64)
+    else:
+        out["FSABHat2"] = np.asarray(float(np.asarray(fsab_hat2_jax(grids=grids, geom=geom), dtype=np.float64)), dtype=np.float64)
+        if output_cache_key is not None and output_cache_payload is not None:
+            output_cache_payload["FSABHat2"] = out["FSABHat2"]
+            output_cache_dirty = True
     cached_gpsi = None
     if output_cache_payload is not None:
         cached_gpsi = output_cache_payload.get("gpsiHatpsiHat")
@@ -2026,7 +2074,14 @@ def sfincs_jax_output_dict(
             - np.asarray(geom.b_hat_sub_zeta, dtype=np.float64) * np.asarray(geom.db_hat_sub_psi_dtheta, dtype=np.float64)
         )
     )
-    out["BDotCurlB"] = np.asarray(bdotcurlb, dtype=np.float64)
+    cached_bdotcurlb = output_cache_payload.get("BDotCurlB") if output_cache_payload is not None else None
+    if cached_bdotcurlb is not None:
+        out["BDotCurlB"] = np.asarray(cached_bdotcurlb, dtype=np.float64)
+    else:
+        out["BDotCurlB"] = np.asarray(bdotcurlb, dtype=np.float64)
+        if output_cache_key is not None and output_cache_payload is not None:
+            output_cache_payload["BDotCurlB"] = out["BDotCurlB"]
+            output_cache_dirty = True
 
     out["DHat"] = np.asarray(geom.d_hat, dtype=np.float64)
     out["BHat"] = np.asarray(geom.b_hat, dtype=np.float64)
@@ -2108,36 +2163,73 @@ def sfincs_jax_output_dict(
 
     from .classical_transport import classical_flux_v3  # noqa: PLC0415
 
-    pf0, hf0 = classical_flux_v3(
-        use_phi1=False,
-        theta_weights=jnp.asarray(grids.theta_weights, dtype=jnp.float64),
-        zeta_weights=jnp.asarray(grids.zeta_weights, dtype=jnp.float64),
-        d_hat=jnp.asarray(out["DHat"], dtype=jnp.float64),
-        gpsipsi=jnp.asarray(out["gpsiHatpsiHat"], dtype=jnp.float64),
-        b_hat=jnp.asarray(out["BHat"], dtype=jnp.float64),
-        vprime_hat=jnp.asarray(out["VPrimeHat"], dtype=jnp.float64),
-        alpha=jnp.asarray(out["alpha"], dtype=jnp.float64),
-        phi1_hat=jnp.zeros_like(jnp.asarray(out["BHat"], dtype=jnp.float64)),
-        delta=jnp.asarray(out["Delta"], dtype=jnp.float64),
-        nu_n=jnp.asarray(out["nu_n"], dtype=jnp.float64),
-        z_s=jnp.asarray(out["Zs"], dtype=jnp.float64),
-        m_hat=jnp.asarray(out["mHats"], dtype=jnp.float64),
-        t_hat=jnp.asarray(out["THats"], dtype=jnp.float64),
-        n_hat=jnp.asarray(out["nHats"], dtype=jnp.float64),
-        dn_hat_dpsi_hat=jnp.asarray(out["dnHatdpsiHat"], dtype=jnp.float64),
-        dt_hat_dpsi_hat=jnp.asarray(out["dTHatdpsiHat"], dtype=jnp.float64),
-    )
+    cached_pf0 = output_cache_payload.get("classicalParticleFluxNoPhi1_psiHat") if output_cache_payload is not None else None
+    cached_hf0 = output_cache_payload.get("classicalHeatFluxNoPhi1_psiHat") if output_cache_payload is not None else None
+    if cached_pf0 is not None and cached_hf0 is not None:
+        out["classicalParticleFluxNoPhi1_psiHat"] = np.asarray(cached_pf0, dtype=np.float64)
+        out["classicalHeatFluxNoPhi1_psiHat"] = np.asarray(cached_hf0, dtype=np.float64)
+        out["classicalParticleFluxNoPhi1_psiN"] = np.asarray(
+            output_cache_payload["classicalParticleFluxNoPhi1_psiN"], dtype=np.float64
+        )
+        out["classicalParticleFluxNoPhi1_rHat"] = np.asarray(
+            output_cache_payload["classicalParticleFluxNoPhi1_rHat"], dtype=np.float64
+        )
+        out["classicalParticleFluxNoPhi1_rN"] = np.asarray(
+            output_cache_payload["classicalParticleFluxNoPhi1_rN"], dtype=np.float64
+        )
+        out["classicalHeatFluxNoPhi1_psiN"] = np.asarray(
+            output_cache_payload["classicalHeatFluxNoPhi1_psiN"], dtype=np.float64
+        )
+        out["classicalHeatFluxNoPhi1_rHat"] = np.asarray(
+            output_cache_payload["classicalHeatFluxNoPhi1_rHat"], dtype=np.float64
+        )
+        out["classicalHeatFluxNoPhi1_rN"] = np.asarray(
+            output_cache_payload["classicalHeatFluxNoPhi1_rN"], dtype=np.float64
+        )
+    else:
+        pf0, hf0 = classical_flux_v3(
+            use_phi1=False,
+            theta_weights=jnp.asarray(grids.theta_weights, dtype=jnp.float64),
+            zeta_weights=jnp.asarray(grids.zeta_weights, dtype=jnp.float64),
+            d_hat=jnp.asarray(out["DHat"], dtype=jnp.float64),
+            gpsipsi=jnp.asarray(out["gpsiHatpsiHat"], dtype=jnp.float64),
+            b_hat=jnp.asarray(out["BHat"], dtype=jnp.float64),
+            vprime_hat=jnp.asarray(out["VPrimeHat"], dtype=jnp.float64),
+            alpha=jnp.asarray(out["alpha"], dtype=jnp.float64),
+            phi1_hat=jnp.zeros_like(jnp.asarray(out["BHat"], dtype=jnp.float64)),
+            delta=jnp.asarray(out["Delta"], dtype=jnp.float64),
+            nu_n=jnp.asarray(out["nu_n"], dtype=jnp.float64),
+            z_s=jnp.asarray(out["Zs"], dtype=jnp.float64),
+            m_hat=jnp.asarray(out["mHats"], dtype=jnp.float64),
+            t_hat=jnp.asarray(out["THats"], dtype=jnp.float64),
+            n_hat=jnp.asarray(out["nHats"], dtype=jnp.float64),
+            dn_hat_dpsi_hat=jnp.asarray(out["dnHatdpsiHat"], dtype=jnp.float64),
+            dt_hat_dpsi_hat=jnp.asarray(out["dTHatdpsiHat"], dtype=jnp.float64),
+        )
 
-    pf0 = np.asarray(pf0, dtype=np.float64)
-    hf0 = np.asarray(hf0, dtype=np.float64)
-    out["classicalParticleFluxNoPhi1_psiHat"] = pf0
-    out["classicalHeatFluxNoPhi1_psiHat"] = hf0
-    out["classicalParticleFluxNoPhi1_psiN"] = pf0 * float(conv["ddpsiN2ddpsiHat"])
-    out["classicalParticleFluxNoPhi1_rHat"] = pf0 * float(conv["ddrHat2ddpsiHat"])
-    out["classicalParticleFluxNoPhi1_rN"] = pf0 * float(conv["ddrN2ddpsiHat"])
-    out["classicalHeatFluxNoPhi1_psiN"] = hf0 * float(conv["ddpsiN2ddpsiHat"])
-    out["classicalHeatFluxNoPhi1_rHat"] = hf0 * float(conv["ddrHat2ddpsiHat"])
-    out["classicalHeatFluxNoPhi1_rN"] = hf0 * float(conv["ddrN2ddpsiHat"])
+        pf0 = np.asarray(pf0, dtype=np.float64)
+        hf0 = np.asarray(hf0, dtype=np.float64)
+        out["classicalParticleFluxNoPhi1_psiHat"] = pf0
+        out["classicalHeatFluxNoPhi1_psiHat"] = hf0
+        out["classicalParticleFluxNoPhi1_psiN"] = pf0 * float(conv["ddpsiN2ddpsiHat"])
+        out["classicalParticleFluxNoPhi1_rHat"] = pf0 * float(conv["ddrHat2ddpsiHat"])
+        out["classicalParticleFluxNoPhi1_rN"] = pf0 * float(conv["ddrN2ddpsiHat"])
+        out["classicalHeatFluxNoPhi1_psiN"] = hf0 * float(conv["ddpsiN2ddpsiHat"])
+        out["classicalHeatFluxNoPhi1_rHat"] = hf0 * float(conv["ddrHat2ddpsiHat"])
+        out["classicalHeatFluxNoPhi1_rN"] = hf0 * float(conv["ddrN2ddpsiHat"])
+        if output_cache_key is not None and output_cache_payload is not None:
+            for key in (
+                "classicalParticleFluxNoPhi1_psiHat",
+                "classicalParticleFluxNoPhi1_psiN",
+                "classicalParticleFluxNoPhi1_rHat",
+                "classicalParticleFluxNoPhi1_rN",
+                "classicalHeatFluxNoPhi1_psiHat",
+                "classicalHeatFluxNoPhi1_psiN",
+                "classicalHeatFluxNoPhi1_rHat",
+                "classicalHeatFluxNoPhi1_rN",
+            ):
+                output_cache_payload[key] = np.asarray(out[key], dtype=np.float64)
+            output_cache_dirty = True
 
     return out
 
