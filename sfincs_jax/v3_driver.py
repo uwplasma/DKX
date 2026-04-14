@@ -11802,6 +11802,7 @@ def solve_v3_full_system_linear_gmres(
         pas_auto_strong_ratio = float(pas_auto_strong_ratio_env) if pas_auto_strong_ratio_env else 10.0
     except ValueError:
         pas_auto_strong_ratio = 10.0
+    er_abs = 0.0
 
     if rhs1_precond_env:
         if rhs1_precond_env in {"0", "false", "no", "off"}:
