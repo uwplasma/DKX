@@ -11216,6 +11216,7 @@ def solve_v3_full_system_linear_gmres(
     *,
     nml: Namelist,
     which_rhs: int | None = None,
+    op: V3FullSystemOperator | None = None,
     x0: jnp.ndarray | None = None,
     tol: float = 1e-10,
     atol: float = 0.0,
@@ -11273,7 +11274,15 @@ def solve_v3_full_system_linear_gmres(
             eq_name = Path(str(eq_hint)).name if eq_hint else "VMEC equilibrium"
             emit(1, f"solve_v3_full_system_linear_gmres: VMEC operator build start ({eq_name})")
             vmec_operator_timer = Timer()
-    op = full_system_operator_from_namelist(nml=nml, identity_shift=identity_shift, phi1_hat_base=phi1_hat_base)
+    op = (
+        full_system_operator_from_namelist(
+            nml=nml,
+            identity_shift=identity_shift,
+            phi1_hat_base=phi1_hat_base,
+        )
+        if op is None
+        else op
+    )
     if emit is not None and vmec_operator_timer is not None:
         emit(1, f"solve_v3_full_system_linear_gmres: VMEC operator build done elapsed_s={vmec_operator_timer.elapsed_s():.3f}")
     _mark("operator_built")

@@ -2546,7 +2546,7 @@ def write_sfincs_jax_output_h5(
         #
         # Therefore, default to a Krylov solver (auto → BiCGStab with GMRES fallback) unless explicitly overridden.
         solve_method = "auto"
-        op0 = full_system_operator_from_namelist(nml=nml)
+        op0 = full_system_operator_from_namelist(nml=nml, grids=grids, geom=geom_full)
         state_in_env = os.environ.get("SFINCS_JAX_STATE_IN", "").strip()
         x0_state = None
         recycle_basis_state = None
@@ -2906,6 +2906,7 @@ def write_sfincs_jax_output_h5(
             _mark("rhs1_solve_start")
             result = solve_v3_full_system_linear_gmres(
                 nml=nml,
+                op=op0,
                 tol=float(solver_tol),
                 solve_method=solve_method,
                 x0=x0_state,
