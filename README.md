@@ -1,5 +1,12 @@
 # sfincs_jax
 
+[![CI](https://github.com/uwplasma/sfincs_jax/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/uwplasma/sfincs_jax/actions/workflows/ci.yml)
+[![Docs](https://github.com/uwplasma/sfincs_jax/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/uwplasma/sfincs_jax/actions/workflows/docs.yml)
+[![PyPI](https://img.shields.io/pypi/v/sfincs_jax)](https://pypi.org/project/sfincs_jax/)
+[![Coverage](https://codecov.io/gh/uwplasma/sfincs_jax/branch/main/graph/badge.svg)](https://codecov.io/gh/uwplasma/sfincs_jax)
+![Python versions](https://img.shields.io/pypi/pyversions/sfincs_jax)
+![License](https://img.shields.io/github/license/uwplasma/sfincs_jax)
+
 `sfincs_jax` is a standalone neoclassical transport code for radially local
 drift-kinetic calculations in stellarator and tokamak geometry. It combines
 high-fidelity kinetic models, CPU/GPU execution, modern matrix-free numerics,
@@ -38,13 +45,55 @@ cd sfincs_jax
 pip install .
 ```
 
-Development install:
+After installing from a source checkout, you can run the CLI immediately on the
+bundled tiny example:
 
 ```bash
-git clone https://github.com/uwplasma/sfincs_jax.git
 cd sfincs_jax
-pip install -e ".[dev]"
+sfincs_jax write-output \
+  --input examples/getting_started/input.namelist \
+  --out sfincsOutput.h5 \
+  --geometry-only
+sfincs_jax --plot sfincsOutput.h5
 ```
+
+This is the fast installation smoke test. It writes `sfincsOutput.h5` and then
+writes a compact PNG summary next to it as `sfincsOutput_summary.png`.
+
+## Quick Start (CLI)
+
+You can run `sfincs_jax` from anywhere in your terminal. You do not need to be
+inside the repository folder.
+
+Run an input file:
+
+```bash
+sfincs_jax /path/to/input.namelist
+```
+
+Write output explicitly:
+
+```bash
+sfincs_jax write-output --input /path/to/input.namelist --out /path/to/sfincsOutput.h5
+```
+
+Plot an existing output file:
+
+```bash
+sfincs_jax --plot /path/to/sfincsOutput.h5
+```
+
+Override the equilibrium file at the CLI without changing `input.namelist`:
+
+```bash
+sfincs_jax write-output \
+  --input /path/to/input.namelist \
+  --out /path/to/sfincsOutput.h5 \
+  --wout-path /path/to/wout.nc
+```
+
+The bare `sfincs_jax /path/to/input.namelist` form accepts the same
+`--equilibrium-file` and `--wout-path` overrides.
 
 ## Quick Start (Python)
 
@@ -92,39 +141,12 @@ write_sfincs_jax_output_h5(
 
 Repository examples that map directly onto common first tasks:
 
+- run the bundled tiny CLI example: `sfincs_jax examples/getting_started/input.namelist`
 - write a tiny tokamak output: `python examples/getting_started/write_sfincs_output_tokamak.py`
 - write a tiny VMEC output with `wout_path`: `python examples/getting_started/write_sfincs_output_vmec.py`
 - plot an output file: `python examples/getting_started/plot_sfincs_output.py`
 - run autodiff examples: `python examples/autodiff/autodiff_gradient_nu_n_residual.py`
 - benchmark CPU/GPU parallel solves: `python examples/performance/benchmark_sharded_solve_scaling.py ...`
-
-## Executable (CLI)
-
-You can run `sfincs_jax` from anywhere in your terminal. You do not need to be inside the repository folder.
-
-Run an input file:
-
-```bash
-sfincs_jax /path/to/input.namelist
-```
-
-Write output explicitly:
-
-```bash
-sfincs_jax write-output --input /path/to/input.namelist --out /path/to/sfincsOutput.h5
-```
-
-Override the equilibrium file at the CLI without changing ``input.namelist``:
-
-```bash
-sfincs_jax write-output \
-  --input /path/to/input.namelist \
-  --out /path/to/sfincsOutput.h5 \
-  --wout-path /path/to/wout.nc
-```
-
-The bare ``sfincs_jax /path/to/input.namelist`` form accepts the same
-``--equilibrium-file`` and ``--wout-path`` overrides.
 
 Parallel CLI controls are now first-class:
 
@@ -199,7 +221,8 @@ Compare two outputs:
 sfincs_jax compare-h5 --a sfincsOutput_jax.h5 --b sfincsOutput_fortran.h5
 ```
 
-Advanced CLI/solver options are documented in `docs/usage.rst` and `docs/performance_techniques.rst`.
+Advanced CLI, plotting, and solver options are documented in `docs/usage.rst`,
+`docs/outputs.rst`, and `docs/performance_techniques.rst`.
 
 ## Models, Numerics, and Validation
 

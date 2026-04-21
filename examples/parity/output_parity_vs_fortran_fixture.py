@@ -9,7 +9,7 @@ Run:
   python examples/parity/output_parity_vs_fortran_fixture.py
 
 Plotting requires:
-  pip install -e ".[viz]"
+  pip install matplotlib
 """
 
 from __future__ import annotations

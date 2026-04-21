@@ -32,6 +32,34 @@ jobs:
         run: |
           python -m pytest -q -n auto --dist=loadscope --splits 3 --group ${{ matrix.group }}
 
+  coverage:
+    runs-on: ubuntu-22.04
+    env:
+      JAX_ENABLE_X64: "True"
+      JAX_DISABLE_JIT: "0"
+      SFINCS_JAX_SOLVER_JIT: "1"
+      SFINCS_JAX_PRECOMPILE: "0"
+      SFINCS_JAX_PROFILE: "0"
+      SFINCS_JAX_CI: "1"
+      SFINCS_JAX_FAST_EXAMPLES: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Coverage
+        run: |
+          python -m pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml --cov-fail-under=50
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          use_oidc: true
+
   examples-smoke:
     runs-on: ubuntu-22.04
     env:
@@ -57,6 +85,7 @@ jobs:
           python examples/getting_started/apply_collisionless_operator.py
           python examples/getting_started/write_sfincs_output_python.py
           python examples/getting_started/write_sfincs_output_cli.py
+          python examples/getting_started/plot_sfincs_output.py
           python examples/parity/write_output_upstream_quick2species_python.py
           python examples/parity/write_output_upstream_quick2species_cli.py
           python examples/parity/geometry_scheme4_parity.py

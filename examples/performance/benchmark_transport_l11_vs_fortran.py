@@ -38,7 +38,7 @@ try:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 except Exception as exc:  # noqa: BLE001
-    raise SystemExit('This example requires matplotlib. Install with: pip install -e ".[viz]"') from exc
+    raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from exc
 
 from sfincs_jax.io import localize_equilibrium_file_in_place, write_sfincs_jax_output_h5
 
