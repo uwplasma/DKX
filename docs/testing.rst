@@ -96,20 +96,22 @@ The current audited full-suite command on ``main`` is:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-On the current audited local release tree this command yields ``473 passed`` and
-roughly ``52%`` package coverage. That number is materially higher than the Linux
+On the current audited local release tree this command yields ``486 passed`` and
+roughly ``53%`` package coverage. That number is materially higher than the Linux
 CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
 surface is still the large solver/geometry stack, especially ``v3_driver.py``,
 ``io.py``, ``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. The latest
 low-cost campaign improved the analytic geometry/grid surface materially
 (``geometry.py`` to about ``88%``, ``grids.py`` to about ``46%``, and
-``vmec_geometry.py`` to about ``97%``) using formula-driven invariants rather than
-slow end-to-end solves. These tests were chosen from the same identities used in the
-SFINCS technical documentation and the 2014 SFINCS paper: periodic/spectral
-differentiation exactness, Boozer-coordinate field-component relations, and the VMEC
-half-mesh finite-difference conventions used by the reference implementation. Reaching a
-research-grade coverage target therefore requires more focused tests on those heavy
-modules rather than more trivial helper tests.
+``vmec_geometry.py`` to about ``97%``) and then added direct coverage for the
+operational cache/policy seams in ``io.py`` and ``v3_driver.py`` using cheap
+environment- and fixture-driven tests. These tests were chosen from the same identities
+used in the SFINCS technical documentation and the 2014 SFINCS paper:
+periodic/spectral differentiation exactness, Boozer-coordinate field-component
+relations, VMEC half-mesh finite-difference conventions, and deterministic cache /
+solver-policy behavior on bounded inputs. Reaching a research-grade coverage target
+therefore still requires more focused tests on the heavy solver modules rather than
+more trivial helper tests.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be

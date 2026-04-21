@@ -1322,7 +1322,24 @@ Release-ready means:
 - Added operational `io` coverage for:
   - geometryScheme=12 non-stellarator-symmetric Boozer localization
   - scheme-5 netCDF sibling preference during equilibrium resolution
+- Added bounded helper coverage for the remaining cheap `io.py` / `v3_driver.py` seams:
+  - `tests/test_io_cache_helpers.py`
+  - `tests/test_v3_driver_policy_helpers.py`
+- These cover:
+  - output-cache enable/path/save/load/version behavior,
+  - hashable grouping and equilibrium-content cache identity,
+  - HDF5 layout and decode helpers,
+  - solver-JIT env/threshold selection,
+  - explicit dtype/policy boundaries for the geometry4 PAS fp32 rule,
+  - dense-backend allow/deny env logic,
+  - resource-exhausted error detection through chained exceptions,
+  - sharded-line override whitelisting.
+- Fresh audited local result on current `main`:
+  - chunked `pytest -q` over the full tree to avoid the earlier memory spike
+  - `486 passed`
+  - chunked package coverage audit
+  - total package coverage: `53%`
 - Honest conclusion:
   - The cheap helper surface is now much better covered.
-  - `95%` is still not reachable without a separate heavy-solver campaign against `v3_driver.py`, `io.py`, and the remaining under-covered numerical infrastructure.
+  - `95%` is still not reachable without a separate heavy-solver campaign against `v3_driver.py`, `io.py`, `solver.py`, and the remaining under-covered numerical infrastructure.
   - The next meaningful coverage work is therefore targeted physics/regression tests on those heavy modules, not more small helper tests.
