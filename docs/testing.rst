@@ -96,11 +96,15 @@ The current audited full-suite command on ``main`` is:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-On the current audited local release tree this command yields ``462 passed`` and
+On the current audited local release tree this command yields ``469 passed`` and
 roughly ``51%`` package coverage. That number is materially higher than the Linux
 CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
 surface is still the large solver/geometry stack, especially ``v3_driver.py``,
-``io.py``, ``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. Reaching a
+``io.py``, ``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. The latest
+low-cost campaign improved the analytic geometry/grid surface materially
+(``geometry.py`` to about ``40%``, ``grids.py`` to about ``46%``, and
+``vmec_geometry.py`` to about ``22%``) using formula-driven invariants rather than
+slow end-to-end solves. Reaching a
 research-grade coverage target therefore requires more focused tests on those heavy
 modules rather than more trivial helper tests.
 

@@ -1301,8 +1301,19 @@ Release-ready means:
   - `.github/workflows/publish-pypi.yml` now uses `skip-existing: true`, so retagging a published version does not hard-fail the workflow.
 - Audited current local result:
   - `pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml`
-  - `462 passed in 364.65s`
+  - `469 passed in 378.09s`
   - total package coverage: `51%`
+- Additional low-cost physics/helper coverage landed after that first batch:
+  - `tests/test_geometry_grid_helper_coverage.py`
+- These add formula-driven invariants from the analytic Boozer models and radial-coordinate machinery:
+  - periodic/spectral differentiation identities,
+  - scheme-1 / scheme-2 / scheme-4 analytic geometry checks,
+  - VMEC half-mesh finite-difference behavior,
+  - radial-coordinate conversion and Fortran-logical helper formulas.
+- Measured module gains from the second batch:
+  - `geometry.py`: `23% -> 40%`
+  - `grids.py`: `38% -> 46%`
+  - `vmec_geometry.py`: `8% -> 22%`
 - Honest conclusion:
   - The cheap helper surface is now much better covered.
   - `95%` is not reachable without a separate heavy-solver campaign against `v3_driver.py`, `io.py`, `geometry.py`, `grids.py`, and `vmec_geometry.py`.
