@@ -11,7 +11,7 @@ We:
   4) Produce a small, publication-style figure.
 
 Run:
-  pip install -e ".[viz]"
+  pip install matplotlib
   python examples/autodiff/autodiff_er_xidot_term.py
 """
 
@@ -33,7 +33,7 @@ try:
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 except Exception as e:  # pragma: no cover
-    raise SystemExit('This example requires matplotlib. Install with: pip install -e ".[viz]"') from e
+    raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from e
 
 from sfincs_jax.collisionless_er import ErXiDotV3Operator, apply_er_xidot_v3
 from sfincs_jax.namelist import read_sfincs_input

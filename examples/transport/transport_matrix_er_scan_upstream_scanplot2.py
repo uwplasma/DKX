@@ -11,7 +11,7 @@ This example demonstrates one of the main goals of `sfincs_jax`:
 
 Requirements
 ------------
-- `pip install -e .[viz]` (matplotlib)
+- `pip install matplotlib`
 - A repo checkout (so `examples/sfincs_examples/utils` and `examples/sfincs_examples/globalVariables.F90` exist)
 """
 
@@ -57,4 +57,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

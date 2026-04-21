@@ -3,7 +3,7 @@
 This example requires:
 
 ```bash
-pip install -e \"sfincs_jax[opt]\"
+pip install optax
 ```
 
 It demonstrates how a differentiable geometry model can be optimized with standard JAX
@@ -28,7 +28,7 @@ try:
     import optax
 except Exception as e:  # pragma: no cover
     raise SystemExit(
-        "This example requires optax. Install with: pip install -e \"sfincs_jax[opt]\""
+        "This example requires optax. Install with: pip install optax"
     ) from e
 
 from sfincs_jax.geometry import boozer_geometry_scheme4

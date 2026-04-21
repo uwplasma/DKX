@@ -18,7 +18,7 @@ This script demonstrates two things:
 
 Requirements
 ------------
-- `matplotlib` installed: `pip install -e ".[viz]"`
+- `matplotlib` installed: `pip install matplotlib`
 """
 
 import subprocess

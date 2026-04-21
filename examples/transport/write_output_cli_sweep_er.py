@@ -9,7 +9,7 @@ Run:
   python examples/transport/write_output_cli_sweep_er.py
 
 Plotting requires:
-  pip install -e ".[viz]"
+  pip install matplotlib
 """
 
 from __future__ import annotations

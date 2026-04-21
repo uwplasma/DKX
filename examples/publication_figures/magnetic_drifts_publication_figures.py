@@ -9,7 +9,7 @@ This script produces a small set of polished figures that illustrate:
 Outputs are written as both PNG and PDF in `examples/publication_figures/figures/`.
 
 Requirements:
-  pip install -e ".[viz]"
+  pip install matplotlib
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ try:
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 except Exception as e:  # pragma: no cover
-    raise SystemExit('This example requires matplotlib. Install with: pip install -e ".[viz]"') from e
+    raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from e
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3 import grids_from_namelist

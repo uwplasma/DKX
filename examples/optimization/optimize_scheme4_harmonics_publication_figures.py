@@ -14,7 +14,7 @@ the target might come from a VMEC equilibrium, a Boozer transform, or a design g
 (e.g. reducing a neoclassical proxy).
 
 Requirements:
-  pip install -e ".[opt,viz]"
+  pip install optax
 """
 
 from __future__ import annotations
@@ -34,13 +34,13 @@ if str(_REPO_ROOT) not in sys.path:
 try:
     import optax
 except Exception as e:  # pragma: no cover
-    raise SystemExit('This example requires optax. Install with: pip install -e ".[opt]"') from e
+    raise SystemExit("This example requires optax. Install with: pip install optax") from e
 
 try:
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 except Exception as e:  # pragma: no cover
-    raise SystemExit('This example requires matplotlib. Install with: pip install -e ".[viz]"') from e
+    raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from e
 
 from sfincs_jax.geometry import boozer_geometry_scheme4
 
@@ -176,4 +176,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
