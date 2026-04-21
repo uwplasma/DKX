@@ -443,9 +443,7 @@ Links to the JAX ecosystem (optional)
 The package currently uses a lightweight in-repo GMRES implementation for parity control. For more advanced
 workflows, the JAX ecosystem can be integrated cleanly once the residual is expressed in a differentiable way:
 
-- `jaxopt`: implicit differentiation (root finding / linear solves) and robust optimization loops.
 - `optax`: gradient-based optimization with schedules, constraints, and modern optimizers.
-- `equinox`: structured parameter handling and module-style organization for larger refactors.
 
 
 Parity tuning environment variables (developer)

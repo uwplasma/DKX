@@ -239,9 +239,7 @@ Using JAX enables:
   sparse matrices, enabling scalable iterative solvers.
 - An ecosystem of tools that become natural once the compute graph is differentiable:
 
-  - `jaxopt` for implicit differentiation and robust root/linear solvers.
   - `optax` for gradient-based optimization loops (calibration, inverse problems).
-  - `equinox` for clean, testable module organization and parameter handling.
 
 Code design strategy
 --------------------

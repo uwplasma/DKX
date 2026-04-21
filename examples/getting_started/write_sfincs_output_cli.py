@@ -3,6 +3,7 @@
 This example demonstrates:
   - invoking the `sfincs_jax` CLI from Python
   - loading the resulting HDF5 output
+  - using the fast geometry-only write path for a smoke test
 
 Run:
   python examples/getting_started/write_sfincs_output_cli.py
@@ -24,7 +25,7 @@ from sfincs_jax.io import read_sfincs_h5
 
 
 def main() -> int:
-    input_path = _REPO_ROOT / "tests" / "ref" / "output_scheme4_1species_tiny.input.namelist"
+    input_path = _REPO_ROOT / "examples" / "getting_started" / "input.namelist"
     out_dir = Path(__file__).with_suffix("").parent / "output"
     out_path = out_dir / "sfincsOutput_cli.h5"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -38,6 +39,7 @@ def main() -> int:
         str(input_path),
         "--out",
         str(out_path),
+        "--geometry-only",
     ]
     subprocess.run(cmd, check=True)
 

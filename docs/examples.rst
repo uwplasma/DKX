@@ -36,6 +36,7 @@ Plotting a generated or frozen output file:
 
 .. code-block:: bash
 
+   sfincs_jax --plot sfincsOutput.h5
    python examples/getting_started/plot_sfincs_output.py
 
 Matrix-free linear solve demo (using frozen PETSc binaries):
@@ -72,20 +73,13 @@ There is also a small end-to-end demo that generates PDF figures for a tiny tran
 
 .. code-block:: bash
 
-   pip install -e ".[viz]"
    python examples/transport/postprocess_upstream_scanplot_1_transport_matrix.py
 
 Some advanced examples require optional dependencies:
 
 .. code-block:: bash
 
-   pip install -e ".[opt]"
-
-Plotting examples require:
-
-.. code-block:: bash
-
-   pip install -e ".[viz]"
+   pip install optax
 
 Optimization + figures
 ----------------------
@@ -95,7 +89,7 @@ is available):
 
 .. code-block:: bash
 
-   pip install -e ".[opt,viz]"
+   pip install optax
    python examples/optimization/optimize_scheme4_harmonics_publication_figures.py
    python examples/optimization/calibrate_nu_n_to_fortran_residual_fixture.py
 
