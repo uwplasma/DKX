@@ -14,7 +14,7 @@ from sfincs_jax.input_compat import (
     infer_species_input_radial_coordinate_for_gradients,
     with_equilibrium_override,
 )
-from sfincs_jax.io import localize_equilibrium_file_in_place, sfincs_jax_output_dict
+from sfincs_jax.io import _resolve_equilibrium_file_from_namelist, localize_equilibrium_file_in_place, sfincs_jax_output_dict
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3 import grids_from_namelist
 from sfincs_jax.v3_fblock import _dphi_hat_dpsi_hat_from_er
@@ -208,6 +208,40 @@ def test_localize_equilibrium_file_in_place_patches_legacy_boozer_key(tmp_path: 
     assert localized is not None
     patched = dst_input.read_text(encoding="utf-8")
     assert f'JGboozer_file = "{localized.name}"' in patched
+
+
+def test_localize_equilibrium_file_in_place_patches_nonstelsym_boozer_key(tmp_path: Path) -> None:
+    src_bc = Path(__file__).resolve().parents[1] / "tests" / "ref" / "nonStelSym_tiny_geometryScheme12.bc"
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 12\n"
+        f'  JGboozer_file_NonStelSym = "{src_bc}"\n'
+        "/\n",
+        encoding="utf-8",
+    )
+    localized = localize_equilibrium_file_in_place(input_namelist=input_path, overwrite=True)
+    assert localized is not None
+    patched = input_path.read_text(encoding="utf-8")
+    assert f'JGboozer_file_NonStelSym = "{localized.name}"' in patched
+
+
+def test_resolve_equilibrium_prefers_vmec_netcdf_sibling(tmp_path: Path) -> None:
+    txt = tmp_path / "eq.txt"
+    nc = tmp_path / "eq.nc"
+    txt.write_text("ascii placeholder", encoding="utf-8")
+    nc.write_text("netcdf placeholder", encoding="utf-8")
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 5\n"
+        '  equilibriumFile = "eq.txt"\n'
+        "/\n",
+        encoding="utf-8",
+    )
+    nml = read_sfincs_input(input_path)
+    resolved = _resolve_equilibrium_file_from_namelist(nml=nml)
+    assert resolved == nc.resolve()
 
 
 def test_sfincs_output_dict_preserves_legacy_er_coordinate_and_value() -> None:
