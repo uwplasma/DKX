@@ -1,37 +1,31 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "sfincs_jax"
-version = "1.0.0"
+version = "1.0.1"
 description = "Neoclassical transport solver with CPU/GPU and differentiable JAX workflows"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "jax>=0.4.25",
-  "numpy>=1.24",
-  "scipy>=1.10",
-  "h5py>=3.8",
+  "jax",
+  "numpy",
+  "scipy",
+  "h5py",
+  "matplotlib",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=7.0",
-  "pytest-xdist>=3.5",
-  "pytest-split>=0.9",
+  "pytest",
+  "pytest-cov",
+  "pytest-xdist",
+  "pytest-split",
 ]
 docs = [
-  "sphinx>=7.0",
-  "sphinx-rtd-theme>=2.0",
-]
-opt = [
-  "equinox>=0.11",
-  "jaxopt>=0.8",
-  "optax>=0.1.9",
-]
-viz = [
-  "matplotlib>=3.8",
+  "sphinx",
+  "sphinx-rtd-theme",
 ]
 
 [project.scripts]

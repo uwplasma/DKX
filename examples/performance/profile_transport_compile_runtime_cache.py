@@ -115,7 +115,7 @@ def _main() -> int:
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except Exception as exc:  # noqa: BLE001
-        raise SystemExit('This example requires matplotlib. Install with: pip install -e ".[viz]"') from exc
+        raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from exc
 
     fig, axes = plt.subplots(2, 2, figsize=(12.8, 8.3), constrained_layout=True)
     flat_axes = list(axes.reshape(-1))

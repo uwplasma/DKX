@@ -14,10 +14,10 @@ The workflow is:
      using optax/Adam.
 
 Requirements:
-  pip install -e ".[opt]"
+  pip install optax
 
 Optional (for figures):
-  pip install -e ".[viz]"
+  pip install matplotlib
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ if str(_REPO_ROOT) not in sys.path:
 try:
     import optax
 except Exception as e:  # pragma: no cover
-    raise SystemExit('This example requires optax. Install with: pip install -e ".[opt]"') from e
+    raise SystemExit("This example requires optax. Install with: pip install optax") from e
 
 try:
     import matplotlib as mpl
@@ -176,4 +176,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

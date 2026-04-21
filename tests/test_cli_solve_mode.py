@@ -277,6 +277,22 @@ def test_normalize_default_argv_keeps_parallel_flags() -> None:
     ]
 
 
+def test_normalize_default_argv_maps_plot_shortcut() -> None:
+    argv = ["--plot", "sfincsOutput.h5", "--out", "summary.png"]
+    assert cli._normalize_default_argv(argv) == [
+        "plot-output",
+        "--input-h5",
+        "sfincsOutput.h5",
+        "--out",
+        "summary.png",
+    ]
+
+
+def test_default_plot_output_path_handles_sfincsoutput_suffix() -> None:
+    path = cli._default_plot_output_path(Path("sfincsOutput.h5"))
+    assert path.name == "sfincsOutput_summary.png"
+
+
 def test_apply_parallel_runtime_settings_sets_transport_and_sharding(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", raising=False)

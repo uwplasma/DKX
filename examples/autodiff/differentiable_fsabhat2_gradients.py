@@ -11,7 +11,7 @@ Run:
   python examples/autodiff/differentiable_fsabhat2_gradients.py
 
 Plotting requires:
-  pip install -e ".[viz]"
+  pip install matplotlib
 """
 
 from __future__ import annotations

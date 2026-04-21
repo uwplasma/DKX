@@ -388,6 +388,30 @@ def _cmd_dump_h5(args: argparse.Namespace) -> int:
     return 0
 
 
+def _default_plot_output_path(input_h5: Path) -> Path:
+    input_h5 = Path(input_h5)
+    stem = input_h5.stem
+    if stem.endswith(".sfincsOutput"):
+        stem = stem[: -len(".sfincsOutput")]
+    return input_h5.with_name(f"{stem}_summary.png")
+
+
+def _cmd_plot_output(args: argparse.Namespace) -> int:
+    t0 = _now()
+    from .plotting import plot_sfincs_output_summary  # noqa: PLC0415
+
+    input_h5 = Path(args.input_h5)
+    out_path = Path(args.out) if args.out else _default_plot_output_path(input_h5)
+    _emit("################################################################", level=0, args=args)
+    _emit(" sfincs_jax plot-output", level=0, args=args)
+    _emit(f" input={input_h5.resolve()}", level=0, args=args)
+    _emit(f" out={out_path.resolve()}", level=0, args=args)
+    plot_path = plot_sfincs_output_summary(input_h5=input_h5, output_png=out_path)
+    _emit(f" wrote plot -> {plot_path}", level=0, args=args)
+    _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
+    return 0
+
+
 def _cmd_compare_h5(args: argparse.Namespace) -> int:
     from .compare import compare_sfincs_outputs  # noqa: PLC0415
 
@@ -597,6 +621,7 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
         "write-output",
         "transport-matrix-v3",
         "dump-h5",
+        "plot-output",
         "compare-h5",
         "postprocess-upstream",
     }
@@ -624,6 +649,35 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
         "--no-shard-pad",
         "--distributed",
     }
+    if "--plot" in argv:
+        global_args: list[str] = []
+        rest: list[str] = []
+        input_h5: str | None = None
+        idx = 0
+        while idx < len(argv):
+            tok = argv[idx]
+            if tok in global_opts_with_val:
+                if idx + 1 < len(argv):
+                    global_args.extend([tok, argv[idx + 1]])
+                    idx += 2
+                    continue
+            if tok.startswith("--cores="):
+                global_args.append(tok)
+                idx += 1
+                continue
+            if tok in global_opts_no_val:
+                global_args.append(tok)
+                idx += 1
+                continue
+            if tok == "--plot":
+                if idx + 1 < len(argv):
+                    input_h5 = argv[idx + 1]
+                    idx += 2
+                    continue
+            rest.append(tok)
+            idx += 1
+        if input_h5 is not None:
+            return [*global_args, "plot-output", "--input-h5", input_h5, *rest]
     global_args: list[str] = []
     rest: list[str] = []
     input_path: str | None = None
@@ -875,6 +929,17 @@ def main(argv: list[str] | None = None) -> int:
     p_dump.add_argument("--out-json", required=True, help="Where to write JSON")
     p_dump.add_argument("--keys-only", action="store_true", help="Only print dataset names")
     p_dump.set_defaults(func=_cmd_dump_h5)
+
+    p_plot = sub.add_parser("plot-output", help="Write a compact PNG summary from sfincsOutput.h5.")
+    _add_common_cli_args(p_plot)
+    _add_parallel_cli_args(p_plot)
+    p_plot.add_argument("--input-h5", required=True, help="Path to sfincsOutput.h5")
+    p_plot.add_argument(
+        "--out",
+        default=None,
+        help="Where to write the PNG summary (default: <input>_summary.png next to the HDF5 file).",
+    )
+    p_plot.set_defaults(func=_cmd_plot_output)
 
     p_cmp = sub.add_parser("compare-h5", help="Compare two SFINCS HDF5 output files.")
     _add_common_cli_args(p_cmp)

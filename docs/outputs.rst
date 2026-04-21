@@ -22,6 +22,16 @@ CLI
      --out sfincsOutput.h5 \
      --wout-path /path/to/wout.nc
 
+For a compact summary figure from an existing output file:
+
+.. code-block:: bash
+
+   sfincs_jax --plot sfincsOutput.h5
+
+.. code-block:: bash
+
+   sfincs_jax plot-output --input-h5 sfincsOutput.h5 --out sfincsOutput_summary.png
+
 Use ``--equilibrium-file`` for a generic Boozer or VMEC override, or ``--wout-path``
 as a compatibility alias for VMEC-centered workflows.
 
@@ -114,16 +124,28 @@ There is also a multi-species regression against the established reference outpu
 Plotting output files
 ---------------------
 
-For a minimal end-to-end plotting example, run:
+The CLI supports direct plotting from any existing ``sfincsOutput.h5``:
+
+.. code-block:: bash
+
+   sfincs_jax --plot sfincsOutput.h5
+
+By default this writes ``<input>_summary.png`` next to the HDF5 file. Use
+``plot-output --out`` to choose a different filename.
+
+For a minimal end-to-end plotting example from the repository, run:
 
 .. code-block:: bash
 
    python examples/getting_started/plot_sfincs_output.py
 
-The script reads ``sfincsOutput.h5`` datasets directly and writes a compact PNG
-summary showing representative radial diagnostics and the geometry field
-``BHat(theta, zeta)``. It accepts any existing output file via
-``--input-h5 /path/to/sfincsOutput.h5``.
+The script and the CLI both call the same plotting helper and write a compact
+PNG summary showing representative radial diagnostics and the geometry field
+``BHat(theta, zeta)``. The figure includes:
+
+- ``FSABFlow_vs_x``
+- ``heatFlux_vm_psiHat_vs_x``
+- ``BHat(theta, zeta)``
 
 .. note::
 
