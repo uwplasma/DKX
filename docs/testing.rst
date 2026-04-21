@@ -85,8 +85,24 @@ The repository is kept buildable and testable through standard CI-style commands
 The same checks are also represented in the repository CI/CD configuration:
 
 - ``.github/workflows/ci.yml`` runs the test matrix and example smoke tests,
+- the same CI workflow also runs the audited coverage job and uploads ``coverage.xml``
+  through Codecov using GitHub OIDC,
 - ``.github/workflows/docs.yml`` builds the Sphinx documentation,
-- ``.github/workflows/publish.yml`` handles packaging/release publication.
+- ``.github/workflows/publish-pypi.yml`` handles packaging/release publication.
+
+The current audited full-suite command on ``main`` is:
+
+.. code-block:: bash
+
+   pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
+
+On the current audited local release tree this command yields ``462 passed`` and
+roughly ``51%`` package coverage. That number is materially higher than the Linux
+CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
+surface is still the large solver/geometry stack, especially ``v3_driver.py``,
+``io.py``, ``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. Reaching a
+research-grade coverage target therefore requires more focused tests on those heavy
+modules rather than more trivial helper tests.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be

@@ -1280,3 +1280,30 @@ Release-ready means:
 4. CI/docs/tests are green.
 5. Runtime/memory and solver defaults are documented with reproducible commands.
 6. README/docs/plan all reflect the current `main` truth.
+
+### 19.1 Test campaign and CI/CD reality check (2026-04-21)
+
+- Landed a new fast helper/physics coverage batch:
+  - `tests/test_helper_module_coverage.py`
+  - `tests/test_runtime_helper_coverage.py`
+- These cover:
+  - ambipolar-current and scanplot conventions,
+  - flux-surface-average diagnostics identities on simple analytic fields,
+  - path/indexing/profiling/verbose helpers,
+  - Fortran wrapper failure/success paths,
+  - ER-scan directory generation helpers,
+  - transport-parallel worker NPZ emission,
+  - distributed-runtime bootstrap,
+  - solver-state save/load guards,
+  - compare-module helper logic.
+- CI/CD fixes:
+  - `.github/workflows/ci.yml` coverage job now has `id-token: write`, so Codecov OIDC upload is valid.
+  - `.github/workflows/publish-pypi.yml` now uses `skip-existing: true`, so retagging a published version does not hard-fail the workflow.
+- Audited current local result:
+  - `pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml`
+  - `462 passed in 364.65s`
+  - total package coverage: `51%`
+- Honest conclusion:
+  - The cheap helper surface is now much better covered.
+  - `95%` is not reachable without a separate heavy-solver campaign against `v3_driver.py`, `io.py`, `geometry.py`, `grids.py`, and `vmec_geometry.py`.
+  - The next meaningful coverage work is therefore targeted physics/regression tests on those heavy modules, not more small helper tests.
