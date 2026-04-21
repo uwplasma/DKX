@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from sfincs_jax.geometry import boozer_geometry_scheme1, boozer_geometry_scheme2, boozer_geometry_scheme4
+from sfincs_jax.geometry import boozer_geometry_from_bc_file
 from sfincs_jax.grids import uniform_diff_matrices
 from sfincs_jax.io import (
     _conversion_factors_to_from_dpsi_hat,
@@ -16,6 +17,7 @@ from sfincs_jax.io import (
     _set_input_radial_coordinate_wish,
 )
 from sfincs_jax.vmec_geometry import _finite_diff_on_full_mesh_from_half_mesh
+from sfincs_jax.vmec_geometry import vmec_geometry_from_wout_file
 
 
 def test_uniform_diff_matrices_invalid_inputs_and_weights() -> None:
@@ -114,6 +116,42 @@ def test_vmec_half_mesh_finite_difference_matches_v3_pattern() -> None:
 
     with pytest.raises(ValueError):
         _finite_diff_on_full_mesh_from_half_mesh(np.zeros((2, 2, 2)), 1.0)
+
+
+def test_boozer_bc_geometry_loader_on_reference_fixture() -> None:
+    ref = Path(__file__).parent / "ref" / "w7x_standardConfig.bc"
+    theta = np.linspace(0.0, 2.0 * np.pi, 8, endpoint=False)
+    zeta = np.linspace(0.0, 2.0 * np.pi / 5.0, 6, endpoint=False)
+    geom = boozer_geometry_from_bc_file(path=str(ref), theta=theta, zeta=zeta, r_n_wish=0.5)
+
+    b_hat = np.asarray(geom.b_hat)
+    d_hat = np.asarray(geom.d_hat)
+    np.testing.assert_equal(b_hat.shape, (8, 6))
+    assert geom.n_periods == 5
+    assert np.all(np.isfinite(b_hat))
+    assert np.all(b_hat > 0.0)
+    np.testing.assert_allclose(d_hat, b_hat**2 / (geom.g_hat + geom.iota * geom.i_hat), rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(np.asarray(geom.b_hat_sup_theta), geom.iota * d_hat, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(np.asarray(geom.b_hat_sup_zeta), d_hat, rtol=1e-12, atol=1e-12)
+
+
+def test_vmec_geometry_loader_on_reference_fixture_is_consistent_with_bc_range() -> None:
+    ref = Path(__file__).parent / "ref"
+    theta = np.linspace(0.0, 2.0 * np.pi, 8, endpoint=False)
+    zeta = np.linspace(0.0, 2.0 * np.pi / 5.0, 6, endpoint=False)
+    geom_bc = boozer_geometry_from_bc_file(path=str(ref / "w7x_standardConfig.bc"), theta=theta, zeta=zeta, r_n_wish=0.5)
+    geom_vmec = vmec_geometry_from_wout_file(path=ref / "wout_w7x_standardConfig.nc", theta=theta, zeta=zeta, psi_n_wish=0.25)
+
+    b_bc = np.asarray(geom_bc.b_hat)
+    b_vmec = np.asarray(geom_vmec.b_hat)
+    np.testing.assert_equal(b_vmec.shape, (8, 6))
+    assert geom_vmec.n_periods == 5
+    assert np.all(np.isfinite(b_vmec))
+    assert np.all(b_vmec > 0.0)
+    # The Boozer and VMEC loaders come from different reference files for the same W7-X
+    # configuration. Their coarse-grid B ranges should still agree closely.
+    assert abs(float(np.min(b_vmec)) - float(np.min(b_bc))) < 0.02
+    assert abs(float(np.max(b_vmec)) - float(np.max(b_bc))) < 0.02
 
 
 def test_io_radial_coordinate_formula_helpers() -> None:
