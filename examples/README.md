@@ -24,16 +24,13 @@ cd sfincs_jax
 pip install -e ".[dev]"
 ```
 
-For examples that use `optax` / `jaxopt` / `equinox`:
+The standard install already includes `matplotlib`, so plotting examples and
+`sfincs_jax --plot` work without extra plotting dependencies.
+
+For optimization examples that use `optax`:
 
 ```bash
-pip install -e ".[opt]"
-```
-
-For examples that generate publication-style figures:
-
-```bash
-pip install -e ".[viz]"
+pip install optax
 ```
 
 ### Running

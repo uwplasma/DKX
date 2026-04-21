@@ -115,6 +115,24 @@ you can invoke the CLI module directly:
 
    python -m sfincs_jax run-fortran --input /path/to/input.namelist
 
+Fast CLI smoke test
+-------------------
+
+The repository ships a tiny runnable input for quick installation checks:
+
+.. code-block:: bash
+
+   sfincs_jax write-output \
+     --input examples/getting_started/input.namelist \
+     --out sfincsOutput.h5 \
+     --geometry-only
+   sfincs_jax --plot sfincsOutput.h5
+
+The first command is the fast installation smoke test. It writes
+``sfincsOutput.h5`` in the current working directory without a full solve. The
+second writes ``sfincsOutput_summary.png`` next to it unless ``--out`` is given
+explicitly.
+
 Solving a supported v3 linear run (matrix-free)
 ------------------------------------------------------------
 
@@ -202,6 +220,8 @@ Relevant CLI flags:
   multi-host JAX distributed initialization from the CLI.
 - ``--shard-pad`` / ``--no-shard-pad``: control neutral padding when the sharded
   dimension is not divisible by the visible device count.
+- ``--plot /path/to/sfincsOutput.h5``: top-level shortcut for writing a compact
+  PNG summary from an existing output file.
 
 For actual scaling measurements, prefer the benchmark scripts in
 ``examples/performance`` over ad hoc shell timing. They handle warmup, backend
