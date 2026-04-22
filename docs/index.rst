@@ -68,6 +68,7 @@ This manual is organized around the actual user and developer workflows:
    performance
    performance_techniques
    testing
+   validation_matrix
    paper_figures
    upstream_docs
    fortran_examples
