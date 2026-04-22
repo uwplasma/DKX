@@ -18,19 +18,29 @@ Examples:
 - `generate_sfincs_paper_figs.py`
 - `generate_er_trajectory_sweep.py`
 
-Prototype run used on this branch:
+Pinned fixed-case runs on the refactor branch:
 
 ```bash
 python examples/publication_figures/generate_er_trajectory_sweep.py \
   --preset tokamak_like \
+  --er-values=-30,0,30 \
+  --work-dir examples/publication_figures/output/er_sweep_tokamak_reference \
+  --summary-json examples/publication_figures/output/er_sweep_tokamak_reference/summary.json \
+  --out-dir docs/_static/figures/paper \
+  --stem sfincs_jax_er_trajectory_sweep_tokamak_reference
+
+python examples/publication_figures/generate_er_trajectory_sweep.py \
+  --preset stellarator_like \
   --fast \
-  --er-values=-0.5,0.0,0.5 \
-  --er-res 1.0 \
-  --work-dir examples/publication_figures/output/er_sweep_fast_tokamak \
-  --out-dir docs/_static/figures/paper
+  --er-values=-8.5897,0,8.5897 \
+  --work-dir examples/publication_figures/output/er_sweep_stellarator_fast_reference \
+  --summary-json examples/publication_figures/output/er_sweep_stellarator_fast_reference/summary.json \
+  --out-dir docs/_static/figures/paper \
+  --stem sfincs_jax_er_trajectory_sweep_stellarator_fast_reference
 ```
 
-That bounded sweep produces:
-- `examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json`
-- `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png`
-- `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.pdf`
+Those pinned runs are checked in as:
+- `examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json`
+- `examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json`
+- `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png`
+- `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png`
