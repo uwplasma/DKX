@@ -67,6 +67,48 @@ def test_uniform_diff_matrices_aperiodic_endpoint_coefficients_for_high_order_sc
     np.testing.assert_allclose(d2dx213[0, :3], np.asarray([1.0, -2.0, 1.0]) / (dx * dx))
 
 
+@pytest.mark.parametrize(("scheme", "poly_degree"), [(2, 2), (12, 4), (13, 2)])
+def test_uniform_diff_matrices_polynomial_exactness_matches_stencil_order(
+    scheme: int,
+    poly_degree: int,
+) -> None:
+    x, _, ddx, d2dx2 = uniform_diff_matrices(n=7, x_min=-1.0, x_max=2.0, scheme=scheme)
+    x = np.asarray(x)
+    ddx = np.asarray(ddx)
+    d2dx2 = np.asarray(d2dx2)
+
+    coeffs = np.arange(poly_degree + 1, dtype=np.float64) + 1.0
+    f = sum(coeffs[k] * x**k for k in range(poly_degree + 1))
+    df = sum(k * coeffs[k] * x ** (k - 1) for k in range(1, poly_degree + 1))
+    d2f = sum(k * (k - 1) * coeffs[k] * x ** (k - 2) for k in range(2, poly_degree + 1))
+
+    first_err = np.max(np.abs(ddx @ f - df))
+    second_err = np.max(np.abs(d2dx2 @ f - d2f))
+
+    assert first_err < 1.0e-12
+    assert second_err < 1.0e-12
+
+
+def test_uniform_diff_matrices_scheme3_matches_expected_low_order_exactness() -> None:
+    x, _, ddx, d2dx2 = uniform_diff_matrices(n=7, x_min=-1.0, x_max=2.0, scheme=3)
+    x = np.asarray(x)
+    ddx = np.asarray(ddx)
+    d2dx2 = np.asarray(d2dx2)
+
+    linear = 2.0 + 3.0 * x
+    quadratic = 1.0 - 2.0 * x + 4.0 * x**2
+
+    np.testing.assert_allclose(ddx @ linear, np.full_like(x, 3.0), atol=1.0e-12, rtol=0.0)
+    np.testing.assert_allclose(d2dx2 @ quadratic, np.full_like(x, 8.0), atol=1.0e-12, rtol=0.0)
+
+
+def test_uniform_diff_matrices_minimum_n_guards_for_one_sided_five_point_schemes() -> None:
+    with pytest.raises(ValueError, match="scheme 102"):
+        uniform_diff_matrices(n=4, x_min=0.0, x_max=1.0, scheme=102)
+    with pytest.raises(ValueError, match="scheme 112"):
+        uniform_diff_matrices(n=4, x_min=0.0, x_max=1.0, scheme=112)
+
+
 def test_uniform_diff_matrices_notimplemented_branches_raise() -> None:
     with pytest.raises(NotImplementedError, match="scheme 122"):
         uniform_diff_matrices(n=6, x_min=0.0, x_max=1.0, scheme=122)

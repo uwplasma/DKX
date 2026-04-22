@@ -150,3 +150,86 @@ def test_explicit_sparse_host_direct_allowed_and_env_bounds(monkeypatch) -> None
         use_implicit=False,
         active_size=10_000,
     )
+
+
+def test_build_host_sparse_direct_factor_from_matvec_falls_back_on_invalid_env(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+    operator_bundle = SimpleNamespace(metadata=SimpleNamespace(storage_kind="csr", reason="fallback"))
+    factor_bundle = SimpleNamespace(kind="lu")
+
+    def fake_build_operator_from_matvec(matvec, **kwargs):
+        seen["kwargs"] = kwargs
+        np.testing.assert_allclose(matvec(np.asarray([1.0, -2.0])), np.asarray([2.0, -4.0]))
+        np.testing.assert_allclose(
+            kwargs["matmat"](np.asarray([[1.0, 0.0], [0.0, 1.0]])),
+            2.0 * np.eye(2),
+        )
+        return operator_bundle
+
+    def fake_factorize_host_sparse_operator(bundle, *, kind):
+        seen["factor"] = (bundle, kind)
+        return factor_bundle
+
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS", "bad")
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_DENSE_MAX_MB", "bad")
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "bad")
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "bad")
+    monkeypatch.setattr(v3_driver, "build_operator_from_matvec", fake_build_operator_from_matvec)
+    monkeypatch.setattr(v3_driver, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+
+    messages: list[tuple[int, str]] = []
+    op, fac = v3_driver._build_host_sparse_direct_factor_from_matvec(
+        matvec=lambda x: 2.0 * x,
+        n=2,
+        dtype=jnp.float32,
+        factor_dtype=np.dtype(np.float64),
+        emit=lambda level, msg: messages.append((level, msg)),
+    )
+
+    assert op is operator_bundle
+    assert fac is factor_bundle
+    assert seen["factor"] == (operator_bundle, "lu")
+    kwargs = seen["kwargs"]
+    assert kwargs["block_cols"] == 32
+    assert kwargs["dense_max_mb"] == pytest.approx(128.0)
+    assert kwargs["csr_max_mb"] == pytest.approx(512.0)
+    assert kwargs["drop_tol"] == pytest.approx(0.0)
+    assert kwargs["prefer_sparse_on_gpu"] is True
+    assert kwargs["allow_operator_only"] is False
+    assert messages == [(1, "explicit_sparse: storage=csr reason=fallback")]
+
+
+def test_build_host_sparse_direct_factor_from_matvec_respects_env_overrides(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_build_operator_from_matvec(matvec, **kwargs):
+        seen["kwargs"] = kwargs
+        np.testing.assert_allclose(matvec(np.asarray([3.0, -1.0])), np.asarray([9.0, -3.0]))
+        return SimpleNamespace(metadata=SimpleNamespace(storage_kind="dense", reason="forced"))
+
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS", "7")
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_DENSE_MAX_MB", "3.5")
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "9.5")
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "1e-3")
+    monkeypatch.setattr(v3_driver, "build_operator_from_matvec", fake_build_operator_from_matvec)
+    monkeypatch.setattr(
+        v3_driver,
+        "factorize_host_sparse_operator",
+        lambda bundle, *, kind: SimpleNamespace(bundle=bundle, kind=kind),
+    )
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+
+    v3_driver._build_host_sparse_direct_factor_from_matvec(
+        matvec=lambda x: 3.0 * x,
+        n=2,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float32),
+    )
+
+    kwargs = seen["kwargs"]
+    assert kwargs["backend"] == "gpu"
+    assert kwargs["block_cols"] == 7
+    assert kwargs["dense_max_mb"] == pytest.approx(3.5)
+    assert kwargs["csr_max_mb"] == pytest.approx(9.5)
+    assert kwargs["drop_tol"] == pytest.approx(1.0e-3)

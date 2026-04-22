@@ -1399,3 +1399,27 @@ Release-ready means:
   - The cheap helper surface is now much better covered.
   - `95%` is still not reachable without a separate heavy-solver campaign against `v3_driver.py`, `io.py`, `solver.py`, and the remaining under-covered numerical infrastructure.
   - The next meaningful coverage work is therefore targeted physics/regression tests on those heavy modules, not more small helper tests.
+- Added one more literature-anchored numeric / bounded-driver pass:
+  - extended `tests/test_grids_scheme_coverage.py`
+  - extended `tests/test_rhs1_sparse_first_heuristic.py`
+  - extended `tests/test_v3_driver_sparse_helper_coverage.py`
+- These cover:
+  - polynomial exactness order conditions for SFINCS `uniformDiffMatrices` schemes `2`, `3`, `12`, and `13`,
+  - remaining one-sided five-point guard branches for schemes `102` and `112`,
+  - explicit sparse host-factor builder env parsing, matrix-free operator assembly hooks, emit-path behavior, and factorization handoff in `v3_driver.py`,
+  - invalid-env and override parsing for PAS large-base selection and PAS fast-accept thresholds.
+- Fresh audited local result after this pass:
+  - `pytest --collect-only -q` -> `529 tests collected`
+  - chunked `pytest -q` over the full tree -> `529 passed`
+  - chunked package coverage audit -> total package coverage `54%`
+  - measured module gains:
+    - `grids.py`: `79% -> 82%`
+    - `v3_driver.py`: still `37%`, but with the explicit sparse-factor builder and additional PAS env seams now covered
+- Literature anchors used in this pass:
+  - the finite-difference order conditions encoded in SFINCS v3 `uniformDiffMatrices`,
+  - the periodic / spectral differentiation identities used throughout the SFINCS technical notes,
+  - the 2014 SFINCS paper’s continuum discretization framework for the bounded operator-path checks.
+- Next meaningful coverage work remains unchanged:
+  - the denominator is still dominated by `sfincs_jax/v3_driver.py`,
+  - then `sfincs_jax/io.py`, `sfincs_jax/solver.py`, and `sfincs_jax/pas_smoother.py`,
+  - so the next campaign should target bounded solve-selection / preconditioner-applicability seams in the driver, not more cheap helper branches.
