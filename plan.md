@@ -1339,6 +1339,24 @@ Release-ready means:
   - `486 passed`
   - chunked package coverage audit
   - total package coverage: `53%`
+- Added a bounded heavy-module coverage batch:
+  - `tests/test_io_export_and_h5_coverage.py`
+  - `tests/test_solver_heavy_helper_coverage.py`
+- These cover:
+  - HDF5 writer/readback and overwrite guards,
+  - export-f configuration and mapping behavior on bounded analytic grids,
+  - `_as_1d_float()` / `_legendre_matrix()` branch behavior,
+  - Krylov-method normalization and restart caps,
+  - distributed-GMRES env enablement logic,
+  - SciPy GMRES/BiCGStab history paths including right preconditioning.
+- Fresh audited local result after the heavy-module batch:
+  - chunked `pytest -q` over the full tree
+  - `495 passed`
+  - chunked package coverage audit
+  - total package coverage: `53%`
+  - measured module gains:
+    - `io.py`: `65% -> 67%`
+    - `solver.py`: `57% -> 67%`
 - Honest conclusion:
   - The cheap helper surface is now much better covered.
   - `95%` is still not reachable without a separate heavy-solver campaign against `v3_driver.py`, `io.py`, `solver.py`, and the remaining under-covered numerical infrastructure.
