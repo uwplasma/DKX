@@ -96,9 +96,9 @@ The current audited full-suite command on ``main`` is:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-On the current audited local release tree this command yields ``552 tests collected``,
-``552 passed`` in the stable chunked rerun, and
-roughly ``54%`` package coverage. That number is materially higher than the Linux
+On the current audited local release tree this command yields ``568 tests collected``,
+``568 passed`` in the stable chunked rerun, and
+roughly ``55%`` package coverage. That number is materially higher than the Linux
 CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
 surface is still the large solver/geometry stack, especially ``v3_driver.py``,
 ``io.py``, ``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. The latest
@@ -157,7 +157,15 @@ coarse corrections must apply in a deterministic order without creating
 nonfinite iterates. The main measured result of that pass was not a dramatic
 package-percentage jump but a tighter, more meaningful test net around the
 ``v3_driver.py`` decision layer while keeping the full tree at ``552/552``
-green and the package coverage at roughly ``54%``.
+green and the package coverage at roughly ``54%``. The latest bounded
+solve-policy pass then moved the full tree to ``568/568`` and pushed package
+coverage to about ``55%`` by exercising more of the driver’s actual control
+logic: constraint-scheme routing, sparse-exact-LU selection, x-block/sxblock
+rescue eligibility, transport sparse-direct and host-GMRES guard rails, host-only
+SciPy Krylov dispatch, and distributed-incompatible GMRES rejection. These tests
+do not attempt to prove convergence of every large solve; they prove that the
+policy ladder surrounding those solves takes the right branch on bounded,
+physically meaningful synthetic inputs.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
