@@ -121,6 +121,12 @@ from .transport_parallel_execution import (
     run_transport_parallel_payloads,
     should_run_transport_parallel,
 )
+from .phi1_newton_policy import (
+    phi1_frozen_jacobian_policy,
+    phi1_gmres_restart,
+    phi1_line_search_policy,
+    phi1_use_active_dof_mode,
+)
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -18411,18 +18417,12 @@ def solve_v3_full_system_newton_krylov_history(
     active_env = os.environ.get("SFINCS_JAX_PHI1_ACTIVE_DOF", "").strip().lower()
     nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
     has_reduced_modes = bool(np.any(nxi_for_x < int(op.n_xi)))
-    if active_env in {"1", "true", "yes", "on"}:
-        use_active_dof_mode = True
-    elif active_env in {"0", "false", "no", "off"}:
-        use_active_dof_mode = False
-    else:
-        # Auto mode: for includePhi1 nonlinear RHSMode=1 solves with a truncated pitch grid,
-        # solve only active DOFs to avoid singular inactive rows and reduce Krylov cost.
-        use_active_dof_mode = bool(
-            int(op.rhs_mode) == 1
-            and bool(op.include_phi1)
-            and has_reduced_modes
-        )
+    use_active_dof_mode = phi1_use_active_dof_mode(
+        rhs_mode=int(op.rhs_mode),
+        include_phi1=bool(op.include_phi1),
+        has_reduced_modes=has_reduced_modes,
+        env_value=active_env,
+    )
 
     active_idx_jnp: jnp.ndarray | None = None
     full_to_active_jnp: jnp.ndarray | None = None
@@ -18442,10 +18442,7 @@ def solve_v3_full_system_newton_krylov_history(
                 "solve_v3_full_system_newton_krylov_history: active-DOF mode enabled "
                 f"(size={active_size}/{int(op.total_size)})",
             )
-    gmres_restart_use = int(gmres_restart)
-    if active_size <= 1000:
-        gmres_restart_use = min(gmres_restart_use, 200)
-    gmres_restart_use = max(1, gmres_restart_use)
+    gmres_restart_use = phi1_gmres_restart(active_size=active_size, gmres_restart=int(gmres_restart))
 
     def _reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
         assert active_idx_jnp is not None
@@ -18533,19 +18530,9 @@ def solve_v3_full_system_newton_krylov_history(
     rnorm_initial: float | None = None
     cached_jvp = None
     cached_jvp_iter = -1
-    frozen_jac_cache_env = os.environ.get("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE", "").strip().lower()
-    if frozen_jac_cache_env in {"0", "false", "no", "off"}:
-        use_frozen_jac_cache = False
-    elif frozen_jac_cache_env in {"1", "true", "yes", "on"}:
-        use_frozen_jac_cache = True
-    else:
-        use_frozen_jac_cache = True
-    frozen_jac_every_env = os.environ.get("SFINCS_JAX_PHI1_FROZEN_JAC_CACHE_EVERY", "").strip()
-    try:
-        frozen_jac_every = int(frozen_jac_every_env) if frozen_jac_every_env else 1
-    except ValueError:
-        frozen_jac_every = 1
-    frozen_jac_every = max(1, frozen_jac_every)
+    frozen_jac_policy = phi1_frozen_jacobian_policy(include_phi1=bool(op.include_phi1))
+    use_frozen_jac_cache = bool(frozen_jac_policy.use_cache)
+    frozen_jac_every = int(frozen_jac_policy.every)
     ksp_history_max_env = os.environ.get("SFINCS_JAX_KSP_HISTORY_MAX_SIZE", "").strip().lower()
     if ksp_history_max_env in {"none", "inf", "infinite", "unlimited"}:
         ksp_history_max_size = None
@@ -18738,9 +18725,7 @@ def solve_v3_full_system_newton_krylov_history(
 
         frozen_jac_mode = None
         if use_frozen_linearization:
-            jac_mode = os.environ.get("SFINCS_JAX_PHI1_FROZEN_JAC_MODE", "").strip().lower()
-            if jac_mode not in {"frozen", "frozen_rhs", "frozen_op"}:
-                jac_mode = "frozen" if bool(op.include_phi1) else "frozen_rhs"
+            jac_mode = frozen_jac_policy.mode
             frozen_jac_mode = jac_mode
 
             if jac_mode == "frozen_rhs":
@@ -18960,36 +18945,20 @@ def solve_v3_full_system_newton_krylov_history(
         last_linear_resid = linear_resid_norm
 
         step = 1.0
-        step_scale_env = os.environ.get("SFINCS_JAX_PHI1_STEP_SCALE", "").strip()
-        try:
-            step_scale = float(step_scale_env) if step_scale_env else 1.0
-        except ValueError:
-            step_scale = 1.0
         rnorm0 = float(rnorm)
-        ls_factor_env = os.environ.get("SFINCS_JAX_PHI1_LINESEARCH_FACTOR", "").strip()
-        ls_c1_env = os.environ.get("SFINCS_JAX_PHI1_LINESEARCH_C1", "").strip()
-        try:
-            ls_factor = float(ls_factor_env) if ls_factor_env else None
-        except ValueError:
-            ls_factor = None
-        try:
-            ls_c1 = float(ls_c1_env) if ls_c1_env else 1.0e-4
-        except ValueError:
-            ls_c1 = 1.0e-4
-        ls_mode_env = os.environ.get("SFINCS_JAX_PHI1_LINESEARCH_MODE", "").strip().lower()
-        if ls_mode_env:
-            ls_mode = ls_mode_env
-        else:
-            ls_mode = "petsc" if (use_frozen_linearization and bool(op.include_phi1)) else "best"
+        ls_policy = phi1_line_search_policy(
+            use_frozen_linearization=bool(use_frozen_linearization),
+            include_phi1=bool(op.include_phi1),
+        )
+        step_scale = float(ls_policy.step_scale)
+        ls_factor = ls_policy.factor
+        ls_c1 = float(ls_policy.c1)
+        ls_mode = str(ls_policy.mode)
         best_x = None
         best_rnorm = float("inf")
         if ls_mode == "best":
             step_candidates = [1.0, 1.5, 2.0, 0.5, 0.25, 0.125, 0.0625, 0.03125]
-        max_ls_env = os.environ.get("SFINCS_JAX_PHI1_LINESEARCH_MAXITER", "").strip()
-        try:
-            max_ls = int(max_ls_env) if max_ls_env else (40 if ls_mode == "petsc" else 12)
-        except ValueError:
-            max_ls = 40 if ls_mode == "petsc" else 12
+        max_ls = int(ls_policy.maxiter)
         if ls_mode in {"basic", "full"}:
             x = x + (step * step_scale) * s
             accepted.append(x)
