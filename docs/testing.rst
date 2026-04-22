@@ -242,19 +242,25 @@ unit/regression suite:
   map from literature claim to script and artifact.
 - :doc:`validation_matrix` is the corresponding human-facing documentation page.
 
-The first new lane on the refactor branch is the bounded ``E_r`` trajectory-model sweep:
+The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep family:
 
 - script: ``examples/publication_figures/generate_er_trajectory_sweep.py``
-- prototype artifact:
-  ``examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json``
-- prototype figure:
-  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png``
+- pinned tokamak-like reference artifact:
+  ``examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json``
+- pinned tokamak-like reference figure:
+  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png``
+- pinned stellarator-like fast artifact:
+  ``examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json``
+- pinned stellarator-like fast figure:
+  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png``
 
-That lane is not yet the final audited paper reproduction. It is currently used as:
+This lane is now used as:
 
 - a branch-level regression target for the trajectory-model sweep script,
-- a stable artifact with numerical assertions for small-field agreement and finite-``E_r``
-  model separation,
+- a fixed tokamak-like reference lane with direct numerical assertions on zero-field
+  agreement and finite-field model separation,
+- a bounded stellarator-like branch lane that keeps the fixed input and figure stable
+  while the full-resolution stellarator sweep remains a heavier validation target,
 - and a figure/layout prototype for the eventual manuscript figure family.
 
 Further reading

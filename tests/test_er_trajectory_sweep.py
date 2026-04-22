@@ -136,3 +136,44 @@ def test_plot_er_trajectory_sweep_from_summary(tmp_path: Path) -> None:
     )
     assert (tmp_path / "er_sweep_test.png").exists()
     assert (tmp_path / "er_sweep_test.pdf").exists()
+
+
+def test_run_sweep_respects_custom_stem_and_title(tmp_path: Path, monkeypatch) -> None:
+    mod = _load_module()
+    base_input = tmp_path / "input.namelist"
+    base_input.write_text(
+        "&physicsParameters\n"
+        "  Er = 0.0\n"
+        "/\n"
+        "&resolutionParameters\n"
+        "  Ntheta = 5\n"
+        "  Nzeta = 5\n"
+        "  Nxi = 3\n"
+        "  NL = 3\n"
+        "  Nx = 3\n"
+        "/\n"
+    )
+
+    def fake_write(*, input_namelist, output_path, compute_solution, verbose):
+        del input_namelist, compute_solution, verbose
+        with h5py.File(output_path, "w") as h5:
+            h5["particleFlux_vm_psiHat"] = np.asarray([1.0])
+            h5["heatFlux_vm_psiHat"] = np.asarray([2.0])
+            h5["FSABFlow"] = np.asarray([3.0])
+            h5["FSABjHat"] = np.asarray(4.0)
+
+    monkeypatch.setattr(mod, "write_sfincs_jax_output_h5", fake_write)
+    mod._run_sweep(
+        input_path=base_input,
+        work_dir=tmp_path / "work",
+        summary_json=tmp_path / "summary.json",
+        out_dir=tmp_path / "figs",
+        er_values=[0.0],
+        er_res=None,
+        species_index=0,
+        fast=False,
+        stem="custom_er_lane",
+        title="Custom title",
+    )
+    assert (tmp_path / "figs" / "custom_er_lane.png").exists()
+    assert (tmp_path / "figs" / "custom_er_lane.pdf").exists()
