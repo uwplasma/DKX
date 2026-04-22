@@ -2011,3 +2011,142 @@ Execution order on this branch:
 Current branch status:
 - `rhs1_pas_policy.py` extraction in progress and validated against the PAS policy test slice.
 - next extraction target is the shared `_build_rhs1_preconditioner_from_kind(...)` ladder, using a thin wrapper in `v3_driver.py` so the existing regression seam stays intact.
+
+### 19.13 Literature-anchored validation baselines for the paper
+
+Primary literature anchors to use directly for validation and manuscript figures:
+- SFINCS paper: [Landreman et al., *Comparison of particle trajectories and collision operators for collisional transport in nonaxisymmetric plasmas*, Phys. Plasmas 21, 042503 (2014)](https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf)
+- Upstream SFINCS documentation tree: [landreman/sfincs `doc/`](https://github.com/landreman/sfincs/tree/master/doc)
+- MONKES paper: [Escoto et al., *MONKES: a fast neoclassical code for the evaluation of monoenergetic transport coefficients*](https://arxiv.org/abs/2312.12248)
+- W7-X ion-root validation context: [Pablant et al. ion-root / ambipolar-electric-field comparison page mirrored here](https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf)
+- optimization / adjoint motivation: [APS abstract on adjoint neoclassical stellarator optimization with SFINCS](https://meetings-archive.aps.org/dpp/2018/bp11/36/)
+
+Key baseline claims from the literature that `sfincs_jax` should explicitly test or reproduce:
+- trajectory-model agreement at small normalized electric field and divergence at large `E_r / E_r^{res}`:
+  - SFINCS 2014 Figures 1-3 show the three trajectory models are close for `E_*` below roughly one-third of the resonant value and diverge for larger fields, with bootstrap-current sign-change behavior in the full-trajectory model at large inward `E_r`.
+- collision-operator comparison across collisionality:
+  - SFINCS 2014 Figures 4-6 show which transport-matrix elements are sensitive to momentum conservation and where the high-collisionality asymptotes should match.
+- analytic high-collisionality limit:
+  - SFINCS 2014 Figure 6 and Appendix B provide a direct asymptotic gate for transport-matrix elements in the short-mean-free-path regime.
+- quasisymmetry isomorphism:
+  - SFINCS 2014 Appendix A states a strong code-verification property for quasisymmetric fields that should be turned into an automated test family where feasible.
+- monoenergetic low-collisionality benchmark and convergence:
+  - MONKES provides overlap for monoenergetic coefficients, convergence studies, and runtime expectations that are directly relevant to `geometryScheme` / monoenergetic subsets in `sfincs_jax`.
+
+### 19.14 Manuscript figure plan
+
+The paper should not be built around only parity tables. It should have a small set of high-information figures, each tied to an automated or semi-automated benchmark lane.
+
+Figure set A: Correctness / physics
+- A1. Trajectory-model comparison versus normalized radial electric field.
+  - Recreate the SFINCS-2014-style sweep for one tokamak-like and one stellarator case.
+  - Plot particle flux, heat flux, parallel flow, and bootstrap current versus `E_r / E_r^{res}`.
+  - Goal: show the same small-`E_r` agreement and large-`E_r` divergence structure, with `sfincs_jax` reproducing the expected model ordering.
+- A2. Collision-operator comparison versus collisionality.
+  - Transport-matrix elements vs collisionality at `E_r = 0`, matching the logic of SFINCS 2014 Figures 4-6.
+  - Include analytic high-collisionality asymptotes where available.
+- A3. Quasisymmetry / symmetry verification.
+  - A compact figure or table showing invariance/isomorphism behavior for matched quasisymmetric fields or a strongly related reduced test.
+- A4. W7-X-style ambipolar field / bootstrap-current validation.
+  - If experimental-profile validation is practical, show one figure comparing `sfincs_jax` prediction to published experimental/neoclassical comparison context.
+  - If not practical for the first paper, demote this to supplement and keep it as a plan item.
+
+Figure set B: Numerical methods
+- B1. Convergence study.
+  - Resolution study in `N_theta`, `N_zeta`, `N_xi`, `N_x`, and possibly `L_max`/active-DOF truncation for representative PAS, FP, VMEC, and monoenergetic cases.
+  - Plot solution error proxy and runtime versus resolution.
+- B2. Solver/preconditioner path map.
+  - A compact diagram or ablation plot showing how the default CLI lane selects stable fast paths across major model families.
+  - This should be backed by the bounded tests and offender benchmarks.
+- B3. Warm/cold runtime split.
+  - Separate JAX compile/lowering/setup from steady-state solve time on the main offender classes.
+
+Figure set C: Performance and scaling
+- C1. Full-suite CPU/GPU benchmark summary.
+  - Keep the parity table, but the manuscript should use a cleaner summary figure: per-case runtime ratio and memory ratio versus Fortran v3.
+- C2. Published GPU scaling figure.
+  - Use the transport-worker/case-throughput lane as the main GPU scaling claim unless single-case sharding becomes genuinely strong and stable.
+- C3. Single-case sharded scaling figure.
+  - Keep this only if the ongoing research lane closes convincingly. Otherwise it belongs in limitations/supplement, not the main paper.
+- C4. MONKES overlap figure.
+  - For monoenergetic overlap cases, compare coefficients and runtime on a like-for-like subset where the models coincide.
+
+Figure set D: Differentiation / optimization
+- D1. Gradient-check figure.
+  - Autodiff vs finite-difference vs implicit-diff directional derivative agreement for a few representative objectives.
+- D2. Sensitivity map or inverse-design demo.
+  - Example: bootstrap current or radial flux sensitivity to selected Boozer/geometry coefficients.
+- D3. Optimization/UQ workflow figure.
+  - Small but real demo showing `sfincs_jax` inside an optimization or UQ loop with cached/parallel evaluation.
+
+### 19.15 Additional tests and simulations to strengthen the paper
+
+Add the following to the validation matrix if feasible on the current branch:
+- Electric-field sweep tests modeled on SFINCS 2014 Figures 1-3.
+  - Needed outputs: fluxes, flows, bootstrap current, source terms.
+  - These should become regression plots plus numerical assertions about small-`E_r` agreement and large-`E_r` separation.
+- Collisionality sweep tests modeled on SFINCS 2014 Figures 4-6.
+  - Needed outputs: transport-matrix elements for PAS / momentum-corrected / FP operators.
+  - Assertions should focus on asymptotic trends and operator ordering, not exact plotted values alone.
+- High-collisionality asymptotic tests.
+  - For representative geometries, verify convergence toward the known analytic short-mean-free-path limits discussed in the SFINCS paper.
+- Quasisymmetry isomorphism tests.
+  - Add at least one reduced automated lane that exercises the isomorphism relation or a strong proxy derived from the same theory.
+- Monoenergetic overlap tests against MONKES.
+  - Compare coefficients and convergence on small overlap cases.
+- Experimental-profile or profile-inspired validation.
+  - W7-X ion-root / bootstrap-current context if the published inputs can be reconstructed sufficiently well.
+- Resolution and aliasing studies from numerical analysis.
+  - Demonstrate spectral/stencil convergence and absence of spurious parity drift with increasing resolution.
+- Autodiff verification battery.
+  - JVP/VJP/finite-difference checks for residuals, transport objectives, and geometry parameters used in optimization.
+- UQ / inverse problems.
+  - Small synthetic inverse-calibration task and local uncertainty propagation with gradient cross-checks.
+
+### 19.16 Testing and code-structure documentation workstream
+
+The docs should become explicit about how the code is organized and how it is validated.
+
+Code-structure docs to add or expand:
+- `docs/source_map.rst`
+  - update it continuously as `v3_driver.py` is split, with one subsection per extracted module and clear ownership of equations / numerics / policy logic.
+- `docs/numerics.rst`
+  - add a dedicated subsection for the refactored RHSMode=1 dispatch, fallback, and builder layers.
+- `docs/testing.rst`
+  - expand from “what tests exist” to “why each test family exists”:
+    - literature-anchored physics tests,
+    - numerical-analysis tests,
+    - regression/parity tests,
+    - performance/benchmark tests,
+    - autodiff/gradient tests.
+- `docs/parallelism.rst`
+  - make explicit which parallel lanes are publication claims and which remain research lanes.
+
+Testing docs should include:
+- a matrix mapping each example/model family to:
+  - geometry,
+  - physics model,
+  - parity fixture,
+  - literature anchor,
+  - benchmark lane,
+  - autodiff support status.
+- a reproducibility section describing:
+  - frozen reference roots,
+  - cold vs warm benchmarks,
+  - office multi-GPU reruns,
+  - artifact naming/versioning.
+
+### 19.17 Ready-to-start execution order after this planning pass
+
+1. Finish the structural split of `v3_driver.py` on this branch:
+   - dispatch layer
+   - fallback/rescue layer
+   - transport/distributed policy
+   - nonlinear helpers
+2. In parallel with the split, build the manuscript baseline matrix:
+   - trajectory-model `E_r` sweeps
+   - collision-operator collisionality sweeps
+   - monoenergetic MONKES overlap
+3. Expand `docs/testing.rst` and `docs/source_map.rst` as modules move.
+4. Add the first manuscript-grade figure generation scripts with pinned JSON artifacts.
+5. Only after the structure is stable, run the broader benchmark/validation campaign and start writing the paper figures from those audited artifacts.
