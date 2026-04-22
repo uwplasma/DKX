@@ -2014,7 +2014,8 @@ Current branch status:
 - `rhs1_strong_fallback.py` is now landed for the full-path strong-preconditioner fallback build, replacing the duplicated full-path builder ladder with a shared helper that reuses the dispatch module.
 - `rhs1_strong_policy.py` is now landed for the duplicated reduced/full strong-preconditioner env-to-kind mapping.
 - `rhs1_stage2_policy.py` is now landed for the duplicated stage-2 trigger / FP-force-stage2 / PAS-stage2-skip policy.
-- next extraction target is the remaining RHSMode=1 fallback / rescue policy beneath these helpers, especially the sparse-rescue-first and strong-preconditioner auto-enable/auto-disable decision seams.
+- `rhs1_strong_control.py` is now landed for the duplicated strong-preconditioner enable/disable/auto control layer, including sparse-rescue-first and PAS-fast-accept gating.
+- next extraction target is the remaining RHSMode=1 fallback / rescue policy beneath these helpers, especially the auto strong-kind selection layer and the sparse-rescue ordering decisions.
 
 ### 19.13 Literature-anchored validation baselines for the paper
 

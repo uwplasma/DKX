@@ -63,6 +63,7 @@ from .rhs1_preconditioner_dispatch import (
 )
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .rhs1_strong_policy import requested_rhs1_strong_preconditioner_kind
+from .rhs1_strong_control import rhs1_resolved_strong_preconditioner_control
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -14714,48 +14715,53 @@ def solve_v3_full_system_linear_gmres(
             pre_zeta=int(pre_zeta),
             use_implicit=bool(use_implicit),
         )
-        strong_precond_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MIN", "").strip()
-        try:
-            strong_precond_min = int(strong_precond_min_env) if strong_precond_min_env else 800
-        except ValueError:
-            strong_precond_min = 800
         strong_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "").strip().lower()
-        strong_precond_disabled = strong_precond_env in {"0", "false", "no", "off"}
-        strong_precond_auto = strong_precond_env == "auto"
-        if pas_large_bicgstab_fastpath and strong_precond_env == "":
-            strong_precond_disabled = True
-            strong_precond_auto = False
-        if cs0_sparse_first and strong_precond_env in {"", "auto"}:
-            strong_precond_disabled = True
-            strong_precond_auto = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: constraintScheme=0 sparse-first "
-                    "auto mode -> defer strong preconditioner until after sparse ILU",
-                )
-        if _rhsmode1_large_cpu_sparse_rescue_first(
+        large_cpu_sparse_rescue_first = _rhsmode1_large_cpu_sparse_rescue_first(
             large_cpu_sparse_rescue=large_cpu_sparse_rescue_active,
             strong_precond_env=strong_precond_env,
-        ):
-            strong_precond_disabled = True
-            strong_precond_auto = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: large CPU sparse rescue-first "
-                    "auto mode -> defer strong preconditioner until after sparse LU",
-                )
-        if _pas_auto_skip_strong_retry(
+        )
+        pas_auto_skip = _pas_auto_skip_strong_retry(
             has_pas=op.fblock.pas is not None,
             strong_precond_env=strong_precond_env,
             rhs1_precond_kind=rhs1_precond_kind,
             residual_norm=float(res_reduced.residual_norm),
             target=float(target_reduced),
             ratio=float(pas_auto_strong_ratio),
-        ):
-            strong_precond_disabled = True
-            strong_precond_auto = False
+        )
+        strong_control = rhs1_resolved_strong_preconditioner_control(
+            strong_precond_env=strong_precond_env,
+            has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0 and (not use_pas_projection),
+            has_fp=op.fblock.fp is not None,
+            has_pas=op.fblock.pas is not None,
+            size=int(active_size),
+            n_theta=int(op.n_theta),
+            n_zeta=int(op.n_zeta),
+            pas_large_bicgstab_fastpath=bool(pas_large_bicgstab_fastpath),
+            cs0_sparse_first=bool(cs0_sparse_first),
+            large_cpu_sparse_rescue_first=bool(large_cpu_sparse_rescue_first),
+            pas_auto_skip=bool(pas_auto_skip),
+            pas_fast_accept=bool(pas_fast_accept),
+            pas_precond_force_collision=bool(pas_precond_force_collision),
+            residual_norm=float(res_reduced.residual_norm),
+            target=float(target_reduced),
+        )
+        strong_precond_min = int(strong_control.min_size)
+        strong_precond_disabled = bool(strong_control.disabled)
+        strong_precond_auto = bool(strong_control.auto)
+        if strong_control.reason_cs0_sparse_first and emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: constraintScheme=0 sparse-first "
+                "auto mode -> defer strong preconditioner until after sparse ILU",
+            )
+        if strong_control.reason_large_cpu_sparse_first and emit is not None:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: large CPU sparse rescue-first "
+                    "auto mode -> defer strong preconditioner until after sparse LU",
+                )
+        if strong_control.reason_pas_auto_skip and emit is not None:
             if emit is not None:
                 emit(
                     1,
@@ -14763,53 +14769,27 @@ def solve_v3_full_system_linear_gmres(
                     f"after base={rhs1_precond_kind} "
                     f"(residual={float(res_reduced.residual_norm):.3e} <= {float(pas_auto_strong_ratio):.1f}x target)",
                 )
-        if pas_fast_accept and strong_precond_env in {"", "auto"}:
-            strong_precond_disabled = True
-            strong_precond_auto = False
+        if strong_control.reason_pas_fast_accept and emit is not None:
             if emit is not None:
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: PAS fast-accept "
                     f"(residual={float(res_reduced.residual_norm):.3e}) -> skip strong preconditioner tail",
                 )
-        pas_force_strong_ratio_env = os.environ.get("SFINCS_JAX_PAS_FORCE_STRONG_RATIO", "").strip()
-        try:
-            pas_force_strong_ratio = float(pas_force_strong_ratio_env) if pas_force_strong_ratio_env else 50.0
-        except ValueError:
-            pas_force_strong_ratio = 50.0
-        if pas_precond_force_collision and strong_precond_env in {"", "auto"}:
-            if float(res_reduced.residual_norm) <= target_reduced * pas_force_strong_ratio:
-                strong_precond_disabled = True
-                strong_precond_auto = False
-                if emit is not None:
-                    emit(1, "solve_v3_full_system_linear_gmres: PAS collision probe disabled strong preconditioner auto")
-            elif emit is not None:
+        if strong_control.reason_collision_probe_skip and emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: PAS collision probe disabled strong preconditioner auto")
+        elif pas_precond_force_collision and strong_precond_env in {"", "auto"} and emit is not None:
+            pas_force_strong_ratio_env = os.environ.get("SFINCS_JAX_PAS_FORCE_STRONG_RATIO", "").strip()
+            try:
+                pas_force_strong_ratio = float(pas_force_strong_ratio_env) if pas_force_strong_ratio_env else 50.0
+            except ValueError:
+                pas_force_strong_ratio = 50.0
+            if float(res_reduced.residual_norm) > target_reduced * pas_force_strong_ratio:
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: PAS collision probe allows strong preconditioner "
                     f"(residual={float(res_reduced.residual_norm):.3e} > {pas_force_strong_ratio:.1f}x target)",
                 )
-        if (
-            strong_precond_env == ""
-            and int(op.constraint_scheme) == 2
-            and int(op.extra_size) > 0
-            and (not use_pas_projection)
-        ):
-            strong_precond_auto = True
-        if (
-            strong_precond_env == ""
-            and op.fblock.fp is not None
-            and int(active_size) >= strong_precond_min
-            and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
-        ):
-            strong_precond_auto = True
-        if (
-            strong_precond_env == ""
-            and op.fblock.pas is not None
-            and int(active_size) >= strong_precond_min
-            and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
-        ):
-            strong_precond_auto = True
         strong_precond_kind: str | None = None
         strong_xblock_tz_lmax: int | None = None
         if strong_precond_disabled:
@@ -17605,14 +17585,7 @@ def solve_v3_full_system_linear_gmres(
                     ksp_maxiter = maxiter
                     ksp_precond_side = gmres_precond_side
                     ksp_solver_kind = _solver_kind("incremental")[0]
-        strong_precond_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MIN", "").strip()
-        try:
-            strong_precond_min = int(strong_precond_min_env) if strong_precond_min_env else 800
-        except ValueError:
-            strong_precond_min = 800
         strong_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "").strip().lower()
-        strong_precond_disabled = strong_precond_env in {"0", "false", "no", "off"}
-        strong_precond_auto = strong_precond_env == "auto"
         cs0_sparse_first = _rhsmode1_constraint0_sparse_first(
             op=op,
             solve_method_kind=solve_method_kind,
@@ -17620,54 +17593,47 @@ def solve_v3_full_system_linear_gmres(
             active_size=int(active_size),
             sparse_max_size=int(sparse_max_size),
         )
-        if cs0_sparse_first and strong_precond_env in {"", "auto"}:
-            strong_precond_disabled = True
-            strong_precond_auto = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: constraintScheme=0 sparse-first "
-                    "auto mode -> defer strong preconditioner until after sparse ILU",
-                )
-        if (
-            strong_precond_env == ""
-            and int(op.constraint_scheme) == 2
-            and int(op.extra_size) > 0
-        ):
-            strong_precond_auto = True
-        if (
-            strong_precond_env == ""
-            and op.fblock.fp is not None
-            and int(op.total_size) >= strong_precond_min
-            and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
-        ):
-            strong_precond_auto = True
-        if _pas_auto_skip_strong_retry(
-            has_pas=op.fblock.pas is not None,
+        strong_control = rhs1_resolved_strong_preconditioner_control(
             strong_precond_env=strong_precond_env,
-            rhs1_precond_kind=rhs1_precond_kind,
-            residual_norm=float(result.residual_norm),
-            target=float(target),
-            ratio=float(pas_auto_strong_ratio),
-        ):
-            strong_precond_disabled = True
-            strong_precond_auto = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: PAS auto strong preconditioner skipped "
-                    f"after base={rhs1_precond_kind} "
-                    f"(residual={float(result.residual_norm):.3e} <= {float(pas_auto_strong_ratio):.1f}x target)",
-                )
-        if pas_fast_accept and strong_precond_env in {"", "auto"}:
-            strong_precond_disabled = True
-            strong_precond_auto = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: PAS fast-accept "
-                    f"(residual={float(result.residual_norm):.3e}) -> skip strong preconditioner tail",
-                )
+            has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0,
+            has_fp=op.fblock.fp is not None,
+            has_pas=op.fblock.pas is not None,
+            size=int(op.total_size),
+            n_theta=int(op.n_theta),
+            n_zeta=int(op.n_zeta),
+            cs0_sparse_first=bool(cs0_sparse_first),
+            pas_auto_skip=_pas_auto_skip_strong_retry(
+                has_pas=op.fblock.pas is not None,
+                strong_precond_env=strong_precond_env,
+                rhs1_precond_kind=rhs1_precond_kind,
+                residual_norm=float(result.residual_norm),
+                target=float(target),
+                ratio=float(pas_auto_strong_ratio),
+            ),
+            pas_fast_accept=bool(pas_fast_accept),
+        )
+        strong_precond_min = int(strong_control.min_size)
+        strong_precond_disabled = bool(strong_control.disabled)
+        strong_precond_auto = bool(strong_control.auto)
+        if strong_control.reason_cs0_sparse_first and emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: constraintScheme=0 sparse-first "
+                "auto mode -> defer strong preconditioner until after sparse ILU",
+            )
+        if strong_control.reason_pas_auto_skip and emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: PAS auto strong preconditioner skipped "
+                f"after base={rhs1_precond_kind} "
+                f"(residual={float(result.residual_norm):.3e} <= {float(pas_auto_strong_ratio):.1f}x target)",
+            )
+        if strong_control.reason_pas_fast_accept and emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: PAS fast-accept "
+                f"(residual={float(result.residual_norm):.3e}) -> skip strong preconditioner tail",
+            )
         strong_precond_kind: str | None = None
         if strong_precond_disabled:
             strong_precond_kind = None
