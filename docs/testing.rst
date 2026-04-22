@@ -96,8 +96,8 @@ The current audited full-suite command on ``main`` is:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-On the current audited local release tree this command yields ``529 tests collected``,
-``529 passed`` in the stable chunked rerun, and
+On the current audited local release tree this command yields ``539 tests collected``,
+``539 passed`` in the stable chunked rerun, and
 roughly ``54%`` package coverage. That number is materially higher than the Linux
 CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
 surface is still the large solver/geometry stack, especially ``v3_driver.py``,
@@ -123,7 +123,17 @@ differentiation exactness, finite-difference order conditions, Boozer-coordinate
 field-component relations, VMEC half-mesh finite-difference conventions, and
 deterministic cache / solver-policy behavior on bounded inputs. Reaching a
 research-grade coverage target therefore still requires more focused tests on the
-heavy solver modules rather than more trivial helper tests.
+heavy solver modules rather than more trivial helper tests. The latest applied-math
+pass then targeted the sparse/circulant derivative layer and the PAS residual-gate
+metrics directly. That batch pushed ``periodic_stencil.py`` from about ``57%`` to
+about ``67%`` by checking circulant/Fourier-mode exactness, sparse-row extraction
+bounds, and the documented sharded-halo fallback behavior; it also pushed
+``pas_smoother.py`` from about ``59%`` to about ``62%`` by checking
+target/upward/plateau gate logic and bounded stationary-smoother convergence on
+tiny analytic systems. These tests are anchored in standard numerical-analysis
+invariants: Fourier modes as eigenvectors of circulant derivative operators, and
+residual-history stopping rules consistent with minimal-residual / stagnation
+monitoring in iterative methods.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
