@@ -1986,3 +1986,28 @@ Benchmarking:
 3. Build a gradient-test batch for the shipped autodiff examples.
 4. Create a benchmark manifest file and audited runner for CPU/GPU/full/offender lanes.
 5. Add a first `simsopt`-style objective wrapper demo for serial sensitivity/inverse design.
+
+### 19.12 Active refactor branch: `refactor/v3-driver-split`
+
+Purpose:
+- reduce the denominator that blocks `95%` coverage,
+- move `v3_driver.py` toward a thin orchestration layer,
+- preserve full-suite behavior and Fortran-v3 parity while increasing direct testability.
+
+Branch rules:
+- every extraction must keep existing focused PAS/RHSMode=1 tests green before moving on,
+- new modules must carry docstrings and narrow responsibilities,
+- existing monkeypatch/debug seams in `sfincs_jax.v3_driver` should stay stable unless there is a strong reason to break them,
+- no numerical or solver-policy change is allowed in this branch unless it is required to preserve correctness after the split.
+
+Execution order on this branch:
+1. Extract PAS applicability / memory-policy helpers into `rhs1_pas_policy.py`.
+2. Extract the shared RHSMode=1 dispatch ladder into `rhs1_preconditioner_dispatch.py`.
+3. Extract RHSMode=1 fallback / rescue policy below the dispatch layer.
+4. Extract transport-policy and distributed-policy helpers.
+5. Split nonlinear / Newton helpers away from linear solve orchestration.
+6. After each step, rerun the focused driver tests and then a broader branch validation slice.
+
+Current branch status:
+- `rhs1_pas_policy.py` extraction in progress and validated against the PAS policy test slice.
+- next extraction target is the shared `_build_rhs1_preconditioner_from_kind(...)` ladder, using a thin wrapper in `v3_driver.py` so the existing regression seam stays intact.
