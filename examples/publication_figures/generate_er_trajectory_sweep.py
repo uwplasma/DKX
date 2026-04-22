@@ -147,6 +147,16 @@ def _parse_args() -> argparse.Namespace:
         default=0,
         help="Species index for particle/heat flux and flow summaries.",
     )
+    parser.add_argument(
+        "--stem",
+        default="sfincs_jax_er_trajectory_sweep",
+        help="Output figure stem (without extension).",
+    )
+    parser.add_argument(
+        "--title",
+        default="Trajectory-model sweep versus radial electric field",
+        help="Figure title.",
+    )
     parser.add_argument("--fast", action="store_true", help="Apply a bounded low-resolution override for quicker exploratory sweeps.")
     parser.add_argument("--plot-only", action="store_true", help="Reuse an existing summary JSON and only regenerate the figure.")
     return parser.parse_args()
@@ -269,7 +279,19 @@ def plot_er_trajectory_sweep(*, records: list[SweepRecord], out_dir: Path, stem:
     plt.close(fig)
 
 
-def _run_sweep(*, input_path: Path, work_dir: Path, summary_json: Path, out_dir: Path, er_values: list[float], er_res: float | None, species_index: int, fast: bool) -> None:
+def _run_sweep(
+    *,
+    input_path: Path,
+    work_dir: Path,
+    summary_json: Path,
+    out_dir: Path,
+    er_values: list[float],
+    er_res: float | None,
+    species_index: int,
+    fast: bool,
+    stem: str,
+    title: str,
+) -> None:
     base_text = input_path.read_text()
     records: list[SweepRecord] = []
     for model in TRAJECTORY_MODELS:
@@ -302,8 +324,8 @@ def _run_sweep(*, input_path: Path, work_dir: Path, summary_json: Path, out_dir:
     plot_er_trajectory_sweep(
         records=records,
         out_dir=out_dir,
-        stem="sfincs_jax_er_trajectory_sweep",
-        title="Trajectory-model sweep versus radial electric field",
+        stem=stem,
+        title=title,
     )
 
 
@@ -320,8 +342,8 @@ def main() -> int:
         plot_er_trajectory_sweep(
             records=records,
             out_dir=out_dir,
-            stem="sfincs_jax_er_trajectory_sweep",
-            title="Trajectory-model sweep versus radial electric field",
+            stem=args.stem,
+            title=args.title,
         )
         print(f"Replotted trajectory-model sweep from {summary_json}")
         return 0
@@ -336,6 +358,8 @@ def main() -> int:
         er_res=args.er_res,
         species_index=int(args.species_index),
         fast=bool(args.fast),
+        stem=str(args.stem),
+        title=str(args.title),
     )
     print(f"Wrote sweep summary to {summary_json}")
     print(f"Wrote figures to {out_dir}")
