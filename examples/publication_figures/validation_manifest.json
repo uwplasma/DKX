@@ -53,24 +53,43 @@
     ]
   },
   {
-    "id": "sfincs2014_er_sweep_tokamak_stellarator",
+    "id": "sfincs2014_er_sweep_tokamak_reference",
+    "status": "implemented",
+    "kind": "literature_validation",
+    "literature": [
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "scripts": [
+      "examples/publication_figures/generate_er_trajectory_sweep.py --preset tokamak_like --er-values=-30,0,30 --stem sfincs_jax_er_trajectory_sweep_tokamak_reference"
+    ],
+    "artifacts": [
+      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png",
+      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.pdf",
+      "examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json"
+    ],
+    "claims": [
+      "The three trajectory models agree at Er=0 on the fixed tokamak-like reference input",
+      "Away from Er=0, the tokamak-like reference sweep resolves clear separation in fluxes and flows across DKES, partial, and full trajectories"
+    ]
+  },
+  {
+    "id": "sfincs2014_er_sweep_stellarator_fast_scaffold",
     "status": "prototype_artifact",
     "kind": "literature_validation",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
     "scripts": [
-      "examples/publication_figures/generate_er_trajectory_sweep.py --preset tokamak_like",
-      "examples/publication_figures/generate_er_trajectory_sweep.py --preset stellarator_like"
+      "examples/publication_figures/generate_er_trajectory_sweep.py --preset stellarator_like --fast --er-values=-8.5897,0,8.5897 --stem sfincs_jax_er_trajectory_sweep_stellarator_fast_reference"
     ],
     "artifacts": [
-      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png",
-      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.pdf",
-      "examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json"
+      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png",
+      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.pdf",
+      "examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json"
     ],
     "claims": [
-      "Trajectory models should agree at small Er/Eres and separate at larger normalized electric field",
-      "Bootstrap-current sign-change behavior should appear in the full-trajectory branch where reported in the paper"
+      "The three trajectory models agree at Er=0 on the fixed stellarator-like scaffold input",
+      "A bounded fast stellarator-like sweep resolves nonzero-Er separation while the full-resolution version remains a heavier validation lane"
     ]
   },
   {

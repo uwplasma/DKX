@@ -2209,20 +2209,23 @@ Testing docs should include:
   - solve handoff helpers,
   - transport policy, transport-parallel policy/runtime/pool/execution helpers,
   - Phi1 Newton policy, linear-step, and line-search helpers.
-- The first literature-facing validation lane is now live as a bounded prototype:
+- The first literature-facing validation lane is now live with pinned fixed-case artifacts:
   - script: `examples/publication_figures/generate_er_trajectory_sweep.py`
   - machine-readable lane entry: `examples/publication_figures/validation_manifest.json`
-  - prototype artifact: `examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json`
-  - prototype figure: `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png`
-- The current prototype lane is intentionally scoped as a fast tokamak-like scaffold, not
-  the final audited manuscript sweep. What it already proves is:
+  - tokamak-like reference artifact: `examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json`
+  - tokamak-like reference figure: `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png`
+  - stellarator-like fast artifact: `examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json`
+  - stellarator-like fast figure: `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png`
+- The current branch lane now proves:
   - the upstream DKES/partial/full trajectory switches are encoded explicitly in one place,
-  - the sweep script generates stable JSON + PNG/PDF artifacts,
-  - and bounded numerical assertions can already lock down small-`E_r` agreement and
-    finite-`E_r` model separation on that artifact.
+  - the sweep script generates stable JSON + PNG/PDF artifacts with named fixed-case outputs,
+  - the fixed tokamak-like lane supports direct assertions on zero-field agreement and
+    finite-field model separation,
+  - the fixed stellarator-like lane is stable as a bounded fast branch artifact,
+    while the full-resolution stellarator sweep is still too heavy for the regular branch workflow.
 - Immediate next actions on this branch:
   1. deepen the remaining transport/distributed orchestration split if more of it is still
      embedded in `v3_driver.py`,
-  2. upgrade the `E_r` prototype lane from fast scaffold to audited reference sweep on a
-     fixed tokamak-like and stellarator-like pair,
-  3. then start the collisionality / collision-operator lane from the same validation manifest.
+  2. promote the stellarator-like `E_r` lane from fast branch artifact to a heavier
+     audited release/nightly sweep once its runtime/cost is acceptable,
+  3. start the collisionality / collision-operator lane from the same validation manifest.
