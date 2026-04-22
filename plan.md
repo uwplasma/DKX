@@ -2022,13 +2022,15 @@ Current branch status:
 - `rhs1_sparse_polish_policy.py` is now landed for the duplicated sparse polish / retry / accept-ratio env parsing used by FP x-block seeds, sxblock polish, host sparse direct polish, and sparse operator-preconditioned GMRES restart/maxiter selection.
 - `transport_policy.py` is now landed for the pure RHSMode=2/3 transport backend / sparse-direct / host-GMRES / dtype / recycle policy layer, with thin wrappers preserved in `v3_driver.py` so the existing transport tests and monkeypatch seams stay stable.
 - `transport_parallel_policy.py` is now landed for the process-parallel transport backend/start-method/persistent-pool/GPU-worker environment policy layer, again keeping thin wrappers in `v3_driver.py`.
+- `transport_parallel_runtime.py` is now landed for the transport parallel RHS partitioning, GPU worker subprocess runner, and parallel-result merge layer, reducing the inlined orchestration inside `solve_v3_transport_matrix_linear_gmres` without changing the public transport test seams.
 - current validation slice on this branch:
   - focused RHSMode=1 + transport policy/dispatch/fallback tests: `103 passed`
   - broader bounded driver/transport slice: `92 passed`
   - dedicated transport slices:
     - `tests/test_transport_sparse_direct.py`: `37 passed`
     - `tests/test_transport_parallel.py`: `13 passed`
-- next extraction target is the deeper transport/distributed orchestration layer that still lives in `v3_driver.py`, especially the worker-launch / pool-management handoff and then the nonlinear / Newton helper split.
+    - `tests/test_transport_parallel_runtime.py`: `3 passed`
+- next extraction target is the remaining transport/distributed orchestration that still lives in `v3_driver.py`, especially the persistent pool lifecycle and the top-level parallel execution branch in `solve_v3_transport_matrix_linear_gmres`, then the nonlinear / Newton helper split.
 
 ### 19.13 Literature-anchored validation baselines for the paper
 

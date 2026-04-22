@@ -111,6 +111,11 @@ from .transport_parallel_policy import (
     transport_parallel_visible_gpu_ids as _transport_parallel_visible_gpu_ids_impl,
     transport_parallel_worker_env as _transport_parallel_worker_env_impl,
 )
+from .transport_parallel_runtime import (
+    merge_transport_parallel_results,
+    partition_transport_rhs,
+    run_transport_parallel_gpu_subprocesses as _run_transport_parallel_gpu_subprocesses_impl,
+)
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -19164,74 +19169,13 @@ def _run_transport_parallel_gpu_subprocesses(
     parallel_workers: int,
     emit: Callable[[int, str], None] | None = None,
 ) -> list[dict[str, object]]:
-    gpu_ids = _transport_parallel_visible_gpu_ids(parallel_workers)
-    if not gpu_ids:
-        raise RuntimeError("GPU transport parallel backend requested but no visible GPU ids were found.")
-    use_workers = min(int(parallel_workers), len(payloads), len(gpu_ids))
-    gpu_ids = gpu_ids[:use_workers]
-    if emit is not None and use_workers < int(parallel_workers):
-        emit(
-            1,
-            "solve_v3_transport_matrix_linear_gmres: GPU transport workers capped by visible devices "
-            f"({use_workers}/{int(parallel_workers)})",
-        )
-
-    results: list[dict[str, object]] = []
-    with tempfile.TemporaryDirectory(prefix="sfincs_jax_transport_gpu_") as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        procs: list[tuple[subprocess.Popen[str], Path, list[int], str]] = []
-        for i, payload in enumerate(payloads[:use_workers]):
-            rhs_vals = [int(v) for v in payload.get("which_rhs_values", [])]
-            payload_path = tmpdir_path / f"payload_{i}.json"
-            output_path = tmpdir_path / f"result_{i}.npz"
-            payload_path.write_text(json.dumps(payload))
-            gpu_id = gpu_ids[i]
-            env = _transport_parallel_gpu_worker_env(gpu_id=gpu_id)
-            cmd = [
-                sys.executable,
-                "-m",
-                "sfincs_jax.transport_parallel_worker",
-                "--payload",
-                str(payload_path),
-                "--output",
-                str(output_path),
-            ]
-            proc = subprocess.Popen(
-                cmd,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            procs.append((proc, output_path, rhs_vals, gpu_id))
-
-        for proc, output_path, rhs_vals, gpu_id in procs:
-            out, err = proc.communicate()
-            if proc.returncode != 0:
-                raise RuntimeError(
-                    "GPU transport worker failed "
-                    f"(gpu={gpu_id} whichRHS={rhs_vals} code={proc.returncode})\n"
-                    f"stdout:\n{out}\n"
-                    f"stderr:\n{err}"
-                )
-            data = np.load(output_path)
-            rhs_values = [int(v) for v in np.asarray(data["which_rhs_values"], dtype=np.int32)]
-            state_vectors = np.asarray(data["state_vectors"], dtype=np.float64)
-            residual_norms = np.asarray(data["residual_norms"], dtype=np.float64)
-            elapsed_time_s = np.asarray(data["elapsed_time_s"], dtype=np.float64)
-            results.append(
-                {
-                    "which_rhs_values": rhs_values,
-                    "state_vectors_by_rhs": {
-                        int(rhs): state_vectors[idx] for idx, rhs in enumerate(rhs_values)
-                    },
-                    "residual_norms_by_rhs": {
-                        int(rhs): float(residual_norms[idx]) for idx, rhs in enumerate(rhs_values)
-                    },
-                    "elapsed_time_s": elapsed_time_s,
-                }
-            )
-    return results
+    return _run_transport_parallel_gpu_subprocesses_impl(
+        payloads=payloads,
+        parallel_workers=int(parallel_workers),
+        visible_gpu_ids=_transport_parallel_visible_gpu_ids,
+        gpu_worker_env=_transport_parallel_gpu_worker_env,
+        emit=emit,
+    )
 
 
 def _transport_parallel_pool_executor_kwargs(
@@ -19532,13 +19476,7 @@ def solve_v3_transport_matrix_linear_gmres(
                 f"(backend={parallel_backend} workers={int(parallel_workers)} rhs_count={len(which_rhs_values)}/{n})",
             )
 
-        def _partition(values: list[int], workers: int) -> list[list[int]]:
-            chunks: list[list[int]] = [[] for _ in range(workers)]
-            for i, val in enumerate(values):
-                chunks[i % workers].append(val)
-            return [c for c in chunks if c]
-
-        chunks = _partition(list(which_rhs_values), int(parallel_workers))
+        chunks = partition_transport_rhs(list(which_rhs_values), int(parallel_workers))
         payloads: list[dict[str, object]] = []
         phi1_payload = np.asarray(phi1_hat_base) if phi1_hat_base is not None else None
         for chunk in chunks:
@@ -19625,27 +19563,12 @@ def solve_v3_transport_matrix_linear_gmres(
                         )
                     results = [_transport_parallel_worker(payload) for payload in payloads]
 
-        state_vectors: dict[int, jnp.ndarray] = {}
-        residual_norms: dict[int, jnp.ndarray] = {}
-        elapsed_s = np.zeros((n,), dtype=np.float64)
-        for res in results:
-            rhs_vals = [int(v) for v in res.get("which_rhs_values", [])]
-            idxs = [v - 1 for v in rhs_vals]
-            elapsed_chunk = np.asarray(res.get("elapsed_time_s", np.zeros((n,))), dtype=np.float64)
-            if elapsed_chunk.ndim == 0:
-                if idxs:
-                    elapsed_s[idxs[0]] = float(elapsed_chunk)
-            elif elapsed_chunk.shape[0] == len(rhs_vals):
-                elapsed_s[idxs] = elapsed_chunk
-            elif elapsed_chunk.shape[0] > max(idxs, default=-1):
-                elapsed_s[idxs] = elapsed_chunk[idxs]
-            else:
-                count = min(len(rhs_vals), int(elapsed_chunk.shape[0]))
-                if count > 0:
-                    elapsed_s[idxs[:count]] = elapsed_chunk[:count]
-            residual_norms.update({int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in res.get("residual_norms_by_rhs", {}).items()})
-            for which_rhs, x_state in res.get("state_vectors_by_rhs", {}).items():
-                state_vectors[int(which_rhs)] = jnp.asarray(x_state, dtype=jnp.float64)
+        state_vectors_np, residual_norms_np, elapsed_s = merge_transport_parallel_results(
+            n_rhs=n,
+            results=results,
+        )
+        state_vectors = {int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in state_vectors_np.items()}
+        residual_norms = {int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in residual_norms_np.items()}
 
         missing_rhs = [which_rhs for which_rhs in range(1, n + 1) if which_rhs not in state_vectors]
         if missing_rhs:
