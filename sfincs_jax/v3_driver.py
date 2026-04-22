@@ -63,6 +63,11 @@ from .rhs1_preconditioner_dispatch import (
 )
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .rhs1_strong_policy import requested_rhs1_strong_preconditioner_kind
+from .rhs1_stage2_policy import (
+    rhs1_fp_force_stage2,
+    rhs1_pas_stage2_skip,
+    rhs1_stage2_trigger,
+)
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -14345,26 +14350,11 @@ def solve_v3_full_system_linear_gmres(
                 x=res_reduced.x, residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64)
             )
         res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
-        stage2_ratio_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RATIO", "").strip()
-        try:
-            stage2_ratio = float(stage2_ratio_env) if stage2_ratio_env else 1.0e2
-        except ValueError:
-            stage2_ratio = 1.0e2
-        # DKES cases can require *tight* convergence for parity, even when the
-        # initial solve is only slightly above the target tolerance. Trigger stage2
-        # as a "polish" step whenever residual > target in this branch.
-        if use_dkes:
-            stage2_ratio = min(float(stage2_ratio), 1.0)
-        stage2_trigger = bool(res_ratio > stage2_ratio) if stage2_ratio > 0 else True
-        fp_stage2_abs_env = os.environ.get("SFINCS_JAX_FP_STAGE2_ABS", "").strip()
-        try:
-            fp_stage2_abs = float(fp_stage2_abs_env) if fp_stage2_abs_env else 1.0e-6
-        except ValueError:
-            fp_stage2_abs = 1.0e-6
-        fp_force_stage2 = bool(
-            op.fblock.fp is not None
-            and (not bool(op.include_phi1))
-            and float(res_reduced.residual_norm) > float(fp_stage2_abs)
+        stage2_trigger = rhs1_stage2_trigger(res_ratio=res_ratio, use_dkes=bool(use_dkes))
+        fp_force_stage2 = rhs1_fp_force_stage2(
+            has_fp=op.fblock.fp is not None,
+            include_phi1=bool(op.include_phi1),
+            residual_norm=float(res_reduced.residual_norm),
         )
         if fp_force_stage2:
             stage2_trigger = True
@@ -14376,20 +14366,23 @@ def solve_v3_full_system_linear_gmres(
                     "solve_v3_full_system_linear_gmres: CPU large FP x-block shortcut "
                     "skipping stage2 GMRES and proceeding directly to x-block rescue",
                 )
-        if op.fblock.pas is not None and rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}:
-            pas_stage2_skip_env = os.environ.get("SFINCS_JAX_PAS_STAGE2_SKIP_RATIO", "").strip()
-            try:
-                pas_stage2_skip_ratio = float(pas_stage2_skip_env) if pas_stage2_skip_env else 1.0e6
-            except ValueError:
-                pas_stage2_skip_ratio = 1.0e6
-            if res_ratio >= float(pas_stage2_skip_ratio):
-                stage2_trigger = False
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: PAS stage2 skipped "
-                        f"(residual ratio={res_ratio:.3e} >= {float(pas_stage2_skip_ratio):.1e})",
-                    )
+        if rhs1_pas_stage2_skip(
+            has_pas=op.fblock.pas is not None,
+            rhs1_precond_kind=rhs1_precond_kind,
+            res_ratio=float(res_ratio),
+        ):
+            stage2_trigger = False
+            if emit is not None:
+                pas_stage2_skip_env = os.environ.get("SFINCS_JAX_PAS_STAGE2_SKIP_RATIO", "").strip()
+                try:
+                    pas_stage2_skip_ratio = float(pas_stage2_skip_env) if pas_stage2_skip_env else 1.0e6
+                except ValueError:
+                    pas_stage2_skip_ratio = 1.0e6
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: PAS stage2 skipped "
+                    f"(residual ratio={res_ratio:.3e} >= {float(pas_stage2_skip_ratio):.1e})",
+                )
         if (
             (not early_dense_shortcut)
             and (not cs0_sparse_first)
@@ -17378,14 +17371,10 @@ def solve_v3_full_system_linear_gmres(
             # retry with a larger iteration budget and the more robust incremental mode.
             target = max(float(atol), float(tol) * float(rhs_norm))
             res_ratio = float(result.residual_norm) / max(float(target), 1e-300)
-            stage2_ratio_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RATIO", "").strip()
-            try:
-                stage2_ratio = float(stage2_ratio_env) if stage2_ratio_env else 1.0e2
-            except ValueError:
-                stage2_ratio = 1.0e2
-            if op.fblock.pas is not None and use_dkes:
-                stage2_ratio = min(float(stage2_ratio), 1.0)
-            stage2_trigger = bool(res_ratio > stage2_ratio) if stage2_ratio > 0 else True
+            stage2_trigger = rhs1_stage2_trigger(
+                res_ratio=res_ratio,
+                use_dkes=bool(op.fblock.pas is not None and use_dkes),
+            )
             solver_kind = _solver_kind(solve_method)[0]
             bicgstab_fallback_target = float(target)
             if bicgstab_fallback_strict:
