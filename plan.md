@@ -1574,3 +1574,29 @@ Release-ready means:
   - continue on bounded `v3_driver.py` solve-handoff and preconditioner-builder edges beneath these PAS policy gates,
   - then return to `io.py` output/reduction assembly with similarly bounded tests,
   - keep avoiding broad expensive end-to-end reruns unless they buy real heavy-module coverage.
+- Extended the PAS tokamak / PAS-TZ coverage slice to the sharded memory-unsafe handoff:
+  - updated `sfincs_jax/v3_driver.py`
+  - updated `tests/test_v3_driver_pas_precond_policy_coverage.py`
+- These cover:
+  - fallback from PAS-TZ to the axis-correct Schwarz builder on memory-unsafe sharded runs,
+  - both `theta` and `zeta` shard-axis routing,
+  - invalid `SFINCS_JAX_RHSMODE1_{THETA,ZETA}_DD_{BLOCK,OVERLAP}` parsing on that handoff path.
+- Real bug fixed:
+  - the PAS-TZ memory-unsafe sharded fallback always routed into `theta_schwarz`, even when `_matvec_shard_axis(op) == "zeta"`;
+  - the driver now dispatches to `theta_schwarz` for `theta` sharding and `zeta_schwarz` for `zeta` sharding.
+- Fresh audited local result after this follow-up:
+  - `pytest --collect-only -q` -> `590 tests collected`
+  - chunked `pytest -q` over the full tree -> `590 passed`
+  - chunked package coverage audit -> total package coverage `55%`
+  - measured module gains:
+    - `v3_driver.py`: held at `37%` (`5285/14162`)
+    - `io.py`: held at `67%`
+    - `solver.py`: held at `67%`
+- Numerical / validation conclusion:
+  - this follow-up buys real production signal because it covers and fixes the axis-specific handoff that determines which local Schwarz preconditioner a sharded PAS run actually builds under memory pressure,
+  - it stays efficient by using tiny synthetic operators and mocked builder fallbacks,
+  - the remaining denominator is still the deep solve body of `v3_driver.py`, not the outer routing seams.
+- Next meaningful coverage work:
+  - continue into bounded `v3_driver.py` solve-handoff and reduced/full preconditioner-builder edges below these PAS fallback routes,
+  - then return to `io.py` output/reduction assembly with similarly bounded tests,
+  - keep avoiding broad expensive end-to-end reruns unless they buy real heavy-module coverage.

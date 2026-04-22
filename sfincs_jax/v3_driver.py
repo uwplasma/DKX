@@ -5382,7 +5382,12 @@ def _build_rhsmode1_pas_tz_preconditioner(
                 dd_overlap = int(dd_overlap_env) if dd_overlap_env else 1
             except ValueError:
                 dd_overlap = 1
-            return _build_rhsmode1_theta_schwarz_preconditioner(
+            schwarz_builder = (
+                _build_rhsmode1_theta_schwarz_preconditioner
+                if shard_axis == "theta"
+                else _build_rhsmode1_zeta_schwarz_preconditioner
+            )
+            return schwarz_builder(
                 op=op,
                 block=dd_block,
                 overlap=dd_overlap,
