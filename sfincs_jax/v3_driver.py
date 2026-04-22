@@ -9,7 +9,6 @@ import multiprocessing as mp
 import subprocess
 import sys
 import tempfile
-import threading
 
 from jax import config as _jax_config
 
@@ -116,6 +115,7 @@ from .transport_parallel_runtime import (
     partition_transport_rhs,
     run_transport_parallel_gpu_subprocesses as _run_transport_parallel_gpu_subprocesses_impl,
 )
+from .transport_parallel_pool import TransportParallelPoolCache
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -19134,9 +19134,7 @@ def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
     }
 
 
-_TRANSPORT_PARALLEL_POOL_LOCK = threading.Lock()
-_TRANSPORT_PARALLEL_POOL: concurrent.futures.ProcessPoolExecutor | None = None
-_TRANSPORT_PARALLEL_POOL_KEY: tuple[object, ...] | None = None
+_TRANSPORT_PARALLEL_POOL_CACHE = TransportParallelPoolCache()
 
 
 def _transport_parallel_start_method() -> str:
@@ -19191,13 +19189,7 @@ def _transport_parallel_pool_executor_kwargs(
 
 
 def _shutdown_transport_parallel_pool() -> None:
-    global _TRANSPORT_PARALLEL_POOL, _TRANSPORT_PARALLEL_POOL_KEY
-    with _TRANSPORT_PARALLEL_POOL_LOCK:
-        pool = _TRANSPORT_PARALLEL_POOL
-        _TRANSPORT_PARALLEL_POOL = None
-        _TRANSPORT_PARALLEL_POOL_KEY = None
-    if pool is not None:
-        pool.shutdown(wait=True, cancel_futures=True)
+    _TRANSPORT_PARALLEL_POOL_CACHE.shutdown()
 
 
 atexit.register(_shutdown_transport_parallel_pool)
@@ -19208,28 +19200,14 @@ def _get_transport_parallel_pool(
     parallel_workers: int,
     emit: Callable[[int, str], None] | None = None,
 ) -> concurrent.futures.ProcessPoolExecutor:
-    global _TRANSPORT_PARALLEL_POOL, _TRANSPORT_PARALLEL_POOL_KEY
-
-    key = _transport_parallel_pool_key(parallel_workers)
-    with _TRANSPORT_PARALLEL_POOL_LOCK:
-        if _TRANSPORT_PARALLEL_POOL is not None and _TRANSPORT_PARALLEL_POOL_KEY == key:
-            return _TRANSPORT_PARALLEL_POOL
-        old_pool = _TRANSPORT_PARALLEL_POOL
-        _TRANSPORT_PARALLEL_POOL = None
-        _TRANSPORT_PARALLEL_POOL_KEY = None
-
-    if old_pool is not None:
-        old_pool.shutdown(wait=True, cancel_futures=True)
-
-    with _transport_parallel_worker_env(int(parallel_workers)):
-        pool = concurrent.futures.ProcessPoolExecutor(
-            **_transport_parallel_pool_executor_kwargs(parallel_workers=parallel_workers, emit=emit)
-        )
-
-    with _TRANSPORT_PARALLEL_POOL_LOCK:
-        _TRANSPORT_PARALLEL_POOL = pool
-        _TRANSPORT_PARALLEL_POOL_KEY = key
-    return pool
+    return _TRANSPORT_PARALLEL_POOL_CACHE.get(
+        parallel_workers=int(parallel_workers),
+        key_fn=_transport_parallel_pool_key,
+        worker_env=_transport_parallel_worker_env,
+        executor_kwargs=_transport_parallel_pool_executor_kwargs,
+        executor_class=concurrent.futures.ProcessPoolExecutor,
+        emit=emit,
+    )
 
 
 def _transport_active_dof_indices(op: V3FullSystemOperator) -> np.ndarray:
