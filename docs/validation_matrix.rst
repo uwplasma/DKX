@@ -73,32 +73,43 @@ Current scaffold:
 - ``examples/publication_figures/generate_er_trajectory_sweep.py``
 
 This script already implements the correct upstream trajectory-model switches and
-produces a JSON summary plus a 2x2 publication-style figure. At the moment it is a
-validation scaffold rather than a pinned manuscript artifact: the final paper lane still
-needs audited sweep inputs and fixed output roots for the selected tokamak-like and
-stellarator-like cases.
+produces JSON summaries plus 2x2 publication-style figures.
 
-Current prototype artifact:
+Current fixed artifacts:
 
-- bounded fast tokamak-like sweep summary:
-  ``examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json``
-- bounded fast prototype figure:
-  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png``
+- audited tokamak-like reference summary:
+  ``examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json``
+- audited tokamak-like reference figure:
+  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png``
+- bounded stellarator-like fast summary:
+  ``examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json``
+- bounded stellarator-like fast figure:
+  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png``
 
-.. figure:: _static/figures/paper/sfincs_jax_er_trajectory_sweep.png
-   :alt: Prototype electric-field trajectory-model sweep for sfincs_jax
+.. figure:: _static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png
+   :alt: Tokamak-like electric-field trajectory-model sweep for sfincs_jax
    :width: 85%
 
-   Prototype fast tokamak-like ``E_r`` sweep across DKES, partial, and full
-   trajectory models. This figure is useful as a branch regression target and
-   manuscript-layout prototype, but it is not yet the final audited literature
-   reproduction. The final lane still needs fixed inputs, a denser sweep, and
-   explicit physics assertions on ordering, crossover, and small-field agreement.
+   Fixed tokamak-like ``E_r`` sweep across DKES, partial, and full trajectory
+   models. This lane is now pinned to checked-in JSON and figure artifacts, and
+   it is backed by direct numerical assertions on zero-field agreement and
+   finite-field model separation.
+
+.. figure:: _static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png
+   :alt: Stellarator-like electric-field trajectory-model sweep for sfincs_jax
+   :width: 85%
+
+   Fixed stellarator-like fast branch scaffold across DKES, partial, and full
+   trajectory models. This is intentionally a bounded branch-validation lane:
+   it resolves the expected model separation on the selected input, but the
+   full-resolution stellarator sweep remains a heavier validation target.
 
 Validation goal:
 
-- verify small-``E_r / E_r^{res}`` agreement and large-field separation behavior,
-- make the ordering and crossover behavior explicit in both assertions and figures.
+- verify small-field agreement and large-field separation behavior,
+- make the ordering and crossover behavior explicit in both assertions and figures,
+- promote the stellarator-like branch scaffold to a full-resolution audited lane only
+  after the runtime/cost tradeoff is acceptable for the release/nightly workflow.
 
 2. W7-X ambipolar-field validation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

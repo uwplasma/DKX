@@ -1,0 +1,101 @@
+[
+  {
+    "er": -8.5897,
+    "er_over_eres": null,
+    "fsab_flow": -0.013821428953659518,
+    "fsab_jhat": 0.058591832805300205,
+    "heat_flux_vm_psi_hat": 9.444434018834122e-06,
+    "label": "DKES trajectories",
+    "model": "dkes",
+    "output_path": "artifact://er_sweep_stellarator_fast_reference/dkes/er_m8.5897",
+    "particle_flux_vm_psi_hat": 5.708680970159147e-06
+  },
+  {
+    "er": 0.0,
+    "er_over_eres": null,
+    "fsab_flow": 0.05972463013216002,
+    "fsab_jhat": 0.11190568635090836,
+    "heat_flux_vm_psi_hat": 0.0001759554609742829,
+    "label": "DKES trajectories",
+    "model": "dkes",
+    "output_path": "artifact://er_sweep_stellarator_fast_reference/dkes/er_p0",
+    "particle_flux_vm_psi_hat": 0.00011345318661311001
+  },
+  {
+    "er": 8.5897,
+    "er_over_eres": null,
+    "fsab_flow": -0.01797361177435692,
+    "fsab_jhat": 0.028534292125336126,
+    "heat_flux_vm_psi_hat": 1.4088520156486812e-05,
+    "label": "DKES trajectories",
+    "model": "dkes",
+    "output_path": "artifact://er_sweep_stellarator_fast_reference/dkes/er_p8.5897",
+    "particle_flux_vm_psi_hat": 8.868880870615977e-06
+  },
+  {
+    "er": -8.5897,
+    "er_over_eres": null,
+    "fsab_flow": -0.013391067639212294,
+    "fsab_jhat": 0.05899192006045378,
+    "heat_flux_vm_psi_hat": 9.875188931878263e-06,
+    "label": "Partial trajectories",
+    "model": "partial",
+    "output_path": "artifact://er_sweep_stellarator_fast_reference/partial/er_m8.5897",
+    "particle_flux_vm_psi_hat": 5.970056527083898e-06
+  },
+  {
+    "er": 0.0,
+    "er_over_eres": null,
+    "fsab_flow": 0.05972463013216002,
+    "fsab_jhat": 0.11190568635090836,
+    "heat_flux_vm_psi_hat": 0.0001759554609742829,
+    "label": "Partial trajectories",
+    "model": "partial",
+    "output_path": "artifact://er_sweep_stellarator_fast_reference/partial/er_p0",
+    "particle_flux_vm_psi_hat": 0.00011345318661311001
+  },
+  {
+    "er": 8.5897,
+    "er_over_eres": null,
+    "fsab_flow": -0.017296475132534826,
+    "fsab_jhat": 0.02915419898455639,
+    "heat_flux_vm_psi_hat": 1.4732468110622597e-05,
+    "label": "Partial trajectories",
+    "model": "partial",
+    "output_path": "artifact://er_sweep_stellarator_fast_reference/partial/er_p8.5897",
+    "particle_flux_vm_psi_hat": 9.275193542948756e-06
+  },
+  {
+    "er": -8.5897,
+    "er_over_eres": null,
+    "fsab_flow": -0.014022134569099875,
+    "fsab_jhat": 0.05842401401885875,
+    "heat_flux_vm_psi_hat": 9.575265402569336e-06,
+    "label": "Full trajectories",
+    "model": "full",
+    "output_path": "artifact://er_sweep_stellarator_fast_reference/full/er_m8.5897",
+    "particle_flux_vm_psi_hat": 5.781775435948481e-06
+  },
+  {
+    "er": 0.0,
+    "er_over_eres": null,
+    "fsab_flow": 0.05972463013216002,
+    "fsab_jhat": 0.11190568635090836,
+    "heat_flux_vm_psi_hat": 0.0001759554609742829,
+    "label": "Full trajectories",
+    "model": "full",
+    "output_path": "artifact://er_sweep_stellarator_fast_reference/full/er_p0",
+    "particle_flux_vm_psi_hat": 0.00011345318661311001
+  },
+  {
+    "er": 8.5897,
+    "er_over_eres": null,
+    "fsab_flow": -0.018255882880834514,
+    "fsab_jhat": 0.028297932744471465,
+    "heat_flux_vm_psi_hat": 1.4238137270759368e-05,
+    "label": "Full trajectories",
+    "model": "full",
+    "output_path": "artifact://er_sweep_stellarator_fast_reference/full/er_p8.5897",
+    "particle_flux_vm_psi_hat": 8.961297645132668e-06
+  }
+]
