@@ -2200,3 +2200,29 @@ Testing docs should include:
 3. Expand `docs/testing.rst` and `docs/source_map.rst` as modules move.
 4. Add the first manuscript-grade figure generation scripts with pinned JSON artifacts.
 5. Only after the structure is stable, run the broader benchmark/validation campaign and start writing the paper figures from those audited artifacts.
+
+### 19.18 Current branch execution status
+
+- Structural split progress now includes:
+  - RHSMode=1 PAS policy and dispatch helpers,
+  - strong-fallback / strong-control / stage-2 / sparse-rescue / sparse-polish policy helpers,
+  - solve handoff helpers,
+  - transport policy, transport-parallel policy/runtime/pool/execution helpers,
+  - Phi1 Newton policy, linear-step, and line-search helpers.
+- The first literature-facing validation lane is now live as a bounded prototype:
+  - script: `examples/publication_figures/generate_er_trajectory_sweep.py`
+  - machine-readable lane entry: `examples/publication_figures/validation_manifest.json`
+  - prototype artifact: `examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json`
+  - prototype figure: `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png`
+- The current prototype lane is intentionally scoped as a fast tokamak-like scaffold, not
+  the final audited manuscript sweep. What it already proves is:
+  - the upstream DKES/partial/full trajectory switches are encoded explicitly in one place,
+  - the sweep script generates stable JSON + PNG/PDF artifacts,
+  - and bounded numerical assertions can already lock down small-`E_r` agreement and
+    finite-`E_r` model separation on that artifact.
+- Immediate next actions on this branch:
+  1. deepen the remaining transport/distributed orchestration split if more of it is still
+     embedded in `v3_driver.py`,
+  2. upgrade the `E_r` prototype lane from fast scaffold to audited reference sweep on a
+     fixed tokamak-like and stellarator-like pair,
+  3. then start the collisionality / collision-operator lane from the same validation manifest.
