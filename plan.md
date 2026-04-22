@@ -2018,10 +2018,11 @@ Current branch status:
 - `rhs1_strong_auto_kind.py` is now landed for the duplicated reduced/full automatic strong-preconditioner kind selection and post-selection adjustments, including theta-line size promotion and PAS tokamak-style `xblock_tz_lmax` fallback.
 - `rhs1_sparse_rescue_policy.py` is now landed for the duplicated sparse-rescue ordering and skip policy, including dense-shortcut interaction, size routing, targeted-rescue suppression after exact large-CPU LU selection, PAS fast-accept skip, GPU sparse-skip, and sparse-JAX memory-cap disablement.
 - `rhs1_handoff.py` is now landed for the repeated “accept improved candidate and update Krylov replay state” logic used by stage-2, smoother, collision-retry, strong-preconditioner, and PAS Schur rescue branches.
+- the sparse accept/handoff paths now use the shared handoff helper for sparse-JAX and generic sparse fallback acceptance in both reduced and full RHSMode=1 paths, so the remaining duplication is concentrated in the deeper branch-specific sparse build/polish ladders rather than in acceptance-state mutation.
 - current validation slice on this branch:
-  - focused RHSMode=1 policy/dispatch/fallback tests: `99 passed`
-  - broader bounded driver slice: `91 passed`
-- next extraction target is the remaining RHSMode=1 fallback / rescue policy beneath these helpers, especially the deeper sparse/strong solve handoff branches and then the first transport/distributed-policy extraction.
+  - focused RHSMode=1 policy/dispatch/fallback tests: `100 passed`
+  - broader bounded driver slice: `92 passed`
+- next extraction target is the remaining RHSMode=1 fallback / rescue policy beneath these helpers, especially the deeper sparse build/polish ladders and then the first transport/distributed-policy extraction.
 
 ### 19.13 Literature-anchored validation baselines for the paper
 

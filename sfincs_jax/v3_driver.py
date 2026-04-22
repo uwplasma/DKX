@@ -15647,16 +15647,22 @@ def solve_v3_full_system_linear_gmres(
                         solve_method_val="incremental",
                         precond_side=gmres_precond_side,
                     )
-                    if res_sparse is not None and float(res_sparse.residual_norm) < float(res_reduced.residual_norm):
-                        res_reduced = res_sparse
-                        ksp_matvec = mv_reduced
-                        ksp_b = rhs_reduced
-                        ksp_precond = precond_sparse
-                        ksp_x0 = res_reduced.x
-                        ksp_restart = restart
-                        ksp_maxiter = maxiter
-                        ksp_precond_side = gmres_precond_side
-                        ksp_solver_kind = _solver_kind("incremental")[0]
+                    if res_sparse is not None:
+                        res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                            current_result=res_reduced,
+                            candidate_result=res_sparse,
+                            current_residual_vec=residual_vec,
+                            candidate_residual_vec=None,
+                            matvec_fn=mv_reduced,
+                            b_vec=rhs_reduced,
+                            precond_fn=precond_sparse,
+                            x0_vec=res_sparse.x,
+                            restart=restart,
+                            maxiter=maxiter,
+                            precond_side=gmres_precond_side,
+                            solver_kind=_solver_kind("incremental")[0],
+                        )
+                        _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(1, f"sparse_jax: failed ({type(exc).__name__}: {exc})")
@@ -15952,16 +15958,22 @@ def solve_v3_full_system_linear_gmres(
                             x=jnp.asarray(x_np, dtype=jnp.float64),
                             residual_norm=jnp.asarray(rn_sparse, dtype=jnp.float64),
                         )
-                    if res_sparse is not None and float(res_sparse.residual_norm) < float(res_reduced.residual_norm):
-                        res_reduced = res_sparse
-                        ksp_matvec = mv_reduced if use_implicit else _mv_sparse
-                        ksp_b = rhs_reduced
-                        ksp_precond = _precond_sparse
-                        ksp_x0 = res_reduced.x
-                        ksp_restart = restart
-                        ksp_maxiter = maxiter
-                        ksp_precond_side = gmres_precond_side
-                        ksp_solver_kind = _solver_kind("incremental")[0]
+                    if res_sparse is not None:
+                        res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                            current_result=res_reduced,
+                            candidate_result=res_sparse,
+                            current_residual_vec=residual_vec,
+                            candidate_residual_vec=None,
+                            matvec_fn=mv_reduced if use_implicit else _mv_sparse,
+                            b_vec=rhs_reduced,
+                            precond_fn=_precond_sparse,
+                            x0_vec=res_sparse.x,
+                            restart=restart,
+                            maxiter=maxiter,
+                            precond_side=gmres_precond_side,
+                            solver_kind=_solver_kind("incremental")[0],
+                        )
+                        _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(
@@ -17892,17 +17904,21 @@ def solve_v3_full_system_linear_gmres(
                         solve_method_val="incremental",
                         precond_side=gmres_precond_side,
                     )
-                    if float(res_sparse.residual_norm) < float(result.residual_norm):
-                        result = res_sparse
-                        residual_vec = residual_vec_sparse
-                        ksp_matvec = mv
-                        ksp_b = rhs
-                        ksp_precond = precond_sparse
-                        ksp_x0 = result.x
-                        ksp_restart = restart
-                        ksp_maxiter = maxiter
-                        ksp_precond_side = gmres_precond_side
-                        ksp_solver_kind = _solver_kind("incremental")[0]
+                    result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                        current_result=result,
+                        candidate_result=res_sparse,
+                        current_residual_vec=residual_vec,
+                        candidate_residual_vec=residual_vec_sparse,
+                        matvec_fn=mv,
+                        b_vec=rhs,
+                        precond_fn=precond_sparse,
+                        x0_vec=res_sparse.x,
+                        restart=restart,
+                        maxiter=maxiter,
+                        precond_side=gmres_precond_side,
+                        solver_kind=_solver_kind("incremental")[0],
+                    )
+                    _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(1, f"sparse_jax: failed ({type(exc).__name__}: {exc})")
@@ -18280,17 +18296,22 @@ def solve_v3_full_system_linear_gmres(
                             residual_norm=jnp.asarray(rn_sparse, dtype=jnp.float64),
                         )
                         residual_vec_sparse = rhs - _mv_sparse(res_sparse.x)
-                    if res_sparse is not None and float(res_sparse.residual_norm) < float(result.residual_norm):
-                        result = res_sparse
-                        residual_vec = residual_vec_sparse
-                        ksp_matvec = mv if use_implicit else _mv_sparse
-                        ksp_b = rhs
-                        ksp_precond = _precond_sparse
-                        ksp_x0 = result.x
-                        ksp_restart = restart
-                        ksp_maxiter = maxiter
-                        ksp_precond_side = gmres_precond_side
-                        ksp_solver_kind = _solver_kind("incremental")[0]
+                    if res_sparse is not None:
+                        result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                            current_result=result,
+                            candidate_result=res_sparse,
+                            current_residual_vec=residual_vec,
+                            candidate_residual_vec=residual_vec_sparse,
+                            matvec_fn=mv if use_implicit else _mv_sparse,
+                            b_vec=rhs,
+                            precond_fn=_precond_sparse,
+                            x0_vec=res_sparse.x,
+                            restart=restart,
+                            maxiter=maxiter,
+                            precond_side=gmres_precond_side,
+                            solver_kind=_solver_kind("incremental")[0],
+                        )
+                        _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(
