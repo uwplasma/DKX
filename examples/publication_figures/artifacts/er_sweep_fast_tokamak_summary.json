@@ -1,0 +1,101 @@
+[
+  {
+    "er": -0.5,
+    "er_over_eres": -0.5,
+    "fsab_flow": 0.04056561454627977,
+    "fsab_jhat": 0.04056561454627977,
+    "heat_flux_vm_psi_hat": 3.2795729430829724e-07,
+    "label": "DKES trajectories",
+    "model": "dkes",
+    "output_path": "artifact://er_sweep_fast_tokamak/dkes/er_m0.5",
+    "particle_flux_vm_psi_hat": -1.9255861253963128e-08
+  },
+  {
+    "er": 0.0,
+    "er_over_eres": 0.0,
+    "fsab_flow": 0.0438141208520429,
+    "fsab_jhat": 0.0438141208520429,
+    "heat_flux_vm_psi_hat": 3.3046445485335644e-07,
+    "label": "DKES trajectories",
+    "model": "dkes",
+    "output_path": "artifact://er_sweep_fast_tokamak/dkes/er_p0",
+    "particle_flux_vm_psi_hat": -1.7783754073985952e-08
+  },
+  {
+    "er": 0.5,
+    "er_over_eres": 0.5,
+    "fsab_flow": 0.047051397858134114,
+    "fsab_jhat": 0.047051397858134114,
+    "heat_flux_vm_psi_hat": 3.289101262014485e-07,
+    "label": "DKES trajectories",
+    "model": "dkes",
+    "output_path": "artifact://er_sweep_fast_tokamak/dkes/er_p0.5",
+    "particle_flux_vm_psi_hat": -1.8008055490893785e-08
+  },
+  {
+    "er": -0.5,
+    "er_over_eres": -0.5,
+    "fsab_flow": 0.04057231450874396,
+    "fsab_jhat": 0.04057231450874396,
+    "heat_flux_vm_psi_hat": 3.28111297227005e-07,
+    "label": "Partial trajectories",
+    "model": "partial",
+    "output_path": "artifact://er_sweep_fast_tokamak/partial/er_m0.5",
+    "particle_flux_vm_psi_hat": -1.9169331446215985e-08
+  },
+  {
+    "er": 0.0,
+    "er_over_eres": 0.0,
+    "fsab_flow": 0.0438141208520429,
+    "fsab_jhat": 0.0438141208520429,
+    "heat_flux_vm_psi_hat": 3.3046445485335644e-07,
+    "label": "Partial trajectories",
+    "model": "partial",
+    "output_path": "artifact://er_sweep_fast_tokamak/partial/er_p0",
+    "particle_flux_vm_psi_hat": -1.7783754073985952e-08
+  },
+  {
+    "er": 0.5,
+    "er_over_eres": 0.5,
+    "fsab_flow": 0.047058981252452774,
+    "fsab_jhat": 0.047058981252452774,
+    "heat_flux_vm_psi_hat": 3.290704244064991e-07,
+    "label": "Partial trajectories",
+    "model": "partial",
+    "output_path": "artifact://er_sweep_fast_tokamak/partial/er_p0.5",
+    "particle_flux_vm_psi_hat": -1.79164914858963e-08
+  },
+  {
+    "er": -0.5,
+    "er_over_eres": -0.5,
+    "fsab_flow": 0.040562601065168805,
+    "fsab_jhat": 0.040562601065168805,
+    "heat_flux_vm_psi_hat": 3.2795355170990894e-07,
+    "label": "Full trajectories",
+    "model": "full",
+    "output_path": "artifact://er_sweep_fast_tokamak/full/er_m0.5",
+    "particle_flux_vm_psi_hat": -1.9268313066898677e-08
+  },
+  {
+    "er": 0.0,
+    "er_over_eres": 0.0,
+    "fsab_flow": 0.0438141208520429,
+    "fsab_jhat": 0.0438141208520429,
+    "heat_flux_vm_psi_hat": 3.3046445485335644e-07,
+    "label": "Full trajectories",
+    "model": "full",
+    "output_path": "artifact://er_sweep_fast_tokamak/full/er_p0",
+    "particle_flux_vm_psi_hat": -1.7783754073985952e-08
+  },
+  {
+    "er": 0.5,
+    "er_over_eres": 0.5,
+    "fsab_flow": 0.047048358214507154,
+    "fsab_jhat": 0.047048358214507154,
+    "heat_flux_vm_psi_hat": 3.2891287869472764e-07,
+    "label": "Full trajectories",
+    "model": "full",
+    "output_path": "artifact://er_sweep_fast_tokamak/full/er_p0.5",
+    "particle_flux_vm_psi_hat": -1.8007840802124104e-08
+  }
+]

@@ -17,3 +17,20 @@ Examples:
 - `er_terms_publication_figures.py`
 - `generate_sfincs_paper_figs.py`
 - `generate_er_trajectory_sweep.py`
+
+Prototype run used on this branch:
+
+```bash
+python examples/publication_figures/generate_er_trajectory_sweep.py \
+  --preset tokamak_like \
+  --fast \
+  --er-values=-0.5,0.0,0.5 \
+  --er-res 1.0 \
+  --work-dir examples/publication_figures/output/er_sweep_fast_tokamak \
+  --out-dir docs/_static/figures/paper
+```
+
+That bounded sweep produces:
+- `examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json`
+- `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png`
+- `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.pdf`
