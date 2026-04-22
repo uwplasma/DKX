@@ -96,8 +96,8 @@ The current audited full-suite command on ``main`` is:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-On the current audited local release tree this command yields ``539 tests collected``,
-``539 passed`` in the stable chunked rerun, and
+On the current audited local release tree this command yields ``543 tests collected``,
+``543 passed`` in the stable chunked rerun, and
 roughly ``54%`` package coverage. That number is materially higher than the Linux
 CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
 surface is still the large solver/geometry stack, especially ``v3_driver.py``,
@@ -133,7 +133,16 @@ target/upward/plateau gate logic and bounded stationary-smoother convergence on
 tiny analytic systems. These tests are anchored in standard numerical-analysis
 invariants: Fourier modes as eigenvectors of circulant derivative operators, and
 residual-history stopping rules consistent with minimal-residual / stagnation
-monitoring in iterative methods.
+monitoring in iterative methods. The latest diagnostics/output-reduction pass then
+targeted the ``uHat`` assembly seam directly. Those tests pushed
+``diagnostics.py`` to ``100%`` by checking FFT-vs-NumPy agreement on a frozen
+scheme-4 fixture, differentiability with respect to Boozer harmonics, finite and
+shape-correct loop behavior on even and odd periodic grids, resonant-denominator
+safety in the explicit harmonic-loop reference implementation, and spatial
+constancy in the constant-``B`` limit. That pass also found and fixed a real bug:
+the resonant branch in ``_u_hat_loop()`` could still trigger a Python-side
+division-by-zero before the masked ``jnp.where()`` path executed, so the loop now
+guards the denominator explicitly instead of relying on masked evaluation.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be

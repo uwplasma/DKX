@@ -1451,3 +1451,25 @@ Release-ready means:
   - the remaining denominator is now even more concentrated in `sfincs_jax/v3_driver.py`,
   - followed by `sfincs_jax/io.py`, `sfincs_jax/solver.py`, and the uncovered portions of the physics assembly stack,
   - so the next high-signal campaign should target bounded physics/reduction seams inside the driver and output/diagnostics assembly rather than more standalone helper modules.
+- Added a bounded diagnostics/output-reduction coverage pass:
+  - extended `tests/test_u_hat_fft.py`
+  - fixed `sfincs_jax/diagnostics.py`
+- These cover:
+  - FFT-vs-NumPy `uHat` agreement on a frozen scheme-4 fixture,
+  - differentiability of `uHat` with respect to Boozer harmonics,
+  - finite/shape-correct `_u_hat_loop()` behavior on even and odd periodic cosine geometries,
+  - resonant-denominator safety in the explicit harmonic-loop reference implementation,
+  - spatial constancy of the loop implementation in the constant-`B` limit.
+- Fresh audited local result after this pass:
+  - `pytest --collect-only -q` -> `543 tests collected`
+  - chunked `pytest -q` over the full tree -> `543 passed`
+  - chunked package coverage audit -> total package coverage `54%`
+  - measured module gains:
+    - `diagnostics.py`: `77% -> 100%`
+    - total package coverage held at `54%`, so the dominant remaining denominator is still the heavy solver stack
+- Real bug fixed in this pass:
+  - `_u_hat_loop()` previously relied on `jnp.where()` to mask resonant denominators, but the Python-side `(numer / denom)` still evaluated first and could raise `ZeroDivisionError` on exact resonances. The loop now guards the denominator explicitly before forming the amplitude.
+- Next meaningful coverage work:
+  - stay on bounded, physics-relevant seams,
+  - focus next on driver-side solve-selection / preconditioner-applicability branches and then output/diagnostics assembly in `io.py`,
+  - avoid broad expensive end-to-end solve campaigns unless they buy real heavy-module coverage.
