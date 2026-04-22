@@ -1549,3 +1549,28 @@ Release-ready means:
   - return to bounded `v3_driver.py` solve-handoff and preconditioner-builder edges,
   - then keep filling `io.py` output/reduction assembly with similarly bounded tests,
   - continue preferring mathematically anchored seams over broad expensive end-to-end reruns.
+- Added a bounded PAS tokamak / PAS-TZ preconditioner-policy coverage pass:
+  - new `tests/test_v3_driver_pas_precond_policy_coverage.py`
+- These cover:
+  - zeta-invariant tokamak-theta applicability and rejection of zeta-varying or drift-rich tokamak branches,
+  - fallback from the tokamak-theta builder to the generic block preconditioner,
+  - PAS-TZ applicability boundaries for RHS mode, angular grid size, `n_xi`, PAS-only vs FP structure,
+  - invalid environment fallback for `SFINCS_JAX_RHSMODE1_PAS_TZ_MAX_BYTES`,
+  - PAS-TZ build-byte estimation and memory-safety gating,
+  - fallback from the PAS-TZ builder to the hybrid preconditioner when PAS-TZ is inapplicable or memory-unsafe.
+- Fresh audited local result after this pass:
+  - `pytest --collect-only -q` -> `588 tests collected`
+  - chunked `pytest -q` over the full tree -> `588 passed`
+  - chunked package coverage audit -> total package coverage `55%`
+  - measured module gains:
+    - `v3_driver.py`: held at `37%` (`5280/14161`)
+    - `io.py`: held at `67%`
+    - `solver.py`: held at `67%`
+- Numerical / validation conclusion:
+  - this pass buys real signal because it covers the driver-side routing that decides whether the heavier PAS tokamak and PAS-TZ preconditioners are even eligible to be built,
+  - it stays efficient by using tiny synthetic operators and builder fallbacks instead of any broad RHSMode=1 solve campaign,
+  - the remaining denominator is still concentrated in the deep execution body of `v3_driver.py`, not the outer policy layer.
+- Next meaningful coverage work:
+  - continue on bounded `v3_driver.py` solve-handoff and preconditioner-builder edges beneath these PAS policy gates,
+  - then return to `io.py` output/reduction assembly with similarly bounded tests,
+  - keep avoiding broad expensive end-to-end reruns unless they buy real heavy-module coverage.
