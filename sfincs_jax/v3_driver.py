@@ -64,6 +64,12 @@ from .rhs1_preconditioner_dispatch import (
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .rhs1_strong_policy import requested_rhs1_strong_preconditioner_kind
 from .rhs1_strong_control import rhs1_resolved_strong_preconditioner_control
+from .rhs1_strong_auto_kind import (
+    adjust_rhs1_reduced_auto_kind,
+    adjust_rhs1_theta_line_auto_kind,
+    auto_rhs1_full_strong_kind,
+    auto_rhs1_reduced_strong_kind,
+)
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -14803,206 +14809,58 @@ def solve_v3_full_system_linear_gmres(
         if strong_precond_kind is None and (not strong_precond_disabled) and strong_precond_auto:
             if int(op.constraint_scheme) == 2 and int(op.extra_size) > 0:
                 if op.fblock.pas is not None:
-                    pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-                    try:
-                        pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-                    except ValueError:
-                        pas_lite_min = 20000
-                    if int(active_size) >= max(1, int(pas_lite_min)):
-                        strong_precond_kind = "pas_lite"
-                    else:
-                        strong_precond_kind = "pas_hybrid"
+                    auto_sel = auto_rhs1_reduced_strong_kind(
+                        has_pas=True,
+                        has_fp=False,
+                        geom_scheme=int(geom_scheme),
+                        use_dkes=bool(use_dkes),
+                        active_size=int(active_size),
+                        strong_precond_min=int(strong_precond_min),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
+                        shard_axis=_matvec_shard_axis(op),
+                        device_count=int(jax.device_count()),
+                    )
+                    strong_precond_kind = auto_sel.kind
                 else:
                     strong_precond_kind = "schur"
-            elif op.fblock.pas is not None:
-                pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-                try:
-                    pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-                except ValueError:
-                    pas_lite_min = 20000
-                if int(active_size) >= max(1, int(pas_lite_min)):
-                    strong_precond_kind = "pas_lite"
-                else:
-                    strong_precond_kind = "pas_hybrid"
-            elif (
-                rhs1_precond_env == ""
-                and int(op.rhs_mode) == 1
-                and (not bool(op.include_phi1))
-                and op.fblock.pas is not None
-                and int(active_size) >= strong_precond_min
-                and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
-            ):
-                tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "").strip()
-                try:
-                    tz_max = int(tz_max_env) if tz_max_env else 128
-                except ValueError:
-                    tz_max = 128
-                xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
-                default_xblock_tz_max = 1200
-                if op.fblock.pas is not None and geom_scheme == 1:
-                    # Tokamak PAS can be stiff; prefer a lighter xblock_tz_lmax fallback
-                    # over the full xblock_tz to keep build time bounded.
-                    default_xblock_tz_max = 2000
-                elif op.fblock.pas is not None and use_dkes:
-                    default_xblock_tz_max = 2000
-                try:
-                    xblock_tz_max = int(xblock_tz_max_env) if xblock_tz_max_env else default_xblock_tz_max
-                except ValueError:
-                    xblock_tz_max = default_xblock_tz_max
-                max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-                if (
-                    int(op.n_theta) > 1
-                    and xblock_tz_max > 0
-                    and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max
-                ):
-                    strong_precond_kind = "xblock_tz"
-                elif int(op.n_theta) > 1 and int(op.n_zeta) > 1 and int(op.n_theta) * int(op.n_zeta) <= tz_max:
-                    strong_precond_kind = "theta_zeta"
-                else:
-                    shard_axis = _matvec_shard_axis(op)
-                    schwarz_auto_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN", "").strip()
-                    try:
-                        schwarz_auto_min = int(schwarz_auto_min_env) if schwarz_auto_min_env else 4000
-                    except ValueError:
-                        schwarz_auto_min = 4000
-                    if (
-                        shard_axis in {"theta", "zeta"}
-                        and jax.device_count() > 1
-                        and int(active_size) >= max(1, int(schwarz_auto_min))
-                    ):
-                        strong_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-                    else:
-                        strong_precond_kind = "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
-            elif (
-                rhs1_precond_env == ""
-                and int(op.rhs_mode) == 1
-                and (not bool(op.include_phi1))
-                and op.fblock.fp is not None
-                and int(active_size) >= strong_precond_min
-                and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
-            ):
-                tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "").strip()
-                try:
-                    tz_max = int(tz_max_env) if tz_max_env else 128
-                except ValueError:
-                    tz_max = 128
-                xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
-                default_xblock_tz_max = 1200
-                try:
-                    xblock_tz_max = int(xblock_tz_max_env) if xblock_tz_max_env else default_xblock_tz_max
-                except ValueError:
-                    xblock_tz_max = default_xblock_tz_max
-                max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-                lmax_auto = 0
-                if int(op.n_theta) > 0 and int(op.n_zeta) > 0:
-                    lmax_auto = int(xblock_tz_max // (int(op.n_theta) * int(op.n_zeta)))
-                lmax_auto = max(0, min(max_l, lmax_auto))
-                if (
-                    int(op.n_theta) > 1
-                    and xblock_tz_max > 0
-                    and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max
-                ):
-                    strong_precond_kind = "xblock_tz"
-                elif lmax_auto >= 1:
-                    strong_precond_kind = "xblock_tz_lmax"
-                    strong_xblock_tz_lmax = int(lmax_auto)
-                elif int(op.n_theta) > 1 and int(op.n_zeta) > 1 and int(op.n_theta) * int(op.n_zeta) <= tz_max:
-                    strong_precond_kind = "theta_zeta"
-                else:
-                    strong_precond_kind = "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
-
-        if (
-            strong_precond_kind == "pas_lite"
-            and op.fblock.pas is not None
-            and (int(op.n_zeta) == 1 or geom_scheme == 1)
-        ):
-            strong_precond_kind = "pas_hybrid"
-        if (
-            strong_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz"}
-            and op.fblock.pas is not None
-            and (int(op.n_zeta) == 1 or geom_scheme == 1)
-            and strong_precond_trigger
-        ):
-            max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-            xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
-            # Keep PAS strong-preconditioner builds bounded; fall back to xblock_tz_lmax sooner.
-            default_xblock_tz_max = 2000
-            try:
-                xblock_tz_max = int(xblock_tz_max_env) if xblock_tz_max_env else default_xblock_tz_max
-            except ValueError:
-                xblock_tz_max = default_xblock_tz_max
-            if (
-                int(op.n_theta) > 0
-                and int(op.n_zeta) > 0
-                and xblock_tz_max > 0
-                and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= int(xblock_tz_max)
-            ):
-                strong_precond_kind = "xblock_tz"
             else:
-                pas_strong_lmax_env = os.environ.get("SFINCS_JAX_PAS_STRONG_LMAX", "").strip()
-                try:
-                    pas_strong_lmax = int(pas_strong_lmax_env) if pas_strong_lmax_env else 2
-                except ValueError:
-                    pas_strong_lmax = 2
-                lmax_fallback = min(max_l, max(1, int(pas_strong_lmax)))
-                if lmax_fallback > 0:
-                    strong_precond_kind = "xblock_tz_lmax"
-                    strong_xblock_tz_lmax = int(lmax_fallback)
+                auto_sel = auto_rhs1_reduced_strong_kind(
+                    has_pas=op.fblock.pas is not None,
+                    has_fp=op.fblock.fp is not None,
+                    geom_scheme=int(geom_scheme),
+                    use_dkes=bool(use_dkes),
+                    active_size=int(active_size),
+                    strong_precond_min=int(strong_precond_min),
+                    n_theta=int(op.n_theta),
+                    n_zeta=int(op.n_zeta),
+                    max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
+                    shard_axis=_matvec_shard_axis(op),
+                    device_count=int(jax.device_count()),
+                )
+                strong_precond_kind = auto_sel.kind
+                strong_xblock_tz_lmax = auto_sel.xblock_tz_lmax
 
-        if strong_precond_kind == "theta_line":
-            line_size = int(np.sum(nxi_for_x)) * int(op.n_theta)
-            theta_line_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_THETA_LINE_MAX", "").strip()
-            try:
-                theta_line_max = int(theta_line_max_env) if theta_line_max_env else 0
-            except ValueError:
-                theta_line_max = 0
-            if theta_line_max > 0 and line_size > theta_line_max:
-                strong_precond_kind = "theta_line_xdiag"
-            elif (
-                rhs1_precond_env == ""
-                and int(op.rhs_mode) == 1
-                and (not bool(op.include_phi1))
-                and op.fblock.fp is not None
-                and int(active_size) >= strong_precond_min
-                and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
-            ):
-                tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "").strip()
-                try:
-                    tz_max = int(tz_max_env) if tz_max_env else 128
-                except ValueError:
-                    tz_max = 128
-                xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
-                default_xblock_tz_max = 1200
-                if op.fblock.pas is not None and use_dkes:
-                    default_xblock_tz_max = 2000
-                try:
-                    xblock_tz_max = int(xblock_tz_max_env) if xblock_tz_max_env else default_xblock_tz_max
-                except ValueError:
-                    xblock_tz_max = default_xblock_tz_max
-                max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-                if (
-                    int(op.n_theta) > 1
-                    and xblock_tz_max > 0
-                    and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max
-                ):
-                    strong_precond_kind = "xblock_tz"
-                elif int(op.n_theta) > 1 and int(op.n_zeta) > 1 and int(op.n_theta) * int(op.n_zeta) <= tz_max:
-                    strong_precond_kind = "theta_zeta"
-                else:
-                    shard_axis = _matvec_shard_axis(op)
-                    schwarz_auto_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN", "").strip()
-                    try:
-                        schwarz_auto_min = int(schwarz_auto_min_env) if schwarz_auto_min_env else 4000
-                    except ValueError:
-                        schwarz_auto_min = 4000
-                    if (
-                        shard_axis in {"theta", "zeta"}
-                        and jax.device_count() > 1
-                        and int(active_size) >= max(1, int(schwarz_auto_min))
-                    ):
-                        strong_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-                    else:
-                        strong_precond_kind = "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
+        auto_sel = adjust_rhs1_reduced_auto_kind(
+            kind=strong_precond_kind,
+            has_pas=op.fblock.pas is not None,
+            geom_scheme=int(geom_scheme),
+            n_zeta=int(op.n_zeta),
+            strong_precond_trigger=bool(strong_precond_trigger),
+            max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
+            n_theta=int(op.n_theta),
+        )
+        strong_precond_kind = auto_sel.kind
+        if auto_sel.xblock_tz_lmax is not None:
+            strong_xblock_tz_lmax = auto_sel.xblock_tz_lmax
+
+        auto_sel = adjust_rhs1_theta_line_auto_kind(
+            kind=strong_precond_kind,
+            n_theta=int(op.n_theta),
+            nxi_for_x_sum=int(np.sum(nxi_for_x)) if nxi_for_x.size else 0,
+        )
+        strong_precond_kind = auto_sel.kind
 
         if (
             strong_precond_kind is not None
@@ -17635,6 +17493,7 @@ def solve_v3_full_system_linear_gmres(
                 f"(residual={float(result.residual_norm):.3e}) -> skip strong preconditioner tail",
             )
         strong_precond_kind: str | None = None
+        strong_xblock_tz_lmax: int | None = None
         if strong_precond_disabled:
             strong_precond_kind = None
         else:
@@ -17646,130 +17505,56 @@ def solve_v3_full_system_linear_gmres(
         if strong_precond_kind is None and (not strong_precond_disabled) and strong_precond_auto:
             if int(op.constraint_scheme) == 2 and int(op.extra_size) > 0:
                 if op.fblock.pas is not None:
-                    pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-                    try:
-                        pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-                    except ValueError:
-                        pas_lite_min = 20000
-                    if int(op.total_size) >= max(1, int(pas_lite_min)):
-                        strong_precond_kind = "pas_lite"
-                    else:
-                        strong_precond_kind = "pas_hybrid"
+                    auto_sel = auto_rhs1_full_strong_kind(
+                        has_pas=True,
+                        has_fp=False,
+                        rhs1_precond_kind=rhs1_precond_kind,
+                        total_size=int(op.total_size),
+                        strong_precond_min=int(strong_precond_min),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
+                        shard_axis=_matvec_shard_axis(op),
+                        device_count=int(jax.device_count()),
+                    )
+                    strong_precond_kind = auto_sel.kind
                 else:
                     strong_precond_kind = "schur"
-            elif op.fblock.pas is not None:
-                pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-                try:
-                    pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-                except ValueError:
-                    pas_lite_min = 20000
-                if int(op.total_size) >= max(1, int(pas_lite_min)):
-                    strong_precond_kind = "pas_lite"
-                else:
-                    strong_precond_kind = "pas_hybrid"
-        elif (
-            rhs1_precond_env == ""
-            and rhs1_precond_kind == "point"
-            and int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and op.fblock.pas is not None
-            and int(op.total_size) >= strong_precond_min
-            and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
-        ):
-            pas_xmg_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_XMG_MIN", "").strip()
-            try:
-                pas_xmg_min = int(pas_xmg_env) if pas_xmg_env else 50000
-            except ValueError:
-                pas_xmg_min = 50000
-            xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
-            try:
-                xblock_tz_max = int(xblock_tz_max_env) if xblock_tz_max_env else 1200
-            except ValueError:
-                xblock_tz_max = 1200
-            max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-            if int(op.total_size) >= pas_xmg_min:
-                strong_precond_kind = "xmg"
-            elif (
-                int(op.n_theta) > 1
-                and xblock_tz_max > 0
-                and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max
-            ):
-                strong_precond_kind = "xblock_tz"
             else:
-                shard_axis = _matvec_shard_axis(op)
-                schwarz_auto_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN", "").strip()
-                try:
-                    schwarz_auto_min = int(schwarz_auto_min_env) if schwarz_auto_min_env else 4000
-                except ValueError:
-                    schwarz_auto_min = 4000
-                if (
-                    shard_axis in {"theta", "zeta"}
-                    and jax.device_count() > 1
-                    and int(op.total_size) >= max(1, int(schwarz_auto_min))
-                ):
-                    strong_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-                else:
-                    strong_precond_kind = "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
-        elif (
-            rhs1_precond_env == ""
-            and int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and op.fblock.fp is not None
-            and int(op.total_size) >= strong_precond_min
-            and (int(op.n_theta) > 1 or int(op.n_zeta) > 1)
-        ):
-            tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "").strip()
-            try:
-                tz_max = int(tz_max_env) if tz_max_env else 128
-            except ValueError:
-                tz_max = 128
-            xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
-            try:
-                xblock_tz_max = int(xblock_tz_max_env) if xblock_tz_max_env else 1200
-            except ValueError:
-                xblock_tz_max = 1200
-            max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-            if (
-                int(op.n_theta) > 1
-                and int(op.n_zeta) > 1
-                and xblock_tz_max > 0
-                and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max
-            ):
-                strong_precond_kind = "xblock_tz"
-            elif int(op.n_theta) > 1 and int(op.n_zeta) > 1 and int(op.n_theta) * int(op.n_zeta) <= tz_max:
-                strong_precond_kind = "theta_zeta"
-            else:
-                shard_axis = _matvec_shard_axis(op)
-                schwarz_auto_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN", "").strip()
-                try:
-                    schwarz_auto_min = int(schwarz_auto_min_env) if schwarz_auto_min_env else 4000
-                except ValueError:
-                    schwarz_auto_min = 4000
-                if (
-                    shard_axis in {"theta", "zeta"}
-                    and jax.device_count() > 1
-                    and int(op.total_size) >= max(1, int(schwarz_auto_min))
-                ):
-                    strong_precond_kind = "theta_schwarz" if shard_axis == "theta" else "zeta_schwarz"
-                else:
-                    strong_precond_kind = "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
-        if (
-            strong_precond_kind == "pas_lite"
-            and op.fblock.pas is not None
-            and (int(op.n_zeta) == 1 or geom_scheme == 1)
-        ):
-            strong_precond_kind = "pas_hybrid"
+                auto_sel = auto_rhs1_full_strong_kind(
+                    has_pas=op.fblock.pas is not None,
+                    has_fp=op.fblock.fp is not None,
+                    rhs1_precond_kind=rhs1_precond_kind,
+                    total_size=int(op.total_size),
+                    strong_precond_min=int(strong_precond_min),
+                    n_theta=int(op.n_theta),
+                    n_zeta=int(op.n_zeta),
+                    max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
+                    shard_axis=_matvec_shard_axis(op),
+                    device_count=int(jax.device_count()),
+                )
+                strong_precond_kind = auto_sel.kind
+                strong_xblock_tz_lmax = auto_sel.xblock_tz_lmax
 
-        if strong_precond_kind == "theta_line":
-            nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-            line_size = int(np.sum(nxi_for_x)) * int(op.n_theta)
-            theta_line_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_THETA_LINE_MAX", "").strip()
-            try:
-                theta_line_max = int(theta_line_max_env) if theta_line_max_env else 0
-            except ValueError:
-                theta_line_max = 0
-            if theta_line_max > 0 and line_size > theta_line_max:
-                strong_precond_kind = "theta_line_xdiag"
+        auto_sel = adjust_rhs1_reduced_auto_kind(
+            kind=strong_precond_kind,
+            has_pas=op.fblock.pas is not None,
+            geom_scheme=int(geom_scheme),
+            n_zeta=int(op.n_zeta),
+            strong_precond_trigger=True,
+            max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
+            n_theta=int(op.n_theta),
+        )
+        strong_precond_kind = auto_sel.kind
+        if auto_sel.xblock_tz_lmax is not None:
+            strong_xblock_tz_lmax = auto_sel.xblock_tz_lmax
+
+        auto_sel = adjust_rhs1_theta_line_auto_kind(
+            kind=strong_precond_kind,
+            n_theta=int(op.n_theta),
+            nxi_for_x_sum=int(np.sum(nxi_for_x)) if nxi_for_x.size else 0,
+        )
+        strong_precond_kind = auto_sel.kind
 
         if strong_precond_kind is not None and float(result.residual_norm) > target:
             dd_block_theta = _parse_rhs1_dd_block("theta")
