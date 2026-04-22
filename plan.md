@@ -2026,6 +2026,8 @@ Current branch status:
 - `transport_parallel_pool.py` is now landed for the persistent transport process-pool lifecycle, replacing the inlined pool cache / rebuild / shutdown state in `v3_driver.py` with a narrow reusable manager while preserving the existing wrapper seams.
 - `transport_parallel_execution.py` is now landed for the top-level transport parallel execution branch: run/no-run gating, payload construction, backend-specific execution, persistent-pool retry, and sequential fallback now live outside the monolith.
 - `phi1_newton_policy.py` is now landed for the bounded nonlinear/Newton policy layer: active-DOF mode selection, GMRES restart sizing, frozen-Jacobian cache policy, and line-search policy are no longer embedded inline in `solve_v3_full_system_newton_krylov_history`.
+- `phi1_newton_linear.py` is now landed for the nonlinear linear-step orchestration: reduced/full routing, sparse-direct entry, KSP-history emission, and retry-without-preconditioner now live outside the monolith while reusing the same numerical kernels.
+- `phi1_line_search.py` is now landed for the accepted-iterate update logic: PETSc-like backtracking, fixed-candidate `best` search, and finite-state fallback rules are no longer embedded inline in the Newton driver.
 - current validation slice on this branch:
   - focused RHSMode=1 + transport policy/dispatch/fallback tests: `103 passed`
   - broader bounded driver/transport slice: `92 passed`
@@ -2035,7 +2037,9 @@ Current branch status:
     - `tests/test_transport_parallel_runtime.py`: `3 passed`
     - `tests/test_transport_parallel_execution.py`: `5 passed`
     - `tests/test_phi1_newton_policy.py`: `4 passed`
-- next extraction target is the deeper nonlinear / Newton orchestration and helper split, then the first literature-anchored validation sweep scaffold on top of the cleaner branch structure.
+    - `tests/test_phi1_newton_linear.py`: `3 passed`
+    - `tests/test_phi1_line_search.py`: `4 passed`
+- next extraction target is the first literature-anchored validation sweep scaffold and figure-generation lane on top of the cleaner branch structure, then any remaining thin orchestration cleanup in the nonlinear path.
 
 ### 19.13 Literature-anchored validation baselines for the paper
 
@@ -2045,6 +2049,10 @@ Primary literature anchors to use directly for validation and manuscript figures
 - MONKES paper: [Escoto et al., *MONKES: a fast neoclassical code for the evaluation of monoenergetic transport coefficients*](https://arxiv.org/abs/2312.12248)
 - W7-X ion-root validation context: [Pablant et al. ion-root / ambipolar-electric-field comparison page mirrored here](https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf)
 - optimization / adjoint motivation: [APS abstract on adjoint neoclassical stellarator optimization with SFINCS](https://meetings-archive.aps.org/dpp/2018/bp11/36/)
+- W7-X neoclassical validation context at reactor relevance: [Mollen et al., *Demonstration of reduced neoclassical energy transport in Wendelstein 7-X*, Nature 596, 221-226 (2021)](https://www.nature.com/articles/s41586-021-03687-w)
+- direct ambipolar-field / ion-root comparison context: [Pablant et al., *Core radial electric field and transport in Wendelstein 7-X plasmas*](https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2018er.pdf)
+- low-collisionality comparison code context: [Velasco et al., *KNOSOS: a fast orbit-averaging neoclassical code for stellarator geometry*](https://arxiv.org/abs/1908.11615)
+- optimization / differentiability target: [Paul et al., *An adjoint method for neoclassical stellarator optimization*](https://arxiv.org/abs/1904.06430)
 
 Key baseline claims from the literature that `sfincs_jax` should explicitly test or reproduce:
 - trajectory-model agreement at small normalized electric field and divergence at large `E_r / E_r^{res}`:
@@ -2057,6 +2065,10 @@ Key baseline claims from the literature that `sfincs_jax` should explicitly test
   - SFINCS 2014 Appendix A states a strong code-verification property for quasisymmetric fields that should be turned into an automated test family where feasible.
 - monoenergetic low-collisionality benchmark and convergence:
   - MONKES provides overlap for monoenergetic coefficients, convergence studies, and runtime expectations that are directly relevant to `geometryScheme` / monoenergetic subsets in `sfincs_jax`.
+- ambipolar electric-field and heat-flux validation in optimized stellarators:
+  - the W7-X ion-root and Nature validation papers provide publication-grade targets for `E_r` trends, heat-flux ordering, and where neoclassical predictions are expected to match experiment or trusted profile reconstructions.
+- optimization-grade derivatives:
+  - the adjoint optimization literature gives the right standard for derivative validation: directional-derivative agreement, geometry sensitivity maps, and objective-gradient accuracy under realistic solve tolerances.
 
 ### 19.14 Manuscript figure plan
 
@@ -2075,6 +2087,8 @@ Figure set A: Correctness / physics
 - A4. W7-X-style ambipolar field / bootstrap-current validation.
   - If experimental-profile validation is practical, show one figure comparing `sfincs_jax` prediction to published experimental/neoclassical comparison context.
   - If not practical for the first paper, demote this to supplement and keep it as a plan item.
+- A5. Monoenergetic overlap against MONKES / KNOSOS-style low-collisionality trends.
+  - Show coefficient overlap and scaling on a subset where the physics models coincide.
 
 Figure set B: Numerical methods
 - B1. Convergence study.
@@ -2095,6 +2109,8 @@ Figure set C: Performance and scaling
   - Keep this only if the ongoing research lane closes convincingly. Otherwise it belongs in limitations/supplement, not the main paper.
 - C4. MONKES overlap figure.
   - For monoenergetic overlap cases, compare coefficients and runtime on a like-for-like subset where the models coincide.
+- C5. Ambipolar/W7-X validation summary.
+  - Compact comparison of predicted `E_r` or neoclassical heat flux against the published W7-X validation context, if the input reconstruction is sufficiently controlled.
 
 Figure set D: Differentiation / optimization
 - D1. Gradient-check figure.
@@ -2103,6 +2119,8 @@ Figure set D: Differentiation / optimization
   - Example: bootstrap current or radial flux sensitivity to selected Boozer/geometry coefficients.
 - D3. Optimization/UQ workflow figure.
   - Small but real demo showing `sfincs_jax` inside an optimization or UQ loop with cached/parallel evaluation.
+- D4. Adjoint-style geometry sensitivity map.
+  - Use Boozer or VMEC harmonics to show a local sensitivity map for a transport objective, consistent with the neoclassical-optimization literature.
 
 ### 19.15 Additional tests and simulations to strengthen the paper
 
@@ -2119,12 +2137,16 @@ Add the following to the validation matrix if feasible on the current branch:
   - Add at least one reduced automated lane that exercises the isomorphism relation or a strong proxy derived from the same theory.
 - Monoenergetic overlap tests against MONKES.
   - Compare coefficients and convergence on small overlap cases.
+- Low-collisionality overlap checks against KNOSOS-style trends.
+  - Use these as qualitative ordering/scaling gates where exact like-for-like model overlap is not possible.
 - Experimental-profile or profile-inspired validation.
   - W7-X ion-root / bootstrap-current context if the published inputs can be reconstructed sufficiently well.
 - Resolution and aliasing studies from numerical analysis.
   - Demonstrate spectral/stencil convergence and absence of spurious parity drift with increasing resolution.
 - Autodiff verification battery.
   - JVP/VJP/finite-difference checks for residuals, transport objectives, and geometry parameters used in optimization.
+- Adjoint-style sensitivity tests.
+  - Directional derivatives and local sensitivity maps for geometry perturbations, matching the optimization literature rather than only tiny toy examples.
 - UQ / inverse problems.
   - Small synthetic inverse-calibration task and local uncertainty propagation with gradient cross-checks.
 

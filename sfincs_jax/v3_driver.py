@@ -127,6 +127,11 @@ from .phi1_newton_policy import (
     phi1_line_search_policy,
     phi1_use_active_dof_mode,
 )
+from .phi1_newton_linear import (
+    build_phi1_newton_preconditioner,
+    solve_phi1_newton_linear_step,
+)
+from .phi1_line_search import advance_phi1_newton_iterate
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -18474,56 +18479,20 @@ def solve_v3_full_system_newton_krylov_history(
     )
     if use_dense_linear or use_sparse_direct_linear:
         use_preconditioner = False
-    precond_opts = nml.group("preconditionerOptions")
-
-    def _phi1_precond_opt_int(key: str, default: int) -> int:
-        val = precond_opts.get(key, None)
-        if val is None:
-            return default
-        try:
-            return int(val)
-        except (TypeError, ValueError):
-            return default
-
-    preconditioner_species = _phi1_precond_opt_int("PRECONDITIONER_SPECIES", 1)
-    preconditioner_x = _phi1_precond_opt_int("PRECONDITIONER_X", 1)
-    preconditioner_xi = _phi1_precond_opt_int("PRECONDITIONER_XI", 1)
-    if use_preconditioner and use_frozen_linearization and int(op.rhs_mode) == 1:
-        precond_kind_env = os.environ.get("SFINCS_JAX_PHI1_PRECOND_KIND", "").strip().lower()
-        if not precond_kind_env:
-            precond_kind = "collision" if bool(op.include_phi1) else "block"
-        elif precond_kind_env in {"collision", "diag"}:
-            precond_kind = "collision"
-        elif precond_kind_env in {"block", "block_jacobi", "point"}:
-            precond_kind = "block"
-        else:
-            precond_kind = "block"
-        if emit is not None:
-            emit(1, f"solve_v3_full_system_newton_krylov_history: preconditioner={precond_kind}")
-        if precond_kind == "collision":
-            if use_active_dof_mode:
-                preconditioner = _build_rhsmode1_collision_preconditioner(
-                    op=op, reduce_full=_reduce_full, expand_reduced=_expand_reduced
-                )
-            else:
-                preconditioner = _build_rhsmode1_collision_preconditioner(op=op)
-        else:
-            if use_active_dof_mode:
-                preconditioner = _build_rhsmode1_block_preconditioner(
-                    op=op,
-                    reduce_full=_reduce_full,
-                    expand_reduced=_expand_reduced,
-                    preconditioner_species=preconditioner_species,
-                    preconditioner_x=preconditioner_x,
-                    preconditioner_xi=preconditioner_xi,
-                )
-            else:
-                preconditioner = _build_rhsmode1_block_preconditioner(
-                    op=op,
-                    preconditioner_species=preconditioner_species,
-                    preconditioner_x=preconditioner_x,
-                    preconditioner_xi=preconditioner_xi,
-                )
+    preconditioner = build_phi1_newton_preconditioner(
+        use_preconditioner=bool(use_preconditioner),
+        use_frozen_linearization=bool(use_frozen_linearization),
+        rhs_mode=int(op.rhs_mode),
+        include_phi1=bool(op.include_phi1),
+        use_active_dof_mode=bool(use_active_dof_mode),
+        op=op,
+        reduce_full=_reduce_full if use_active_dof_mode else None,
+        expand_reduced=_expand_reduced if use_active_dof_mode else None,
+        preconditioner_options=nml.group("preconditionerOptions"),
+        collision_builder=_build_rhsmode1_collision_preconditioner,
+        block_builder=_build_rhsmode1_block_preconditioner,
+        emit=emit,
+    )
 
     last_linear_resid = jnp.asarray(jnp.inf, dtype=jnp.float64)
     accepted: list[jnp.ndarray] = []
@@ -18797,135 +18766,26 @@ def solve_v3_full_system_newton_krylov_history(
             if int(linear_size) <= int(dense_cutoff):
                 solve_method_linear = "dense"
 
-        if use_active_dof_mode:
-            rhs_reduced = _reduce_full(-r)
-
-            def matvec_reduced(dx_reduced: jnp.ndarray) -> jnp.ndarray:
-                return _reduce_full(matvec(_expand_reduced(dx_reduced)))
-
-            if solve_method_linear == "sparse_direct":
-                lin = _phi1_sparse_direct_solve(
-                    matvec_fn=matvec_reduced,
-                    b_vec=rhs_reduced,
-                    n=int(active_size),
-                    cache_tag=("reduced", int(k), int(active_size)),
-                    tol_val=float(gmres_tol),
-                    atol_val=0.0,
-                    restart_val=int(gmres_restart_use),
-                    maxiter_val=gmres_maxiter,
-                )
-            else:
-                lin = _gmres_solve_dispatch(
-                    matvec=matvec_reduced,
-                    b=rhs_reduced,
-                    preconditioner=preconditioner,
-                    tol=float(gmres_tol),
-                    restart=int(gmres_restart_use),
-                    maxiter=gmres_maxiter,
-                    solve_method=solve_method_linear,
-                )
-                _emit_ksp_history_nk(
-                    matvec_fn=matvec_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=preconditioner,
-                    x0_vec=None,
-                    tol_val=float(gmres_tol),
-                    atol_val=0.0,
-                    restart_val=int(gmres_restart_use),
-                    maxiter_val=gmres_maxiter,
-                    precond_side="left",
-                )
-                if preconditioner is not None and (not _gmres_result_is_finite(lin)):
-                    if emit is not None:
-                        emit(
-                            0,
-                            "newton_iter="
-                            f"{k}: preconditioned GMRES returned non-finite result; retrying without preconditioner",
-                        )
-                    lin = _gmres_solve_dispatch(
-                        matvec=matvec_reduced,
-                        b=rhs_reduced,
-                        preconditioner=None,
-                        tol=float(gmres_tol),
-                        restart=int(gmres_restart_use),
-                        maxiter=gmres_maxiter,
-                        solve_method=solve_method_linear,
-                    )
-                    _emit_ksp_history_nk(
-                        matvec_fn=matvec_reduced,
-                        b_vec=rhs_reduced,
-                        precond_fn=None,
-                        x0_vec=None,
-                        tol_val=float(gmres_tol),
-                        atol_val=0.0,
-                        restart_val=int(gmres_restart_use),
-                        maxiter_val=gmres_maxiter,
-                        precond_side="left",
-                    )
-            s = _expand_reduced(lin.x)
-            linear_resid_norm = jnp.linalg.norm(matvec(s) + r)
-        else:
-            if solve_method_linear == "sparse_direct":
-                lin = _phi1_sparse_direct_solve(
-                    matvec_fn=matvec,
-                    b_vec=-r,
-                    n=int(op.total_size),
-                    cache_tag=("full", int(k), int(op.total_size)),
-                    tol_val=float(gmres_tol),
-                    atol_val=0.0,
-                    restart_val=int(gmres_restart_use),
-                    maxiter_val=gmres_maxiter,
-                )
-            else:
-                lin = _gmres_solve_dispatch(
-                    matvec=matvec,
-                    b=-r,
-                    preconditioner=preconditioner,
-                    tol=float(gmres_tol),
-                    restart=int(gmres_restart_use),
-                    maxiter=gmres_maxiter,
-                    solve_method=solve_method_linear,
-                )
-                _emit_ksp_history_nk(
-                    matvec_fn=matvec,
-                    b_vec=-r,
-                    precond_fn=preconditioner,
-                    x0_vec=None,
-                    tol_val=float(gmres_tol),
-                    atol_val=0.0,
-                    restart_val=int(gmres_restart_use),
-                    maxiter_val=gmres_maxiter,
-                    precond_side="left",
-                )
-                if preconditioner is not None and (not _gmres_result_is_finite(lin)):
-                    if emit is not None:
-                        emit(
-                            0,
-                            "newton_iter="
-                            f"{k}: preconditioned GMRES returned non-finite result; retrying without preconditioner",
-                        )
-                    lin = _gmres_solve_dispatch(
-                        matvec=matvec,
-                        b=-r,
-                        preconditioner=None,
-                        tol=float(gmres_tol),
-                        restart=int(gmres_restart_use),
-                        maxiter=gmres_maxiter,
-                        solve_method=solve_method_linear,
-                    )
-                    _emit_ksp_history_nk(
-                        matvec_fn=matvec,
-                        b_vec=-r,
-                        precond_fn=None,
-                        x0_vec=None,
-                        tol_val=float(gmres_tol),
-                        atol_val=0.0,
-                        restart_val=int(gmres_restart_use),
-                        maxiter_val=gmres_maxiter,
-                        precond_side="left",
-                    )
-            s = lin.x
-            linear_resid_norm = lin.residual_norm
+        lin, s, linear_resid_norm = solve_phi1_newton_linear_step(
+            use_active_dof_mode=bool(use_active_dof_mode),
+            solve_method_linear=solve_method_linear,
+            matvec=matvec,
+            residual_vec=r,
+            preconditioner=preconditioner,
+            gmres_tol=float(gmres_tol),
+            gmres_restart=int(gmres_restart_use),
+            gmres_maxiter=gmres_maxiter,
+            sparse_direct_solve=_phi1_sparse_direct_solve,
+            gmres_dispatch=_gmres_solve_dispatch,
+            gmres_result_is_finite=_gmres_result_is_finite,
+            emit_ksp_history=_emit_ksp_history_nk,
+            emit=emit,
+            newton_iter=int(k),
+            reduce_full=_reduce_full if use_active_dof_mode else None,
+            expand_reduced=_expand_reduced if use_active_dof_mode else None,
+            active_size=int(active_size),
+            total_size=int(op.total_size),
+        )
 
         if emit is not None:
             emit(1, f"newton_iter={k}: gmres_residual={float(linear_resid_norm):.6e}")
@@ -18944,66 +18804,24 @@ def solve_v3_full_system_newton_krylov_history(
             )
         last_linear_resid = linear_resid_norm
 
-        step = 1.0
         rnorm0 = float(rnorm)
         ls_policy = phi1_line_search_policy(
             use_frozen_linearization=bool(use_frozen_linearization),
             include_phi1=bool(op.include_phi1),
         )
-        step_scale = float(ls_policy.step_scale)
-        ls_factor = ls_policy.factor
-        ls_c1 = float(ls_policy.c1)
-        ls_mode = str(ls_policy.mode)
-        best_x = None
-        best_rnorm = float("inf")
-        if ls_mode == "best":
-            step_candidates = [1.0, 1.5, 2.0, 0.5, 0.25, 0.125, 0.0625, 0.03125]
-        max_ls = int(ls_policy.maxiter)
-        if ls_mode in {"basic", "full"}:
-            x = x + (step * step_scale) * s
-            accepted.append(x)
-            continue
-        for _ in range(max_ls):
-            if ls_mode == "best":
-                try_step = step_candidates.pop(0) if step_candidates else step
-            else:
-                try_step = step
-            x_try = x + (try_step * step_scale) * s
-            # Always evaluate the true nonlinear residual for line-search acceptance,
-            # even when using a frozen linearization for the Jacobian. This matches PETSc's
-            # SNES line-search behavior and improves includePhi1 iteration parity.
-            r_try = residual_v3_full_system(op, x_try)
-            rnorm_try = float(jnp.linalg.norm(r_try))
-            if not np.isfinite(rnorm_try):
-                if ls_mode != "best":
-                    step *= 0.5
-                continue
-            if rnorm_try < best_rnorm:
-                best_rnorm = rnorm_try
-                best_x = x_try
-            if ls_mode != "best":
-                if ls_factor is not None:
-                    accept = rnorm_try <= ls_factor * rnorm0
-                else:
-                    accept = rnorm_try <= (1.0 - ls_c1 * step) * rnorm0
-                if accept:
-                    x = x_try
-                    accepted.append(x)
-                    break
-            if ls_mode != "best":
-                step *= 0.5
-        else:
-            if ls_mode == "best" and best_x is not None and best_rnorm < rnorm0:
-                x = best_x
-            elif best_x is not None and np.isfinite(best_rnorm):
-                # Accept the best finite trial even if not strictly improving.
-                x = best_x
-            elif accepted:
-                # Reuse the last accepted finite state to avoid propagating non-finite updates.
-                x = accepted[-1]
-            else:
-                x = x + (1.0 / 64.0) * s
-            accepted.append(x)
+        x = advance_phi1_newton_iterate(
+            x=x,
+            step_direction=s,
+            residual_norm0=rnorm0,
+            residual_fn=lambda x_try: residual_v3_full_system(op, x_try),
+            accepted=accepted,
+            mode=str(ls_policy.mode),
+            step_scale=float(ls_policy.step_scale),
+            factor=ls_policy.factor,
+            c1=float(ls_policy.c1),
+            maxiter=int(ls_policy.maxiter),
+        )
+        accepted.append(x)
 
     r = residual_v3_full_system(op, x)
     return (
