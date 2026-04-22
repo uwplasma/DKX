@@ -68,6 +68,16 @@ Publication target:
 - fluxes, flows, and bootstrap current versus normalized radial electric field,
 - clear comparison of partial, DKES-like, and full-trajectory models.
 
+Current scaffold:
+
+- ``examples/publication_figures/generate_er_trajectory_sweep.py``
+
+This script already implements the correct upstream trajectory-model switches and
+produces a JSON summary plus a 2x2 publication-style figure. At the moment it is a
+validation scaffold rather than a pinned manuscript artifact: the final paper lane still
+needs audited sweep inputs and fixed output roots for the selected tokamak-like and
+stellarator-like cases.
+
 Validation goal:
 
 - verify small-``E_r / E_r^{res}`` agreement and large-field separation behavior,

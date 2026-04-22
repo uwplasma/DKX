@@ -54,13 +54,18 @@
   },
   {
     "id": "sfincs2014_er_sweep_tokamak_stellarator",
-    "status": "planned",
+    "status": "scaffolded",
     "kind": "literature_validation",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
-    "scripts": [],
-    "artifacts": [],
+    "scripts": [
+      "examples/publication_figures/generate_er_trajectory_sweep.py --preset tokamak_like",
+      "examples/publication_figures/generate_er_trajectory_sweep.py --preset stellarator_like"
+    ],
+    "artifacts": [
+      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png"
+    ],
     "claims": [
       "Trajectory models should agree at small Er/Eres and separate at larger normalized electric field",
       "Bootstrap-current sign-change behavior should appear in the full-trajectory branch where reported in the paper"
