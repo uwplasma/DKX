@@ -2024,6 +2024,7 @@ Current branch status:
 - `transport_parallel_policy.py` is now landed for the process-parallel transport backend/start-method/persistent-pool/GPU-worker environment policy layer, again keeping thin wrappers in `v3_driver.py`.
 - `transport_parallel_runtime.py` is now landed for the transport parallel RHS partitioning, GPU worker subprocess runner, and parallel-result merge layer, reducing the inlined orchestration inside `solve_v3_transport_matrix_linear_gmres` without changing the public transport test seams.
 - `transport_parallel_pool.py` is now landed for the persistent transport process-pool lifecycle, replacing the inlined pool cache / rebuild / shutdown state in `v3_driver.py` with a narrow reusable manager while preserving the existing wrapper seams.
+- `transport_parallel_execution.py` is now landed for the top-level transport parallel execution branch: run/no-run gating, payload construction, backend-specific execution, persistent-pool retry, and sequential fallback now live outside the monolith.
 - current validation slice on this branch:
   - focused RHSMode=1 + transport policy/dispatch/fallback tests: `103 passed`
   - broader bounded driver/transport slice: `92 passed`
@@ -2031,7 +2032,8 @@ Current branch status:
     - `tests/test_transport_sparse_direct.py`: `37 passed`
     - `tests/test_transport_parallel.py`: `13 passed`
     - `tests/test_transport_parallel_runtime.py`: `3 passed`
-- next extraction target is the remaining top-level parallel execution branch inside `solve_v3_transport_matrix_linear_gmres`, then the nonlinear / Newton helper split and the first literature-anchored validation sweep scaffold on top of the cleaner branch structure.
+    - `tests/test_transport_parallel_execution.py`: `5 passed`
+- next extraction target is the nonlinear / Newton helper split, then the first literature-anchored validation sweep scaffold on top of the cleaner branch structure.
 
 ### 19.13 Literature-anchored validation baselines for the paper
 
