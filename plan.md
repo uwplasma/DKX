@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-04-11 (America/Chicago)
+Last updated: 2026-04-22 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -1629,3 +1629,360 @@ Release-ready means:
   - keep pushing on bounded `v3_driver.py` solve-handoff and post-build fallback seams beneath the shared dispatch helper,
   - then return to deeper `io.py` output/reduction assembly,
   - continue preferring mathematically anchored seams over broad expensive end-to-end solve campaigns.
+
+---
+
+## 19) Research-Grade Coverage + Validation + Autodiff Roadmap (2026-04-22)
+
+This section is the concrete roadmap for moving `sfincs_jax` from the current
+release-quality state to a research-grade, optimization-ready state with:
+- near-complete automated validation,
+- materially higher test coverage,
+- stronger benchmark discipline,
+- and trustworthy derivative-aware workflows for sensitivity analysis, inverse design,
+  uncertainty quantification, and stellarator optimization.
+
+### 19.1 External anchors reviewed for this roadmap
+
+Primary physics / SFINCS references:
+- Landreman et al., *Phys. Plasmas* 21, 042503 (2014), the original SFINCS paper:
+  https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf
+- The upstream SFINCS technical documentation and paper sources mirrored in
+  `docs/upstream/` and online at:
+  https://github.com/landreman/sfincs/tree/master/doc
+  https://github.com/landreman/sfincs/tree/master/doc/sfincsPaper
+- STELLOPT’s SFINCS integration notes:
+  https://princetonuniversity.github.io/STELLOPT/SFINCS.html
+
+Neighboring code / workflow anchors:
+- `yancc` (`f0uriest/yancc`), especially its explicit testing culture and active
+  solver/smoother work:
+  https://github.com/f0uriest/yancc
+- `monkes` (`f0uriest/monkes`) and the MONKES literature for monoenergetic
+  block-tridiagonal structure, factor reuse, and optimization-oriented transport:
+  https://github.com/f0uriest/monkes
+  https://arxiv.org/abs/2312.12248
+- `simsopt` for optimization graph structure, least-squares workflows, and MPI-aware
+  optimization orchestration:
+  https://simsopt.readthedocs.io/stable/
+- `DESC` for JAX-native stellarator optimization posture and differentiated equilibrium
+  workflows:
+  https://desc-docs.readthedocs.io/en/stable/
+- JAX implicit differentiation / linear-solve hooks:
+  https://docs.jax.dev/en/latest/_autosummary/jax.lax.custom_linear_solve.html
+- JAXopt implicit differentiation notes:
+  https://jaxopt.github.io/dev/implicit_diff.html
+
+### 19.2 Current reality and the main planning constraint
+
+Current audited local state:
+- `596` tests collected
+- `596` tests passed
+- total package coverage `55%`
+- dominant denominator:
+  - `sfincs_jax/v3_driver.py` at `38%`
+  - then `sfincs_jax/io.py` at `67%`
+  - then `sfincs_jax/solver.py` at `67%`
+
+Conclusion:
+- Reaching `95%` total package coverage is **not** a “write more tests” problem.
+- It is a **code-structure + testability + validation-surface** problem.
+- The only credible path to `95%` is:
+  1. keep adding bounded literature-anchored tests,
+  2. refactor the remaining monoliths into testable helpers/modules,
+  3. lock every benchmarked/autodiff-facing workflow to golden validation artifacts.
+
+### 19.3 Target end state
+
+For this roadmap, “research-grade” means:
+- all shipped examples and benchmark examples run in CI or in a reproducible audited lane,
+- all supported geometry / physics families have at least one end-to-end validated fixture,
+- every important solver/preconditioner decision layer has bounded unit/regression tests,
+- every derivative-facing public workflow has gradient checks against finite-difference or
+  implicit-diff references,
+- performance claims are tied to pinned benchmark artifacts,
+- optimization/UQ workflows are demonstrated on real `sfincs_jax` objectives,
+- and package coverage reaches `95%` without padding it with low-value tests.
+
+### 19.4 Workstream A: Coverage to 95% by refactoring the denominator
+
+#### A1. Split `v3_driver.py` into testable submodules
+
+Current blocker:
+- `v3_driver.py` still holds the majority of uncovered production logic.
+
+Refactor target:
+- extract the following into separate modules with stable helper APIs:
+  - `rhs1_policy.py`
+  - `rhs1_preconditioner_dispatch.py`
+  - `rhs1_preconditioner_builders.py`
+  - `rhs1_fallbacks.py`
+  - `transport_policy.py`
+  - `nonlinear_newton.py`
+  - `distributed_policy.py`
+
+Coverage goal after split:
+- each extracted module should reach `90-95%` individually,
+- the remaining thin orchestration in `v3_driver.py` should be kept intentionally small,
+- package total should move sharply upward without synthetic test padding.
+
+Acceptance criteria:
+- no behavior change in the full frozen CPU/GPU suite,
+- identical CLI-facing output for the audited scope,
+- full-tree coverage rerun demonstrates a material jump, not a cosmetic one.
+
+#### A2. Finish `io.py` output/reduction coverage
+
+Uncovered high-value seams still include:
+- result assembly paths that only trigger after successful solves,
+- diagnostic selection / omission branches,
+- HDF5 write policies for full/reduced / geometry-only / transport-only cases,
+- comparison and export pathways used by parity and publication scripts.
+
+Plan:
+- write bounded fixtures that bypass expensive solves by feeding in synthetic but
+  shape-correct result dictionaries,
+- pin exact HDF5 key behavior and output-map semantics,
+- add tests for all `sfincsOutput.h5` writer modes used in examples/docs.
+
+Acceptance criteria:
+- `io.py` at `90%+`,
+- every dataset family written by the public CLI covered by at least one direct test.
+
+#### A3. Finish `solver.py` and `pas_smoother.py`
+
+Plan:
+- add bounded tests for:
+  - restart/termination/stagnation rules,
+  - transpose-solve paths used by implicit differentiation,
+  - recycled-subspace paths,
+  - distributed-Krylov enablement and fallbacks,
+  - PAS smoother histories and adaptive stopping edge cases under tiny synthetic operators.
+
+Acceptance criteria:
+- `solver.py` and `pas_smoother.py` both above `90%`,
+- all implicit-diff solve modes used in examples are directly covered.
+
+### 19.5 Workstream B: Physics validation matrix anchored in literature
+
+This workstream should move beyond “fixture parity exists” to “the governing invariants
+and asymptotic limits are explicitly tested.”
+
+#### B1. Geometry and coordinate-system invariants
+
+Add direct tests for:
+- Boozer coordinate symmetry / non-symmetry (`geometryScheme 11/12`),
+- VMEC radial-coordinate consistency (`rho`, `s`, `psi`) against upstream definitions,
+- flux-surface averages, Jacobian identities, and magnetic-field component consistency,
+- Miller / analytic geometry parameter sensitivities.
+
+Anchor:
+- upstream SFINCS docs,
+- existing mirrored PDFs,
+- geometry-specific formulas already documented in `docs/geometry.rst`.
+
+#### B2. Collision / trajectory / model-validation matrix
+
+Required benchmark grid:
+- PAS vs FP
+- DKES vs full trajectories
+- with/without `E_r`
+- with/without `Phi1`
+- monoenergetic vs full kinetic
+- axisymmetric vs non-axisymmetric
+- Boozer `.bc` vs VMEC `wout`
+
+Validation target:
+- use the current 39-case suite + additional examples as the minimum release set,
+- then add targeted sweep fixtures where literature makes specific claims:
+  - collisionality sweeps,
+  - `E_r` sweeps,
+  - resolution sensitivity studies,
+  - collision-operator / trajectory-model comparisons from the 2014 SFINCS paper.
+
+Acceptance criteria:
+- every model family in docs has at least one corresponding automated validation lane.
+
+#### B3. Manufactured / reduced analytic tests
+
+Add tests that do not depend on external HDF5 fixtures:
+- null residual on exact manufactured states where possible,
+- symmetry-protected limits,
+- constant-`B` and reduced-coupling limits,
+- small-system exact solves for transport and RHSMode=1 operators,
+- Landau / PAS operator conservation and sign checks where the discrete operator
+  should satisfy them.
+
+### 19.6 Workstream C: Benchmark and validation discipline
+
+The code is already parity-clean on the audited suite. What is missing is a more
+systematic research benchmark matrix.
+
+#### C1. Pinned benchmark matrix
+
+Create a benchmark manifest that always runs:
+- full frozen CPU suite,
+- full frozen GPU suite,
+- top offender subset,
+- transport-worker scaling,
+- single-case sharded CPU/GPU scaling,
+- compile-time vs solve-time split,
+- memory peak for the heaviest offender set.
+
+Artifacts to pin:
+- runtime JSON
+- memory JSON
+- solver path / fallback logs
+- environment metadata
+
+#### C2. Statistical benchmarking
+
+Current benchmarking often relies on single runs.
+
+Upgrade:
+- use at least `3-5` repeats for small/medium cases,
+- report median and spread,
+- separate cold-start compile cost from warm solve cost,
+- separate process launch overhead from solver-reported time.
+
+#### C3. Research-facing comparison matrix
+
+For trustworthiness, keep and publish:
+- `sfincs_jax` CPU/GPU vs SFINCS Fortran v3,
+- `sfincs_jax` monoenergetic subset vs MONKES where the model overlaps,
+- throughput / scaling comparisons for the optimization-facing transport-worker lane.
+
+### 19.7 Workstream D: Autodiff, inverse design, UQ, and optimization
+
+This is the largest gap between “code runs” and “code is useful for research workflows.”
+
+#### D1. Define the supported differentiability surface
+
+Publicly stable derivative-aware APIs should be limited and explicit:
+- matrix-free residuals,
+- differentiable geometry parameterizations,
+- implicit differentiation through linear solves,
+- transport/objective functionals that are documented as differentiable.
+
+Explicitly unsupported or not-yet-guaranteed paths should be documented separately.
+
+#### D2. Gradient verification campaign
+
+For every public autodiff example, add automated tests comparing:
+- autodiff gradients,
+- finite-difference gradients,
+- implicit-diff gradients where relevant,
+- and, when feasible, directional derivatives via JVP/VJP.
+
+Initial mandatory objective families:
+- residual norm vs `nu_n`,
+- geometry harmonic coefficients in `geometryScheme=4`,
+- `FSABHat2` / transport scalar functionals,
+- implicit-diff through linear solves,
+- differentiable transport-matrix outputs where support is claimed.
+
+Acceptance criteria:
+- every documented autodiff example has a test,
+- gradient relative errors are pinned in CI on small fixtures.
+
+#### D3. Inverse design and stellarator-optimization interfaces
+
+Short-term:
+- provide a stable wrapper layer that exposes `sfincs_jax` objectives and gradients
+  in a form that can be embedded in `simsopt` and DESC workflows,
+- start with serial/CPU and transport-worker throughput, not full multi-GPU single-case sharding.
+
+Mid-term:
+- create two reference optimization demos:
+  1. inverse calibration of a kinetic/transport parameter to a frozen reference,
+  2. geometry-harmonic optimization under regularization and parity checks.
+
+Long-term:
+- integrate with VMEC/DESC/SIMSOPT parameter loops for stellarator optimization,
+- add robust checkpoint/restart and objective caching so repeated optimization steps
+  are reproducible and efficient.
+
+#### D4. Uncertainty quantification
+
+Add a dedicated UQ lane built on the explicit CLI path plus the differentiable Python path:
+- case-parallel Monte Carlo / Latin hypercube on CPU/GPU workers,
+- local linear uncertainty propagation using gradients from the autodiff path,
+- gradient-vs-sampling cross-checks on small benchmark objectives.
+
+Acceptance criteria:
+- at least one published example for:
+  - local sensitivity,
+  - inverse calibration,
+  - UQ propagation,
+  - stellarator optimization embedding.
+
+### 19.8 Workstream E: CI/CD and runtime budgeting
+
+To keep this realistic, the test campaign must be stratified:
+
+#### E1. Fast CI lane
+- bounded unit/regression/gradient tests
+- docs build
+- no heavy solves
+- target: minutes, not tens of minutes
+
+#### E2. Medium audited lane
+- selected parity fixtures
+- selected benchmark smoke runs
+- selected autodiff gradient checks
+
+#### E3. Nightly / release lane
+- full frozen CPU suite
+- full frozen GPU suite
+- benchmark matrix
+- coverage audit
+- publication-figure regeneration checks
+
+This is the only way to push toward `95%` and full research validation without
+making every PR prohibitively slow.
+
+### 19.9 Immediate execution order
+
+1. **Refactor for testability first**
+   - split `v3_driver.py` along the existing dispatch/fallback boundaries.
+2. **Raise coverage where it matters**
+   - target extracted driver modules, then `io.py`, then `solver.py`/`pas_smoother.py`.
+3. **Lock the physics matrix**
+   - turn the current example suite + sweeps into a documented validation matrix.
+4. **Lock the derivative matrix**
+   - every public autodiff/optimization example gets an automated gradient check.
+5. **Lock the benchmark matrix**
+   - pinned CPU/GPU/full/transport-worker/offender artifacts with medians and warm/cold splits.
+6. **Only then claim research-grade**
+   - when coverage, validation, benchmarking, and derivative-aware workflows all agree.
+
+### 19.10 Quantitative acceptance gates
+
+Coverage:
+- package total: `>=95%`
+- `v3_driver` successor modules: `>=95%`
+- `io.py`: `>=90%`
+- `solver.py`: `>=90%`
+
+Validation:
+- full frozen CPU suite: clean
+- full frozen GPU suite: clean
+- documented model-validation sweep matrix: clean
+
+Autodiff:
+- every public autodiff example tested
+- finite-difference / implicit-diff gradient agreement pinned
+
+Benchmarking:
+- pinned benchmark manifest regenerated
+- top offenders explicitly tracked over time
+- transport-worker scaling remains the published GPU scaling lane unless single-case
+  sharding becomes genuinely strong and stable
+
+### 19.11 Immediate next coding tasks
+
+1. Extract the shared RHSMode=1 dispatch / fallback helpers out of `v3_driver.py`.
+2. Add a bounded output/reduction assembly test batch for `io.py`.
+3. Build a gradient-test batch for the shipped autodiff examples.
+4. Create a benchmark manifest file and audited runner for CPU/GPU/full/offender lanes.
+5. Add a first `simsopt`-style objective wrapper demo for serial sensitivity/inverse design.
