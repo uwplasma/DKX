@@ -1423,3 +1423,31 @@ Release-ready means:
   - the denominator is still dominated by `sfincs_jax/v3_driver.py`,
   - then `sfincs_jax/io.py`, `sfincs_jax/solver.py`, and `sfincs_jax/pas_smoother.py`,
   - so the next campaign should target bounded solve-selection / preconditioner-applicability seams in the driver, not more cheap helper branches.
+- Added an applied-math / gate-metric coverage pass:
+  - extended `tests/test_periodic_stencil.py`
+  - extended `tests/test_pas_smoother.py`
+- These cover:
+  - circulant/Fourier-mode exactness for extracted periodic derivative stencils,
+  - sparse-row stencil extraction bounds on bad-shape / too-dense matrices,
+  - documented `apply_periodic_stencil_halo()` fallback-to-roll behavior when local shards are too small,
+  - sharding-hint env semantics for the periodic stencil runtime gate,
+  - `should_stop_adaptive_smoother()` target / nonfinite / upward / continue cases,
+  - `run_adaptive_stationary_smoother()` convergence and nonfinite-update behavior on tiny analytic systems,
+  - zero-residual and consecutive-increase gate decisions in the PAS smoother logic.
+- Fresh audited local result after this pass:
+  - `pytest --collect-only -q` -> `539 tests collected`
+  - chunked `pytest -q` over the full tree -> `539 passed`
+  - chunked package coverage audit -> total package coverage `54%`
+  - measured module gains:
+    - `periodic_stencil.py`: `57% -> 67%`
+    - `pas_smoother.py`: `59% -> 62%`
+    - `grids.py`: held at `82%`
+    - `v3_driver.py`: held at `37%`
+- Numerical-analysis anchors used in this pass:
+  - Fourier modes as eigenvectors of circulant derivative operators,
+  - sparse stencil extraction preserving the same discrete linear operator,
+  - residual-history stopping rules aligned with minimal-residual / stagnation monitoring concepts used in Krylov and stationary iterations.
+- Current conclusion:
+  - the remaining denominator is now even more concentrated in `sfincs_jax/v3_driver.py`,
+  - followed by `sfincs_jax/io.py`, `sfincs_jax/solver.py`, and the uncovered portions of the physics assembly stack,
+  - so the next high-signal campaign should target bounded physics/reduction seams inside the driver and output/diagnostics assembly rather than more standalone helper modules.
