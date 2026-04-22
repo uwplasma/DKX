@@ -173,7 +173,18 @@ scalar/list parsing. That moved the audited tree to ``579/579`` while nudging
 ``io.py`` from about ``66.6%`` to about ``66.8%``. The package percentage moved
 only slightly because the remaining denominator is still dominated by the deep
 solver body in ``v3_driver.py``, but the added tests cover genuine user-facing
-behavior rather than synthetic dead branches.
+behavior rather than synthetic dead branches. The latest bounded driver pass then
+targeted the PAS tokamak / PAS-TZ preconditioner applicability ladder directly.
+Those tests check zeta-invariant tokamak detection, rejection of zeta-varying or
+drift-rich tokamak branches, PAS-only vs FP-only routing for the 3D PAS-TZ
+preconditioner, invalid environment fallback for the PAS-TZ memory cap, build-byte
+estimation, memory-safety gating, and the fallback to lighter hybrid or block
+preconditioners when the heavier PAS builders are inapplicable or unsafe. This
+moved the audited tree to ``588 tests collected`` and ``588 passed`` while holding
+total package coverage at about ``55%``. That result is still useful because it
+tightens the remaining driver decision surface without opening a new expensive
+solve campaign, and it confirms again that the dominant denominator is the deep
+execution body of ``v3_driver.py`` rather than the outer policy layer.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
