@@ -96,8 +96,8 @@ The current audited full-suite command on ``main`` is:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-On the current audited local release tree this command yields ``495 passed`` and
-roughly ``53%`` package coverage. That number is materially higher than the Linux
+On the current audited local release tree this command yields ``514 passed`` and
+roughly ``54%`` package coverage. That number is materially higher than the Linux
 CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
 surface is still the large solver/geometry stack, especially ``v3_driver.py``,
 ``io.py``, ``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. The latest
@@ -108,8 +108,10 @@ operational cache/policy seams in ``io.py`` and ``v3_driver.py`` plus bounded
 HDF5/export and distributed-Krylov branches in ``io.py`` and ``solver.py``.
 Those later heavy-module tests raised ``io.py`` from about ``65%`` to ``67%`` and
 ``solver.py`` from about ``57%`` to ``67%`` without opening another long solver-wide
-campaign. These tests were chosen from the same identities used in the SFINCS
-technical documentation and the 2014 SFINCS paper:
+campaign. The latest stencil-scheme campaign then raised ``grids.py`` from about
+``46%`` to ``79%`` by exercising the unused finite-difference branches directly.
+These tests were chosen from the same identities used in the SFINCS technical
+documentation and the 2014 SFINCS paper:
 periodic/spectral differentiation exactness, Boozer-coordinate field-component
 relations, VMEC half-mesh finite-difference conventions, and deterministic cache /
 solver-policy behavior on bounded inputs. Reaching a research-grade coverage target
