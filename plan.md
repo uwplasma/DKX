@@ -2016,10 +2016,11 @@ Current branch status:
 - `rhs1_stage2_policy.py` is now landed for the duplicated stage-2 trigger / FP-force-stage2 / PAS-stage2-skip policy.
 - `rhs1_strong_control.py` is now landed for the duplicated strong-preconditioner enable/disable/auto control layer, including sparse-rescue-first and PAS-fast-accept gating.
 - `rhs1_strong_auto_kind.py` is now landed for the duplicated reduced/full automatic strong-preconditioner kind selection and post-selection adjustments, including theta-line size promotion and PAS tokamak-style `xblock_tz_lmax` fallback.
+- `rhs1_sparse_rescue_policy.py` is now landed for the duplicated sparse-rescue ordering and skip policy, including dense-shortcut interaction, size routing, targeted-rescue suppression after exact large-CPU LU selection, PAS fast-accept skip, GPU sparse-skip, and sparse-JAX memory-cap disablement.
 - current validation slice on this branch:
-  - focused RHSMode=1 policy/dispatch/fallback tests: `67 passed`
-  - broader bounded driver slice: `83 passed`
-- next extraction target is the remaining RHSMode=1 fallback / rescue policy beneath these helpers, especially sparse-rescue ordering decisions and the post-build solve handoff layer.
+  - focused RHSMode=1 policy/dispatch/fallback tests: `61 passed` on the sparse-policy slice, `67 passed` on the prior strong-auto-kind slice
+  - broader bounded driver slice: `89 passed`
+- next extraction target is the remaining RHSMode=1 fallback / rescue policy beneath these helpers, especially the post-build sparse/strong solve handoff layer and result-accept/retry ordering.
 
 ### 19.13 Literature-anchored validation baselines for the paper
 
