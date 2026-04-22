@@ -62,6 +62,7 @@ from .rhs1_preconditioner_dispatch import (
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
+from .rhs1_strong_policy import requested_rhs1_strong_preconditioner_kind
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -14820,44 +14821,11 @@ def solve_v3_full_system_linear_gmres(
         strong_xblock_tz_lmax: int | None = None
         if strong_precond_disabled:
             strong_precond_kind = None
-        elif strong_precond_env in {"theta", "theta_line", "line_theta"}:
-            strong_precond_kind = "theta_line"
-        elif strong_precond_env in {"theta_schwarz", "schwarz_theta", "ras_theta", "theta_ras"}:
-            strong_precond_kind = "theta_schwarz"
-        elif strong_precond_env in {"theta_line_xdiag", "theta_xdiag", "theta_line_diagx"}:
-            strong_precond_kind = "theta_line_xdiag"
-        elif strong_precond_env in {"species", "species_block", "speciesblock"}:
-            strong_precond_kind = "species_block"
-        elif strong_precond_env in {"sxblock", "species_xblock", "species_x"}:
-            strong_precond_kind = "sxblock"
-        elif strong_precond_env in {"sxblock_tz", "sxblock_theta_zeta", "species_xblock_tz", "sx_tz"}:
-            strong_precond_kind = "sxblock_tz"
-        elif strong_precond_env in {"zeta", "zeta_line", "line_zeta"}:
-            strong_precond_kind = "zeta_line"
-        elif strong_precond_env in {"zeta_schwarz", "schwarz_zeta", "ras_zeta", "zeta_ras"}:
-            strong_precond_kind = "zeta_schwarz"
-        elif strong_precond_env in {"xblock_tz", "xblock", "x_tz", "xtz", "xblock_theta_zeta"}:
-            strong_precond_kind = "xblock_tz"
-        elif strong_precond_env in {"xblock_tz_lmax", "xblock_tz_trunc", "xblock_tz_cut"}:
-            strong_precond_kind = "xblock_tz_lmax"
-        elif strong_precond_env in {"xmg", "multigrid", "x_coarse", "coarse_x"}:
-            strong_precond_kind = "xmg"
-        elif strong_precond_env in {"pas_lite", "pas_light", "pas_xmg", "pas_xmg_lite"}:
-            strong_precond_kind = "pas_lite"
-        elif strong_precond_env in {"pas_hybrid", "pas_xline_xcoarse", "pas_line_xcoarse", "pas_xcoarse_line"}:
-            strong_precond_kind = "pas_hybrid"
-        elif strong_precond_env in {"pas_tz", "pas_3d", "pas_tz_l"}:
-            strong_precond_kind = "pas_tz"
-        elif strong_precond_env in {"theta_zeta", "theta_zeta_line", "tz", "tz_line"}:
-            strong_precond_kind = "theta_zeta"
-        elif strong_precond_env in {"adi", "adi_line", "line_adi", "theta_zeta", "zeta_theta"}:
-            strong_precond_kind = "adi"
-        elif strong_precond_env in {"schur", "schur_complement", "constraint_schur"}:
-            strong_precond_kind = "schur"
-        elif strong_precond_env == "auto":
-            strong_precond_kind = None
         else:
-            strong_precond_kind = None
+            strong_precond_kind = requested_rhs1_strong_preconditioner_kind(
+                strong_precond_env,
+                mode="reduced",
+            )
 
         if strong_precond_kind is None and (not strong_precond_disabled) and strong_precond_auto:
             if int(op.constraint_scheme) == 2 and int(op.extra_size) > 0:
@@ -17714,36 +17682,11 @@ def solve_v3_full_system_linear_gmres(
         strong_precond_kind: str | None = None
         if strong_precond_disabled:
             strong_precond_kind = None
-        elif strong_precond_env in {"theta", "theta_line", "line_theta"}:
-            strong_precond_kind = "theta_line"
-        elif strong_precond_env in {"theta_schwarz", "schwarz_theta", "ras_theta", "theta_ras"}:
-            strong_precond_kind = "theta_schwarz"
-        elif strong_precond_env in {"theta_line_xdiag", "theta_xdiag", "theta_line_diagx"}:
-            strong_precond_kind = "theta_line_xdiag"
-        elif strong_precond_env in {"species", "species_block", "speciesblock"}:
-            strong_precond_kind = "species_block"
-        elif strong_precond_env in {"sxblock_tz", "sxblock_theta_zeta", "species_xblock_tz", "sx_tz"}:
-            strong_precond_kind = "sxblock_tz"
-        elif strong_precond_env in {"zeta", "zeta_line", "line_zeta"}:
-            strong_precond_kind = "zeta_line"
-        elif strong_precond_env in {"zeta_schwarz", "schwarz_zeta", "ras_zeta", "zeta_ras"}:
-            strong_precond_kind = "zeta_schwarz"
-        elif strong_precond_env in {"xblock_tz", "xblock", "x_tz", "xtz", "xblock_theta_zeta"}:
-            strong_precond_kind = "xblock_tz"
-        elif strong_precond_env in {"xmg", "multigrid", "x_coarse", "coarse_x"}:
-            strong_precond_kind = "xmg"
-        elif strong_precond_env in {"pas_lite", "pas_light", "pas_xmg", "pas_xmg_lite"}:
-            strong_precond_kind = "pas_lite"
-        elif strong_precond_env in {"pas_hybrid", "pas_xline_xcoarse", "pas_line_xcoarse", "pas_xcoarse_line"}:
-            strong_precond_kind = "pas_hybrid"
-        elif strong_precond_env in {"adi", "adi_line", "line_adi", "theta_zeta", "zeta_theta"}:
-            strong_precond_kind = "adi"
-        elif strong_precond_env in {"schur", "schur_complement", "constraint_schur"}:
-            strong_precond_kind = "schur"
-        elif strong_precond_env == "auto":
-            strong_precond_kind = None
         else:
-            strong_precond_kind = None
+            strong_precond_kind = requested_rhs1_strong_preconditioner_kind(
+                strong_precond_env,
+                mode="full",
+            )
 
         if strong_precond_kind is None and (not strong_precond_disabled) and strong_precond_auto:
             if int(op.constraint_scheme) == 2 and int(op.extra_size) > 0:

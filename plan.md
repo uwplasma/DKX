@@ -2012,6 +2012,7 @@ Current branch status:
 - `rhs1_pas_policy.py` extraction is landed and validated against the PAS policy test slice.
 - `rhs1_preconditioner_dispatch.py` extraction is landed and validated; `v3_driver.py` now keeps a thin wrapper around the shared dispatch helper so the existing regression seam stays intact.
 - `rhs1_strong_fallback.py` is now landed for the full-path strong-preconditioner fallback build, replacing the duplicated full-path builder ladder with a shared helper that reuses the dispatch module.
+- `rhs1_strong_policy.py` is now landed for the duplicated reduced/full strong-preconditioner env-to-kind mapping.
 - next extraction target is the RHSMode=1 fallback / rescue policy beneath the strong-preconditioner build layer, especially the stage-2 / sparse-rescue / strong-preconditioner decision seams.
 
 ### 19.13 Literature-anchored validation baselines for the paper
