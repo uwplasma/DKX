@@ -1,0 +1,114 @@
+[
+  {
+    "id": "sfincs2014_fig1_lhd_collisionality",
+    "status": "implemented",
+    "kind": "literature_reproduction",
+    "literature": [
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "scripts": [
+      "examples/publication_figures/generate_sfincs_paper_figs.py --case lhd"
+    ],
+    "artifacts": [
+      "docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png"
+    ],
+    "claims": [
+      "Ion transport matrix elements versus collisionality at Er=0",
+      "High-collisionality trend should agree with the SFINCS 2014 figure family"
+    ]
+  },
+  {
+    "id": "sfincs2014_fig2_w7x_collisionality",
+    "status": "implemented",
+    "kind": "literature_reproduction",
+    "literature": [
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "scripts": [
+      "examples/publication_figures/generate_sfincs_paper_figs.py --case w7x"
+    ],
+    "artifacts": [
+      "docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png"
+    ],
+    "claims": [
+      "Ion transport matrix elements versus collisionality at Er=0",
+      "Low- versus high-collisionality operator ordering should match the SFINCS 2014 figure family"
+    ]
+  },
+  {
+    "id": "sfincs2014_fig3_high_collisionality_limit",
+    "status": "implemented",
+    "kind": "literature_reproduction",
+    "literature": [
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "scripts": [
+      "examples/publication_figures/generate_sfincs_paper_figs.py --plot-only"
+    ],
+    "artifacts": [
+      "docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png"
+    ],
+    "claims": [
+      "High-collisionality transport-matrix trends should agree with analytic asymptotic limits"
+    ]
+  },
+  {
+    "id": "sfincs2014_er_sweep_tokamak_stellarator",
+    "status": "planned",
+    "kind": "literature_validation",
+    "literature": [
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "scripts": [],
+    "artifacts": [],
+    "claims": [
+      "Trajectory models should agree at small Er/Eres and separate at larger normalized electric field",
+      "Bootstrap-current sign-change behavior should appear in the full-trajectory branch where reported in the paper"
+    ]
+  },
+  {
+    "id": "w7x_ambipolar_er_validation",
+    "status": "planned",
+    "kind": "profile_validation",
+    "literature": [
+      "https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf",
+      "https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2018er.pdf",
+      "https://www.nature.com/articles/s41586-021-03687-w"
+    ],
+    "scripts": [],
+    "artifacts": [],
+    "claims": [
+      "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature"
+    ]
+  },
+  {
+    "id": "monkes_monoenergetic_overlap",
+    "status": "planned",
+    "kind": "cross_code_validation",
+    "literature": [
+      "https://arxiv.org/abs/2312.12248",
+      "https://arxiv.org/abs/1908.11615"
+    ],
+    "scripts": [],
+    "artifacts": [],
+    "claims": [
+      "Monoenergetic coefficients and low-collisionality trends should overlap with MONKES on shared model subsets",
+      "KNOSOS-style low-collisionality ordering should be respected when exact model overlap is not available"
+    ]
+  },
+  {
+    "id": "adjoint_sensitivity_gradient_checks",
+    "status": "planned",
+    "kind": "autodiff_validation",
+    "literature": [
+      "https://arxiv.org/abs/1904.06430",
+      "https://meetings-archive.aps.org/dpp/2018/bp11/36/"
+    ],
+    "scripts": [],
+    "artifacts": [],
+    "claims": [
+      "Directional derivatives from autodiff should agree with finite differences and implicit-diff checks",
+      "Geometry-sensitivity maps should be stable enough for optimization-oriented workflows"
+    ]
+  }
+]
