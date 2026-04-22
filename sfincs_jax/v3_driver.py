@@ -11217,6 +11217,194 @@ def _build_rhsmode1_zeta_line_preconditioner(
     return _apply_reduced
 
 
+def _build_rhs1_preconditioner_from_kind(
+    *,
+    op: V3FullSystemOperator,
+    rhs1_precond_kind: str | None,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    preconditioner_species: int = 1,
+    preconditioner_x: int = 1,
+    preconditioner_xi: int = 1,
+    rhs1_xblock_tz_lmax: int | None = None,
+    dd_block_theta: int = 8,
+    dd_overlap_theta: int = 1,
+    dd_block_zeta: int = 8,
+    dd_overlap_zeta: int = 1,
+    adi_sweeps: int = 2,
+    emit: Callable[[int, str], None] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    if rhs1_precond_kind == "theta_line":
+        return _build_rhsmode1_theta_line_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "theta_dd":
+        if dd_overlap_theta > 0:
+            return _build_rhsmode1_theta_schwarz_preconditioner(
+                op=op,
+                block=dd_block_theta,
+                overlap=dd_overlap_theta,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            )
+        return _build_rhsmode1_theta_dd_preconditioner(
+            op=op,
+            block=dd_block_theta,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+    if rhs1_precond_kind == "theta_schwarz":
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: theta_schwarz "
+                f"(block={int(dd_block_theta)}, overlap={int(dd_overlap_theta)})",
+            )
+        return _build_rhsmode1_theta_schwarz_preconditioner(
+            op=op,
+            block=dd_block_theta,
+            overlap=dd_overlap_theta,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+    if rhs1_precond_kind == "theta_line_xdiag":
+        precond = _build_rhsmode1_theta_line_xdiag_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+        if op.fblock.fp is not None or op.fblock.pas is not None:
+            collision_precond = _build_rhsmode1_collision_preconditioner(
+                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+            )
+            precond = _compose_preconditioners(collision_precond, precond)
+        return precond
+    if rhs1_precond_kind == "point_xdiag":
+        return _build_rhsmode1_block_preconditioner_xdiag(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            preconditioner_xi=preconditioner_xi,
+        )
+    if rhs1_precond_kind == "species_block":
+        return _build_rhsmode1_species_block_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "sxblock":
+        return _build_rhsmode1_species_xblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "sxblock_tz":
+        return _build_rhsmode1_sxblock_tz_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "xblock_tz":
+        return _build_rhsmode1_xblock_tz_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "xblock_tz_lmax":
+        return _build_rhsmode1_xblock_tz_lmax_preconditioner(
+            op=op,
+            lmax=int(rhs1_xblock_tz_lmax or 0),
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+    if rhs1_precond_kind == "theta_zeta":
+        return _build_rhsmode1_theta_zeta_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "xmg":
+        return _build_rhsmode1_xmg_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "pas_lite":
+        return _build_rhsmode1_pas_lite_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "pas_hybrid":
+        return _build_rhsmode1_pas_hybrid_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "pas_schur":
+        return _build_rhsmode1_pas_schur_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "pas_tz":
+        return _build_rhsmode1_pas_tz_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "pas_tokamak_theta":
+        return _build_rhsmode1_pas_tokamak_theta_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "pas_ilu":
+        return _build_rhsmode1_pas_xblock_ilu_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "zeta_line":
+        return _build_rhsmode1_zeta_line_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "zeta_dd":
+        if dd_overlap_zeta > 0:
+            return _build_rhsmode1_zeta_schwarz_preconditioner(
+                op=op,
+                block=dd_block_zeta,
+                overlap=dd_overlap_zeta,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            )
+        return _build_rhsmode1_zeta_dd_preconditioner(
+            op=op,
+            block=dd_block_zeta,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+    if rhs1_precond_kind == "zeta_schwarz":
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: zeta_schwarz "
+                f"(block={int(dd_block_zeta)}, overlap={int(dd_overlap_zeta)})",
+            )
+        return _build_rhsmode1_zeta_schwarz_preconditioner(
+            op=op,
+            block=dd_block_zeta,
+            overlap=dd_overlap_zeta,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+    if rhs1_precond_kind == "schur":
+        return _build_rhsmode1_schur_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "collision":
+        return _build_rhsmode1_collision_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "adi":
+        pre_theta = _build_rhsmode1_theta_line_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+        pre_zeta = _build_rhsmode1_zeta_line_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+        def preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+            out = v
+            for _ in range(max(1, int(adi_sweeps))):
+                out = pre_zeta(pre_theta(out))
+            return out
+
+        return preconditioner
+    return _build_rhsmode1_block_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        preconditioner_species=preconditioner_species,
+        preconditioner_x=preconditioner_x,
+        preconditioner_xi=preconditioner_xi,
+    )
+
+
 def solve_v3_full_system_linear_gmres(
     *,
     nml: Namelist,
@@ -13683,192 +13871,34 @@ def solve_v3_full_system_linear_gmres(
                         f"({rhs1_precond_kind}); this stage can take a while for large systems.",
                     )
                     progress_notes_emitted["precond"] = True
-            if rhs1_precond_kind == "theta_line":
-                precond = _build_rhsmode1_theta_line_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "theta_dd":
-                dd_block = _parse_rhs1_dd_block("theta")
-                dd_overlap = _parse_rhs1_dd_overlap("theta", default=0)
-                if dd_overlap > 0:
-                    precond = _build_rhsmode1_theta_schwarz_preconditioner(
-                        op=op,
-                        block=dd_block,
-                        overlap=dd_overlap,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
-                    )
-                else:
-                    precond = _build_rhsmode1_theta_dd_preconditioner(
-                        op=op, block=dd_block, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-            elif rhs1_precond_kind == "theta_schwarz":
-                dd_block = _parse_rhs1_dd_block("theta")
-                dd_overlap = _parse_rhs1_dd_overlap("theta", default=1)
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: theta_schwarz "
-                        f"(block={int(dd_block)}, overlap={int(dd_overlap)})",
-                    )
-                precond = _build_rhsmode1_theta_schwarz_preconditioner(
-                    op=op,
-                    block=dd_block,
-                    overlap=dd_overlap,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-            elif rhs1_precond_kind == "theta_line_xdiag":
-                precond = _build_rhsmode1_theta_line_xdiag_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-                if op.fblock.fp is not None or op.fblock.pas is not None:
-                    collision_precond = _build_rhsmode1_collision_preconditioner(
-                        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-                    precond = _compose_preconditioners(collision_precond, precond)
-            elif rhs1_precond_kind == "point_xdiag":
-                precond = _build_rhsmode1_block_preconditioner_xdiag(
-                    op=op,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                    preconditioner_xi=preconditioner_xi,
-                )
-            elif rhs1_precond_kind == "species_block":
-                precond = _build_rhsmode1_species_block_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "sxblock":
-                precond = _build_rhsmode1_species_xblock_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "sxblock_tz":
-                precond = _build_rhsmode1_sxblock_tz_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "xblock_tz":
-                precond = _build_rhsmode1_xblock_tz_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "xblock_tz_lmax":
-                lmax_use = rhs1_xblock_tz_lmax or 0
-                if lmax_use <= 0:
-                    lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "").strip()
-                    try:
-                        lmax_use = int(lmax_env) if lmax_env else 0
-                    except ValueError:
-                        lmax_use = 0
-                precond = _build_rhsmode1_xblock_tz_lmax_preconditioner(
-                    op=op,
-                    lmax=int(lmax_use),
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-            elif rhs1_precond_kind == "theta_zeta":
-                precond = _build_rhsmode1_theta_zeta_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "xmg":
-                precond = _build_rhsmode1_xmg_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "pas_lite":
-                precond = _build_rhsmode1_pas_lite_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "pas_hybrid":
-                precond = _build_rhsmode1_pas_hybrid_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "pas_schur":
-                precond = _build_rhsmode1_pas_schur_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "pas_tz":
-                precond = _build_rhsmode1_pas_tz_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "pas_tokamak_theta":
-                precond = _build_rhsmode1_pas_tokamak_theta_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "pas_ilu":
-                precond = _build_rhsmode1_pas_xblock_ilu_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "zeta_line":
-                precond = _build_rhsmode1_zeta_line_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "zeta_dd":
-                dd_block = _parse_rhs1_dd_block("zeta")
-                dd_overlap = _parse_rhs1_dd_overlap("zeta", default=0)
-                if dd_overlap > 0:
-                    precond = _build_rhsmode1_zeta_schwarz_preconditioner(
-                        op=op,
-                        block=dd_block,
-                        overlap=dd_overlap,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
-                    )
-                else:
-                    precond = _build_rhsmode1_zeta_dd_preconditioner(
-                        op=op, block=dd_block, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-            elif rhs1_precond_kind == "zeta_schwarz":
-                dd_block = _parse_rhs1_dd_block("zeta")
-                dd_overlap = _parse_rhs1_dd_overlap("zeta", default=1)
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: zeta_schwarz "
-                        f"(block={int(dd_block)}, overlap={int(dd_overlap)})",
-                    )
-                precond = _build_rhsmode1_zeta_schwarz_preconditioner(
-                    op=op,
-                    block=dd_block,
-                    overlap=dd_overlap,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-            elif rhs1_precond_kind == "schur":
-                precond = _build_rhsmode1_schur_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "collision":
-                precond = _build_rhsmode1_collision_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif rhs1_precond_kind == "adi":
-                pre_theta = _build_rhsmode1_theta_line_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-                pre_zeta = _build_rhsmode1_zeta_line_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-
-                sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
+            sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
+            try:
+                sweeps = int(sweeps_env) if sweeps_env else 2
+            except ValueError:
+                sweeps = 2
+            lmax_use = rhs1_xblock_tz_lmax or 0
+            if rhs1_precond_kind == "xblock_tz_lmax" and lmax_use <= 0:
+                lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "").strip()
                 try:
-                    sweeps = int(sweeps_env) if sweeps_env else 2
+                    lmax_use = int(lmax_env) if lmax_env else 0
                 except ValueError:
-                    sweeps = 2
-                sweeps = max(1, sweeps)
-
-                def preconditioner_reduced(v: jnp.ndarray) -> jnp.ndarray:
-                    out = v
-                    for _ in range(sweeps):
-                        out = pre_zeta(pre_theta(out))
-                    return out
-                precond = preconditioner_reduced
-            else:
-                precond = _build_rhsmode1_block_preconditioner(
-                    op=op,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                    preconditioner_species=preconditioner_species,
-                    preconditioner_x=preconditioner_x,
-                    preconditioner_xi=preconditioner_xi,
-                )
+                    lmax_use = 0
+            precond = _build_rhs1_preconditioner_from_kind(
+                op=op,
+                rhs1_precond_kind=rhs1_precond_kind,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+                preconditioner_species=preconditioner_species,
+                preconditioner_x=preconditioner_x,
+                preconditioner_xi=preconditioner_xi,
+                rhs1_xblock_tz_lmax=lmax_use,
+                dd_block_theta=_parse_rhs1_dd_block("theta"),
+                dd_overlap_theta=_parse_rhs1_dd_overlap("theta", default=1 if rhs1_precond_kind == "theta_schwarz" else 0),
+                dd_block_zeta=_parse_rhs1_dd_block("zeta"),
+                dd_overlap_zeta=_parse_rhs1_dd_overlap("zeta", default=1 if rhs1_precond_kind == "zeta_schwarz" else 0),
+                adi_sweeps=max(1, sweeps),
+                emit=emit,
+            )
             precond = _wrap_pas_precond(precond) if use_pas_projection else precond
             _mark("rhs1_precond_build_done")
             return precond
@@ -17461,97 +17491,32 @@ def solve_v3_full_system_linear_gmres(
                             f"({rhs1_precond_kind}); this stage can take a while for large systems.",
                         )
                         progress_notes_emitted["precond"] = True
-                if rhs1_precond_kind == "theta_line":
-                    precond = _build_rhsmode1_theta_line_preconditioner(op=op)
-                elif rhs1_precond_kind == "theta_dd":
-                    dd_block = _parse_rhs1_dd_block("theta")
-                    dd_overlap = _parse_rhs1_dd_overlap("theta", default=0)
-                    if dd_overlap > 0:
-                        precond = _build_rhsmode1_theta_schwarz_preconditioner(
-                            op=op, block=dd_block, overlap=dd_overlap
-                        )
-                    else:
-                        precond = _build_rhsmode1_theta_dd_preconditioner(op=op, block=dd_block)
-                elif rhs1_precond_kind == "theta_schwarz":
-                    dd_block = _parse_rhs1_dd_block("theta")
-                    dd_overlap = _parse_rhs1_dd_overlap("theta", default=1)
-                    precond = _build_rhsmode1_theta_schwarz_preconditioner(
-                        op=op, block=dd_block, overlap=dd_overlap
-                    )
-                elif rhs1_precond_kind == "theta_line_xdiag":
-                    precond = _build_rhsmode1_theta_line_xdiag_preconditioner(op=op)
-                    if op.fblock.fp is not None or op.fblock.pas is not None:
-                        collision_precond = _build_rhsmode1_collision_preconditioner(op=op)
-                        precond = _compose_preconditioners(collision_precond, precond)
-                elif rhs1_precond_kind == "species_block":
-                    precond = _build_rhsmode1_species_block_preconditioner(op=op)
-                elif rhs1_precond_kind == "sxblock":
-                    precond = _build_rhsmode1_species_xblock_preconditioner(op=op)
-                elif rhs1_precond_kind == "sxblock_tz":
-                    precond = _build_rhsmode1_sxblock_tz_preconditioner(op=op)
-                elif rhs1_precond_kind == "xblock_tz":
-                    precond = _build_rhsmode1_xblock_tz_preconditioner(op=op)
-                elif rhs1_precond_kind == "xmg":
-                    precond = _build_rhsmode1_xmg_preconditioner(op=op)
-                elif rhs1_precond_kind == "pas_lite":
-                    precond = _build_rhsmode1_pas_lite_preconditioner(op=op)
-                elif rhs1_precond_kind == "pas_hybrid":
-                    precond = _build_rhsmode1_pas_hybrid_preconditioner(op=op)
-                elif rhs1_precond_kind == "pas_schur":
-                    precond = _build_rhsmode1_pas_schur_preconditioner(op=op)
-                elif rhs1_precond_kind == "pas_tokamak_theta":
-                    precond = _build_rhsmode1_pas_tokamak_theta_preconditioner(op=op)
-                elif rhs1_precond_kind == "pas_tz":
-                    precond = _build_rhsmode1_pas_tz_preconditioner(op=op)
-                elif rhs1_precond_kind == "pas_ilu":
-                    precond = _build_rhsmode1_pas_xblock_ilu_preconditioner(op=op)
-                elif rhs1_precond_kind == "theta_zeta":
-                    precond = _build_rhsmode1_theta_zeta_preconditioner(op=op)
-                elif rhs1_precond_kind == "zeta_line":
-                    precond = _build_rhsmode1_zeta_line_preconditioner(op=op)
-                elif rhs1_precond_kind == "zeta_dd":
-                    dd_block = _parse_rhs1_dd_block("zeta")
-                    dd_overlap = _parse_rhs1_dd_overlap("zeta", default=0)
-                    if dd_overlap > 0:
-                        precond = _build_rhsmode1_zeta_schwarz_preconditioner(
-                            op=op, block=dd_block, overlap=dd_overlap
-                        )
-                    else:
-                        precond = _build_rhsmode1_zeta_dd_preconditioner(op=op, block=dd_block)
-                elif rhs1_precond_kind == "zeta_schwarz":
-                    dd_block = _parse_rhs1_dd_block("zeta")
-                    dd_overlap = _parse_rhs1_dd_overlap("zeta", default=1)
-                    precond = _build_rhsmode1_zeta_schwarz_preconditioner(
-                        op=op, block=dd_block, overlap=dd_overlap
-                    )
-                elif rhs1_precond_kind == "schur":
-                    precond = _build_rhsmode1_schur_preconditioner(op=op)
-                elif rhs1_precond_kind == "collision":
-                    precond = _build_rhsmode1_collision_preconditioner(op=op)
-                elif rhs1_precond_kind == "adi":
-                    pre_theta = _build_rhsmode1_theta_line_preconditioner(op=op)
-                    pre_zeta = _build_rhsmode1_zeta_line_preconditioner(op=op)
-
-                    sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
+                sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
+                try:
+                    sweeps = int(sweeps_env) if sweeps_env else 2
+                except ValueError:
+                    sweeps = 2
+                lmax_use = rhs1_xblock_tz_lmax or 0
+                if rhs1_precond_kind == "xblock_tz_lmax" and lmax_use <= 0:
+                    lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "").strip()
                     try:
-                        sweeps = int(sweeps_env) if sweeps_env else 2
+                        lmax_use = int(lmax_env) if lmax_env else 0
                     except ValueError:
-                        sweeps = 2
-                    sweeps = max(1, sweeps)
-
-                    def preconditioner_full(v: jnp.ndarray) -> jnp.ndarray:
-                        out = v
-                        for _ in range(sweeps):
-                            out = pre_zeta(pre_theta(out))
-                        return out
-                    precond = preconditioner_full
-                else:
-                    precond = _build_rhsmode1_block_preconditioner(
-                        op=op,
-                        preconditioner_species=preconditioner_species,
-                        preconditioner_x=preconditioner_x,
-                        preconditioner_xi=preconditioner_xi,
-                    )
+                        lmax_use = 0
+                precond = _build_rhs1_preconditioner_from_kind(
+                    op=op,
+                    rhs1_precond_kind=rhs1_precond_kind,
+                    preconditioner_species=preconditioner_species,
+                    preconditioner_x=preconditioner_x,
+                    preconditioner_xi=preconditioner_xi,
+                    rhs1_xblock_tz_lmax=lmax_use,
+                    dd_block_theta=_parse_rhs1_dd_block("theta"),
+                    dd_overlap_theta=_parse_rhs1_dd_overlap("theta", default=1 if rhs1_precond_kind == "theta_schwarz" else 0),
+                    dd_block_zeta=_parse_rhs1_dd_block("zeta"),
+                    dd_overlap_zeta=_parse_rhs1_dd_overlap("zeta", default=1 if rhs1_precond_kind == "zeta_schwarz" else 0),
+                    adi_sweeps=max(1, sweeps),
+                    emit=emit,
+                )
                 _mark("rhs1_precond_build_done")
                 return precond
 

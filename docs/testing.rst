@@ -191,6 +191,17 @@ holding total package coverage at about ``55%``. That result is still useful bec
 it tightens the remaining driver decision surface without opening a new expensive
 solve campaign, and it confirms again that the dominant denominator is the deep
 execution body of ``v3_driver.py`` rather than the outer policy layer.
+The latest follow-up then factored the RHSMode=1 preconditioner dispatch used by
+the reduced and full solve paths into a single helper and added bounded tests on
+that shared dispatch layer. Those tests cover DD-vs-Schwarz routing, the
+``point_xdiag`` and ``xblock_tz_lmax`` branches, composition of the
+``theta_line_xdiag`` collision wrapper, and the default block-preconditioner
+fallback. This matters because it closed a real consistency gap: the reduced path
+already supported ``point_xdiag`` and ``xblock_tz_lmax``, while the full-path copy
+of the dispatch ladder had drifted away from it. After this refactor the audited
+tree moved to ``596 tests collected`` and ``596 passed``, package coverage stayed
+at about ``55%``, and ``v3_driver.py`` itself moved from about ``37%`` to about
+``38%``.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
