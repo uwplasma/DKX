@@ -61,6 +61,7 @@ from .rhs1_preconditioner_dispatch import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
+from .rhs1_handoff import rhs1_accept_candidate
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .rhs1_strong_policy import requested_rhs1_strong_preconditioner_kind
 from .rhs1_strong_control import rhs1_resolved_strong_preconditioner_control
@@ -13136,6 +13137,19 @@ def solve_v3_full_system_linear_gmres(
     ksp_solver_kind = "gmres"
     residual_vec: jnp.ndarray | None = None
 
+    def _apply_rhs1_handoff(state) -> None:
+        nonlocal ksp_matvec, ksp_b, ksp_precond, ksp_x0, ksp_restart, ksp_maxiter, ksp_precond_side, ksp_solver_kind
+        if state is None:
+            return
+        ksp_matvec = state.matvec_fn
+        ksp_b = state.b_vec
+        ksp_precond = state.precond_fn
+        ksp_x0 = state.x0_vec
+        ksp_restart = state.restart
+        ksp_maxiter = state.maxiter
+        ksp_precond_side = state.precond_side
+        ksp_solver_kind = state.solver_kind
+
     def _emit_ksp_history(
         *,
         matvec_fn,
@@ -14338,16 +14352,21 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val="incremental",
                     precond_side=gmres_precond_side,
                 )
-                if float(res_full.residual_norm) < float(res_reduced.residual_norm):
-                    res_reduced = res_full
-                    ksp_matvec = mv_reduced
-                    ksp_b = rhs_reduced
-                    ksp_precond = preconditioner_reduced
-                    ksp_x0 = res_reduced.x
-                    ksp_restart = restart
-                    ksp_maxiter = maxiter
-                    ksp_precond_side = gmres_precond_side
-                    ksp_solver_kind = _solver_kind("incremental")[0]
+                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                    current_result=res_reduced,
+                    candidate_result=res_full,
+                    current_residual_vec=residual_vec,
+                    candidate_residual_vec=residual_vec,
+                    matvec_fn=mv_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=preconditioner_reduced,
+                    x0_vec=res_full.x,
+                    restart=restart,
+                    maxiter=maxiter,
+                    precond_side=gmres_precond_side,
+                    solver_kind=_solver_kind("incremental")[0],
+                )
+                _apply_rhs1_handoff(handoff_state)
         residual_norm_check = float(res_reduced.residual_norm)
         residual_norm_true = residual_norm_check
         try:
@@ -14544,16 +14563,21 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val=stage2_method,
                 precond_side=gmres_precond_side,
             )
-            if float(res2.residual_norm) < float(res_reduced.residual_norm):
-                res_reduced = res2
-                ksp_matvec = mv_reduced
-                ksp_b = rhs_reduced
-                ksp_precond = preconditioner_reduced
-                ksp_x0 = res_reduced.x
-                ksp_restart = stage2_restart
-                ksp_maxiter = stage2_maxiter
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind(stage2_method)[0]
+            res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                current_result=res_reduced,
+                candidate_result=res2,
+                current_residual_vec=residual_vec,
+                candidate_residual_vec=residual_vec,
+                matvec_fn=mv_reduced,
+                b_vec=rhs_reduced,
+                precond_fn=preconditioner_reduced,
+                x0_vec=res2.x,
+                restart=stage2_restart,
+                maxiter=stage2_maxiter,
+                precond_side=gmres_precond_side,
+                solver_kind=_solver_kind(stage2_method)[0],
+            )
+            _apply_rhs1_handoff(handoff_state)
         pas_fast_accept = _rhsmode1_pas_fast_accept(
             op=op,
             active_size=int(active_size),
@@ -14641,18 +14665,25 @@ def solve_v3_full_system_linear_gmres(
                         f"reason={smoother.stop_reason}, "
                         f"residual={float(res_reduced.residual_norm):.3e}->{float(smoother.residual_norm):.3e}",
                     )
-                res_reduced = GMRESSolveResult(
+                smoother_result = GMRESSolveResult(
                     x=smoother.x,
                     residual_norm=jnp.asarray(smoother.residual_norm, dtype=jnp.float64),
                 )
-                ksp_matvec = mv_reduced
-                ksp_b = rhs_reduced
-                ksp_precond = preconditioner_reduced
-                ksp_x0 = res_reduced.x
-                ksp_restart = restart
-                ksp_maxiter = maxiter
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind("incremental")[0]
+                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                    current_result=res_reduced,
+                    candidate_result=smoother_result,
+                    current_residual_vec=residual_vec,
+                    candidate_residual_vec=residual_vec,
+                    matvec_fn=mv_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=preconditioner_reduced,
+                    x0_vec=smoother_result.x,
+                    restart=restart,
+                    maxiter=maxiter,
+                    precond_side=gmres_precond_side,
+                    solver_kind=_solver_kind("incremental")[0],
+                )
+                _apply_rhs1_handoff(handoff_state)
         if fp_force_strong:
             strong_precond_trigger = True
         if (
@@ -14686,16 +14717,21 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val="incremental",
                     precond_side=gmres_precond_side,
                 )
-                if float(res_collision.residual_norm) < float(res_reduced.residual_norm):
-                    res_reduced = res_collision
-                    ksp_matvec = mv_reduced
-                    ksp_b = rhs_reduced
-                    ksp_precond = bicgstab_preconditioner_reduced
-                    ksp_x0 = res_reduced.x
-                    ksp_restart = restart
-                    ksp_maxiter = maxiter
-                    ksp_precond_side = gmres_precond_side
-                    ksp_solver_kind = _solver_kind("incremental")[0]
+                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                    current_result=res_reduced,
+                    candidate_result=res_collision,
+                    current_residual_vec=residual_vec,
+                    candidate_residual_vec=residual_vec,
+                    matvec_fn=mv_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=bicgstab_preconditioner_reduced,
+                    x0_vec=res_collision.x,
+                    restart=restart,
+                    maxiter=maxiter,
+                    precond_side=gmres_precond_side,
+                    solver_kind=_solver_kind("incremental")[0],
+                )
+                _apply_rhs1_handoff(handoff_state)
         large_cpu_sparse_rescue_active = _rhsmode1_large_cpu_sparse_rescue_allowed(
             op=op,
             solve_method_kind=solve_method_kind,
@@ -15061,16 +15097,21 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val="incremental",
                 precond_side=gmres_precond_side,
             )
-            if float(res_strong.residual_norm) < float(res_reduced.residual_norm):
-                res_reduced = res_strong
-                ksp_matvec = mv_reduced
-                ksp_b = rhs_reduced
-                ksp_precond = strong_preconditioner_reduced
-                ksp_x0 = res_reduced.x
-                ksp_restart = strong_restart
-                ksp_maxiter = strong_maxiter
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind("incremental")[0]
+            res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                current_result=res_reduced,
+                candidate_result=res_strong,
+                current_residual_vec=residual_vec,
+                candidate_residual_vec=residual_vec,
+                matvec_fn=mv_reduced,
+                b_vec=rhs_reduced,
+                precond_fn=strong_preconditioner_reduced,
+                x0_vec=res_strong.x,
+                restart=strong_restart,
+                maxiter=strong_maxiter,
+                precond_side=gmres_precond_side,
+                solver_kind=_solver_kind("incremental")[0],
+            )
+            _apply_rhs1_handoff(handoff_state)
 
         # Only treat the probe as a "dense shortcut" when the dense branch is
         # actually allowed (probe_shortcut). Otherwise we still want to try
@@ -17319,17 +17360,21 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val=stage2_method,
                 precond_side=gmres_precond_side,
             )
-            if float(res2.residual_norm) < float(result.residual_norm):
-                result = res2
-                residual_vec = residual_vec2
-                ksp_matvec = mv
-                ksp_b = rhs
-                ksp_precond = preconditioner_full
-                ksp_x0 = result.x
-                ksp_restart = stage2_restart
-                ksp_maxiter = stage2_maxiter
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind(stage2_method)[0]
+            result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                current_result=result,
+                candidate_result=res2,
+                current_residual_vec=residual_vec,
+                candidate_residual_vec=residual_vec2,
+                matvec_fn=mv,
+                b_vec=rhs,
+                precond_fn=preconditioner_full,
+                x0_vec=res2.x,
+                restart=stage2_restart,
+                maxiter=stage2_maxiter,
+                precond_side=gmres_precond_side,
+                solver_kind=_solver_kind(stage2_method)[0],
+            )
+            _apply_rhs1_handoff(handoff_state)
         # Krylov solvers with left preconditioning report the preconditioned residual
         # norm. Recompute the true residual before deciding whether to escalate to a
         # stronger preconditioner or dense fallback so those decisions track the
@@ -17395,19 +17440,25 @@ def solve_v3_full_system_linear_gmres(
                         f"reason={smoother.stop_reason}, "
                         f"residual={float(result.residual_norm):.3e}->{float(smoother.residual_norm):.3e}",
                     )
-                result = GMRESSolveResult(
+                smoother_result = GMRESSolveResult(
                     x=smoother.x,
                     residual_norm=jnp.asarray(smoother.residual_norm, dtype=jnp.float64),
                 )
-                residual_vec = rhs - mv(result.x)
-                ksp_matvec = mv
-                ksp_b = rhs
-                ksp_precond = preconditioner_full
-                ksp_x0 = result.x
-                ksp_restart = restart
-                ksp_maxiter = maxiter
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind("incremental")[0]
+                result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                    current_result=result,
+                    candidate_result=smoother_result,
+                    current_residual_vec=residual_vec,
+                    candidate_residual_vec=rhs - mv(smoother_result.x),
+                    matvec_fn=mv,
+                    b_vec=rhs,
+                    precond_fn=preconditioner_full,
+                    x0_vec=smoother_result.x,
+                    restart=restart,
+                    maxiter=maxiter,
+                    precond_side=gmres_precond_side,
+                    solver_kind=_solver_kind("incremental")[0],
+                )
+                _apply_rhs1_handoff(handoff_state)
         if (
             float(result.residual_norm) > target
             and int(op.rhs_mode) == 1
@@ -17437,17 +17488,21 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val="incremental",
                     precond_side=gmres_precond_side,
                 )
-                if float(res_collision.residual_norm) < float(result.residual_norm):
-                    result = res_collision
-                    residual_vec = residual_vec_collision
-                    ksp_matvec = mv
-                    ksp_b = rhs
-                    ksp_precond = bicgstab_preconditioner_full
-                    ksp_x0 = result.x
-                    ksp_restart = restart
-                    ksp_maxiter = maxiter
-                    ksp_precond_side = gmres_precond_side
-                    ksp_solver_kind = _solver_kind("incremental")[0]
+                result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                    current_result=result,
+                    candidate_result=res_collision,
+                    current_residual_vec=residual_vec,
+                    candidate_residual_vec=residual_vec_collision,
+                    matvec_fn=mv,
+                    b_vec=rhs,
+                    precond_fn=bicgstab_preconditioner_full,
+                    x0_vec=res_collision.x,
+                    restart=restart,
+                    maxiter=maxiter,
+                    precond_side=gmres_precond_side,
+                    solver_kind=_solver_kind("incremental")[0],
+                )
+                _apply_rhs1_handoff(handoff_state)
         strong_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "").strip().lower()
         cs0_sparse_first = _rhsmode1_constraint0_sparse_first(
             op=op,
@@ -17615,17 +17670,21 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val="incremental",
                 precond_side=gmres_precond_side,
             )
-            if float(res_strong.residual_norm) < float(result.residual_norm):
-                result = res_strong
-                residual_vec = residual_vec_strong
-                ksp_matvec = mv
-                ksp_b = rhs
-                ksp_precond = strong_preconditioner_full
-                ksp_x0 = result.x
-                ksp_restart = strong_restart
-                ksp_maxiter = strong_maxiter
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind("incremental")[0]
+            result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                current_result=result,
+                candidate_result=res_strong,
+                current_residual_vec=residual_vec,
+                candidate_residual_vec=residual_vec_strong,
+                matvec_fn=mv,
+                b_vec=rhs,
+                precond_fn=strong_preconditioner_full,
+                x0_vec=res_strong.x,
+                restart=strong_restart,
+                maxiter=strong_maxiter,
+                precond_side=gmres_precond_side,
+                solver_kind=_solver_kind("incremental")[0],
+            )
+            _apply_rhs1_handoff(handoff_state)
         if (
             int(op.rhs_mode) == 1
             and (not bool(op.include_phi1))
@@ -17680,17 +17739,21 @@ def solve_v3_full_system_linear_gmres(
                         solve_method_val="incremental",
                         precond_side=gmres_precond_side,
                     )
-                    if float(res_schur.residual_norm) < float(result.residual_norm):
-                        result = res_schur
-                        residual_vec = residual_vec_schur
-                        ksp_matvec = mv
-                        ksp_b = rhs
-                        ksp_precond = schur_precond
-                        ksp_x0 = result.x
-                        ksp_restart = rescue_restart
-                        ksp_maxiter = rescue_maxiter
-                        ksp_precond_side = gmres_precond_side
-                        ksp_solver_kind = _solver_kind("incremental")[0]
+                    result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                        current_result=result,
+                        candidate_result=res_schur,
+                        current_residual_vec=residual_vec,
+                        candidate_residual_vec=residual_vec_schur,
+                        matvec_fn=mv,
+                        b_vec=rhs,
+                        precond_fn=schur_precond,
+                        x0_vec=res_schur.x,
+                        restart=rescue_restart,
+                        maxiter=rescue_maxiter,
+                        precond_side=gmres_precond_side,
+                        solver_kind=_solver_kind("incremental")[0],
+                    )
+                    _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(1, f"solve_v3_full_system_linear_gmres: PAS Schur rescue failed ({type(exc).__name__}: {exc})")
