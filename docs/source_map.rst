@@ -159,6 +159,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/transport_parallel_pool.py``:
   persistent transport process-pool caching, rebuild, and shutdown behavior used by the
   CPU process-parallel transport lane.
+- ``sfincs_jax/transport_parallel_execution.py``:
+  top-level transport process-parallel execution control, including run/no-run gating,
+  per-worker payload construction, backend-specific execution, retry, and sequential
+  fallback.
 
 ``sfincs_jax/solver.py`` and ``sfincs_jax/implicit_solve.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

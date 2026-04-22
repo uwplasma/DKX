@@ -116,6 +116,11 @@ from .transport_parallel_runtime import (
     run_transport_parallel_gpu_subprocesses as _run_transport_parallel_gpu_subprocesses_impl,
 )
 from .transport_parallel_pool import TransportParallelPoolCache
+from .transport_parallel_execution import (
+    build_transport_parallel_payloads,
+    run_transport_parallel_payloads,
+    should_run_transport_parallel,
+)
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -19441,11 +19446,11 @@ def solve_v3_transport_matrix_linear_gmres(
         if parallel_workers <= 1:
             parallel_backend = "cpu"
 
-    if (
-        (not parallel_child)
-        and parallel_workers > 1
-        and len(which_rhs_values) > 1
-        and (input_namelist is not None)
+    if should_run_transport_parallel(
+        parallel_child=parallel_child,
+        parallel_workers=int(parallel_workers),
+        which_rhs_values=which_rhs_values,
+        input_namelist=input_namelist,
     ):
         if emit is not None:
             emit(
@@ -19455,91 +19460,33 @@ def solve_v3_transport_matrix_linear_gmres(
             )
 
         chunks = partition_transport_rhs(list(which_rhs_values), int(parallel_workers))
-        payloads: list[dict[str, object]] = []
-        phi1_payload = np.asarray(phi1_hat_base) if phi1_hat_base is not None else None
-        for chunk in chunks:
-            payloads.append(
-                {
-                    "input_path": str(input_namelist),
-                    "which_rhs_values": chunk,
-                    "tol": tol,
-                    "atol": atol,
-                    "restart": restart,
-                    "maxiter": maxiter,
-                    "solve_method": solve_method,
-                    "identity_shift": identity_shift,
-                    "collect_transport_output_fields": bool(collect_transport_output_fields),
-                    "phi1_hat_base": phi1_payload,
-                }
-            )
+        payloads = build_transport_parallel_payloads(
+            chunks=chunks,
+            input_namelist=input_namelist,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=solve_method,
+            identity_shift=identity_shift,
+            collect_transport_output_fields=bool(collect_transport_output_fields),
+            phi1_hat_base=phi1_hat_base,
+        )
 
-        results: list[dict[str, object]] = []
-        use_persistent_pool = _transport_parallel_persistent_pool_enabled()
-        if parallel_backend == "gpu":
-            results = _run_transport_parallel_gpu_subprocesses(
-                payloads=payloads,
-                parallel_workers=int(parallel_workers),
-                emit=emit,
-            )
-        elif use_persistent_pool:
-            try:
-                pool = _get_transport_parallel_pool(parallel_workers=int(parallel_workers), emit=emit)
-                futures = [pool.submit(_transport_parallel_worker, payload) for payload in payloads]
-                for fut in concurrent.futures.as_completed(futures):
-                    results.append(fut.result())
-            except concurrent.futures.process.BrokenProcessPool as exc:
-                # Rebuild a stale/broken persistent pool once, then retry.
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_transport_matrix_linear_gmres: persistent transport pool broke "
-                        f"({type(exc).__name__}: {exc}); restarting pool once",
-                    )
-                _shutdown_transport_parallel_pool()
-                try:
-                    pool = _get_transport_parallel_pool(parallel_workers=int(parallel_workers), emit=emit)
-                    futures = [pool.submit(_transport_parallel_worker, payload) for payload in payloads]
-                    for fut in concurrent.futures.as_completed(futures):
-                        results.append(fut.result())
-                except Exception as retry_exc:
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_transport_matrix_linear_gmres: persistent transport pool retry failed "
-                            f"({type(retry_exc).__name__}: {retry_exc}); falling back to sequential whichRHS",
-                        )
-                    results = [_transport_parallel_worker(payload) for payload in payloads]
-            except (PermissionError, NotImplementedError, OSError) as exc:
-                # Some platforms / sandboxed environments cannot create process pools due to
-                # missing semaphore support or restricted sysconf calls. Fall back to a safe,
-                # sequential execution path to preserve correctness.
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_transport_matrix_linear_gmres: process parallelism unavailable "
-                        f"({type(exc).__name__}: {exc}); falling back to sequential whichRHS",
-                    )
-                results = [_transport_parallel_worker(payload) for payload in payloads]
-        else:
-            with _transport_parallel_worker_env(int(parallel_workers)):
-                try:
-                    with concurrent.futures.ProcessPoolExecutor(
-                        **_transport_parallel_pool_executor_kwargs(parallel_workers=int(parallel_workers), emit=emit)
-                    ) as pool:
-                        futures = [pool.submit(_transport_parallel_worker, payload) for payload in payloads]
-                        for fut in concurrent.futures.as_completed(futures):
-                            results.append(fut.result())
-                except (PermissionError, NotImplementedError, OSError) as exc:
-                    # Some platforms / sandboxed environments cannot create process pools due to
-                    # missing semaphore support or restricted sysconf calls. Fall back to a safe,
-                    # sequential execution path to preserve correctness.
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_transport_matrix_linear_gmres: process parallelism unavailable "
-                            f"({type(exc).__name__}: {exc}); falling back to sequential whichRHS",
-                        )
-                    results = [_transport_parallel_worker(payload) for payload in payloads]
+        results = run_transport_parallel_payloads(
+            payloads=payloads,
+            parallel_workers=int(parallel_workers),
+            parallel_backend=parallel_backend,
+            run_gpu_subprocesses=_run_transport_parallel_gpu_subprocesses,
+            persistent_pool_enabled=_transport_parallel_persistent_pool_enabled(),
+            get_pool=_get_transport_parallel_pool,
+            shutdown_pool=_shutdown_transport_parallel_pool,
+            worker=_transport_parallel_worker,
+            worker_env=_transport_parallel_worker_env,
+            executor_class=concurrent.futures.ProcessPoolExecutor,
+            executor_kwargs=_transport_parallel_pool_executor_kwargs,
+            emit=emit,
+        )
 
         state_vectors_np, residual_norms_np, elapsed_s = merge_transport_parallel_results(
             n_rhs=n,
