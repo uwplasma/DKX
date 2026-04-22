@@ -96,13 +96,14 @@ The current audited full-suite command on ``main`` is:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-On the current audited local release tree this command yields ``520 passed`` and
+On the current audited local release tree this command yields ``529 tests collected``,
+``529 passed`` in the stable chunked rerun, and
 roughly ``54%`` package coverage. That number is materially higher than the Linux
 CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
 surface is still the large solver/geometry stack, especially ``v3_driver.py``,
 ``io.py``, ``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. The latest
 low-cost campaign improved the analytic geometry/grid surface materially
-(``geometry.py`` to about ``88%``, ``grids.py`` to about ``46%``, and
+(``geometry.py`` to about ``88%``, ``grids.py`` to about ``82%``, and
 ``vmec_geometry.py`` to about ``97%``) and then added direct coverage for the
 operational cache/policy seams in ``io.py`` and ``v3_driver.py`` plus bounded
 HDF5/export and distributed-Krylov branches in ``io.py`` and ``solver.py``.
@@ -110,15 +111,19 @@ Those later heavy-module tests raised ``io.py`` from about ``65%`` to ``67%`` an
 ``solver.py`` from about ``57%`` to ``67%`` without opening another long solver-wide
 campaign. The stencil-scheme campaign then raised ``grids.py`` from about
 ``46%`` to ``79%`` by exercising the unused finite-difference branches directly.
-The latest bounded sparse-helper campaign then pushed the huge driver module itself
-from about ``36%`` to ``37%`` by covering real sparse-direct refinement and
-host-factor policy paths with tiny synthetic operators. These tests were chosen from
-the same identities used in the SFINCS technical documentation and the 2014 SFINCS paper:
-periodic/spectral differentiation exactness, Boozer-coordinate field-component
-relations, VMEC half-mesh finite-difference conventions, and deterministic cache /
-solver-policy behavior on bounded inputs. Reaching a research-grade coverage target
-therefore still requires more focused tests on the heavy solver modules rather than
-more trivial helper tests.
+The latest literature-anchored numeric pass then pushed ``grids.py`` further to
+about ``82%`` by checking the exact polynomial order conditions of the 3-point and
+5-point SFINCS finite-difference formulas and by covering the remaining one-sided
+five-point guard branches. In parallel, the bounded sparse-helper campaign covered
+the explicit sparse-factor builder in ``v3_driver.py``, including environment parsing,
+matrix-free operator assembly hooks, and host sparse factorization handoff on tiny
+synthetic operators. These tests were chosen from the same identities used in the
+SFINCS technical documentation and the 2014 SFINCS paper: periodic/spectral
+differentiation exactness, finite-difference order conditions, Boozer-coordinate
+field-component relations, VMEC half-mesh finite-difference conventions, and
+deterministic cache / solver-policy behavior on bounded inputs. Reaching a
+research-grade coverage target therefore still requires more focused tests on the
+heavy solver modules rather than more trivial helper tests.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be

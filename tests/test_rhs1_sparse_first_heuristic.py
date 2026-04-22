@@ -411,6 +411,13 @@ def test_large_pas_auto_prefers_pas_hybrid_below_threshold(monkeypatch) -> None:
     assert _rhs1_pas_auto_large_base_kind(active_size=5000) == "pas_hybrid"
 
 
+def test_large_pas_auto_handles_invalid_or_lowered_threshold_env(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "bad")
+    assert _rhs1_pas_auto_large_base_kind(active_size=25000) == "pas_lite"
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "30000")
+    assert _rhs1_pas_auto_large_base_kind(active_size=25000) == "pas_hybrid"
+
+
 def test_pas_fast_accept_enabled_for_large_explicit_cpu_pas(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_PAS_FAST_ACCEPT", raising=False)
     monkeypatch.delenv("SFINCS_JAX_PAS_FAST_ACCEPT_MIN", raising=False)
@@ -424,6 +431,34 @@ def test_pas_fast_accept_enabled_for_large_explicit_cpu_pas(monkeypatch) -> None
         active_size=41561,
         residual_norm=6.6e-8,
         target=4.8e-10,
+        use_implicit=False,
+    )
+
+
+def test_pas_fast_accept_env_overrides_and_invalid_parsing(monkeypatch) -> None:
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    op = _op(constraint_scheme=1, has_fp=False)
+    op.fblock.pas = object()
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_FAST_ACCEPT_MIN", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_FAST_ACCEPT_RATIO", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_FAST_ACCEPT_ABS", "bad")
+    assert _rhsmode1_pas_fast_accept(
+        op=op,
+        active_size=41561,
+        residual_norm=6.6e-8,
+        target=4.8e-10,
+        use_implicit=False,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_FAST_ACCEPT_MIN", "1000")
+    monkeypatch.setenv("SFINCS_JAX_PAS_FAST_ACCEPT_RATIO", "1.0")
+    monkeypatch.setenv("SFINCS_JAX_PAS_FAST_ACCEPT_ABS", "1e-6")
+    assert _rhsmode1_pas_fast_accept(
+        op=op,
+        active_size=1000,
+        residual_norm=5.0e-7,
+        target=1.0e-10,
         use_implicit=False,
     )
 
