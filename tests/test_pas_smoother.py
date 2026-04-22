@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 import math
+import numpy as np
 
 import pytest
 
@@ -13,6 +14,8 @@ from sfincs_jax.pas_smoother import (
     advance_pas_smoother,
     append_residual,
     decide_pas_smoother_action,
+    run_adaptive_stationary_smoother,
+    should_stop_adaptive_smoother,
     summarize_residual_history,
 )
 
@@ -176,3 +179,132 @@ def test_pas_smoother_config_validation() -> None:
         PasSmootherConfig(window=0)
     with pytest.raises(ValueError):
         PasSmootherConfig(accept_ratio=1.1, worsen_ratio=1.0)
+
+
+def test_should_stop_adaptive_smoother_handles_empty_nonfinite_target_and_upward() -> None:
+    assert should_stop_adaptive_smoother(
+        (),
+        target=1.0e-8,
+        target_ratio=1.0,
+        abs_floor=0.0,
+        upward_ratio=1.05,
+        patience=2,
+        min_steps=1,
+    ) == (True, "empty")
+
+    assert should_stop_adaptive_smoother(
+        (10.0, float("nan")),
+        target=1.0e-8,
+        target_ratio=1.0,
+        abs_floor=0.0,
+        upward_ratio=1.05,
+        patience=2,
+        min_steps=1,
+    ) == (True, "nonfinite")
+
+    assert should_stop_adaptive_smoother(
+        (10.0, 1.0e-10),
+        target=1.0e-8,
+        target_ratio=1.0,
+        abs_floor=0.0,
+        upward_ratio=1.05,
+        patience=2,
+        min_steps=1,
+    ) == (True, "target")
+
+    assert should_stop_adaptive_smoother(
+        (10.0, 9.0, 9.6, 9.8),
+        target=1.0e-8,
+        target_ratio=1.0,
+        abs_floor=0.0,
+        upward_ratio=1.05,
+        patience=2,
+        min_steps=1,
+    ) == (True, "upward")
+
+    assert should_stop_adaptive_smoother(
+        (10.0, 9.0),
+        target=1.0e-8,
+        target_ratio=1.0,
+        abs_floor=0.0,
+        upward_ratio=1.05,
+        patience=2,
+        min_steps=3,
+    ) == (False, "continue")
+
+
+def test_summarize_residual_history_handles_nonfinite_and_zero_denominator() -> None:
+    trend = summarize_residual_history((0.0, 0.0, float("inf")), window=2)
+    assert trend.has_nonfinite
+    assert trend.latest_ratio == math.inf
+    assert trend.best_before_latest == pytest.approx(0.0)
+    assert trend.best_before_latest_ratio == math.inf
+
+
+def test_decide_pas_smoother_action_zero_residual_and_consecutive_increases() -> None:
+    zero = decide_pas_smoother_action((3.0, 0.0))
+    assert zero.accept
+    assert zero.stop
+    assert zero.reason == "zero-residual"
+
+    worsening = decide_pas_smoother_action(
+        (5.0, 5.2, 5.5),
+        config=PasSmootherConfig(max_consecutive_increases=2, worsen_ratio=10.0, stagnation_ratio=10.0),
+    )
+    assert not worsening.accept
+    assert worsening.stop
+    assert worsening.reason == "consecutive-increases"
+
+
+def test_run_adaptive_stationary_smoother_reaches_target_and_tracks_best_state() -> None:
+    a = jnp.diag(jnp.asarray([4.0, 2.0], dtype=jnp.float64))
+    rhs = jnp.asarray([2.0, 4.0], dtype=jnp.float64)
+
+    def matvec(x):
+        return a @ x
+
+    def smoother(r):
+        return jnp.asarray([r[0] / 4.0, r[1] / 2.0], dtype=jnp.float64)
+
+    result = run_adaptive_stationary_smoother(
+        matvec_fn=matvec,
+        rhs_vec=rhs,
+        x0_vec=jnp.zeros_like(rhs),
+        smoother_fn=smoother,
+        target=1.0e-12,
+        max_steps=2,
+        omega=1.0,
+        upward_ratio=1.05,
+        patience=1,
+        min_steps=1,
+        target_ratio=1.0,
+        abs_floor=0.0,
+    )
+
+    assert result.stop_reason == "target"
+    assert result.improved
+    assert result.steps_completed == 1
+    assert result.best_residual_norm <= 1.0e-12
+    np.testing.assert_allclose(np.asarray(result.x_best), np.asarray([0.5, 2.0]), rtol=0.0, atol=1e-12)
+
+
+def test_run_adaptive_stationary_smoother_stops_on_nonfinite_update() -> None:
+    rhs = jnp.asarray([1.0, -1.0], dtype=jnp.float64)
+
+    result = run_adaptive_stationary_smoother(
+        matvec_fn=lambda x: x,
+        rhs_vec=rhs,
+        x0_vec=jnp.zeros_like(rhs),
+        smoother_fn=lambda r: jnp.asarray([jnp.inf, r[1]], dtype=jnp.float64),
+        target=1.0e-12,
+        max_steps=2,
+        omega=1.0,
+        upward_ratio=1.05,
+        patience=1,
+        min_steps=1,
+        target_ratio=1.0,
+        abs_floor=0.0,
+    )
+
+    assert result.stop_reason == "nonfinite_update"
+    assert result.steps_completed == 0
