@@ -86,6 +86,31 @@ from .rhs1_stage2_policy import (
     rhs1_pas_stage2_skip,
     rhs1_stage2_trigger,
 )
+from .transport_policy import (
+    transport_dense_backend_allowed as _transport_dense_backend_allowed_impl,
+    transport_disable_auto_recycle as _transport_disable_auto_recycle_impl,
+    transport_host_gmres_accepts_preconditioned_residual as _transport_host_gmres_accepts_preconditioned_residual_impl,
+    transport_host_gmres_first_attempt_allowed as _transport_host_gmres_first_attempt_allowed_impl,
+    transport_precondition_side as _transport_precondition_side_impl,
+    transport_sparse_direct_first_attempt_allowed as _transport_sparse_direct_first_attempt_allowed_impl,
+    transport_sparse_direct_needs_float64_retry as _transport_sparse_direct_needs_float64_retry_impl,
+    transport_sparse_direct_rescue_allowed as _transport_sparse_direct_rescue_allowed_impl,
+    transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
+    transport_sparse_direct_use_explicit_helper as _transport_sparse_direct_use_explicit_helper_impl,
+    transport_sparse_factor_dtype as _transport_sparse_factor_dtype_impl,
+    transport_tzfft_accelerator_auto_allowed as _transport_tzfft_accelerator_auto_allowed_impl,
+    transport_tzfft_backend_allowed as _transport_tzfft_backend_allowed_impl,
+)
+from .transport_parallel_policy import (
+    transport_parallel_backend as _transport_parallel_backend_impl,
+    transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
+    transport_parallel_persistent_pool_enabled as _transport_parallel_persistent_pool_enabled_impl,
+    transport_parallel_pool_executor_kwargs as _transport_parallel_pool_executor_kwargs_impl,
+    transport_parallel_pool_key as _transport_parallel_pool_key_impl,
+    transport_parallel_start_method as _transport_parallel_start_method_impl,
+    transport_parallel_visible_gpu_ids as _transport_parallel_visible_gpu_ids_impl,
+    transport_parallel_worker_env as _transport_parallel_worker_env_impl,
+)
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -556,48 +581,15 @@ def _rhsmode1_dense_backend_allowed() -> bool:
 
 
 def _transport_dense_backend_allowed() -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", "").strip().lower()
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    if env in {"0", "false", "no", "off"}:
-        return False
-    return jax.default_backend() == "cpu"
+    return _transport_dense_backend_allowed_impl(backend=jax.default_backend())
 
 
 def _transport_tzfft_backend_allowed() -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_ALLOW_ACCELERATOR", "").strip().lower()
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    if env in {"0", "false", "no", "off"}:
-        return False
-    return jax.default_backend() == "cpu"
+    return _transport_tzfft_backend_allowed_impl(backend=jax.default_backend())
 
 
 def _transport_tzfft_accelerator_auto_allowed(op: V3FullSystemOperator) -> bool:
-    """Allow accelerator tzfft only for bounded collisionless transport branches."""
-    if jax.default_backend() == "cpu":
-        return True
-    n_theta = int(getattr(op, "n_theta", 0) or 0)
-    n_zeta = int(getattr(op, "n_zeta", 0) or 0)
-    total_size = int(getattr(op, "total_size", 0) or 0)
-    if bool(op.include_phi1):
-        return False
-    if int(op.rhs_mode) not in {2, 3}:
-        return False
-    if op.fblock.fp is not None:
-        return False
-    if int(op.n_x) > 2:
-        return False
-    if n_theta <= 0 or n_zeta <= 0 or total_size <= 0:
-        return False
-    if n_theta * n_zeta < 64:
-        return False
-    max_env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", "").strip()
-    try:
-        max_size = int(max_env) if max_env else 5000
-    except ValueError:
-        max_size = 5000
-    return total_size <= max(1, int(max_size))
+    return _transport_tzfft_accelerator_auto_allowed_impl(op, backend=jax.default_backend())
 
 
 def _rhsmode1_host_dense_fallback_allowed() -> bool:
@@ -1553,53 +1545,18 @@ def _transport_sparse_direct_rescue_allowed(
     target: float,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if bool(use_implicit):
-        return False
-    if int(op.rhs_mode) not in {2, 3} or bool(op.include_phi1):
-        return False
-    mono_pas_cpu_priority = (
-        jax.default_backend() == "cpu"
-        and int(op.rhs_mode) == 3
-        and getattr(op.fblock, "fp", None) is None
-        and int(getattr(op, "n_x", 0) or 0) <= 2
+    return _transport_sparse_direct_rescue_allowed_impl(
+        op=op,
+        size=size,
+        residual_norm=residual_norm,
+        target=target,
+        use_implicit=use_implicit,
+        backend=jax.default_backend(),
     )
-    rescue_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX", "").strip()
-    rescue_ratio_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_RATIO", "").strip()
-    try:
-        if rescue_max_env:
-            rescue_max = int(rescue_max_env)
-        elif mono_pas_cpu_priority:
-            rescue_max = 80000
-        else:
-            rescue_max = 40000
-    except ValueError:
-        rescue_max = 40000
-    try:
-        if rescue_ratio_env:
-            rescue_ratio = float(rescue_ratio_env)
-        elif mono_pas_cpu_priority:
-            rescue_ratio = 1.0e4
-        else:
-            rescue_ratio = 1.0e2
-    except ValueError:
-        rescue_ratio = 1.0e2
-    if int(size) > max(1, int(rescue_max)):
-        return False
-    if not np.isfinite(float(residual_norm)):
-        return True
-    if float(target) <= 0.0:
-        return True
-    return float(residual_norm) > float(target) * float(rescue_ratio)
 
 
 def _transport_sparse_direct_rescue_first(*, sparse_direct_rescue: bool) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    return bool(sparse_direct_rescue)
+    return _transport_sparse_direct_rescue_first_impl(sparse_direct_rescue=sparse_direct_rescue)
 
 
 def _transport_sparse_direct_first_attempt_allowed(
@@ -1608,64 +1565,12 @@ def _transport_sparse_direct_first_attempt_allowed(
     size: int,
     use_implicit: bool,
 ) -> bool:
-    if bool(use_implicit):
-        return False
-    if int(op.rhs_mode) not in {2, 3} or bool(op.include_phi1):
-        return False
-    size_int = int(size)
-    if jax.default_backend() == "cpu":
-        if (
-            int(op.rhs_mode) == 3
-            and getattr(op.fblock, "fp", None) is None
-            and int(getattr(op, "n_x", 0) or 0) <= 2
-        ):
-            # Monoenergetic PAS transport solves are branch-sensitive on CPU: sparse LU can
-            # satisfy the true residual while landing on a different source/flow branch than
-            # PETSc GMRES. Keep sparse direct available as a late rescue, but prefer Krylov first.
-            return False
-        first_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST_CPU_MIN", "").strip()
-        first_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST_CPU_MAX", "").strip()
-        try:
-            first_min = int(first_min_env) if first_min_env else 12000
-        except ValueError:
-            first_min = 12000
-        if size_int < max(1, int(first_min)):
-            return False
-        # For explicit CLI/default transport solves, medium-to-large CPU systems are
-        # typically dominated by the GMRES->sparse-rescue ladder rather than by the
-        # sparse factorization itself. Prefer going straight to the host sparse-direct
-        # branch when the system is large enough that the direct path is predictably
-        # the winning explicit solve.
-        allowed = _transport_sparse_direct_rescue_allowed(
-            op=op,
-            size=size_int,
-            residual_norm=float("nan"),
-            target=1.0,
-            use_implicit=use_implicit,
-        )
-        if not allowed:
-            return False
-        if first_max_env:
-            try:
-                return size_int <= max(1, int(first_max_env))
-            except ValueError:
-                return True
-        return True
-    if jax.default_backend() != "cpu":
-        if _transport_tzfft_accelerator_auto_allowed(op):
-            # For bounded collisionless accelerator transport cases we now have a
-            # viable tzfft iterative branch. Let that cheaper path run first and
-            # keep host sparse LU as a rescue instead of paying the host factorization
-            # cost up front on every solve.
-            return False
-        return _transport_sparse_direct_rescue_allowed(
-            op=op,
-            size=size_int,
-            residual_norm=float("nan"),
-            target=1.0,
-            use_implicit=use_implicit,
-        )
-    return False
+    return _transport_sparse_direct_first_attempt_allowed_impl(
+        op=op,
+        size=size,
+        use_implicit=use_implicit,
+        backend=jax.default_backend(),
+    )
 
 
 def _transport_host_gmres_first_attempt_allowed(
@@ -1674,38 +1579,12 @@ def _transport_host_gmres_first_attempt_allowed(
     size: int,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if bool(use_implicit):
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if int(op.rhs_mode) not in {2, 3} or bool(op.include_phi1):
-        return False
-    if getattr(op.fblock, "fp", None) is not None:
-        return False
-    if int(getattr(op, "n_x", 0) or 0) > 2:
-        return False
-    if int(op.rhs_mode) == 3:
-        max_env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST_MAX", "").strip()
-        try:
-            max_size = int(max_env) if max_env else 80000
-        except ValueError:
-            max_size = 80000
-        return int(size) <= max(1, int(max_size))
-    if _transport_sparse_direct_first_attempt_allowed(
+    return _transport_host_gmres_first_attempt_allowed_impl(
         op=op,
         size=size,
         use_implicit=use_implicit,
-    ):
-        return False
-    max_env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST_MAX", "").strip()
-    try:
-        max_size = int(max_env) if max_env else 80000
-    except ValueError:
-        max_size = 80000
-    return int(size) <= max(1, int(max_size))
+        backend=jax.default_backend(),
+    )
 
 
 def _transport_host_gmres_accepts_preconditioned_residual(
@@ -1714,35 +1593,11 @@ def _transport_host_gmres_accepts_preconditioned_residual(
     true_residual_norm: float,
     target_true: float,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_TRUE_RATIO", "").strip()
-    try:
-        if env:
-            max_ratio = float(env)
-        elif (
-            int(op.rhs_mode) == 3
-            and getattr(op.fblock, "fp", None) is None
-            and int(getattr(op, "n_x", 0) or 0) <= 2
-        ):
-            max_ratio = 1.0e4
-        else:
-            max_ratio = 100.0
-    except ValueError:
-        max_ratio = 100.0
-    max_ratio = max(1.0, float(max_ratio))
-    if not np.isfinite(float(true_residual_norm)):
-        return False
-    if float(true_residual_norm) <= float(target_true):
-        return True
-    # Monoenergetic collisionless transport systems can be singular enough that PETSc's
-    # preconditioned KSP residual is the right accept/reject signal, but only while the
-    # corresponding true residual is still within a modest band of the requested target.
-    if (
-        int(op.rhs_mode) == 3
-        and getattr(op.fblock, "fp", None) is None
-        and int(getattr(op, "n_x", 0) or 0) <= 2
-    ):
-        return float(true_residual_norm) <= float(target_true) * float(max_ratio)
-    return float(true_residual_norm) <= float(target_true) * min(10.0, float(max_ratio))
+    return _transport_host_gmres_accepts_preconditioned_residual_impl(
+        op=op,
+        true_residual_norm=true_residual_norm,
+        target_true=target_true,
+    )
 
 
 def _transport_precondition_side(
@@ -1750,10 +1605,7 @@ def _transport_precondition_side(
     op: V3FullSystemOperator,
     use_implicit: bool,
 ) -> str:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_PRECONDITION_SIDE", "").strip().lower()
-    if env in {"left", "right", "none"}:
-        return env
-    return "left"
+    return _transport_precondition_side_impl(op=op, use_implicit=use_implicit)
 
 
 def _transport_disable_auto_recycle(
@@ -1761,18 +1613,10 @@ def _transport_disable_auto_recycle(
     op: V3FullSystemOperator,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_DISABLE_AUTO_RECYCLE", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    return bool(
-        (not bool(use_implicit))
-        and jax.default_backend() == "cpu"
-        and int(op.rhs_mode) == 3
-        and int(getattr(op, "constraint_scheme", -1)) == 2
-        and getattr(op.fblock, "fp", None) is None
-        and int(getattr(op, "n_x", 0) or 0) <= 2
+    return _transport_disable_auto_recycle_impl(
+        op=op,
+        use_implicit=use_implicit,
+        backend=jax.default_backend(),
     )
 
 
@@ -1782,59 +1626,27 @@ def _transport_sparse_direct_needs_float64_retry(
     residual_norm: float,
     target_true: float,
 ) -> bool:
-    if np.dtype(factor_dtype) != np.dtype(np.float32):
-        return False
-    if not np.isfinite(float(residual_norm)):
-        return True
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FLOAT64_RETRY_RATIO", "").strip()
-    try:
-        ratio = float(env) if env else 10.0
-    except ValueError:
-        ratio = 10.0
-    ratio = max(1.0, float(ratio))
-    return float(residual_norm) > float(target_true) * float(ratio)
+    return _transport_sparse_direct_needs_float64_retry_impl(
+        factor_dtype=factor_dtype,
+        residual_norm=residual_norm,
+        target_true=target_true,
+    )
 
 
 def _transport_sparse_factor_dtype(*, size: int, use_implicit: bool) -> np.dtype:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE", "").strip().lower()
-    if env == "float64":
-        return np.dtype(np.float64)
-    if env == "float32":
-        return np.dtype(np.float32)
-    factor_dtype = _host_sparse_factor_dtype(
-        size=int(size),
-        factorization="lu",
+    return _transport_sparse_factor_dtype_impl(
+        size=size,
         use_implicit=use_implicit,
+        backend=jax.default_backend(),
+        host_sparse_factor_dtype=_host_sparse_factor_dtype,
     )
-    if (
-        factor_dtype == np.dtype(np.float32)
-        and (not bool(use_implicit))
-        and jax.default_backend() == "cpu"
-    ):
-        min_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_FLOAT64_MIN", "").strip()
-        try:
-            float64_min = int(min_env) if min_env else 30000
-        except ValueError:
-            float64_min = 30000
-        if int(size) >= max(1, int(float64_min)):
-            return np.dtype(np.float64)
-    return factor_dtype
 
 
 def _transport_sparse_direct_use_explicit_helper(*, size: int) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    min_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CPU_MIN", "").strip()
-    try:
-        cpu_min = int(min_env) if min_env else 12000
-    except ValueError:
-        cpu_min = 12000
-    if jax.default_backend() != "cpu":
-        return True
-    return int(size) >= max(1, int(cpu_min))
+    return _transport_sparse_direct_use_explicit_helper_impl(
+        size=size,
+        backend=jax.default_backend(),
+    )
 
 
 def _host_scipy_krylov_requested(solve_method: str | None) -> bool:
@@ -19266,48 +19078,11 @@ def _rewrite_xla_flags(flags: str, *, cpu_threads: int | None, host_devices: int
 
 @contextlib.contextmanager
 def _transport_parallel_worker_env(parallel_workers: int):
-    """Cap XLA threads + disable sharding in transport worker processes."""
-    saved: dict[str, str | None] = {}
-
-    def _set(key: str, value: str | None) -> None:
-        saved[key] = os.environ.get(key)
-        if value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = value
-
-    try:
-        cores_env = os.environ.get("SFINCS_JAX_CORES", "").strip()
-        total_cores = int(cores_env) if cores_env else 0
-    except ValueError:
-        total_cores = 0
-    if total_cores <= 0:
-        total_cores = os.cpu_count() or 1
-    threads = max(1, int(total_cores) // max(1, int(parallel_workers)))
-
-    _set("SFINCS_JAX_SHARD", "0")
-    _set("SFINCS_JAX_MATVEC_SHARD_AXIS", "off")
-    _set("SFINCS_JAX_AUTO_SHARD", "0")
-    _set("SFINCS_JAX_CPU_DEVICES", "1")
-    pin_threads_env = os.environ.get("SFINCS_JAX_TRANSPORT_PIN_THREADS", "").strip().lower()
-    if pin_threads_env in {"1", "true", "yes", "on"}:
-        flags = _rewrite_xla_flags(os.environ.get("XLA_FLAGS", ""), cpu_threads=None, host_devices=1)
-        _set("XLA_FLAGS", flags or None)
-        # Optional worker-side thread pinning for experiments on oversubscribed hosts.
-        _set("OMP_NUM_THREADS", str(int(threads)))
-        _set("OPENBLAS_NUM_THREADS", str(int(threads)))
-        _set("MKL_NUM_THREADS", str(int(threads)))
-        _set("VECLIB_MAXIMUM_THREADS", str(int(threads)))
-        _set("NUMEXPR_NUM_THREADS", str(int(threads)))
-
-    try:
+    with _transport_parallel_worker_env_impl(
+        parallel_workers=int(parallel_workers),
+        rewrite_xla_flags=_rewrite_xla_flags,
+    ):
         yield
-    finally:
-        for key, value in saved.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
 
 
 def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
@@ -19360,60 +19135,27 @@ _TRANSPORT_PARALLEL_POOL_KEY: tuple[object, ...] | None = None
 
 
 def _transport_parallel_start_method() -> str:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_MP_START_METHOD", "").strip().lower()
-    if env in {"", "auto"}:
-        # Spawn is the safest default across Linux/macOS with JAX runtime state.
-        return "spawn"
-    if env in {"spawn", "fork", "forkserver"}:
-        return env
-    return "spawn"
+    return _transport_parallel_start_method_impl()
 
 
 def _transport_parallel_backend() -> str:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "").strip().lower()
-    if env in {"", "auto", "cpu", "process"}:
-        return "cpu"
-    if env in {"gpu", "gpu_process", "process_gpu"}:
-        return "gpu"
-    return "cpu"
+    return _transport_parallel_backend_impl()
 
 
 def _transport_parallel_persistent_pool_enabled() -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "").strip().lower()
-    return env not in {"0", "false", "no", "off"}
+    return _transport_parallel_persistent_pool_enabled_impl()
 
 
 def _transport_parallel_pool_key(parallel_workers: int) -> tuple[object, ...]:
-    return (
-        int(parallel_workers),
-        _transport_parallel_backend(),
-        _transport_parallel_start_method(),
-        os.environ.get("SFINCS_JAX_TRANSPORT_PIN_THREADS", "").strip().lower(),
-        os.environ.get("SFINCS_JAX_CORES", "").strip(),
-    )
+    return _transport_parallel_pool_key_impl(int(parallel_workers))
 
 
 def _transport_parallel_visible_gpu_ids(parallel_workers: int) -> list[str]:
-    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
-    if visible:
-        ids = [token.strip() for token in visible.split(",") if token.strip()]
-    else:
-        ids = [str(i) for i in range(max(1, int(parallel_workers)))]
-    return ids
+    return _transport_parallel_visible_gpu_ids_impl(int(parallel_workers))
 
 
 def _transport_parallel_gpu_worker_env(*, gpu_id: str) -> dict[str, str]:
-    env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    env["SFINCS_JAX_TRANSPORT_PARALLEL"] = "off"
-    env["SFINCS_JAX_TRANSPORT_PARALLEL_CHILD"] = "1"
-    env["SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND"] = "gpu"
-    env["SFINCS_JAX_SHARD"] = "0"
-    env["SFINCS_JAX_MATVEC_SHARD_AXIS"] = "off"
-    env["SFINCS_JAX_AUTO_SHARD"] = "0"
-    env.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-    env.setdefault("TF_GPU_ALLOCATOR", "cuda_malloc_async")
-    return env
+    return _transport_parallel_gpu_worker_env_impl(gpu_id=str(gpu_id))
 
 
 def _run_transport_parallel_gpu_subprocesses(
@@ -19497,19 +19239,11 @@ def _transport_parallel_pool_executor_kwargs(
     parallel_workers: int,
     emit: Callable[[int, str], None] | None = None,
 ) -> dict[str, object]:
-    kwargs: dict[str, object] = {"max_workers": int(parallel_workers)}
-    start_method = _transport_parallel_start_method()
-    try:
-        kwargs["mp_context"] = mp.get_context(start_method)
-    except ValueError:
-        kwargs["mp_context"] = mp.get_context("spawn")
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: invalid "
-                f"SFINCS_JAX_TRANSPORT_MP_START_METHOD={start_method!r}; using 'spawn'.",
-            )
-    return kwargs
+    return _transport_parallel_pool_executor_kwargs_impl(
+        parallel_workers=int(parallel_workers),
+        get_context=mp.get_context,
+        emit=emit,
+    )
 
 
 def _shutdown_transport_parallel_pool() -> None:

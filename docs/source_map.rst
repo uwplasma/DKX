@@ -129,6 +129,31 @@ Top-level solve orchestration. This file controls:
 When a solve behaves differently on CPU and GPU, this is usually the first file to
 inspect.
 
+On the active refactor branch, the main policy layers are being split out of the
+monolith into narrower modules while keeping ``v3_driver.py`` as the stable public seam
+for debugging and monkeypatch-based tests. The first extracted layers are:
+
+- ``sfincs_jax/rhs1_pas_policy.py``:
+  PAS applicability, PAS-TZ memory safety, and PAS fallback routing.
+- ``sfincs_jax/rhs1_preconditioner_dispatch.py``:
+  shared RHSMode=1 preconditioner-kind dispatch.
+- ``sfincs_jax/rhs1_stage2_policy.py``:
+  stage-2 trigger and skip rules.
+- ``sfincs_jax/rhs1_strong_policy.py``, ``sfincs_jax/rhs1_strong_control.py``,
+  ``sfincs_jax/rhs1_strong_auto_kind.py``:
+  strong-preconditioner request mapping, enable/disable control, and automatic
+  strong-kind selection.
+- ``sfincs_jax/rhs1_sparse_rescue_policy.py`` and
+  ``sfincs_jax/rhs1_sparse_polish_policy.py``:
+  sparse-rescue ordering, skip logic, and sparse-polish env parsing.
+- ``sfincs_jax/rhs1_handoff.py``:
+  accepted-candidate handoff and Krylov replay-state updates.
+- ``sfincs_jax/transport_policy.py``:
+  pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
+- ``sfincs_jax/transport_parallel_policy.py``:
+  transport process-parallel backend selection, worker env, GPU worker env, and pool
+  policy.
+
 ``sfincs_jax/solver.py`` and ``sfincs_jax/implicit_solve.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

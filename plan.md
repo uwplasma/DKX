@@ -2020,10 +2020,15 @@ Current branch status:
 - `rhs1_handoff.py` is now landed for the repeated “accept improved candidate and update Krylov replay state” logic used by stage-2, smoother, collision-retry, strong-preconditioner, and PAS Schur rescue branches.
 - the sparse accept/handoff paths now use the shared handoff helper for sparse-JAX and generic sparse fallback acceptance in both reduced and full RHSMode=1 paths, so the remaining duplication is concentrated in the deeper branch-specific sparse build/polish ladders rather than in acceptance-state mutation.
 - `rhs1_sparse_polish_policy.py` is now landed for the duplicated sparse polish / retry / accept-ratio env parsing used by FP x-block seeds, sxblock polish, host sparse direct polish, and sparse operator-preconditioned GMRES restart/maxiter selection.
+- `transport_policy.py` is now landed for the pure RHSMode=2/3 transport backend / sparse-direct / host-GMRES / dtype / recycle policy layer, with thin wrappers preserved in `v3_driver.py` so the existing transport tests and monkeypatch seams stay stable.
+- `transport_parallel_policy.py` is now landed for the process-parallel transport backend/start-method/persistent-pool/GPU-worker environment policy layer, again keeping thin wrappers in `v3_driver.py`.
 - current validation slice on this branch:
-  - focused RHSMode=1 policy/dispatch/fallback tests: `103 passed`
-  - broader bounded driver slice: `95 passed`
-- next extraction target is the remaining RHSMode=1 fallback / rescue policy beneath these helpers, especially the branch-specific sparse seed/build ladders and then the first transport/distributed-policy extraction.
+  - focused RHSMode=1 + transport policy/dispatch/fallback tests: `103 passed`
+  - broader bounded driver/transport slice: `92 passed`
+  - dedicated transport slices:
+    - `tests/test_transport_sparse_direct.py`: `37 passed`
+    - `tests/test_transport_parallel.py`: `13 passed`
+- next extraction target is the deeper transport/distributed orchestration layer that still lives in `v3_driver.py`, especially the worker-launch / pool-management handoff and then the nonlinear / Newton helper split.
 
 ### 19.13 Literature-anchored validation baselines for the paper
 
