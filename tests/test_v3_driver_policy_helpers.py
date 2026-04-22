@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import jax.numpy as jnp
 
 import sfincs_jax.v3_driver as v3_driver
@@ -111,3 +113,138 @@ def test_rhs1_sharded_line_override_allowed_whitelist() -> None:
     assert v3_driver._rhs1_sharded_line_override_allowed(None)
     assert v3_driver._rhs1_sharded_line_override_allowed("theta_line")
     assert not v3_driver._rhs1_sharded_line_override_allowed("schur")
+
+
+def test_rhs1_pas_dkes_xblock_rejects_invalid_backend_and_zero_limits() -> None:
+    assert not v3_driver._rhs1_pas_dkes_xblock_allowed(
+        has_pas=True,
+        use_dkes=True,
+        backend="metal",
+        n_theta=9,
+        n_zeta=11,
+        max_l=4,
+        xblock_tz_limit=1000,
+    )
+    assert not v3_driver._rhs1_pas_dkes_xblock_allowed(
+        has_pas=True,
+        use_dkes=True,
+        backend="gpu",
+        n_theta=1,
+        n_zeta=11,
+        max_l=4,
+        xblock_tz_limit=1000,
+    )
+    assert not v3_driver._rhs1_pas_dkes_xblock_allowed(
+        has_pas=True,
+        use_dkes=True,
+        backend="gpu",
+        n_theta=9,
+        n_zeta=11,
+        max_l=4,
+        xblock_tz_limit=0,
+    )
+
+
+def test_pas_tokamak_gpu_policy_handles_invalid_env_bounds(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_MAX", "bad")
+    assert v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=500,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "bad")
+    assert v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=500,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+        n_theta=10,
+        n_zeta=1,
+        max_l=14,
+        xblock_tz_limit=1200,
+    )
+
+
+def test_rhs1_gpu_sparse_fallback_skip_invalid_ratio_and_nonpositive_ratio(monkeypatch) -> None:
+    op = SimpleNamespace(
+        rhs_mode=1,
+        include_phi1=False,
+        fblock=SimpleNamespace(pas=object()),
+    )
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", "bad")
+    assert v3_driver._rhs1_gpu_sparse_fallback_skip_allowed(
+        op=op,
+        rhs1_precond_kind="schur",
+        use_active_dof_mode=True,
+        residual_norm=5.0,
+        target=1.0,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", "0")
+    assert not v3_driver._rhs1_gpu_sparse_fallback_skip_allowed(
+        op=op,
+        rhs1_precond_kind="schur",
+        use_active_dof_mode=True,
+        residual_norm=5.0,
+        target=1.0,
+    )
+
+
+def test_sparse_structural_tol_handles_invalid_and_negative_env(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_SPARSE_STRUCTURAL_TOL", raising=False)
+    default_tol = v3_driver._sparse_structural_tol()
+    assert default_tol >= 0.0
+
+    monkeypatch.setenv("SFINCS_JAX_SPARSE_STRUCTURAL_TOL", "bad")
+    assert v3_driver._sparse_structural_tol() == default_tol
+
+    monkeypatch.setenv("SFINCS_JAX_SPARSE_STRUCTURAL_TOL", "-1.0")
+    assert v3_driver._sparse_structural_tol() == 0.0
+
+
+def test_transport_tzfft_accelerator_auto_allowed_boundary_cases(monkeypatch) -> None:
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    cpu_op = SimpleNamespace(rhs_mode=3, include_phi1=False, n_x=1, n_theta=2, n_zeta=2, total_size=10, fblock=SimpleNamespace(fp=None))
+    assert v3_driver._transport_tzfft_accelerator_auto_allowed(cpu_op)
+
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_TZFFT_ACCELERATOR_AUTO_MAX", "bad")
+    reject_phi1 = SimpleNamespace(rhs_mode=3, include_phi1=True, n_x=1, n_theta=37, n_zeta=5, total_size=1000, fblock=SimpleNamespace(fp=None))
+    reject_rhs = SimpleNamespace(rhs_mode=1, include_phi1=False, n_x=1, n_theta=37, n_zeta=5, total_size=1000, fblock=SimpleNamespace(fp=None))
+    reject_nx = SimpleNamespace(rhs_mode=3, include_phi1=False, n_x=3, n_theta=37, n_zeta=5, total_size=1000, fblock=SimpleNamespace(fp=None))
+    reject_grid = SimpleNamespace(rhs_mode=3, include_phi1=False, n_x=1, n_theta=7, n_zeta=7, total_size=1000, fblock=SimpleNamespace(fp=None))
+    assert not v3_driver._transport_tzfft_accelerator_auto_allowed(reject_phi1)
+    assert not v3_driver._transport_tzfft_accelerator_auto_allowed(reject_rhs)
+    assert not v3_driver._transport_tzfft_accelerator_auto_allowed(reject_nx)
+    assert not v3_driver._transport_tzfft_accelerator_auto_allowed(reject_grid)
+
+
+def test_rhsmode1_dense_and_host_dense_policy_envs(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV", "0")
+    assert not v3_driver._rhsmode1_dense_krylov_allowed()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV", "1")
+    assert v3_driver._rhsmode1_dense_krylov_allowed()
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV", raising=False)
+    assert v3_driver._rhsmode1_dense_krylov_allowed()
+
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    assert v3_driver._rhsmode1_host_dense_fallback_allowed()
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "on")
+    assert v3_driver._rhsmode1_host_dense_fallback_allowed()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "off")
+    assert not v3_driver._rhsmode1_host_dense_fallback_allowed()

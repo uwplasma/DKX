@@ -1357,6 +1357,27 @@ Release-ready means:
   - measured module gains:
     - `io.py`: `65% -> 67%`
     - `solver.py`: `57% -> 67%`
+- Added a stencil/policy branch campaign for the remaining cheap `grids.py` and
+  top-level `v3_driver.py` surfaces:
+  - `tests/test_grids_scheme_coverage.py`
+  - extended `tests/test_v3_driver_policy_helpers.py`
+- These cover:
+  - representative finite-difference schemes `30/40/50/60/80/90/100/110/120/130`,
+  - odd-`n` periodic spectral differentiation,
+  - high-order aperiodic endpoint coefficients for schemes `12` and `13`,
+  - `NotImplementedError` branches for schemes `122` and `132`,
+  - remaining top-level PAS/tokamak policy boundaries and invalid env parsing in `v3_driver.py`,
+  - sparse-structural tolerance env handling,
+  - transport `tzfft` accelerator auto-path boundaries,
+  - dense-krylov and host-dense fallback env logic.
+- Fresh audited local result after the grids/policy batch:
+  - chunked `pytest -q` over the full tree
+  - `514 passed`
+  - chunked package coverage audit
+  - total package coverage: `54%`
+  - measured module gains:
+    - `grids.py`: `46% -> 79%`
+    - `v3_driver.py`: `36%` (small top-level branch improvement, but still the dominant remaining denominator)
 - Honest conclusion:
   - The cheap helper surface is now much better covered.
   - `95%` is still not reachable without a separate heavy-solver campaign against `v3_driver.py`, `io.py`, `solver.py`, and the remaining under-covered numerical infrastructure.
