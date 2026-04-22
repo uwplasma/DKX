@@ -179,10 +179,16 @@ Those tests check zeta-invariant tokamak detection, rejection of zeta-varying or
 drift-rich tokamak branches, PAS-only vs FP-only routing for the 3D PAS-TZ
 preconditioner, invalid environment fallback for the PAS-TZ memory cap, build-byte
 estimation, memory-safety gating, and the fallback to lighter hybrid or block
-preconditioners when the heavier PAS builders are inapplicable or unsafe. This
-moved the audited tree to ``588 tests collected`` and ``588 passed`` while holding
-total package coverage at about ``55%``. That result is still useful because it
-tightens the remaining driver decision surface without opening a new expensive
+preconditioners when the heavier PAS builders are inapplicable or unsafe. The
+follow-up pass then extended that same slice to the sharded memory-unsafe fallback
+handoff itself, including the ``theta`` and ``zeta`` Schwarz branches and invalid
+domain-decomposition environment parsing. That follow-up also fixed a real bug:
+the PAS-TZ memory-unsafe sharded path always routed into
+``_build_rhsmode1_theta_schwarz_preconditioner()`` even when the active shard axis
+was ``zeta``. It now dispatches to the axis-correct Schwarz builder. Together these
+passes moved the audited tree to ``590 tests collected`` and ``590 passed`` while
+holding total package coverage at about ``55%``. That result is still useful because
+it tightens the remaining driver decision surface without opening a new expensive
 solve campaign, and it confirms again that the dominant denominator is the deep
 execution body of ``v3_driver.py`` rather than the outer policy layer.
 
