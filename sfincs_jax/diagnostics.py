@@ -122,7 +122,10 @@ def _u_hat_loop(*, grids: V3Grids, geom: BoozerGeometry) -> jnp.ndarray:
 
             denom = float(n * geom.n_periods) - float(geom.iota) * float(m)
             numer = float(geom.iota) * (float(geom.g_hat) * float(m) + float(geom.i_hat) * float(n * geom.n_periods))
-            u_amp = jnp.where(jnp.abs(denom) < 1e-30, 0.0, (numer / denom) * h_amp)
+            if abs(denom) < 1e-30:
+                u_amp = jnp.asarray(0.0, dtype=jnp.float64)
+            else:
+                u_amp = jnp.asarray((numer / denom), dtype=jnp.float64) * h_amp
 
             u = u + u_amp * cos_angle
 
