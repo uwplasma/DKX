@@ -156,6 +156,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/transport_parallel_runtime.py``:
   transport parallel RHS partitioning, GPU worker subprocess launch, and parent-side
   merge of per-worker state/residual/elapsed-time results.
+- ``sfincs_jax/transport_parallel_pool.py``:
+  persistent transport process-pool caching, rebuild, and shutdown behavior used by the
+  CPU process-parallel transport lane.
 
 ``sfincs_jax/solver.py`` and ``sfincs_jax/implicit_solve.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
