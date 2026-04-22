@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -123,6 +124,25 @@ def _inject_group(text: str, group: str, lines: list[str]) -> str:
     return "\n".join(out) + "\n"
 
 
+def _set_group_assignment(text: str, group: str, key: str, value: str) -> str:
+    group_pattern = re.compile(
+        rf"(^\s*&{re.escape(group)}\b.*?$)(.*?)(^\s*/\s*$)",
+        re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    )
+    match = group_pattern.search(text)
+    if not match:
+        raise ValueError(f"Could not find &{group} group in input text")
+    group_header, group_body, group_end = match.groups()
+    assign_pattern = re.compile(rf"(^\s*{re.escape(key)}\s*=\s*)([^!\n\r]*)(.*)$", re.IGNORECASE | re.MULTILINE)
+    if assign_pattern.search(group_body):
+        new_body = assign_pattern.sub(lambda m: f"{m.group(1)}{value}{m.group(3)}", group_body, count=1)
+    else:
+        if group_body and not group_body.endswith("\n"):
+            group_body += "\n"
+        new_body = group_body + f"  {key} = {value}\n"
+    return text[: match.start()] + group_header + new_body + group_end + text[match.end() :]
+
+
 def _write_scan_input(
     *,
     base_input: Path,
@@ -145,26 +165,17 @@ def _write_scan_input(
             "",
         ]
     )
-    text = _inject_group(
-        text,
-        "physicsParameters",
-        [
-            f"  collisionOperator = {collision_operator}",
-        ],
-    )
+    text = _set_group_assignment(text, "physicsParameters", "collisionOperator", str(int(collision_operator)))
     if fast:
-        text = _inject_group(
-            text,
-            "resolutionParameters",
-            [
-                "  Ntheta = 5",
-                "  Nzeta = 3",
-                "  Nxi = 3",
-                "  NL = 3",
-                "  Nx = 3",
-                "  solverTolerance = 1e-4",
-            ],
-        )
+        for key, value in (
+            ("Ntheta", "5"),
+            ("Nzeta", "5"),
+            ("Nxi", "3"),
+            ("NL", "3"),
+            ("Nx", "3"),
+            ("solverTolerance", "1e-4"),
+        ):
+            text = _set_group_assignment(text, "resolutionParameters", key, value)
     dest.write_text(text)
 
 

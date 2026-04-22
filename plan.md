@@ -2228,4 +2228,25 @@ Testing docs should include:
      embedded in `v3_driver.py`,
   2. promote the stellarator-like `E_r` lane from fast branch artifact to a heavier
      audited release/nightly sweep once its runtime/cost is acceptable,
-  3. start the collisionality / collision-operator lane from the same validation manifest.
+  3. re-audit the collisionality / collision-operator lane from the same validation manifest
+     using the corrected scan writer.
+
+### 19.19 Collisionality lane status after writer fix
+
+- A real publication-lane bug was found in `examples/publication_figures/generate_sfincs_paper_figs.py`:
+  duplicate namelist assignments could leave the original `collisionOperator` and
+  resolution values in force, so stored FP/PAS collisionality outputs could silently
+  collapse onto the same physics.
+- A second fast-path bug was found immediately after that fix:
+  missing keys such as `NL` could be appended outside the `resolutionParameters`
+  group, and the hard-coded fast `Nzeta=3` was below the current stencil floor.
+- Both bugs are now fixed and covered by bounded tests.
+- A corrected bounded LHD fast rerun now cleanly separates FP and PAS transport matrices:
+  - FP `L11` at `nu_n=0.02668018`: about `-0.3507`
+  - PAS `L11` at `nu_n=0.02668018`: about `-0.4754`
+  - FP `L22` at `nu_n=2.668018`: about `-1.5703`
+  - PAS `L22` at `nu_n=2.668018`: about `-1.8295`
+- This means the collisionality lane is alive again, but the checked-in
+  `sfincs_jax_fig{1,2,3}_*.png` files are no longer treated as publication-grade.
+  They remain open re-audit lanes until regenerated from the corrected script with
+  pinned machine-readable summaries.
