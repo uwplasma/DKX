@@ -2009,8 +2009,10 @@ Execution order on this branch:
 6. After each step, rerun the focused driver tests and then a broader branch validation slice.
 
 Current branch status:
-- `rhs1_pas_policy.py` extraction in progress and validated against the PAS policy test slice.
-- next extraction target is the shared `_build_rhs1_preconditioner_from_kind(...)` ladder, using a thin wrapper in `v3_driver.py` so the existing regression seam stays intact.
+- `rhs1_pas_policy.py` extraction is landed and validated against the PAS policy test slice.
+- `rhs1_preconditioner_dispatch.py` extraction is landed and validated; `v3_driver.py` now keeps a thin wrapper around the shared dispatch helper so the existing regression seam stays intact.
+- `rhs1_strong_fallback.py` is now landed for the full-path strong-preconditioner fallback build, replacing the duplicated full-path builder ladder with a shared helper that reuses the dispatch module.
+- next extraction target is the RHSMode=1 fallback / rescue policy beneath the strong-preconditioner build layer, especially the stage-2 / sparse-rescue / strong-preconditioner decision seams.
 
 ### 19.13 Literature-anchored validation baselines for the paper
 
