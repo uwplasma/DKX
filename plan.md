@@ -1600,3 +1600,32 @@ Release-ready means:
   - continue into bounded `v3_driver.py` solve-handoff and reduced/full preconditioner-builder edges below these PAS fallback routes,
   - then return to `io.py` output/reduction assembly with similarly bounded tests,
   - keep avoiding broad expensive end-to-end reruns unless they buy real heavy-module coverage.
+- Factored the RHSMode=1 reduced/full preconditioner dispatch ladder into a shared helper:
+  - updated `sfincs_jax/v3_driver.py`
+  - new `tests/test_v3_driver_rhs1_dispatch_coverage.py`
+- These cover:
+  - `theta_dd` routing to DD vs Schwarz depending on overlap,
+  - `point_xdiag` forwarding of `preconditioner_xi`,
+  - `xblock_tz_lmax` forwarding of the resolved `lmax`,
+  - `theta_line_xdiag` composition with the collision preconditioner on PAS/FP branches,
+  - default fallback to the generic block preconditioner with the right species/x/xi parameters.
+- Real bug / consistency fix:
+  - the RHSMode=1 reduced and full solve paths previously carried separate copies of the preconditioner dispatch ladder;
+  - the reduced path handled `point_xdiag` and `xblock_tz_lmax`, while the full-path copy did not mirror those branches cleanly;
+  - both paths now dispatch through `_build_rhs1_preconditioner_from_kind(...)`, closing that drift.
+- Fresh audited local result after this pass:
+  - `pytest --collect-only -q` -> `596 tests collected`
+  - chunked `pytest -q` over the full tree -> `596 passed`
+  - chunked package coverage audit -> total package coverage `55%`
+  - measured module gains:
+    - `v3_driver.py`: `37% -> 38%` (`5309/14096`)
+    - `io.py`: held at `67%`
+    - `solver.py`: held at `67%`
+- Numerical / validation conclusion:
+  - this pass buys real signal because it turns the production RHSMode=1 preconditioner handoff into one tested dispatch surface instead of two drifting nested copies,
+  - it stays efficient by testing the helper directly on tiny synthetic operators with mocked builders,
+  - the remaining denominator is still concentrated in the deep solve body of `v3_driver.py`, but the top-level routing layer is now materially tighter.
+- Next meaningful coverage work:
+  - keep pushing on bounded `v3_driver.py` solve-handoff and post-build fallback seams beneath the shared dispatch helper,
+  - then return to deeper `io.py` output/reduction assembly,
+  - continue preferring mathematically anchored seams over broad expensive end-to-end solve campaigns.
