@@ -78,6 +78,23 @@ validation scaffold rather than a pinned manuscript artifact: the final paper la
 needs audited sweep inputs and fixed output roots for the selected tokamak-like and
 stellarator-like cases.
 
+Current prototype artifact:
+
+- bounded fast tokamak-like sweep summary:
+  ``examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json``
+- bounded fast prototype figure:
+  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png``
+
+.. figure:: _static/figures/paper/sfincs_jax_er_trajectory_sweep.png
+   :alt: Prototype electric-field trajectory-model sweep for sfincs_jax
+   :width: 85%
+
+   Prototype fast tokamak-like ``E_r`` sweep across DKES, partial, and full
+   trajectory models. This figure is useful as a branch regression target and
+   manuscript-layout prototype, but it is not yet the final audited literature
+   reproduction. The final lane still needs fixed inputs, a denser sweep, and
+   explicit physics assertions on ordering, crossover, and small-field agreement.
+
 Validation goal:
 
 - verify small-``E_r / E_r^{res}`` agreement and large-field separation behavior,

@@ -54,7 +54,7 @@
   },
   {
     "id": "sfincs2014_er_sweep_tokamak_stellarator",
-    "status": "scaffolded",
+    "status": "prototype_artifact",
     "kind": "literature_validation",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -64,7 +64,9 @@
       "examples/publication_figures/generate_er_trajectory_sweep.py --preset stellarator_like"
     ],
     "artifacts": [
-      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png"
+      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png",
+      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.pdf",
+      "examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json"
     ],
     "claims": [
       "Trajectory models should agree at small Er/Eres and separate at larger normalized electric field",
