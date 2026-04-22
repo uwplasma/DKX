@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
+import sfincs_jax.rhs1_pas_policy as pas_policy
 import sfincs_jax.v3_driver as vd
 
 
@@ -132,9 +133,9 @@ def test_pas_tz_build_bytes_zero_for_inapplicable_and_positive_for_valid(monkeyp
 
 def test_pas_tz_memory_safe_respects_env_override(monkeypatch) -> None:
     op = _pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)
-    monkeypatch.setattr(vd, "_rhs1_pas_tz_max_bytes", lambda: 1)
+    monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 1)
     assert not vd._pas_tz_preconditioner_memory_safe(op)
-    monkeypatch.setattr(vd, "_rhs1_pas_tz_max_bytes", lambda: 10**12)
+    monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 10**12)
     assert vd._pas_tz_preconditioner_memory_safe(op)
 
 
@@ -148,8 +149,8 @@ def test_pas_tz_builder_falls_back_to_hybrid_when_inapplicable(monkeypatch) -> N
 def test_pas_tz_builder_falls_back_to_hybrid_when_memory_unsafe_without_sharding(monkeypatch) -> None:
     sentinel = object()
     monkeypatch.setattr(vd, "_build_rhsmode1_pas_hybrid_preconditioner", lambda **kwargs: sentinel)
-    monkeypatch.setattr(vd, "_estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
-    monkeypatch.setattr(vd, "_rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
+    monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
+    monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
     monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: None)
     monkeypatch.setattr(vd.jax, "device_count", lambda: 1)
     assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
@@ -165,8 +166,8 @@ def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe_and_theta
         return sentinel
 
     monkeypatch.setattr(vd, "_build_rhsmode1_theta_schwarz_preconditioner", _theta_builder)
-    monkeypatch.setattr(vd, "_estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
-    monkeypatch.setattr(vd, "_rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
+    monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
+    monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
     monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: "theta")
     monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_THETA_DD_BLOCK", raising=False)
@@ -186,8 +187,8 @@ def test_pas_tz_builder_falls_back_to_zeta_schwarz_when_memory_unsafe_and_zeta_s
         return sentinel
 
     monkeypatch.setattr(vd, "_build_rhsmode1_zeta_schwarz_preconditioner", _zeta_builder)
-    monkeypatch.setattr(vd, "_estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
-    monkeypatch.setattr(vd, "_rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
+    monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
+    monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
     monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: "zeta")
     monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ZETA_DD_BLOCK", "bad")
