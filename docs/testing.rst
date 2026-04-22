@@ -96,8 +96,8 @@ The current audited full-suite command on ``main`` is:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-On the current audited local release tree this command yields ``543 tests collected``,
-``543 passed`` in the stable chunked rerun, and
+On the current audited local release tree this command yields ``552 tests collected``,
+``552 passed`` in the stable chunked rerun, and
 roughly ``54%`` package coverage. That number is materially higher than the Linux
 CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
 surface is still the large solver/geometry stack, especially ``v3_driver.py``,
@@ -143,6 +143,21 @@ constancy in the constant-``B`` limit. That pass also found and fixed a real bug
 the resonant branch in ``_u_hat_loop()`` could still trigger a Python-side
 division-by-zero before the masked ``jnp.where()`` path executed, so the loop now
 guards the denominator explicitly instead of relying on masked evaluation.
+
+After the diagnostics pass, the next bounded driver-side campaign targeted the
+domain-decomposition and residual-correction layer directly. Those tests check
+diagonal and block-diagonal reductions, overlapping patch-range construction,
+coarse-level sizing and environment overrides, multilevel residual-correction
+composition, safe-preconditioner clipping of nonfinite values, and finite-state
+GMRES-result gating on tiny synthetic systems. These checks are anchored in
+standard additive-Schwarz / block-Jacobi invariants and bounded multilevel
+residual-correction ideas: local blocks must preserve only local couplings,
+patches must cover the full discrete domain with controlled overlap, and
+coarse corrections must apply in a deterministic order without creating
+nonfinite iterates. The main measured result of that pass was not a dramatic
+package-percentage jump but a tighter, more meaningful test net around the
+``v3_driver.py`` decision layer while keeping the full tree at ``552/552``
+green and the package coverage at roughly ``54%``.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
