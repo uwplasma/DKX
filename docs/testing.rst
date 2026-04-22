@@ -237,3 +237,4 @@ Further reading
 
 For the current benchmark/performance state, see :doc:`performance` and
 :doc:`parallelism`. For the external validation story, see :doc:`fortran_comparison`.
+For the manuscript-facing literature/figure lanes, see :doc:`validation_matrix`.

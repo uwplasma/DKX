@@ -2028,6 +2028,9 @@ Current branch status:
 - `phi1_newton_policy.py` is now landed for the bounded nonlinear/Newton policy layer: active-DOF mode selection, GMRES restart sizing, frozen-Jacobian cache policy, and line-search policy are no longer embedded inline in `solve_v3_full_system_newton_krylov_history`.
 - `phi1_newton_linear.py` is now landed for the nonlinear linear-step orchestration: reduced/full routing, sparse-direct entry, KSP-history emission, and retry-without-preconditioner now live outside the monolith while reusing the same numerical kernels.
 - `phi1_line_search.py` is now landed for the accepted-iterate update logic: PETSc-like backtracking, fixed-candidate `best` search, and finite-state fallback rules are no longer embedded inline in the Newton driver.
+- the first manuscript-validation scaffold is now started:
+  - `examples/publication_figures/validation_manifest.json` is the machine-readable map from literature claim to script and artifact,
+  - `docs/validation_matrix.rst` is the public-facing counterpart for the same figure/test lanes.
 - current validation slice on this branch:
   - focused RHSMode=1 + transport policy/dispatch/fallback tests: `103 passed`
   - broader bounded driver/transport slice: `92 passed`
