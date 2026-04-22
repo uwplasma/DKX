@@ -263,6 +263,21 @@ This lane is now used as:
   while the full-resolution stellarator sweep remains a heavier validation target,
 - and a figure/layout prototype for the eventual manuscript figure family.
 
+Another important branch outcome is that the collisionality-figure generator
+(``generate_sfincs_paper_figs.py``) is no longer trusted just because the old figure
+files exist. On this branch, two real bugs were found in its scan-input writer:
+
+- duplicate ``collisionOperator`` assignments could leave the later original value in
+  force, collapsing FP and PAS scans onto the same physics,
+- and the fast-path override could place missing keys such as ``NL`` outside the
+  namelist group, while also choosing ``Nzeta=3``, which is below the current stencil
+  floor for these runs.
+
+Those writer bugs are now unit-tested and fixed, and a corrected bounded LHD fast rerun
+shows strong FP/PAS separation again. However, until the checked-in collisionality
+figures are regenerated from the fixed script, they remain historical artifacts rather
+than publication-grade validated outputs.
+
 Further reading
 ---------------
 

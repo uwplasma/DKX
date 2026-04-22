@@ -1,7 +1,7 @@
 [
   {
     "id": "sfincs2014_fig1_lhd_collisionality",
-    "status": "implemented",
+    "status": "needs_reaudit",
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -19,7 +19,7 @@
   },
   {
     "id": "sfincs2014_fig2_w7x_collisionality",
-    "status": "implemented",
+    "status": "needs_reaudit",
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -37,7 +37,7 @@
   },
   {
     "id": "sfincs2014_fig3_high_collisionality_limit",
-    "status": "implemented",
+    "status": "needs_reaudit",
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"

@@ -49,6 +49,18 @@ These figures are intentionally low-resolution reproductions and should be read 
 regression targets and validation scaffolds, not as the final polished figures for the
 next paper.
 
+Current status note:
+
+- the checked-in collisionality figures are now treated as historical branch artifacts,
+  not fully audited paper figures
+- the scan writer in ``generate_sfincs_paper_figs.py`` was fixed on this branch after
+  finding that duplicate namelist assignments could override the intended
+  ``collisionOperator`` and fast-resolution settings
+- a corrected bounded LHD fast rerun now cleanly separates FP and PAS transport
+  matrices again, so the collisionality lane is scientifically alive, but the checked-in
+  figures need to be regenerated from the fixed script before they should be promoted
+  back to publication-grade status
+
 Planned literature-driven lanes
 -------------------------------
 
@@ -111,7 +123,25 @@ Validation goal:
 - promote the stellarator-like branch scaffold to a full-resolution audited lane only
   after the runtime/cost tradeoff is acceptable for the release/nightly workflow.
 
-2. W7-X ambipolar-field validation
+2. Collisionality re-audit after writer fix
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Literature anchors:
+
+- [Landreman et al. 2014](https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf)
+
+Immediate branch evidence:
+
+- corrected bounded LHD fast rerun now resolves strong FP/PAS separation on the same
+  four-point ``\\nu'`` ladder that previously collapsed onto identical stored outputs
+
+Validation goal:
+
+- regenerate the LHD and W7-X collisionality figures from the fixed writer,
+- emit machine-readable summary artifacts for each scan,
+- and only then restore these lanes to ``implemented`` status in the validation manifest.
+
+3. W7-X ambipolar-field validation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Literature anchors:
@@ -131,7 +161,7 @@ Validation goal:
 - make any profile reconstruction assumptions explicit,
 - use this lane only if the reconstructed input set is scientifically defensible.
 
-3. MONKES / KNOSOS overlap
+4. MONKES / KNOSOS overlap
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Literature anchors:
@@ -149,7 +179,7 @@ Validation goal:
 - separate exact overlap claims from qualitative trend/ordering claims,
 - keep this lane focused on the model subset that is genuinely comparable.
 
-4. Adjoint / sensitivity validation
+5. Adjoint / sensitivity validation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Literature anchors:
