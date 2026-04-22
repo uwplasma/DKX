@@ -76,6 +76,11 @@ from .rhs1_sparse_rescue_policy import (
     rhs1_sparse_enabled_initial,
     rhs1_sparse_kind_use,
 )
+from .rhs1_sparse_polish_policy import (
+    rhs1_parse_accept_ratio,
+    rhs1_parse_polish_gmres_config,
+    rhs1_polish_enabled,
+)
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -15337,26 +15342,19 @@ def solve_v3_full_system_linear_gmres(
                             except ValueError:
                                 refine_steps = 2
                             refine_steps = max(0, int(refine_steps))
-                            accept_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ACCEPT_RATIO", "").strip()
-                            try:
-                                accept_ratio = float(accept_ratio_env) if accept_ratio_env else 10.0
-                            except ValueError:
-                                accept_ratio = 10.0
-                            accept_ratio = max(1.0, float(accept_ratio))
-                            polish_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH", "").strip().lower()
-                            polish_enabled = polish_env not in {"0", "false", "no", "off"}
-                            polish_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_RESTART", "").strip()
-                            polish_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_MAXITER", "").strip()
-                            try:
-                                polish_restart = int(polish_restart_env) if polish_restart_env else min(int(restart), 40)
-                            except ValueError:
-                                polish_restart = min(int(restart), 40)
-                            try:
-                                polish_maxiter = int(polish_maxiter_env) if polish_maxiter_env else min(int(maxiter or 80), 80)
-                            except ValueError:
-                                polish_maxiter = min(int(maxiter or 80), 80)
-                            polish_restart = max(5, int(polish_restart))
-                            polish_maxiter = max(5, int(polish_maxiter))
+                            accept_ratio = rhs1_parse_accept_ratio(
+                                env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_ACCEPT_RATIO",
+                                default=10.0,
+                            )
+                            polish_enabled = rhs1_polish_enabled(
+                                env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH",
+                            )
+                            polish_restart, polish_maxiter = rhs1_parse_polish_gmres_config(
+                                restart_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_RESTART",
+                                maxiter_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_MAXITER",
+                                default_restart=min(int(restart), 40),
+                                default_maxiter=min(int(maxiter or 80), 80),
+                            )
                             base_residual_norm = float(res_reduced.residual_norm)
                             x_trial = jnp.asarray(precond_sparse_xblock(rhs_reduced), dtype=jnp.float64)
                             residual_vec_sparse_xblock = rhs_reduced - mv_reduced(x_trial)
@@ -15537,30 +15535,12 @@ def solve_v3_full_system_linear_gmres(
                         if float(res_reduced.residual_norm) > target_reduced:
                             polish_precond = precond_sparse_xblock_current or preconditioner_reduced
                             if polish_precond is not None:
-                                sxblock_polish_restart_env = os.environ.get(
-                                    "SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_RESTART", ""
-                                ).strip()
-                                sxblock_polish_maxiter_env = os.environ.get(
-                                    "SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_MAXITER", ""
-                                ).strip()
-                                try:
-                                    sxblock_polish_restart = (
-                                        int(sxblock_polish_restart_env)
-                                        if sxblock_polish_restart_env
-                                        else min(int(restart), 40)
-                                    )
-                                except ValueError:
-                                    sxblock_polish_restart = min(int(restart), 40)
-                                try:
-                                    sxblock_polish_maxiter = (
-                                        int(sxblock_polish_maxiter_env)
-                                        if sxblock_polish_maxiter_env
-                                        else min(max(40, int(maxiter or 120)), 120)
-                                    )
-                                except ValueError:
-                                    sxblock_polish_maxiter = min(max(40, int(maxiter or 120)), 120)
-                                sxblock_polish_restart = max(5, int(sxblock_polish_restart))
-                                sxblock_polish_maxiter = max(5, int(sxblock_polish_maxiter))
+                                sxblock_polish_restart, sxblock_polish_maxiter = rhs1_parse_polish_gmres_config(
+                                    restart_env_name="SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_RESTART",
+                                    maxiter_env_name="SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_MAXITER",
+                                    default_restart=min(int(restart), 40),
+                                    default_maxiter=min(max(40, int(maxiter or 120)), 120),
+                                )
                                 if emit is not None:
                                     emit(
                                         0,
@@ -15780,34 +15760,13 @@ def solve_v3_full_system_linear_gmres(
                             residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
                         )
                         if factor_dtype == np.dtype(np.float32) and float(res_sparse.residual_norm) > float(target_reduced):
-                            polish_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH", "").strip().lower()
-                            if polish_env not in {"0", "false", "no", "off"}:
-                                polish_restart_env = os.environ.get(
-                                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_RESTART",
-                                    "",
-                                ).strip()
-                                polish_maxiter_env = os.environ.get(
-                                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_MAXITER",
-                                    "",
-                                ).strip()
-                                try:
-                                    polish_restart = (
-                                        int(polish_restart_env)
-                                        if polish_restart_env
-                                        else min(int(restart), 40)
-                                    )
-                                except ValueError:
-                                    polish_restart = min(int(restart), 40)
-                                try:
-                                    polish_maxiter = (
-                                        int(polish_maxiter_env)
-                                        if polish_maxiter_env
-                                        else min(max(40, int(maxiter or 120)), 120)
-                                    )
-                                except ValueError:
-                                    polish_maxiter = min(max(40, int(maxiter or 120)), 120)
-                                polish_restart = max(5, int(polish_restart))
-                                polish_maxiter = max(5, int(polish_maxiter))
+                            if rhs1_polish_enabled(env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH"):
+                                polish_restart, polish_maxiter = rhs1_parse_polish_gmres_config(
+                                    restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_RESTART",
+                                    maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_MAXITER",
+                                    default_restart=min(int(restart), 40),
+                                    default_maxiter=min(max(40, int(maxiter or 120)), 120),
+                                )
                                 if emit is not None:
                                     emit(
                                         0,
@@ -18036,30 +17995,12 @@ def solve_v3_full_system_linear_gmres(
                                 y_np = ilu.solve(x_np)
                                 return jnp.asarray(y_np, dtype=jnp.float64)
 
-                            sparse_pc_restart_env = os.environ.get(
-                                "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
-                                "",
-                            ).strip()
-                            sparse_pc_maxiter_env = os.environ.get(
-                                "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
-                                "",
-                            ).strip()
-                            try:
-                                sparse_pc_restart = (
-                                    int(sparse_pc_restart_env)
-                                    if sparse_pc_restart_env
-                                    else max(120, int(restart))
-                                )
-                            except ValueError:
-                                sparse_pc_restart = max(120, int(restart))
-                            try:
-                                sparse_pc_maxiter = (
-                                    int(sparse_pc_maxiter_env)
-                                    if sparse_pc_maxiter_env
-                                    else max(800, int(maxiter or 400) * 2)
-                                )
-                            except ValueError:
-                                sparse_pc_maxiter = max(800, int(maxiter or 400) * 2)
+                            sparse_pc_restart, sparse_pc_maxiter = rhs1_parse_polish_gmres_config(
+                                restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
+                                maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
+                                default_restart=max(120, int(restart)),
+                                default_maxiter=max(800, int(maxiter or 400) * 2),
+                            )
                             if emit is not None:
                                 emit(
                                     0,
@@ -18118,34 +18059,13 @@ def solve_v3_full_system_linear_gmres(
                                 residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
                             )
                             if factor_dtype == np.dtype(np.float32) and float(res_sparse.residual_norm) > float(target):
-                                polish_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH", "").strip().lower()
-                                if polish_env not in {"0", "false", "no", "off"}:
-                                    polish_restart_env = os.environ.get(
-                                        "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_RESTART",
-                                        "",
-                                    ).strip()
-                                    polish_maxiter_env = os.environ.get(
-                                        "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_MAXITER",
-                                        "",
-                                    ).strip()
-                                    try:
-                                        polish_restart = (
-                                            int(polish_restart_env)
-                                            if polish_restart_env
-                                            else min(int(restart), 40)
-                                        )
-                                    except ValueError:
-                                        polish_restart = min(int(restart), 40)
-                                    try:
-                                        polish_maxiter = (
-                                            int(polish_maxiter_env)
-                                            if polish_maxiter_env
-                                            else min(max(40, int(maxiter or 120)), 120)
-                                        )
-                                    except ValueError:
-                                        polish_maxiter = min(max(40, int(maxiter or 120)), 120)
-                                    polish_restart = max(5, int(polish_restart))
-                                    polish_maxiter = max(5, int(polish_maxiter))
+                                if rhs1_polish_enabled(env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH"):
+                                    polish_restart, polish_maxiter = rhs1_parse_polish_gmres_config(
+                                        restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_RESTART",
+                                        maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_MAXITER",
+                                        default_restart=min(int(restart), 40),
+                                        default_maxiter=min(max(40, int(maxiter or 120)), 120),
+                                    )
                                     if emit is not None:
                                         emit(
                                             0,
