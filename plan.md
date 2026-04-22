@@ -1378,6 +1378,23 @@ Release-ready means:
   - measured module gains:
     - `grids.py`: `46% -> 79%`
     - `v3_driver.py`: `36%` (small top-level branch improvement, but still the dominant remaining denominator)
+- Added a bounded sparse-helper campaign inside `v3_driver.py`:
+  - `tests/test_v3_driver_sparse_helper_coverage.py`
+- These cover:
+  - host sparse-direct policy/env gates,
+  - sparse-preconditioned rescue eligibility,
+  - host sparse factor dtype and cache-key logic,
+  - sparse-direct refinement-step parsing,
+  - direct and sparse-direct iterative refinement helpers on tiny synthetic operators,
+  - sparse-direct GMRES polish wiring,
+  - explicit sparse-host-direct helper bounds.
+- Fresh audited local result after the sparse-helper batch:
+  - chunked `pytest -q` over the full tree
+  - `520 passed`
+  - chunked package coverage audit
+  - total package coverage: `54%`
+  - measured module gains:
+    - `v3_driver.py`: `36% -> 37%`
 - Honest conclusion:
   - The cheap helper surface is now much better covered.
   - `95%` is still not reachable without a separate heavy-solver campaign against `v3_driver.py`, `io.py`, `solver.py`, and the remaining under-covered numerical infrastructure.
