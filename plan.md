@@ -1525,3 +1525,27 @@ Release-ready means:
   - keep targeting bounded, physics-relevant seams in `v3_driver.py`, especially the solve-handoff and preconditioner-builder edges that still decide real production behavior,
   - then move to `io.py` output/reduction assembly and transport/output diagnostic construction,
   - continue to avoid long end-to-end solve campaigns unless they buy meaningful heavy-module coverage.
+- Added a bounded `io.py` output-policy / serialization coverage pass:
+  - new `tests/test_io_output_policy_coverage.py`
+- These cover:
+  - output-cache directory selection and cache-path determinism,
+  - nested HDF5 readback and overwrite guards,
+  - scalar/list parsing helpers and Legendre-matrix construction,
+  - bounded includePhi1 Newton-step selection policy,
+  - export-`f` configuration on real geometry-4 fixtures, invalid-option rejection, and identity export-map application.
+- Fresh audited local result after this pass:
+  - `pytest --collect-only -q` -> `579 tests collected`
+  - chunked `pytest -q` over the full tree -> `579 passed`
+  - chunked package coverage audit -> total package coverage `55%`
+  - measured module gains:
+    - `io.py`: `66.6% -> 66.8%` (`1714/2574 -> 1719/2574`)
+    - `v3_driver.py`: held at `37.1%`
+    - `solver.py`: held at `67.0%`
+- Numerical / validation conclusion:
+  - this pass buys real user-facing signal because it exercises the output-side policy and serialization behavior that shapes written artifacts and postprocessing inputs,
+  - it remains cheap because it stays on tiny fixtures and synthetic arrays instead of broad solve campaigns,
+  - the dominant remaining denominator is still the deep solve body of `v3_driver.py`, followed by the larger uncovered portions of `io.py`.
+- Next meaningful coverage work:
+  - return to bounded `v3_driver.py` solve-handoff and preconditioner-builder edges,
+  - then keep filling `io.py` output/reduction assembly with similarly bounded tests,
+  - continue preferring mathematically anchored seams over broad expensive end-to-end reruns.
