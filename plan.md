@@ -1473,3 +1473,29 @@ Release-ready means:
   - stay on bounded, physics-relevant seams,
   - focus next on driver-side solve-selection / preconditioner-applicability branches and then output/diagnostics assembly in `io.py`,
   - avoid broad expensive end-to-end solve campaigns unless they buy real heavy-module coverage.
+- Added a bounded driver-side domain-decomposition / reduction coverage pass:
+  - new `tests/test_v3_driver_dd_reduction_coverage.py`
+- These cover:
+  - diagonal-only and block-diagonal-only reductions as local-coupling-preserving simplifications,
+  - overlapping patch-range construction for additive-Schwarz style local solves,
+  - coarse-level sizing and environment override behavior for multilevel Schwarz correction,
+  - bounded multilevel residual-correction composition with zero-step and ordered-level checks,
+  - safe-preconditioner clipping/NaN handling,
+  - finite-state gating for GMRES results.
+- Fresh audited local result after this pass:
+  - `pytest --collect-only -q` -> `552 tests collected`
+  - chunked `pytest -q` over the full tree -> `552 passed`
+  - chunked package coverage audit -> total package coverage `54%`
+  - measured module gains:
+    - `v3_driver.py`: held at `37%`, but with the DD/reduction seam now exercised directly
+    - `diagnostics.py`: held at `100%`
+    - `grids.py`: held at `82%`
+    - `solver.py`: held at `67%`
+- Numerical / literature anchors used in this pass:
+  - additive-Schwarz and block-Jacobi locality invariants for restricted local corrections,
+  - multilevel residual-correction ordering and bounded damping ideas from domain-decomposition preconditioning,
+  - finite-state Krylov acceptance criteria on bounded synthetic systems.
+- Current conclusion:
+  - the remaining denominator is still dominated by `sfincs_jax/v3_driver.py`,
+  - the next high-signal tests should stay inside the driver’s solve-selection / preconditioner-applicability ladder and then move to `io.py` output/reduction assembly,
+  - the right strategy remains bounded synthetic operators and reduction identities, not broad expensive end-to-end solves.
