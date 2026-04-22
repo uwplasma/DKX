@@ -37,9 +37,10 @@ def rhs1_accept_candidate(
 ) -> tuple[Any, Any, RHS1KSPHandoffState | None, bool]:
     """Accept a candidate only if it strictly improves the residual norm."""
     if float(candidate_result.residual_norm) < float(current_result.residual_norm):
+        accepted_residual_vec = candidate_residual_vec if candidate_residual_vec is not None else current_residual_vec
         return (
             candidate_result,
-            candidate_residual_vec,
+            accepted_residual_vec,
             RHS1KSPHandoffState(
                 matvec_fn=matvec_fn,
                 b_vec=b_vec,

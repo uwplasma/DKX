@@ -61,3 +61,26 @@ def test_rhs1_accept_candidate_rejects_non_improving_result() -> None:
     assert result is current
     assert residual_vec == "r0"
     assert handoff is None
+
+
+def test_rhs1_accept_candidate_keeps_current_residual_vector_when_candidate_residual_is_missing() -> None:
+    current = _result(1.0, x="x0")
+    candidate = _result(0.5, x="x1")
+    result, residual_vec, handoff, accepted = rhs1_accept_candidate(
+        current_result=current,
+        candidate_result=candidate,
+        current_residual_vec="r0",
+        candidate_residual_vec=None,
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        x0_vec="seed",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="gmres",
+    )
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r0"
+    assert handoff is not None
