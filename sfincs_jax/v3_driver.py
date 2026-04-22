@@ -70,6 +70,11 @@ from .rhs1_strong_auto_kind import (
     auto_rhs1_full_strong_kind,
     auto_rhs1_reduced_strong_kind,
 )
+from .rhs1_sparse_rescue_policy import (
+    rhs1_resolved_sparse_rescue_ordering,
+    rhs1_sparse_enabled_initial,
+    rhs1_sparse_kind_use,
+)
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -15121,69 +15126,82 @@ def solve_v3_full_system_linear_gmres(
                                 f"(ratio={res_ratio:.3e} >= {dense_shortcut_ratio:.1e})",
                             )
 
-        sparse_kind_use = sparse_precond_kind
-        sparse_enabled = False
-        if sparse_precond_mode == "on":
-            sparse_enabled = True
-        elif sparse_precond_mode == "auto":
-            sparse_enabled = bool(op.fblock.fp is not None) or (
-                op.fblock.pas is not None and float(res_reduced.residual_norm) > target_reduced
+        sparse_enabled = rhs1_sparse_enabled_initial(
+            sparse_precond_mode=sparse_precond_mode,
+            has_fp=op.fblock.fp is not None,
+            has_pas=op.fblock.pas is not None,
+            residual_norm=float(res_reduced.residual_norm),
+            target=float(target_reduced),
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+        )
+        sparse_kind_use = rhs1_sparse_kind_use(sparse_precond_kind=sparse_precond_kind)
+        sparse_jax_est_mb: float | None = None
+        if sparse_enabled and sparse_kind_use == "jax" and int(active_size) <= int(sparse_max_size):
+            precond_dtype = _precond_dtype(int(active_size))
+            bytes_per = 4.0 if precond_dtype == jnp.float32 else 8.0
+            sparse_jax_est_mb = (int(active_size) ** 2) * bytes_per / 1.0e6
+        sparse_order = rhs1_resolved_sparse_rescue_ordering(
+            sparse_enabled=bool(sparse_enabled),
+            sparse_kind_use=sparse_kind_use,
+            dense_shortcut=bool(dense_shortcut),
+            sparse_exact_direct=bool(sparse_exact_direct),
+            size=int(active_size),
+            sparse_max_size=int(sparse_max_size),
+            large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_active),
+            sparse_xblock_rescue_active=bool(sparse_xblock_rescue_active),
+            sparse_sxblock_rescue_active=bool(sparse_sxblock_rescue_active),
+            sparse_jax_est_mb=sparse_jax_est_mb,
+            sparse_jax_max_mb=float(sparse_jax_max_mb),
+            pas_fast_accept=bool(pas_fast_accept),
+            gpu_sparse_skip=bool(
+                _rhs1_gpu_sparse_fallback_skip_allowed(
+                    op=op,
+                    rhs1_precond_kind=rhs1_precond_kind,
+                    use_active_dof_mode=True,
+                    residual_norm=float(res_reduced.residual_norm),
+                    target=float(target_reduced),
+                )
+            ),
+        )
+        sparse_enabled = bool(sparse_order.enabled)
+        sparse_kind_use = str(sparse_order.kind_use)
+        sparse_xblock_rescue_active = bool(sparse_order.xblock_rescue_active)
+        sparse_sxblock_rescue_active = bool(sparse_order.sxblock_rescue_active)
+        if sparse_order.prefer_sparse_exact_over_dense_shortcut and emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: preferring sparse exact rescue over dense shortcut",
             )
-        if sparse_enabled:
-            sparse_enabled = int(op.rhs_mode) == 1 and (not bool(op.include_phi1))
-        if sparse_enabled:
-            if dense_shortcut and (not sparse_exact_direct):
-                sparse_enabled = False
-            elif dense_shortcut and sparse_exact_direct and emit is not None:
+        if sparse_order.reason_size_large_cpu:
+            sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size))
+            if emit is not None:
                 emit(
                     0,
-                    "solve_v3_full_system_linear_gmres: preferring sparse exact rescue over dense shortcut",
+                    f"solve_v3_full_system_linear_gmres: large CPU sparse {'LU' if sparse_exact_lu else 'ILU'} rescue "
+                    f"(size={int(active_size)} > max={int(sparse_max_size)})",
                 )
-            sparse_kind_use = sparse_precond_kind
-            if sparse_kind_use == "auto":
-                # Prefer SciPy/SuperLU ILU: factors are built on the host, then applied in
-                # JAX (including for implicit/differentiable solves) via triangular solves.
-                sparse_kind_use = "scipy"
-            if int(active_size) > sparse_max_size:
-                if large_cpu_sparse_rescue_active:
-                    sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size))
-                    if emit is not None:
-                        emit(
-                            0,
-                            f"solve_v3_full_system_linear_gmres: large CPU sparse {'LU' if sparse_exact_lu else 'ILU'} rescue "
-                            f"(size={int(active_size)} > max={int(sparse_max_size)})",
-                        )
-                elif sparse_exact_direct:
-                    if emit is not None:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: exact sparse LU rescue "
-                            f"(size={int(active_size)} > max={int(sparse_max_size)})",
-                        )
-                elif sparse_xblock_rescue_active or sparse_sxblock_rescue_active:
-                    if emit is not None:
-                        rescue_kind = "xblock" if sparse_xblock_rescue_active else "sxblock"
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: targeted sparse "
-                            f"{rescue_kind} rescue (size={int(active_size)} > max={int(sparse_max_size)})",
-                        )
-                else:
-                    sparse_enabled = False
-                    if emit is not None:
-                        emit(1, f"sparse_ilu: disabled (size={int(active_size)} > max={int(sparse_max_size)})")
-            elif sparse_kind_use == "jax":
-                precond_dtype = _precond_dtype(int(active_size))
-                bytes_per = 4.0 if precond_dtype == jnp.float32 else 8.0
-                est_mb = (int(active_size) ** 2) * bytes_per / 1.0e6
-                if sparse_jax_max_mb > 0.0 and est_mb > sparse_jax_max_mb:
-                    sparse_enabled = False
-                    if emit is not None:
-                        emit(
-                            1,
-                            "sparse_jax: disabled "
-                            f"(est_mem={est_mb:.1f} MB > max_mb={sparse_jax_max_mb:.1f})",
-                        )
+        elif sparse_order.reason_size_exact_direct and emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: exact sparse LU rescue "
+                f"(size={int(active_size)} > max={int(sparse_max_size)})",
+            )
+        elif sparse_order.reason_size_targeted and emit is not None:
+            rescue_kind = "xblock" if sparse_xblock_rescue_active else "sxblock"
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: targeted sparse "
+                f"{rescue_kind} rescue (size={int(active_size)} > max={int(sparse_max_size)})",
+            )
+        elif sparse_order.reason_size_disabled and emit is not None:
+            emit(1, f"sparse_ilu: disabled (size={int(active_size)} > max={int(sparse_max_size)})")
+        if sparse_order.reason_sparse_jax_mem_disabled and sparse_jax_est_mb is not None and emit is not None:
+            emit(
+                1,
+                "sparse_jax: disabled "
+                f"(est_mem={sparse_jax_est_mb:.1f} MB > max_mb={sparse_jax_max_mb:.1f})",
+            )
 
         dense_matrix_cache: np.ndarray | None = None
         host_sparse_direct_used = False
@@ -15191,38 +15209,25 @@ def solve_v3_full_system_linear_gmres(
         explicit_fp_xblock_seed_used = False
         explicit_fp_xblock_seed_residual = float("inf")
         explicit_fp_xblock_seed_improvement_ratio = 1.0
-        if large_cpu_sparse_rescue_active and sparse_exact_lu:
-            sparse_xblock_rescue_active = False
-            sparse_sxblock_rescue_active = False
+        if sparse_order.reason_large_cpu_exact_skips_targeted:
             if emit is not None:
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: exact large-CPU sparse LU selected "
                     "-> skipping targeted sparse xblock/sxblock rescue",
                 )
-        if pas_fast_accept and sparse_enabled and emit is not None:
+        if sparse_order.reason_pas_fast_accept and emit is not None:
             emit(
                 1,
                 "solve_v3_full_system_linear_gmres: PAS fast-accept "
                 f"(residual={float(res_reduced.residual_norm):.3e}) -> skip sparse rescue tail",
             )
-        if pas_fast_accept:
-            sparse_enabled = False
-        gpu_sparse_skip = _rhs1_gpu_sparse_fallback_skip_allowed(
-            op=op,
-            rhs1_precond_kind=rhs1_precond_kind,
-            use_active_dof_mode=True,
-            residual_norm=float(res_reduced.residual_norm),
-            target=float(target_reduced),
-        )
-        if gpu_sparse_skip and sparse_enabled and emit is not None:
+        if sparse_order.reason_gpu_sparse_skip and emit is not None:
             emit(
                 1,
                 "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
                 f"{rhs1_precond_kind} accept (residual={float(res_reduced.residual_norm):.3e})",
             )
-        if gpu_sparse_skip:
-            sparse_enabled = False
         if sparse_enabled and float(res_reduced.residual_norm) > target_reduced:
             if sparse_xblock_rescue_active:
                 try:
@@ -17699,80 +17704,84 @@ def solve_v3_full_system_linear_gmres(
             target=float(target),
         )
 
-        sparse_kind_use = sparse_precond_kind
         sparse_exact_direct = _rhsmode1_host_sparse_direct_allowed(
             sparse_exact_lu=sparse_exact_lu,
             use_implicit=bool(use_implicit),
         )
-        sparse_enabled = False
-        if sparse_precond_mode == "on":
-            sparse_enabled = True
-        elif sparse_precond_mode == "auto":
-            sparse_enabled = bool(op.fblock.fp is not None) or (
-                op.fblock.pas is not None and float(result.residual_norm) > target
+        sparse_enabled = rhs1_sparse_enabled_initial(
+            sparse_precond_mode=sparse_precond_mode,
+            has_fp=op.fblock.fp is not None,
+            has_pas=op.fblock.pas is not None,
+            residual_norm=float(result.residual_norm),
+            target=float(target),
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+        )
+        sparse_kind_use = rhs1_sparse_kind_use(sparse_precond_kind=sparse_precond_kind)
+        sparse_jax_est_mb: float | None = None
+        if sparse_enabled and sparse_kind_use == "jax" and int(op.total_size) <= int(sparse_max_size):
+            precond_dtype = _precond_dtype(int(op.total_size))
+            bytes_per = 4.0 if precond_dtype == jnp.float32 else 8.0
+            sparse_jax_est_mb = (int(op.total_size) ** 2) * bytes_per / 1.0e6
+        sparse_order = rhs1_resolved_sparse_rescue_ordering(
+            sparse_enabled=bool(sparse_enabled),
+            sparse_kind_use=sparse_kind_use,
+            sparse_exact_direct=bool(sparse_exact_direct),
+            size=int(op.total_size),
+            sparse_max_size=int(sparse_max_size),
+            large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_full),
+            sparse_jax_est_mb=sparse_jax_est_mb,
+            sparse_jax_max_mb=float(sparse_jax_max_mb),
+            pas_fast_accept=bool(pas_fast_accept),
+            gpu_sparse_skip=bool(
+                _rhs1_gpu_sparse_fallback_skip_allowed(
+                    op=op,
+                    rhs1_precond_kind=rhs1_precond_kind,
+                    use_active_dof_mode=False,
+                    residual_norm=float(result.residual_norm),
+                    target=float(target),
+                )
+            ),
+        )
+        sparse_enabled = bool(sparse_order.enabled)
+        sparse_kind_use = str(sparse_order.kind_use)
+        if sparse_order.reason_size_large_cpu:
+            sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(op.total_size))
+            if emit is not None:
+                emit(
+                    0,
+                    f"solve_v3_full_system_linear_gmres: large CPU sparse {'LU' if sparse_exact_lu else 'ILU'} rescue "
+                    f"(size={int(op.total_size)} > max={int(sparse_max_size)})",
+                )
+        elif sparse_order.reason_size_exact_direct and emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: exact sparse LU rescue "
+                f"(size={int(op.total_size)} > max={int(sparse_max_size)})",
             )
-        if sparse_enabled:
-            sparse_enabled = int(op.rhs_mode) == 1 and (not bool(op.include_phi1))
-            if sparse_kind_use == "auto":
-                sparse_kind_use = "scipy"
-            if int(op.total_size) > int(sparse_max_size):
-                if large_cpu_sparse_rescue_full:
-                    sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(op.total_size))
-                    if emit is not None:
-                        emit(
-                            0,
-                            f"solve_v3_full_system_linear_gmres: large CPU sparse {'LU' if sparse_exact_lu else 'ILU'} rescue "
-                            f"(size={int(op.total_size)} > max={int(sparse_max_size)})",
-                        )
-                elif sparse_exact_direct:
-                    if emit is not None:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: exact sparse LU rescue "
-                            f"(size={int(op.total_size)} > max={int(sparse_max_size)})",
-                        )
-                else:
-                    sparse_enabled = False
-                    if emit is not None:
-                        emit(1, f"sparse_ilu: disabled (size={int(op.total_size)} > max={int(sparse_max_size)})")
-            elif sparse_kind_use == "jax":
-                precond_dtype = _precond_dtype(int(op.total_size))
-                bytes_per = 4.0 if precond_dtype == jnp.float32 else 8.0
-                est_mb = (int(op.total_size) ** 2) * bytes_per / 1.0e6
-                if sparse_jax_max_mb > 0.0 and est_mb > sparse_jax_max_mb:
-                    sparse_enabled = False
-                    if emit is not None:
-                        emit(
-                            1,
-                            "sparse_jax: disabled "
-                            f"(est_mem={est_mb:.1f} MB > max_mb={sparse_jax_max_mb:.1f})",
-                        )
+        elif sparse_order.reason_size_disabled and emit is not None:
+            emit(1, f"sparse_ilu: disabled (size={int(op.total_size)} > max={int(sparse_max_size)})")
+        if sparse_order.reason_sparse_jax_mem_disabled and sparse_jax_est_mb is not None and emit is not None:
+            emit(
+                1,
+                "sparse_jax: disabled "
+                f"(est_mem={sparse_jax_est_mb:.1f} MB > max_mb={sparse_jax_max_mb:.1f})",
+            )
 
         dense_matrix_cache: np.ndarray | None = None
         host_sparse_direct_used = False
-        if pas_fast_accept and sparse_enabled and emit is not None:
+        if sparse_order.reason_pas_fast_accept and emit is not None:
             emit(
                 1,
                 "solve_v3_full_system_linear_gmres: PAS fast-accept "
                 f"(residual={float(result.residual_norm):.3e}) -> skip sparse rescue tail",
             )
-        if pas_fast_accept:
-            sparse_enabled = False
-        gpu_sparse_skip = _rhs1_gpu_sparse_fallback_skip_allowed(
-            op=op,
-            rhs1_precond_kind=rhs1_precond_kind,
-            use_active_dof_mode=False,
-            residual_norm=float(result.residual_norm),
-            target=float(target),
-        )
-        if gpu_sparse_skip and sparse_enabled and emit is not None:
+        if sparse_order.reason_gpu_sparse_skip and emit is not None:
             emit(
                 1,
                 "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
                 f"{rhs1_precond_kind} accept (residual={float(result.residual_norm):.3e})",
             )
-        if gpu_sparse_skip:
-            sparse_enabled = False
         if sparse_enabled and float(result.residual_norm) > target:
             if sparse_kind_use == "jax":
                 try:
