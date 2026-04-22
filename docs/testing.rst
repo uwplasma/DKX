@@ -232,6 +232,31 @@ That structure is intended to make claims in the docs reproducible. If a figure 
 table appears in the docs, there should be a script or artifact trail that explains how
 it was produced.
 
+Publication-facing validation lanes
+-----------------------------------
+
+The manuscript-oriented validation lanes are tracked separately from the general
+unit/regression suite:
+
+- ``examples/publication_figures/validation_manifest.json`` is the machine-readable
+  map from literature claim to script and artifact.
+- :doc:`validation_matrix` is the corresponding human-facing documentation page.
+
+The first new lane on the refactor branch is the bounded ``E_r`` trajectory-model sweep:
+
+- script: ``examples/publication_figures/generate_er_trajectory_sweep.py``
+- prototype artifact:
+  ``examples/publication_figures/artifacts/er_sweep_fast_tokamak_summary.json``
+- prototype figure:
+  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep.png``
+
+That lane is not yet the final audited paper reproduction. It is currently used as:
+
+- a branch-level regression target for the trajectory-model sweep script,
+- a stable artifact with numerical assertions for small-field agreement and finite-``E_r``
+  model separation,
+- and a figure/layout prototype for the eventual manuscript figure family.
+
 Further reading
 ---------------
 
