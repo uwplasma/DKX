@@ -1499,3 +1499,29 @@ Release-ready means:
   - the remaining denominator is still dominated by `sfincs_jax/v3_driver.py`,
   - the next high-signal tests should stay inside the driver’s solve-selection / preconditioner-applicability ladder and then move to `io.py` output/reduction assembly,
   - the right strategy remains bounded synthetic operators and reduction identities, not broad expensive end-to-end solves.
+- Added a bounded driver solve-policy / rescue-ladder coverage pass:
+  - new `tests/test_v3_driver_solve_policy_coverage.py`
+- These cover:
+  - `constraintScheme=0` PETSc-compat and dense-fallback routing,
+  - sparse-exact-LU selection for FP and PAS branches, including accelerator small-case and full-preconditioner paths,
+  - large-CPU x-block skip-primary eligibility,
+  - transport sparse-direct first-attempt and host-GMRES-first policy guards,
+  - transport residual-acceptance, recycle, factor-dtype, and retry policy seams,
+  - host-only SciPy Krylov requests and GMRES dispatch incompatibility with distributed paths.
+- Fresh audited local result after this pass:
+  - `pytest --collect-only -q` -> `568 tests collected`
+  - chunked `pytest -q` over the full tree -> `568 passed`
+  - chunked package coverage audit -> total package coverage `55%`
+  - measured module gains:
+    - `v3_driver.py`: `37.0% -> 37.1%` (`5227/14161 -> 5259/14161`)
+    - total package coverage: `54% -> 55%`
+    - `io.py`: held at `66.6%`
+    - `solver.py`: held at `67.0%`
+- Numerical / validation conclusion:
+  - this pass buys real signal because it covers the branch-selection logic that determines which bounded linear-algebra path the physics solve takes,
+  - it still avoids expensive full-system solves and therefore keeps the campaign efficient,
+  - the remaining denominator is even more obviously concentrated in the deep solve body of `v3_driver.py` and then in `io.py` output/reduction assembly.
+- Next meaningful coverage work:
+  - keep targeting bounded, physics-relevant seams in `v3_driver.py`, especially the solve-handoff and preconditioner-builder edges that still decide real production behavior,
+  - then move to `io.py` output/reduction assembly and transport/output diagnostic construction,
+  - continue to avoid long end-to-end solve campaigns unless they buy meaningful heavy-module coverage.
