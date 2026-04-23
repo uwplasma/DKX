@@ -2883,6 +2883,55 @@ Decision:
     “synthesize the audited full-resolution LHD summary/figure from the finished
     output tree”, then immediately reuse the freed GPUs for the full W7-X
     collisionality rerun or the heavier W7-X ambipolar reference lane.
+
+### 19.32 Office milestone: audited LHD full artifact closed, W7-X full rerun launched
+
+- The `office` LHD full-resolution re-audit is now actually closed:
+  - `examples/publication_figures/generate_sfincs_paper_figs.py --case lhd --plot-only --collision-operators 0,1 ...`
+    was rerun from `/home/rjorge/sfincs_jax_refactor_v3_latest`;
+  - the audited full artifact now resolves to the standard full names:
+    - summary:
+      `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/artifacts/lhd_collisionality_summary.json`
+    - figure:
+      `/home/rjorge/sfincs_jax_refactor_v3_latest/docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png`
+  - metadata check on the summary:
+    - `ROW_COUNT = 14`
+    - labels = `Fokker-Planck` and `PAS`
+    - `FAST = False`
+    - `CASE = lhd`
+    - `N_POINTS = 7`
+    - `NU_MIN = 0.1`
+    - `NU_MAX = 10.0`
+- The older CPU-only W7-X ambipolar reference lane was intentionally paused after
+  preserving its partial work directory:
+  - PID `3145554` had still not advanced beyond the first scan point and was
+    consuming several host cores;
+  - this lane should be resumed later through the new `--skip-existing` /
+    split-scan workflow rather than left as an unbounded CPU-only job.
+- The freed GPUs were immediately reassigned to the next critical-path lane:
+  the full W7-X collisionality re-audit.
+  - worktree:
+    `/home/rjorge/sfincs_jax_refactor_v3_latest`
+  - work dir:
+    `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/output/w7x_reaudit_full`
+  - operator 0 launch:
+    - wrapper PID `3172653`
+    - active scan child PID `3172691`
+    - log:
+      `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/output/resume_logs/w7x_co0_resume_gpu0.log`
+  - operator 1 launch:
+    - wrapper PID `3173256`
+    - active scan child PID `3173300`
+    - log:
+      `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/output/resume_logs/w7x_co1_resume_gpu1.log`
+  - both operator ladders entered the expected `nu_n_0.01727` first point and
+    both GPUs showed active utilization after launch.
+- Immediate next actions:
+  1. let the split W7-X full rerun finish on `office`;
+  2. synthesize the audited full `w7x_collisionality_summary.json` and
+     `sfincs_jax_fig2_w7x_collisionality.png`;
+  3. only after both full LHD and full W7-X artifacts are pinned, revisit the
+     high-collisionality proxy and the heavier W7-X ambipolar literature lane.
      - Keep the CLI unchanged. This lane is Python-first; file-based `wout_path`
        remains the stable public CLI interface.
 
