@@ -216,6 +216,9 @@ This script now exists as the executable lane scaffold. It defaults to the exist
 ``filteredW7XNetCDF_2species_magneticDrifts_withEr`` example input, runs an
 ``E_r`` scan, postprocesses the scan with ``sfincs_jax.ambipolar.solve_ambipolar_from_scan_dir``,
 and writes both a metadata-rich JSON summary and a publication-style figure.
+It also supports ``--skip-existing`` plus ``--index/--stride`` split execution, so
+the heavy reference scan can be resumed or distributed across devices before the final
+ambipolar postprocess/figure pass.
 
 Current status note:
 
