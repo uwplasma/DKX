@@ -224,17 +224,21 @@
       "https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2018er.pdf",
       "https://www.nature.com/articles/s41586-021-03687-w"
     ],
-    "scripts": [],
+    "scripts": [
+      "examples/publication_figures/generate_w7x_ambipolar_validation.py --fast --n-points 7"
+    ],
     "artifacts": [],
     "claims": [
       "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature"
     ],
     "source_code": [
+      "examples/publication_figures/generate_w7x_ambipolar_validation.py",
       "sfincs_jax/ambipolar.py",
       "sfincs_jax/io.py"
     ],
     "tests": [
-      "tests/test_er_scan_and_ambipolar.py"
+      "tests/test_er_scan_and_ambipolar.py",
+      "tests/test_generate_w7x_ambipolar_validation.py"
     ],
     "acceptance_gates": [
       "Document the exact VMEC/Boozer/profile inputs used for the comparison",

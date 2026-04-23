@@ -2687,3 +2687,53 @@ Decision:
   3. keep full-resolution LHD/W7-X collisionality regeneration and W7-X
      ambipolar validation as open research lanes until their acceptance gates
      are satisfied by pinned artifacts.
+
+### 19.27 W7-X ambipolar validation scaffold and heavy collisionality rerun handoff
+
+- The W7-X ambipolar lane is no longer just a manifest placeholder:
+  - new script:
+    `examples/publication_figures/generate_w7x_ambipolar_validation.py`
+  - default base input:
+    `examples/sfincs_examples/filteredW7XNetCDF_2species_magneticDrifts_withEr/input.namelist`
+  - bounded branch mode:
+    `--fast --n-points 7`
+  - outputs:
+    - metadata-rich JSON summary with `metadata`, per-run `runs`, and
+      `ambipolar` root/output sections,
+    - publication-style PNG/PDF figure with radial-current, heat-flux,
+      particle-flux, and flow/current panels.
+- Focused validation now exists for this lane:
+  - new test:
+    `tests/test_generate_w7x_ambipolar_validation.py`
+  - it covers:
+    - default `!ss` Er-bracket parsing from the W7-X input,
+    - summary-payload serialization from a synthetic ambipolar result,
+    - end-to-end execution of the script on the tiny scheme-11 fixture.
+- Documentation and manifest updates:
+  - `examples/publication_figures/validation_manifest.json` now points the
+    `w7x_ambipolar_er_validation` lane at the executable scaffold and its test;
+  - `docs/validation_matrix.rst`, `docs/testing.rst`, and
+    `examples/publication_figures/README.md` now describe the scaffold as an
+    implemented script but keep the lane explicitly unpromoted until a defensible
+    W7-X reference artifact is pinned.
+- Validation run:
+  - `pytest -q tests/test_generate_w7x_ambipolar_validation.py tests/test_er_scan_and_ambipolar.py tests/test_validation_manifest_schema.py`
+    -> `7 passed`
+  - `python -m py_compile examples/publication_figures/generate_w7x_ambipolar_validation.py tests/test_generate_w7x_ambipolar_validation.py`
+    -> passed
+  - `sphinx-build -W -b html docs docs/_build/html`
+    -> passed
+- Heavy collisionality rerun status:
+  - a clean `office` worktree was created at `/home/rjorge/sfincs_jax_refactor_v3`
+    from `origin/refactor/v3-driver-split`;
+  - the full LHD collisionality rerun was launched there with scan-state recycling:
+    `SFINCS_JAX_SCAN_RECYCLE=1 python3 examples/publication_figures/generate_sfincs_paper_figs.py --case lhd ...`
+  - within this turn it remained compute-bound in the first scan solve, so no
+    audited full-resolution artifact has been promoted yet.
+- Next actions:
+  1. finish the full LHD rerun on `office` and pull back the summary/figure;
+  2. repeat the same full rerun for W7-X on `office`;
+  3. only after both are pinned, re-evaluate and regenerate the high-collisionality
+     proxy lane;
+  4. run the heavier W7-X ambipolar scaffold on the reference input and pin its
+     first literature-facing summary/figure artifact.

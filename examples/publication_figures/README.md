@@ -17,6 +17,7 @@ Examples:
 - `er_terms_publication_figures.py`
 - `generate_sfincs_paper_figs.py`
 - `generate_er_trajectory_sweep.py`
+- `generate_w7x_ambipolar_validation.py`
 
 Pinned fixed-case runs on the refactor branch:
 
@@ -69,3 +70,18 @@ The corrected bounded W7-X rerun is currently pinned as:
 
 The full collisionality figure family remains an explicit re-audit lane until the
 corrected LHD and W7-X outputs are both regenerated and pinned from the fixed script.
+
+W7-X ambipolar validation scaffold:
+
+```bash
+python examples/publication_figures/generate_w7x_ambipolar_validation.py \
+  --fast \
+  --n-points 7 \
+  --work-dir examples/publication_figures/output/w7x_ambipolar_validation_fast \
+  --summary-json examples/publication_figures/output/w7x_ambipolar_validation_fast/summary.json \
+  --out-dir docs/_static/figures/paper
+```
+
+This lane currently ships as an executable scaffold with a metadata-rich JSON summary
+and figure writer, but it is not promoted to a checked-in W7-X literature artifact
+until the heavier reference input is rerun and audited.
