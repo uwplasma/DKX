@@ -12,6 +12,17 @@ from .boozer_bc import read_boozer_bc_bracketing_surfaces
 
 @dataclass(frozen=True)
 class BoozerGeometry:
+    """Normalized single-surface Boozer-coordinate geometry.
+
+    The v3 operator kernels use arrays with internal shape ``(Ntheta, Nzeta)``.
+    Hats denote the nondimensional SFINCS normalizations used throughout the
+    solver and output writer.  The container is intentionally flat and explicit:
+    every field that enters streaming, drift, collisionless response, or output
+    serialization is visible here rather than hidden behind geometry-specific
+    subclasses.  This makes parity tests, finite-difference checks, and JAX
+    differentiation gates straightforward to write and audit.
+    """
+
     # Scalars:
     n_periods: int
     b0_over_bbar: float
@@ -257,6 +268,9 @@ def boozer_geometry_scheme4(
     zeta2 = zeta[None, :]
 
     # Harmonics (l, n, amplitude) from Beidler et al, NF 51, 076001 (2011), Table 1.
+    # Keep this path in JAX operations because it is the smallest deterministic gate
+    # for differentiating geometry-dependent objectives with respect to magnetic
+    # spectrum amplitudes.
     amp = (amp0 * b0_over_bbar)[:, None, None]  # (H,1,1)
     angle = l[:, None, None] * theta2[None, :, :] - n_periods * n[:, None, None] * zeta2[None, :, :]
     cos_angle = jnp.cos(angle)
