@@ -88,6 +88,33 @@ VMEC-centered user workflows typically use either:
 - the namelist ``equilibriumFile`` entry, or
 - the explicit Python / CLI override ``wout_path=...`` / ``--wout-path ...``.
 
+Optional JAX-native geometry producers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The standard release path for ``geometryScheme=5`` remains a VMEC ``wout`` file.
+For differentiable research workflows, `sfincs_jax` now also includes a small
+structural adapter layer in ``sfincs_jax/jax_geometry_adapters.py``. The adapter can
+accept VMEC-like in-memory objects, including objects with the field layout used by
+``vmec_jax.wout.WoutData``, and normalize them to the internal
+``sfincs_jax.vmec_wout.VmecWout`` convention without making ``vmec_jax`` a required
+dependency.
+
+This is the intended staged path for JAX-native equilibrium coupling:
+
+1. solve or update an equilibrium with an optional producer such as ``vmec_jax``,
+2. convert the in-memory ``wout``-like object with
+   ``vmec_wout_from_wout_like(...)``,
+3. evaluate the same scheme-5 geometry formulas used by file-based VMEC inputs,
+4. pass the resulting arrays to the kinetic operator and, when the upstream geometry
+   producer supports it, differentiate through the outer objective.
+
+The first adapter stage is covered by unit tests that check backend discovery,
+``(radius, mode)`` to ``(mode, radius)`` transposition, native ``sfincs_jax`` array
+ordering, and invalid-shape rejection. The remaining research-grade work is to expose
+an end-to-end public ``vmec_jax -> sfincs_jax`` example once the driver split is far
+enough along that the differentiable geometry path can be validated without hidden
+file I/O.
+
 Boozer ``.bc`` workflow
 -----------------------
 
