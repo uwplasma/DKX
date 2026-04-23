@@ -153,6 +153,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/transport_preconditioner_dispatch.py``:
   shared transport preconditioner-kind normalization, auto-selection, DD/sparse-JAX
   env parsing, and reduced/full preconditioner builder dispatch.
+- ``sfincs_jax/transport_solve_policy.py``:
+  shared active-DOF transport policy, active-index map construction, and dense
+  fallback / dense-preconditioner policy used before the transport preconditioner and
+  solve handoff layers.
 - ``sfincs_jax/transport_parallel_policy.py``:
   transport process-parallel backend selection, worker env, GPU worker env, and pool
   policy.
