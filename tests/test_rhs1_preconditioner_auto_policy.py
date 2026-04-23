@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sfincs_jax.rhs1_preconditioner_auto_policy import (
+    canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry,
     rhs1_gpu_sparse_fallback_skip_allowed,
     rhs1_pas_auto_large_base_kind,
@@ -10,6 +11,43 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     rhs1_pas_tokamak_gpu_xblock_preferred,
     rhs1_sharded_line_override_allowed,
 )
+
+
+def test_canonical_rhs1_preconditioner_kind_preserves_driver_aliases() -> None:
+    cases = {
+        "": None,
+        "off": None,
+        "theta": "theta_line",
+        "line_theta": "theta_line",
+        "theta_block": "theta_dd",
+        "ras_theta": "theta_schwarz",
+        "theta_xdiag": "theta_line_xdiag",
+        "xdiag": "point_xdiag",
+        "species": "species_block",
+        "species_x": "sxblock",
+        "sx_tz": "sxblock_tz",
+        "xblock_tz_cut": "xblock_tz_lmax",
+        "xtz": "xblock_tz",
+        "multigrid": "xmg",
+        "pas_light": "pas_lite",
+        "pas_line_xcoarse": "pas_hybrid",
+        "pas_block_schur": "pas_schur",
+        "pas_3d": "pas_tz",
+        "block_ilu": "pas_ilu",
+        "tz": "theta_zeta",
+        "line_zeta": "zeta_line",
+        "dd_z": "zeta_dd",
+        "ras_zeta": "zeta_schwarz",
+        "zeta_theta": "adi",
+        "yes": "point",
+        "constraint_schur": "schur",
+        "diag": "collision",
+        "unknown": None,
+    }
+    for raw, expected in cases.items():
+        assert canonical_rhs1_preconditioner_kind(raw) == expected
+
+    assert canonical_rhs1_preconditioner_kind(" THETA_ZETA ") == "theta_zeta"
 
 
 def test_pas_auto_large_base_kind_respects_threshold(monkeypatch) -> None:

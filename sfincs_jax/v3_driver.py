@@ -61,6 +61,7 @@ from .rhs1_preconditioner_dispatch import (
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
 from .rhs1_preconditioner_auto_policy import (
+    canonical_rhs1_preconditioner_kind as _canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry as _pas_auto_skip_strong_retry,
     rhs1_pas_auto_large_base_kind as _rhs1_pas_auto_large_base_kind,
     rhs1_pas_dkes_xblock_allowed as _rhs1_pas_dkes_xblock_allowed,
@@ -11317,58 +11318,7 @@ def solve_v3_full_system_linear_gmres(
     er_abs = 0.0
 
     if rhs1_precond_env:
-        if rhs1_precond_env in {"0", "false", "no", "off"}:
-            rhs1_precond_kind = None
-        elif rhs1_precond_env in {"theta", "theta_line", "line_theta"}:
-            rhs1_precond_kind = "theta_line"
-        elif rhs1_precond_env in {"theta_dd", "theta_block", "dd_theta", "dd_t"}:
-            rhs1_precond_kind = "theta_dd"
-        elif rhs1_precond_env in {"theta_schwarz", "schwarz_theta", "ras_theta", "theta_ras"}:
-            rhs1_precond_kind = "theta_schwarz"
-        elif rhs1_precond_env in {"theta_line_xdiag", "theta_xdiag", "theta_line_diagx"}:
-            rhs1_precond_kind = "theta_line_xdiag"
-        elif rhs1_precond_env in {"xdiag", "point_xdiag", "block_xdiag"}:
-            rhs1_precond_kind = "point_xdiag"
-        elif rhs1_precond_env in {"species", "species_block", "speciesblock"}:
-            rhs1_precond_kind = "species_block"
-        elif rhs1_precond_env in {"sxblock", "species_xblock", "species_x"}:
-            rhs1_precond_kind = "sxblock"
-        elif rhs1_precond_env in {"sxblock_tz", "sxblock_theta_zeta", "species_xblock_tz", "sx_tz"}:
-            rhs1_precond_kind = "sxblock_tz"
-        elif rhs1_precond_env in {"xblock_tz_lmax", "xblock_tz_trunc", "xblock_tz_cut"}:
-            rhs1_precond_kind = "xblock_tz_lmax"
-        elif rhs1_precond_env in {"xblock_tz", "xblock", "x_tz", "xtz", "xblock_theta_zeta"}:
-            rhs1_precond_kind = "xblock_tz"
-        elif rhs1_precond_env in {"xmg", "multigrid", "x_coarse", "coarse_x"}:
-            rhs1_precond_kind = "xmg"
-        elif rhs1_precond_env in {"pas_lite", "pas_light", "pas_xmg", "pas_xmg_lite"}:
-            rhs1_precond_kind = "pas_lite"
-        elif rhs1_precond_env in {"pas_hybrid", "pas_xline_xcoarse", "pas_line_xcoarse", "pas_xcoarse_line"}:
-            rhs1_precond_kind = "pas_hybrid"
-        elif rhs1_precond_env in {"pas_schur", "pas_block_schur", "pas_xmg_l"}:
-            rhs1_precond_kind = "pas_schur"
-        elif rhs1_precond_env in {"pas_tz", "pas_3d", "pas_tz_l"}:
-            rhs1_precond_kind = "pas_tz"
-        elif rhs1_precond_env in {"pas_ilu", "pas_block_ilu", "pas_xblock_ilu", "block_ilu"}:
-            rhs1_precond_kind = "pas_ilu"
-        elif rhs1_precond_env in {"theta_zeta", "theta_zeta_line", "tz", "tz_line"}:
-            rhs1_precond_kind = "theta_zeta"
-        elif rhs1_precond_env in {"zeta", "zeta_line", "line_zeta"}:
-            rhs1_precond_kind = "zeta_line"
-        elif rhs1_precond_env in {"zeta_dd", "zeta_block", "dd_zeta", "dd_z"}:
-            rhs1_precond_kind = "zeta_dd"
-        elif rhs1_precond_env in {"zeta_schwarz", "schwarz_zeta", "ras_zeta", "zeta_ras"}:
-            rhs1_precond_kind = "zeta_schwarz"
-        elif rhs1_precond_env in {"adi", "adi_line", "line_adi", "theta_zeta", "zeta_theta"}:
-            rhs1_precond_kind = "adi"
-        elif rhs1_precond_env in {"1", "true", "yes", "on", "point", "point_block"}:
-            rhs1_precond_kind = "point"
-        elif rhs1_precond_env in {"schur", "schur_complement", "constraint_schur"}:
-            rhs1_precond_kind = "schur"
-        elif rhs1_precond_env in {"collision", "diag", "collision_diag"}:
-            rhs1_precond_kind = "collision"
-        else:
-            rhs1_precond_kind = None
+        rhs1_precond_kind = _canonical_rhs1_preconditioner_kind(rhs1_precond_env)
     else:
         # Default to v3-like preconditioner options: when preconditioner_theta/zeta are 0,
         # use point-block Jacobi. Enable line preconditioning only when explicitly requested.

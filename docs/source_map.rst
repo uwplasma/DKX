@@ -138,8 +138,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/rhs1_preconditioner_dispatch.py``:
   shared RHSMode=1 preconditioner-kind dispatch.
 - ``sfincs_jax/rhs1_preconditioner_auto_policy.py``:
-  bounded RHSMode=1 automatic preconditioner policy predicates for PAS, DKES,
-  tokamak, GPU sparse fallback, and sharded line-overrides.
+  RHSMode=1 preconditioner environment alias normalization plus bounded
+  automatic preconditioner policy predicates for PAS, DKES, tokamak, GPU sparse
+  fallback, and sharded line-overrides.
 - ``sfincs_jax/rhs1_schur_policy.py``:
   RHSMode=1 Schur base-preconditioner alias normalization and automatic
   geometry/PAS/DKES routing policy.
