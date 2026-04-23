@@ -19195,6 +19195,17 @@ def solve_v3_transport_matrix_linear_gmres(
     - Use `diagnostics.F90` formulas to fill `transportMatrix`
     """
     t_all = Timer()
+
+    def _format_duration(seconds: float) -> str:
+        seconds = max(0.0, float(seconds))
+        if seconds < 60.0:
+            return f"{seconds:.1f}s"
+        minutes, sec = divmod(int(round(seconds)), 60)
+        if minutes < 60:
+            return f"{minutes}m{sec:02d}s"
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours}h{minutes:02d}m"
+
     if emit is not None:
         emit(0, "solve_v3_transport_matrix_linear_gmres: starting whichRHS loop")
     op0 = full_system_operator_from_namelist(nml=nml, identity_shift=identity_shift, phi1_hat_base=phi1_hat_base)
@@ -19354,6 +19365,11 @@ def solve_v3_transport_matrix_linear_gmres(
         )
     if emit is not None:
         emit(1, f"solve_v3_transport_matrix_linear_gmres: rhs_mode={rhs_mode} whichRHS_count={n} total_size={int(op0.total_size)}")
+        emit(
+            0,
+            "solve_v3_transport_matrix_linear_gmres: ETA becomes available after the first completed whichRHS solve. "
+            "The first solve may include one-time JIT compilation, so later solves can be faster.",
+        )
 
     low_memory_env = os.environ.get("SFINCS_JAX_TRANSPORT_LOW_MEMORY", "").strip().lower()
     if low_memory_env in {"1", "true", "yes", "on"}:
@@ -20063,6 +20079,7 @@ def solve_v3_transport_matrix_linear_gmres(
     state_vectors: dict[int, jnp.ndarray] = {}
     residual_norms: dict[int, jnp.ndarray] = {}
     elapsed_s = np.zeros((n,), dtype=np.float64)
+    elapsed_history_transport: list[float] = []
     op_rhs_by_index = [with_transport_rhs_settings(op0, which_rhs=which_rhs) for which_rhs in which_rhs_values]
     rhs_by_index = [rhs_v3_full_system_jit(op_rhs) for op_rhs in op_rhs_by_index]
 
@@ -21542,6 +21559,17 @@ def solve_v3_transport_matrix_linear_gmres(
                     f"elapsed_s={t_rhs.elapsed_s():.3f}",
                 )
             elapsed_s[int(which_rhs) - 1] = float(t_rhs.elapsed_s())
+            elapsed_history_transport.append(float(t_rhs.elapsed_s()))
+            if emit is not None:
+                completed_rhs = len(elapsed_history_transport)
+                remaining_rhs = max(0, len(which_rhs_values) - completed_rhs)
+                avg_rhs_s = float(sum(elapsed_history_transport) / max(1, completed_rhs))
+                emit(
+                    0,
+                    f"solve_v3_transport_matrix_linear_gmres: progress {completed_rhs}/{len(which_rhs_values)} "
+                    f"avg_rhs={_format_duration(avg_rhs_s)} elapsed={_format_duration(t_all.elapsed_s())} "
+                    f"est_remaining={_format_duration(avg_rhs_s * remaining_rhs)}",
+                )
 
     if emit is not None:
         emit(0, "solve_v3_transport_matrix_linear_gmres: computing whichRHS diagnostics (batched)")

@@ -61,6 +61,65 @@ def configure_krylov_recycle(prev_dir: Path | None, current_dir: Path) -> None:
     else:
         os.environ.pop("SFINCS_JAX_STATE_IN", None)
 
+
+def format_scan_duration(seconds):
+    seconds = max(0.0, float(seconds))
+    if seconds < 60.0:
+        return f"{seconds:.1f}s"
+    minutes, sec = divmod(int(round(seconds)), 60)
+    if minutes < 60:
+        return f"{minutes}m{sec:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h{minutes:02d}m"
+    days, hours = divmod(hours, 24)
+    return f"{days}d{hours:02d}h"
+
+
+def start_scan_progress(*, total_runs, label):
+    total_runs = int(total_runs)
+    print(
+        f"[{label}] scan start: total_runs={total_runs}. ETA becomes available after the first completed run. "
+        "The first run may include one-time JIT compilation, so later runs can be faster.",
+        flush=True,
+    )
+    return {"label": str(label), "t0": time.time(), "elapsed_s": [], "total_runs": total_runs}
+
+
+def note_scan_run_start(*, progress, run_index, directory):
+    total_runs = int(progress["total_runs"])
+    elapsed_s = list(progress["elapsed_s"])
+    total_elapsed = time.time() - float(progress["t0"])
+    if elapsed_s:
+        avg_s = sum(elapsed_s) / len(elapsed_s)
+        runs_left_including_current = max(1, total_runs - int(run_index) + 1)
+        eta_text = format_scan_duration(avg_s * runs_left_including_current)
+        avg_text = format_scan_duration(avg_s)
+    else:
+        eta_text = "pending_first_run"
+        avg_text = "n/a"
+    print(
+        f"[{progress['label']}] run {int(run_index)}/{total_runs} start {directory} "
+        f"elapsed={format_scan_duration(total_elapsed)} avg_run={avg_text} est_remaining={eta_text}",
+        flush=True,
+    )
+    return time.time()
+
+
+def note_scan_run_done(*, progress, run_index, directory, run_started_at):
+    total_runs = int(progress["total_runs"])
+    run_elapsed = time.time() - float(run_started_at)
+    progress["elapsed_s"].append(float(run_elapsed))
+    avg_s = sum(progress["elapsed_s"]) / len(progress["elapsed_s"])
+    remaining_runs = max(0, total_runs - int(run_index))
+    total_elapsed = time.time() - float(progress["t0"])
+    print(
+        f"[{progress['label']}] run {int(run_index)}/{total_runs} done {directory} "
+        f"run_elapsed={format_scan_duration(run_elapsed)} avg_run={format_scan_duration(avg_s)} "
+        f"total_elapsed={format_scan_duration(total_elapsed)} est_remaining={format_scan_duration(avg_s * remaining_runs)}",
+        flush=True,
+    )
+
 def readScanVariable(varName, intOrFloatOrString, required=True, stringValueCaseSensitive=False):
     # This subroutine reads the special scan commands in the input.namelist that are hidden from fortran:
     # It is assumed that the input.namelist file has been loaded into the variable "inputFile".

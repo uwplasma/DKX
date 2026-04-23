@@ -149,6 +149,7 @@ if waitBeforeSubmitting:
         exit(0)
 print ("launching runs...")
 
+scan_progress = start_scan_progress(total_runs=numRunsInScan, label=this_filename)
 prev_dir = None
 for runNum in range(numRunsInScan):
    dirNum = runNum-1
@@ -165,7 +166,7 @@ for runNum in range(numRunsInScan):
    configure_krylov_recycle(prev_dir, current_dir)
 
    jobName="Sfnx."+dirName
-   print ("Beginning to handle job "+str(runNum+1)+" of "+str(numRunsInScan)+": "+dirName)
+   run_started_at = note_scan_run_start(progress=scan_progress, run_index=runNum+1, directory=dirName)
 
    # Now copy the input.namelist file:
    input_lines = []
@@ -191,6 +192,7 @@ for runNum in range(numRunsInScan):
        input_namelist=input_path,
        output_path=Path(outputFilename),
    )
+   note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=dirName, run_started_at=run_started_at)
 
    os.chdir("..")
    prev_dir = current_dir

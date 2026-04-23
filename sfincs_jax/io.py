@@ -2272,7 +2272,7 @@ def write_sfincs_jax_output_h5(
         # Default to stdout logging for end users (Fortran-like, deterministic).
         def emit(level: int, msg: str) -> None:  # type: ignore[no-redef]
             if level <= 1:
-                print(msg)
+                print(msg, flush=True)
     profiler = None
     if emit is not None:
         try:
@@ -2302,8 +2302,40 @@ def write_sfincs_jax_output_h5(
     def _fmt_fortran_i(val: int, width: int = 12) -> str:
         return f"{int(val):{width}d}"
 
+    def _format_duration(seconds: float) -> str:
+        seconds = max(0.0, float(seconds))
+        if seconds < 60.0:
+            return f"{seconds:.1f}s"
+        minutes, sec = divmod(int(round(seconds)), 60)
+        if minutes < 60:
+            return f"{minutes}m{sec:02d}s"
+        hours, minutes = divmod(minutes, 60)
+        if hours < 24:
+            return f"{hours}h{minutes:02d}m"
+        days, hours = divmod(hours, 24)
+        return f"{days}d{hours:02d}h"
+
+    def _runtime_scale_hint(*, rhs_mode_hint: int, total_size_hint: int, n_rhs_hint: int | None = None) -> str:
+        size = int(total_size_hint)
+        if rhs_mode_hint in {2, 3}:
+            n_rhs_use = max(1, int(n_rhs_hint or 1))
+            work = size * n_rhs_use
+            if work < 40_000:
+                return "usually seconds to a few minutes"
+            if work < 250_000:
+                return "often minutes"
+            return "often many minutes or longer"
+        if size < 8_000:
+            return "usually seconds"
+        if size < 50_000:
+            return "often tens of seconds to a few minutes"
+        if size < 200_000:
+            return "often minutes"
+        return "often many minutes or longer"
+
     input_namelist = Path(input_namelist)
     output_path = Path(output_path)
+    run_t0 = time.perf_counter()
 
     nml = read_sfincs_input(input_namelist)
     eq_override = canonical_equilibrium_override(
@@ -2348,6 +2380,8 @@ def write_sfincs_jax_output_h5(
 
     grids = grids_from_namelist(nml)
     _mark("grids_from_namelist")
+    if emit is not None:
+        emit(1, f" timing: grids ready elapsed={_format_duration(time.perf_counter() - run_t0)}")
     if emit is not None:
         rhs_mode = int(nml.group("general").get("RHSMODE", 1))
         res = nml.group("resolutionParameters")
@@ -2437,6 +2471,8 @@ def write_sfincs_jax_output_h5(
         emit(0, f" VMEC: output geometry fields ready in {time.perf_counter() - vmec_out_t0:.2f} s.")
     _mark("sfincs_jax_output_dict")
     if emit is not None:
+        emit(1, f" timing: geometry/output fields ready elapsed={_format_duration(time.perf_counter() - run_t0)}")
+    if emit is not None:
         geom_params = nml.group("geometryParameters")
         input_radial_coordinate = _get_int(geom_params, "inputRadialCoordinate", 3)
         psi_hat_wish_in = _get_float(geom_params, "psiHat_wish", -1.0)
@@ -2504,6 +2540,7 @@ def write_sfincs_jax_output_h5(
     solver_tol = _get_float(resolution, "solverTolerance", 1e-6)
 
     if bool(compute_solution) and rhs_mode == 1:
+        rhs1_branch_t0 = time.perf_counter()
         # Import lazily to keep geometry-only use-cases lightweight.
         from dataclasses import replace
 
@@ -2581,6 +2618,11 @@ def write_sfincs_jax_output_h5(
                 0,
                 " The matrix is"
                 f"{_fmt_fortran_i(active_total_size)} x{_fmt_fortran_i(active_total_size)}  elements.",
+            )
+            emit(
+                0,
+                " Runtime hint: RHSMode=1 "
+                f"active_size={int(active_total_size)}. This size range is {_runtime_scale_hint(rhs_mode_hint=1, total_size_hint=int(active_total_size))}.",
             )
             if int(active_total_size) >= 80000:
                 emit(
@@ -3798,9 +3840,16 @@ def write_sfincs_jax_output_h5(
             data["heatFlux_withoutPhi1_rN"] = _fortran_h5_layout(hf_wo * float(conv["ddrN2ddpsiHat"]))
 
         _mark("rhs1_diagnostics_done")
+        if emit is not None:
+            emit(
+                0,
+                " timing: RHSMode=1 solve+diagnostics elapsed="
+                f"{_format_duration(time.perf_counter() - rhs1_branch_t0)} total_elapsed={_format_duration(time.perf_counter() - run_t0)}",
+            )
 
     if bool(compute_transport_matrix):
         if rhs_mode in {2, 3}:
+            transport_branch_t0 = time.perf_counter()
             import jax.numpy as jnp
 
             # Import lazily to keep geometry-only use-cases lightweight.
@@ -3812,6 +3861,23 @@ def write_sfincs_jax_output_h5(
             )
 
             n_rhs = transport_matrix_size_from_rhs_mode(int(rhs_mode))
+            n_species = int(np.asarray(nml.group("speciesParameters").get("ZS", [])).size)
+            n_theta = int(grids.theta.size)
+            n_zeta = int(grids.zeta.size)
+            n_x = int(grids.x.size)
+            nxi_for_x = np.asarray(grids.n_xi_for_x, dtype=np.int32)
+            active_f_size = n_species * int(np.sum(nxi_for_x)) * n_theta * n_zeta
+            phys = nml.group("physicsParameters")
+            include_phi1 = bool(phys.get("INCLUDEPHI1", False))
+            phi1_size = n_theta * n_zeta if include_phi1 else 0
+            constraint_scheme = int(np.asarray(data.get("constraintScheme", 0)).reshape(-1)[0])
+            if constraint_scheme == 2:
+                extra_size = n_species * n_x
+            elif constraint_scheme in {1, 3, 4}:
+                extra_size = 2 * n_species
+            else:
+                extra_size = 0
+            size_est = int(active_f_size + extra_size + phi1_size)
             stream_h5_env = os.environ.get("SFINCS_JAX_TRANSPORT_STREAM_H5", "").strip().lower()
             if stream_h5_env in {"1", "true", "yes", "on"}:
                 stream_transport_h5 = True
@@ -3819,27 +3885,21 @@ def write_sfincs_jax_output_h5(
                 stream_transport_h5 = False
             else:
                 # Heuristic: stream H5 when transport diagnostics are large.
-                n_species = int(np.asarray(nml.group("speciesParameters").get("ZS", [])).size)
-                n_theta = int(grids.theta.size)
-                n_zeta = int(grids.zeta.size)
-                n_x = int(grids.x.size)
-                nxi_for_x = np.asarray(grids.n_xi_for_x, dtype=np.int32)
-                active_f_size = n_species * int(np.sum(nxi_for_x)) * n_theta * n_zeta
-                phys = nml.group("physicsParameters")
-                include_phi1 = bool(phys.get("INCLUDEPHI1", False))
-                phi1_size = n_theta * n_zeta if include_phi1 else 0
-                constraint_scheme = int(np.asarray(data.get("constraintScheme", 0)).reshape(-1)[0])
-                if constraint_scheme == 2:
-                    extra_size = n_species * n_x
-                elif constraint_scheme in {1, 3, 4}:
-                    extra_size = 2 * n_species
-                else:
-                    extra_size = 0
-                size_est = int(active_f_size + extra_size + phi1_size)
                 stream_transport_h5 = int(size_est) * int(n_rhs) >= 200_000
 
             if emit is not None:
                 emit(0, " Computing transport matrix.")
+                emit(
+                    0,
+                    " Runtime hint: transport solve "
+                    f"whichRHS_count={int(n_rhs)} total_size={int(size_est)}. "
+                    f"This workload is {_runtime_scale_hint(rhs_mode_hint=int(rhs_mode), total_size_hint=int(size_est), n_rhs_hint=int(n_rhs))}.",
+                )
+                emit(
+                    0,
+                    " Transport ETA becomes available after the first completed whichRHS solve. "
+                    "The first solve may include one-time JIT compilation, so later solves can be faster.",
+                )
             _mark("transport_solve_start")
             env_restore: dict[str, str | None] = {}
             if stream_transport_h5:
@@ -3884,6 +3944,11 @@ def write_sfincs_jax_output_h5(
                 _mark("write_h5_done")
                 _mark("transport_diagnostics_done")
                 if emit is not None:
+                    emit(
+                        0,
+                        " timing: transport solve+diagnostics elapsed="
+                        f"{_format_duration(time.perf_counter() - transport_branch_t0)} total_elapsed={_format_duration(time.perf_counter() - run_t0)}",
+                    )
                     emit(1, f" wrote sfincsOutput.h5 -> {output_path.resolve()}")
                     emit(0, " Goodbye!")
                 return output_path.resolve()
@@ -4139,6 +4204,12 @@ def write_sfincs_jax_output_h5(
             for k, v in fields.items():
                 data[k] = _fortran_h5_layout(v)
             _mark("transport_diagnostics_done")
+            if emit is not None:
+                emit(
+                    0,
+                    " timing: transport solve+diagnostics elapsed="
+                    f"{_format_duration(time.perf_counter() - transport_branch_t0)} total_elapsed={_format_duration(time.perf_counter() - run_t0)}",
+                )
 
     if int(rhs_mode) in {2, 3} and not bool(compute_transport_matrix):
         # v3 leaves NIterations at 0 for RHSMode=2/3 runs that do not execute transport solves.
@@ -4162,6 +4233,7 @@ def write_sfincs_jax_output_h5(
     write_sfincs_h5(path=output_path, data=data, fortran_layout=fortran_layout, overwrite=overwrite)
     _mark("write_h5_done")
     if emit is not None:
+        emit(0, f" timing: total run elapsed={_format_duration(time.perf_counter() - run_t0)}")
         emit(1, f" wrote sfincsOutput.h5 -> {output_path.resolve()}")
         emit(0, " Goodbye!")
     out_path = output_path.resolve()

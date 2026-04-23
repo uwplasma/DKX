@@ -288,6 +288,7 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr("sfincs_jax.scans.localize_equilibrium_file_in_place", _fake_localize)
     monkeypatch.setattr("sfincs_jax.scans.write_sfincs_jax_output_h5", _fake_write)
+    emits: list[tuple[int, str]] = []
 
     result = run_er_scan(
         input_namelist=template,
@@ -295,6 +296,7 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         values=[0.5, -0.25, 1.5],
         compute_solution=True,
         jobs=1,
+        emit=lambda level, msg: emits.append((level, msg)),
     )
     assert result.variable == "Er"
     assert result.values == (1.5, 0.5, -0.25)
@@ -302,8 +304,11 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
     assert all(path.exists() for path in result.outputs)
     assert [p.name for p in result.run_dirs] == ["Er1.5", "Er0.5", "Er-0.25"]
     assert len(calls) == 3
+    assert any("ETA becomes available after the first completed point" in msg for _, msg in emits)
+    assert any("scan-er: progress 3/3" in msg and "est_remaining=" in msg for _, msg in emits)
 
     calls.clear()
+    emits.clear()
     result_resume = run_er_scan(
         input_namelist=template,
         out_dir=tmp_path / "scan",
@@ -311,12 +316,15 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         compute_solution=True,
         jobs=1,
         skip_existing=True,
+        emit=lambda level, msg: emits.append((level, msg)),
     )
     assert result_resume.values == (1.5, 0.5, -0.25)
     assert len(calls) == 0
+    assert any("reused existing output" in msg for _, msg in emits)
 
     missing_output = (tmp_path / "scan" / "Er0.5" / "sfincsOutput.h5")
     missing_output.unlink()
+    emits.clear()
     result_partial_resume = run_er_scan(
         input_namelist=template,
         out_dir=tmp_path / "scan",
@@ -324,11 +332,13 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         compute_solution=True,
         jobs=1,
         skip_existing=True,
+        emit=lambda level, msg: emits.append((level, msg)),
     )
     assert result_partial_resume.values == (1.5, 0.5, -0.25)
     assert len(calls) == 1
     assert calls[0][1] == missing_output
     assert missing_output.exists()
+    assert any("scan-er: progress 3/3" in msg for _, msg in emits)
 
 
 def test_transport_parallel_worker_writes_npz(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
