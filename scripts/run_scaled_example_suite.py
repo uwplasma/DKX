@@ -14,6 +14,8 @@ import socket
 import sys
 from pathlib import Path
 
+from audit_suite_output_keys import audit_suite_output_keys
+from audit_suite_runtime_drift import audit_suite_runtime_drift
 from sfincs_jax.io import localize_equilibrium_file_in_place
 
 from run_reduced_upstream_suite import (
@@ -226,6 +228,77 @@ def _write_suite_outputs(rows: list[CaseResult], out_root: Path) -> None:
     _write_rst(ordered, report_rst, strict=False)
     _write_rst(ordered, report_rst_strict, strict=True)
     _write_lane_summary(ordered, out_root / "summary.md")
+
+
+def _resolve_repo_or_abs(path: Path | None) -> Path | None:
+    if path is None:
+        return None
+    return path if path.is_absolute() else (REPO_ROOT / path)
+
+
+def _write_suite_audits(
+    *,
+    out_root: Path,
+    runtime_baseline_report: Path | None,
+    runtime_drift_threshold_ratio: float,
+    runtime_drift_min_baseline_runtime_s: float,
+) -> dict[str, object]:
+    coverage = audit_suite_output_keys(suite_root=out_root)
+    (out_root / "suite_output_key_coverage.json").write_text(
+        json.dumps([asdict(item) for item in coverage], indent=2),
+        encoding="utf-8",
+    )
+    output_summary = {
+        "cases": len(coverage),
+        "audited_cases": sum(1 for item in coverage if not item.skipped),
+        "skipped_cases": sum(1 for item in coverage if item.skipped),
+        "missing_total": sum(len(item.missing_in_jax) for item in coverage),
+        "extra_total": sum(len(item.extra_in_jax) for item in coverage),
+        "cases_with_missing": [item.case for item in coverage if item.missing_in_jax],
+        "cases_with_extra": [item.case for item in coverage if item.extra_in_jax],
+        "cases_skipped": [
+            {"case": item.case, "reason": item.skip_reason}
+            for item in coverage
+            if item.skipped
+        ],
+    }
+    (out_root / "suite_output_key_coverage_summary.json").write_text(
+        json.dumps(output_summary, indent=2),
+        encoding="utf-8",
+    )
+
+    runtime_summary: dict[str, object] | None = None
+    baseline_path = _resolve_repo_or_abs(runtime_baseline_report)
+    if baseline_path is not None:
+        if not baseline_path.exists():
+            raise FileNotFoundError(f"Runtime baseline report does not exist: {baseline_path}")
+        flagged = audit_suite_runtime_drift(
+            baseline_report=baseline_path,
+            candidate_report=out_root / "suite_report.json",
+            threshold_ratio=float(runtime_drift_threshold_ratio),
+            min_baseline_runtime_s=float(runtime_drift_min_baseline_runtime_s),
+        )
+        (out_root / "suite_runtime_drift.json").write_text(
+            json.dumps([asdict(item) for item in flagged], indent=2),
+            encoding="utf-8",
+        )
+        runtime_summary = {
+            "baseline_report": _repo_rel(baseline_path),
+            "candidate_report": _repo_rel(out_root / "suite_report.json"),
+            "threshold_ratio": float(runtime_drift_threshold_ratio),
+            "min_baseline_runtime_s": float(runtime_drift_min_baseline_runtime_s),
+            "flagged_cases": len(flagged),
+            "cases": [item.case for item in flagged],
+        }
+        (out_root / "suite_runtime_drift_summary.json").write_text(
+            json.dumps(runtime_summary, indent=2),
+            encoding="utf-8",
+        )
+
+    return {
+        "output_key_coverage": output_summary,
+        "runtime_drift": runtime_summary,
+    }
 
 
 def _scaled_resolution_from_reference(*, reference_input: Path, runtime_input: Path, scale_factor: float) -> dict[str, int]:
@@ -484,6 +557,37 @@ def main() -> int:
             "for comparison instead of re-running Fortran on this lane."
         ),
     )
+    parser.add_argument(
+        "--runtime-baseline-report",
+        type=Path,
+        default=None,
+        help=(
+            "Optional baseline suite_report.json used to audit candidate JAX runtime drift "
+            "for this lane."
+        ),
+    )
+    parser.add_argument(
+        "--runtime-drift-threshold-ratio",
+        type=float,
+        default=1.25,
+        help="Flag candidate/base JAX runtime ratios above this threshold in suite_runtime_drift.json.",
+    )
+    parser.add_argument(
+        "--runtime-drift-min-baseline-runtime-s",
+        type=float,
+        default=1.0,
+        help="Ignore baseline cases faster than this threshold when auditing runtime drift.",
+    )
+    parser.add_argument(
+        "--fail-on-missing-output-keys",
+        action="store_true",
+        help="Exit nonzero if any Fortran top-level sfincsOutput.h5 key is missing in JAX output.",
+    )
+    parser.add_argument(
+        "--fail-on-runtime-drift",
+        action="store_true",
+        help="Exit nonzero if any case exceeds --runtime-drift-threshold-ratio against the baseline report.",
+    )
     parser.add_argument("--timeout-s", type=float, default=900.0, help="Per-attempt timeout in seconds.")
     parser.add_argument(
         "--fortran-min-runtime-s",
@@ -677,6 +781,11 @@ def main() -> int:
         "jobs": int(args.jobs),
         "resolution_reference_root": _repo_rel(reference_root) if reference_root is not None else None,
         "reference_results_root": _repo_rel(reference_results_root) if reference_results_root is not None else None,
+        "runtime_baseline_report": _repo_rel(_resolve_repo_or_abs(args.runtime_baseline_report))
+        if args.runtime_baseline_report is not None
+        else None,
+        "runtime_drift_threshold_ratio": float(args.runtime_drift_threshold_ratio),
+        "runtime_drift_min_baseline_runtime_s": float(args.runtime_drift_min_baseline_runtime_s),
         "fortran_exe": _repo_rel(fortran_exe) if fortran_exe is not None else None,
         "environment": _gather_jax_env(),
         "cases": manifest_cases,
@@ -699,6 +808,12 @@ def main() -> int:
         current_run_results.append(result)
         merged_results[result.case] = result
         _write_suite_outputs(list(merged_results.values()), out_root)
+        _write_suite_audits(
+            out_root=out_root,
+            runtime_baseline_report=args.runtime_baseline_report,
+            runtime_drift_threshold_ratio=float(args.runtime_drift_threshold_ratio),
+            runtime_drift_min_baseline_runtime_s=float(args.runtime_drift_min_baseline_runtime_s),
+        )
         print(
             f"  status={result.status} attempts={result.attempts} reductions={result.reductions} "
             f"res={result.final_resolution} mismatch={result.n_mismatch_common}/{result.n_common_keys} "
@@ -782,13 +897,49 @@ def main() -> int:
 
     ordered = [merged_results[key] for key in sorted(merged_results)]
     _write_suite_outputs(ordered, out_root)
+    audit_summary = _write_suite_audits(
+        out_root=out_root,
+        runtime_baseline_report=args.runtime_baseline_report,
+        runtime_drift_threshold_ratio=float(args.runtime_drift_threshold_ratio),
+        runtime_drift_min_baseline_runtime_s=float(args.runtime_drift_min_baseline_runtime_s),
+    )
 
     print(f"Wrote {report_json}")
     print(f"Wrote {out_root / 'suite_report_strict.json'}")
     print(f"Wrote {out_root / 'suite_status.rst'}")
     print(f"Wrote {out_root / 'suite_status_strict.rst'}")
     print(f"Wrote {out_root / 'summary.md'}")
-    return 0
+    print(f"Wrote {out_root / 'suite_output_key_coverage.json'}")
+    print(f"Wrote {out_root / 'suite_output_key_coverage_summary.json'}")
+    output_summary = audit_summary["output_key_coverage"]
+    print(
+        "Output-key coverage: "
+        f"missing_total={output_summary['missing_total']} "
+        f"extra_total={output_summary['extra_total']} "
+        f"audited_cases={output_summary['audited_cases']} "
+        f"skipped_cases={output_summary['skipped_cases']}"
+    )
+    runtime_summary = audit_summary["runtime_drift"]
+    if runtime_summary is not None:
+        print(f"Wrote {out_root / 'suite_runtime_drift.json'}")
+        print(f"Wrote {out_root / 'suite_runtime_drift_summary.json'}")
+        print(
+            "Runtime drift audit: "
+            f"flagged_cases={runtime_summary['flagged_cases']} "
+            f"threshold_ratio={runtime_summary['threshold_ratio']} "
+            f"min_baseline_runtime_s={runtime_summary['min_baseline_runtime_s']}"
+        )
+
+    exit_code = 0
+    if bool(args.fail_on_missing_output_keys) and int(output_summary["missing_total"]) > 0:
+        exit_code = 1
+    if (
+        bool(args.fail_on_runtime_drift)
+        and runtime_summary is not None
+        and int(runtime_summary["flagged_cases"]) > 0
+    ):
+        exit_code = 1
+    return exit_code
 
 
 if __name__ == "__main__":
