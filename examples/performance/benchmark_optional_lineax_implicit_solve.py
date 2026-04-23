@@ -1,10 +1,15 @@
 """Benchmark the optional Lineax implicit-solve gate.
 
 This script is deliberately outside the production solver path. It compares the
-current in-tree implicit linear solve against an optional ``lineax`` solve on a
-small deterministic nonsymmetric system. The gate is useful for deciding whether
-Lineax is worth evaluating on real SFINCS operators; it is not a production
-dependency and exits cleanly when Lineax is not installed.
+current in-tree implicit linear solve against an optional ``lineax`` solve on:
+
+- a small deterministic nonsymmetric system,
+- a tiny real SFINCS implicit-diff operator,
+- and a repeated-RHS reuse case on that same tiny real operator.
+
+The gate is useful for deciding whether Lineax is worth evaluating on real
+SFINCS operators; it is not a production dependency and exits cleanly when
+Lineax is not installed.
 
 Example
 -------
@@ -13,13 +18,15 @@ Example
 
    python examples/performance/benchmark_optional_lineax_implicit_solve.py \
      --backend all \
+     --suite all \
      --out-json examples/performance/output/lineax_implicit_gate.json
 """
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
+from functools import lru_cache
 import json
 from pathlib import Path
 import sys
@@ -35,6 +42,9 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.implicit_solve import linear_custom_solve
+from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.petsc_binary import read_petsc_vec
+from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
 
 
 _AUTO_IMPORT = object()
@@ -42,11 +52,14 @@ _AUTO_IMPORT = object()
 
 @dataclass(frozen=True)
 class GateResult:
+    case: str
     backend: str
     status: str
     size: int
+    n_rhs: int
     residual_norm: float | None
     relative_residual: float | None
+    max_solution_error: float | None
     objective: float | None
     grad: float | None
     finite_difference_grad: float | None
@@ -77,6 +90,39 @@ def make_nonsymmetric_system(size: int) -> tuple[jnp.ndarray, jnp.ndarray]:
     return matrix.astype(jnp.float64), rhs.astype(jnp.float64)
 
 
+def _default_sfincs_input() -> Path:
+    return _REPO_ROOT / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.input.namelist"
+
+
+def _statevector_path(input_path: Path) -> Path:
+    return Path(str(input_path).replace(".input.namelist", ".stateVector.petscbin"))
+
+
+@lru_cache(maxsize=4)
+def load_tiny_sfincs_fixture(input_path_str: str) -> tuple[object, jnp.ndarray, float]:
+    """Load the tiny scheme-5 PAS full-system operator and reference state."""
+    input_path = Path(input_path_str)
+    nml = read_sfincs_input(input_path)
+    op0 = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    x_ref = jnp.asarray(read_petsc_vec(_statevector_path(input_path)).values, dtype=jnp.float64)
+    if op0.fblock.pas is None:
+        raise ValueError(f"{input_path} is expected to be a PAS fixture with differentiable nu_n.")
+    nu0 = float(op0.fblock.pas.nu_n)
+    return op0, x_ref, nu0
+
+
+def _lineax_result_name(lx, result: Any) -> str:
+    try:
+        return str(lx.RESULTS[result])
+    except Exception:  # noqa: BLE001
+        return str(result)
+
+
+def _sfincs_gate_solver_window(restart: int, maxiter: int) -> tuple[int, int]:
+    """Use a parity-clean Krylov window for the tiny real SFINCS gate."""
+    return max(80, int(restart)), max(400, int(maxiter))
+
+
 def _finite_difference_grad(objective, p0: float, eps: float = 1.0e-5) -> float:
     f_plus = float(objective(jnp.asarray(p0 + eps, dtype=jnp.float64)))
     f_minus = float(objective(jnp.asarray(p0 - eps, dtype=jnp.float64)))
@@ -85,8 +131,10 @@ def _finite_difference_grad(objective, p0: float, eps: float = 1.0e-5) -> float:
 
 def _result_from_solution(
     *,
+    case: str,
     backend: str,
     size: int,
+    n_rhs: int,
     matrix: jnp.ndarray,
     rhs: jnp.ndarray,
     p0: float,
@@ -103,11 +151,14 @@ def _result_from_solution(
     residual_norm = float(jnp.linalg.norm(residual))
     rhs_norm = max(float(jnp.linalg.norm(rhs)), 1.0)
     return GateResult(
+        case=case,
         backend=backend,
         status="ok",
         size=int(size),
+        n_rhs=int(n_rhs),
         residual_norm=residual_norm,
         relative_residual=residual_norm / rhs_norm,
+        max_solution_error=None,
         objective=float(value),
         grad=float(grad),
         finite_difference_grad=float(fd),
@@ -142,6 +193,7 @@ def _solve_current(
 
 def run_current_gate(
     *,
+    case: str,
     matrix: jnp.ndarray,
     rhs: jnp.ndarray,
     p0: float,
@@ -160,8 +212,10 @@ def run_current_gate(
     grad.block_until_ready()
     elapsed_s = time.perf_counter() - t0
     return _result_from_solution(
+        case=case,
         backend="current_custom_linear_solve",
         size=int(matrix.shape[0]),
+        n_rhs=1,
         matrix=matrix,
         rhs=rhs,
         p0=p0,
@@ -180,6 +234,7 @@ def _import_lineax():
 
 def run_lineax_gate(
     *,
+    case: str,
     matrix: jnp.ndarray,
     rhs: jnp.ndarray,
     p0: float,
@@ -196,11 +251,14 @@ def run_lineax_gate(
         lx, import_error = lineax_module, None
     if lx is None:
         return GateResult(
+            case=case,
             backend="lineax_gmres",
             status="skipped",
             size=int(matrix.shape[0]),
+            n_rhs=1,
             residual_norm=None,
             relative_residual=None,
+            max_solution_error=None,
             objective=None,
             grad=None,
             finite_difference_grad=None,
@@ -233,11 +291,14 @@ def run_lineax_gate(
         residual_norm = float(jnp.linalg.norm(residual))
         rhs_norm = max(float(jnp.linalg.norm(rhs)), 1.0)
         return GateResult(
+            case=case,
             backend="lineax_gmres",
             status="ok",
             size=int(matrix.shape[0]),
+            n_rhs=1,
             residual_norm=residual_norm,
             relative_residual=residual_norm / rhs_norm,
+            max_solution_error=None,
             objective=float(value),
             grad=float(grad),
             finite_difference_grad=float(fd),
@@ -246,11 +307,326 @@ def run_lineax_gate(
         )
     except Exception as exc:  # noqa: BLE001
         return GateResult(
+            case=case,
             backend="lineax_gmres",
             status="error",
             size=int(matrix.shape[0]),
+            n_rhs=1,
             residual_norm=None,
             relative_residual=None,
+            max_solution_error=None,
+            objective=None,
+            grad=None,
+            finite_difference_grad=None,
+            grad_abs_error=None,
+            elapsed_s=None,
+            error=str(exc),
+        )
+
+
+def run_current_sfincs_implicit_gate(
+    *,
+    input_path: Path,
+    tol: float,
+    restart: int,
+    maxiter: int,
+) -> GateResult:
+    op0, _x_ref, nu0 = load_tiny_sfincs_fixture(str(input_path))
+    restart_use, maxiter_use = _sfincs_gate_solver_window(restart, maxiter)
+
+    def objective(nu_n: jnp.ndarray) -> jnp.ndarray:
+        pas2 = replace(op0.fblock.pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64))
+        op = replace(op0, fblock=replace(op0.fblock, pas=pas2))
+        rhs = rhs_v3_full_system(op)
+
+        def mv(x: jnp.ndarray) -> jnp.ndarray:
+            return apply_v3_full_system_operator(op, x)
+
+        x = linear_custom_solve(
+            matvec=mv,
+            b=rhs,
+            tol=tol,
+            atol=0.0,
+            restart=restart_use,
+            maxiter=maxiter_use,
+            solver="gmres",
+            solve_method="incremental",
+            solver_jit=False,
+        ).x
+        return 0.5 * jnp.vdot(x, x)
+
+    t0 = time.perf_counter()
+    value, grad = jax.value_and_grad(objective)(jnp.asarray(nu0, dtype=jnp.float64))
+    value.block_until_ready()
+    grad.block_until_ready()
+    elapsed_s = time.perf_counter() - t0
+
+    pas2 = replace(op0.fblock.pas, nu_n=jnp.asarray(nu0, dtype=jnp.float64))
+    op = replace(op0, fblock=replace(op0.fblock, pas=pas2))
+    rhs = rhs_v3_full_system(op)
+    x = linear_custom_solve(
+        matvec=lambda v: apply_v3_full_system_operator(op, v),
+        b=rhs,
+        tol=tol,
+        atol=0.0,
+        restart=restart_use,
+        maxiter=maxiter_use,
+        solver="gmres",
+        solve_method="incremental",
+        solver_jit=False,
+    ).x
+    residual = rhs - apply_v3_full_system_operator(op, x)
+    residual_norm = float(jnp.linalg.norm(residual))
+    rhs_norm = max(float(jnp.linalg.norm(rhs)), 1.0)
+    fd = _finite_difference_grad(objective, nu0)
+    return GateResult(
+        case="sfincs_tiny_implicit",
+        backend="current_custom_linear_solve",
+        status="ok",
+        size=int(op.total_size),
+        n_rhs=1,
+        residual_norm=residual_norm,
+        relative_residual=residual_norm / rhs_norm,
+        max_solution_error=None,
+        objective=float(value),
+        grad=float(grad),
+        finite_difference_grad=float(fd),
+        grad_abs_error=abs(float(grad) - float(fd)),
+        elapsed_s=float(elapsed_s),
+    )
+
+
+def run_lineax_sfincs_implicit_gate(
+    *,
+    input_path: Path,
+    tol: float,
+    restart: int,
+    maxiter: int,
+    lineax_module: Any = _AUTO_IMPORT,
+) -> GateResult:
+    if lineax_module is _AUTO_IMPORT:
+        lx, import_error = _import_lineax()
+    elif lineax_module is None:
+        lx, import_error = None, ImportError("lineax was not provided")
+    else:
+        lx, import_error = lineax_module, None
+    op0, _x_ref, nu0 = load_tiny_sfincs_fixture(str(input_path))
+    restart_use, maxiter_use = _sfincs_gate_solver_window(restart, maxiter)
+    if lx is None:
+        return GateResult(
+            case="sfincs_tiny_implicit",
+            backend="lineax_gmres",
+            status="skipped",
+            size=int(op0.total_size),
+            n_rhs=1,
+            residual_norm=None,
+            relative_residual=None,
+            max_solution_error=None,
+            objective=None,
+            grad=None,
+            finite_difference_grad=None,
+            grad_abs_error=None,
+            elapsed_s=None,
+            error=f"Lineax unavailable: {import_error}",
+        )
+
+    def _solve_lineax(op, rhs: jnp.ndarray) -> tuple[jnp.ndarray, str]:
+        input_structure = jax.ShapeDtypeStruct(rhs.shape, rhs.dtype)
+        operator = lx.FunctionLinearOperator(lambda v: apply_v3_full_system_operator(op, v), input_structure)
+        solver = lx.GMRES(rtol=tol, atol=0.0, restart=restart_use, max_steps=maxiter_use)
+        solution = lx.linear_solve(operator, rhs, solver=solver, throw=False)
+        return solution.value, _lineax_result_name(lx, solution.result)
+
+    def objective(nu_n: jnp.ndarray) -> jnp.ndarray:
+        pas2 = replace(op0.fblock.pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64))
+        op = replace(op0, fblock=replace(op0.fblock, pas=pas2))
+        rhs = rhs_v3_full_system(op)
+        x, _result_name = _solve_lineax(op, rhs)
+        return 0.5 * jnp.vdot(x, x)
+
+    try:
+        t0 = time.perf_counter()
+        value, grad = jax.value_and_grad(objective)(jnp.asarray(nu0, dtype=jnp.float64))
+        value.block_until_ready()
+        grad.block_until_ready()
+        elapsed_s = time.perf_counter() - t0
+        pas2 = replace(op0.fblock.pas, nu_n=jnp.asarray(nu0, dtype=jnp.float64))
+        op = replace(op0, fblock=replace(op0.fblock, pas=pas2))
+        rhs = rhs_v3_full_system(op)
+        x, result_name = _solve_lineax(op, rhs)
+        residual = rhs - apply_v3_full_system_operator(op, x)
+        residual_norm = float(jnp.linalg.norm(residual))
+        rhs_norm = max(float(jnp.linalg.norm(rhs)), 1.0)
+        fd = _finite_difference_grad(objective, nu0)
+        status = "ok" if result_name == "successful" else "error"
+        return GateResult(
+            case="sfincs_tiny_implicit",
+            backend="lineax_gmres",
+            status=status,
+            size=int(op.total_size),
+            n_rhs=1,
+            residual_norm=residual_norm,
+            relative_residual=residual_norm / rhs_norm,
+            max_solution_error=None,
+            objective=float(value),
+            grad=float(grad),
+            finite_difference_grad=float(fd),
+            grad_abs_error=abs(float(grad) - float(fd)),
+            elapsed_s=float(elapsed_s),
+            error=None if status == "ok" else f"Lineax solve result: {result_name}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return GateResult(
+            case="sfincs_tiny_implicit",
+            backend="lineax_gmres",
+            status="error",
+            size=int(op0.total_size),
+            n_rhs=1,
+            residual_norm=None,
+            relative_residual=None,
+            max_solution_error=None,
+            objective=None,
+            grad=None,
+            finite_difference_grad=None,
+            grad_abs_error=None,
+            elapsed_s=None,
+            error=str(exc),
+        )
+
+
+def run_current_sfincs_repeated_rhs_gate(
+    *,
+    input_path: Path,
+    tol: float,
+    restart: int,
+    maxiter: int,
+) -> GateResult:
+    op0, x_ref, _nu0 = load_tiny_sfincs_fixture(str(input_path))
+    restart_use, maxiter_use = _sfincs_gate_solver_window(restart, maxiter)
+    perturb = 1.0e-6 * jnp.linspace(1.0, float(op0.total_size), int(op0.total_size), dtype=jnp.float64)
+    x_targets = (x_ref, x_ref + perturb)
+    rhs_targets = tuple(apply_v3_full_system_operator(op0, x_true) for x_true in x_targets)
+
+    t0 = time.perf_counter()
+    x_solutions = [
+        linear_custom_solve(
+            matvec=lambda v: apply_v3_full_system_operator(op0, v),
+            b=rhs,
+            tol=tol,
+            atol=0.0,
+            restart=restart_use,
+            maxiter=maxiter_use,
+            solver="gmres",
+            solve_method="incremental",
+            solver_jit=False,
+        ).x
+        for rhs in rhs_targets
+    ]
+    for x_sol in x_solutions:
+        x_sol.block_until_ready()
+    elapsed_s = time.perf_counter() - t0
+
+    residual_norms = [float(jnp.linalg.norm(rhs - apply_v3_full_system_operator(op0, x_sol))) for rhs, x_sol in zip(rhs_targets, x_solutions)]
+    rhs_norms = [max(float(jnp.linalg.norm(rhs)), 1.0) for rhs in rhs_targets]
+    solution_errors = [float(jnp.linalg.norm(x_sol - x_true)) for x_sol, x_true in zip(x_solutions, x_targets)]
+    return GateResult(
+        case="sfincs_tiny_repeated_rhs",
+        backend="current_custom_linear_solve",
+        status="ok",
+        size=int(op0.total_size),
+        n_rhs=2,
+        residual_norm=max(residual_norms),
+        relative_residual=max(rn / rhsn for rn, rhsn in zip(residual_norms, rhs_norms)),
+        max_solution_error=max(solution_errors),
+        objective=None,
+        grad=None,
+        finite_difference_grad=None,
+        grad_abs_error=None,
+        elapsed_s=float(elapsed_s),
+        error=None,
+    )
+
+
+def run_lineax_sfincs_repeated_rhs_gate(
+    *,
+    input_path: Path,
+    tol: float,
+    restart: int,
+    maxiter: int,
+    lineax_module: Any = _AUTO_IMPORT,
+) -> GateResult:
+    if lineax_module is _AUTO_IMPORT:
+        lx, import_error = _import_lineax()
+    elif lineax_module is None:
+        lx, import_error = None, ImportError("lineax was not provided")
+    else:
+        lx, import_error = lineax_module, None
+    op0, x_ref, _nu0 = load_tiny_sfincs_fixture(str(input_path))
+    restart_use, maxiter_use = _sfincs_gate_solver_window(restart, maxiter)
+    if lx is None:
+        return GateResult(
+            case="sfincs_tiny_repeated_rhs",
+            backend="lineax_gmres",
+            status="skipped",
+            size=int(op0.total_size),
+            n_rhs=2,
+            residual_norm=None,
+            relative_residual=None,
+            max_solution_error=None,
+            objective=None,
+            grad=None,
+            finite_difference_grad=None,
+            grad_abs_error=None,
+            elapsed_s=None,
+            error=f"Lineax unavailable: {import_error}",
+        )
+
+    perturb = 1.0e-6 * jnp.linspace(1.0, float(op0.total_size), int(op0.total_size), dtype=jnp.float64)
+    x_targets = (x_ref, x_ref + perturb)
+    rhs_targets = tuple(apply_v3_full_system_operator(op0, x_true) for x_true in x_targets)
+    input_structure = jax.ShapeDtypeStruct(rhs_targets[0].shape, rhs_targets[0].dtype)
+    operator = lx.FunctionLinearOperator(lambda v: apply_v3_full_system_operator(op0, v), input_structure)
+    solver = lx.GMRES(rtol=tol, atol=0.0, restart=restart_use, max_steps=maxiter_use)
+
+    try:
+        state = solver.init(operator, options={})
+        t0 = time.perf_counter()
+        solutions = [lx.linear_solve(operator, rhs, solver=solver, state=state, throw=False) for rhs in rhs_targets]
+        x_solutions = [solution.value for solution in solutions]
+        for x_sol in x_solutions:
+            x_sol.block_until_ready()
+        elapsed_s = time.perf_counter() - t0
+        result_names = [_lineax_result_name(lx, solution.result) for solution in solutions]
+        residual_norms = [float(jnp.linalg.norm(rhs - apply_v3_full_system_operator(op0, x_sol))) for rhs, x_sol in zip(rhs_targets, x_solutions)]
+        rhs_norms = [max(float(jnp.linalg.norm(rhs)), 1.0) for rhs in rhs_targets]
+        solution_errors = [float(jnp.linalg.norm(x_sol - x_true)) for x_sol, x_true in zip(x_solutions, x_targets)]
+        status = "ok" if all(name == "successful" for name in result_names) else "error"
+        return GateResult(
+            case="sfincs_tiny_repeated_rhs",
+            backend="lineax_gmres",
+            status=status,
+            size=int(op0.total_size),
+            n_rhs=2,
+            residual_norm=max(residual_norms),
+            relative_residual=max(rn / rhsn for rn, rhsn in zip(residual_norms, rhs_norms)),
+            max_solution_error=max(solution_errors),
+            objective=None,
+            grad=None,
+            finite_difference_grad=None,
+            grad_abs_error=None,
+            elapsed_s=float(elapsed_s),
+            error=None if status == "ok" else f"Lineax solve results: {', '.join(result_names)}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return GateResult(
+            case="sfincs_tiny_repeated_rhs",
+            backend="lineax_gmres",
+            status="error",
+            size=int(op0.total_size),
+            n_rhs=2,
+            residual_norm=None,
+            relative_residual=None,
+            max_solution_error=None,
             objective=None,
             grad=None,
             finite_difference_grad=None,
@@ -261,39 +637,82 @@ def run_lineax_gate(
 
 
 def run_gate(args: argparse.Namespace) -> list[GateResult]:
-    matrix, rhs = make_nonsymmetric_system(int(args.size))
-    restart = min(int(args.restart), int(args.size))
     backends = ["current", "lineax"] if args.backend == "all" else [str(args.backend)]
+    suites = ["synthetic", "sfincs"] if args.suite == "all" else [str(args.suite)]
     results: list[GateResult] = []
-    if "current" in backends:
-        results.append(
-            run_current_gate(
-                matrix=matrix,
-                rhs=rhs,
-                p0=float(args.shift),
-                tol=float(args.tol),
-                restart=restart,
-                maxiter=int(args.maxiter),
+    if "synthetic" in suites:
+        matrix, rhs = make_nonsymmetric_system(int(args.size))
+        restart = min(int(args.restart), int(args.size))
+        if "current" in backends:
+            results.append(
+                run_current_gate(
+                    case="synthetic_nonsymmetric",
+                    matrix=matrix,
+                    rhs=rhs,
+                    p0=float(args.shift),
+                    tol=float(args.tol),
+                    restart=restart,
+                    maxiter=int(args.maxiter),
+                )
             )
-        )
-    if "lineax" in backends:
-        results.append(
-            run_lineax_gate(
-                matrix=matrix,
-                rhs=rhs,
-                p0=float(args.shift),
-                tol=float(args.tol),
-                restart=restart,
-                maxiter=int(args.maxiter),
+        if "lineax" in backends:
+            results.append(
+                run_lineax_gate(
+                    case="synthetic_nonsymmetric",
+                    matrix=matrix,
+                    rhs=rhs,
+                    p0=float(args.shift),
+                    tol=float(args.tol),
+                    restart=restart,
+                    maxiter=int(args.maxiter),
+                )
             )
-        )
+    if "sfincs" in suites:
+        input_path = Path(args.input)
+        restart = max(1, int(args.restart))
+        if "current" in backends:
+            results.append(
+                run_current_sfincs_implicit_gate(
+                    input_path=input_path,
+                    tol=float(args.tol),
+                    restart=restart,
+                    maxiter=int(args.maxiter),
+                )
+            )
+            results.append(
+                run_current_sfincs_repeated_rhs_gate(
+                    input_path=input_path,
+                    tol=float(args.tol),
+                    restart=restart,
+                    maxiter=int(args.maxiter),
+                )
+            )
+        if "lineax" in backends:
+            results.append(
+                run_lineax_sfincs_implicit_gate(
+                    input_path=input_path,
+                    tol=float(args.tol),
+                    restart=restart,
+                    maxiter=int(args.maxiter),
+                )
+            )
+            results.append(
+                run_lineax_sfincs_repeated_rhs_gate(
+                    input_path=input_path,
+                    tol=float(args.tol),
+                    restart=restart,
+                    maxiter=int(args.maxiter),
+                )
+            )
     return results
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("current", "lineax", "all"), default="all")
+    parser.add_argument("--suite", choices=("synthetic", "sfincs", "all"), default="all")
     parser.add_argument("--size", type=int, default=8)
+    parser.add_argument("--input", type=Path, default=_default_sfincs_input())
     parser.add_argument("--shift", type=float, default=0.2)
     parser.add_argument("--tol", type=float, default=1.0e-10)
     parser.add_argument("--restart", type=int, default=20)

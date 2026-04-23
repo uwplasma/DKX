@@ -2585,12 +2585,17 @@ Decision:
   - `examples/performance/benchmark_optional_lineax_implicit_solve.py`
     benchmarks the current in-tree implicit solve and optionally benchmarks
     Lineax GMRES when `lineax` is installed;
-  - the benchmark uses a deterministic nonsymmetric stress system, records
-    residuals, finite-difference gradient agreement, and elapsed time, and
-    writes JSON for later comparison;
+  - the benchmark now covers three bounded cases:
+    - a deterministic nonsymmetric stress system,
+    - a tiny real SFINCS implicit-diff solve on
+      `tests/ref/pas_1species_PAS_noEr_tiny_scheme5.input.namelist`,
+    - a repeated-RHS reuse case on that same tiny real operator;
+  - it records residuals, finite-difference gradient agreement, repeated-RHS
+    solution error, and elapsed time, and writes JSON for later comparison;
   - `tests/test_optional_lineax_implicit_gate.py` verifies deterministic system
-    construction, current-solver residual/gradient quality, JSON output, and
-    clean skip behavior when Lineax is absent.
+    construction, current-solver residual/gradient quality on both synthetic and
+    tiny real-operator lanes, repeated-RHS accuracy, JSON output, and clean skip
+    behavior when Lineax is absent.
 - The manuscript validation manifest now carries explicit research gates:
   - every lane has `source_code`, `tests`, and `acceptance_gates` fields;
   - implemented/prototype lanes point to existing scripts, artifacts, source
@@ -2611,11 +2616,22 @@ Decision:
   - `examples/performance/README.md` lists the optional benchmark.
 - Validation run:
   - `pytest -q tests/test_validation_manifest_schema.py tests/test_optional_lineax_implicit_gate.py`
-    -> `7 passed`.
+    -> `8 passed` at the first hardening pass;
+  - the extended real-operator pass then validated with:
+    - `pytest -q tests/test_optional_lineax_implicit_gate.py tests/test_implicit_linear_solve_grad.py tests/test_validation_manifest_schema.py`
+      -> `14 passed`,
+    - direct benchmark smoke:
+      `python examples/performance/benchmark_optional_lineax_implicit_solve.py --backend current --suite sfincs --restart 20 --maxiter 120 ...`
+      which internally uses the parity-clean real-operator Krylov window and
+      produced:
+      - `sfincs_tiny_implicit`: relative residual about `1.4e-14`,
+      - `sfincs_tiny_repeated_rhs`: relative residual about `4.3e-12`,
+        max solution error about `2.8e-09`.
 - Next actions:
-  1. extend the optional Lineax gate from the synthetic nonsymmetric stress
-     system to a tiny real SFINCS implicit-diff operator and a repeated-RHS
-     state-reuse case;
+  1. run the extended Lineax gate on a machine that actually has `lineax`
+     installed and record whether the tiny real operator and repeated-RHS lanes
+     remain residual-clean and materially faster or lighter than the in-tree
+     baseline;
   2. add a similarly optional JAXopt/Equinox objective-wrapper gate for
      nonlinear or ambipolar sensitivity once the forward solve target is
      finalized;
