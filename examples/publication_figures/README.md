@@ -44,3 +44,20 @@ Those pinned runs are checked in as:
 - `examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png`
 - `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png`
+
+Corrected bounded collisionality branch artifact:
+
+```bash
+python examples/publication_figures/generate_sfincs_paper_figs.py \
+  --case lhd \
+  --fast \
+  --scan-only \
+  --work-dir examples/publication_figures/output/lhd_reaudit_fast
+```
+
+The corrected bounded LHD rerun is currently pinned as:
+- `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
+- `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png`
+
+The full collisionality figure family remains an explicit re-audit lane until the
+corrected LHD and W7-X outputs are both regenerated and pinned from the fixed script.
