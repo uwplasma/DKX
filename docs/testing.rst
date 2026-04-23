@@ -283,6 +283,13 @@ skip-global-sparse-after-xblock routing after a good x-block seed. The tests kee
 large-case convergence handoff decisions visible while avoiding heavyweight CI
 runs.
 
+Small acceptance/probe gates are covered directly by
+``tests/test_rhs1_acceptance_policy.py``. That file checks the large-PAS
+fast-accept environment parsing and backend/implicit/Phi1/PAS guards, plus the
+host x-block factor probe for exceptions, shape mismatches, nonfinite solves, and
+excessive amplification. The PAS residual formula itself is shared with
+``sfincs_jax/pas_smoother.py`` so the acceptance threshold is not duplicated.
+
 The VMEC convention layer has its own bounded gate in
 ``tests/test_vmec_wout_conventions.py``. It checks the scheme-5 conventions that are
 easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh
