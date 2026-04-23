@@ -303,6 +303,33 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
     assert [p.name for p in result.run_dirs] == ["Er1.5", "Er0.5", "Er-0.25"]
     assert len(calls) == 3
 
+    calls.clear()
+    result_resume = run_er_scan(
+        input_namelist=template,
+        out_dir=tmp_path / "scan",
+        values=[0.5, -0.25, 1.5],
+        compute_solution=True,
+        jobs=1,
+        skip_existing=True,
+    )
+    assert result_resume.values == (1.5, 0.5, -0.25)
+    assert len(calls) == 0
+
+    missing_output = (tmp_path / "scan" / "Er0.5" / "sfincsOutput.h5")
+    missing_output.unlink()
+    result_partial_resume = run_er_scan(
+        input_namelist=template,
+        out_dir=tmp_path / "scan",
+        values=[0.5, -0.25, 1.5],
+        compute_solution=True,
+        jobs=1,
+        skip_existing=True,
+    )
+    assert result_partial_resume.values == (1.5, 0.5, -0.25)
+    assert len(calls) == 1
+    assert calls[0][1] == missing_output
+    assert missing_output.exists()
+
 
 def test_transport_parallel_worker_writes_npz(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     payload_path = tmp_path / "payload.json"

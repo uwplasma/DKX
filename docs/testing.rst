@@ -311,6 +311,12 @@ the scan, ambipolar postprocessing, summary JSON, and figure generation paths ar
 covered by a bounded end-to-end test on a tiny fixture, even though the heavy W7-X
 reference artifact is still an explicit open lane in the manifest.
 
+The same scaffold is now resumable for heavy runs: ``run_er_scan`` accepts
+``skip_existing=True``, the ``sfincs_jax scan-er`` CLI exposes ``--skip-existing``,
+and the publication script adds ``--skip-existing``, ``--scan-only``, and
+``--index/--stride`` so the heavy W7-X reference ladder can be filled across multiple
+devices before a final aggregation pass.
+
 Further reading
 ---------------
 
