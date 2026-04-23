@@ -2788,3 +2788,187 @@ Decision:
   - purpose:
     advance the first literature-facing W7-X ambipolar artifact without
     competing for the two GPUs reserved for the LHD collisionality re-audit.
+
+### 19.30 Post-refactor lane: vmec_jax and booz_xform_jax integration
+
+- This is a **queued next-level research lane**, not the current critical path.
+  It should start only after the current `sfincs_jax` refactor / testing work and
+  the open collisionality + W7-X ambipolar validation lanes are closed.
+- Motivation and external anchors reviewed for this lane:
+  - `vmec_jax` already provides an end-to-end differentiable fixed/free-boundary
+    VMEC implementation with an exact discrete-adjoint optimizer and a public
+    `wout_from_fixed_boundary_run(...)` path.
+  - `booz_xform_jax` already supports both file-based `read_wout(...)` and
+    in-memory `read_wout_data(...)`, plus a low-level JAX API intended for
+    differentiable pipelines.
+  - STELLOPT is the historical reference for coupling VMEC to optimization
+    targets, including transport targets through external physics codes.
+  - the SFINCS adjoint abstract shows the concrete target class we care about:
+    bootstrap current / radial flux gradients with respect to Boozer-spectrum
+    inputs.
+  - recent stellarator-optimization literature has moved from proxy-only
+    objectives toward direct neoclassical targets and ambipolar/root-aware
+    objectives, so a differentiable `vmec_jax -> sfincs_jax` lane would be
+    scientifically well motivated rather than just architecturally elegant.
+
+- Architectural conclusion from the code review:
+  - `sfincs_jax` should **not** start this lane by rewriting everything around
+    Boozer coordinates.
+  - the first integration target should be `geometryScheme=5`, because
+    `sfincs_jax` already consumes VMEC `wout` data there.
+  - `booz_xform_jax` is the correct **second-stage** lane for in-memory Boozer
+    transforms, scheme-11/12-style workflows, and Boozer-spectrum optimization
+    targets.
+
+- Current code constraints that must be respected:
+  - `sfincs_jax/vmec_geometry.py` currently reads a `wout_*.nc` file through
+    `sfincs_jax/vmec_wout.py` and then evaluates the geometry with NumPy-heavy
+    logic. This is parity-clean, but not end-to-end differentiable.
+  - `sfincs_jax` already has a differentiable solve path through
+    `sfincs_jax/implicit_solve.py` and the Python `differentiable=True` solve
+    route. That is the correct transport-side foundation for an autodiff lane.
+  - discrete geometry choices such as `MIN_BMN_TO_LOAD`, Nyquist truncation, and
+    operator/mode filtering are not smooth design variables. In the differentiable
+    lane they must be treated as **static topology choices**, not optimized
+    continuously.
+  - the first implementation scope should remain fixed-boundary, stellarator-symmetric
+    VMEC (`lasym = false`) because that is the current supported `sfincs_jax`
+    VMEC subset.
+
+- Planned implementation sequence:
+
+  1. Compatibility bridge, no physics change.
+     - Add a canonical `VmecWoutLike` / adapter layer in
+       `sfincs_jax/vmec_wout.py` that can be built from:
+       - the current file-based `VmecWout`,
+       - `vmec_jax.wout.WoutData`,
+       - and `vmec_jax.driver.FixedBoundaryRun` via
+         `vmec_jax.wout_from_fixed_boundary_run(...)`.
+     - Refactor `sfincs_jax/vmec_geometry.py` so the file reader is just a thin
+       wrapper around a new `vmec_geometry_from_wout_data(...)`.
+     - Keep the CLI unchanged. This lane is Python-first; file-based `wout_path`
+       remains the stable public CLI interface.
+
+  2. In-memory VMEC fast path, still parity-first.
+     - Add Python API entry points that accept an in-memory VMEC object/run and
+       avoid writing `wout_*.nc` to disk in repeated-loop workflows.
+     - Touch points will likely include:
+       `sfincs_jax/vmec_wout.py`,
+       `sfincs_jax/vmec_geometry.py`,
+       `sfincs_jax/v3.py`,
+       `sfincs_jax/io.py`,
+       and new examples under `examples/autodiff/`.
+     - Acceptance gate:
+       - for the same equilibrium, file-based and in-memory geometryScheme=5
+         paths must agree on geometry arrays and on `sfincsOutput.h5` transport
+         outputs to the same tolerances currently used for parity fixtures.
+
+  3. Pure-JAX geometryScheme=5 kernel.
+     - Replace the NumPy-only VMEC geometry evaluation path with a JAX-native
+       implementation that keeps the same mode set fixed and computes the Fourier
+       sums with `jnp` plus bounded chunking / `lax.scan` where needed.
+     - Preserve the current mode-selection semantics, but freeze that selection
+       before differentiation so the autodiff graph does not cross discrete
+       truncation changes.
+     - Acceptance gate:
+       - the JAX geometry kernel must match the current parity-clean file path on
+         representative VMEC fixtures before it is used for gradients.
+
+  4. End-to-end differentiable transport lane.
+     - Wire the new in-memory VMEC geometry into the existing
+       `differentiable=True` transport solve path, explicitly excluding host-only
+       rescue paths, process pools, and other non-differentiable orchestration.
+     - Define a bounded research API for objectives such as:
+       - monoenergetic / transport-matrix coefficients,
+       - radial particle flux,
+       - bootstrap current,
+       - ambipolar radial current and root location.
+     - Initial gradients should be evaluated only on single-process/single-device
+       Python paths; multi-process strong scaling remains a separate performance
+       lane, not the first differentiable target.
+
+  5. Optional Boozer lane through `booz_xform_jax`.
+     - After the VMEC in-memory lane is stable, add an in-memory
+       `vmec_jax -> booz_xform_jax -> sfincs_jax` route for Boozer-space studies.
+     - Use `booz_xform_jax.read_wout_data(...)` or its low-level JAX API rather
+       than serializing through disk unnecessarily.
+     - This lane is for:
+       - direct Boozer-spectrum sensitivity studies,
+       - scheme-11/12-style workflow modernization,
+       - bootstrap-current / transport optimization directly in Boozer variables,
+       - and benchmarking against existing Boozer-based optimization literature.
+
+- Test and validation plan:
+
+  - Unit tests:
+    - field-by-field adapter tests between `vmec_jax` `WoutData` and
+      `sfincs_jax` VMEC expectations,
+    - interpolation-index / half-mesh / full-mesh convention checks,
+    - `nfp`, `xm/xn`, Nyquist-table, and sign-convention tests.
+
+  - Regression tests:
+    - same equilibrium through file-based and in-memory paths must reproduce the
+      same `BHat`, `DHat`, covariant/contravariant components, and selected
+      transport outputs for representative geometryScheme=5 fixtures.
+    - representative targets:
+      `geometryScheme5_3species_loRes`,
+      `monoenergetic_geometryScheme5_netCDF`,
+      and tiny scheme-5 implicit-diff fixtures.
+
+  - Differentiation tests:
+    - compare `jax.grad` / `jax.jvp` against centered finite differences for a
+      small set of VMEC boundary coefficients on bounded fixed-boundary cases,
+    - require finite, stable sensitivities for at least:
+      - one transport-matrix coefficient,
+      - one flux quantity,
+      - and one ambipolar/root-related scalar.
+
+  - External validation:
+    - leverage `vmec_jax`'s existing `wout` parity and discrete-adjoint tests as
+      upstream trust anchors,
+    - leverage `booz_xform_jax`'s existing `run()` vs JAX-API agreement tests as
+      the trust anchor for the Boozer lane,
+    - then add `sfincs_jax` end-to-end checks on top of those rather than
+      re-proving the full equilibrium/Boozer stack from scratch.
+
+- Benchmark plan:
+  - compare file-based vs in-memory VMEC geometry ingestion on CPU and GPU,
+  - compare current NumPy VMEC geometry evaluation vs JAX-native evaluation on
+    warm repeated calls,
+  - benchmark a repeated-loop design study where the same shape family is
+    perturbed many times, since that is where disk I/O elimination and JIT
+    amortization should matter most,
+  - benchmark gradient throughput for a tiny bounded optimization problem rather
+    than only forward-solve runtime.
+
+- Research-grade example plan:
+  - `examples/autodiff/vmec_jax_boundary_sensitivity_scheme5.py`
+    for direct transport sensitivity to boundary Fourier coefficients,
+  - `examples/autodiff/vmec_jax_bootstrap_current_gradient.py`
+    for a bounded bootstrap-current objective,
+  - `examples/autodiff/vmec_jax_ambipolar_root_sensitivity.py`
+    for root-aware `E_r` studies,
+  - `examples/autodiff/vmec_jax_to_boozer_transport_pipeline.py`
+    for the optional `vmec_jax -> booz_xform_jax -> sfincs_jax` lane,
+  - and one small optimization example showing actual objective reduction, not
+    only gradient agreement.
+
+- Publication / documentation deliverables for this lane:
+  - a docs page explaining the full differentiable equilibrium-to-transport
+    stack and its static-vs-differentiable boundaries,
+  - a validation page with file-vs-in-memory parity tables and gradient-agreement
+    plots,
+  - publication-ready figures for:
+    - gradient agreement,
+    - repeated-loop runtime improvement from avoiding file I/O,
+    - and one bounded transport-objective optimization case.
+
+- Best initial scientific use cases, based on the reviewed literature:
+  - direct neoclassical transport optimization beyond proxy metrics,
+  - bootstrap-current minimization,
+  - ambipolar / positive-`E_r` equilibrium studies,
+  - local sensitivity analysis, inverse design, and uncertainty quantification
+    with respect to boundary Fourier coefficients,
+  - and combined proxy + transport optimization where QS/QI metrics remain the
+    cheap preconditioner and `sfincs_jax` provides the high-fidelity follow-up
+    objective.
