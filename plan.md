@@ -2207,7 +2207,7 @@ Testing docs should include:
   - RHSMode=1 PAS policy and dispatch helpers,
   - strong-fallback / strong-control / stage-2 / sparse-rescue / sparse-polish policy helpers,
   - solve handoff helpers,
-  - transport policy, transport preconditioner dispatch, transport-parallel
+  - transport policy, transport solve policy, transport preconditioner dispatch, transport-parallel
     policy/runtime/pool/execution helpers,
   - Phi1 Newton policy, linear-step, and line-search helpers.
 - The first literature-facing validation lane is now live with pinned fixed-case artifacts:
@@ -2253,6 +2253,33 @@ Testing docs should include:
 - New bounded regression coverage now lives in
   `tests/test_transport_preconditioner_dispatch.py`.
 - Current validation for this slice:
+  - `tests/test_transport_preconditioner_dispatch.py`
+  - `tests/test_transport_sparse_direct.py`
+  - `tests/test_transport_parallel.py`
+  - all passed together after the extraction.
+
+### 19.21 Transport active-DOF and dense policy split
+
+- The transport solve still contained a large front-end policy block mixing:
+  - active-DOF auto/forced routing,
+  - active-index map construction,
+  - dense fallback / dense memory-cap handling,
+  - dense preconditioner enable/disable control.
+- That front-end policy is now extracted into
+  `sfincs_jax/transport_solve_policy.py`.
+- `v3_driver.py` now uses the shared module for:
+  - active-DOF mode resolution,
+  - active-index/full-to-active map construction,
+  - dense fallback policy recomputation on the active reduced size,
+  - dense preconditioner enable/disable policy.
+- This stayed structure-preserving:
+  - the public `solve_v3_transport_matrix_linear_gmres(...)` seam is unchanged,
+  - existing bounded transport tests stayed green,
+  - no transport benchmark or parity claims were changed by this extraction.
+- New bounded regression coverage now lives in:
+  - `tests/test_transport_solve_policy.py`
+- Current validation for the transport front-end policy slice:
+  - `tests/test_transport_solve_policy.py`
   - `tests/test_transport_preconditioner_dispatch.py`
   - `tests/test_transport_sparse_direct.py`
   - `tests/test_transport_parallel.py`
