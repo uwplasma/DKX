@@ -248,8 +248,9 @@ The latest driver split also extracts RHSMode=1 host dense/sparse-direct policy 
 ``sfincs_jax/rhs1_host_policy.py``. ``tests/test_rhs1_host_policy.py`` covers the
 backend/env rules for host dense fallback, small accelerator dense shortcuts,
 host sparse-direct enablement, sparse-preconditioned GMRES rescue, sparse factor
-dtype selection, iterative-refinement step parsing, and explicit sparse-helper
-bounds.  The public driver wrappers remain tested separately, so this is a
+dtype selection, iterative-refinement step parsing, explicit sparse-helper
+bounds, and the FP/PAS dense-fallback active-size ceiling.  The public driver
+wrappers remain tested separately, so this is a
 behavior-preserving refactor with a smaller directly testable policy surface.
 
 The VMEC convention layer has its own bounded gate in
