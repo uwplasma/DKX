@@ -75,6 +75,19 @@ _OUTPUT_CACHE_FIELDS = (
 )
 
 
+def _should_precompile_v3_full_system(*, env_value: str) -> bool:
+    """Return whether eager v3 precompile should run before a solve.
+
+    Precompile is valuable for targeted repeated-workflow debugging, but it adds
+    one-time compilation cost directly to single-shot CLI runs. Keep it opt-in so
+    runtime audits and ordinary example solves measure time-to-solution rather
+    than an extra eager compile pass.
+    """
+
+    env = str(env_value).strip().lower()
+    return env in {"1", "true", "yes", "on"}
+
+
 def _select_rhsmode1_linear_solve_method(
     *,
     default_method: str,
@@ -2609,11 +2622,8 @@ def write_sfincs_jax_output_h5(
             recycle_k = 4
         recycle_k = max(0, recycle_k)
         precompile_env = os.environ.get("SFINCS_JAX_PRECOMPILE", "").strip().lower()
-        if precompile_env in {"1", "true", "yes", "on"}:
+        if _should_precompile_v3_full_system(env_value=precompile_env):
             precompile_v3_full_system(op0, include_jacobian=bool(include_phi1))
-        elif precompile_env not in {"0", "false", "no", "off"}:
-            if os.environ.get("JAX_COMPILATION_CACHE_DIR", "").strip():
-                precompile_v3_full_system(op0, include_jacobian=bool(include_phi1))
         nxi_for_x = np.asarray(op0.fblock.collisionless.n_xi_for_x, dtype=np.int32)
         active_f_size = int(op0.n_species) * int(np.sum(nxi_for_x)) * int(op0.n_theta) * int(op0.n_zeta)
         active_total_size = active_f_size + int(op0.phi1_size) + int(op0.extra_size)

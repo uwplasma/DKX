@@ -660,6 +660,7 @@ def _run_jax_cli(
         env.setdefault("JAX_COMPILATION_CACHE_DIR", str(cache_dir))
         env.setdefault("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")
         env.setdefault("JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "0")
+    env.setdefault("SFINCS_JAX_PRECOMPILE", "0")
     env["SFINCS_JAX_SOLVER_ITER_STATS"] = "1" if collect_iterations else "0"
     if collect_iterations:
         env.setdefault("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "800")

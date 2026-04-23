@@ -209,6 +209,9 @@ JAX-native performance patterns used in `sfincs_jax`
 - **Persistent cache in automated suite runs**: ``scripts/run_reduced_upstream_suite.py`` and
   the full example-suite runners can reuse a persistent JAX compilation cache, reducing
   repeated-iteration benchmarking overhead.
+- **Opt-in eager precompile**: ``SFINCS_JAX_PRECOMPILE`` is now explicit opt-in. A persistent
+  JAX compilation cache can still amortize repeated workflows, but single-shot CLI solves and
+  runtime audits no longer pay an extra eager compile pass just because a cache directory exists.
 - **Warm runtime reporting**: use repeated JAX runs in the reduced-suite or full example-suite
   runners when you want steady-state runtime after the first (cold-compile) run.
 - **Remove dead Jacobian work in hot matvec paths**: direct-Phi1 ``factorJ`` kinetic-row terms
