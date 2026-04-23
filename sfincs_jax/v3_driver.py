@@ -6863,6 +6863,10 @@ def _build_rhsmode1_schur_preconditioner(
                     base_kind = "xblock_tz"
                 else:
                     base_kind = "pas_ilu"
+            elif op.fblock.pas is not None and _pas_tokamak_theta_preconditioner_applicable(op):
+                # In zeta-invariant tokamak PAS branches, the dedicated theta/L base is
+                # substantially cheaper than generic xblock_tz or PAS-TZ Schur bases.
+                base_kind = "pas_tokamak_theta"
             elif (
                 op.fblock.pas is not None
                 and op.fblock.fp is None
@@ -6895,10 +6899,6 @@ def _build_rhsmode1_schur_preconditioner(
                 and int(op.n_theta) * int(op.n_zeta) <= tz_max
             ):
                 base_kind = "theta_zeta"
-            elif op.fblock.pas is not None and _pas_tokamak_theta_preconditioner_applicable(op):
-                # Tokamak-like PAS-only systems have no x-coupling; use an inexpensive
-                # block-tridiagonal-in-L theta preconditioner rather than enormous theta-line blocks.
-                base_kind = "pas_tokamak_theta"
             elif op.fblock.pas is not None and (geom_scheme == 1 or int(op.n_zeta) <= 5):
                 base_kind = "pas_schur"
             else:

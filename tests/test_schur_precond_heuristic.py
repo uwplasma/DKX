@@ -185,6 +185,35 @@ def test_pas_tokamak_structured_tail_is_opt_in_by_default(tmp_path: Path, monkey
     assert cache.tail_factors is None
 
 
+def test_schur_base_prefers_pas_tokamak_theta_for_tokamak_pas_noer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_path = Path(__file__).parent / "reduced_inputs" / "tokamak_1species_PASCollisions_noEr_Nx1.input.namelist"
+
+    txt = input_path.read_text()
+    txt = _patch_resolution_block(txt, ntheta=7, nzeta=1, nxi=5, nx=2, solver_tol=1e-6)
+    txt = _patch_export_block(txt)
+    patched = tmp_path / "input_schur_base_tokamak_theta.namelist"
+    patched.write_text(txt)
+
+    op = full_system_operator_from_namelist(nml=read_sfincs_input(patched))
+    called: list[str] = []
+
+    def _tokamak_theta_builder(**_kwargs):
+        called.append("pas_tokamak_theta")
+        return lambda v: v
+
+    def _unexpected_xblock(**_kwargs):
+        raise AssertionError("xblock_tz base should not be selected before pas_tokamak_theta")
+
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_pas_tokamak_theta_preconditioner", _tokamak_theta_builder)
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_xblock_tz_preconditioner", _unexpected_xblock)
+
+    _ = v3_driver._build_rhsmode1_schur_preconditioner(op=op)
+
+    assert called == ["pas_tokamak_theta"]
+
+
 def test_schur_auto_min_for_pas(tmp_path: Path, monkeypatch) -> None:
     """Auto Schur selection should respect SFINCS_JAX_RHSMODE1_SCHUR_AUTO_MIN."""
     input_path = Path(__file__).parent / "reduced_inputs" / "geometryScheme4_2species_PAS_noEr.input.namelist"
