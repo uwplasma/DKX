@@ -60,6 +60,7 @@ from .rhs1_preconditioner_dispatch import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
+from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .rhs1_handoff import rhs1_accept_candidate
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .rhs1_strong_policy import requested_rhs1_strong_preconditioner_kind
@@ -6733,184 +6734,27 @@ def _build_rhsmode1_schur_preconditioner(
     precond_dtype = _precond_dtype()
     geom_scheme = int(_PRECOND_GEOM_SCHEME_HINT or 0)
     base_xblock_tz_lmax = 0
-    species_block_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "").strip()
-    try:
-        species_block_max = int(species_block_max_env) if species_block_max_env else 1600
-    except ValueError:
-        species_block_max = 1600
     base_kind_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHUR_BASE", "").strip().lower()
-    if base_kind_env in {"theta", "theta_line", "line_theta"}:
-        base_kind = "theta_line"
-    elif base_kind_env in {"theta_dd", "theta_block", "dd_theta", "dd_t"}:
-        base_kind = "theta_dd"
-    elif base_kind_env in {"zeta", "zeta_line", "line_zeta"}:
-        base_kind = "zeta_line"
-    elif base_kind_env in {"zeta_dd", "zeta_block", "dd_zeta", "dd_z"}:
-        base_kind = "zeta_dd"
-    elif base_kind_env in {"adi", "adi_line", "theta_zeta", "zeta_theta"}:
-        base_kind = "adi"
-    elif base_kind_env in {"species", "species_block", "speciesblock"}:
-        base_kind = "species_block"
-    elif base_kind_env in {"sxblock_tz", "sxblock_theta_zeta", "species_xblock_tz", "sx_tz"}:
-        base_kind = "sxblock_tz"
-    elif base_kind_env in {"xblock_tz", "xblock", "x_tz", "xtz", "xblock_theta_zeta"}:
-        base_kind = "xblock_tz"
-    elif base_kind_env in {"xblock_tz_lmax", "xblock_lmax", "xtz_lmax", "xblock_theta_zeta_lmax"}:
-        base_kind = "xblock_tz_lmax"
-    elif base_kind_env in {"xmg", "multigrid", "x_coarse", "coarse_x"}:
-        base_kind = "xmg"
-    elif base_kind_env in {"pas_lite", "pas_light", "pas_xmg", "pas_xmg_lite"}:
-        base_kind = "pas_lite"
-    elif base_kind_env in {"pas_hybrid", "pas_xline_xcoarse", "pas_line_xcoarse", "pas_xcoarse_line"}:
-        base_kind = "pas_hybrid"
-    elif base_kind_env in {"pas_schur", "pas_block_schur", "pas_xmg_l"}:
-        base_kind = "pas_schur"
-    elif base_kind_env in {"pas_ilu", "pas_block_ilu", "pas_xblock_ilu", "block_ilu"}:
-        base_kind = "pas_ilu"
-    elif base_kind_env in {"pas_tz", "pas_theta_zeta", "pas_tz_l", "pas_l_tz", "tz_l", "tz_lblock"}:
-        base_kind = "pas_tz"
-    elif base_kind_env in {"pas_tokamak_theta", "pas_tokamak", "pas_theta", "tokamak_theta", "theta_tokamak"}:
-        base_kind = "pas_tokamak_theta"
-    elif base_kind_env in {"point", "block", "jacobi"}:
-        base_kind = "point"
-    else:
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-        max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-        local_per_species = int(np.sum(nxi_for_x))
-        dke_size = int(local_per_species * int(op.n_theta) * int(op.n_zeta))
-        use_dkes_exb = bool(getattr(op.fblock.exb_theta, "use_dkes_exb_drift", False)) or bool(
-            getattr(op.fblock.exb_zeta, "use_dkes_exb_drift", False)
-        )
-        prefer_xmg = False
-        if op.fblock.pas is not None and op.fblock.er_xdot is not None and op.fblock.fp is None:
-            # PAS+Er runs introduce dense x-coupling via the v3 Er xDot term. For large
-            # systems, prefer an x-coarse base preconditioner over large angular blocks.
-            xmg_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_XMG_MIN", "").strip()
-            try:
-                xmg_min = int(xmg_min_env) if xmg_min_env else 50000
-            except ValueError:
-                xmg_min = 50000
-            prefer_xmg = int(op.total_size) >= xmg_min
-        if prefer_xmg:
-            base_kind = "xmg"
-        elif int(op.n_theta) > 1 or int(op.n_zeta) > 1:
-            tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "").strip()
-            try:
-                tz_max = int(tz_max_env) if tz_max_env else 128
-            except ValueError:
-                tz_max = 128
-            xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
-            try:
-                # PAS systems can be much harder to solve if the Schur base preconditioner
-                # does not include (theta,zeta) coupling. Allow a somewhat larger xblock_tz
-                # base by default for PAS to preserve parity on 3D constrained systems.
-                default_xblock_tz_max = 2000 if op.fblock.pas is not None else 1200
-                xblock_tz_max = int(xblock_tz_max_env) if xblock_tz_max_env else default_xblock_tz_max
-            except ValueError:
-                xblock_tz_max = 2000 if op.fblock.pas is not None else 1200
-            block_size = int(max_l) * int(op.n_theta) * int(op.n_zeta)
-            pas_tz_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_MIN", "").strip()
-            try:
-                pas_tz_min = int(pas_tz_min_env) if pas_tz_min_env else 800
-            except ValueError:
-                pas_tz_min = 800
-            if (
-                op.fblock.pas is not None
-                and op.fblock.fp is None
-                and use_dkes_exb
-                and op.fblock.er_xdot is None
-                and op.fblock.er_xidot is None
-            ):
-                # DKES-trajectory PAS runs can be stiff. Prefer a PETSc-like sparse block
-                # factorization per (species,x) ("pas_ilu") by default:
-                # - Assemble a stencil-like sparse approximation of the (L,theta,zeta) operator.
-                # - Factor each x-block with SciPy (exact sparse LU for small blocks, ILU for larger).
-                # - Apply the triangular factors in pure JAX inside GMRES iterations.
-                #
-                # This avoids the expensive dense xblock_tz assembly/inversion while remaining
-                # robust enough for parity-sensitive DKES diagnostics.
-                dense_bytes_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_DKES_XBLOCK_TZ_MAX_BYTES", "").strip()
-                try:
-                    # Default parity-first: allow moderately large dense (theta,zeta) x-block
-                    # inverses for DKES-trajectory PAS runs. These cases can be extremely
-                    # ill-conditioned, and the cheaper PAS (theta,zeta)/L approximation may
-                    # converge to a solution with acceptable residual norm but poor accuracy
-                    # in delicate moment diagnostics (e.g. FSAPressurePerturbation).
-                    dense_bytes_max = int(dense_bytes_max_env) if dense_bytes_max_env else 512 * 1024 * 1024
-                except ValueError:
-                    dense_bytes_max = 512 * 1024 * 1024
-                dense_bytes_max = max(0, int(dense_bytes_max))
-                # Estimate xblock_tz memory more accurately than the worst-case
-                # n_blocks * max_block_size^2, since Nxi can vary with x.
-                block_sizes_x = (nxi_for_x.astype(np.int64, copy=False) * int(op.n_theta) * int(op.n_zeta)).astype(
-                    np.int64, copy=False
-                )
-                dense_bytes = int(int(op.n_species) * int(np.sum(block_sizes_x * block_sizes_x)) * 8)
-                xblock_tz_small_env = os.environ.get("SFINCS_JAX_RHSMODE1_DKES_XBLOCK_TZ_SMALL_MAX", "").strip()
-                try:
-                    # Default to the same scale as xblock_tz_max for DKES PAS systems.
-                    # Empirically this branch is far more robust/fast than PAS ILU for
-                    # medium-size DKES blocks when dense memory stays within the cap.
-                    xblock_tz_small_default = max(0, int(xblock_tz_max))
-                    xblock_tz_small_max = (
-                        int(xblock_tz_small_env) if xblock_tz_small_env else xblock_tz_small_default
-                    )
-                except ValueError:
-                    xblock_tz_small_max = max(0, int(xblock_tz_max))
-                xblock_tz_small_max = max(0, int(xblock_tz_small_max))
-                use_dense_xblock_tz = bool(
-                    xblock_tz_small_max > 0
-                    and xblock_tz_max > 0
-                    and block_size <= xblock_tz_max
-                    and block_size <= xblock_tz_small_max
-                    and dense_bytes <= dense_bytes_max
-                )
-                if use_dense_xblock_tz:
-                    base_kind = "xblock_tz"
-                else:
-                    base_kind = "pas_ilu"
-            elif op.fblock.pas is not None and _pas_tokamak_theta_preconditioner_applicable(op):
-                # In zeta-invariant tokamak PAS branches, the dedicated theta/L base is
-                # substantially cheaper than generic xblock_tz or PAS-TZ Schur bases.
-                base_kind = "pas_tokamak_theta"
-            elif (
-                op.fblock.pas is not None
-                and op.fblock.fp is None
-                and _pas_tz_preconditioner_applicable(op)
-                and block_size >= pas_tz_min
-            ):
-                # For 3D PAS cases with large angular blocks, dense per-x (theta,zeta,L) inverses are
-                # prohibitively expensive. Switch to the cheaper PAS (theta,zeta)/L block-tridiagonal
-                # approximation by default.
-                base_kind = "pas_tz"
-            elif (
-                op.fblock.pas is not None
-                and int(op.n_theta) > 1
-                and int(op.n_zeta) > 1
-                and species_block_max > 0
-                and dke_size <= species_block_max
-            ):
-                base_kind = "species_block"
-            elif (
-                op.fblock.pas is not None
-                and int(op.n_theta) > 1
-                and xblock_tz_max > 0
-                and block_size <= xblock_tz_max
-            ):
-                base_kind = "xblock_tz"
-            elif (
-                op.fblock.pas is not None
-                and int(op.n_theta) > 1
-                and int(op.n_zeta) > 1
-                and int(op.n_theta) * int(op.n_zeta) <= tz_max
-            ):
-                base_kind = "theta_zeta"
-            elif op.fblock.pas is not None and (geom_scheme == 1 or int(op.n_zeta) <= 5):
-                base_kind = "pas_schur"
-            else:
-                base_kind = "theta_line" if int(op.n_theta) >= int(op.n_zeta) else "zeta_line"
-        else:
-            base_kind = "point"
+    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    use_dkes_exb = bool(getattr(op.fblock.exb_theta, "use_dkes_exb_drift", False)) or bool(
+        getattr(op.fblock.exb_zeta, "use_dkes_exb_drift", False)
+    )
+    base_kind = resolve_rhs1_schur_base_kind(
+        base_kind_env=base_kind_env,
+        n_theta=int(op.n_theta),
+        n_zeta=int(op.n_zeta),
+        n_species=int(op.n_species),
+        total_size=int(op.total_size),
+        nxi_for_x=nxi_for_x,
+        has_pas=op.fblock.pas is not None,
+        has_fp=op.fblock.fp is not None,
+        has_er_xdot=op.fblock.er_xdot is not None,
+        has_er_xidot=op.fblock.er_xidot is not None,
+        use_dkes_exb=use_dkes_exb,
+        pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable(op),
+        pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
+        geom_scheme=geom_scheme,
+    )
 
     if base_kind == "theta_line":
         base_precond = _build_rhsmode1_theta_line_preconditioner(op=op)

@@ -137,6 +137,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   PAS applicability, PAS-TZ memory safety, and PAS fallback routing.
 - ``sfincs_jax/rhs1_preconditioner_dispatch.py``:
   shared RHSMode=1 preconditioner-kind dispatch.
+- ``sfincs_jax/rhs1_schur_policy.py``:
+  RHSMode=1 Schur base-preconditioner alias normalization and automatic
+  geometry/PAS/DKES routing policy.
 - ``sfincs_jax/rhs1_stage2_policy.py``:
   stage-2 trigger and skip rules.
 - ``sfincs_jax/rhs1_strong_policy.py``, ``sfincs_jax/rhs1_strong_control.py``,

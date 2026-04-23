@@ -3416,3 +3416,36 @@ Immediate next actions:
   - use this gate as the admission criterion for future structured production
     changes: promote only when the full fixture is parity-clean and the local or
     end-to-end benchmark clears runtime or memory without suite drift.
+
+### 19.37 Driver split step 2: Schur base-selection policy extraction
+
+- Implemented the next low-risk driver split:
+  - added `sfincs_jax/rhs1_schur_policy.py`;
+  - moved RHSMode=1 Schur base-kind alias normalization and the automatic
+    PAS/DKES/geometry size routing ladder out of `v3_driver.py`;
+  - kept the numerical Schur preconditioner and all factor builders in
+    `v3_driver.py`, so this is a policy extraction rather than an algorithm
+    change.
+- Behavior pinned by direct unit tests:
+  - explicit `SFINCS_JAX_RHSMODE1_SCHUR_BASE` aliases still normalize to the
+    same canonical builder names;
+  - the pinned `geometryScheme4_2species_PAS_noEr` offender resolves the Schur
+    base to `pas_tz`;
+  - smaller PAS tokamak-like fallbacks route to `pas_schur` without the previous
+    latent `geom_scheme` NameError risk;
+  - bounded DKES PAS blocks choose `xblock_tz`, while memory-capped DKES blocks
+    choose `pas_ilu`;
+  - large PAS+Er constrained systems choose the x-coarse `xmg` Schur base.
+- Validation:
+  - `python -m py_compile sfincs_jax/rhs1_schur_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_schur_policy.py tests/test_schur_precond_heuristic.py`
+    -> passed;
+  - `python -m ruff check sfincs_jax/rhs1_schur_policy.py tests/test_rhs1_schur_policy.py tests/test_schur_precond_heuristic.py`
+    -> passed;
+  - `pytest -q tests/test_rhs1_schur_policy.py tests/test_schur_precond_heuristic.py tests/test_benchmark_structured_solve.py tests/test_structured_velocity.py`
+    -> `39 passed`;
+  - `pytest -q tests/test_output_h5_scheme1_parity.py::test_output_scheme1_matches_fortran_fixture tests/test_full_system_gmres_solution_parity.py`
+    -> `18 passed`.
+- Next implementation step:
+  - continue splitting policy-only routing out of `v3_driver.py`, prioritizing
+    the RHSMode=1 top-level preconditioner auto-selection block so the remaining
+    offender routing can be tested without full solves.
