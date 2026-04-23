@@ -26,6 +26,101 @@ PAS_AUTO_STRONG_BASE_KINDS = frozenset(
     }
 )
 
+_RHS1_PRECONDITIONER_KIND_ALIASES = {
+    "0": None,
+    "false": None,
+    "no": None,
+    "off": None,
+    "theta": "theta_line",
+    "theta_line": "theta_line",
+    "line_theta": "theta_line",
+    "theta_dd": "theta_dd",
+    "theta_block": "theta_dd",
+    "dd_theta": "theta_dd",
+    "dd_t": "theta_dd",
+    "theta_schwarz": "theta_schwarz",
+    "schwarz_theta": "theta_schwarz",
+    "ras_theta": "theta_schwarz",
+    "theta_ras": "theta_schwarz",
+    "theta_line_xdiag": "theta_line_xdiag",
+    "theta_xdiag": "theta_line_xdiag",
+    "theta_line_diagx": "theta_line_xdiag",
+    "xdiag": "point_xdiag",
+    "point_xdiag": "point_xdiag",
+    "block_xdiag": "point_xdiag",
+    "species": "species_block",
+    "species_block": "species_block",
+    "speciesblock": "species_block",
+    "sxblock": "sxblock",
+    "species_xblock": "sxblock",
+    "species_x": "sxblock",
+    "sxblock_tz": "sxblock_tz",
+    "sxblock_theta_zeta": "sxblock_tz",
+    "species_xblock_tz": "sxblock_tz",
+    "sx_tz": "sxblock_tz",
+    "xblock_tz_lmax": "xblock_tz_lmax",
+    "xblock_tz_trunc": "xblock_tz_lmax",
+    "xblock_tz_cut": "xblock_tz_lmax",
+    "xblock_tz": "xblock_tz",
+    "xblock": "xblock_tz",
+    "x_tz": "xblock_tz",
+    "xtz": "xblock_tz",
+    "xblock_theta_zeta": "xblock_tz",
+    "xmg": "xmg",
+    "multigrid": "xmg",
+    "x_coarse": "xmg",
+    "coarse_x": "xmg",
+    "pas_lite": "pas_lite",
+    "pas_light": "pas_lite",
+    "pas_xmg": "pas_lite",
+    "pas_xmg_lite": "pas_lite",
+    "pas_hybrid": "pas_hybrid",
+    "pas_xline_xcoarse": "pas_hybrid",
+    "pas_line_xcoarse": "pas_hybrid",
+    "pas_xcoarse_line": "pas_hybrid",
+    "pas_schur": "pas_schur",
+    "pas_block_schur": "pas_schur",
+    "pas_xmg_l": "pas_schur",
+    "pas_tz": "pas_tz",
+    "pas_3d": "pas_tz",
+    "pas_tz_l": "pas_tz",
+    "pas_ilu": "pas_ilu",
+    "pas_block_ilu": "pas_ilu",
+    "pas_xblock_ilu": "pas_ilu",
+    "block_ilu": "pas_ilu",
+    "theta_zeta": "theta_zeta",
+    "theta_zeta_line": "theta_zeta",
+    "tz": "theta_zeta",
+    "tz_line": "theta_zeta",
+    "zeta": "zeta_line",
+    "zeta_line": "zeta_line",
+    "line_zeta": "zeta_line",
+    "zeta_dd": "zeta_dd",
+    "zeta_block": "zeta_dd",
+    "dd_zeta": "zeta_dd",
+    "dd_z": "zeta_dd",
+    "zeta_schwarz": "zeta_schwarz",
+    "schwarz_zeta": "zeta_schwarz",
+    "ras_zeta": "zeta_schwarz",
+    "zeta_ras": "zeta_schwarz",
+    "adi": "adi",
+    "adi_line": "adi",
+    "line_adi": "adi",
+    "zeta_theta": "adi",
+    "1": "point",
+    "true": "point",
+    "yes": "point",
+    "on": "point",
+    "point": "point",
+    "point_block": "point",
+    "schur": "schur",
+    "schur_complement": "schur",
+    "constraint_schur": "schur",
+    "collision": "collision",
+    "diag": "collision",
+    "collision_diag": "collision",
+}
+
 
 def _env_int(name: str, default: int) -> int:
     env = os.environ.get(name, "").strip()
@@ -41,6 +136,18 @@ def _env_float(name: str, default: float) -> float:
         return float(env) if env else float(default)
     except ValueError:
         return float(default)
+
+
+def canonical_rhs1_preconditioner_kind(raw: str | None) -> str | None:
+    """Canonicalize ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` aliases.
+
+    Unknown non-empty aliases intentionally return ``None`` to preserve the
+    historical driver behavior for unrecognized values.
+    """
+    key = str(raw or "").strip().lower()
+    if not key:
+        return None
+    return _RHS1_PRECONDITIONER_KIND_ALIASES.get(key)
 
 
 def rhs1_pas_auto_large_base_kind(*, active_size: int) -> str:
@@ -236,6 +343,7 @@ def rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
 
 __all__ = [
     "PAS_AUTO_STRONG_BASE_KINDS",
+    "canonical_rhs1_preconditioner_kind",
     "pas_auto_skip_strong_retry",
     "rhs1_gpu_sparse_fallback_skip_allowed",
     "rhs1_pas_auto_large_base_kind",

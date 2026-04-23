@@ -3632,3 +3632,37 @@ Next refactor target:
 - Extract RHSMode=1 preconditioner environment alias normalization and top-level
   initial-kind selection into pure helpers, then add direct tests before moving
   to the physics-gate and benchmark-gate lanes.
+
+### 19.40 Driver split step 4: RHSMode=1 preconditioner alias canonicalization
+
+Implemented the next maintainability increment:
+
+- Added `canonical_rhs1_preconditioner_kind(raw)` to
+  `sfincs_jax/rhs1_preconditioner_auto_policy.py`.
+- Moved the long `SFINCS_JAX_RHSMODE1_PRECONDITIONER` alias chain out of
+  `solve_v3_full_system_linear_gmres` and into a pure mapping that is directly
+  testable.
+- Preserved historical behavior:
+  - blank aliases return `None`,
+  - explicit off/false/no values return `None`,
+  - unknown non-empty aliases return `None`,
+  - `theta_zeta` still canonicalizes to `theta_zeta` while `zeta_theta`
+    canonicalizes to `adi`, matching the old ordered chain.
+- Added direct alias tests covering each alias family and retained the existing
+  driver-wrapper tests.
+- Updated `docs/source_map.rst` so the alias-normalization responsibility is
+  visible in the architecture documentation.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_preconditioner_auto_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_preconditioner_auto_policy.py`
+- `python -m ruff check sfincs_jax/rhs1_preconditioner_auto_policy.py tests/test_rhs1_preconditioner_auto_policy.py`
+- `pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py tests/test_v3_driver_policy_helpers.py tests/test_rhs1_sparse_first_heuristic.py`
+  passed with `112 passed`.
+
+Next refactor target:
+
+- Extract the default RHSMode=1 initial preconditioner selection around the
+  `rhs1_precond_env == ""` branch into a typed policy helper that accepts
+  already-computed scalar diagnostics. That will make the PAS/FP/DKES default
+  routing auditable before the PAS runtime/memory offender work resumes.
