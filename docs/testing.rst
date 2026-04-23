@@ -253,6 +253,13 @@ bounds, and the FP/PAS dense-fallback active-size ceiling.  The public driver
 wrappers remain tested separately, so this is a
 behavior-preserving refactor with a smaller directly testable policy surface.
 
+The adjacent constraint-scheme-0 sparse-first policy now lives in
+``sfincs_jax/rhs1_constraint0_policy.py``. ``tests/test_rhs1_constraint0_policy.py``
+checks that the accelerator-default sparse-first lane, explicit
+PETSc-compatible sparse mode, and dense-fallback opt-in preserve the same RHSMode,
+``Phi1``, full-FP, solve-method, preconditioner, and size guards as the driver
+wrappers in ``tests/test_rhs1_sparse_first_heuristic.py``.
+
 The VMEC convention layer has its own bounded gate in
 ``tests/test_vmec_wout_conventions.py``. It checks the scheme-5 conventions that are
 easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh
