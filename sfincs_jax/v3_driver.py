@@ -108,6 +108,7 @@ from .rhs1_host_policy import (
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
     host_sparse_factor_dtype as _host_sparse_factor_dtype_impl,
     rhs1_dense_backend_allowed as _rhs1_dense_backend_allowed_impl,
+    rhs1_dense_fallback_max as _rhs1_dense_fallback_max_impl,
     rhs1_dense_krylov_allowed as _rhs1_dense_krylov_allowed_impl,
     rhs1_explicit_sparse_host_direct_allowed as _rhs1_explicit_sparse_host_direct_allowed_impl,
     rhs1_host_dense_fallback_allowed as _rhs1_host_dense_fallback_allowed_impl,
@@ -3134,47 +3135,7 @@ def _hash_array(arr: jnp.ndarray | np.ndarray) -> str:
 
 
 def _rhsmode1_dense_fallback_max(op: V3FullSystemOperator) -> int:
-    dense_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX", "").strip()
-    try:
-        base_max = int(dense_env) if dense_env else 400
-    except ValueError:
-        base_max = 0
-    if op.fblock.fp is None:
-        # PAS operators are sensitive to dense fallback (can drift from PETSc-style
-        # approximate solutions), so disable by default unless explicitly overridden
-        # or constraintScheme=0. Allow a small-size carve-out for tiny PAS systems
-        # to keep parity with reference fixtures.
-        dense_pas_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", "").strip()
-        if dense_pas_env:
-            try:
-                dense_pas_max = int(dense_pas_env)
-            except ValueError:
-                dense_pas_max = base_max
-            if dense_pas_max <= 0:
-                return 0
-            return max(base_max, dense_pas_max)
-        if int(op.constraint_scheme) != 0:
-            return 0
-        dense_pas_max = 5000
-        if dense_pas_max <= 0:
-            return base_max
-        return max(base_max, dense_pas_max)
-    dense_fp_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", "").strip()
-    dense_fp_cutoff_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "").strip()
-    try:
-        if dense_fp_env:
-            dense_fp_max = int(dense_fp_env)
-        elif dense_fp_cutoff_env:
-            dense_fp_max = int(dense_fp_cutoff_env)
-        else:
-            # Keep the default conservative to avoid transient multi-GB allocations in
-            # the dense branch for medium FP systems.
-            dense_fp_max = 5000
-    except ValueError:
-        dense_fp_max = base_max
-    if dense_fp_max <= 0:
-        return base_max
-    return max(base_max, dense_fp_max)
+    return _rhs1_dense_fallback_max_impl(op)
 
 
 def _rhsmode1_precond_cache_key(op: V3FullSystemOperator, kind: str) -> tuple[object, ...]:

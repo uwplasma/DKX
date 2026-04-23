@@ -8,6 +8,7 @@ from sfincs_jax.rhs1_host_policy import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,
     rhs1_dense_backend_allowed,
+    rhs1_dense_fallback_max,
     rhs1_dense_krylov_allowed,
     rhs1_explicit_sparse_host_direct_allowed,
     rhs1_host_dense_fallback_allowed,
@@ -89,6 +90,30 @@ def test_rhs1_host_dense_shortcut_guards_small_accelerator_fp(monkeypatch) -> No
         backend="gpu",
         dense_fallback_max=5000,
     )
+
+
+def test_rhs1_dense_fallback_max_respects_fp_pas_and_env_overrides(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", raising=False)
+
+    assert rhs1_dense_fallback_max(_op(has_fp=True)) == 5000
+    assert rhs1_dense_fallback_max(_op(has_fp=False, has_pas=True, constraint_scheme=1)) == 0
+    assert rhs1_dense_fallback_max(_op(has_fp=False, has_pas=True, constraint_scheme=0)) == 5000
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX", "800")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", "1200")
+    assert rhs1_dense_fallback_max(_op(has_fp=True)) == 1200
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", "0")
+    assert rhs1_dense_fallback_max(_op(has_fp=True)) == 800
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", "1600")
+    assert rhs1_dense_fallback_max(_op(has_fp=False, has_pas=True, constraint_scheme=2)) == 1600
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", "0")
+    assert rhs1_dense_fallback_max(_op(has_fp=False, has_pas=True, constraint_scheme=2)) == 0
 
 
 def test_rhs1_host_sparse_direct_and_pc_rescue_policy(monkeypatch) -> None:
