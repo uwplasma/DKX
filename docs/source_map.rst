@@ -157,6 +157,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   shared active-DOF transport policy, active-index map construction, and dense
   fallback / dense-preconditioner policy used before the transport preconditioner and
   solve handoff layers.
+- ``sfincs_jax/transport_handoff_policy.py``:
+  shared transport retry residual metrics, better-candidate comparisons, and RHSMode=3
+  polish threshold/restart/maxiter policy used by the reduced and full transport solve
+  branches.
 - ``sfincs_jax/transport_parallel_policy.py``:
   transport process-parallel backend selection, worker env, GPU worker env, and pool
   policy.
