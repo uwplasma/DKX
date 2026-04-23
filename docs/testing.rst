@@ -310,10 +310,11 @@ allowed into production code. The current example is the Lineax implicit-solve g
 
 .. code-block:: bash
 
-   python examples/performance/benchmark_optional_lineax_implicit_solve.py --backend all
+   python examples/performance/benchmark_optional_lineax_implicit_solve.py --backend all --suite all
 
 This gate always benchmarks the in-tree implicit solve and only runs the Lineax branch
 when ``lineax`` is installed. The associated test
 ``tests/test_optional_lineax_implicit_gate.py`` verifies the deterministic
-nonsymmetric stress system, finite implicit gradients, small current-solver residuals,
-and clean skip behavior when Lineax is absent.
+nonsymmetric stress system, the tiny real scheme-5 SFINCS implicit-diff lane, the
+repeated-RHS reuse lane on that same tiny operator, and clean skip behavior when Lineax
+is absent.
