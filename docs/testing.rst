@@ -284,10 +284,14 @@ The first corrected artifact from that lane is now checked in:
   ``examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
 - figure:
   ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png``
+- summary:
+  ``examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json``
+- figure:
+  ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png``
 
-That artifact is now guarded by direct tests on the collisionality ladder and FP/PAS
-separation, but it is still explicitly documented as a bounded branch artifact rather
-than the final audited collisionality publication figure.
+These corrected fast artifacts are now guarded by direct tests on the collisionality
+ladder and FP/PAS separation, but they are still explicitly documented as bounded branch
+artifacts rather than the final audited collisionality publication figures.
 
 Further reading
 ---------------

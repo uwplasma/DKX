@@ -59,5 +59,9 @@ The corrected bounded LHD rerun is currently pinned as:
 - `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png`
 
+The corrected bounded W7-X rerun is currently pinned as:
+- `examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json`
+- `docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png`
+
 The full collisionality figure family remains an explicit re-audit lane until the
 corrected LHD and W7-X outputs are both regenerated and pinned from the fixed script.

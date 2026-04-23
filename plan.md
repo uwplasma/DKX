@@ -2253,10 +2253,16 @@ Testing docs should include:
 - The first corrected branch artifact is now pinned:
   - summary: `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
   - figure: `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png`
+- The corrected W7-X fast branch artifact is now also pinned:
+  - summary: `examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json`
+  - figure: `docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png`
 - This artifact is backed by direct tests on:
   - the collisionality ladder itself,
   - and the restored FP/PAS separation in the diagonal transport coefficients.
+- The same is now true for the bounded W7-X fast lane: it stayed cheap enough for branch
+  validation and resolves clear FP/PAS separation in the corrected rerun.
 - Remaining open lanes are explicit:
   - regenerate the full LHD collisionality figure family from the fixed writer,
-  - characterize whether corrected W7-X fast reruns are cheap enough for the branch workflow,
-  - regenerate the W7-X collisionality and high-collisionality-proxy artifacts only after that.
+  - regenerate the full W7-X collisionality figure family from the fixed writer,
+  - regenerate the high-collisionality proxy only after its parent LHD/W7-X scans are
+    pinned from the corrected script.
