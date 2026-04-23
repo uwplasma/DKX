@@ -3666,3 +3666,42 @@ Next refactor target:
   `rhs1_precond_env == ""` branch into a typed policy helper that accepts
   already-computed scalar diagnostics. That will make the PAS/FP/DKES default
   routing auditable before the PAS runtime/memory offender work resumes.
+
+### 19.41 Driver split step 5: PAS weak-default and family-refinement policy extraction
+
+Implemented another bounded policy split focused on the PAS offender lane:
+
+- Added `rhs1_pas_weak_auto_override_kind(...)` to
+  `sfincs_jax/rhs1_preconditioner_auto_policy.py`.
+  - It promotes weak automatic PAS defaults (`point`, `collision`, `xmg`, pure
+    line, weak angular blocks, or `None`) to either bounded `xblock_tz` or the
+    PAS-native lite/hybrid family.
+  - It preserves explicit user preconditioner requests and non-RHSMode=1 /
+    Phi1 cases.
+- Added `rhs1_pas_family_refinement_kind(...)`.
+  - It refines PAS lite/hybrid choices to `pas_tokamak_theta`, `pas_tz`, or
+    `pas_ilu` when the specialized builder is applicable and the existing
+    thresholds allow it.
+  - It preserves the old ordering: tokamak `pas_lite` first becomes
+    `pas_hybrid`, dedicated tokamak-theta wins over 3D PAS, 3D PAS wins over
+    generic lite/hybrid, and large tokamak-like blank-auto PAS may promote to
+    `pas_ilu`.
+- Updated `solve_v3_full_system_linear_gmres` to call those helpers instead of
+  keeping the PAS refinements embedded in the monolithic solver body.
+- Added direct unit tests for small bounded `xblock_tz`, explicit-env
+  preservation, large `pas_lite`, tokamak `pas_hybrid`, `pas_tokamak_theta`,
+  `pas_tz`, and `pas_ilu` routing.
+- Updated the source map.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_preconditioner_auto_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_preconditioner_auto_policy.py`
+- `python -m ruff check sfincs_jax/rhs1_preconditioner_auto_policy.py tests/test_rhs1_preconditioner_auto_policy.py`
+- `pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py tests/test_v3_driver_policy_helpers.py tests/test_rhs1_sparse_first_heuristic.py`
+  passed with `114 passed`.
+
+Next refactor target:
+
+- Extract FP/DKES and large-FP default-selection policy using the same pattern,
+  then move to the validation/coverage lane with focused physics gates around
+  the newly isolated solver-routing policies.
