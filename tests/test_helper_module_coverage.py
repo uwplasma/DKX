@@ -170,17 +170,40 @@ def test_profiling_and_verbose_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
     assert _rss_mb() == pytest.approx(12.5)
 
-    monkeypatch.setattr("jax.devices", lambda: [SimpleNamespace(memory_stats=lambda: {"bytes_active": 3_000_000})])
+    device_mem_calls: list[int] = []
+    monkeypatch.setattr(
+        "jax.devices",
+        lambda: device_mem_calls.append(1) or [SimpleNamespace(memory_stats=lambda: {"bytes_active": 3_000_000})],
+    )
     assert _device_mem_mb() == pytest.approx(3.0)
 
     monkeypatch.setattr(profiling.time, "perf_counter", lambda: 11.25)
-    profiler = SimpleProfiler(emit=None, t0=10.0, last=10.5, rss0_mb=12.5)
+    profiler = SimpleProfiler(emit=None, sample_device_mem=False, t0=10.0, last=10.5, rss0_mb=12.5)
     profiler.mark("phase")
     assert profiler.entries[0]["dt_s"] == pytest.approx(0.75)
     assert profiler.entries[0]["total_s"] == pytest.approx(1.25)
+    assert profiler.entries[0]["device_mb"] is None
+    assert device_mem_calls == [1]
+
+    profiler_with_dev = SimpleProfiler(emit=None, sample_device_mem=True, t0=10.0, last=10.5, rss0_mb=12.5)
+    profiler_with_dev.mark("phase_dev")
+    assert profiler_with_dev.entries[0]["device_mb"] == pytest.approx(3.0)
+    assert device_mem_calls == [1, 1]
 
     monkeypatch.setenv("SFINCS_JAX_PROFILE", "on")
-    assert maybe_profiler() is not None
+    monkeypatch.delenv("SFINCS_JAX_PROFILE_DEVICE_MEM", raising=False)
+    prof = maybe_profiler()
+    assert prof is not None
+    assert prof.sample_device_mem is False
+    monkeypatch.setenv("SFINCS_JAX_PROFILE_DEVICE_MEM", "1")
+    prof = maybe_profiler()
+    assert prof is not None
+    assert prof.sample_device_mem is True
+    monkeypatch.delenv("SFINCS_JAX_PROFILE_DEVICE_MEM", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_PROFILE", "full")
+    prof = maybe_profiler()
+    assert prof is not None
+    assert prof.sample_device_mem is True
     monkeypatch.setenv("SFINCS_JAX_PROFILE", "off")
     assert maybe_profiler() is None
 
