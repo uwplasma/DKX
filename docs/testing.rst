@@ -227,8 +227,9 @@ through ``scripts/profile_write_output_trace.py`` or the transport-trace helpers
 not through always-on per-phase GPU memory polling. The runtime-drift audit also
 prefers the solver's logged ``elapsed_s=...`` value when available, falling back
 to subprocess wall time only for older artifacts that do not record it. The suite
-subprocesses also pin ``SFINCS_JAX_PRECOMPILE=0`` unless explicitly overridden, so
-runtime drift is not polluted by an eager precompile pass.
+subprocesses also pin ``SFINCS_JAX_PRECOMPILE=0`` unless explicitly overridden, and
+they leave ``JAX_COMPILATION_CACHE_DIR`` unset unless ``--jax-cache-dir`` is requested,
+so runtime drift is not polluted by eager precompile or persistent-cache write cost.
 
 Research reproducibility
 ------------------------
