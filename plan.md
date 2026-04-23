@@ -4189,3 +4189,22 @@ Validation:
 - `pytest -q tests/test_rhs1_large_cpu_policy.py tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
   passed with `177 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.59 Full-suite gate after RHSMode=1 policy extractions
+
+Ran the full local suite after the latest three driver-policy extractions:
+
+- `sfincs_jax/rhs1_constraint0_policy.py`
+- `sfincs_jax/rhs1_sparse_exact_policy.py`
+- `sfincs_jax/rhs1_large_cpu_policy.py`
+
+Validation:
+
+- `pytest -q` passed with `809 passed in 363.46s (0:06:03)`.
+
+Notes:
+
+- This confirms the scoped policy refactors did not regress the local unit,
+  regression, CLI, docs-support, geometry, solver, or bounded parity tests.
+- The next bounded refactor lane is the adjacent post-x-block polish /
+  targeted-polish / skip-global-sparse policy cluster in `v3_driver.py`.
