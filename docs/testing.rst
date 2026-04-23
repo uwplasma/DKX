@@ -218,6 +218,12 @@ When changing physics, numerics, or performance-sensitive logic:
 4. rerun a representative case or benchmark if performance-sensitive code changed,
 5. rerun broader validation before release.
 
+For performance audits, keep benchmark instrumentation bounded: use the normal
+phase-timing/RSS profiler, but leave ``SFINCS_JAX_PROFILE_DEVICE_MEM=0`` unless
+the goal is an explicit device-memory investigation. Kernel/XLA traces should go
+through ``scripts/profile_write_output_trace.py`` or the transport-trace helpers,
+not through always-on per-phase GPU memory polling.
+
 Research reproducibility
 ------------------------
 

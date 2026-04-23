@@ -667,6 +667,7 @@ def _run_jax_cli(
         env.get("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "800"),
     )
     env.setdefault("SFINCS_JAX_PROFILE", "1")
+    env.setdefault("SFINCS_JAX_PROFILE_DEVICE_MEM", "0")
     run_times: list[float] = []
     repeat_count = max(1, int(repeats))
     for idx in range(repeat_count):
