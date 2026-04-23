@@ -461,6 +461,7 @@ def _cmd_scan_er(args: argparse.Namespace) -> int:
         values=values,
         compute_transport_matrix=bool(args.compute_transport_matrix),
         compute_solution=bool(getattr(args, "compute_solution", False)),
+        skip_existing=bool(getattr(args, "skip_existing", False)),
         jobs=int(args.jobs) if getattr(args, "jobs", None) is not None else None,
         index=int(args.index) if getattr(args, "index", None) is not None else None,
         stride=int(args.stride) if getattr(args, "stride", None) is not None else None,
@@ -840,6 +841,11 @@ def main(argv: list[str] | None = None) -> int:
     p_scan.add_argument("--max", default="1.0", help="Maximum value (ignored if --values is provided).")
     p_scan.add_argument("--n", default="5", help="Number of points (ignored if --values is provided).")
     p_scan.add_argument("--values", default=None, nargs="+", help="Explicit list of values to use.")
+    p_scan.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Reuse existing sfincsOutput.h5 files and only solve missing scan points.",
+    )
     p_scan.add_argument("--jobs", type=int, default=1, help="Parallel worker processes for scan points.")
     p_scan.add_argument("--index", type=int, default=None, help="Optional job-array index (0-based).")
     p_scan.add_argument("--stride", type=int, default=1, help="Stride for job-array slicing.")

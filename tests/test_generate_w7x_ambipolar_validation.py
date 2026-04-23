@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from sfincs_jax.ambipolar import AmbipolarSolveResult
 
@@ -93,3 +94,79 @@ def test_generate_w7x_ambipolar_validation_tiny_fixture_end_to_end(tmp_path: Pat
     assert "roots_er" in payload["ambipolar"]
     assert (out_dir / "tiny_w7x_ambi.png").exists()
     assert (out_dir / "tiny_w7x_ambi.pdf").exists()
+
+
+def test_scan_only_forwards_resume_and_split_options(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _load_module()
+    repo = Path(__file__).resolve().parents[1]
+    input_path = repo / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme11.input.namelist"
+    work_dir = tmp_path / "work"
+    out_dir = tmp_path / "figures"
+    summary_json = tmp_path / "summary.json"
+
+    scan_calls: list[dict[str, object]] = []
+
+    def _fake_run_er_scan(**kwargs):
+        scan_calls.append(dict(kwargs))
+        scan_dir = Path(kwargs["out_dir"])
+        scan_dir.mkdir(parents=True, exist_ok=True)
+        for value in kwargs["values"]:
+            run_dir = scan_dir / f"Er{float(value):.4g}"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            (run_dir / "sfincsOutput.h5").write_bytes(b"")
+        return None
+
+    def _unexpected(*_args, **_kwargs):
+        raise AssertionError("ambipolar postprocessing should be skipped in --scan-only mode")
+
+    monkeypatch.setattr(mod, "run_er_scan", _fake_run_er_scan)
+    monkeypatch.setattr(mod, "solve_ambipolar_from_scan_dir", _unexpected)
+    monkeypatch.setattr(mod, "plot_w7x_ambipolar_summary", _unexpected)
+
+    rc = mod.main(
+        [
+            "--input",
+            str(input_path),
+            "--work-dir",
+            str(work_dir),
+            "--out-dir",
+            str(out_dir),
+            "--summary-json",
+            str(summary_json),
+            "--er-values",
+            "1e-3,0,-1e-3",
+            "--skip-existing",
+            "--scan-only",
+            "--jobs",
+            "2",
+            "--index",
+            "1",
+            "--stride",
+            "3",
+        ]
+    )
+
+    assert rc == 0
+    assert len(scan_calls) == 1
+    kwargs = scan_calls[0]
+    assert kwargs["skip_existing"] is True
+    assert kwargs["jobs"] == 2
+    assert kwargs["index"] == 1
+    assert kwargs["stride"] == 3
+    assert not summary_json.exists()
+    assert not out_dir.exists()
+
+
+def test_main_rejects_scan_only_and_plot_only(tmp_path: Path) -> None:
+    mod = _load_module()
+    summary_json = tmp_path / "summary.json"
+    summary_json.write_text("{}\n")
+    with pytest.raises(ValueError, match="Cannot combine --scan-only and --plot-only"):
+        mod.main(
+            [
+                "--summary-json",
+                str(summary_json),
+                "--scan-only",
+                "--plot-only",
+            ]
+        )
