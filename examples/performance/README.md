@@ -7,6 +7,6 @@ Examples that focus on JIT/vectorization performance:
 - `benchmark_transport_parallel_scaling.py` — benchmark transport-worker scaling on CPU or GPU (`--backend cpu|gpu`). The current publication-grade multi-GPU result uses `--backend gpu` on `transport_parallel_2min.input.namelist`.
 - `benchmark_transport_l11_vs_fortran.py` — reproduce the 2x2 L11 parity/runtime figure used in the README/docs.
 - `benchmark_optional_lineax_implicit_solve.py` — optional Lineax gate for differentiable linear solves; it compares against the in-tree `custom_linear_solve` path on a synthetic nonsymmetric system, a tiny real SFINCS implicit-diff operator, and a repeated-RHS reuse case, and it skips cleanly when `lineax` is not installed.
-- `benchmark_structured_solve.py` — bounded factor-once / repeated-RHS block-tridiagonal benchmark. Use this as the admission gate before wiring structured velocity-space solves into production preconditioner or transport paths.
+- `benchmark_structured_solve.py` — bounded factor-once / repeated-RHS block-tridiagonal benchmark. It supports both deterministic synthetic systems and `--case sfincs-pas-block`, which extracts a real local PAS block from a SFINCS fixture. Use this as the admission gate before wiring structured velocity-space solves into production preconditioner or transport paths.
 - `profile_transport_compile_runtime_cache.py` — profile transport-solve compile/runtime split with persistent JAX cache.
 - `profile_reduced_examples.py` — batch profile the reduced upstream suite (runtime + memory summaries).

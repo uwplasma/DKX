@@ -136,6 +136,23 @@ factorization on deterministic synthetic systems. It reports residuals, maximum
 solution error against the dense solve, dense storage bytes, structured storage bytes,
 and warm solve timings.
 
+It also has a real-operator mode:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_structured_solve.py \
+     --case sfincs-pas-block \
+     --sfincs-input tests/ref/monoenergetic_PAS_tiny_scheme1.input.namelist \
+     --n-rhs 4 \
+     --out-json examples/performance/output/structured_solve_sfincs_pas_gate.json
+
+This mode fixes one species and one speed index, extracts the active Legendre-mode
+chain and full angular grid from the matrix-free SFINCS PAS F-block, checks that the
+extracted block is block-tridiagonal, then applies a small diagonal regularization
+before comparing dense and structured solves. The regularization is explicit in the
+JSON output and exists only to make the local preconditioner-style block nonsingular;
+it does not change production solver behavior.
+
 Run it with:
 
 .. code-block:: bash
@@ -145,11 +162,11 @@ Run it with:
      --out-json examples/performance/output/structured_solve_gate.json
 
 **Admission rule.** A structured algorithm should not be wired into real SFINCS solve
-paths unless it is parity-clean on the relevant fixture and this harness, or a direct
-real-operator extension of it, shows a material runtime or memory benefit. The current
-recommended gate is the same as the research roadmap: at least ``20%`` warm runtime
-improvement or ``25%`` memory reduction on a pinned offender, with no suite drift above
-``1.25x``.
+paths unless it is parity-clean on the relevant fixture and this harness, preferably in
+``--case sfincs-pas-block`` mode or a direct larger-offender extension of it, shows a
+material runtime or memory benefit. The current recommended gate is the same as the
+research roadmap: at least ``20%`` warm runtime improvement or ``25%`` memory reduction
+on a pinned offender, with no suite drift above ``1.25x``.
 
 JIT compilation and persistent compilation cache
 ------------------------------------------------
