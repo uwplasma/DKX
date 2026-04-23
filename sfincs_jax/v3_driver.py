@@ -121,6 +121,10 @@ from .transport_handoff_policy import (
     transport_residual_value,
     transport_result_needs_retry,
 )
+from .transport_dense_lu import (
+    dense_preconditioner_for_matvec as _dense_preconditioner_for_matvec,
+    dense_solver_for_matvec as _dense_solver_for_matvec,
+)
 from .transport_parallel_policy import (
     transport_parallel_backend as _transport_parallel_backend_impl,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
@@ -19889,50 +19893,6 @@ def solve_v3_transport_matrix_linear_gmres(
                 sparse_jax_config=sparse_jax_config,
             )
         return strong_preconditioner_full
-
-    def _dense_preconditioner_for_matvec(
-        *,
-        matvec_fn,
-        n: int,
-        dtype: jnp.dtype,
-        cache: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]],
-        key: tuple[object, int],
-    ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-        if key in cache:
-            return cache[key]
-        import jax.scipy.linalg as jla  # noqa: PLC0415
-
-        a_dense = assemble_dense_matrix_from_matvec(matvec=matvec_fn, n=n, dtype=dtype)
-        a_dense = jnp.asarray(a_dense, dtype=dtype)
-        lu, piv = jla.lu_factor(a_dense)
-
-        def precond(v: jnp.ndarray) -> jnp.ndarray:
-            return jla.lu_solve((lu, piv), v)
-
-        cache[key] = precond
-        return precond
-
-    def _dense_solver_for_matvec(
-        *,
-        matvec_fn,
-        n: int,
-        dtype: jnp.dtype,
-        cache: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]],
-        key: tuple[object, int],
-    ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-        if key in cache:
-            return cache[key]
-        import jax.scipy.linalg as jla  # noqa: PLC0415
-
-        a_dense = assemble_dense_matrix_from_matvec(matvec=matvec_fn, n=n, dtype=dtype)
-        a_dense = jnp.asarray(a_dense, dtype=dtype)
-        lu, piv = jla.lu_factor(a_dense)
-
-        def solve(v: jnp.ndarray) -> jnp.ndarray:
-            return jla.lu_solve((lu, piv), v)
-
-        cache[key] = solve
-        return solve
 
     def _transport_sparse_direct_solve(
         *,
