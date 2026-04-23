@@ -14,6 +14,8 @@ import os
 
 import numpy as np
 
+from .pas_smoother import adaptive_pas_smoother_allowed
+
 
 def pas_tokamak_theta_preconditioner_applicable(op) -> bool:
     """Return whether the PAS tokamak theta/L preconditioner is applicable.
@@ -157,6 +159,34 @@ def pas_tz_preconditioner_memory_safe(op) -> bool:
     return estimate <= max(0, rhs1_pas_tz_max_bytes())
 
 
+def rhs1_pas_adaptive_smoother_allowed(
+    *,
+    op,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    use_implicit: bool,
+) -> bool:
+    """Return whether the adaptive PAS smoother should run before stronger solves."""
+    env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER", "").strip().lower()
+    enabled = env not in {"0", "false", "no", "off"}
+    min_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_MIN", "").strip()
+    try:
+        min_size = int(min_env) if min_env else 2000
+    except ValueError:
+        min_size = 2000
+    return adaptive_pas_smoother_allowed(
+        enabled=enabled,
+        use_implicit=bool(use_implicit),
+        has_pas=op.fblock.pas is not None,
+        include_phi1=bool(op.include_phi1),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        active_size=int(active_size),
+        min_size=int(min_size),
+    )
+
+
 def build_pas_tz_memory_fallback(
     *,
     op,
@@ -202,5 +232,6 @@ __all__ = [
     "pas_tokamak_theta_preconditioner_applicable",
     "pas_tz_preconditioner_applicable",
     "pas_tz_preconditioner_memory_safe",
+    "rhs1_pas_adaptive_smoother_allowed",
     "rhs1_pas_tz_max_bytes",
 ]

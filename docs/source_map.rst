@@ -150,7 +150,8 @@ monolith into narrower modules while keeping ``v3_driver.py`` as the stable publ
 for debugging and monkeypatch-based tests. The first extracted layers are:
 
 - ``sfincs_jax/rhs1_pas_policy.py``:
-  PAS applicability, PAS-TZ memory safety, and PAS fallback routing.
+  PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
+  adaptive-smoother eligibility.
 - ``sfincs_jax/rhs1_preconditioner_dispatch.py``:
   shared RHSMode=1 preconditioner-kind dispatch.
 - ``sfincs_jax/rhs1_preconditioner_auto_policy.py``:
@@ -189,6 +190,8 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/rhs1_post_xblock_policy.py``:
   post-x-block polish, targeted FP polish, and skip-global-sparse-after-xblock
   policy for large explicit full-FP CPU systems.
+- ``sfincs_jax/solve_mode_policy.py``:
+  shared implicit/differentiable solve-mode environment resolution.
 - ``sfincs_jax/transport_policy.py``:
   pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
 - ``sfincs_jax/transport_preconditioner_dispatch.py``:

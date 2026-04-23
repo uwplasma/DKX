@@ -4276,3 +4276,27 @@ Notes:
   helpers and either extract the next small pure-policy cluster or switch to the
   open validation/documentation lanes if the remaining code is less clearly
   separable.
+
+### 19.63 PAS adaptive-smoother and solve-mode policy extraction
+
+Completed the small pure-policy extraction:
+
+- Move PAS adaptive-smoother eligibility into `rhs1_pas_policy.py`, reusing the
+  lower-level `pas_smoother.adaptive_pas_smoother_allowed(...)` predicate.
+- Add `sfincs_jax/solve_mode_policy.py` for shared
+  `SFINCS_JAX_IMPLICIT_SOLVE` / differentiability precedence.
+- Keep the existing `v3_driver.py` wrappers intact for compatibility with the
+  established heuristic and I/O tests.
+- Add direct tests for PAS adaptive smoother activation/guards/env parsing and
+  direct tests for implicit-solve env resolution.
+- Update API docs, source map, testing docs, and module-docstring coverage.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/solve_mode_policy.py sfincs_jax/rhs1_pas_policy.py sfincs_jax/v3_driver.py tests/test_solve_mode_policy.py tests/test_rhs1_pas_policy.py tests/test_policy_module_docstrings.py`
+- `python -m ruff check sfincs_jax/solve_mode_policy.py sfincs_jax/rhs1_pas_policy.py tests/test_solve_mode_policy.py tests/test_rhs1_pas_policy.py tests/test_policy_module_docstrings.py`
+- `pytest -q tests/test_rhs1_pas_policy.py tests/test_solve_mode_policy.py tests/test_rhs1_sparse_first_heuristic.py tests/test_policy_module_docstrings.py`
+  passed with `75 passed`.
+- `pytest -q tests/test_rhs1_pas_policy.py tests/test_solve_mode_policy.py tests/test_rhs1_acceptance_policy.py tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_large_cpu_policy.py tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
+  passed with `195 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.

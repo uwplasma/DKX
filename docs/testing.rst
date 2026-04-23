@@ -290,6 +290,12 @@ host x-block factor probe for exceptions, shape mismatches, nonfinite solves, an
 excessive amplification. The PAS residual formula itself is shared with
 ``sfincs_jax/pas_smoother.py`` so the acceptance threshold is not duplicated.
 
+The PAS adaptive-smoother gate and implicit-solve mode resolver also have direct
+coverage in ``tests/test_rhs1_pas_policy.py`` and ``tests/test_solve_mode_policy.py``.
+Those tests keep the PAS smoother activation threshold and
+``SFINCS_JAX_IMPLICIT_SOLVE`` / differentiability precedence rules explicit while
+the driver wrappers remain stable for compatibility tests.
+
 The VMEC convention layer has its own bounded gate in
 ``tests/test_vmec_wout_conventions.py``. It checks the scheme-5 conventions that are
 easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh
