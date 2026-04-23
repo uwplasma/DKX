@@ -4417,3 +4417,21 @@ Notes:
 - This confirms the extra NetCDF fixture generation does not add meaningful CI
   cost and does not regress the broader geometry, driver, CLI, output, or bounded
   parity tests.
+
+### 19.69 CI warning cleanup: structured-velocity docstring
+
+Cleaned up a warning surfaced by the package-scoped coverage probes:
+
+- Converted the block-tridiagonal factorization docstring in
+  `sfincs_jax/structured_velocity.py` to a raw docstring so the LaTeX
+  `\begin{...}` / `\ddots` content is not interpreted as Python escape
+  sequences.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/structured_velocity.py`
+- `python -m ruff check sfincs_jax/structured_velocity.py`
+- `python -m pytest -q tests/test_structured_velocity.py` passed with
+  `5 passed in 1.86s`.
+- `COVERAGE_FILE=/tmp/sfincs_jax_warning_probe.coverage python -m pytest -q tests/test_collision_physics_gates.py --cov=sfincs_jax --cov-report=term | rg 'DeprecationWarning|structured_velocity|passed'`
+  reported no `DeprecationWarning` and `7 passed in 3.17s`.
