@@ -6,9 +6,11 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     rhs1_gpu_sparse_fallback_skip_allowed,
     rhs1_pas_auto_large_base_kind,
     rhs1_pas_dkes_xblock_allowed,
+    rhs1_pas_family_refinement_kind,
     rhs1_pas_tokamak_cpu_xblock_preferred,
     rhs1_pas_tokamak_gpu_theta_allowed,
     rhs1_pas_tokamak_gpu_xblock_preferred,
+    rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed,
 )
 
@@ -60,6 +62,119 @@ def test_pas_auto_large_base_kind_respects_threshold(monkeypatch) -> None:
 
     monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "30_000")
     assert rhs1_pas_auto_large_base_kind(active_size=25_000) == "pas_hybrid"
+
+
+def test_pas_weak_auto_override_promotes_default_weak_kinds(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_SMALL_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_MIN", raising=False)
+
+    assert (
+        rhs1_pas_weak_auto_override_kind(
+            rhs1_precond_env="",
+            rhs_mode=1,
+            include_phi1=False,
+            has_pas=True,
+            current_kind="collision",
+            active_size=500,
+            n_theta=8,
+            n_zeta=3,
+            max_l=10,
+        )
+        == "xblock_tz"
+    )
+
+    assert (
+        rhs1_pas_weak_auto_override_kind(
+            rhs1_precond_env="manual",
+            rhs_mode=1,
+            include_phi1=False,
+            has_pas=True,
+            current_kind="collision",
+            active_size=500,
+            n_theta=8,
+            n_zeta=3,
+            max_l=10,
+        )
+        == "collision"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "100")
+    assert (
+        rhs1_pas_weak_auto_override_kind(
+            rhs1_precond_env="",
+            rhs_mode=1,
+            include_phi1=False,
+            has_pas=True,
+            current_kind=None,
+            active_size=30_000,
+            n_theta=16,
+            n_zeta=9,
+            max_l=12,
+        )
+        == "pas_lite"
+    )
+
+
+def test_pas_family_refinement_preserves_specialized_routing(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_ILU_MIN", raising=False)
+
+    assert (
+        rhs1_pas_family_refinement_kind(
+            rhs1_precond_env="",
+            has_pas=True,
+            has_fp=False,
+            current_kind="pas_lite",
+            active_size=500,
+            n_zeta=1,
+            geom_scheme=1,
+            pas_tz_applicable=False,
+            pas_tokamak_theta_applicable=False,
+        )
+        == "pas_hybrid"
+    )
+    assert (
+        rhs1_pas_family_refinement_kind(
+            rhs1_precond_env="auto",
+            has_pas=True,
+            has_fp=False,
+            current_kind="pas_hybrid",
+            active_size=500,
+            n_zeta=1,
+            geom_scheme=1,
+            pas_tz_applicable=True,
+            pas_tokamak_theta_applicable=True,
+        )
+        == "pas_tokamak_theta"
+    )
+    assert (
+        rhs1_pas_family_refinement_kind(
+            rhs1_precond_env="auto",
+            has_pas=True,
+            has_fp=False,
+            current_kind="pas_hybrid",
+            active_size=500,
+            n_zeta=7,
+            geom_scheme=5,
+            pas_tz_applicable=True,
+            pas_tokamak_theta_applicable=False,
+        )
+        == "pas_tz"
+    )
+    assert (
+        rhs1_pas_family_refinement_kind(
+            rhs1_precond_env="",
+            has_pas=True,
+            has_fp=False,
+            current_kind="pas_hybrid",
+            active_size=20_000,
+            n_zeta=3,
+            geom_scheme=5,
+            pas_tz_applicable=False,
+            pas_tokamak_theta_applicable=False,
+        )
+        == "pas_ilu"
+    )
 
 
 def test_pas_auto_skip_strong_retry_requires_pas_auto_and_strong_base() -> None:

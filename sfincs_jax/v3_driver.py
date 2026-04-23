@@ -65,9 +65,11 @@ from .rhs1_preconditioner_auto_policy import (
     pas_auto_skip_strong_retry as _pas_auto_skip_strong_retry,
     rhs1_pas_auto_large_base_kind as _rhs1_pas_auto_large_base_kind,
     rhs1_pas_dkes_xblock_allowed as _rhs1_pas_dkes_xblock_allowed,
+    rhs1_pas_family_refinement_kind as _rhs1_pas_family_refinement_kind,
     rhs1_pas_tokamak_cpu_xblock_preferred as _rhs1_pas_tokamak_cpu_xblock_preferred,
     rhs1_pas_tokamak_gpu_theta_allowed as _rhs1_pas_tokamak_gpu_theta_allowed,
     rhs1_pas_tokamak_gpu_xblock_preferred as _rhs1_pas_tokamak_gpu_xblock_preferred,
+    rhs1_pas_weak_auto_override_kind as _rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
 )
 from .rhs1_preconditioner_auto_policy import (
@@ -11823,64 +11825,30 @@ def solve_v3_full_system_linear_gmres(
         # PAS hybrid (line + x-coarse) preconditioner by default. For large systems,
         # prefer a lighter PAS preconditioner to keep setup cost down. The PAS probe
         # can still downgrade to a collision preconditioner if it suffices.
-        xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
-        xblock_small_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_SMALL_MAX", "").strip()
-        try:
-            xblock_tz_max_local = int(xblock_tz_max_env) if xblock_tz_max_env else 1200
-        except ValueError:
-            xblock_tz_max_local = 1200
-        try:
-            xblock_small_max_local = int(xblock_small_env) if xblock_small_env else 4000
-        except ValueError:
-            xblock_small_max_local = 4000
         max_l_local = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-        if (
-            int(active_size) <= max(1, int(xblock_small_max_local))
-            and xblock_tz_max_local > 0
-            and int(max_l_local) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max_local
-        ):
-            rhs1_precond_kind = "xblock_tz"
-        else:
-            pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-            try:
-                pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-            except ValueError:
-                pas_lite_min = 20000
-            if int(active_size) >= max(1, int(pas_lite_min)):
-                rhs1_precond_kind = "pas_lite"
-            else:
-                rhs1_precond_kind = "pas_hybrid"
-    if (
-        rhs1_precond_kind == "pas_lite"
-        and op.fblock.pas is not None
-        and (int(op.n_zeta) == 1 or geom_scheme == 1)
-    ):
-        # Tokamak PAS runs (geometryScheme=1) tend to benefit from a stronger angular/L block
-        # (xblock/line) than pas_lite provides. Prefer the PAS hybrid in this setting.
-        rhs1_precond_kind = "pas_hybrid"
-    if (
-        rhs1_precond_env in {"", "auto", "default"}
-        and
-        rhs1_precond_kind in {"pas_lite", "pas_hybrid"}
-        and _pas_tokamak_theta_preconditioner_applicable(op)
-    ):
-        rhs1_precond_kind = "pas_tokamak_theta"
-    if (
-        rhs1_precond_env in {"", "auto", "default"}
-        and
-        rhs1_precond_kind in {"pas_lite", "pas_hybrid"}
-        and _pas_tz_preconditioner_applicable(op)
-        and (not _pas_tokamak_theta_preconditioner_applicable(op))
-    ):
-        # Prefer the dedicated PAS 3D (theta,zeta)/L preconditioner when available.
-        rhs1_precond_kind = "pas_tz"
+        rhs1_precond_kind = _rhs1_pas_weak_auto_override_kind(
+            rhs1_precond_env=rhs1_precond_env,
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+            has_pas=op.fblock.pas is not None,
+            current_kind=rhs1_precond_kind,
+            active_size=int(active_size),
+            n_theta=int(op.n_theta),
+            n_zeta=int(op.n_zeta),
+            max_l=int(max_l_local),
+        )
     tokamak_like = bool(geom_scheme == 1 or int(op.n_zeta) <= 5)
-    if (
-        tokamak_like
-        and rhs1_precond_kind in {"pas_lite", "pas_hybrid"}
-        and _pas_tz_preconditioner_applicable(op)
-    ):
-        rhs1_precond_kind = "pas_tz"
+    rhs1_precond_kind = _rhs1_pas_family_refinement_kind(
+        rhs1_precond_env=rhs1_precond_env,
+        has_pas=op.fblock.pas is not None,
+        has_fp=op.fblock.fp is not None,
+        current_kind=rhs1_precond_kind,
+        active_size=int(active_size),
+        n_zeta=int(op.n_zeta),
+        geom_scheme=int(geom_scheme),
+        pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
+        pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable(op),
+    )
     if (
         tokamak_like
         and rhs1_precond_env in {"", "auto", "default"}
@@ -11933,19 +11901,6 @@ def solve_v3_full_system_linear_gmres(
                 )
         else:
             rhs1_precond_kind = "pas_schur"
-    if (
-        (not rhs1_precond_env)
-        and op.fblock.pas is not None
-        and (int(op.n_zeta) <= 5 or geom_scheme == 1)
-        and rhs1_precond_kind in {"pas_lite", "pas_hybrid"}
-    ):
-        pas_ilu_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_ILU_MIN", "").strip()
-        try:
-            pas_ilu_min = int(pas_ilu_min_env) if pas_ilu_min_env else 12000
-        except ValueError:
-            pas_ilu_min = 12000
-        if int(active_size) >= max(1, int(pas_ilu_min)):
-            rhs1_precond_kind = "pas_ilu"
     if (
         rhs1_precond_env == ""
         and int(op.rhs_mode) == 1

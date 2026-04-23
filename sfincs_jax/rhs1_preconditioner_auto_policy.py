@@ -26,6 +26,21 @@ PAS_AUTO_STRONG_BASE_KINDS = frozenset(
     }
 )
 
+PAS_WEAK_AUTO_OVERRIDE_KINDS = frozenset(
+    {
+        None,
+        "collision",
+        "point",
+        "xmg",
+        "theta_line",
+        "zeta_line",
+        "theta_zeta",
+        "xblock_tz",
+        "xblock_tz_lmax",
+        "theta_line_xdiag",
+    }
+)
+
 _RHS1_PRECONDITIONER_KIND_ALIASES = {
     "0": None,
     "false": None,
@@ -156,6 +171,83 @@ def rhs1_pas_auto_large_base_kind(*, active_size: int) -> str:
     if int(active_size) >= max(1, int(pas_lite_min)):
         return "pas_lite"
     return "pas_hybrid"
+
+
+def rhs1_pas_weak_auto_override_kind(
+    *,
+    rhs1_precond_env: str,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_pas: bool,
+    current_kind: str | None,
+    active_size: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+) -> str | None:
+    """Promote weak default PAS preconditioners to PAS-aware defaults.
+
+    This mirrors the driver auto-policy used before expensive PAS fallback
+    attempts: small angular blocks may use ``xblock_tz``; larger systems stay in
+    the PAS-native lite/hybrid family.
+    """
+    if str(rhs1_precond_env or "").strip().lower():
+        return current_kind
+    if int(rhs_mode) != 1 or bool(include_phi1) or not has_pas:
+        return current_kind
+    if current_kind not in PAS_WEAK_AUTO_OVERRIDE_KINDS:
+        return current_kind
+
+    xblock_tz_max = _env_int("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", 1200)
+    xblock_small_max = _env_int("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_SMALL_MAX", 4000)
+    if (
+        int(active_size) <= max(1, int(xblock_small_max))
+        and int(xblock_tz_max) > 0
+        and int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_max)
+    ):
+        return "xblock_tz"
+    return rhs1_pas_auto_large_base_kind(active_size=int(active_size))
+
+
+def rhs1_pas_family_refinement_kind(
+    *,
+    rhs1_precond_env: str,
+    has_pas: bool,
+    has_fp: bool,
+    current_kind: str | None,
+    active_size: int,
+    n_zeta: int,
+    geom_scheme: int,
+    pas_tz_applicable: bool,
+    pas_tokamak_theta_applicable: bool,
+) -> str | None:
+    """Refine automatic PAS lite/hybrid selections to specialized PAS builders."""
+    result = current_kind
+    env = str(rhs1_precond_env or "").strip().lower()
+    tokamak_geometry = int(n_zeta) == 1 or int(geom_scheme) == 1
+    tokamak_like = int(geom_scheme) == 1 or int(n_zeta) <= 5
+
+    if result == "pas_lite" and has_pas and tokamak_geometry:
+        # GeometryScheme=1 tokamak PAS runs need stronger angular/L coupling
+        # than pas_lite provides, but can still avoid the most expensive global
+        # blocks by staying in the hybrid family.
+        result = "pas_hybrid"
+    if env in {"", "auto", "default"} and result in {"pas_lite", "pas_hybrid"} and pas_tokamak_theta_applicable:
+        return "pas_tokamak_theta"
+    if (
+        env in {"", "auto", "default"}
+        and result in {"pas_lite", "pas_hybrid"}
+        and pas_tz_applicable
+        and (not pas_tokamak_theta_applicable)
+    ):
+        return "pas_tz"
+    if tokamak_like and result in {"pas_lite", "pas_hybrid"} and pas_tz_applicable:
+        return "pas_tz"
+    if env == "" and has_pas and tokamak_like and result in {"pas_lite", "pas_hybrid"}:
+        pas_ilu_min = _env_int("SFINCS_JAX_RHSMODE1_PAS_ILU_MIN", 12000)
+        if int(active_size) >= max(1, int(pas_ilu_min)):
+            return "pas_ilu"
+    return result
 
 
 def pas_auto_skip_strong_retry(
@@ -343,11 +435,14 @@ def rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
 
 __all__ = [
     "PAS_AUTO_STRONG_BASE_KINDS",
+    "PAS_WEAK_AUTO_OVERRIDE_KINDS",
     "canonical_rhs1_preconditioner_kind",
     "pas_auto_skip_strong_retry",
+    "rhs1_pas_family_refinement_kind",
     "rhs1_gpu_sparse_fallback_skip_allowed",
     "rhs1_pas_auto_large_base_kind",
     "rhs1_pas_dkes_xblock_allowed",
+    "rhs1_pas_weak_auto_override_kind",
     "rhs1_pas_tokamak_cpu_xblock_preferred",
     "rhs1_pas_tokamak_gpu_theta_allowed",
     "rhs1_pas_tokamak_gpu_xblock_preferred",
