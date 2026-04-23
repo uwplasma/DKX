@@ -150,6 +150,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   accepted-candidate handoff and Krylov replay-state updates.
 - ``sfincs_jax/transport_policy.py``:
   pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
+- ``sfincs_jax/transport_preconditioner_dispatch.py``:
+  shared transport preconditioner-kind normalization, auto-selection, DD/sparse-JAX
+  env parsing, and reduced/full preconditioner builder dispatch.
 - ``sfincs_jax/transport_parallel_policy.py``:
   transport process-parallel backend selection, worker env, GPU worker env, and pool
   policy.
