@@ -4,6 +4,9 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry,
     rhs1_gpu_sparse_fallback_skip_allowed,
+    rhs1_fp_dkes_default_kind,
+    rhs1_fp_dkes_env_preconditioner_kind,
+    rhs1_large_fp_near_zero_er_override_kind,
     rhs1_pas_auto_large_base_kind,
     rhs1_pas_dkes_xblock_allowed,
     rhs1_pas_family_refinement_kind,
@@ -174,6 +177,138 @@ def test_pas_family_refinement_preserves_specialized_routing(monkeypatch) -> Non
             pas_tokamak_theta_applicable=False,
         )
         == "pas_ilu"
+    )
+
+
+def test_fp_dkes_env_override_only_promotes_bounded_xblock(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_DKES_STRONG_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", raising=False)
+
+    assert (
+        rhs1_fp_dkes_env_preconditioner_kind(
+            rhs1_precond_env="",
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            use_dkes=True,
+            total_size=500,
+            n_theta=7,
+            n_zeta=3,
+            max_l=10,
+        )
+        == "xblock_tz"
+    )
+    assert (
+        rhs1_fp_dkes_env_preconditioner_kind(
+            rhs1_precond_env="theta_line",
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            use_dkes=True,
+            total_size=500,
+            n_theta=7,
+            n_zeta=3,
+            max_l=10,
+        )
+        == "theta_line"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "100")
+    assert (
+        rhs1_fp_dkes_env_preconditioner_kind(
+            rhs1_precond_env="",
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            use_dkes=True,
+            total_size=500,
+            n_theta=7,
+            n_zeta=3,
+            max_l=10,
+        )
+        == ""
+    )
+
+
+def test_fp_dkes_default_kind_bounds_strong_preconditioners(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_DKES_STRONG_MAX", raising=False)
+
+    assert (
+        rhs1_fp_dkes_default_kind(
+            active_size=500,
+            n_theta=7,
+            n_zeta=3,
+            max_l=10,
+            xblock_tz_limit=500,
+        )
+        == "xblock_tz"
+    )
+    assert (
+        rhs1_fp_dkes_default_kind(
+            active_size=500,
+            n_theta=7,
+            n_zeta=3,
+            max_l=10,
+            xblock_tz_limit=100,
+        )
+        == "xmg"
+    )
+    assert (
+        rhs1_fp_dkes_default_kind(
+            active_size=50_000,
+            n_theta=7,
+            n_zeta=3,
+            max_l=10,
+            xblock_tz_limit=500,
+        )
+        == "collision"
+    )
+
+
+def test_large_fp_near_zero_er_override_forces_xmg_only_for_weak_kinds(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_FORCE_XMG_MIN", raising=False)
+
+    assert (
+        rhs1_large_fp_near_zero_er_override_kind(
+            rhs1_precond_env="",
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            has_pas=False,
+            current_kind="collision",
+            total_size=150_000,
+            er_abs=0.0,
+            schur_er_min=1.0e-12,
+        )
+        == "xmg"
+    )
+    assert (
+        rhs1_large_fp_near_zero_er_override_kind(
+            rhs1_precond_env="",
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            has_pas=False,
+            current_kind="schur",
+            total_size=150_000,
+            er_abs=0.0,
+            schur_er_min=1.0e-12,
+        )
+        == "schur"
+    )
+    assert (
+        rhs1_large_fp_near_zero_er_override_kind(
+            rhs1_precond_env="",
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            has_pas=False,
+            current_kind="collision",
+            total_size=150_000,
+            er_abs=1.0e-8,
+            schur_er_min=1.0e-12,
+        )
+        == "collision"
     )
 
 
