@@ -2207,8 +2207,8 @@ Testing docs should include:
   - RHSMode=1 PAS policy and dispatch helpers,
   - strong-fallback / strong-control / stage-2 / sparse-rescue / sparse-polish policy helpers,
   - solve handoff helpers,
-  - transport policy, transport solve policy, transport preconditioner dispatch, transport-parallel
-    policy/runtime/pool/execution helpers,
+  - transport policy, transport solve policy, transport preconditioner dispatch,
+    transport handoff policy, transport-parallel policy/runtime/pool/execution helpers,
   - Phi1 Newton policy, linear-step, and line-search helpers.
 - The first literature-facing validation lane is now live with pinned fixed-case artifacts:
   - script: `examples/publication_figures/generate_er_trajectory_sweep.py`
@@ -2279,6 +2279,31 @@ Testing docs should include:
 - New bounded regression coverage now lives in:
   - `tests/test_transport_solve_policy.py`
 - Current validation for the transport front-end policy slice:
+  - `tests/test_transport_solve_policy.py`
+  - `tests/test_transport_preconditioner_dispatch.py`
+  - `tests/test_transport_sparse_direct.py`
+  - `tests/test_transport_parallel.py`
+  - all passed together after the extraction.
+
+### 19.22 Transport handoff policy split
+
+- The reduced and full transport solve branches still duplicated residual retry
+  metrics and RHSMode=3 polish parsing.
+- That duplicated policy is now extracted into
+  `sfincs_jax/transport_handoff_policy.py`.
+- `v3_driver.py` now uses that shared module for:
+  - finite-comparable residual values,
+  - retry gates around solver results,
+  - better-candidate comparisons,
+  - RHSMode=3 polish threshold / restart / maxiter policy.
+- The extraction stayed structure-preserving:
+  - the actual linear solves remain in `v3_driver.py`,
+  - reduced/full transport branches still execute in the same order,
+  - existing transport tests stayed green.
+- New bounded regression coverage now lives in:
+  - `tests/test_transport_handoff_policy.py`
+- Current validation for the handoff-policy slice:
+  - `tests/test_transport_handoff_policy.py`
   - `tests/test_transport_solve_policy.py`
   - `tests/test_transport_preconditioner_dispatch.py`
   - `tests/test_transport_sparse_direct.py`
