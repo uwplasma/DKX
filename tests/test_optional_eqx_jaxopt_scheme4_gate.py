@@ -7,6 +7,9 @@ from pathlib import Path
 
 import numpy as np
 
+_HAS_EQUINOX = importlib.util.find_spec("equinox") is not None
+_HAS_JAXOPT = importlib.util.find_spec("jaxopt") is not None
+
 
 def _load_module():
     repo = Path(__file__).resolve().parents[1]
@@ -33,6 +36,10 @@ def test_equinox_gate_matches_directional_finite_difference() -> None:
     mod = _load_module()
     result = mod.run_equinox_gate(n_theta=17, n_zeta=17)
     assert result.case == "scheme4_geometry_fit"
+    if not _HAS_EQUINOX:
+        assert result.status == "skipped"
+        assert "Equinox unavailable" in str(result.error)
+        return
     assert result.status == "ok"
     assert result.directional_grad is not None and np.isfinite(result.directional_grad)
     assert result.directional_grad_abs_error is not None
@@ -43,6 +50,14 @@ def test_jaxopt_gate_reduces_loss_and_recovers_parameters() -> None:
     mod = _load_module()
     result = mod.run_jaxopt_gate(n_theta=17, n_zeta=17, maxiter=5, stepsize=0.1)
     assert result.case == "scheme4_geometry_fit"
+    if not _HAS_EQUINOX:
+        assert result.status == "skipped"
+        assert "Equinox unavailable" in str(result.error)
+        return
+    if not _HAS_JAXOPT:
+        assert result.status == "skipped"
+        assert "JAXopt unavailable" in str(result.error)
+        return
     assert result.status == "ok"
     assert result.initial_loss is not None and result.final_loss is not None
     assert result.final_loss < result.initial_loss
@@ -85,6 +100,13 @@ def test_optional_eqx_jaxopt_gate_cli_writes_json(tmp_path: Path) -> None:
     )
     assert rc == 0
     payload = json.loads(out_json.read_text())
-    backends = {row["backend"] for row in payload}
-    assert backends == {"equinox_wrapper", "jaxopt_gradient_descent"}
-    assert all(row["status"] == "ok" for row in payload)
+    rows = {row["backend"]: row for row in payload}
+    assert set(rows) == {"equinox_wrapper", "jaxopt_gradient_descent"}
+    if _HAS_EQUINOX:
+        assert rows["equinox_wrapper"]["status"] == "ok"
+    else:
+        assert rows["equinox_wrapper"]["status"] == "skipped"
+    if _HAS_EQUINOX and _HAS_JAXOPT:
+        assert rows["jaxopt_gradient_descent"]["status"] == "ok"
+    else:
+        assert rows["jaxopt_gradient_descent"]["status"] == "skipped"
