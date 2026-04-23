@@ -295,6 +295,12 @@ These corrected fast artifacts are now guarded by direct tests on the collisiona
 ladder and FP/PAS separation, but they are still explicitly documented as bounded branch
 artifacts rather than the final audited collisionality publication figures.
 
+The collisionality generator now also writes structured JSON summaries for future
+reruns, with top-level metadata that records the case, fast/full-resolution mode,
+scan ladder, source input, and collision-operator labeling. That keeps the next
+full-resolution LHD/W7-X re-audit aligned with the manifest's provenance and
+acceptance-gate expectations instead of relying on plots alone.
+
 Further reading
 ---------------
 
