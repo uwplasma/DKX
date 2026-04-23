@@ -17,7 +17,7 @@ On the current ``main`` branch, `sfincs_jax` can claim:
 The authoritative release-facing artifacts for this state are:
 
 - ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix``
-- ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postkeyfix``
+- ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem``
 
 What should still be stated carefully:
 
