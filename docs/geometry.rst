@@ -138,10 +138,13 @@ This is the intended staged path for JAX-native equilibrium coupling:
 
 The first adapter stage is covered by unit tests that check backend discovery,
 ``(radius, mode)`` to ``(mode, radius)`` transposition, native ``sfincs_jax`` array
-ordering, invalid-shape rejection, and exact equality between the file wrapper and a
-preloaded ``VmecWout`` object. When ``vmec_jax`` is installed, an optional integration
-gate also reads a real ``vmec_jax.wout.WoutData`` fixture and checks exact equality of
-the converted Fourier coefficients and the evaluated scheme-5 geometry arrays.
+ordering, metadata-only path overrides, strict rejection of missing required field
+tables, optional zero-filling of absent covariant/contravariant magnetic-field
+tables, invalid-shape rejection, and exact equality between the file wrapper and a
+preloaded ``VmecWout`` object. When ``vmec_jax`` is installed, an optional
+integration gate also reads a real ``vmec_jax.wout.WoutData`` fixture and checks
+exact equality of the converted Fourier coefficients and the evaluated scheme-5
+geometry arrays.
 
 Minimal adapter workflow:
 
