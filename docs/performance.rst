@@ -644,14 +644,18 @@ Latest snapshot (3 repeats):
 Deep profiling without perturbing GPU timings
 ---------------------------------------------
 
-For release benchmarking and the reduced/full example-suite audits, ``sfincs_jax``
-now keeps the lightweight timing/RSS profiler enabled by default but leaves
-per-mark device-memory sampling disabled. Repeated ``jax.devices()[0].memory_stats()``
-polling inside hot GPU phases can distort wall-clock timings badly on current
-JAX/CUDA stacks, so explicit device-memory inspection is opt-in:
+For release benchmarking and the reduced/full example-suite audits, the suite
+harness now runs ``sfincs_jax`` with profiler marks disabled by default.
+Wall-clock runtime and the solver's ``elapsed_s=...`` output are sufficient for
+runtime drift auditing, and avoiding per-phase probes keeps the benchmark from
+measuring itself. Repeated ``jax.devices()[0].memory_stats()`` polling inside hot
+GPU phases can distort wall-clock timings badly on current JAX/CUDA stacks, so
+explicit profiling is opt-in:
 
+- ``SFINCS_JAX_PROFILE=0``:
+  default for runtime suites and recommended for release-facing timing audits.
 - ``SFINCS_JAX_PROFILE=1``:
-  keep phase timing + host RSS marks in logs.
+  enable phase timing + host RSS marks in logs.
 - ``SFINCS_JAX_PROFILE_DEVICE_MEM=1``:
   also sample device memory at each mark. Use this only for targeted diagnosis,
   not for benchmark lanes.

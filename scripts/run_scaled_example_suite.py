@@ -455,6 +455,7 @@ def _run_prepared_case(
     collect_iterations: bool,
     jax_repeats: int,
     jax_cache_dir: Path,
+    jax_profile_mode: str,
     equilibria_search_dir: Path | None,
     reference_results_root: Path | None,
     target_runtime_s: float | None,
@@ -499,6 +500,7 @@ def _run_prepared_case(
             collect_iterations=collect_iterations,
             jax_repeats=jax_repeats,
             jax_cache_dir=jax_cache_dir,
+            jax_profile_mode=jax_profile_mode,
         )
     finally:
         if prev_equilibria_dirs:
@@ -668,6 +670,15 @@ def main() -> int:
         action="store_true",
         help="Disable solver-iteration parsing from sfincs_jax logs.",
     )
+    parser.add_argument(
+        "--jax-profile-marks",
+        choices=("off", "on", "full"),
+        default="off",
+        help=(
+            "sfincs_jax profiling mode for suite subprocesses. "
+            "Use 'off' for runtime audits and opt into 'on'/'full' only for targeted profiling lanes."
+        ),
+    )
     args = parser.parse_args()
 
     examples_root = Path(args.examples_root)
@@ -778,6 +789,7 @@ def main() -> int:
         "atol": float(args.atol),
         "max_attempts": int(args.max_attempts),
         "jax_repeats": int(args.jax_repeats),
+        "jax_profile_marks": str(args.jax_profile_marks),
         "jobs": int(args.jobs),
         "resolution_reference_root": _repo_rel(reference_root) if reference_root is not None else None,
         "reference_results_root": _repo_rel(reference_results_root) if reference_results_root is not None else None,
@@ -849,6 +861,7 @@ def main() -> int:
                 collect_iterations=not bool(args.no_collect_iterations),
                 jax_repeats=int(args.jax_repeats),
                 jax_cache_dir=(REPO_ROOT / args.jax_cache_dir),
+                jax_profile_mode=str(args.jax_profile_marks),
                 equilibria_search_dir=seed_input.parent,
                 reference_results_root=reference_results_root,
             )
@@ -887,6 +900,7 @@ def main() -> int:
                         collect_iterations=not bool(args.no_collect_iterations),
                         jax_repeats=int(args.jax_repeats),
                         jax_cache_dir=(REPO_ROOT / args.jax_cache_dir),
+                        jax_profile_mode=str(args.jax_profile_marks),
                         equilibria_search_dir=seed_input.parent,
                         reference_results_root=reference_results_root,
                     )
