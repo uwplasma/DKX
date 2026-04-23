@@ -69,6 +69,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_handoff
    :members:
 
+.. automodule:: sfincs_jax.rhs1_acceptance_policy
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_constraint0_policy
    :members:
 
