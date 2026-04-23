@@ -77,6 +77,14 @@ Geometry loading and normalized coefficient generation:
 - Boozer ``.bc`` evaluation,
 - surface metrics and scalar geometry diagnostics.
 
+``sfincs_jax/vmec_geometry.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+VMEC ``geometryScheme=5`` Fourier-sum evaluator. The public file path
+``vmec_geometry_from_wout_file(...)`` reads ``wout`` data and delegates to
+``vmec_geometry_from_wout(...)`` so optional in-memory producers can exercise the
+same formulas and parity tests without hidden file I/O.
+
 ``sfincs_jax/collisionless.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

@@ -6,11 +6,11 @@ from pathlib import Path
 from jax import config as _jax_config
 
 _jax_config.update("jax_enable_x64", True)
-import jax.numpy as jnp
-import numpy as np
+import jax.numpy as jnp  # noqa: E402
+import numpy as np  # noqa: E402
 
-from .geometry import BoozerGeometry
-from .vmec_wout import VmecWout, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation, _set_scale_factor
+from .geometry import BoozerGeometry  # noqa: E402
+from .vmec_wout import VmecWout, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation, _set_scale_factor  # noqa: E402
 
 
 def _finite_diff_on_full_mesh_from_half_mesh(arr_half: np.ndarray, dpsi: float) -> np.ndarray:
@@ -56,19 +56,53 @@ def vmec_geometry_from_wout_file(
 ) -> BoozerGeometry:
     """Compute geometry arrays for v3 `geometryScheme=5` (VMEC wout file).
 
+    The file reader is intentionally a thin wrapper around
+    :func:`vmec_geometry_from_wout` so optional in-memory producers such as
+    ``vmec_jax`` can feed the same evaluator without round-tripping through disk.
+    """
+    return vmec_geometry_from_wout(
+        w=read_vmec_wout(path),
+        theta=theta,
+        zeta=zeta,
+        psi_n_wish=psi_n_wish,
+        vmec_radial_option=vmec_radial_option,
+        vmec_nyquist_option=vmec_nyquist_option,
+        min_bmn_to_load=min_bmn_to_load,
+        ripple_scale=ripple_scale,
+        helicity_n=helicity_n,
+        helicity_l=helicity_l,
+        chunk=chunk,
+    )
+
+
+def vmec_geometry_from_wout(
+    *,
+    w: VmecWout,
+    theta: jnp.ndarray,
+    zeta: jnp.ndarray,
+    psi_n_wish: float,
+    vmec_radial_option: int = 0,
+    vmec_nyquist_option: int = 1,
+    min_bmn_to_load: float = 0.0,
+    ripple_scale: float = 1.0,
+    helicity_n: int = 0,
+    helicity_l: int = 0,
+    chunk: int = 256,
+) -> BoozerGeometry:
+    """Compute geometry arrays for v3 `geometryScheme=5` from preloaded VMEC data.
+
     This is a direct, minimal translation of the core Fourier-sum logic in v3
     `geometry.F90::computeBHat_VMEC` for stellarator-symmetric equilibria (lasym=false).
 
     Notes
     -----
-    - The VMEC file read is not differentiable. Once loaded and evaluated, the resulting
-      arrays are standard JAX arrays usable in JIT-compiled kernels.
+    - Passing a preloaded :class:`~sfincs_jax.vmec_wout.VmecWout` separates file I/O
+      from geometry evaluation, which is the seam used by optional JAX-native
+      geometry producers.
     - This implementation aims to support output parity and operator kernels on the same
       (theta,zeta) grid used by v3.
     """
-    w: VmecWout = read_vmec_wout(path)
     psi_a_hat = psi_a_hat_from_wout(w)
-    a_hat = float(w.aminor_p)
     n_periods = int(w.nfp)
 
     interp = vmec_interpolation(w=w, psi_n_wish=float(psi_n_wish), vmec_radial_option=int(vmec_radial_option))
@@ -240,9 +274,6 @@ def vmec_geometry_from_wout_file(
 
     # Convert Jacobian to inverse Jacobian:
     d_hat = 1.0 / d_hat
-
-    # Zeros for quantities not yet computed for VMEC in sfincs_jax:
-    zeros = np.zeros_like(b_hat)
 
     # iota for `sfincsOutput.h5` is read separately as a flux function; here we store it in the geometry struct
     # as the half-mesh interpolated value (consistent with v3).
