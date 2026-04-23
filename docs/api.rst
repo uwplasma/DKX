@@ -75,6 +75,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_host_policy
    :members:
 
+.. automodule:: sfincs_jax.rhs1_large_cpu_policy
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_pas_policy
    :members:
 

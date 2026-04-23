@@ -181,6 +181,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/rhs1_host_policy.py``:
   RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
   GMRES rescue, factor-dtype, and explicit sparse-helper policy.
+- ``sfincs_jax/rhs1_large_cpu_policy.py``:
+  large explicit full-FP CPU sparse rescue, x-block seed, exact-LU promotion,
+  host x-block assembly, and species-x-block rescue policy.
 - ``sfincs_jax/transport_policy.py``:
   pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
 - ``sfincs_jax/transport_preconditioner_dispatch.py``:

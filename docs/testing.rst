@@ -268,6 +268,14 @@ size caps, dense-method rejection, moderate-FP sparse preference, and the
 stage-2 skip guard. Existing driver-wrapper tests keep the `v3_driver` seam
 stable for downstream users.
 
+The large-CPU full-FP rescue ladder now has its own direct policy tests in
+``tests/test_rhs1_large_cpu_policy.py``. Those tests cover global sparse rescue,
+large-CPU exact-LU caps, sparse-rescue-first ordering, x-block exact-LU
+promotion after a good seed, x-block sparse rescue, host x-block assembly,
+primary-solve skipping, and the explicit multispecies species-x-block rescue
+opt-in. This keeps the CPU runtime-offender routing testable without running a
+large solve in CI.
+
 The VMEC convention layer has its own bounded gate in
 ``tests/test_vmec_wout_conventions.py``. It checks the scheme-5 conventions that are
 easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh
