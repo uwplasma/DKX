@@ -100,6 +100,16 @@ from .transport_policy import (
     transport_tzfft_accelerator_auto_allowed as _transport_tzfft_accelerator_auto_allowed_impl,
     transport_tzfft_backend_allowed as _transport_tzfft_backend_allowed_impl,
 )
+from .transport_preconditioner_dispatch import (
+    TransportPreconditionerContext,
+    TransportPreconditionerDispatchBuilders,
+    build_transport_preconditioner_from_kind,
+    build_transport_strong_preconditioner_from_kind,
+    normalize_transport_preconditioner_kind,
+    resolve_transport_preconditioner_choice,
+    transport_dd_config_from_env,
+    transport_sparse_jax_config_from_env,
+)
 from .transport_parallel_policy import (
     transport_parallel_backend as _transport_parallel_backend_impl,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
@@ -19796,321 +19806,69 @@ def solve_v3_transport_matrix_linear_gmres(
             padded = jnp.concatenate([z0, v_reduced], axis=0)
             return padded[full_to_active_jnp]
 
-    transport_precond_env = os.environ.get("SFINCS_JAX_TRANSPORT_PRECOND", "").strip().lower()
-    if transport_precond_env in {"0", "none", "off", "false", "no"}:
-        transport_precond_kind = None
-    elif transport_precond_env in {
-        "collision",
-        "block",
-        "block_jacobi",
-        "sxblock",
-        "block_sx",
-        "species_x",
-        "xmg",
-        "multigrid",
-        "theta_dd",
-        "theta_block",
-        "dd_theta",
-        "dd_t",
-        "theta_schwarz",
-        "schwarz_theta",
-        "zeta_dd",
-        "zeta_block",
-        "dd_zeta",
-        "dd_z",
-        "zeta_schwarz",
-        "schwarz_zeta",
-        "tzfft",
-        "streaming_fft",
-        "stream_fft",
-        "sparse_jax",
-    }:
-        if transport_precond_env in {"streaming_fft", "stream_fft"}:
-            transport_precond_kind = "tzfft"
-        elif transport_precond_env in {"theta_block", "dd_theta", "dd_t"}:
-            transport_precond_kind = "theta_dd"
-        elif transport_precond_env in {"theta_schwarz", "schwarz_theta"}:
-            transport_precond_kind = "theta_schwarz"
-        elif transport_precond_env in {"zeta_block", "dd_zeta", "dd_z"}:
-            transport_precond_kind = "zeta_dd"
-        elif transport_precond_env in {"zeta_schwarz", "schwarz_zeta"}:
-            transport_precond_kind = "zeta_schwarz"
-        else:
-            transport_precond_kind = transport_precond_env
-    else:
-        transport_precond_kind = "auto"
-
+    transport_precond_kind = normalize_transport_preconditioner_kind(
+        env_value=os.environ.get("SFINCS_JAX_TRANSPORT_PRECOND", "")
+    )
     preconditioner_full = None
     preconditioner_reduced = None
     strong_precond_kind: str | None = None
     default_solver_kind = _solver_kind(solve_method_use)[0]
     precond_kind_used: str | None = None
-    transport_sparse_drop_tol_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DROP_TOL", "").strip()
-    transport_sparse_drop_rel_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DROP_REL", "").strip()
-    try:
-        transport_sparse_drop_tol = float(transport_sparse_drop_tol_env) if transport_sparse_drop_tol_env else 0.0
-    except ValueError:
-        transport_sparse_drop_tol = 0.0
-    try:
-        transport_sparse_drop_rel = float(transport_sparse_drop_rel_env) if transport_sparse_drop_rel_env else 1.0e-6
-    except ValueError:
-        transport_sparse_drop_rel = 1.0e-6
-    transport_sparse_reg_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_JAX_REG", "").strip()
-    try:
-        transport_sparse_reg = float(transport_sparse_reg_env) if transport_sparse_reg_env else 1e-10
-    except ValueError:
-        transport_sparse_reg = 1e-10
-    transport_sparse_omega_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_JAX_OMEGA", "").strip()
-    try:
-        transport_sparse_omega = float(transport_sparse_omega_env) if transport_sparse_omega_env else 0.8
-    except ValueError:
-        transport_sparse_omega = 0.8
-    transport_sparse_sweeps_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_JAX_SWEEPS", "").strip()
-    try:
-        transport_sparse_sweeps = int(transport_sparse_sweeps_env) if transport_sparse_sweeps_env else 2
-    except ValueError:
-        transport_sparse_sweeps = 2
-    transport_sparse_sweeps = max(1, transport_sparse_sweeps)
-    transport_sparse_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_JAX_MAX_MB", "").strip()
-    try:
-        transport_sparse_max_mb = float(transport_sparse_max_env) if transport_sparse_max_env else 128.0
-    except ValueError:
-        transport_sparse_max_mb = 128.0
+    sparse_jax_config = transport_sparse_jax_config_from_env()
+    dd_config = transport_dd_config_from_env(op=op0)
+    transport_precond_context = TransportPreconditionerContext(
+        op=op0,
+        active_size=int(active_size),
+        use_active_dof_mode=bool(use_active_dof_mode),
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        emit=emit,
+    )
+    transport_precond_builders = TransportPreconditionerDispatchBuilders(
+        collision_builder=_build_rhsmode23_collision_preconditioner,
+        sxblock_builder=_build_rhsmode23_sxblock_preconditioner,
+        block_builder=_build_rhsmode23_block_preconditioner,
+        xmg_builder=_build_rhsmode23_xmg_preconditioner,
+        theta_dd_builder=_build_rhsmode23_theta_dd_preconditioner,
+        theta_schwarz_builder=_build_rhsmode23_theta_schwarz_preconditioner,
+        zeta_dd_builder=_build_rhsmode23_zeta_dd_preconditioner,
+        zeta_schwarz_builder=_build_rhsmode23_zeta_schwarz_preconditioner,
+        tzfft_builder=_build_rhsmode23_tzfft_preconditioner,
+        sparse_jax_builder=_build_sparse_jax_preconditioner_from_matvec,
+        sparse_jax_cache_key=_transport_precond_cache_key,
+        apply_operator_cached=apply_v3_full_system_operator_cached,
+        precond_dtype=_precond_dtype,
+    )
     tzfft_backend_allowed = _transport_tzfft_backend_allowed() or _transport_tzfft_accelerator_auto_allowed(op0)
     if transport_precond_kind is not None and int(rhs_mode) in {2, 3}:
-        precond_kind = transport_precond_kind
-        if precond_kind == "auto":
-            block_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_PRECOND_BLOCK_MAX", "").strip()
-            try:
-                block_max = int(block_max_env) if block_max_env else 5000
-            except ValueError:
-                block_max = 5000
-            sxblock_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SXBLOCK_MAX", "").strip()
-            try:
-                sxblock_max = int(sxblock_max_env) if sxblock_max_env else 64
-            except ValueError:
-                sxblock_max = 64
-            n_block = int(op0.n_species) * int(op0.n_x)
-            if op0.fblock.fp is not None:
-                if n_block <= sxblock_max:
-                    precond_kind = "sxblock"
-                elif int(op0.total_size) <= block_max and default_solver_kind != "bicgstab":
-                    precond_kind = "sxblock"
-                elif default_solver_kind == "bicgstab":
-                    precond_kind = "collision"
-                else:
-                    precond_kind = "collision"
-                if n_block <= sxblock_max:
-                    strong_precond_kind = "sxblock"
-                elif int(op0.total_size) <= block_max:
-                    strong_precond_kind = "block"
-                else:
-                    strong_precond_kind = "xmg"
-            else:
-                # Collisionless (no PAS/FP) transport systems can be dominated by (theta,zeta)
-                # streaming/mirror coupling, for which x-multigrid provides no benefit (often Nx=1).
-                # Prefer an angular FFT+tridiagonal(L) preconditioner in this branch.
-                no_fp = op0.fblock.fp is None
-                small_x = int(op0.n_x) <= 2
-                multi_angle = int(op0.n_theta) * int(op0.n_zeta) >= 64
-                if no_fp and small_x and multi_angle and tzfft_backend_allowed:
-                    precond_kind = "tzfft"
-                    strong_precond_kind = "tzfft"
-                elif int(op0.total_size) <= block_max:
-                    precond_kind = "block"
-                    strong_precond_kind = "block"
-                else:
-                    precond_kind = "collision"
-                    strong_precond_kind = "collision" if (no_fp and (not tzfft_backend_allowed)) else "xmg"
-            # For large parallel transport solves, prefer a domain-decomposition preconditioner
-            # aligned with the active matvec shard axis to avoid global preconditioner work.
-            dd_auto_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_AUTO_MIN", "").strip()
-            try:
-                dd_auto_min = int(dd_auto_min_env) if dd_auto_min_env else 0
-            except ValueError:
-                dd_auto_min = 0
-            if int(parallel_workers) > 1 and dd_auto_min > 0 and int(op0.total_size) >= dd_auto_min:
-                shard_axis = _matvec_shard_axis(op0)
-                if shard_axis == "theta":
-                    precond_kind = "theta_schwarz"
-                    strong_precond_kind = "theta_schwarz"
-                elif shard_axis == "zeta":
-                    precond_kind = "zeta_schwarz"
-                    strong_precond_kind = "zeta_schwarz"
-            if dense_mem_block and strong_precond_kind is not None:
-                precond_kind = strong_precond_kind
-        if precond_kind == "tzfft" and (not tzfft_backend_allowed):
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_transport_matrix_linear_gmres: tzfft preconditioner disabled on "
-                    f"backend={jax.default_backend()}",
-                )
-            precond_kind = "collision"
-            if strong_precond_kind == "tzfft":
-                strong_precond_kind = "collision"
-        precond_kind_used = precond_kind
-        if precond_kind in {"xmg", "multigrid"}:
-            preconditioner_full = _build_rhsmode23_xmg_preconditioner(op=op0)
-            if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                preconditioner_reduced = _build_rhsmode23_xmg_preconditioner(
-                    op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-        elif precond_kind == "theta_dd":
-            block_t_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_T", "").strip()
-            try:
-                dd_block_t = int(block_t_env) if block_t_env else 8
-            except ValueError:
-                dd_block_t = 8
-            dd_block_t = max(1, min(int(op0.n_theta), dd_block_t))
-            preconditioner_full = _build_rhsmode23_theta_dd_preconditioner(op=op0, block=dd_block_t)
-            if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                preconditioner_reduced = _build_rhsmode23_theta_dd_preconditioner(
-                    op=op0,
-                    block=dd_block_t,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-        elif precond_kind == "theta_schwarz":
-            block_t_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_T", "").strip()
-            overlap_t_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_OVERLAP", "").strip()
-            try:
-                dd_block_t = int(block_t_env) if block_t_env else 8
-            except ValueError:
-                dd_block_t = 8
-            try:
-                dd_overlap_t = int(overlap_t_env) if overlap_t_env else 1
-            except ValueError:
-                dd_overlap_t = 1
-            dd_block_t = max(1, min(int(op0.n_theta), dd_block_t))
-            dd_overlap_t = max(0, min(dd_block_t - 1, dd_overlap_t))
-            preconditioner_full = _build_rhsmode23_theta_schwarz_preconditioner(
-                op=op0,
-                block=dd_block_t,
-                overlap=dd_overlap_t,
+        precond_kind_used, strong_precond_kind = resolve_transport_preconditioner_choice(
+            op=op0,
+            transport_precond_kind=transport_precond_kind,
+            default_solver_kind=default_solver_kind,
+            parallel_workers=int(parallel_workers),
+            dense_mem_block=bool(dense_mem_block),
+            tzfft_backend_allowed=bool(tzfft_backend_allowed),
+            shard_axis=_matvec_shard_axis(op0),
+            backend=jax.default_backend(),
+            emit=emit,
+        )
+        if precond_kind_used is not None:
+            preconditioner_full = build_transport_preconditioner_from_kind(
+                kind=precond_kind_used,
+                context=transport_precond_context,
+                builders=transport_precond_builders,
+                dd_config=dd_config,
+                sparse_jax_config=sparse_jax_config,
+                use_reduced=False,
             )
             if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                preconditioner_reduced = _build_rhsmode23_theta_schwarz_preconditioner(
-                    op=op0,
-                    block=dd_block_t,
-                    overlap=dd_overlap_t,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-        elif precond_kind == "zeta_dd":
-            block_z_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_Z", "").strip()
-            try:
-                dd_block_z = int(block_z_env) if block_z_env else 8
-            except ValueError:
-                dd_block_z = 8
-            dd_block_z = max(1, min(int(op0.n_zeta), dd_block_z))
-            preconditioner_full = _build_rhsmode23_zeta_dd_preconditioner(op=op0, block=dd_block_z)
-            if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                preconditioner_reduced = _build_rhsmode23_zeta_dd_preconditioner(
-                    op=op0,
-                    block=dd_block_z,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-        elif precond_kind == "zeta_schwarz":
-            block_z_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_Z", "").strip()
-            overlap_z_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_OVERLAP", "").strip()
-            try:
-                dd_block_z = int(block_z_env) if block_z_env else 8
-            except ValueError:
-                dd_block_z = 8
-            try:
-                dd_overlap_z = int(overlap_z_env) if overlap_z_env else 1
-            except ValueError:
-                dd_overlap_z = 1
-            dd_block_z = max(1, min(int(op0.n_zeta), dd_block_z))
-            dd_overlap_z = max(0, min(dd_block_z - 1, dd_overlap_z))
-            preconditioner_full = _build_rhsmode23_zeta_schwarz_preconditioner(
-                op=op0,
-                block=dd_block_z,
-                overlap=dd_overlap_z,
-            )
-            if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                preconditioner_reduced = _build_rhsmode23_zeta_schwarz_preconditioner(
-                    op=op0,
-                    block=dd_block_z,
-                    overlap=dd_overlap_z,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-        elif precond_kind == "tzfft":
-            preconditioner_full = _build_rhsmode23_tzfft_preconditioner(op=op0)
-            if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                preconditioner_reduced = _build_rhsmode23_tzfft_preconditioner(
-                    op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-        elif precond_kind == "sparse_jax":
-            precond_dtype = _precond_dtype(int(active_size) if use_active_dof_mode else int(op0.total_size))
-            bytes_per = 4.0 if precond_dtype == jnp.float32 else 8.0
-            size_est = int(active_size) if use_active_dof_mode else int(op0.total_size)
-            est_mb = (size_est**2) * bytes_per / 1.0e6
-            if transport_sparse_max_mb > 0.0 and est_mb > transport_sparse_max_mb:
-                preconditioner_full = _build_rhsmode23_collision_preconditioner(op=op0)
-                if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                    preconditioner_reduced = _build_rhsmode23_collision_preconditioner(
-                        op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_transport_matrix_linear_gmres: sparse_jax preconditioner disabled "
-                        f"(est_mem={est_mb:.1f} MB > max_mb={transport_sparse_max_mb:.1f})",
-                    )
-            else:
-                cache_key_full = _transport_precond_cache_key(op0, f"sparse_jax_{size_est}")
-                def _mv_sparse_full(x: jnp.ndarray, op=op0) -> jnp.ndarray:
-                    return apply_v3_full_system_operator_cached(op, x)
-                preconditioner_full = _build_sparse_jax_preconditioner_from_matvec(
-                    matvec=_mv_sparse_full,
-                    n=int(op0.total_size),
-                    dtype=precond_dtype,
-                    cache_key=cache_key_full,
-                    drop_tol=transport_sparse_drop_tol,
-                    drop_rel=transport_sparse_drop_rel,
-                    reg=transport_sparse_reg,
-                    omega=transport_sparse_omega,
-                    sweeps=transport_sparse_sweeps,
-                    emit=emit,
-                )
-                if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                    cache_key_reduced = _transport_precond_cache_key(op0, f"sparse_jax_active_{int(active_size)}")
-                    def _mv_sparse_reduced(x_reduced: jnp.ndarray, op=op0) -> jnp.ndarray:
-                        y_full = apply_v3_full_system_operator_cached(op, expand_reduced(x_reduced))
-                        return reduce_full(y_full)
-                    preconditioner_reduced = _build_sparse_jax_preconditioner_from_matvec(
-                        matvec=_mv_sparse_reduced,
-                        n=int(active_size),
-                        dtype=precond_dtype,
-                        cache_key=cache_key_reduced,
-                        drop_tol=transport_sparse_drop_tol,
-                        drop_rel=transport_sparse_drop_rel,
-                        reg=transport_sparse_reg,
-                        omega=transport_sparse_omega,
-                        sweeps=transport_sparse_sweeps,
-                        emit=emit,
-                    )
-        elif precond_kind in {"sxblock", "block_sx", "species_x"}:
-            preconditioner_full = _build_rhsmode23_sxblock_preconditioner(op=op0)
-            if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                preconditioner_reduced = _build_rhsmode23_sxblock_preconditioner(
-                    op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-        elif precond_kind in {"block", "block_jacobi"}:
-            preconditioner_full = _build_rhsmode23_block_preconditioner(op=op0)
-            if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                preconditioner_reduced = _build_rhsmode23_block_preconditioner(
-                    op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-        else:
-            preconditioner_full = _build_rhsmode23_collision_preconditioner(op=op0)
-            if use_active_dof_mode and reduce_full is not None and expand_reduced is not None:
-                preconditioner_reduced = _build_rhsmode23_collision_preconditioner(
-                    op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
+                preconditioner_reduced = build_transport_preconditioner_from_kind(
+                    kind=precond_kind_used,
+                    context=transport_precond_context,
+                    builders=transport_precond_builders,
+                    dd_config=dd_config,
+                    sparse_jax_config=sparse_jax_config,
+                    use_reduced=True,
                 )
         if emit is not None and precond_kind_used is not None:
             emit(
@@ -20126,160 +19884,32 @@ def solve_v3_transport_matrix_linear_gmres(
         nonlocal strong_preconditioner_full, strong_preconditioner_reduced
         if strong_precond_kind is None:
             return None
-        if precond_kind_used is not None and strong_precond_kind == precond_kind_used:
-            return preconditioner_reduced if use_reduced else preconditioner_full
         if use_reduced:
             if strong_preconditioner_reduced is None:
-                if strong_precond_kind in {"xmg", "multigrid"}:
-                    strong_preconditioner_reduced = _build_rhsmode23_xmg_preconditioner(
-                        op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-                elif strong_precond_kind == "theta_dd":
-                    block_t_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_T", "").strip()
-                    try:
-                        dd_block_t = int(block_t_env) if block_t_env else 8
-                    except ValueError:
-                        dd_block_t = 8
-                    dd_block_t = max(1, min(int(op0.n_theta), dd_block_t))
-                    strong_preconditioner_reduced = _build_rhsmode23_theta_dd_preconditioner(
-                        op=op0,
-                        block=dd_block_t,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
-                    )
-                elif strong_precond_kind == "theta_schwarz":
-                    block_t_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_T", "").strip()
-                    overlap_t_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_OVERLAP", "").strip()
-                    try:
-                        dd_block_t = int(block_t_env) if block_t_env else 8
-                    except ValueError:
-                        dd_block_t = 8
-                    try:
-                        dd_overlap_t = int(overlap_t_env) if overlap_t_env else 1
-                    except ValueError:
-                        dd_overlap_t = 1
-                    dd_block_t = max(1, min(int(op0.n_theta), dd_block_t))
-                    dd_overlap_t = max(0, min(dd_block_t - 1, dd_overlap_t))
-                    strong_preconditioner_reduced = _build_rhsmode23_theta_schwarz_preconditioner(
-                        op=op0,
-                        block=dd_block_t,
-                        overlap=dd_overlap_t,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
-                    )
-                elif strong_precond_kind == "zeta_dd":
-                    block_z_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_Z", "").strip()
-                    try:
-                        dd_block_z = int(block_z_env) if block_z_env else 8
-                    except ValueError:
-                        dd_block_z = 8
-                    dd_block_z = max(1, min(int(op0.n_zeta), dd_block_z))
-                    strong_preconditioner_reduced = _build_rhsmode23_zeta_dd_preconditioner(
-                        op=op0,
-                        block=dd_block_z,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
-                    )
-                elif strong_precond_kind == "zeta_schwarz":
-                    block_z_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_Z", "").strip()
-                    overlap_z_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_OVERLAP", "").strip()
-                    try:
-                        dd_block_z = int(block_z_env) if block_z_env else 8
-                    except ValueError:
-                        dd_block_z = 8
-                    try:
-                        dd_overlap_z = int(overlap_z_env) if overlap_z_env else 1
-                    except ValueError:
-                        dd_overlap_z = 1
-                    dd_block_z = max(1, min(int(op0.n_zeta), dd_block_z))
-                    dd_overlap_z = max(0, min(dd_block_z - 1, dd_overlap_z))
-                    strong_preconditioner_reduced = _build_rhsmode23_zeta_schwarz_preconditioner(
-                        op=op0,
-                        block=dd_block_z,
-                        overlap=dd_overlap_z,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
-                    )
-                elif strong_precond_kind == "tzfft":
-                    strong_preconditioner_reduced = _build_rhsmode23_tzfft_preconditioner(
-                        op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-                elif strong_precond_kind in {"sxblock", "block_sx", "species_x"}:
-                    strong_preconditioner_reduced = _build_rhsmode23_sxblock_preconditioner(
-                        op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-                elif strong_precond_kind in {"block", "block_jacobi"}:
-                    strong_preconditioner_reduced = _build_rhsmode23_block_preconditioner(
-                        op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-                else:
-                    strong_preconditioner_reduced = _build_rhsmode23_collision_preconditioner(
-                        op=op0, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
+                strong_preconditioner_reduced = build_transport_strong_preconditioner_from_kind(
+                    kind=strong_precond_kind,
+                    use_reduced=True,
+                    precond_kind_used=precond_kind_used,
+                    preconditioner_full=preconditioner_full,
+                    preconditioner_reduced=preconditioner_reduced,
+                    context=transport_precond_context,
+                    builders=transport_precond_builders,
+                    dd_config=dd_config,
+                    sparse_jax_config=sparse_jax_config,
+                )
             return strong_preconditioner_reduced
         if strong_preconditioner_full is None:
-            if strong_precond_kind in {"xmg", "multigrid"}:
-                strong_preconditioner_full = _build_rhsmode23_xmg_preconditioner(op=op0)
-            elif strong_precond_kind == "theta_dd":
-                block_t_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_T", "").strip()
-                try:
-                    dd_block_t = int(block_t_env) if block_t_env else 8
-                except ValueError:
-                    dd_block_t = 8
-                dd_block_t = max(1, min(int(op0.n_theta), dd_block_t))
-                strong_preconditioner_full = _build_rhsmode23_theta_dd_preconditioner(op=op0, block=dd_block_t)
-            elif strong_precond_kind == "theta_schwarz":
-                block_t_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_T", "").strip()
-                overlap_t_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_OVERLAP", "").strip()
-                try:
-                    dd_block_t = int(block_t_env) if block_t_env else 8
-                except ValueError:
-                    dd_block_t = 8
-                try:
-                    dd_overlap_t = int(overlap_t_env) if overlap_t_env else 1
-                except ValueError:
-                    dd_overlap_t = 1
-                dd_block_t = max(1, min(int(op0.n_theta), dd_block_t))
-                dd_overlap_t = max(0, min(dd_block_t - 1, dd_overlap_t))
-                strong_preconditioner_full = _build_rhsmode23_theta_schwarz_preconditioner(
-                    op=op0,
-                    block=dd_block_t,
-                    overlap=dd_overlap_t,
-                )
-            elif strong_precond_kind == "zeta_dd":
-                block_z_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_Z", "").strip()
-                try:
-                    dd_block_z = int(block_z_env) if block_z_env else 8
-                except ValueError:
-                    dd_block_z = 8
-                dd_block_z = max(1, min(int(op0.n_zeta), dd_block_z))
-                strong_preconditioner_full = _build_rhsmode23_zeta_dd_preconditioner(op=op0, block=dd_block_z)
-            elif strong_precond_kind == "zeta_schwarz":
-                block_z_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_BLOCK_Z", "").strip()
-                overlap_z_env = os.environ.get("SFINCS_JAX_TRANSPORT_DD_OVERLAP", "").strip()
-                try:
-                    dd_block_z = int(block_z_env) if block_z_env else 8
-                except ValueError:
-                    dd_block_z = 8
-                try:
-                    dd_overlap_z = int(overlap_z_env) if overlap_z_env else 1
-                except ValueError:
-                    dd_overlap_z = 1
-                dd_block_z = max(1, min(int(op0.n_zeta), dd_block_z))
-                dd_overlap_z = max(0, min(dd_block_z - 1, dd_overlap_z))
-                strong_preconditioner_full = _build_rhsmode23_zeta_schwarz_preconditioner(
-                    op=op0,
-                    block=dd_block_z,
-                    overlap=dd_overlap_z,
-                )
-            elif strong_precond_kind == "tzfft":
-                strong_preconditioner_full = _build_rhsmode23_tzfft_preconditioner(op=op0)
-            elif strong_precond_kind in {"sxblock", "block_sx", "species_x"}:
-                strong_preconditioner_full = _build_rhsmode23_sxblock_preconditioner(op=op0)
-            elif strong_precond_kind in {"block", "block_jacobi"}:
-                strong_preconditioner_full = _build_rhsmode23_block_preconditioner(op=op0)
-            else:
-                strong_preconditioner_full = _build_rhsmode23_collision_preconditioner(op=op0)
+            strong_preconditioner_full = build_transport_strong_preconditioner_from_kind(
+                kind=strong_precond_kind,
+                use_reduced=False,
+                precond_kind_used=precond_kind_used,
+                preconditioner_full=preconditioner_full,
+                preconditioner_reduced=preconditioner_reduced,
+                context=transport_precond_context,
+                builders=transport_precond_builders,
+                dd_config=dd_config,
+                sparse_jax_config=sparse_jax_config,
+            )
         return strong_preconditioner_full
 
     def _dense_preconditioner_for_matvec(
