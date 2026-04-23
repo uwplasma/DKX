@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-04-22 (America/Chicago)
+Last updated: 2026-04-23 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -2846,123 +2846,6 @@ Decision:
          `vmec_jax.wout_from_fixed_boundary_run(...)`.
      - Refactor `sfincs_jax/vmec_geometry.py` so the file reader is just a thin
        wrapper around a new `vmec_geometry_from_wout_data(...)`.
-
-### 19.31 Resumable W7-X ambipolar scan lane and LHD full rerun completion
-
-- The generic scan helper now has an explicit resume path:
-  - `sfincs_jax/scans.py:run_er_scan(...)` accepts `skip_existing=True`,
-    reuses any existing `sfincsOutput.h5`, and only resolves missing scan points.
-  - this behavior is covered in
-    `tests/test_helper_module_coverage.py::test_scan_helpers_and_run_er_scan`,
-    including the partial-rerun case where one scan point is deleted and rebuilt.
-- The user-facing CLI now exposes the same capability:
-  - `sfincs_jax scan-er --skip-existing ...`
-  - this keeps the bounded restart semantics in the production scan interface,
-    not only in the publication scripts.
-- The W7-X ambipolar scaffold is now aligned with the collisionality rerun workflow:
-  - `examples/publication_figures/generate_w7x_ambipolar_validation.py` adds
-    `--skip-existing`, `--scan-only`, `--jobs`, `--index`, and `--stride`;
-  - split lanes can now fill the `E_r` ladder on separate devices with
-    `--scan-only --index k --stride N`, then finish with a final
-    `--skip-existing` aggregation pass that writes the ambipolar summary and
-    figure;
-  - focused coverage in `tests/test_generate_w7x_ambipolar_validation.py` now
-    verifies forwarding of the split/resume options and rejects the invalid
-    `--scan-only --plot-only` combination.
-- Validation for this hardening pass:
-  - `pytest -q tests/test_generate_w7x_ambipolar_validation.py tests/test_er_scan_and_ambipolar.py tests/test_helper_module_coverage.py -k 'w7x_ambipolar_validation or er_scan_writes_outputs_and_ambipolar_solve_runs or scan_helpers_and_run_er_scan'`
-    -> `7 passed`
-  - `python -m py_compile sfincs_jax/scans.py sfincs_jax/cli.py examples/publication_figures/generate_w7x_ambipolar_validation.py tests/test_generate_w7x_ambipolar_validation.py tests/test_helper_module_coverage.py`
-    -> passed
-  - `sphinx-build -W -b html docs docs/_build/html`
-    -> passed
-- `office` execution status at this point:
-  - the full LHD collisionality rerun has now completed both collision-operator
-    ladders in `/home/rjorge/sfincs_jax_refactor_v3/examples/publication_figures/output/lhd_reaudit_full`;
-  - the next remote action is no longer “wait for missing points”, but
-    “synthesize the audited full-resolution LHD summary/figure from the finished
-    output tree”, then immediately reuse the freed GPUs for the full W7-X
-    collisionality rerun or the heavier W7-X ambipolar reference lane.
-
-### 19.32 Office milestone: audited LHD full artifact closed, W7-X full rerun launched
-
-- The `office` LHD full-resolution re-audit is now actually closed:
-  - `examples/publication_figures/generate_sfincs_paper_figs.py --case lhd --plot-only --collision-operators 0,1 ...`
-    was rerun from `/home/rjorge/sfincs_jax_refactor_v3_latest`;
-  - the audited full artifact now resolves to the standard full names:
-    - summary:
-      `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/artifacts/lhd_collisionality_summary.json`
-    - figure:
-      `/home/rjorge/sfincs_jax_refactor_v3_latest/docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png`
-  - metadata check on the summary:
-    - `ROW_COUNT = 14`
-    - labels = `Fokker-Planck` and `PAS`
-    - `FAST = False`
-    - `CASE = lhd`
-    - `N_POINTS = 7`
-    - `NU_MIN = 0.1`
-    - `NU_MAX = 10.0`
-- The older CPU-only W7-X ambipolar reference lane was intentionally paused after
-  preserving its partial work directory:
-  - PID `3145554` had still not advanced beyond the first scan point and was
-    consuming several host cores;
-  - this lane should be resumed later through the new `--skip-existing` /
-    split-scan workflow rather than left as an unbounded CPU-only job.
-- The freed GPUs were immediately reassigned to the next critical-path lane:
-  the full W7-X collisionality re-audit.
-  - worktree:
-    `/home/rjorge/sfincs_jax_refactor_v3_latest`
-  - work dir:
-    `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/output/w7x_reaudit_full`
-  - operator 0 launch:
-    - wrapper PID `3172653`
-    - active scan child PID `3172691`
-    - log:
-      `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/output/resume_logs/w7x_co0_resume_gpu0.log`
-  - operator 1 launch:
-    - wrapper PID `3173256`
-    - active scan child PID `3173300`
-    - log:
-      `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/output/resume_logs/w7x_co1_resume_gpu1.log`
-  - both operator ladders entered the expected `nu_n_0.01727` first point and
-    both GPUs showed active utilization after launch.
-- Immediate next actions:
-  1. let the split W7-X full rerun finish on `office`;
-  2. synthesize the audited full `w7x_collisionality_summary.json` and
-     `sfincs_jax_fig2_w7x_collisionality.png`;
-  3. only after both full LHD and full W7-X artifacts are pinned, revisit the
-     high-collisionality proxy and the heavier W7-X ambipolar literature lane.
-
-### 19.33 CPU runtime-watchlist closeout after harness fixes
-
-- The two remaining CPU runtime-drift watchlist cases were rechecked with the
-  post-profiling-fix suite harness instead of the older `postkeyfix` timing
-  data alone.
-  - bounded probe root without host-RSS collection:
-    `tests/scaled_example_suite_cpu_watchlist_probe_2026-04-23`
-  - bounded probe root with safe host-RSS collection:
-    `tests/scaled_example_suite_cpu_watchlist_probe_mem_2026-04-23`
-- Both cases stayed parity-clean and dropped back below the `1.25x` drift gate
-  against `tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json`.
-  - `monoenergetic_geometryScheme11`
-    - baseline `jax_runtime_s = 3.056`
-    - refreshed `jax_runtime_s = 3.185`
-    - refreshed `jax_logged_elapsed_s = 2.497`
-    - refreshed `jax_max_rss_mb = 1187.3`
-  - `transportMatrix_geometryScheme11`
-    - baseline `jax_runtime_s = 1.667`
-    - refreshed `jax_runtime_s = 1.764`
-    - refreshed `jax_logged_elapsed_s = 1.188`
-    - refreshed `jax_max_rss_mb = 439.9`
-- The authoritative CPU release root was then refreshed in place:
-  - `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix`
-  - `suite_runtime_drift_summary.json` now reports:
-    - `flagged_cases = 0`
-    - `cases = []`
-- README/docs should now treat both CPU and GPU runtime-drift watchlists as
-  clean on the current release artifacts. The remaining performance work is the
-  structural runtime/memory reduction lane on heavy PAS and geometry-rich cases,
-  not another artifact-hygiene pass.
      - Keep the CLI unchanged. This lane is Python-first; file-based `wout_path`
        remains the stable public CLI interface.
 
@@ -3089,3 +2972,332 @@ Decision:
   - and combined proxy + transport optimization where QS/QI metrics remain the
     cheap preconditioner and `sfincs_jax` provides the high-fidelity follow-up
     objective.
+
+### 19.31 Resumable W7-X ambipolar scan lane and LHD full rerun completion
+
+- The generic scan helper now has an explicit resume path:
+  - `sfincs_jax/scans.py:run_er_scan(...)` accepts `skip_existing=True`,
+    reuses any existing `sfincsOutput.h5`, and only resolves missing scan points.
+  - this behavior is covered in
+    `tests/test_helper_module_coverage.py::test_scan_helpers_and_run_er_scan`,
+    including the partial-rerun case where one scan point is deleted and rebuilt.
+- The user-facing CLI now exposes the same capability:
+  - `sfincs_jax scan-er --skip-existing ...`
+  - this keeps the bounded restart semantics in the production scan interface,
+    not only in the publication scripts.
+- The W7-X ambipolar scaffold is now aligned with the collisionality rerun workflow:
+  - `examples/publication_figures/generate_w7x_ambipolar_validation.py` adds
+    `--skip-existing`, `--scan-only`, `--jobs`, `--index`, and `--stride`;
+  - split lanes can now fill the `E_r` ladder on separate devices with
+    `--scan-only --index k --stride N`, then finish with a final
+    `--skip-existing` aggregation pass that writes the ambipolar summary and
+    figure;
+  - focused coverage in `tests/test_generate_w7x_ambipolar_validation.py` now
+    verifies forwarding of the split/resume options and rejects the invalid
+    `--scan-only --plot-only` combination.
+- Validation for this hardening pass:
+  - `pytest -q tests/test_generate_w7x_ambipolar_validation.py tests/test_er_scan_and_ambipolar.py tests/test_helper_module_coverage.py -k 'w7x_ambipolar_validation or er_scan_writes_outputs_and_ambipolar_solve_runs or scan_helpers_and_run_er_scan'`
+    -> `7 passed`
+  - `python -m py_compile sfincs_jax/scans.py sfincs_jax/cli.py examples/publication_figures/generate_w7x_ambipolar_validation.py tests/test_generate_w7x_ambipolar_validation.py tests/test_helper_module_coverage.py`
+    -> passed
+  - `sphinx-build -W -b html docs docs/_build/html`
+    -> passed
+- `office` execution status at this point:
+  - the full LHD collisionality rerun has now completed both collision-operator
+    ladders in `/home/rjorge/sfincs_jax_refactor_v3/examples/publication_figures/output/lhd_reaudit_full`;
+  - the next remote action is no longer “wait for missing points”, but
+    “synthesize the audited full-resolution LHD summary/figure from the finished
+    output tree”, then immediately reuse the freed GPUs for the full W7-X
+    collisionality rerun or the heavier W7-X ambipolar reference lane.
+
+### 19.32 Office milestone: audited LHD full artifact closed, W7-X full rerun launched
+
+- The `office` LHD full-resolution re-audit is now actually closed:
+  - `examples/publication_figures/generate_sfincs_paper_figs.py --case lhd --plot-only --collision-operators 0,1 ...`
+    was rerun from `/home/rjorge/sfincs_jax_refactor_v3_latest`;
+  - the audited full artifact now resolves to the standard full names:
+    - summary:
+      `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/artifacts/lhd_collisionality_summary.json`
+    - figure:
+      `/home/rjorge/sfincs_jax_refactor_v3_latest/docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png`
+  - metadata check on the summary:
+    - `ROW_COUNT = 14`
+    - labels = `Fokker-Planck` and `PAS`
+    - `FAST = False`
+    - `CASE = lhd`
+    - `N_POINTS = 7`
+    - `NU_MIN = 0.1`
+    - `NU_MAX = 10.0`
+- The older CPU-only W7-X ambipolar reference lane was intentionally paused after
+  preserving its partial work directory:
+  - PID `3145554` had still not advanced beyond the first scan point and was
+    consuming several host cores;
+  - this lane should be resumed later through the new `--skip-existing` /
+    split-scan workflow rather than left as an unbounded CPU-only job.
+- The freed GPUs were immediately reassigned to the next critical-path lane:
+  the full W7-X collisionality re-audit.
+  - worktree:
+    `/home/rjorge/sfincs_jax_refactor_v3_latest`
+  - work dir:
+    `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/output/w7x_reaudit_full`
+  - operator 0 launch:
+    - wrapper PID `3172653`
+    - active scan child PID `3172691`
+    - log:
+      `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/output/resume_logs/w7x_co0_resume_gpu0.log`
+  - operator 1 launch:
+    - wrapper PID `3173256`
+    - active scan child PID `3173300`
+    - log:
+      `/home/rjorge/sfincs_jax_refactor_v3_latest/examples/publication_figures/output/resume_logs/w7x_co1_resume_gpu1.log`
+  - both operator ladders entered the expected `nu_n_0.01727` first point and
+    both GPUs showed active utilization after launch.
+- Immediate next actions:
+  1. let the split W7-X full rerun finish on `office`;
+  2. synthesize the audited full `w7x_collisionality_summary.json` and
+     `sfincs_jax_fig2_w7x_collisionality.png`;
+  3. only after both full LHD and full W7-X artifacts are pinned, revisit the
+     high-collisionality proxy and the heavier W7-X ambipolar literature lane.
+
+### 19.33 CPU runtime-watchlist closeout after harness fixes
+
+- The two remaining CPU runtime-drift watchlist cases were rechecked with the
+  post-profiling-fix suite harness instead of the older `postkeyfix` timing
+  data alone.
+  - bounded probe root without host-RSS collection:
+    `tests/scaled_example_suite_cpu_watchlist_probe_2026-04-23`
+  - bounded probe root with safe host-RSS collection:
+    `tests/scaled_example_suite_cpu_watchlist_probe_mem_2026-04-23`
+- Both cases stayed parity-clean and dropped back below the `1.25x` drift gate
+  against `tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json`.
+  - `monoenergetic_geometryScheme11`
+    - baseline `jax_runtime_s = 3.056`
+    - refreshed `jax_runtime_s = 3.185`
+    - refreshed `jax_logged_elapsed_s = 2.497`
+    - refreshed `jax_max_rss_mb = 1187.3`
+  - `transportMatrix_geometryScheme11`
+    - baseline `jax_runtime_s = 1.667`
+    - refreshed `jax_runtime_s = 1.764`
+    - refreshed `jax_logged_elapsed_s = 1.188`
+    - refreshed `jax_max_rss_mb = 439.9`
+- The authoritative CPU release root was then refreshed in place:
+  - `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix`
+  - `suite_runtime_drift_summary.json` now reports:
+    - `flagged_cases = 0`
+    - `cases = []`
+- README/docs should now treat both CPU and GPU runtime-drift watchlists as
+  clean on the current release artifacts. The remaining performance work is the
+  structural runtime/memory reduction lane on heavy PAS and geometry-rich cases,
+  not another artifact-hygiene pass.
+
+### 19.34 Full research-grade planning audit after literature/code/docs pass
+
+Scope reviewed on 2026-04-23:
+- local project state:
+  - git history through `02d84cd Close CPU runtime drift watchlist`,
+  - current branch `refactor/v3-driver-split`,
+  - docs pages under `docs/`,
+  - CI/CD workflows under `.github/workflows/`,
+  - package metadata in `pyproject.toml`,
+  - coverage data and module sizes,
+  - remote `office` validation jobs and completed artifacts;
+- literature / reference anchors:
+  - Landreman, Smith, Mollen, and Helander 2014 SFINCS paper:
+    continuum radially local drift-kinetic solves, trajectory-model comparisons,
+    LHD/W7-X collisionality scans, FP/PAS collision-model comparisons, and
+    electric-field resonance behavior;
+  - original SFINCS repository and v3 documentation:
+    supported geometry schemes, VMEC/Boozer inputs, HDF5 output conventions,
+    multispecies equations, Phi1, collision-operator implementation, and
+    Fortran/MPI/PETSc scaling expectations;
+  - KNOSOS papers/code/manual:
+    low-collisionality orbit-averaged validation targets, ambipolar bisection,
+    quasineutrality, DKES-database normalization, high-collisionality caveats,
+    and MPI/PETSc scan decomposition;
+  - MONKES source:
+    factor-once / `vmap`-over-RHS monoenergetic block-tridiagonal solves and
+    lazy low-memory block factorization;
+  - yancc source and branches:
+    Lineax operator wrappers, bordered/inverse operators, periodic banded
+    Schur corrections, GCROT/LGMRES-style Krylov recycling, multigrid
+    preconditioners, verbose solver telemetry, and coordinate/backend tests;
+  - JAX/Lineax/Equinox/JAXopt documentation:
+    `custom_linear_solve` for implicit gradients, `checkpoint` for gradient
+    memory control, persistent compilation cache, GPU memory allocator controls,
+    `shard_map` / multi-controller JAX, profiler traces, Lineax solver-state
+    reuse/status reporting, Equinox PyTree/filter APIs, and JAXopt implicit
+    root differentiation.
+
+Plan hygiene corrected:
+- The queued `vmec_jax` / `booz_xform_jax` implementation sequence had been
+  split by later W7-X status insertions. It is now kept under Section 19.30 so
+  the roadmap is readable and the CPU runtime-watchlist closeout no longer
+  contains stray VMEC work items.
+
+Current research-grade readiness assessment:
+- Correctness / parity:
+  - CPU and GPU release-facing example suites are parity-clean on the documented
+    39-case scope, with strict mismatches and `jax_error` / `max_attempts`
+    cleared in the current release artifacts.
+  - Runtime-drift watchlists are clean after the harness/profiling fixes.
+  - Output-key coverage has been audited, but any future output additions must
+    keep comparison tooling synchronized with Fortran v3 outputs plus JAX-only
+    metadata.
+- Validation artifacts:
+  - full LHD collisionality artifact is closed from the corrected writer and
+    promoted locally with a 14-row metadata-backed summary and figure.
+  - full W7-X collisionality artifact has finished synthesis on `office` and
+    is promoted locally with a 14-row metadata-backed summary and figure.
+  - W7-X ambipolar validation is still a long-running research/nightly lane:
+    one full reference scan point took about `14m23s`, and the next full-size
+    point has active size `918394`, so this must not be part of PR CI.
+- Performance:
+  - current PAS/geometry-heavy CPU/GPU cases are correct but still the main
+    runtime/RSS optimization frontier.
+  - the best near-term algorithmic ideas are structured linear algebra and
+    solve recycling, not broader library replacement.
+  - single-case multi-GPU sharding remains experimental; transport-worker and
+    scan/case-level parallelism remain the production scaling story.
+- Maintainability:
+  - `v3_driver.py` remains the dominant blocker: about `21.8k` lines on disk,
+    about `12.5k` coverage statements, and about `32%` line coverage in the
+    current local coverage report.
+  - `io.py` is also too broad at about `4.3k` lines on disk and about `51%`
+    coverage in the current local report.
+  - Many physics kernels have strong focused coverage already, so adding more
+    superficial tests will not reach `95%`; the code must be split first.
+- Documentation / examples:
+  - docs are broad and buildable with `sphinx-build -W`, but the next upgrade is
+    curation: architecture diagrams after the split, validation-lane status
+    tables tied to exact artifacts, and clearer "fast PR vs nightly/release"
+    testing instructions.
+- CI/CD / PyPI:
+  - CI, docs, examples smoke, optional ecosystem gates, Codecov upload, and
+    trusted PyPI publishing workflow all exist.
+  - CI coverage floor is intentionally low (`43`) because the current driver
+    structure makes `95%` a refactor milestone, not a near-term test-only fix.
+
+Highest-ROI implementation sequence from this audit:
+
+1. Close artifact hygiene before more solver changes.
+   - Run the focused artifact/manifest/docs checks after promoting the completed
+     LHD and W7-X full collisionality summaries and figures.
+   - Commit and push the synchronized plan, manifest, tests, docs, and artifacts.
+   - Keep the W7-X ambipolar full reference in nightly/release status with
+     resumable split-scan controls, not PR CI.
+
+2. Split the monolithic driver into testable modules without changing behavior.
+   - Extract, in small commits:
+     - RHSMode=1 preconditioner policies and safety gates,
+     - domain-decomposition / Schwarz helpers,
+     - Krylov result and retry policy,
+     - sparse/direct/host-rescue dispatch,
+     - progress/ETA logging and solver provenance,
+     - final diagnostics/output handoff.
+   - Acceptance gates for each extraction:
+     - no numerical behavior change,
+     - focused unit tests on the extracted module,
+     - representative parity fixture still clean,
+     - full fast tests and docs build remain green.
+
+3. Convert coverage from branch coverage of a giant driver to meaningful module
+   coverage.
+   - First target after the split: raise package coverage floor from `43` to
+     `60` without increasing CI wall time above the 5-10 minute policy.
+   - Second target: `75` once the extracted solver-policy and I/O modules have
+     focused tests.
+   - `95%` remains the research-grade release target after the solver body is
+     decomposed and heavyweight solve loops are protected by small analytic
+     fixtures plus scheduled/nightly examples rather than by long PR tests.
+
+4. Add algorithmic performance work only behind measured gates.
+   - Port ideas, not code, from MONKES/yancc:
+     - factor-once / `vmap`-over-RHS structured solves for repeated RHS,
+     - lazy block-tridiagonal factors for memory-heavy velocity blocks,
+     - periodic banded low-rank Schur corrections for natural theta/zeta/PAS
+       blocks,
+     - GCROT/GCRO-DR or LGMRES recycling across RHS, collisionality, and Er
+       scans,
+     - operator-level verbose telemetry with residual, setup, and matvec counts.
+   - Initial target cases:
+     - HSX PAS DKES/full trajectories,
+     - geometry11 PAS paper cases,
+     - geometry4 PAS no-Er memory offender,
+     - W7-X ambipolar full-size scan points.
+   - Admission gate:
+     - parity-clean,
+     - no strict-output drift,
+     - `>=20%` warm runtime or `>=25%` RSS improvement on at least one pinned
+       offender,
+     - no regression above `1.25x` on the suite drift gates.
+
+5. Keep ecosystem libraries optional until they prove value.
+   - Keep `jax.lax.custom_linear_solve` as the default differentiable linear
+     solve primitive; it directly matches the implicit-gradient requirement.
+   - Use `jax.checkpoint` selectively around differentiable scanned kernels only
+     after a gradient-RSS benchmark shows benefit.
+   - Keep Lineax as a benchmark-only optional path until real SFINCS operators
+     are faster and status-clean.
+   - Use Equinox for future public differentiable problem/objective wrappers,
+     not for core hot kernels yet.
+   - Use JAXopt only for optional nonlinear/ambipolar implicit-diff wrappers
+     after finite-difference gradient gates pass.
+
+6. Strengthen physics gates in the validation matrix.
+   - Existing gates to preserve:
+     - Fortran-v3 output parity,
+     - strict dataset comparison,
+     - conservation/symmetry identities in collision and drift terms,
+     - Onsager/transport-matrix checks where applicable,
+     - finite-difference vs implicit/autodiff gradients on small fixtures.
+   - Add or promote next:
+     - collisionality trends for LHD/W7-X from corrected full artifacts,
+     - Er trajectory-model sweeps with small-field agreement and finite-field
+       separation,
+     - high-collisionality proxy only after parent collisionality scans are
+       fully pinned,
+     - ambipolar root bracketing/stability tests on bounded fixtures,
+     - coordinate/backend equivalence tests inspired by yancc,
+     - KNOSOS/DKES monoenergetic normalization checks for low-collisionality
+       reference lanes.
+
+7. Make differentiability a first-class validated product lane.
+   - Keep CLI fast paths free to use host/direct/non-differentiable rescues.
+   - Require the Python differentiable lane to:
+     - avoid process pools and host-only sparse rescues,
+     - expose solver residual/provenance in gradient examples,
+     - compare `jax.jvp` / `jax.grad` against centered finite differences,
+     - support sensitivity analysis, inverse design, UQ, and optimization
+       examples on bounded fixtures.
+   - Defer full `vmec_jax -> sfincs_jax` implementation until the driver split
+     is stable, then follow Section 19.30.
+
+8. Testing tiers for a shippable research code.
+   - PR CI:
+     - fast unit/regression tests,
+     - examples smoke,
+     - docs `-W`,
+     - optional ecosystem gates with clean skips,
+     - wall time target `5-10 min`.
+   - Nightly/scheduled:
+     - selected Fortran comparisons,
+     - CPU/GPU pinned offender benchmarks,
+     - medium collisionality and Er scans,
+     - coverage trend report.
+   - Release/HPC:
+     - full 39-case CPU/GPU suites,
+     - full LHD/W7-X collisionality artifacts,
+     - W7-X ambipolar split scan if scientifically defensible,
+     - multi-core / multi-GPU scaling plots,
+     - PyPI build and tag publish.
+
+Immediate next actions:
+1. Finish focused verification for the promoted LHD/W7-X collisionality
+   artifacts, update docs, then commit and push this planning/validation audit.
+2. Start the driver split with one low-risk extraction: progress/provenance
+   logging or preconditioner dispatch helpers, then run focused tests.
+3. Add a small structured-solve benchmark harness that can compare current
+   full-system Krylov against a factor-once / repeated-RHS prototype on a
+   bounded monoenergetic or PAS block.
+4. Raise the CI coverage floor only after the first extraction lands; do not
+   chase `95%` by adding slow full-solve tests to PR CI.
