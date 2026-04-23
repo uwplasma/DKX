@@ -125,6 +125,7 @@ from .transport_dense_lu import (
     dense_preconditioner_for_matvec as _dense_preconditioner_for_matvec,
     dense_solver_for_matvec as _dense_solver_for_matvec,
 )
+from .transport_host_gmres import transport_host_gmres_solve as _transport_host_gmres_solve
 from .transport_parallel_policy import (
     transport_parallel_backend as _transport_parallel_backend_impl,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
@@ -20055,76 +20056,6 @@ def solve_v3_transport_matrix_linear_gmres(
             residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
         )
 
-    def _transport_host_gmres_solve(
-        *,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        x0_vec: jnp.ndarray | None,
-        preconditioner_fn,
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-        precondition_side_val: str,
-    ) -> tuple[GMRESSolveResult, jnp.ndarray]:
-        side = str(precondition_side_val).strip().lower()
-        b_norm = float(jnp.linalg.norm(b_vec))
-        target_true = max(float(atol_val), float(tol_val) * b_norm)
-        reported_residual_norm: float | None = None
-        if preconditioner_fn is not None and side == "left":
-            x_np, rn_true, rn_pc, _history = explicit_left_preconditioned_gmres_scipy(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=preconditioner_fn,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                restart=restart_val,
-                maxiter=maxiter_val,
-            )
-            rhs_pc_norm = float(jnp.linalg.norm(preconditioner_fn(b_vec)))
-            target_pc = max(float(atol_val), float(tol_val) * rhs_pc_norm)
-            if (
-                np.isfinite(float(rn_pc))
-                and float(rn_pc) <= float(target_pc)
-                and _transport_host_gmres_accepts_preconditioned_residual(
-                    op=op0,
-                    true_residual_norm=float(rn_true),
-                    target_true=float(target_true),
-                )
-            ):
-                # Mirror the Fortran/PETSc transport lane, which accepts convergence on the
-                # preconditioned KSP residual. These systems can be singular or nearly singular,
-                # so forcing a much smaller true residual here can drive the solve onto a
-                # different solution branch during fallback retries.
-                reported_residual_norm = min(float(rn_true), float(target_true))
-        else:
-            x_np, rn_true, _history = gmres_solve_with_history_scipy(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=preconditioner_fn,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                restart=restart_val,
-                maxiter=maxiter_val,
-                precondition_side=precondition_side_val,
-            )
-        x_jnp = jnp.asarray(x_np, dtype=jnp.float64)
-        residual_vec = b_vec - matvec_fn(x_jnp)
-        residual_norm = float(jnp.linalg.norm(residual_vec))
-        if np.isfinite(float(rn_true)):
-            residual_norm = min(residual_norm, float(rn_true))
-        if reported_residual_norm is not None:
-            residual_norm = min(residual_norm, float(reported_residual_norm))
-        return (
-            GMRESSolveResult(
-                x=x_jnp,
-                residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
-            ),
-            residual_vec,
-        )
-
     # Geometry scalars needed for the transport-matrix formulas.
     grids = grids_from_namelist(nml)
     geom = geometry_from_namelist(nml=nml, grids=grids)
@@ -20836,6 +20767,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         )
                     try:
                         res_reduced, residual_vec = _transport_host_gmres_solve(
+                            op=op0,
                             matvec_fn=mv_reduced,
                             b_vec=rhs_reduced,
                             x0_vec=x0_reduced,
@@ -21262,6 +21194,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         )
                     try:
                         res, residual_vec = _transport_host_gmres_solve(
+                            op=op0,
                             matvec_fn=mv,
                             b_vec=rhs,
                             x0_vec=x0_full,

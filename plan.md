@@ -2208,8 +2208,8 @@ Testing docs should include:
   - strong-fallback / strong-control / stage-2 / sparse-rescue / sparse-polish policy helpers,
   - solve handoff helpers,
   - transport policy, transport solve policy, transport preconditioner dispatch,
-    transport handoff policy, transport dense-LU helpers, transport-parallel
-    policy/runtime/pool/execution helpers,
+    transport handoff policy, transport dense-LU helpers, transport host-GMRES helper,
+    transport-parallel policy/runtime/pool/execution helpers,
   - Phi1 Newton policy, linear-step, and line-search helpers.
 - The first literature-facing validation lane is now live with pinned fixed-case artifacts:
   - script: `examples/publication_figures/generate_er_trajectory_sweep.py`
@@ -2327,6 +2327,32 @@ Testing docs should include:
 - New bounded regression coverage now lives in:
   - `tests/test_transport_dense_lu.py`
 - Current validation for the dense-LU slice:
+  - `tests/test_transport_dense_lu.py`
+  - `tests/test_transport_handoff_policy.py`
+  - `tests/test_transport_solve_policy.py`
+  - `tests/test_transport_preconditioner_dispatch.py`
+  - `tests/test_transport_sparse_direct.py`
+  - `tests/test_transport_parallel.py`
+  - all passed together after the extraction.
+
+### 19.24 Transport host-GMRES helper split
+
+- The explicit transport host SciPy GMRES first-attempt/rescue helper was still
+  nested inside `solve_v3_transport_matrix_linear_gmres(...)`.
+- That solver helper is now extracted into `sfincs_jax/transport_host_gmres.py`.
+- `v3_driver.py` now calls the shared module for:
+  - host SciPy GMRES without a preconditioner,
+  - left-preconditioned host SciPy GMRES,
+  - PETSc-like acceptance of bounded preconditioned residuals for the transport
+    systems where that behavior is already part of the shipped path.
+- This stayed structure-preserving:
+  - first-attempt / rescue policy remains in `transport_policy.py`,
+  - the reduced/full solve order is unchanged,
+  - existing transport tests stayed green.
+- New bounded regression coverage now lives in:
+  - `tests/test_transport_host_gmres.py`
+- Current validation for the host-GMRES slice:
+  - `tests/test_transport_host_gmres.py`
   - `tests/test_transport_dense_lu.py`
   - `tests/test_transport_handoff_policy.py`
   - `tests/test_transport_solve_policy.py`
