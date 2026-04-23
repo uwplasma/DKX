@@ -104,6 +104,18 @@ from .rhs1_stage2_policy import (
     rhs1_pas_stage2_skip,
     rhs1_stage2_trigger,
 )
+from .rhs1_host_policy import (
+    host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
+    host_sparse_factor_dtype as _host_sparse_factor_dtype_impl,
+    rhs1_dense_backend_allowed as _rhs1_dense_backend_allowed_impl,
+    rhs1_dense_krylov_allowed as _rhs1_dense_krylov_allowed_impl,
+    rhs1_explicit_sparse_host_direct_allowed as _rhs1_explicit_sparse_host_direct_allowed_impl,
+    rhs1_host_dense_fallback_allowed as _rhs1_host_dense_fallback_allowed_impl,
+    rhs1_host_dense_shortcut_allowed as _rhs1_host_dense_shortcut_allowed_impl,
+    rhs1_host_sparse_direct_allowed as _rhs1_host_sparse_direct_allowed_impl,
+    rhs1_host_sparse_skip_dense_ratio as _rhs1_host_sparse_skip_dense_ratio_impl,
+    rhs1_sparse_operator_preconditioned_rescue_allowed as _rhs1_sparse_operator_preconditioned_rescue_allowed_impl,
+)
 from .transport_policy import (
     transport_dense_backend_allowed as _transport_dense_backend_allowed_impl,
     transport_disable_auto_recycle as _transport_disable_auto_recycle_impl,
@@ -456,12 +468,7 @@ def _small_regularized_lstsq(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
 
 
 def _rhsmode1_dense_backend_allowed() -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "").strip().lower()
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    if env in {"0", "false", "no", "off"}:
-        return False
-    return jax.default_backend() == "cpu"
+    return _rhs1_dense_backend_allowed_impl(backend=jax.default_backend())
 
 
 def _transport_dense_backend_allowed() -> bool:
@@ -477,10 +484,7 @@ def _transport_tzfft_accelerator_auto_allowed(op: V3FullSystemOperator) -> bool:
 
 
 def _rhsmode1_host_dense_fallback_allowed() -> bool:
-    if jax.default_backend() == "cpu":
-        return True
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "").strip().lower()
-    return env in {"1", "true", "yes", "on"}
+    return _rhs1_host_dense_fallback_allowed_impl(backend=jax.default_backend())
 
 
 def _rhsmode1_host_dense_shortcut_allowed(
@@ -490,53 +494,25 @@ def _rhsmode1_host_dense_shortcut_allowed(
     use_implicit: bool,
     solve_method_kind: str,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if bool(use_implicit):
-        return False
-    if jax.default_backend() == "cpu":
-        return False
-    if solve_method_kind in {"dense", "dense_ksp"}:
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None:
-        return False
-    host_dense_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "").strip().lower()
-    if host_dense_env in {"0", "false", "no", "off"}:
-        return False
-    shortcut_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", "").strip()
-    try:
-        shortcut_max = int(shortcut_max_env) if shortcut_max_env else 900
-    except ValueError:
-        shortcut_max = 900
-    dense_cap = min(max(0, int(shortcut_max)), max(0, int(_rhsmode1_dense_fallback_max(op))))
-    if dense_cap <= 0:
-        return False
-    return int(active_size) <= dense_cap
+    return _rhs1_host_dense_shortcut_allowed_impl(
+        op=op,
+        active_size=active_size,
+        use_implicit=use_implicit,
+        solve_method_kind=solve_method_kind,
+        backend=jax.default_backend(),
+        dense_fallback_max=_rhsmode1_dense_fallback_max(op),
+    )
 
 
 def _rhsmode1_dense_krylov_allowed() -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    return True
+    return _rhs1_dense_krylov_allowed_impl()
 
 
 def _rhsmode1_host_sparse_direct_allowed(*, sparse_exact_lu: bool, use_implicit: bool = False) -> bool:
-    if not bool(sparse_exact_lu):
-        return False
-    if bool(use_implicit):
-        return False
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    return True
+    return _rhs1_host_sparse_direct_allowed_impl(
+        sparse_exact_lu=sparse_exact_lu,
+        use_implicit=use_implicit,
+    )
 
 
 def _rhsmode1_sparse_operator_preconditioned_rescue_allowed(
@@ -554,20 +530,12 @@ def _rhsmode1_sparse_operator_preconditioned_rescue_allowed(
     preconditioner for GMRES on the true Jacobian more closely matches the Fortran
     KSP path while keeping the strong CPU rescue.
     """
-    if not bool(sparse_exact_lu) or not bool(host_sparse_direct_wanted):
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if int(op.constraint_scheme) != 1:
-        return False
-    if op.fblock.fp is None or op.fblock.pas is not None:
-        return False
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    return True
+    return _rhs1_sparse_operator_preconditioned_rescue_allowed_impl(
+        op=op,
+        sparse_exact_lu=sparse_exact_lu,
+        host_sparse_direct_wanted=host_sparse_direct_wanted,
+        backend=jax.default_backend(),
+    )
 
 
 def _host_sparse_factor_dtype(
@@ -576,25 +544,12 @@ def _host_sparse_factor_dtype(
     factorization: str,
     use_implicit: bool,
 ) -> np.dtype:
-    env = os.environ.get("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", "").strip().lower()
-    if env in {"float64", "fp64", "64"}:
-        return np.dtype(np.float64)
-    if env in {"float32", "fp32", "32"}:
-        return np.dtype(np.float32)
-    if bool(use_implicit):
-        return np.dtype(np.float64)
-    if jax.default_backend() != "cpu":
-        return np.dtype(np.float64)
-    if str(factorization).strip().lower() != "lu":
-        return np.dtype(np.float64)
-    min_env = os.environ.get("SFINCS_JAX_HOST_SPARSE_FACTOR_FLOAT32_MIN", "").strip()
-    try:
-        min_size = int(min_env) if min_env else 12000
-    except ValueError:
-        min_size = 12000
-    if int(size) >= max(1, int(min_size)):
-        return np.dtype(np.float32)
-    return np.dtype(np.float64)
+    return _host_sparse_factor_dtype_impl(
+        size=size,
+        factorization=factorization,
+        use_implicit=use_implicit,
+        backend=jax.default_backend(),
+    )
 
 
 def _sparse_factor_cache_key(cache_key: tuple[object, ...], factor_dtype: np.dtype) -> tuple[object, ...]:
@@ -602,12 +557,7 @@ def _sparse_factor_cache_key(cache_key: tuple[object, ...], factor_dtype: np.dty
 
 
 def _host_sparse_direct_refine_steps(env_name: str, default: int = 2) -> int:
-    env = os.environ.get(env_name, "").strip()
-    try:
-        refine_steps = int(env) if env else int(default)
-    except ValueError:
-        refine_steps = int(default)
-    return max(0, int(refine_steps))
+    return _host_sparse_direct_refine_steps_impl(env_name, default=default)
 
 
 def _host_sparse_direct_solve_with_refinement(
@@ -702,11 +652,7 @@ def _host_sparse_direct_polish(
 
 
 def _rhsmode1_host_sparse_skip_dense_ratio() -> float:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_SKIP_DENSE_RATIO", "").strip()
-    try:
-        return float(env) if env else 1.0e4
-    except ValueError:
-        return 1.0e4
+    return _rhs1_host_sparse_skip_dense_ratio_impl()
 
 
 def _rhsmode1_explicit_sparse_host_direct_allowed(
@@ -715,17 +661,11 @@ def _rhsmode1_explicit_sparse_host_direct_allowed(
     use_implicit: bool,
     active_size: int,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if bool(use_implicit) or (not bool(sparse_exact_lu)):
-        return False
-    max_env = os.environ.get("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER_MAX", "").strip()
-    try:
-        max_size = int(max_env) if max_env else 20000
-    except ValueError:
-        max_size = 20000
-    return int(active_size) <= max(1, int(max_size))
+    return _rhs1_explicit_sparse_host_direct_allowed_impl(
+        sparse_exact_lu=sparse_exact_lu,
+        use_implicit=use_implicit,
+        active_size=active_size,
+    )
 
 
 def _build_host_sparse_direct_factor_from_matvec(
