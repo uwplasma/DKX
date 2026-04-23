@@ -4165,3 +4165,27 @@ Validation:
 - `pytest -q tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
   passed with `169 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.58 RHSMode=1 large-CPU sparse/x-block policy extraction
+
+Completed the next runtime-offender-facing driver-refactor increment:
+
+- Add `sfincs_jax/rhs1_large_cpu_policy.py` for large explicit full-FP CPU sparse
+  rescue, large-CPU exact-LU caps, sparse-rescue-first ordering, x-block
+  exact-LU promotion, x-block sparse rescue, host x-block assembly, primary-solve
+  skipping, and species-x-block rescue eligibility.
+- Keep the existing `v3_driver.py` wrappers intact for compatibility with the
+  established heuristic tests.
+- Add direct tests for the large-CPU rescue decisions so CI can cover the
+  runtime-offender routing without running large cases.
+- Update API docs, source map, testing docs, and module-docstring coverage.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_large_cpu_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_large_cpu_policy.py tests/test_policy_module_docstrings.py`
+- `python -m ruff check sfincs_jax/rhs1_large_cpu_policy.py tests/test_rhs1_large_cpu_policy.py tests/test_policy_module_docstrings.py`
+- `pytest -q tests/test_rhs1_large_cpu_policy.py tests/test_rhs1_sparse_first_heuristic.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
+  passed with `93 passed`.
+- `pytest -q tests/test_rhs1_large_cpu_policy.py tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
+  passed with `177 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.

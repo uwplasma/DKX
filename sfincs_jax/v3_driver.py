@@ -109,6 +109,16 @@ from .rhs1_sparse_exact_policy import (
     rhs1_sparse_exact_lu_requested as _rhs1_sparse_exact_lu_requested_impl,
     rhs1_sparse_prefer_skips_stage2 as _rhs1_sparse_prefer_skips_stage2_impl,
 )
+from .rhs1_large_cpu_policy import (
+    rhs1_fp_xblock_assembled_host_allowed as _rhs1_fp_xblock_assembled_host_allowed_impl,
+    rhs1_large_cpu_sparse_exact_lu_allowed as _rhs1_large_cpu_sparse_exact_lu_allowed_impl,
+    rhs1_large_cpu_sparse_exact_lu_xblock_allowed as _rhs1_large_cpu_sparse_exact_lu_xblock_allowed_impl,
+    rhs1_large_cpu_sparse_rescue_allowed as _rhs1_large_cpu_sparse_rescue_allowed_impl,
+    rhs1_large_cpu_sparse_rescue_first as _rhs1_large_cpu_sparse_rescue_first_impl,
+    rhs1_large_cpu_xblock_skip_primary_allowed as _rhs1_large_cpu_xblock_skip_primary_allowed_impl,
+    rhs1_sparse_sxblock_rescue_allowed as _rhs1_sparse_sxblock_rescue_allowed_impl,
+    rhs1_sparse_xblock_rescue_allowed as _rhs1_sparse_xblock_rescue_allowed_impl,
+)
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -906,66 +916,27 @@ def _rhsmode1_large_cpu_sparse_rescue_allowed(
     residual_norm: float,
     target: float,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None:
-        return False
-    if solve_method_kind in {"dense", "dense_ksp"}:
-        return False
-    fullx_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FULLX_MIN", "").strip()
-    try:
-        fullx_min = int(fullx_min_env) if fullx_min_env else 50000
-    except ValueError:
-        fullx_min = 50000
-    if int(preconditioner_x) != 0 and int(active_size) < max(0, int(fullx_min)):
-        # Moderate-size full-x FP cases can still benefit from the assembled CPU
-        # sparse rescue when the global solve is exact LU. This avoids getting
-        # trapped in slower x-block seeds that do not fully resolve the flow branch.
-        if not _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size)):
-            return False
-    if int(active_size) <= int(sparse_max_size):
-        return False
-    rescue_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_MAX", "").strip()
-    rescue_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_RATIO", "").strip()
-    try:
-        rescue_max = int(rescue_max_env) if rescue_max_env else 80000
-    except ValueError:
-        rescue_max = 80000
-    try:
-        rescue_ratio = float(rescue_ratio_env) if rescue_ratio_env else 1.0e3
-    except ValueError:
-        rescue_ratio = 1.0e3
-    if int(active_size) > max(1, int(rescue_max)):
-        return False
-    if float(target) <= 0.0:
-        return True
-    return float(residual_norm) > float(target) * float(rescue_ratio)
+    return _rhs1_large_cpu_sparse_rescue_allowed_impl(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        preconditioner_x=int(preconditioner_x),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        backend=jax.default_backend(),
+    )
 
 
 def _rhsmode1_large_cpu_sparse_rescue_first(*, large_cpu_sparse_rescue: bool, strong_precond_env: str) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FIRST", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    return bool(large_cpu_sparse_rescue) and str(strong_precond_env).strip().lower() in {"", "auto"}
+    return _rhs1_large_cpu_sparse_rescue_first_impl(
+        large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue),
+        strong_precond_env=strong_precond_env,
+    )
 
 
 def _rhsmode1_large_cpu_sparse_exact_lu_allowed(*, active_size: int) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    exact_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_MAX", "").strip()
-    try:
-        exact_max = int(exact_max_env) if exact_max_env else 30000
-    except ValueError:
-        exact_max = 30000
-    if env in {"1", "true", "yes", "on"}:
-        return int(active_size) <= max(0, int(exact_max))
-    return int(active_size) <= max(0, int(exact_max))
+    return _rhs1_large_cpu_sparse_exact_lu_allowed_impl(active_size=int(active_size))
 
 
 def _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed(
@@ -979,41 +950,17 @@ def _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed(
     xblock_seed_improvement_ratio: float,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if bool(use_implicit):
-        return False
-    if not bool(used_large_cpu_xblock_shortcut) or not bool(used_explicit_fp_xblock_seed):
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None or op.fblock.pas is not None:
-        return False
-    if int(preconditioner_x) == 0:
-        return False
-    max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_MAX", "").strip()
-    ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_RATIO", "").strip()
-    abs_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_ABS", "").strip()
-    try:
-        exact_max = int(max_env) if max_env else 70000
-    except ValueError:
-        exact_max = 70000
-    try:
-        improvement_ratio = float(ratio_env) if ratio_env else 100.0
-    except ValueError:
-        improvement_ratio = 100.0
-    try:
-        residual_abs = float(abs_env) if abs_env else 5.0e-4
-    except ValueError:
-        residual_abs = 5.0e-4
-    if int(active_size) > max(0, int(exact_max)):
-        return False
-    if not np.isfinite(float(xblock_seed_residual)) or float(xblock_seed_residual) > float(residual_abs):
-        return False
-    return float(xblock_seed_improvement_ratio) >= max(1.0, float(improvement_ratio))
+    return _rhs1_large_cpu_sparse_exact_lu_xblock_allowed_impl(
+        op=op,
+        active_size=int(active_size),
+        preconditioner_x=int(preconditioner_x),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        xblock_seed_residual=float(xblock_seed_residual),
+        xblock_seed_improvement_ratio=float(xblock_seed_improvement_ratio),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
 
 
 def _rhsmode1_sparse_xblock_rescue_allowed(
@@ -1028,43 +975,18 @@ def _rhsmode1_sparse_xblock_rescue_allowed(
     residual_norm: float,
     target: float,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None:
-        return False
-    if solve_method_kind in {"dense", "dense_ksp"}:
-        return False
-    if int(preconditioner_x) == 0:
-        return False
-    if int(pre_theta) != 0 or int(pre_zeta) != 0:
-        return False
-    rescue_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MIN", "").strip()
-    rescue_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_RATIO", "").strip()
-    rescue_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MAX", "").strip()
-    try:
-        rescue_min = int(rescue_min_env) if rescue_min_env else max(int(sparse_max_size) + 1, 12000)
-    except ValueError:
-        rescue_min = max(int(sparse_max_size) + 1, 12000)
-    try:
-        rescue_max = int(rescue_max_env) if rescue_max_env else 120000
-    except ValueError:
-        rescue_max = 120000
-    try:
-        rescue_ratio = float(rescue_ratio_env) if rescue_ratio_env else 1.0e2
-    except ValueError:
-        rescue_ratio = 1.0e2
-    if int(active_size) < max(1, int(rescue_min)):
-        return False
-    if int(active_size) > max(1, int(rescue_max)):
-        return False
-    if float(target) <= 0.0:
-        return True
-    return float(residual_norm) > float(target) * float(rescue_ratio)
+    return _rhs1_sparse_xblock_rescue_allowed_impl(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        preconditioner_x=int(preconditioner_x),
+        pre_theta=int(pre_theta),
+        pre_zeta=int(pre_zeta),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        backend=jax.default_backend(),
+    )
 
 
 def _rhsmode1_fp_xblock_assembled_host_allowed(
@@ -1074,24 +996,13 @@ def _rhsmode1_fp_xblock_assembled_host_allowed(
     preconditioner_xi: int,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if bool(use_implicit):
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None or op.fblock.pas is not None:
-        return False
-    if int(preconditioner_species) == 0:
-        return False
-    if int(preconditioner_xi) != 1:
-        return False
-    if bool(op.point_at_x0):
-        return False
-    return True
+    return _rhs1_fp_xblock_assembled_host_allowed_impl(
+        op=op,
+        preconditioner_species=int(preconditioner_species),
+        preconditioner_xi=int(preconditioner_xi),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
 
 
 def _rhsmode1_large_cpu_xblock_skip_primary_allowed(
@@ -1108,26 +1019,19 @@ def _rhsmode1_large_cpu_xblock_skip_primary_allowed(
     use_implicit: bool,
     rhs1_precond_env: str,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_LARGE_CPU_XBLOCK_SKIP_PRIMARY", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if bool(use_implicit):
-        return False
-    if solve_method_kind in {"dense", "dense_ksp"}:
-        return False
-    if int(active_size) <= int(sparse_max_size):
-        return False
-    if int(preconditioner_x) == 0 or int(pre_theta) != 0 or int(pre_zeta) != 0:
-        return False
-    if rhs1_precond_env not in {"", "auto", "default"}:
-        return False
-    return _rhsmode1_fp_xblock_assembled_host_allowed(
+    return _rhs1_large_cpu_xblock_skip_primary_allowed_impl(
         op=op,
-        preconditioner_species=preconditioner_species,
-        preconditioner_xi=preconditioner_xi,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        preconditioner_species=int(preconditioner_species),
+        preconditioner_x=int(preconditioner_x),
+        preconditioner_xi=int(preconditioner_xi),
+        pre_theta=int(pre_theta),
+        pre_zeta=int(pre_zeta),
         use_implicit=bool(use_implicit),
+        rhs1_precond_env=rhs1_precond_env,
+        backend=jax.default_backend(),
     )
 
 
@@ -1272,36 +1176,17 @@ def _rhsmode1_sparse_sxblock_rescue_allowed(
     pre_zeta: int,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE", "").strip().lower()
-    if env not in {"1", "true", "yes", "on"}:
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if bool(use_implicit):
-        return False
-    if solve_method_kind in {"dense", "dense_ksp"}:
-        return False
-    if int(active_size) <= int(sparse_max_size):
-        return False
-    if int(preconditioner_x) == 0 or int(pre_theta) != 0 or int(pre_zeta) != 0:
-        return False
-    if int(getattr(op, "n_species", 1)) <= 1:
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None or op.fblock.pas is not None:
-        return False
-    rescue_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE_MIN", "").strip()
-    rescue_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE_MAX", "").strip()
-    try:
-        rescue_min = int(rescue_min_env) if rescue_min_env else max(int(sparse_max_size) + 1, 12000)
-    except ValueError:
-        rescue_min = max(int(sparse_max_size) + 1, 12000)
-    try:
-        rescue_max = int(rescue_max_env) if rescue_max_env else 120000
-    except ValueError:
-        rescue_max = 120000
-    return max(1, int(rescue_min)) <= int(active_size) <= max(1, int(rescue_max))
+    return _rhs1_sparse_sxblock_rescue_allowed_impl(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        preconditioner_x=int(preconditioner_x),
+        pre_theta=int(pre_theta),
+        pre_zeta=int(pre_zeta),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
 
 
 def _transport_sparse_direct_rescue_allowed(
