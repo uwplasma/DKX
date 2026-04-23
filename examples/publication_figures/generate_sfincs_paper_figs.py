@@ -58,6 +58,12 @@ def _parse_args() -> argparse.Namespace:
         help="Scratch directory for scan runs.",
     )
     parser.add_argument(
+        "--summary-dir",
+        type=Path,
+        default=None,
+        help="Directory for machine-readable scan summaries. Defaults to --work-dir.",
+    )
+    parser.add_argument(
         "--fast",
         action="store_true",
         help="Use reduced resolution and fewer scan points.",
@@ -210,7 +216,9 @@ def _collect_transport_matrix(work_dir: Path) -> tuple[np.ndarray, np.ndarray]:
     return nu, tm
 
 
-def write_transport_scan_summary_json(summary_path: Path, datasets: dict[str, tuple[np.ndarray, np.ndarray]]) -> None:
+def build_transport_scan_summary_rows(
+    datasets: dict[str, tuple[np.ndarray, np.ndarray]]
+) -> list[dict[str, object]]:
     payload: list[dict[str, object]] = []
     for label, (nu, tm) in datasets.items():
         for idx in range(len(nu)):
@@ -222,8 +230,52 @@ def write_transport_scan_summary_json(summary_path: Path, datasets: dict[str, tu
                 }
             )
     payload.sort(key=lambda row: (str(row["label"]), float(row["nuprime"])))
+    return payload
+
+
+def write_transport_scan_summary_json(
+    summary_path: Path,
+    datasets: dict[str, tuple[np.ndarray, np.ndarray]],
+    *,
+    metadata: dict[str, object] | None = None,
+) -> None:
+    rows = build_transport_scan_summary_rows(datasets)
+    payload: dict[str, object] | list[dict[str, object]]
+    if metadata is None:
+        payload = rows
+    else:
+        payload = {"metadata": metadata, "rows": rows}
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def _summary_metadata(
+    *,
+    case: str,
+    fast: bool,
+    n_points: int,
+    nuprime_min: float,
+    nuprime_max: float,
+    work_dir: Path,
+    summary_path: Path,
+    base_input: Path,
+    labels_to_collision_operator: dict[str, int],
+) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "case": case,
+        "fast": bool(fast),
+        "n_points": int(n_points),
+        "nuprime_min": float(nuprime_min),
+        "nuprime_max": float(nuprime_max),
+        "base_input": str(base_input.relative_to(REPO_ROOT)),
+        "source_script": str(Path(__file__).resolve().relative_to(REPO_ROOT)),
+        "work_dir": str(work_dir.resolve()),
+        "summary_path": str(summary_path.resolve()),
+        "labels_to_collision_operator": {
+            str(label): int(operator) for label, operator in labels_to_collision_operator.items()
+        },
+    }
 
 
 def _fit_high_collisionality(nu: np.ndarray, y: np.ndarray, n_fit: int = 2) -> np.ndarray:
@@ -288,6 +340,7 @@ def main() -> None:
     args = _parse_args()
     out_dir = args.out_dir
     work_dir = args.work_dir
+    summary_dir = args.summary_dir if args.summary_dir is not None else work_dir
     fast = bool(args.fast)
     timeout_s = args.timeout_s
     case = args.case
@@ -299,6 +352,7 @@ def main() -> None:
 
     out_dir.mkdir(parents=True, exist_ok=True)
     work_dir.mkdir(parents=True, exist_ok=True)
+    summary_dir.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("MPLCONFIGDIR", str(work_dir / ".mplconfig"))
 
     if not plot_only:
@@ -358,6 +412,23 @@ def main() -> None:
                 )
             fig1_data[label] = _collect_transport_matrix(case_dir)
 
+        lhd_summary_path = summary_dir / f"lhd_collisionality{'_fast' if fast else ''}_summary.json"
+        write_transport_scan_summary_json(
+            lhd_summary_path,
+            fig1_data,
+            metadata=_summary_metadata(
+                case="lhd",
+                fast=fast,
+                n_points=n_points,
+                nuprime_min=nuprime_min,
+                nuprime_max=nuprime_max,
+                work_dir=work_dir,
+                summary_path=lhd_summary_path,
+                base_input=lhd.base_input,
+                labels_to_collision_operator={"Fokker-Planck": 0, "PAS": 1},
+            ),
+        )
+
         if not scan_only:
             _plot_matrix_elements(
                 out_path=out_dir / "sfincs_jax_fig1_lhd_collisionality.png",
@@ -390,6 +461,23 @@ def main() -> None:
                     label=f"scan-w7x-co{collision_operator}",
                 )
             fig2_data[label] = _collect_transport_matrix(case_dir)
+
+        w7x_summary_path = summary_dir / f"w7x_collisionality{'_fast' if fast else ''}_summary.json"
+        write_transport_scan_summary_json(
+            w7x_summary_path,
+            fig2_data,
+            metadata=_summary_metadata(
+                case="w7x",
+                fast=fast,
+                n_points=n_points,
+                nuprime_min=nuprime_min,
+                nuprime_max=nuprime_max,
+                work_dir=work_dir,
+                summary_path=w7x_summary_path,
+                base_input=w7x.base_input,
+                labels_to_collision_operator={"Fokker-Planck": 0, "PAS": 1},
+            ),
+        )
 
         if not scan_only:
             _plot_matrix_elements(

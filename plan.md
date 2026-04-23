@@ -2391,6 +2391,15 @@ Testing docs should include:
   - and the restored FP/PAS separation in the diagonal transport coefficients.
 - The same is now true for the bounded W7-X fast lane: it stayed cheap enough for branch
   validation and resolves clear FP/PAS separation in the corrected rerun.
+- The generator now also emits structured collisionality summary JSON for future reruns:
+  - `generate_sfincs_paper_figs.py` writes top-level `metadata` plus sorted `rows`,
+    recording case, fast/full mode, scan ladder, base input, work directory, and
+    collision-operator labeling;
+  - `tests/test_generate_sfincs_paper_figs.py` now covers both plain row serialization
+    and the richer metadata payload;
+  - `tests/test_collisionality_artifact.py` accepts either legacy row-only artifacts
+    or future metadata-backed artifacts, so the next pinned full-resolution rerun can
+    upgrade the checked-in JSON format without breaking branch validation.
 - Remaining open lanes are explicit:
   - regenerate the full LHD collisionality figure family from the fixed writer,
   - regenerate the full W7-X collisionality figure family from the fixed writer,
