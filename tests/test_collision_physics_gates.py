@@ -3,7 +3,13 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.collisions import apply_pitch_angle_scattering_v3, make_pitch_angle_scattering_v3_operator
+from sfincs_jax.collisions import (
+    _V3_SQRTPI,
+    _psi_chandra,
+    apply_pitch_angle_scattering_v3,
+    make_pitch_angle_scattering_v3_operator,
+    polynomial_interpolation_matrix_np,
+)
 
 
 def _pas_operator():
@@ -44,3 +50,18 @@ def test_pas_legendre_eigenvalues_follow_l_lplus1_over_two() -> None:
         for ell in range(1, n_l_active):
             expected = 0.5 * ell * (ell + 1.0)
             np.testing.assert_allclose(coef[ix, ell] / base, expected, rtol=2e-15, atol=2e-15)
+
+
+def test_chandrasekhar_function_matches_small_x_limit() -> None:
+    x = jnp.asarray([1.0e-12, 1.0e-10, 1.0e-8], dtype=jnp.float64)
+    psi = np.asarray(_psi_chandra(x))
+    expected_ratio = 2.0 / (3.0 * float(_V3_SQRTPI))
+    np.testing.assert_allclose(psi / np.asarray(x), expected_ratio, rtol=1.0e-8, atol=1.0e-12)
+    assert np.all(psi > 0.0)
+
+
+def test_polynomial_interpolation_matrix_is_identity_on_matching_nodes() -> None:
+    xk = np.asarray([0.2, 0.7, 1.4, 2.2], dtype=np.float64)
+    alpxk = np.exp(-(xk * xk))
+    mat = polynomial_interpolation_matrix_np(xk=xk, x=xk.copy(), alpxk=alpxk, alpx=alpxk.copy())
+    np.testing.assert_allclose(mat, np.eye(xk.size), rtol=0.0, atol=1.0e-13)
