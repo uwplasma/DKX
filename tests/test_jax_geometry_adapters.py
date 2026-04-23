@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from sfincs_jax.jax_geometry_adapters import optional_jax_geometry_backend_status, vmec_wout_from_wout_like
+from sfincs_jax.vmec_geometry import vmec_geometry_from_wout
+from sfincs_jax.vmec_wout import read_vmec_wout
 
 
 def _wout_like(*, radius_mode_order: bool = True) -> SimpleNamespace:
@@ -77,3 +80,54 @@ def test_vmec_wout_from_wout_like_rejects_bad_shapes() -> None:
     bad.bmnc = np.zeros((2, 2, 2))
     with pytest.raises(ValueError, match="bmnc must be 2D"):
         vmec_wout_from_wout_like(bad)
+
+
+def test_vmec_jax_woutdata_adapter_matches_file_reader_on_optional_fixture() -> None:
+    vmec_jax = pytest.importorskip("vmec_jax")
+    pytest.importorskip("netCDF4")
+    from vmec_jax.wout import read_wout as read_vmec_jax_wout
+
+    fixture = Path(vmec_jax.__file__).resolve().parents[1] / "examples" / "data" / "wout_circular_tokamak.nc"
+    if not fixture.exists():
+        pytest.skip(f"optional vmec_jax fixture not found: {fixture}")
+
+    sfincs_file = read_vmec_wout(fixture)
+    sfincs_from_vmec_jax = vmec_wout_from_wout_like(read_vmec_jax_wout(fixture))
+
+    for name in (
+        "bmnc",
+        "gmnc",
+        "bsubumnc",
+        "bsubvmnc",
+        "bsubsmns",
+        "bsupumnc",
+        "bsupvmnc",
+        "rmnc",
+        "zmns",
+        "lmns",
+    ):
+        np.testing.assert_allclose(
+            getattr(sfincs_from_vmec_jax, name),
+            getattr(sfincs_file, name),
+            rtol=0.0,
+            atol=0.0,
+        )
+
+    theta = np.linspace(0.0, 2.0 * np.pi, 6, endpoint=False)
+    zeta = np.linspace(0.0, 2.0 * np.pi / sfincs_file.nfp, 5, endpoint=False)
+    geom_file = vmec_geometry_from_wout(w=sfincs_file, theta=theta, zeta=zeta, psi_n_wish=0.25)
+    geom_vmec_jax = vmec_geometry_from_wout(
+        w=sfincs_from_vmec_jax,
+        theta=theta,
+        zeta=zeta,
+        psi_n_wish=0.25,
+    )
+
+    np.testing.assert_allclose(np.asarray(geom_vmec_jax.b_hat), np.asarray(geom_file.b_hat), rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(
+        np.asarray(geom_vmec_jax.db_hat_dtheta),
+        np.asarray(geom_file.db_hat_dtheta),
+        rtol=0.0,
+        atol=0.0,
+    )
+    np.testing.assert_allclose(np.asarray(geom_vmec_jax.d_hat), np.asarray(geom_file.d_hat), rtol=0.0, atol=0.0)
