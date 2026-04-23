@@ -119,6 +119,11 @@ from .rhs1_large_cpu_policy import (
     rhs1_sparse_sxblock_rescue_allowed as _rhs1_sparse_sxblock_rescue_allowed_impl,
     rhs1_sparse_xblock_rescue_allowed as _rhs1_sparse_xblock_rescue_allowed_impl,
 )
+from .rhs1_post_xblock_policy import (
+    rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
+    rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
+    rhs1_skip_global_sparse_after_xblock_allowed as _rhs1_skip_global_sparse_after_xblock_allowed_impl,
+)
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -1044,38 +1049,15 @@ def _rhsmode1_fast_post_xblock_polish_allowed(
     used_large_cpu_xblock_shortcut: bool,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if not bool(used_large_cpu_xblock_shortcut):
-        return False
-    if bool(use_implicit):
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None or op.fblock.pas is not None:
-        return False
-    min_env = os.environ.get("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MIN", "").strip()
-    ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_RATIO", "").strip()
-    abs_env = os.environ.get("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_ABS", "").strip()
-    try:
-        polish_min = int(min_env) if min_env else 12000
-    except ValueError:
-        polish_min = 12000
-    try:
-        polish_ratio = float(ratio_env) if ratio_env else 1.0e3
-    except ValueError:
-        polish_ratio = 1.0e3
-    try:
-        polish_abs = float(abs_env) if abs_env else 1.0e-6
-    except ValueError:
-        polish_abs = 1.0e-6
-    if int(active_size) < max(1, int(polish_min)):
-        return False
-    threshold = max(float(polish_abs), float(target) * max(1.0, float(polish_ratio)))
-    return float(residual_norm) > float(threshold)
+    return _rhs1_fast_post_xblock_polish_allowed_impl(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
 
 
 def _rhsmode1_fp_targeted_polish_allowed(
@@ -1087,38 +1069,15 @@ def _rhsmode1_fp_targeted_polish_allowed(
     rhs1_precond_kind: str,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_TARGETED_POLISH", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if bool(use_implicit):
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None or op.fblock.pas is not None:
-        return False
-    if rhs1_precond_kind != "xmg":
-        return False
-    min_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_TARGETED_POLISH_MIN", "").strip()
-    ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_TARGETED_POLISH_RATIO", "").strip()
-    abs_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_TARGETED_POLISH_ABS", "").strip()
-    try:
-        polish_min = int(min_env) if min_env else 12000
-    except ValueError:
-        polish_min = 12000
-    try:
-        polish_ratio = float(ratio_env) if ratio_env else 10.0
-    except ValueError:
-        polish_ratio = 10.0
-    try:
-        polish_abs = float(abs_env) if abs_env else 1.0e-9
-    except ValueError:
-        polish_abs = 1.0e-9
-    if int(active_size) < max(1, int(polish_min)):
-        return False
-    threshold = max(float(polish_abs), float(target) * max(1.0, float(polish_ratio)))
-    return float(residual_norm) > float(threshold)
+    return _rhs1_fp_targeted_polish_allowed_impl(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        rhs1_precond_kind=rhs1_precond_kind,
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
 
 
 def _rhsmode1_skip_global_sparse_after_xblock_allowed(
@@ -1131,38 +1090,16 @@ def _rhsmode1_skip_global_sparse_after_xblock_allowed(
     used_explicit_fp_xblock_seed: bool,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", "").strip().lower()
-    if env not in {"1", "true", "yes", "on"}:
-        return False
-    if not bool(used_large_cpu_xblock_shortcut) or not bool(used_explicit_fp_xblock_seed):
-        return False
-    if bool(use_implicit):
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None or op.fblock.pas is not None:
-        return False
-    min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK_MIN", "").strip()
-    ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK_RATIO", "").strip()
-    abs_env = os.environ.get("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK_ABS", "").strip()
-    try:
-        skip_min = int(min_env) if min_env else 12000
-    except ValueError:
-        skip_min = 12000
-    try:
-        skip_ratio = float(ratio_env) if ratio_env else 5.0e4
-    except ValueError:
-        skip_ratio = 5.0e4
-    try:
-        skip_abs = float(abs_env) if abs_env else 5.0e-4
-    except ValueError:
-        skip_abs = 5.0e-4
-    if int(active_size) < max(1, int(skip_min)):
-        return False
-    threshold = max(float(skip_abs), float(target) * max(1.0, float(skip_ratio)))
-    return float(residual_norm) <= float(threshold)
+    return _rhs1_skip_global_sparse_after_xblock_allowed_impl(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
 
 
 def _rhsmode1_sparse_sxblock_rescue_allowed(

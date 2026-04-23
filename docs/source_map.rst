@@ -184,6 +184,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/rhs1_large_cpu_policy.py``:
   large explicit full-FP CPU sparse rescue, x-block seed, exact-LU promotion,
   host x-block assembly, and species-x-block rescue policy.
+- ``sfincs_jax/rhs1_post_xblock_policy.py``:
+  post-x-block polish, targeted FP polish, and skip-global-sparse-after-xblock
+  policy for large explicit full-FP CPU systems.
 - ``sfincs_jax/transport_policy.py``:
   pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
 - ``sfincs_jax/transport_preconditioner_dispatch.py``:
