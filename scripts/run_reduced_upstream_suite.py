@@ -637,6 +637,7 @@ def _run_jax_cli(
     collect_iterations: bool = True,
     repeats: int = 1,
     cache_dir: Path | None = None,
+    profile_mode: str = "off",
  ) -> tuple[float, float | None, float | None, float | None]:
     cmd = [
         sys.executable,
@@ -666,8 +667,12 @@ def _run_jax_cli(
         "SFINCS_JAX_KSP_HISTORY_MAX_SIZE",
         env.get("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "800"),
     )
-    env.setdefault("SFINCS_JAX_PROFILE", "1")
-    env.setdefault("SFINCS_JAX_PROFILE_DEVICE_MEM", "0")
+    profile_mode_norm = str(profile_mode).strip().lower() or "off"
+    env.setdefault("SFINCS_JAX_PROFILE", "0" if profile_mode_norm == "off" else profile_mode_norm)
+    env.setdefault(
+        "SFINCS_JAX_PROFILE_DEVICE_MEM",
+        "1" if profile_mode_norm in {"full", "device", "device_mem"} else "0",
+    )
     run_times: list[float] = []
     repeat_count = max(1, int(repeats))
     for idx in range(repeat_count):
@@ -1538,6 +1543,7 @@ def _run_case(
     collect_iterations: bool = True,
     jax_repeats: int = 1,
     jax_cache_dir: Path | None = None,
+    jax_profile_mode: str = "off",
 ) -> CaseResult:
     case = str(case_name)
     runtime_basis = str(target_runtime_basis).strip().lower() or "max"
@@ -1789,6 +1795,7 @@ def _run_case(
                 collect_iterations=collect_iterations,
                 repeats=jax_repeats,
                 cache_dir=jax_cache_dir,
+                profile_mode=jax_profile_mode,
             )
             jax_runtime = jax_runtime_warm if jax_runtime_warm is not None else jax_runtime_cold
             jax_h5_path = jax_h5
@@ -2174,6 +2181,16 @@ def main() -> int:
         action="store_true",
         help="Disable solver-iteration stats collection in sfincs_jax logs.",
     )
+    parser.add_argument(
+        "--jax-profile-marks",
+        choices=("off", "on", "full"),
+        default="off",
+        help=(
+            "sfincs_jax profiling mode for subprocess runs. "
+            "Use 'off' for runtime audits, 'on' for timing/RSS marks, and 'full' "
+            "only for targeted device-memory diagnosis."
+        ),
+    )
     args = parser.parse_args()
 
     examples_root = Path(args.examples_root)
@@ -2263,6 +2280,7 @@ def main() -> int:
                 collect_iterations=not bool(args.no_collect_iterations),
                 jax_repeats=int(args.jax_repeats),
                 jax_cache_dir=(REPO_ROOT / args.jax_cache_dir),
+                jax_profile_mode=str(args.jax_profile_marks),
             )
             _handle_result(result)
     else:
@@ -2298,6 +2316,7 @@ def main() -> int:
                         collect_iterations=not bool(args.no_collect_iterations),
                         jax_repeats=int(args.jax_repeats),
                         jax_cache_dir=(REPO_ROOT / args.jax_cache_dir),
+                        jax_profile_mode=str(args.jax_profile_marks),
                     )
                 )
             for fut in concurrent.futures.as_completed(futures):

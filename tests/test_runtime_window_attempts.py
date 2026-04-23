@@ -46,6 +46,7 @@ def test_runtime_window_max_attempts_returns_last_success(tmp_path: Path, monkey
         collect_iterations: bool = True,
         repeats: int = 1,
         cache_dir: Path | None = None,
+        profile_mode: str = "off",
     ):
         output_path.write_text("jax-h5", encoding="utf-8")
         log_path.write_text("elapsed_s=0.5\n", encoding="utf-8")
@@ -76,6 +77,7 @@ def test_runtime_window_max_attempts_returns_last_success(tmp_path: Path, monkey
         collect_iterations=False,
         jax_repeats=1,
         jax_cache_dir=None,
+        jax_profile_mode="off",
     )
 
     assert result.status == "parity_ok"
@@ -120,6 +122,7 @@ def test_frozen_reference_reuse_aligns_to_staged_input_without_live_fortran(
         collect_iterations: bool = True,
         repeats: int = 1,
         cache_dir: Path | None = None,
+        profile_mode: str = "off",
     ):
         assert input_path.read_text(encoding="utf-8") == staged_input
         output_path.write_text("jax-h5", encoding="utf-8")
@@ -151,6 +154,7 @@ def test_frozen_reference_reuse_aligns_to_staged_input_without_live_fortran(
         collect_iterations=False,
         jax_repeats=1,
         jax_cache_dir=None,
+        jax_profile_mode="off",
     )
 
     assert result.status == "parity_ok"
@@ -197,6 +201,7 @@ def test_frozen_reference_reuse_survives_jax_retry_without_live_fortran(
         collect_iterations: bool = True,
         repeats: int = 1,
         cache_dir: Path | None = None,
+        profile_mode: str = "off",
     ):
         attempts["n"] += 1
         assert input_path.read_text(encoding="utf-8") == staged_input
@@ -231,9 +236,45 @@ def test_frozen_reference_reuse_survives_jax_retry_without_live_fortran(
         collect_iterations=False,
         jax_repeats=1,
         jax_cache_dir=None,
+        jax_profile_mode="off",
     )
 
     assert attempts["n"] == 2
     assert result.status == "parity_ok"
     assert result.final_resolution == {"NTHETA": 8, "NZETA": 9, "NX": 2, "NXI": 23}
     assert (case_out_dir / "input.namelist").read_text(encoding="utf-8") == staged_input
+
+
+def test_run_jax_cli_defaults_to_profile_off(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&general\n/\n", encoding="utf-8")
+    output_path = tmp_path / "sfincsOutput.h5"
+    log_path = tmp_path / "sfincs_jax.log"
+    seen_env: dict[str, str] = {}
+
+    def fake_run(cmd, cwd, check, timeout, stdout, stderr, env):
+        seen_env.update(env)
+        output_path.write_text("jax-h5", encoding="utf-8")
+        stdout.write("elapsed_s=0.5\n")
+        return 0
+
+    monkeypatch.setattr(suite.subprocess, "run", fake_run)
+
+    cold, warm, rss_mb, logged = suite._run_jax_cli(
+        input_path=input_path,
+        output_path=output_path,
+        timeout_s=1.0,
+        log_path=log_path,
+        compute_solution=False,
+        compute_transport_matrix=False,
+        collect_iterations=False,
+        repeats=1,
+        cache_dir=tmp_path / ".jax_cache",
+    )
+
+    assert cold == pytest.approx(0.5, abs=0.5)
+    assert warm is None
+    assert rss_mb is None
+    assert logged == pytest.approx(0.5)
+    assert seen_env["SFINCS_JAX_PROFILE"] == "0"
+    assert seen_env["SFINCS_JAX_PROFILE_DEVICE_MEM"] == "0"

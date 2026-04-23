@@ -376,6 +376,7 @@ def test_run_prepared_case_passes_reference_input(tmp_path: Path, monkeypatch: p
         collect_iterations=True,
         jax_repeats=1,
         jax_cache_dir=tmp_path / ".jax_cache",
+        jax_profile_mode="off",
         equilibria_search_dir=case_input.parent,
         reference_results_root=None,
     )
@@ -387,6 +388,7 @@ def test_run_prepared_case_passes_reference_input(tmp_path: Path, monkeypatch: p
     assert seen["target_runtime_max_s"] == 30.0
     assert seen["target_runtime_max_iters"] == 2
     assert seen["target_runtime_basis"] == "fortran"
+    assert seen["jax_profile_mode"] == "off"
 
 
 def test_runtime_metric_for_basis_uses_fortran_only_when_requested() -> None:
