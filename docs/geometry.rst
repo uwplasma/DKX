@@ -104,16 +104,18 @@ This is the intended staged path for JAX-native equilibrium coupling:
 1. solve or update an equilibrium with an optional producer such as ``vmec_jax``,
 2. convert the in-memory ``wout``-like object with
    ``vmec_wout_from_wout_like(...)``,
-3. evaluate the same scheme-5 geometry formulas used by file-based VMEC inputs,
+3. evaluate the same scheme-5 geometry formulas with
+   ``vmec_geometry_from_wout(...)`` that file-based VMEC inputs use through
+   ``vmec_geometry_from_wout_file(...)``,
 4. pass the resulting arrays to the kinetic operator and, when the upstream geometry
    producer supports it, differentiate through the outer objective.
 
 The first adapter stage is covered by unit tests that check backend discovery,
 ``(radius, mode)`` to ``(mode, radius)`` transposition, native ``sfincs_jax`` array
-ordering, and invalid-shape rejection. The remaining research-grade work is to expose
-an end-to-end public ``vmec_jax -> sfincs_jax`` example once the driver split is far
-enough along that the differentiable geometry path can be validated without hidden
-file I/O.
+ordering, invalid-shape rejection, and exact equality between the file wrapper and a
+preloaded ``VmecWout`` object. The remaining research-grade work is to expose an
+end-to-end public ``vmec_jax -> sfincs_jax`` example once the differentiable geometry
+producer can be validated against a frozen file-based VMEC fixture.
 
 Boozer ``.bc`` workflow
 -----------------------
