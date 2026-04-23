@@ -125,3 +125,52 @@ def test_write_transport_scan_summary_json_sorts_and_serializes(tmp_path: Path) 
     assert [row["label"] for row in rows] == ["Fokker-Planck", "PAS", "PAS"]
     assert [row["nuprime"] for row in rows] == [1.5, 1.0, 2.0]
     assert rows[0]["transport_matrix"] == [[1.0, 0.5], [0.25, 2.0]]
+
+
+def test_write_transport_scan_summary_json_can_include_metadata_payload(tmp_path: Path) -> None:
+    mod = _load_module()
+    summary_path = tmp_path / "summary_with_metadata.json"
+    datasets = {
+        "Fokker-Planck": (
+            np.asarray([1.5]),
+            np.asarray([[[1.0, 0.5], [0.25, 2.0]]], dtype=float),
+        ),
+    }
+    metadata = {
+        "case": "lhd",
+        "fast": True,
+        "labels_to_collision_operator": {"Fokker-Planck": 0},
+        "schema_version": 1,
+    }
+    mod.write_transport_scan_summary_json(summary_path, datasets, metadata=metadata)
+    payload = json.loads(summary_path.read_text())
+    assert payload["metadata"] == metadata
+    rows = payload["rows"]
+    assert [row["label"] for row in rows] == ["Fokker-Planck"]
+    assert [row["nuprime"] for row in rows] == [1.5]
+
+
+def test_summary_metadata_records_case_resolution_and_paths(tmp_path: Path) -> None:
+    mod = _load_module()
+    work_dir = tmp_path / "work"
+    summary_path = tmp_path / "summary.json"
+    work_dir.mkdir()
+    metadata = mod._summary_metadata(
+        case="w7x",
+        fast=False,
+        n_points=7,
+        nuprime_min=0.1,
+        nuprime_max=10.0,
+        work_dir=work_dir,
+        summary_path=summary_path,
+        base_input=mod.EXAMPLES / "transportMatrix_geometryScheme11" / "input.namelist",
+        labels_to_collision_operator={"Fokker-Planck": 0, "PAS": 1},
+    )
+    assert metadata["case"] == "w7x"
+    assert metadata["fast"] is False
+    assert metadata["n_points"] == 7
+    assert metadata["nuprime_min"] == 0.1
+    assert metadata["nuprime_max"] == 10.0
+    assert metadata["base_input"] == "examples/sfincs_examples/transportMatrix_geometryScheme11/input.namelist"
+    assert metadata["source_script"] == "examples/publication_figures/generate_sfincs_paper_figs.py"
+    assert metadata["labels_to_collision_operator"] == {"Fokker-Planck": 0, "PAS": 1}
