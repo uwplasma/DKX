@@ -260,6 +260,14 @@ PETSc-compatible sparse mode, and dense-fallback opt-in preserve the same RHSMod
 ``Phi1``, full-FP, solve-method, preconditioner, and size guards as the driver
 wrappers in ``tests/test_rhs1_sparse_first_heuristic.py``.
 
+The sparse exact-LU and sparse-over-dense preference decisions now live in
+``sfincs_jax/rhs1_sparse_exact_policy.py``. ``tests/test_rhs1_sparse_exact_policy.py``
+checks full-x CPU exact-LU routing, accelerator DKES and small-FP exact-LU
+routing, PAS-only full-preconditioner opt-in, explicit enable/disable behavior,
+size caps, dense-method rejection, moderate-FP sparse preference, and the
+stage-2 skip guard. Existing driver-wrapper tests keep the `v3_driver` seam
+stable for downstream users.
+
 The VMEC convention layer has its own bounded gate in
 ``tests/test_vmec_wout_conventions.py``. It checks the scheme-5 conventions that are
 easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh

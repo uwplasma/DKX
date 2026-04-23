@@ -90,6 +90,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_sparse_polish_policy
    :members:
 
+.. automodule:: sfincs_jax.rhs1_sparse_exact_policy
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_sparse_rescue_policy
    :members:
 
