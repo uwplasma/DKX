@@ -56,15 +56,15 @@ External solver-library gates
 
 Additional JAX-ecosystem solver libraries are evaluated behind measured gates, not adopted on sight.
 
-- ``lineax`` is the strongest current candidate for small differentiable solves, but it is not part of the default CLI path.
-- On a small real SFINCS linear operator, a bounded local benchmark reached the same residual as the current in-tree GMRES path and was faster (`~0.54 s` versus `~3.29 s`).
-- On a generic nonsymmetric test matrix, the same ``lineax.GMRES`` setup stagnated while the current solver remained the more reliable baseline.
+- ``lineax`` remains the strongest current candidate for bounded differentiable linear-solve experiments, but it is not part of the default CLI path.
+- On a deterministic nonsymmetric stress matrix, the current local benchmark showed ``lineax.GMRES`` faster than the in-tree path while staying residual-clean (about ``0.39 s`` versus ``0.99 s``).
+- On the tiny real SFINCS implicit-diff operator and its repeated-RHS reuse lane, the same local benchmark reached tiny residuals with ``lineax`` (about ``3.2e-16`` and ``7.5e-16``) but still returned failure statuses (maximum-step reached or iterative breakdown), while the in-tree solver stayed admissible and residual-clean (about ``1.4e-14`` and ``4.3e-12``).
 
 So the current policy is:
 
 - do not add ``lineax`` to the production CLI solve ladder yet,
 - keep it as a candidate for explicitly bounded differentiable/reference-path experiments,
-- require a pinned real-case runtime/RSS/parity win before any production integration.
+- require a pinned real-case runtime/RSS/parity win with clean solver status before any production integration.
 
 The executable gate for this decision is:
 
@@ -88,6 +88,25 @@ after all three gates below stay healthy:
 For the current in-tree solver, the tiny real gate is already residual-clean with the
 benchmark's parity-safe Krylov window. The remaining question is whether a Lineax-backed
 path can match that reliability and then provide a real runtime or memory win.
+
+A second optional ecosystem gate checks objective-wrapper libraries on a real
+``geometryScheme=4`` differentiable task:
+
+.. code-block:: bash
+
+   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py \
+     --backend all \
+     --n-theta 17 \
+     --n-zeta 17 \
+     --maxiter 5 \
+     --stepsize 0.1
+
+This gate keeps ``equinox`` and ``jaxopt`` outside the production solver path while
+verifying that they can wrap a real repository objective cleanly. In the current local
+run, the ``equinox`` wrapper matched a centered finite-difference directional derivative
+to about ``1.1e-11`` absolute error, and the bounded ``jaxopt.GradientDescent`` lane
+reduced the loss by about ``4.1e-14`` relative to the initial value while recovering
+the target harmonic amplitudes to about ``1.6e-08`` in Euclidean norm.
 
 
 What is differentiable today?
