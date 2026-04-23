@@ -3989,3 +3989,19 @@ Validation:
 - `pytest -q tests/test_policy_module_docstrings.py tests/test_rhs1_handoff.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_sparse_polish_policy.py tests/test_rhs1_sparse_rescue_policy.py tests/test_rhs1_stage2_policy.py tests/test_rhs1_strong_auto_kind.py tests/test_rhs1_strong_control.py tests/test_rhs1_strong_policy.py tests/test_transport_handoff_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_transport_solve_policy.py`
   passed with `63 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.51 API documentation for split geometry and policy modules
+
+Expanded `docs/api.rst` so the newly split modules are visible in generated API
+documentation:
+
+- Added `sfincs_jax.vmec_wout`, `sfincs_jax.vmec_geometry`, and
+  `sfincs_jax.jax_geometry_adapters`.
+- Added a dedicated "Refactored solve-policy modules" section for the RHSMode=1
+  and transport policy/dispatch helpers extracted from `v3_driver.py`.
+- This makes source-level docstrings useful to users and reviewers, and it closes
+  the documentation gap created by the driver split.
+
+Validation:
+
+- `sphinx-build -W -b html docs docs/_build/html` passed.
