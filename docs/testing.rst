@@ -203,6 +203,16 @@ tree moved to ``596 tests collected`` and ``596 passed``, package coverage staye
 at about ``55%``, and ``v3_driver.py`` itself moved from about ``37%`` to about
 ``38%``.
 
+The current refactor branch extends that strategy in two directions. First, it splits
+RHSMode=1 preconditioner policy into directly tested helper modules, covering alias
+canonicalization, PAS weak-default promotion, PAS-family refinement, FP/DKES routing,
+GPU sparse fallback skipping, and sharded-line override safety without constructing
+large operators. Second, it adds an explicit PAS physics gate: the pitch-angle
+scattering collision operator must annihilate the isotropic ``L=0`` Legendre mode,
+mask inactive Legendre slots, and scale active higher modes as ``L(L+1)/2`` when the
+Krook term is zero. That gate is cheap enough for CI, but it is a real physics
+invariant rather than coverage padding.
+
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
 treated as a real regression.
