@@ -29,7 +29,7 @@ def _emit(msg: str, *, level: int, args: argparse.Namespace) -> None:
     if quiet:
         return
     if verbose >= level:
-        print(msg)
+        print(msg, flush=True)
 
 
 def _emit_namelist_summary(*, nml, args: argparse.Namespace) -> None:

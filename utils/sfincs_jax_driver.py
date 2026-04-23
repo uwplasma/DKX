@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -48,7 +49,16 @@ def run_sfincs_jax(
     if ensure_equilibrium:
         localize_equilibrium_file_in_place(input_namelist=input_namelist, overwrite=False)
 
-    return write_sfincs_jax_output_h5(
+    if verbose:
+        print(
+            "sfincs_jax_driver: start "
+            f"input={input_namelist.name} output={Path(output_path).name} "
+            f"rhs_mode={rhs_mode} compute_solution={bool(compute_solution)} "
+            f"compute_transport_matrix={bool(compute_transport_matrix)}",
+            flush=True,
+        )
+    t0 = time.perf_counter()
+    out = write_sfincs_jax_output_h5(
         input_namelist=input_namelist,
         output_path=output_path,
         compute_transport_matrix=bool(compute_transport_matrix),
@@ -56,6 +66,12 @@ def run_sfincs_jax(
         overwrite=overwrite,
         verbose=verbose,
     )
+    if verbose:
+        print(
+            f"sfincs_jax_driver: done output={Path(out).name} elapsed_s={time.perf_counter() - t0:.3f}",
+            flush=True,
+        )
+    return out
 
 
 def _parse_args() -> argparse.Namespace:
