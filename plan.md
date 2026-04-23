@@ -4322,3 +4322,49 @@ Notes:
   continuing to split already-small wrappers by default: driver refactor
   residuals, stronger physics gates, coverage, PAS offender benchmarks, and
   documentation completeness remain the main open research-grade tracks.
+
+### 19.65 Collision-kernel validation extension: Coulomb scaling and Rosenbluth paths
+
+Extended the bounded collision physics/numerics gate without adding a long case:
+
+- Added direct tests that the single-species pitch-angle-scattering deflection
+  frequency is finite, positive, linear in density, and scales as `Z^4` when
+  both test and field charges are doubled.
+- Added a weighted barycentric interpolation exactness check for cubic
+  polynomial content on nonmatching source/target nodes, complementing the
+  existing identity-on-matching-nodes test.
+- Added a tiny three-point Rosenbluth-potential assembly check that compares the
+  analytic path against the quadrature (`quadpack`) reference for `NL=2`.
+- Updated `docs/testing.rst` to record these gates as physics/numerics
+  validation rather than coverage padding.
+
+Validation:
+
+- `python -m py_compile tests/test_collision_physics_gates.py`
+- `python -m ruff check tests/test_collision_physics_gates.py`
+- `pytest -q tests/test_collision_physics_gates.py tests/test_fokker_planck_phi1_reduces_to_no_phi1.py tests/test_pas_collision_operator_parity.py tests/test_fblock_fokker_planck_matvec_parity.py`
+- `sphinx-build -W -b html docs docs/_build/html`
+  passed; the focused pytest subset passed with `10 passed in 3.72s`.
+
+Next validation targets:
+
+- Use the current coverage report to choose the next cheap, real invariant from
+  `vmec_wout.py`, `io.py`, or remaining collision Fokker-Planck branches rather
+  than adding synthetic tests.
+
+### 19.66 Full-suite gate after collision-kernel validation extension
+
+Ran the full local suite after adding the Coulomb-scaling, weighted polynomial
+interpolation, and Rosenbluth analytic-vs-quadrature gates.
+
+Validation:
+
+- `pytest -q` passed with `830 passed in 353.45s (0:05:53)`.
+
+Notes:
+
+- The test count increased from `827` to `830`, matching the three new
+  collision-kernel gates.
+- This confirms the added quadrature/analytic Rosenbluth check remains cheap
+  enough for the normal suite and does not destabilize the broader driver,
+  geometry, CLI, or bounded parity tests.
