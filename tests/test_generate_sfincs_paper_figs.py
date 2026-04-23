@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
+
+import numpy as np
 
 
 def _load_module():
@@ -96,3 +99,29 @@ def test_write_scan_input_preserves_full_resolution_when_fast_disabled(tmp_path:
     assert "Nxi = 16" in text
     assert "Nx = 8" in text
     assert "solverTolerance = 1d-6" in text
+
+
+def test_write_transport_scan_summary_json_sorts_and_serializes(tmp_path: Path) -> None:
+    mod = _load_module()
+    summary_path = tmp_path / "summary.json"
+    datasets = {
+        "PAS": (
+            np.asarray([2.0, 1.0]),
+            np.asarray(
+                [
+                    [[2.0, 0.0], [0.0, 3.0]],
+                    [[4.0, 0.0], [0.0, 5.0]],
+                ],
+                dtype=float,
+            ),
+        ),
+        "Fokker-Planck": (
+            np.asarray([1.5]),
+            np.asarray([[[1.0, 0.5], [0.25, 2.0]]], dtype=float),
+        ),
+    }
+    mod.write_transport_scan_summary_json(summary_path, datasets)
+    rows = json.loads(summary_path.read_text())
+    assert [row["label"] for row in rows] == ["Fokker-Planck", "PAS", "PAS"]
+    assert [row["nuprime"] for row in rows] == [1.5, 1.0, 2.0]
+    assert rows[0]["transport_matrix"] == [[1.0, 0.5], [0.25, 2.0]]
