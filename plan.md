@@ -4256,3 +4256,23 @@ Validation:
 - `pytest -q tests/test_rhs1_acceptance_policy.py tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_large_cpu_policy.py tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
   passed with `189 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.62 Full-suite gate after post-xblock and acceptance policy extractions
+
+Ran the full local suite after the latest two driver-policy extractions:
+
+- `sfincs_jax/rhs1_post_xblock_policy.py`
+- `sfincs_jax/rhs1_acceptance_policy.py`
+
+Validation:
+
+- `pytest -q` passed with `821 passed in 343.95s (0:05:43)`.
+
+Notes:
+
+- This confirms the latest `v3_driver.py` wrapper reductions did not regress the
+  local unit, regression, CLI, geometry, solver, or bounded parity tests.
+- The next practical lane is to review the remaining unextracted RHSMode=1
+  helpers and either extract the next small pure-policy cluster or switch to the
+  open validation/documentation lanes if the remaining code is less clearly
+  separable.
