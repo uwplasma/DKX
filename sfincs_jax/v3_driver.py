@@ -110,6 +110,11 @@ from .transport_preconditioner_dispatch import (
     transport_dd_config_from_env,
     transport_sparse_jax_config_from_env,
 )
+from .transport_solve_policy import (
+    build_transport_active_dof_state,
+    resolve_transport_active_dof_mode,
+    resolve_transport_dense_policy,
+)
 from .transport_parallel_policy import (
     transport_parallel_backend as _transport_parallel_backend_impl,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
@@ -19662,131 +19667,98 @@ def solve_v3_transport_matrix_linear_gmres(
         )
 
     active_dof_env = os.environ.get("SFINCS_JAX_TRANSPORT_ACTIVE_DOF", "").strip().lower()
-    active_dof_reason: str | None = None
-    if active_dof_env in {"0", "false", "no", "off"}:
-        use_active_dof_mode = False
-    elif active_dof_env in {"1", "true", "yes", "on"}:
-        use_active_dof_mode = True
-        active_dof_reason = "env"
-    else:
-        if int(rhs_mode) in {2, 3}:
-            nxi_for_x = np.asarray(op0.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-            use_active_dof_mode = bool(np.any(nxi_for_x < int(op0.n_xi)))
-            if use_active_dof_mode:
-                active_dof_reason = "auto"
-        else:
-            use_active_dof_mode = False
-    # For reduced active-DOF parity mode, prefer Krylov iterations over dense direct
-    # solves to stay closer to upstream PETSc/KSP behavior for singular transport systems.
-    if use_active_dof_mode and str(solve_method_use).lower() == "dense":
-        solve_method_use = str(solve_method)
-    elif int(rhs_mode) in {2, 3} and emit is not None and active_dof_env not in {"0", "false", "no", "off"}:
+    active_dof_decision = resolve_transport_active_dof_mode(
+        op=op0,
+        rhs_mode=int(rhs_mode),
+        solve_method_use=str(solve_method_use),
+        solve_method=str(solve_method),
+        active_dof_env=active_dof_env,
+    )
+    use_active_dof_mode = bool(active_dof_decision.use_active_dof_mode)
+    solve_method_use = str(active_dof_decision.solve_method_use)
+    if active_dof_decision.emit_disabled_hint and emit is not None:
         emit(
             1,
             "solve_v3_transport_matrix_linear_gmres: active-DOF mode disabled "
             "(set SFINCS_JAX_TRANSPORT_ACTIVE_DOF=1 to enable; "
             "SFINCS_JAX_TRANSPORT_ACTIVE_DOF=0 to force full-size solve)",
         )
-    active_idx_np: np.ndarray | None = None
-    active_idx_jnp: jnp.ndarray | None = None
-    full_to_active_jnp: jnp.ndarray | None = None
-    active_size = int(op0.total_size)
+    active_dof_state = build_transport_active_dof_state(
+        op=op0,
+        use_active_dof_mode=bool(use_active_dof_mode),
+        active_dof_indices=_transport_active_dof_indices,
+    )
+    active_idx_np = active_dof_state.active_idx_np
+    active_idx_jnp = active_dof_state.active_idx_jnp
+    full_to_active_jnp = active_dof_state.full_to_active_jnp
+    active_size = int(active_dof_state.active_size)
     if use_active_dof_mode:
-        active_idx_np = _transport_active_dof_indices(op0)
-        active_idx_jnp = jnp.asarray(active_idx_np, dtype=jnp.int32)
-        full_to_active_np = np.zeros((int(op0.total_size),), dtype=np.int32)
-        full_to_active_np[np.asarray(active_idx_np, dtype=np.int32)] = np.arange(1, int(active_idx_np.shape[0]) + 1, dtype=np.int32)
-        full_to_active_jnp = jnp.asarray(full_to_active_np, dtype=jnp.int32)
-        active_size = int(active_idx_np.shape[0])
         if emit is not None:
-            reason = f" ({active_dof_reason})" if active_dof_reason else ""
+            reason = f" ({active_dof_decision.reason})" if active_dof_decision.reason else ""
             emit(
                 1,
                 "solve_v3_transport_matrix_linear_gmres: active-DOF mode enabled "
                 f"(size={active_size}/{int(op0.total_size)}){reason}",
             )
 
-    dense_mem_est_active_mb64 = (int(active_size) ** 2) * 8.0 / 1.0e6
-    dense_mem_est_active_mb32 = (int(active_size) ** 2) * 4.0 / 1.0e6
-    dense_mem_block_active32 = bool(dense_mem_max_mb > 0.0 and dense_mem_est_active_mb32 > dense_mem_max_mb)
-    dense_mem_block_active64 = bool(dense_mem_max_mb > 0.0 and dense_mem_est_active_mb64 > dense_mem_max_mb)
-    if dense_mem_block_active32 and not dense_mem_block:
+    dense_policy = resolve_transport_dense_policy(
+        rhs_mode=int(rhs_mode),
+        n_rhs=int(n),
+        total_size=int(op0.total_size),
+        active_size=int(active_size),
+        solve_method_use=str(solve_method_use),
+        force_krylov=bool(force_krylov),
+        force_dense=bool(force_dense),
+        dense_fallback=bool(dense_fallback),
+        dense_retry_max=int(dense_retry_max),
+        dense_mem_max_mb=float(dense_mem_max_mb),
+        dense_mem_block=bool(dense_mem_block),
+        dense_use_mixed=bool(dense_use_mixed),
+        low_memory_outputs=bool(low_memory_outputs),
+        dense_backend_allowed=bool(dense_backend_allowed),
+        dense_precond_default=bool(not dense_mem_block),
+    )
+    if dense_policy.dense_mem_block and not dense_mem_block:
         dense_mem_block = True
-        dense_use_mixed = False
-        dense_fallback = False
-        dense_retry_max = 0
-        force_dense = False
+        dense_use_mixed = bool(dense_policy.dense_use_mixed)
+        dense_fallback = bool(dense_policy.dense_fallback)
+        dense_retry_max = int(dense_policy.dense_retry_max)
+        force_dense = bool(dense_policy.force_dense)
         if emit is not None:
             emit(
                 1,
                 "solve_v3_transport_matrix_linear_gmres: dense fallback disabled "
-                f"(active_est_mem32={dense_mem_est_active_mb32:.1f} MB > {dense_mem_max_mb:.1f} MB)",
+                f"(active_est_mem32={dense_policy.dense_mem_est_active_mb32:.1f} MB > {dense_mem_max_mb:.1f} MB)",
             )
-        if str(solve_method_use).lower() == "dense":
-            solve_method_use = "incremental"
-    elif dense_mem_block_active64 and not dense_mem_block and not dense_use_mixed:
-        dense_use_mixed = True
+    elif dense_policy.dense_use_mixed and not dense_use_mixed:
+        dense_use_mixed = bool(dense_policy.dense_use_mixed)
         if emit is not None:
             emit(
                 1,
                 "solve_v3_transport_matrix_linear_gmres: dense fallback using float32 "
-                f"(active_est_mem64={dense_mem_est_active_mb64:.1f} MB > {dense_mem_max_mb:.1f} MB)",
+                f"(active_est_mem64={dense_policy.dense_mem_est_active_mb64:.1f} MB > {dense_mem_max_mb:.1f} MB)",
             )
-    if dense_mem_block:
-        dense_precond_enabled = False
-
-    if (
-        int(rhs_mode) == 2
-        and (not force_krylov)
-        and (not force_dense)
-        and str(solve_method_use).lower() in {"auto", "default", "batched", "incremental"}
-    ):
-        auto_dense_size = int(active_size) if use_active_dof_mode else int(op0.total_size)
-        auto_dense_limit = 1500
-        if int(n) > 1 and dense_retry_max > 0:
-            auto_dense_limit = max(auto_dense_limit, min(3000, int(dense_retry_max)))
-        if auto_dense_size <= auto_dense_limit and (not dense_mem_block):
-            solve_method_use = "dense"
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_transport_matrix_linear_gmres: auto dense solve for RHSMode=2 "
-                    f"(n={auto_dense_size})",
-                )
-
-    dense_precond_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_PRECOND_MAX", "").strip()
-    try:
-        if dense_precond_env:
-            dense_precond_max = int(dense_precond_env)
-        else:
-            dense_precond_max = 1600 if int(rhs_mode) == 2 else 600
-    except ValueError:
-        dense_precond_max = 1600 if int(rhs_mode) == 2 else 600
-    dense_precond_mem_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_PRECOND_MAX_MB", "").strip()
-    try:
-        dense_precond_mem_max_mb = float(dense_precond_mem_env) if dense_precond_mem_env else min(32.0, dense_mem_max_mb or 32.0)
-    except ValueError:
-        dense_precond_mem_max_mb = min(32.0, dense_mem_max_mb or 32.0)
-    dense_precond_size = int(active_size) if use_active_dof_mode else int(op0.total_size)
-    dense_precond_bytes = 4.0 if dense_use_mixed else 8.0
-    dense_precond_est_mb = (dense_precond_size**2) * dense_precond_bytes / 1.0e6
-    dense_precond_mem_block = bool(dense_precond_mem_max_mb > 0.0 and dense_precond_est_mb > dense_precond_mem_max_mb)
-    if dense_precond_mem_block and emit is not None:
+    auto_dense_size = int(active_size) if use_active_dof_mode else int(op0.total_size)
+    if str(dense_policy.solve_method_use).lower() == "dense" and str(solve_method_use).lower() != "dense":
+        if emit is not None and int(rhs_mode) == 2 and (not dense_policy.force_dense):
+            emit(
+                0,
+                "solve_v3_transport_matrix_linear_gmres: auto dense solve for RHSMode=2 "
+                f"(n={auto_dense_size})",
+            )
+    dense_mem_block = bool(dense_policy.dense_mem_block)
+    dense_use_mixed = bool(dense_policy.dense_use_mixed)
+    dense_fallback = bool(dense_policy.dense_fallback)
+    dense_retry_max = int(dense_policy.dense_retry_max)
+    force_dense = bool(dense_policy.force_dense)
+    solve_method_use = str(dense_policy.solve_method_use)
+    if dense_policy.dense_precond_mem_block and emit is not None:
         emit(
             1,
             "solve_v3_transport_matrix_linear_gmres: dense preconditioner disabled "
-            f"(est_mem={dense_precond_est_mb:.1f} MB > {dense_precond_mem_max_mb:.1f} MB)",
+            f"(est_mem={dense_policy.dense_precond_est_mb:.1f} MB > {dense_policy.dense_precond_mem_max_mb:.1f} MB)",
         )
-    dense_precond_enabled = (
-        dense_precond_max > 0
-        and int(rhs_mode) in {2, 3}
-        and int(dense_precond_size) <= dense_precond_max
-        and str(solve_method_use).lower() != "dense"
-        and (not low_memory_outputs)
-        and (not dense_mem_block)
-        and (not dense_precond_mem_block)
-        and dense_backend_allowed
-    )
+    dense_precond_enabled = bool(dense_policy.dense_precond_enabled)
     dense_precond_cache_full: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]] = {}
     dense_precond_cache_reduced: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]] = {}
     dense_solver_cache_full: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]] = {}
