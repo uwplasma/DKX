@@ -226,6 +226,13 @@ against the file reader, and verifies that ``vmec_geometry_from_wout(...)`` retu
 the same scheme-5 geometry arrays. In normal CI environments where the optional
 backend is not installed, the test skips rather than adding a hard dependency.
 
+The differentiability gate starts with a cheaper analytic geometry check before
+attempting heavier end-to-end optimization examples.  ``tests/test_geometry_autodiff_gates.py``
+uses the scheme-4 harmonic-amplitude hook to form a scalar from
+``mean(BHat**2)`` and ``mean(DHat)`` and compares ``jax.grad`` against central finite
+differences.  This keeps CI fast while protecting the JAX-native geometry path from
+silent regressions in array layout, dtype handling, or non-differentiable branches.
+
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
 treated as a real regression.
