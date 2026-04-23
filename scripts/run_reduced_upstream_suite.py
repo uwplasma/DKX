@@ -18,7 +18,6 @@ from typing import Sequence
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-_DEFAULT_JAX_CACHE_DIR = REPO_ROOT / "tests" / "reduced_upstream_examples" / ".jax_compilation_cache"
 
 
 def _repo_rel(path: Path | None) -> str | None:
@@ -34,7 +33,7 @@ def _ensure_jax_compilation_cache() -> None:
     if disable_env in {"1", "true", "yes", "on"}:
         return
     if not os.environ.get("JAX_COMPILATION_CACHE_DIR", "").strip():
-        os.environ["JAX_COMPILATION_CACHE_DIR"] = str(_DEFAULT_JAX_CACHE_DIR)
+        return
     os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")
     os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "0")
 
@@ -2150,8 +2149,8 @@ def main() -> int:
     parser.add_argument(
         "--jax-cache-dir",
         type=Path,
-        default=Path("tests") / "reduced_upstream_examples" / ".jax_compilation_cache",
-        help="Persistent JAX compilation cache directory for sfincs_jax subprocess runs.",
+        default=None,
+        help="Optional persistent JAX compilation cache directory for sfincs_jax subprocess runs.",
     )
     parser.add_argument(
         "--jax-repeats",
@@ -2280,7 +2279,7 @@ def main() -> int:
                 reuse_fortran=bool(args.reuse_fortran),
                 collect_iterations=not bool(args.no_collect_iterations),
                 jax_repeats=int(args.jax_repeats),
-                jax_cache_dir=(REPO_ROOT / args.jax_cache_dir),
+                jax_cache_dir=(REPO_ROOT / args.jax_cache_dir) if args.jax_cache_dir is not None else None,
                 jax_profile_mode=str(args.jax_profile_marks),
             )
             _handle_result(result)
@@ -2316,7 +2315,7 @@ def main() -> int:
                         reuse_fortran=bool(args.reuse_fortran),
                         collect_iterations=not bool(args.no_collect_iterations),
                         jax_repeats=int(args.jax_repeats),
-                        jax_cache_dir=(REPO_ROOT / args.jax_cache_dir),
+                        jax_cache_dir=(REPO_ROOT / args.jax_cache_dir) if args.jax_cache_dir is not None else None,
                         jax_profile_mode=str(args.jax_profile_marks),
                     )
                 )
