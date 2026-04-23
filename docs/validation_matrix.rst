@@ -57,26 +57,36 @@ Current artifacts:
 - ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png``
 - ``docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png``
 
-These figures are intentionally low-resolution reproductions and should be read as
-regression targets and validation scaffolds, not as the final polished figures for the
-next paper.
+The standard LHD and W7-X collisionality figures have now been regenerated from the
+corrected scan-input writer and promoted as audited full-resolution validation
+artifacts. They are still regression and manuscript-scaffold figures, not a claim that
+every plotted point should reproduce the original paper image digit-for-digit.
 
 Current status note:
 
-- the checked-in collisionality figures are now treated as historical branch artifacts,
-  not fully audited paper figures
 - the scan writer in ``generate_sfincs_paper_figs.py`` was fixed on this branch after
   finding that duplicate namelist assignments could override the intended
   ``collisionOperator`` and fast-resolution settings
 - the generator now emits machine-readable collisionality summaries with top-level
-  metadata and sorted rows so future full-resolution reruns have pinned provenance
+  metadata and sorted rows so full-resolution reruns have pinned provenance
   instead of relying only on figure files
-- a corrected bounded LHD fast rerun now cleanly separates FP and PAS transport
-  matrices again, so the collisionality lane is scientifically alive, but the checked-in
-  figures need to be regenerated from the fixed script before they should be promoted
-  back to publication-grade status
+- the checked-in full LHD and W7-X summaries each contain 14 rows: both FP and PAS
+  labels on a seven-point collisionality ladder
+- corrected bounded fast reruns are retained as branch-level regression scaffolds, but
+  the main LHD/W7-X figure family now points at the full audited artifacts
 
-Current corrected branch artifact:
+Current audited full artifacts:
+
+- full LHD summary:
+  ``examples/publication_figures/artifacts/lhd_collisionality_summary.json``
+- full LHD figure:
+  ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png``
+- full W7-X summary:
+  ``examples/publication_figures/artifacts/w7x_collisionality_summary.json``
+- full W7-X figure:
+  ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png``
+
+Corrected bounded branch artifacts:
 
 - bounded corrected LHD summary:
   ``examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
@@ -168,25 +178,27 @@ Validation goal:
 - promote the stellarator-like branch scaffold to a full-resolution audited lane only
   after the runtime/cost tradeoff is acceptable for the release/nightly workflow.
 
-2. Collisionality re-audit after writer fix
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2. High-collisionality proxy after collisionality audit
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Literature anchors:
 
 - [Landreman et al. 2014](https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf)
 
-Immediate branch evidence:
+Closed branch evidence:
 
-- corrected bounded LHD fast rerun now resolves strong FP/PAS separation on the same
-  four-point ``\\nu'`` ladder that previously collapsed onto identical stored outputs
+- corrected bounded LHD and W7-X fast reruns resolve FP/PAS separation on the same
+  four-point ``\\nu'`` ladders that previously collapsed onto identical stored outputs
+- audited full LHD and W7-X collisionality summaries now resolve both FP and PAS labels
+  on seven-point ``\\nu'`` ladders
 
 Validation goal:
 
-- regenerate the LHD and W7-X collisionality figures from the fixed writer,
-- emit machine-readable summary artifacts for each scan,
-- restore the full LHD and W7-X figure family from the corrected artifact families,
-- and only then restore the high-collisionality proxy once its parent scans are equally
-  pinned and audited.
+- keep machine-readable summary artifacts for each full scan,
+- use the full LHD/W7-X summaries as the parent gates for later high-collisionality
+  proxy work,
+- and only restore the high-collisionality proxy after its analytic-limit comparison is
+  regenerated from the corrected artifact family.
 
 3. W7-X ambipolar-field validation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

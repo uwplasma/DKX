@@ -110,8 +110,15 @@ The corrected bounded W7-X rerun is currently pinned as:
 - `examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png`
 
-The full collisionality figure family remains an explicit re-audit lane until the
-corrected LHD and W7-X outputs are both regenerated and pinned from the fixed script.
+The full collisionality figure family has also been regenerated and pinned from the
+fixed script:
+- `examples/publication_figures/artifacts/lhd_collisionality_summary.json`
+- `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png`
+- `examples/publication_figures/artifacts/w7x_collisionality_summary.json`
+- `docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png`
+
+The full artifacts are the validation-facing collisionality lane. The fast artifacts
+remain useful as cheap branch-level regression scaffolds.
 
 W7-X ambipolar validation scaffold:
 

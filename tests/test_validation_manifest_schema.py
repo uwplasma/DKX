@@ -65,8 +65,8 @@ def test_validation_manifest_keeps_open_lanes_explicit() -> None:
         for record in _manifest()
         if str(record["status"]) in {"planned", "needs_reaudit"}
     }
-    assert "sfincs2014_fig1_lhd_collisionality" in planned_or_reaudit
-    assert "sfincs2014_fig2_w7x_collisionality" in planned_or_reaudit
+    assert "sfincs2014_fig1_lhd_collisionality" not in planned_or_reaudit
+    assert "sfincs2014_fig2_w7x_collisionality" not in planned_or_reaudit
     assert "sfincs2014_fig3_high_collisionality_limit" in planned_or_reaudit
     assert "w7x_ambipolar_er_validation" in planned_or_reaudit
     assert "monkes_monoenergetic_overlap" in planned_or_reaudit
