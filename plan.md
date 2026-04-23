@@ -3338,3 +3338,43 @@ Immediate next actions:
 - Next implementation step:
   - add the structured-solve benchmark harness from Section 19.34 before changing
     any default preconditioner/Krylov path.
+
+### 19.36 Structured-solve benchmark gate for algorithmic performance work
+
+- Added a bounded benchmark harness for the next algorithmic lane:
+  - `examples/performance/benchmark_structured_solve.py`
+  - `tests/test_benchmark_structured_solve.py`
+- Purpose:
+  - compare dense repeated solves against a reusable block-tridiagonal
+    factorization on deterministic synthetic systems;
+  - report residuals, max solution error, dense-vs-structured storage bytes,
+    factor time, repeated solve time, and total structured time;
+  - provide a cheap admission gate before wiring factor-once / repeated-RHS
+    ideas into real SFINCS operator or preconditioner paths.
+- Documentation:
+  - `examples/performance/README.md` now lists the harness;
+  - `docs/performance_techniques.rst` documents how to run it and the admission
+    rule before touching production defaults.
+- Validation:
+  - `pytest -q tests/test_benchmark_structured_solve.py tests/test_structured_velocity.py`
+    -> `8 passed`;
+  - `python -m py_compile examples/performance/benchmark_structured_solve.py tests/test_benchmark_structured_solve.py`
+    -> passed;
+  - `python -m ruff check examples/performance/benchmark_structured_solve.py tests/test_benchmark_structured_solve.py`
+    -> passed;
+  - bounded CLI smoke with `--nblocks 5 --block-size 3 --n-rhs 2 --warmup 0 --repeats 1`
+    produced `max_solution_error = 1.11e-16`, structured residual `1.50e-16`,
+    dense bytes `1800`, structured bytes `936`, and a small CPU warm timing
+    speedup on this tiny proxy;
+  - `sphinx-build -W -b html docs docs/_build/html`
+    -> passed.
+- Acceptance rule for future structured production changes:
+  - parity-clean on the relevant SFINCS fixture,
+  - structured residual and dense-reference solution agreement on the benchmark,
+  - at least `20%` warm runtime improvement or `25%` memory reduction on a
+    pinned offender,
+  - no drift above the `1.25x` suite gates.
+- Next implementation step:
+  - extend this harness from synthetic block-tridiagonal systems to one real
+    reduced monoenergetic/PAS block extracted from a pinned offender, then test
+    whether factor-once/repeated-RHS should enter a production preconditioner.

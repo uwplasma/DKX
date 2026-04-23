@@ -115,6 +115,42 @@ Fortran builds PETSc matrices once and multiplies by them; `sfincs_jax` applies
 the operator directly, which is often cheaper than assembling matrices,
 especially when JIT compilation fuses multiple operator sub-terms.
 
+Structured solve admission gate
+-------------------------------
+
+**Technique.** Before changing production preconditioners, benchmark whether a
+factor-once / repeated-RHS structured solve is accurate, memory-efficient, and fast on
+a bounded block-tridiagonal proxy.
+
+**Implementation.**
+
+- Structured block solver:
+  ``sfincs_jax.structured_velocity.factor_block_tridiagonal``.
+- Benchmark harness:
+  ``examples/performance/benchmark_structured_solve.py``.
+- Focused tests:
+  ``tests/test_benchmark_structured_solve.py``.
+
+The harness compares a dense repeated solve with a reusable block-tridiagonal
+factorization on deterministic synthetic systems. It reports residuals, maximum
+solution error against the dense solve, dense storage bytes, structured storage bytes,
+and warm solve timings.
+
+Run it with:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_structured_solve.py \
+     --nblocks 32 --block-size 8 --n-rhs 8 \
+     --out-json examples/performance/output/structured_solve_gate.json
+
+**Admission rule.** A structured algorithm should not be wired into real SFINCS solve
+paths unless it is parity-clean on the relevant fixture and this harness, or a direct
+real-operator extension of it, shows a material runtime or memory benefit. The current
+recommended gate is the same as the research roadmap: at least ``20%`` warm runtime
+improvement or ``25%`` memory reduction on a pinned offender, with no suite drift above
+``1.25x``.
+
 JIT compilation and persistent compilation cache
 ------------------------------------------------
 
