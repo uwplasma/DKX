@@ -278,6 +278,17 @@ shows strong FP/PAS separation again. However, until the checked-in collisionali
 figures are regenerated from the fixed script, they remain historical artifacts rather
 than publication-grade validated outputs.
 
+The first corrected artifact from that lane is now checked in:
+
+- summary:
+  ``examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
+- figure:
+  ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png``
+
+That artifact is now guarded by direct tests on the collisionality ladder and FP/PAS
+separation, but it is still explicitly documented as a bounded branch artifact rather
+than the final audited collisionality publication figure.
+
 Further reading
 ---------------
 
