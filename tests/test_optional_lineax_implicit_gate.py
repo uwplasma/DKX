@@ -33,6 +33,7 @@ def test_current_implicit_gate_returns_finite_gradient_and_small_residual() -> N
     mod = _load_module()
     matrix, rhs = mod.make_nonsymmetric_system(4)
     result = mod.run_current_gate(
+        case="synthetic_nonsymmetric",
         matrix=matrix,
         rhs=rhs,
         p0=0.2,
@@ -52,6 +53,7 @@ def test_lineax_gate_skips_cleanly_when_lineax_is_not_supplied() -> None:
     mod = _load_module()
     matrix, rhs = mod.make_nonsymmetric_system(4)
     result = mod.run_lineax_gate(
+        case="synthetic_nonsymmetric",
         matrix=matrix,
         rhs=rhs,
         p0=0.2,
@@ -72,6 +74,8 @@ def test_optional_lineax_gate_cli_writes_json_for_current_backend(tmp_path: Path
         [
             "--backend",
             "current",
+            "--suite",
+            "synthetic",
             "--size",
             "4",
             "--restart",
@@ -84,6 +88,63 @@ def test_optional_lineax_gate_cli_writes_json_for_current_backend(tmp_path: Path
     )
     assert rc == 0
     payload = json.loads(out_json.read_text())
+    assert payload[0]["case"] == "synthetic_nonsymmetric"
     assert payload[0]["backend"] == "current_custom_linear_solve"
     assert payload[0]["status"] == "ok"
     assert payload[0]["relative_residual"] < 1.0e-8
+
+
+def test_load_tiny_sfincs_fixture_returns_scheme5_operator_and_reference_state() -> None:
+    mod = _load_module()
+    op0, x_ref, nu0 = mod.load_tiny_sfincs_fixture(str(mod._default_sfincs_input()))
+    assert int(op0.total_size) == int(x_ref.shape[0])
+    assert np.isfinite(float(nu0))
+    assert int(x_ref.size) > 0
+
+
+def test_current_sfincs_implicit_gate_returns_finite_gradient_and_small_residual() -> None:
+    mod = _load_module()
+    result = mod.run_current_sfincs_implicit_gate(
+        input_path=mod._default_sfincs_input(),
+        tol=1.0e-10,
+        restart=20,
+        maxiter=120,
+    )
+    assert result.case == "sfincs_tiny_implicit"
+    assert result.status == "ok"
+    assert result.relative_residual is not None
+    assert result.relative_residual < 1.0e-8
+    assert result.grad is not None and np.isfinite(result.grad)
+    assert result.grad_abs_error is not None
+    assert result.grad_abs_error < 1.0e-4
+
+
+def test_current_sfincs_repeated_rhs_gate_returns_small_residual_and_solution_error() -> None:
+    mod = _load_module()
+    result = mod.run_current_sfincs_repeated_rhs_gate(
+        input_path=mod._default_sfincs_input(),
+        tol=1.0e-10,
+        restart=20,
+        maxiter=120,
+    )
+    assert result.case == "sfincs_tiny_repeated_rhs"
+    assert result.status == "ok"
+    assert result.n_rhs == 2
+    assert result.relative_residual is not None
+    assert result.relative_residual < 1.0e-8
+    assert result.max_solution_error is not None
+    assert result.max_solution_error < 1.0e-6
+
+
+def test_lineax_sfincs_repeated_rhs_gate_skips_cleanly_when_lineax_missing() -> None:
+    mod = _load_module()
+    result = mod.run_lineax_sfincs_repeated_rhs_gate(
+        input_path=mod._default_sfincs_input(),
+        tol=1.0e-10,
+        restart=20,
+        maxiter=120,
+        lineax_module=None,
+    )
+    assert result.case == "sfincs_tiny_repeated_rhs"
+    assert result.status == "skipped"
+    assert "Lineax unavailable" in str(result.error)
