@@ -12,6 +12,15 @@ from .paths import resolve_existing_path
 
 @dataclass(frozen=True)
 class VmecWout:
+    """VMEC ``wout`` data normalized to the internal scheme-5 layout.
+
+    NetCDF ``wout`` files store many Fourier coefficient arrays as
+    ``(radius, mode)``.  `sfincs_jax` normalizes them to ``(mode, radius)`` at
+    the reader/adapter boundary so VMEC geometry evaluation, output assembly, and
+    tests can use one convention.  Half-mesh arrays keep VMEC's dummy element at
+    radius index 0, matching the indexing rules used by the v3 scheme-5 formulas.
+    """
+
     path: Path
     nfp: int
     ns: int
@@ -186,6 +195,8 @@ def _set_scale_factor(*, n: int, m: int, helicity_n: int, helicity_l: int, rippl
 
 @dataclass(frozen=True)
 class VmecInterpolation:
+    """Resolved full- and half-mesh interpolation state for one VMEC radius."""
+
     index_full: tuple[int, int]  # 0-based indices
     weight_full: tuple[float, float]
     # 0-based indices into VMEC "half grid" arrays. In the wout file, half-grid arrays

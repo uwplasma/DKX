@@ -244,6 +244,14 @@ policy modules and checks that their explanatory module docstrings are real
 keeps the source map and generated API documentation useful as the large driver is
 split into manageable pieces.
 
+The VMEC convention layer has its own bounded gate in
+``tests/test_vmec_wout_conventions.py``. It checks the scheme-5 conventions that are
+easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh
+radial interpolation weights, radial-option snapping, endpoint half-mesh
+extrapolation, invalid radius/option rejection, and helicity-based
+``rippleScale`` selection. These tests protect the VMEC geometry path without
+loading a large equilibrium or running a transport solve.
+
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
 treated as a real regression.

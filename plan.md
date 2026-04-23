@@ -4005,3 +4005,27 @@ documentation:
 Validation:
 
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.52 VMEC scheme-5 convention gates
+
+Added a cheap, scheme-5-focused validation layer for VMEC conventions:
+
+- Added docstrings to `VmecWout` and `VmecInterpolation` explaining the internal
+  `(mode, radius)` coefficient layout, the preserved half-mesh dummy entry, and the
+  purpose of the interpolation state.
+- Added `tests/test_vmec_wout_conventions.py` covering:
+  - `psi_a_hat = phi[-1] / (2*pi)`,
+  - full- and half-mesh interpolation weights at a representative radius,
+  - `VMECRadialOption` snapping to nearest half/full mesh,
+  - endpoint half-mesh extrapolation behavior,
+  - invalid radius/option errors,
+  - and helicity/ripple-scale mode-selection rules.
+- Updated testing docs so these are visible as scheme-5 physics/numerics gates.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/vmec_wout.py tests/test_vmec_wout_conventions.py`
+- `python -m ruff check sfincs_jax/vmec_wout.py tests/test_vmec_wout_conventions.py`
+- `pytest -q tests/test_vmec_wout_conventions.py tests/test_jax_geometry_adapters.py tests/test_geometry_grid_helper_coverage.py`
+  passed with `23 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
