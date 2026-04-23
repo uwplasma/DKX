@@ -19,7 +19,7 @@ Current release snapshot
 The current ``main`` branch release artifacts are:
 
 - CPU: ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix``
-- GPU: ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postkeyfix``
+- GPU: ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem``
 
 These report:
 
@@ -34,14 +34,15 @@ The performance story is therefore:
 - correctness and robustness are release-ready for the current vendored example suite,
 - the default CLI path is explicit and tuned for throughput and reliable convergence,
 - the differentiable path is available from Python when gradients are needed,
-- and the remaining work is to reduce runtime and memory on a small number of heavy PAS and geometry-rich cases.
+- the GPU runtime drift watchlist is clean against the previously promoted frozen GPU lane,
+- and the remaining work is to reduce runtime and memory on a small number of heavy PAS and geometry-rich cases while closing the two remaining CPU runtime watchlist cases.
 
 Current top offenders from the release artifacts are:
 
 - CPU runtime: ``HSX_PASCollisions_DKESTrajectories`` at ``7.220 s``
 - CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``2916.8 MB``
-- GPU runtime: ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` at ``18.300 s``
-- GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2477.1 MB``
+- GPU runtime: ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` at ``18.199 s``
+- GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2507.0 MB``
 
 In other words, all examples run on CPU and GPU, but a handful of cases remain the clear optimization targets.
 
