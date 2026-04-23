@@ -4368,3 +4368,52 @@ Notes:
 - This confirms the added quadrature/analytic Rosenbluth check remains cheap
   enough for the normal suite and does not destabilize the broader driver,
   geometry, CLI, or bounded parity tests.
+
+### 19.67 VMEC reader and half-mesh validation extension
+
+Extended the bounded VMEC convention gate without adding a large equilibrium or
+transport solve:
+
+- Added tiny synthetic NetCDF `wout` fixture generation inside
+  `tests/test_vmec_wout_conventions.py`.
+- Verified that `read_vmec_wout(...)` resolves `.txt` paths to neighboring `.nc`
+  files, transposes VMEC radius/mode coefficient tables into the internal
+  mode/radius convention, and preserves scalar/mode metadata.
+- Added failure tests for missing files, ASCII-only files without a resolvable
+  NetCDF fallback, missing required variables, unsupported `lasym=true`
+  equilibria, and invalid first Fourier mode metadata.
+- Added explicit VMEC interpolation checks for the inner half-mesh extrapolation
+  branch and exact outer half-mesh branch.
+- Updated `docs/testing.rst` to record the reader-level VMEC gate.
+
+Validation:
+
+- `python -m py_compile tests/test_vmec_wout_conventions.py`
+- `python -m ruff check tests/test_vmec_wout_conventions.py`
+- `python -m pytest -q tests/test_vmec_wout_conventions.py tests/test_jax_geometry_adapters.py tests/test_geometry_grid_helper_coverage.py`
+  passed with `31 passed in 1.69s`.
+- `COVERAGE_FILE=/tmp/sfincs_jax_vmec_probe.coverage python -m pytest -q tests/test_vmec_wout_conventions.py --cov=sfincs_jax --cov-report=term | rg 'vmec_wout|TOTAL|passed|failed|Fatal'`
+  reported `sfincs_jax/vmec_wout.py` at `99%` and `13 passed in 1.84s`.
+
+Notes:
+
+- The package-scoped coverage form used by the repository reports the intended
+  VMEC reader coverage while exercising the same test file.
+
+### 19.68 Full-suite gate after VMEC reader validation extension
+
+Ran the full local suite after adding the synthetic NetCDF VMEC reader tests and
+updating the testing documentation.
+
+Validation:
+
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `838 passed in 337.27s (0:05:37)`.
+
+Notes:
+
+- The test count increased from `830` to `838`, matching the eight new VMEC
+  convention/reader tests.
+- This confirms the extra NetCDF fixture generation does not add meaningful CI
+  cost and does not regress the broader geometry, driver, CLI, output, or bounded
+  parity tests.
