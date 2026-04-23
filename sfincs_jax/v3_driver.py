@@ -63,6 +63,9 @@ from .rhs1_preconditioner_dispatch import (
 from .rhs1_preconditioner_auto_policy import (
     canonical_rhs1_preconditioner_kind as _canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry as _pas_auto_skip_strong_retry,
+    rhs1_fp_dkes_default_kind as _rhs1_fp_dkes_default_kind,
+    rhs1_fp_dkes_env_preconditioner_kind as _rhs1_fp_dkes_env_preconditioner_kind,
+    rhs1_large_fp_near_zero_er_override_kind as _rhs1_large_fp_near_zero_er_override_kind,
     rhs1_pas_auto_large_base_kind as _rhs1_pas_auto_large_base_kind,
     rhs1_pas_dkes_xblock_allowed as _rhs1_pas_dkes_xblock_allowed,
     rhs1_pas_family_refinement_kind as _rhs1_pas_family_refinement_kind,
@@ -11203,31 +11206,17 @@ def solve_v3_full_system_linear_gmres(
     rhs1_precond_env_user = rhs1_precond_env
     rhs1_bicgstab_env = os.environ.get("SFINCS_JAX_RHSMODE1_BICGSTAB_PRECOND", "").strip().lower()
     rhs1_bicgstab_env_user = rhs1_bicgstab_env
-    if (
-        rhs1_precond_env == ""
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and op.fblock.fp is not None
-        and use_dkes
-    ):
-        fp_dkes_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_DKES_STRONG_MAX", "").strip()
-        try:
-            fp_dkes_max = int(fp_dkes_env) if fp_dkes_env else 20000
-        except ValueError:
-            fp_dkes_max = 20000
-        if int(op.total_size) <= max(1, int(fp_dkes_max)):
-            xblock_tz_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "").strip()
-            try:
-                xblock_tz_max = int(xblock_tz_max_env) if xblock_tz_max_env else 1200
-            except ValueError:
-                xblock_tz_max = 1200
-            max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-            if (
-                int(op.n_theta) > 1
-                and xblock_tz_max > 0
-                and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max
-            ):
-                rhs1_precond_env = "xblock_tz"
+    rhs1_precond_env = _rhs1_fp_dkes_env_preconditioner_kind(
+        rhs1_precond_env=rhs1_precond_env,
+        rhs_mode=int(op.rhs_mode),
+        include_phi1=bool(op.include_phi1),
+        has_fp=op.fblock.fp is not None,
+        use_dkes=bool(use_dkes),
+        total_size=int(op.total_size),
+        n_theta=int(op.n_theta),
+        n_zeta=int(op.n_zeta),
+        max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
+    )
     try:
         pre_theta = int(precond_opts.get("PRECONDITIONER_THETA", 0) or 0)
     except (TypeError, ValueError):
@@ -11658,25 +11647,16 @@ def solve_v3_full_system_linear_gmres(
                     # preconditioners. Prefer a lightweight xmg/sxblock_tz path for
                     # small/medium systems, and fall back to collision for larger sizes
                     # to avoid expensive block builds.
-                    fp_dkes_strong_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_DKES_STRONG_MAX", "").strip()
-                    try:
-                        fp_dkes_strong_max = int(fp_dkes_strong_max_env) if fp_dkes_strong_max_env else 20000
-                    except ValueError:
-                        fp_dkes_strong_max = 20000
-                    if int(active_size) <= max(1, int(fp_dkes_strong_max)):
-                        max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-                        if (
-                            int(op.n_theta) > 1
-                            and xblock_tz_max > 0
-                            and int(max_l) * int(op.n_theta) * int(op.n_zeta) <= xblock_tz_max
-                        ):
-                            rhs1_precond_kind = "xblock_tz"
-                            if not rhs1_precond_env:
-                                rhs1_precond_env = "xblock_tz"
-                        else:
-                            rhs1_precond_kind = "xmg"
-                    else:
-                        rhs1_precond_kind = "collision"
+                    max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
+                    rhs1_precond_kind = _rhs1_fp_dkes_default_kind(
+                        active_size=int(active_size),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        max_l=int(max_l),
+                        xblock_tz_limit=int(xblock_tz_max),
+                    )
+                    if rhs1_precond_kind == "xblock_tz" and not rhs1_precond_env:
+                        rhs1_precond_env = "xblock_tz"
                 elif (
                     op.fblock.fp is not None
                     and er_abs <= schur_er_min
@@ -11909,16 +11889,19 @@ def solve_v3_full_system_linear_gmres(
         and op.fblock.pas is None
         and float(er_abs) <= float(schur_er_min)
     ):
-        fp_force_xmg_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_FORCE_XMG_MIN", "").strip()
-        try:
-            fp_force_xmg_min = int(fp_force_xmg_min_env) if fp_force_xmg_min_env else 120000
-        except ValueError:
-            fp_force_xmg_min = 120000
-        if (
-            int(op.total_size) >= max(1, int(fp_force_xmg_min))
-            and rhs1_precond_kind in {None, "collision", "point", "theta_line", "zeta_line", "theta_schwarz", "zeta_schwarz"}
-        ):
-            rhs1_precond_kind = "xmg"
+        rhs1_precond_kind_override = _rhs1_large_fp_near_zero_er_override_kind(
+            rhs1_precond_env=rhs1_precond_env,
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+            has_fp=op.fblock.fp is not None,
+            has_pas=op.fblock.pas is not None,
+            current_kind=rhs1_precond_kind,
+            total_size=int(op.total_size),
+            er_abs=float(er_abs),
+            schur_er_min=float(schur_er_min),
+        )
+        if rhs1_precond_kind_override != rhs1_precond_kind:
+            rhs1_precond_kind = rhs1_precond_kind_override
             if emit is not None:
                 emit(
                     1,

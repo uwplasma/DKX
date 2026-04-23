@@ -3705,3 +3705,36 @@ Next refactor target:
 - Extract FP/DKES and large-FP default-selection policy using the same pattern,
   then move to the validation/coverage lane with focused physics gates around
   the newly isolated solver-routing policies.
+
+### 19.42 Driver split step 6: FP/DKES and large-FP default policy extraction
+
+Implemented the FP-focused portion of the RHSMode=1 default selector split:
+
+- Added `rhs1_fp_dkes_env_preconditioner_kind(...)`.
+  - This preserves the early bounded FP/DKES `xblock_tz` environment override
+    that avoids collision-only stagnation in small DKES trajectory cases.
+  - It keeps explicit user preconditioner choices untouched.
+- Added `rhs1_fp_dkes_default_kind(...)`.
+  - It selects `xblock_tz` for bounded small FP/DKES blocks, `xmg` for
+    small/medium FP/DKES blocks that are too large for dense `xblock_tz`, and
+    `collision` above the strong-DKES threshold to avoid excessive setup cost.
+- Added `rhs1_large_fp_near_zero_er_override_kind(...)`.
+  - It forces large FP-only, near-zero-Er, weak-preconditioned systems to `xmg`.
+  - It preserves stronger user/auto choices such as `schur`.
+- Updated `solve_v3_full_system_linear_gmres` to use the extracted helpers.
+- Added direct tests for all FP/DKES branches and the large-FP override.
+- Updated the source map.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_preconditioner_auto_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_preconditioner_auto_policy.py`
+- `python -m ruff check sfincs_jax/rhs1_preconditioner_auto_policy.py tests/test_rhs1_preconditioner_auto_policy.py`
+- `pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py tests/test_v3_driver_policy_helpers.py tests/test_rhs1_sparse_first_heuristic.py`
+  passed with `117 passed`.
+
+Next refactor target:
+
+- Add a compact integration test that asserts representative fixture inputs
+  resolve to the expected preconditioner policy hints. This bridges the pure
+  policy tests to real namelist/operator construction before deeper physics
+  gates and benchmark gates are expanded.

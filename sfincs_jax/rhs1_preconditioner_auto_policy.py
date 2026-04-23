@@ -41,6 +41,18 @@ PAS_WEAK_AUTO_OVERRIDE_KINDS = frozenset(
     }
 )
 
+FP_FORCE_XMG_WEAK_KINDS = frozenset(
+    {
+        None,
+        "collision",
+        "point",
+        "theta_line",
+        "zeta_line",
+        "theta_schwarz",
+        "zeta_schwarz",
+    }
+)
+
 _RHS1_PRECONDITIONER_KIND_ALIASES = {
     "0": None,
     "false": None,
@@ -250,6 +262,88 @@ def rhs1_pas_family_refinement_kind(
     return result
 
 
+def rhs1_fp_dkes_env_preconditioner_kind(
+    *,
+    rhs1_precond_env: str,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_fp: bool,
+    use_dkes: bool,
+    total_size: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+) -> str:
+    """Return an early env override for bounded FP DKES xblock_tz solves."""
+    env = str(rhs1_precond_env or "").strip().lower()
+    if env:
+        return env
+    if int(rhs_mode) != 1 or bool(include_phi1) or (not has_fp) or (not use_dkes):
+        return env
+
+    fp_dkes_max = _env_int("SFINCS_JAX_RHSMODE1_FP_DKES_STRONG_MAX", 20000)
+    if int(total_size) > max(1, int(fp_dkes_max)):
+        return env
+
+    xblock_tz_max = _env_int("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", 1200)
+    if (
+        int(n_theta) > 1
+        and int(xblock_tz_max) > 0
+        and int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_max)
+    ):
+        return "xblock_tz"
+    return env
+
+
+def rhs1_fp_dkes_default_kind(
+    *,
+    active_size: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> str:
+    """Select the default RHSMode=1 preconditioner for FP DKES trajectory cases."""
+    fp_dkes_strong_max = _env_int("SFINCS_JAX_RHSMODE1_FP_DKES_STRONG_MAX", 20000)
+    if int(active_size) > max(1, int(fp_dkes_strong_max)):
+        return "collision"
+    if (
+        int(n_theta) > 1
+        and int(xblock_tz_limit) > 0
+        and int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+    ):
+        return "xblock_tz"
+    return "xmg"
+
+
+def rhs1_large_fp_near_zero_er_override_kind(
+    *,
+    rhs1_precond_env: str,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_fp: bool,
+    has_pas: bool,
+    current_kind: str | None,
+    total_size: int,
+    er_abs: float,
+    schur_er_min: float,
+) -> str | None:
+    """Force large near-zero-Er FP-only systems from weak line/point blocks to xmg."""
+    if str(rhs1_precond_env or "").strip().lower():
+        return current_kind
+    if int(rhs_mode) != 1 or bool(include_phi1) or (not has_fp) or has_pas:
+        return current_kind
+    if float(er_abs) > float(schur_er_min):
+        return current_kind
+    if current_kind not in FP_FORCE_XMG_WEAK_KINDS:
+        return current_kind
+
+    fp_force_xmg_min = _env_int("SFINCS_JAX_RHSMODE1_FP_FORCE_XMG_MIN", 120000)
+    if int(total_size) >= max(1, int(fp_force_xmg_min)):
+        return "xmg"
+    return current_kind
+
+
 def pas_auto_skip_strong_retry(
     *,
     has_pas: bool,
@@ -435,9 +529,13 @@ def rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
 
 __all__ = [
     "PAS_AUTO_STRONG_BASE_KINDS",
+    "FP_FORCE_XMG_WEAK_KINDS",
     "PAS_WEAK_AUTO_OVERRIDE_KINDS",
     "canonical_rhs1_preconditioner_kind",
     "pas_auto_skip_strong_retry",
+    "rhs1_fp_dkes_default_kind",
+    "rhs1_fp_dkes_env_preconditioner_kind",
+    "rhs1_large_fp_near_zero_er_override_kind",
     "rhs1_pas_family_refinement_kind",
     "rhs1_gpu_sparse_fallback_skip_allowed",
     "rhs1_pas_auto_large_base_kind",

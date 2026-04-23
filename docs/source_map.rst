@@ -140,8 +140,8 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/rhs1_preconditioner_auto_policy.py``:
   RHSMode=1 preconditioner environment alias normalization plus bounded
   automatic preconditioner policy predicates for PAS, DKES, tokamak, GPU sparse
-  fallback, weak-default PAS promotion, PAS-family refinement, and sharded
-  line-overrides.
+  fallback, weak-default PAS promotion, PAS-family refinement, FP/DKES routing,
+  large-FP near-zero-Er overrides, and sharded line-overrides.
 - ``sfincs_jax/rhs1_schur_policy.py``:
   RHSMode=1 Schur base-preconditioner alias normalization and automatic
   geometry/PAS/DKES routing policy.
