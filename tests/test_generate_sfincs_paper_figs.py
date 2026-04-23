@@ -209,7 +209,19 @@ def test_parse_collision_operators_rejects_unsupported_values() -> None:
         mod._parse_collision_operators("0,2")
 
 
-def test_main_skip_existing_reuses_selected_operator_outputs(
+def test_expected_scan_subdirs_matches_log_ladder_format() -> None:
+    mod = _load_module()
+    got = mod._expected_scan_subdirs(
+        scan_variable="nu_n",
+        min_value=0.1 * 0.2668018,
+        max_value=10.0 * 0.2668018,
+        n_points=4,
+        scale="log",
+    )
+    assert got == ("nu_n_0.02668", "nu_n_0.1238", "nu_n_0.5748", "nu_n_2.668")
+
+
+def test_main_skip_existing_skips_rerun_for_complete_selected_operator(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -217,7 +229,12 @@ def test_main_skip_existing_reuses_selected_operator_outputs(
     work_dir = tmp_path / "work"
     summary_dir = tmp_path / "summary"
     out_dir = tmp_path / "figures"
-    _write_fake_transport_output(work_dir / "lhd_co1" / "nu_n_0.5", nu_n=0.5, diagonal_scale=3.0)
+    for nu_n, scale in ((0.02668, 1.0), (0.1238, 2.0), (0.5748, 3.0), (2.668, 4.0)):
+        _write_fake_transport_output(
+            work_dir / "lhd_co1" / f"nu_n_{nu_n:.4g}",
+            nu_n=nu_n,
+            diagonal_scale=scale,
+        )
 
     write_calls = 0
     run_calls = 0
@@ -239,6 +256,7 @@ def test_main_skip_existing_reuses_selected_operator_outputs(
             "generate_sfincs_paper_figs.py",
             "--case",
             "lhd",
+            "--fast",
             "--scan-only",
             "--skip-existing",
             "--collision-operators",
@@ -256,10 +274,66 @@ def test_main_skip_existing_reuses_selected_operator_outputs(
 
     assert write_calls == 0
     assert run_calls == 0
-    payload = json.loads((summary_dir / "lhd_collisionality_summary.json").read_text())
+    payload = json.loads((summary_dir / "lhd_collisionality_fast_summary.json").read_text())
     assert payload["metadata"]["labels_to_collision_operator"] == {"PAS": 1}
-    assert [row["label"] for row in payload["rows"]] == ["PAS"]
+    assert [row["label"] for row in payload["rows"]] == ["PAS", "PAS", "PAS", "PAS"]
     assert not (out_dir / "sfincs_jax_fig1_lhd_collisionality.png").exists()
+
+
+def test_main_skip_existing_prunes_incomplete_dirs_and_reruns_partial_operator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _load_module()
+    work_dir = tmp_path / "work"
+    summary_dir = tmp_path / "summary"
+    out_dir = tmp_path / "figures"
+    case_dir = work_dir / "lhd_co1"
+    _write_fake_transport_output(case_dir / "nu_n_0.1238", nu_n=0.1238, diagonal_scale=2.0)
+    stale_dir = case_dir / "nu_n_0.5748"
+    stale_dir.mkdir(parents=True, exist_ok=True)
+    (stale_dir / "input.namelist").write_text("&dummy\n/\n")
+
+    write_calls = 0
+    run_calls = 0
+
+    def _fake_write_scan_input(**kwargs):
+        nonlocal write_calls
+        write_calls += 1
+        Path(kwargs["dest"]).write_text("&physicsParameters\n/\n")
+
+    def _fake_run(*args, **kwargs):
+        nonlocal run_calls
+        run_calls += 1
+
+    monkeypatch.setattr(mod, "_write_scan_input", _fake_write_scan_input)
+    monkeypatch.setattr(mod, "_run", _fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate_sfincs_paper_figs.py",
+            "--case",
+            "lhd",
+            "--scan-only",
+            "--skip-existing",
+            "--collision-operators",
+            "1",
+            "--fast",
+            "--work-dir",
+            str(work_dir),
+            "--summary-dir",
+            str(summary_dir),
+            "--out-dir",
+            str(out_dir),
+        ],
+    )
+
+    mod.main()
+
+    assert write_calls == 1
+    assert run_calls == 1
+    assert not stale_dir.exists()
 
 
 def test_main_plot_only_allows_single_selected_operator_output(
