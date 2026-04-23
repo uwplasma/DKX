@@ -2762,3 +2762,29 @@ Decision:
 - Immediate next actions remain unchanged, but now the heavy reruns can be
   resumed and regenerated from the script interface directly instead of by
   manual operator-specific setup.
+
+### 19.29 Remote handoff status after split-scan support
+
+- `office` now has two relevant worktrees:
+  - `/home/rjorge/sfincs_jax_refactor_v3` holds the already-running LHD
+    full-resolution split scan that was started before the scripted split
+    controls landed;
+  - `/home/rjorge/sfincs_jax_refactor_v3_latest` is a clean clone at commit
+    `939ec93` and is reserved for all follow-on synthesis and new launches.
+- The new split synthesis path has been smoke-tested on the real `office`
+  partial output tree:
+  - `--plot-only --collision-operators 0` successfully wrote a filtered LHD
+    summary and figure from the live partial FP ladder;
+  - `--plot-only --collision-operators 1` successfully wrote a filtered LHD
+    summary and figure from the live partial PAS ladder;
+  - this confirms that the final audited synthesis step can be run directly from
+    the latest clone once the current LHD jobs finish.
+- The full LHD re-audit remains compute-bound on both GPUs, but it is making
+  forward progress and no longer blocks all other validation work.
+- A heavier W7-X ambipolar reference lane has now been launched in parallel on
+  `office` CPU from the latest clone:
+  - command family:
+    `JAX_PLATFORMS=cpu ... python3 examples/publication_figures/generate_w7x_ambipolar_validation.py ...`
+  - purpose:
+    advance the first literature-facing W7-X ambipolar artifact without
+    competing for the two GPUs reserved for the LHD collisionality re-audit.
