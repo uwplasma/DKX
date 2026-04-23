@@ -3813,3 +3813,35 @@ Remaining work in this lane:
 - Add the public differentiable example only after file-based and in-memory
   geometry arrays match on a bounded fixture and finite-difference/JAX gradient
   checks pass.
+
+### 19.45 Physics gate: PAS Legendre nullspace and eigenvalue scaling
+
+Added a cheap, literature-aligned PAS collision-operator gate:
+
+- New `tests/test_collision_physics_gates.py`.
+- The gate checks:
+  - pure pitch-angle scattering annihilates the isotropic `L=0` Legendre mode
+    when `krook=0`,
+  - inactive Legendre slots beyond `n_xi_for_x` are masked exactly,
+  - active higher Legendre coefficients scale as `L(L+1)/2` relative to `L=1`,
+    matching the standard pitch-angle-scattering operator eigenvalues in a
+    Legendre basis.
+- This complements the existing Fortran-matrix parity test in
+  `tests/test_pas_collision_operator_parity.py`: parity proves agreement with
+  the frozen implementation, while this gate proves the expected operator
+  structure directly.
+- Updated `docs/testing.rst`.
+
+Validation:
+
+- `python -m py_compile tests/test_collision_physics_gates.py`
+- `python -m ruff check tests/test_collision_physics_gates.py`
+- `pytest -q tests/test_collision_physics_gates.py tests/test_pas_collision_operator_parity.py`
+  passed with `3 passed`.
+
+Next validation targets:
+
+- Add a similarly cheap Fokker-Planck gate around Chandrasekhar-function limits
+  and interpolation identities.
+- Add a geometry gate around VMEC in-memory conversion once the optional
+  `vmec_jax` fixture can be pinned cleanly.
