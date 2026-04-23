@@ -93,6 +93,13 @@ is available):
    python examples/optimization/optimize_scheme4_harmonics_publication_figures.py
    python examples/optimization/calibrate_nu_n_to_fortran_residual_fixture.py
 
+For bounded optional ecosystem checks around differentiable objective wrappers:
+
+.. code-block:: bash
+
+   pip install equinox jaxopt
+   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py --backend all
+
 Implicit differentiation through solves
 ---------------------------------------
 

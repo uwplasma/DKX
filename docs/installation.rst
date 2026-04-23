@@ -34,3 +34,10 @@ you want those examples:
 .. code-block:: bash
 
    pip install optax
+
+The optional ecosystem benchmark gates also use extra packages when you want to run
+them locally:
+
+.. code-block:: bash
+
+   pip install lineax equinox jaxopt
