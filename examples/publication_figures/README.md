@@ -60,6 +60,45 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
 to `--summary-dir` as well. If `--summary-dir` is omitted, the summaries are written
 into the selected `--work-dir` with top-level `metadata` and sorted `rows`.
 
+For the heavy full-resolution re-audit lanes, the generator now supports
+split-operator execution so the FP and PAS ladders can be resumed independently
+on separate devices:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 XLA_PYTHON_CLIENT_PREALLOCATE=false SFINCS_JAX_SCAN_RECYCLE=1 \
+python examples/publication_figures/generate_sfincs_paper_figs.py \
+  --case lhd \
+  --collision-operators 0 \
+  --skip-existing \
+  --scan-only \
+  --work-dir examples/publication_figures/output/lhd_reaudit_full \
+  --summary-dir examples/publication_figures/artifacts
+
+CUDA_VISIBLE_DEVICES=1 XLA_PYTHON_CLIENT_PREALLOCATE=false SFINCS_JAX_SCAN_RECYCLE=1 \
+python examples/publication_figures/generate_sfincs_paper_figs.py \
+  --case lhd \
+  --collision-operators 1 \
+  --skip-existing \
+  --scan-only \
+  --work-dir examples/publication_figures/output/lhd_reaudit_full \
+  --summary-dir examples/publication_figures/artifacts
+```
+
+Once both operator ladders have completed, synthesize the audited summary and
+figures without rerunning the scan:
+
+```bash
+python examples/publication_figures/generate_sfincs_paper_figs.py \
+  --case lhd \
+  --plot-only \
+  --collision-operators 0,1 \
+  --work-dir examples/publication_figures/output/lhd_reaudit_full \
+  --summary-dir examples/publication_figures/artifacts \
+  --out-dir docs/_static/figures/paper
+```
+
+The same split-and-synthesize pattern applies to the W7-X collisionality lane.
+
 The corrected bounded LHD rerun is currently pinned as:
 - `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png`

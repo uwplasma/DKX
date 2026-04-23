@@ -2737,3 +2737,28 @@ Decision:
      proxy lane;
   4. run the heavier W7-X ambipolar scaffold on the reference input and pin its
      first literature-facing summary/figure artifact.
+
+### 19.28 Split collisionality rerun controls for heavy re-audits
+
+- `examples/publication_figures/generate_sfincs_paper_figs.py` now has explicit
+  support for split operator reruns:
+  - `--collision-operators 0,1` selects which operator ladders are run or
+    collected;
+  - `--skip-existing` preserves already completed ladder directories and only
+    reruns missing operators.
+- The generator no longer assumes both ladders exist before it can write
+  summaries or figures:
+  - partial `plot-only` and `scan-only --skip-existing` workflows now tolerate a
+    single selected operator and still emit a filtered metadata payload;
+  - this is the bounded local fix needed for the `office` two-GPU handoff,
+    rather than continuing to rely on manual ad hoc directory surgery.
+- Focused validation added in `tests/test_generate_sfincs_paper_figs.py`:
+  - collision-operator parsing and validation,
+  - reuse of an existing selected operator without calling the scan runner,
+  - `plot-only` synthesis from a single selected operator output.
+- Documentation update:
+  - `examples/publication_figures/README.md` now records the exact split-GPU
+    LHD/W7-X re-audit pattern and the final `--plot-only` synthesis command.
+- Immediate next actions remain unchanged, but now the heavy reruns can be
+  resumed and regenerated from the script interface directly instead of by
+  manual operator-specific setup.
