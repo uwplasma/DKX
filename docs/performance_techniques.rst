@@ -153,6 +153,30 @@ before comparing dense and structured solves. The regularization is explicit in 
 JSON output and exists only to make the local preconditioner-style block nonsingular;
 it does not change production solver behavior.
 
+Pinned-offender status
+~~~~~~~~~~~~~~~~~~~~~~
+
+The first larger real-block gate used
+``tests/reduced_inputs/geometryScheme4_2species_PAS_noEr.input.namelist`` with
+species ``0``, speed index ``4``, two right-hand sides, and the explicit
+benchmark-only regularization ``1e-4``. The extracted block was exactly
+block-tridiagonal in Legendre index (``off_band_norm = 0``), with 14 blocks of
+size ``81``.
+
+On the local CPU gate this reduced local-block storage from ``10,287,648`` bytes
+for the dense representation to ``2,099,520`` bytes for the structured
+representation. Accuracy against the dense regularized block was acceptable for a
+preconditioner gate: dense relative residual ``2.25e-13``, structured relative
+residual ``9.74e-10``, and max solution difference ``2.94e-7``.
+
+The same local gate did **not** clear the warm-runtime rule: dense solve
+``0.1100 s`` versus structured factor+solve ``0.2305 s``. For this reason the
+gate validates the memory direction but does not justify a broader production
+threshold change by itself. The current production path already uses this idea
+where it matters: the user-facing log reports top-level ``schur`` for the
+geometry4 PAS case, and the Schur base selector chooses ``pas_tz`` internally for
+the pinned offender block.
+
 Run it with:
 
 .. code-block:: bash
