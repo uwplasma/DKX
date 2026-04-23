@@ -45,3 +45,23 @@ def test_lhd_collisionality_artifact_spans_decade_collisionality_ladder() -> Non
     nuprime_values = np.asarray(sorted({float(row["nuprime"]) for row in rows}), dtype=float)
     ratios = nuprime_values[1:] / nuprime_values[:-1]
     assert np.all(ratios > 4.0)
+
+
+def test_w7x_collisionality_artifact_has_expected_labels_and_grid() -> None:
+    rows = _load_rows("w7x_collisionality_reaudit_fast_summary.json")
+    labels = sorted({str(row["label"]) for row in rows})
+    nuprime = sorted({round(float(row["nuprime"]), 6) for row in rows})
+    assert labels == ["Fokker-Planck", "PAS"]
+    assert len(rows) == 8
+    assert nuprime == [0.100003, 0.464173, 2.1545, 10.000301]
+
+
+def test_w7x_collisionality_artifact_resolves_fp_pas_separation() -> None:
+    rows = _load_rows("w7x_collisionality_reaudit_fast_summary.json")
+    by_key = {(str(row["label"]), float(row["nuprime"])): row for row in rows}
+    nuprime_values = sorted({float(row["nuprime"]) for row in rows})
+    for nuprime in nuprime_values:
+        fp = np.asarray(by_key[("Fokker-Planck", nuprime)]["transport_matrix"], dtype=float)
+        pas = np.asarray(by_key[("PAS", nuprime)]["transport_matrix"], dtype=float)
+        assert abs(pas[0, 0]) > abs(fp[0, 0])
+        assert abs(pas[1, 1]) > abs(fp[1, 1])
