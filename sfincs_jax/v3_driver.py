@@ -99,6 +99,11 @@ from .rhs1_sparse_polish_policy import (
     rhs1_parse_polish_gmres_config,
     rhs1_polish_enabled,
 )
+from .rhs1_constraint0_policy import (
+    rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
+    rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
+    rhs1_constraint0_sparse_first as _rhs1_constraint0_sparse_first_impl,
+)
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -807,20 +812,14 @@ def _rhsmode1_constraint0_sparse_first(
     active_size: int,
     sparse_max_size: int,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_CS0_SPARSE_FIRST", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if env not in {"1", "true", "yes", "on"} and jax.default_backend() == "cpu":
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if int(op.constraint_scheme) != 0 or op.fblock.fp is None:
-        return False
-    if solve_method_kind in {"dense", "dense_ksp"}:
-        return False
-    if sparse_precond_mode == "off":
-        return False
-    return int(active_size) <= int(sparse_max_size)
+    return _rhs1_constraint0_sparse_first_impl(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        sparse_precond_mode=sparse_precond_mode,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        backend=jax.default_backend(),
+    )
 
 
 def _rhsmode1_constraint0_petsc_compat(
@@ -831,27 +830,17 @@ def _rhsmode1_constraint0_petsc_compat(
     active_size: int,
     sparse_max_size: int,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT", "").strip().lower()
-    if env in {"", "0", "false", "no", "off"}:
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if int(op.constraint_scheme) != 0 or op.fblock.fp is None:
-        return False
-    if solve_method_kind in {"dense", "dense_ksp"}:
-        return False
-    if sparse_precond_mode == "off":
-        return False
-    if int(active_size) > int(sparse_max_size):
-        return False
-    return env in {"1", "true", "yes", "on"}
+    return _rhs1_constraint0_petsc_compat_impl(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        sparse_precond_mode=sparse_precond_mode,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+    )
 
 
 def _rhsmode1_constraint0_dense_fallback_allowed(op: V3FullSystemOperator) -> bool:
-    if int(op.constraint_scheme) != 0:
-        return True
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_CS0_DENSE_FALLBACK", "").strip().lower()
-    return env in {"1", "true", "yes", "on"}
+    return _rhs1_constraint0_dense_fallback_allowed_impl(op)
 
 
 def _rhsmode1_sparse_exact_lu_requested(
