@@ -81,6 +81,11 @@ def _parse_args() -> argparse.Namespace:
         help="Which geometry scans to run/plot.",
     )
     parser.add_argument(
+        "--collision-operators",
+        default="0,1",
+        help="Comma-separated collision-operator subset to run/collect (default: 0,1).",
+    )
+    parser.add_argument(
         "--scan-only",
         action="store_true",
         help="Run scans only (skip plotting).",
@@ -89,6 +94,11 @@ def _parse_args() -> argparse.Namespace:
         "--plot-only",
         action="store_true",
         help="Plot only (reuse existing scan output; do not run scans).",
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Reuse an existing operator scan directory when it already contains sfincsOutput.h5 files.",
     )
     return parser.parse_args()
 
@@ -214,6 +224,24 @@ def _collect_transport_matrix(work_dir: Path) -> tuple[np.ndarray, np.ndarray]:
     nu = np.asarray([r[0] for r in rows])
     tm = np.asarray([r[1] for r in rows])
     return nu, tm
+
+
+def _has_transport_outputs(work_dir: Path) -> bool:
+    return any(work_dir.glob("*/sfincsOutput.h5"))
+
+
+def _parse_collision_operators(value: str) -> tuple[int, ...]:
+    parts = [part.strip() for part in str(value).split(",") if part.strip()]
+    if not parts:
+        return (0, 1)
+    out: list[int] = []
+    for part in parts:
+        op = int(part)
+        if op not in {0, 1}:
+            raise ValueError(f"Unsupported collision operator {op}; expected 0 and/or 1.")
+        if op not in out:
+            out.append(op)
+    return tuple(out)
 
 
 def build_transport_scan_summary_rows(
@@ -346,6 +374,8 @@ def main() -> None:
     case = args.case
     scan_only = bool(args.scan_only)
     plot_only = bool(args.plot_only)
+    skip_existing = bool(args.skip_existing)
+    selected_collision_operators = set(_parse_collision_operators(args.collision_operators))
 
     if scan_only and plot_only:
         raise ValueError("Cannot combine --scan-only and --plot-only.")
@@ -355,13 +385,13 @@ def main() -> None:
     summary_dir.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("MPLCONFIGDIR", str(work_dir / ".mplconfig"))
 
-    if not plot_only:
+    if not plot_only and not skip_existing:
         if case in ("lhd", "all"):
-            shutil.rmtree(work_dir / "lhd_co0", ignore_errors=True)
-            shutil.rmtree(work_dir / "lhd_co1", ignore_errors=True)
+            for collision_operator in selected_collision_operators:
+                shutil.rmtree(work_dir / f"lhd_co{collision_operator}", ignore_errors=True)
         if case in ("w7x", "all"):
-            shutil.rmtree(work_dir / "w7x_co0", ignore_errors=True)
-            shutil.rmtree(work_dir / "w7x_co1", ignore_errors=True)
+            for collision_operator in selected_collision_operators:
+                shutil.rmtree(work_dir / f"w7x_co{collision_operator}", ignore_errors=True)
 
     n_points = 4 if fast else 7
     nuprime_min = 0.1
@@ -390,46 +420,52 @@ def main() -> None:
             (lhd, 1, "PAS"),
         ]
         for cfg, collision_operator, label in scan_models:
+            if collision_operator not in selected_collision_operators:
+                continue
             nu_n_min = nuprime_min * cfg.nuprime_factor
             nu_n_max = nuprime_max * cfg.nuprime_factor
             case_dir = work_dir / f"{cfg.name}_co{collision_operator}"
             case_dir.mkdir(parents=True, exist_ok=True)
             if not plot_only:
-                _write_scan_input(
-                    base_input=cfg.base_input,
-                    dest=case_dir / "input.namelist",
-                    nu_n_min=nu_n_min,
-                    nu_n_max=nu_n_max,
-                    n_points=n_points,
-                    collision_operator=collision_operator,
+                should_run = not (skip_existing and _has_transport_outputs(case_dir))
+                if should_run:
+                    _write_scan_input(
+                        base_input=cfg.base_input,
+                        dest=case_dir / "input.namelist",
+                        nu_n_min=nu_n_min,
+                        nu_n_max=nu_n_max,
+                        n_points=n_points,
+                        collision_operator=collision_operator,
+                        fast=fast,
+                    )
+                    _run(
+                        [sys.executable, str(UTILS / "sfincsScan"), "--yes", "--input", "input.namelist"],
+                        cwd=case_dir,
+                        timeout_s=timeout_s,
+                        label=f"scan-{cfg.name}-co{collision_operator}",
+                    )
+            if _has_transport_outputs(case_dir):
+                fig1_data[label] = _collect_transport_matrix(case_dir)
+
+        if fig1_data:
+            lhd_summary_path = summary_dir / f"lhd_collisionality{'_fast' if fast else ''}_summary.json"
+            write_transport_scan_summary_json(
+                lhd_summary_path,
+                fig1_data,
+                metadata=_summary_metadata(
+                    case="lhd",
                     fast=fast,
-                )
-                _run(
-                    [sys.executable, str(UTILS / "sfincsScan"), "--yes", "--input", "input.namelist"],
-                    cwd=case_dir,
-                    timeout_s=timeout_s,
-                    label=f"scan-{cfg.name}-co{collision_operator}",
-                )
-            fig1_data[label] = _collect_transport_matrix(case_dir)
+                    n_points=n_points,
+                    nuprime_min=nuprime_min,
+                    nuprime_max=nuprime_max,
+                    work_dir=work_dir,
+                    summary_path=lhd_summary_path,
+                    base_input=lhd.base_input,
+                    labels_to_collision_operator={label: operator for label, operator in (("Fokker-Planck", 0), ("PAS", 1)) if operator in selected_collision_operators},
+                ),
+            )
 
-        lhd_summary_path = summary_dir / f"lhd_collisionality{'_fast' if fast else ''}_summary.json"
-        write_transport_scan_summary_json(
-            lhd_summary_path,
-            fig1_data,
-            metadata=_summary_metadata(
-                case="lhd",
-                fast=fast,
-                n_points=n_points,
-                nuprime_min=nuprime_min,
-                nuprime_max=nuprime_max,
-                work_dir=work_dir,
-                summary_path=lhd_summary_path,
-                base_input=lhd.base_input,
-                labels_to_collision_operator={"Fokker-Planck": 0, "PAS": 1},
-            ),
-        )
-
-        if not scan_only:
+        if not scan_only and fig1_data:
             _plot_matrix_elements(
                 out_path=out_dir / "sfincs_jax_fig1_lhd_collisionality.png",
                 title="LHD collisionality scan (sfincs_jax)",
@@ -440,46 +476,52 @@ def main() -> None:
     fig2_data: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     if case in ("w7x", "all"):
         for collision_operator, label in [(0, "Fokker-Planck"), (1, "PAS")]:
+            if collision_operator not in selected_collision_operators:
+                continue
             nu_n_min = nuprime_min * w7x.nuprime_factor
             nu_n_max = nuprime_max * w7x.nuprime_factor
             case_dir = work_dir / f"w7x_co{collision_operator}"
             case_dir.mkdir(parents=True, exist_ok=True)
             if not plot_only:
-                _write_scan_input(
-                    base_input=w7x.base_input,
-                    dest=case_dir / "input.namelist",
-                    nu_n_min=nu_n_min,
-                    nu_n_max=nu_n_max,
-                    n_points=n_points,
-                    collision_operator=collision_operator,
+                should_run = not (skip_existing and _has_transport_outputs(case_dir))
+                if should_run:
+                    _write_scan_input(
+                        base_input=w7x.base_input,
+                        dest=case_dir / "input.namelist",
+                        nu_n_min=nu_n_min,
+                        nu_n_max=nu_n_max,
+                        n_points=n_points,
+                        collision_operator=collision_operator,
+                        fast=fast,
+                    )
+                    _run(
+                        [sys.executable, str(UTILS / "sfincsScan"), "--yes", "--input", "input.namelist"],
+                        cwd=case_dir,
+                        timeout_s=timeout_s,
+                        label=f"scan-w7x-co{collision_operator}",
+                    )
+            if _has_transport_outputs(case_dir):
+                fig2_data[label] = _collect_transport_matrix(case_dir)
+
+        if fig2_data:
+            w7x_summary_path = summary_dir / f"w7x_collisionality{'_fast' if fast else ''}_summary.json"
+            write_transport_scan_summary_json(
+                w7x_summary_path,
+                fig2_data,
+                metadata=_summary_metadata(
+                    case="w7x",
                     fast=fast,
-                )
-                _run(
-                    [sys.executable, str(UTILS / "sfincsScan"), "--yes", "--input", "input.namelist"],
-                    cwd=case_dir,
-                    timeout_s=timeout_s,
-                    label=f"scan-w7x-co{collision_operator}",
-                )
-            fig2_data[label] = _collect_transport_matrix(case_dir)
+                    n_points=n_points,
+                    nuprime_min=nuprime_min,
+                    nuprime_max=nuprime_max,
+                    work_dir=work_dir,
+                    summary_path=w7x_summary_path,
+                    base_input=w7x.base_input,
+                    labels_to_collision_operator={label: operator for label, operator in (("Fokker-Planck", 0), ("PAS", 1)) if operator in selected_collision_operators},
+                ),
+            )
 
-        w7x_summary_path = summary_dir / f"w7x_collisionality{'_fast' if fast else ''}_summary.json"
-        write_transport_scan_summary_json(
-            w7x_summary_path,
-            fig2_data,
-            metadata=_summary_metadata(
-                case="w7x",
-                fast=fast,
-                n_points=n_points,
-                nuprime_min=nuprime_min,
-                nuprime_max=nuprime_max,
-                work_dir=work_dir,
-                summary_path=w7x_summary_path,
-                base_input=w7x.base_input,
-                labels_to_collision_operator={"Fokker-Planck": 0, "PAS": 1},
-            ),
-        )
-
-        if not scan_only:
+        if not scan_only and fig2_data:
             _plot_matrix_elements(
                 out_path=out_dir / "sfincs_jax_fig2_w7x_collisionality.png",
                 title="W7-X collisionality scan (sfincs_jax)",
