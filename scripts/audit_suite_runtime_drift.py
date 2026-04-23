@@ -20,6 +20,16 @@ def _load_rows(path: Path) -> dict[str, dict[str, object]]:
     return {str(row["case"]): row for row in rows}
 
 
+def _preferred_runtime(row: dict[str, object]) -> float | None:
+    logged = row.get("jax_logged_elapsed_s")
+    if logged not in (None, 0):
+        return float(logged)
+    runtime = row.get("jax_runtime_s")
+    if runtime in (None, 0):
+        return None
+    return float(runtime)
+
+
 def audit_suite_runtime_drift(
     *,
     baseline_report: Path,
@@ -34,8 +44,8 @@ def audit_suite_runtime_drift(
         cand_row = candidate.get(case)
         if cand_row is None:
             continue
-        base_runtime = base_row.get("jax_runtime_s")
-        cand_runtime = cand_row.get("jax_runtime_s")
+        base_runtime = _preferred_runtime(base_row)
+        cand_runtime = _preferred_runtime(cand_row)
         if base_runtime in (None, 0) or cand_runtime is None:
             continue
         base_runtime_f = float(base_runtime)
