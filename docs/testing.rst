@@ -306,15 +306,28 @@ Optional ecosystem gates
 ------------------------
 
 External JAX ecosystem libraries are evaluated through benchmark gates before they are
-allowed into production code. The current example is the Lineax implicit-solve gate:
+allowed into production code. The current bounded examples are:
 
 .. code-block:: bash
 
    python examples/performance/benchmark_optional_lineax_implicit_solve.py --backend all --suite all
+   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py --backend all
 
-This gate always benchmarks the in-tree implicit solve and only runs the Lineax branch
+The Lineax gate always benchmarks the in-tree implicit solve and only runs the Lineax branch
 when ``lineax`` is installed. The associated test
 ``tests/test_optional_lineax_implicit_gate.py`` verifies the deterministic
 nonsymmetric stress system, the tiny real scheme-5 SFINCS implicit-diff lane, the
 repeated-RHS reuse lane on that same tiny operator, and clean skip behavior when Lineax
 is absent.
+
+The measured conclusion from the current local Lineax run is intentionally conservative:
+the synthetic system is faster and residual-clean with ``lineax``, but the tiny real
+matrix-free SFINCS operator still returns Lineax failure statuses despite tiny residuals,
+so the in-tree implicit solve remains the only admissible production path.
+
+The Equinox/JAXopt gate is a separate objective-wrapper check on a real differentiable
+``geometryScheme=4`` harmonic-fit problem. Its associated test
+``tests/test_optional_eqx_jaxopt_scheme4_gate.py`` verifies deterministic problem
+construction, directional-derivative agreement for an ``equinox.Module`` wrapper,
+bounded loss reduction and parameter recovery for ``jaxopt.GradientDescent``, JSON
+output, and clean skip behavior when either optional package is absent.
