@@ -66,6 +66,20 @@ So the current policy is:
 - keep it as a candidate for explicitly bounded differentiable/reference-path experiments,
 - require a pinned real-case runtime/RSS/parity win before any production integration.
 
+The executable gate for this decision is:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_optional_lineax_implicit_solve.py \
+     --backend all \
+     --out-json examples/performance/output/lineax_implicit_gate.json
+
+This benchmark is intentionally optional. It always runs the current in-tree
+``jax.lax.custom_linear_solve`` path, and it records ``lineax`` as skipped when the
+library is not installed. A future Lineax-backed implementation should only be promoted
+after this synthetic nonsymmetric gate and a real SFINCS operator gate both show finite
+gradients, residual-clean solves, and a measured runtime or memory improvement.
+
 
 What is differentiable today?
 -----------------------------
@@ -444,6 +458,9 @@ The package currently uses a lightweight in-repo GMRES implementation for parity
 workflows, the JAX ecosystem can be integrated cleanly once the residual is expressed in a differentiable way:
 
 - `optax`: gradient-based optimization with schedules, constraints, and modern optimizers.
+- `lineax`: optional benchmark target for differentiable linear solves, currently gated
+  by ``examples/performance/benchmark_optional_lineax_implicit_solve.py`` and not used
+  by the production CLI solver.
 
 
 Parity tuning environment variables (developer)
