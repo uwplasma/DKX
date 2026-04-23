@@ -164,6 +164,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/transport_dense_lu.py``:
   cached dense-LU solver and preconditioner construction used by bounded transport
   dense fallback and dense-preconditioner paths.
+- ``sfincs_jax/transport_host_gmres.py``:
+  host SciPy GMRES first-attempt/rescue solve helper for explicit transport paths,
+  including PETSc-like preconditioned-residual acceptance for the relevant
+  near-singular transport systems.
 - ``sfincs_jax/transport_parallel_policy.py``:
   transport process-parallel backend selection, worker env, GPU worker env, and pool
   policy.
