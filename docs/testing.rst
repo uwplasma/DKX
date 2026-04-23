@@ -218,6 +218,14 @@ the direct Chandrasekhar formula was used down to ``x≈1e-14``, which is below 
 range where cancellation is safe in double precision. The JAX and NumPy paths now use
 the analytic small-``x`` series for ``|x| < 1e-5``.
 
+The geometry-integration gate now also includes an optional ``vmec_jax`` fixture
+test. When ``vmec_jax`` and its example data are importable, the test reads a real
+``vmec_jax.wout.WoutData`` object, converts it through
+``vmec_wout_from_wout_like(...)``, compares all VMEC Fourier coefficient arrays
+against the file reader, and verifies that ``vmec_geometry_from_wout(...)`` returns
+the same scheme-5 geometry arrays. In normal CI environments where the optional
+backend is not installed, the test skips rather than adding a hard dependency.
+
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
 treated as a real regression.
