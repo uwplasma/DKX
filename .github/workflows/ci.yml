@@ -100,3 +100,29 @@ jobs:
           python examples/autodiff/matrix_free_residual_and_jvp.py
           python examples/parity/solve_scheme5_tiny_parity.py
           python examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py
+
+  optional-ecosystem-gates:
+    runs-on: ubuntu-22.04
+    env:
+      JAX_ENABLE_X64: "True"
+      JAX_DISABLE_JIT: "0"
+      SFINCS_JAX_SOLVER_JIT: "1"
+      SFINCS_JAX_PRECOMPILE: "0"
+      SFINCS_JAX_PROFILE: "0"
+      SFINCS_JAX_CI: "1"
+      SFINCS_JAX_FAST_EXAMPLES: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install lineax equinox jaxopt
+      - name: Optional ecosystem benchmark gates
+        run: |
+          python -m pytest -q \
+            tests/test_optional_lineax_implicit_gate.py \
+            tests/test_optional_eqx_jaxopt_scheme4_gate.py
