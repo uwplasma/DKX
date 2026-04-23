@@ -3780,3 +3780,36 @@ Remaining work in this lane:
 - Keep `booz_xform_jax` as the second-stage route for Boozer-coordinate studies:
   `vmec_jax -> booz_xform_jax -> sfincs_jax` should only become public after the
   field-component and harmonic-selection tests pass.
+
+### 19.44 VMEC geometry evaluator split for in-memory producers
+
+Completed the next stage of the optional JAX-native geometry lane:
+
+- Refactored `sfincs_jax/vmec_geometry.py`:
+  - `vmec_geometry_from_wout_file(...)` is now a thin file-I/O wrapper,
+  - new `vmec_geometry_from_wout(...)` evaluates the existing
+    `geometryScheme=5` Fourier sums from a preloaded `VmecWout`.
+- Added a regression in `tests/test_geometry_grid_helper_coverage.py` proving
+  exact equality between:
+  - file-based `vmec_geometry_from_wout_file(...)`, and
+  - object-based `vmec_geometry_from_wout(read_vmec_wout(...))`
+    on the W7-X VMEC fixture.
+- Kept numerical formulas unchanged: this only separates file I/O from geometry
+  evaluation so optional JAX-native producers can feed the same evaluator.
+- Updated `docs/geometry.rst` and `docs/source_map.rst`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/vmec_geometry.py tests/test_geometry_grid_helper_coverage.py`
+- `python -m ruff check sfincs_jax/vmec_geometry.py tests/test_geometry_grid_helper_coverage.py`
+- `pytest -q tests/test_geometry_grid_helper_coverage.py tests/test_jax_geometry_adapters.py`
+  passed with `14 passed`.
+
+Remaining work in this lane:
+
+- Add a real `vmec_jax.WoutData -> vmec_wout_from_wout_like(...) ->
+  vmec_geometry_from_wout(...)` test when the local `vmec_jax` state is clean
+  enough to pin stable fixture behavior.
+- Add the public differentiable example only after file-based and in-memory
+  geometry arrays match on a bounded fixture and finite-difference/JAX gradient
+  checks pass.
