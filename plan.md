@@ -3912,3 +3912,34 @@ Next validation target:
   scalar. Candidate: geometryScheme=4 harmonic derivative first, then
   `vmec_jax`-driven scheme-5 once the upstream differentiable producer state is
   stable enough for a deterministic fixture.
+
+### 19.48 Analytic geometry autodiff gate
+
+Added the first bounded differentiable-geometry validation after the optional
+`vmec_jax` adapter gate:
+
+- Added `tests/test_geometry_autodiff_gates.py`.
+- The test differentiates a scalar geometry objective
+  `mean(BHat**2) + 0.1 * mean(DHat)` with respect to the three scheme-4
+  W7-X-like harmonic amplitudes.
+- The JAX gradient is compared against central finite differences on a small
+  `(Ntheta, Nzeta) = (10, 8)` grid, so the gate is cheap enough for CI but still
+  exercises the normalized geometry arrays that feed the transport operator.
+- Added a docstring to `BoozerGeometry` explaining the internal `(Ntheta, Nzeta)`
+  layout and why the geometry container remains flat and explicit.
+- Updated `docs/geometry.rst` and `docs/testing.rst` with the public
+  differentiable geometry example and the validation rationale.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/geometry.py tests/test_geometry_autodiff_gates.py`
+- `python -m ruff check tests/test_geometry_autodiff_gates.py`
+- `pytest -q tests/test_geometry_autodiff_gates.py tests/test_geometry_grid_helper_coverage.py tests/test_u_hat_fft.py`
+  passed with `17 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+
+Next validation targets:
+
+- After this cheap gate is stable, keep `vmec_jax`/`booz_xform_jax` end-to-end
+  optimization examples as a separate research-grade lane rather than merging
+  them into the lightweight CI path prematurely.

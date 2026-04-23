@@ -66,6 +66,32 @@ The reduced LHD- and W7-X-like schemes (``geometryScheme=2`` and ``4``) use fixe
 analytic coefficient sets chosen to reproduce representative magnetic spectra and
 metrics without loading an external equilibrium file.
 
+The W7-X-like scheme also exposes a small differentiable harmonic-amplitude hook in
+Python:
+
+.. code-block:: python
+
+   import jax
+   import jax.numpy as jnp
+
+   from sfincs_jax.geometry import boozer_geometry_scheme4
+
+   theta = jnp.linspace(0.0, 2.0 * jnp.pi, 16, endpoint=False)
+   zeta = jnp.linspace(0.0, 2.0 * jnp.pi / 5.0, 12, endpoint=False)
+   amp0 = jnp.asarray([0.04645, -0.04351, -0.01902])
+
+   def scalar_objective(a):
+       geom = boozer_geometry_scheme4(theta=theta, zeta=zeta, harmonics_amp0=a)
+       return jnp.mean(geom.b_hat**2) + 0.1 * jnp.mean(geom.d_hat)
+
+   gradient = jax.grad(scalar_objective)(amp0)
+
+This is not a replacement for VMEC or Boozer-file geometry. It is a deliberately
+small end-to-end JAX gate used for optimization and testing: a scalar depending on
+the normalized magnetic field and Jacobian-like coefficient is differentiated with
+respect to magnetic-spectrum amplitudes and compared against finite differences in
+CI.
+
 VMEC workflow
 -------------
 
@@ -199,6 +225,11 @@ works with explicitly normalized arrays. This is deliberate:
 - the arrays are cheap to cache and move between JAX transforms,
 - they are straightforward to inspect in tests,
 - and they make the code-to-equation correspondence easier to maintain.
+
+Internally these arrays are collected in ``sfincs_jax.geometry.BoozerGeometry``.
+The class is a flat, frozen dataclass with ``(Ntheta, Nzeta)`` array layout.  Output
+writers may transpose selected datasets to match historical HDF5 conventions, but
+operator assembly and differentiability tests use the internal layout directly.
 
 What is not a public geometry mode
 ----------------------------------
