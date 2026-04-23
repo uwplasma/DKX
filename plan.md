@@ -3877,3 +3877,38 @@ Next validation targets:
 - Run the broader focused parity subset after the collision-kernel change.
 - Add a finite-difference/JAX-gradient gate around a bounded differentiable
   geometry or transport scalar once the refactored geometry path is stable.
+
+### 19.47 Optional real `vmec_jax.WoutData` geometry adapter gate
+
+Closed the first real `vmec_jax` adapter validation item:
+
+- Added an optional test in `tests/test_jax_geometry_adapters.py` that:
+  - imports `vmec_jax` and `netCDF4` only inside the test,
+  - discovers `vmec_jax/examples/data/wout_circular_tokamak.nc` from the
+    installed/imported `vmec_jax` package path,
+  - skips cleanly if the optional backend or fixture is unavailable,
+  - reads the same file through both `vmec_jax.wout.read_wout(...)` and
+    `sfincs_jax.vmec_wout.read_vmec_wout(...)`,
+  - converts the `vmec_jax.wout.WoutData` object through
+    `vmec_wout_from_wout_like(...)`,
+  - checks exact equality of VMEC Fourier coefficient arrays,
+  - evaluates `vmec_geometry_from_wout(...)` from both objects and checks exact
+    equality of representative geometry arrays.
+- Expanded `docs/geometry.rst` with a minimal source-code example for the
+  `vmec_jax -> vmec_wout_from_wout_like -> vmec_geometry_from_wout` workflow.
+- Updated `docs/testing.rst` to describe the optional gate and why it skips in
+  normal CI if the optional backend is absent.
+
+Validation:
+
+- `python -m py_compile tests/test_jax_geometry_adapters.py`
+- `python -m ruff check tests/test_jax_geometry_adapters.py`
+- `pytest -q tests/test_jax_geometry_adapters.py tests/test_geometry_grid_helper_coverage.py`
+  passed with `15 passed`.
+
+Next validation target:
+
+- Add an actual finite-difference/JAX-gradient check around a small differentiable
+  scalar. Candidate: geometryScheme=4 harmonic derivative first, then
+  `vmec_jax`-driven scheme-5 once the upstream differentiable producer state is
+  stable enough for a deterministic fixture.

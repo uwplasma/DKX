@@ -113,9 +113,31 @@ This is the intended staged path for JAX-native equilibrium coupling:
 The first adapter stage is covered by unit tests that check backend discovery,
 ``(radius, mode)`` to ``(mode, radius)`` transposition, native ``sfincs_jax`` array
 ordering, invalid-shape rejection, and exact equality between the file wrapper and a
-preloaded ``VmecWout`` object. The remaining research-grade work is to expose an
-end-to-end public ``vmec_jax -> sfincs_jax`` example once the differentiable geometry
-producer can be validated against a frozen file-based VMEC fixture.
+preloaded ``VmecWout`` object. When ``vmec_jax`` is installed, an optional integration
+gate also reads a real ``vmec_jax.wout.WoutData`` fixture and checks exact equality of
+the converted Fourier coefficients and the evaluated scheme-5 geometry arrays.
+
+Minimal adapter workflow:
+
+.. code-block:: python
+
+   import numpy as np
+   from vmec_jax.wout import read_wout as read_vmec_jax_wout
+
+   from sfincs_jax.jax_geometry_adapters import vmec_wout_from_wout_like
+   from sfincs_jax.vmec_geometry import vmec_geometry_from_wout
+
+   wout_like = read_vmec_jax_wout("wout_circular_tokamak.nc")
+   wout = vmec_wout_from_wout_like(wout_like)
+
+   theta = np.linspace(0.0, 2.0 * np.pi, 32, endpoint=False)
+   zeta = np.linspace(0.0, 2.0 * np.pi / wout.nfp, 16, endpoint=False)
+   geom = vmec_geometry_from_wout(w=wout, theta=theta, zeta=zeta, psi_n_wish=0.25)
+
+The remaining research-grade work is to expose an end-to-end public
+``vmec_jax -> sfincs_jax`` optimization example once the differentiable geometry
+producer can be validated with finite-difference/JAX-gradient checks on a bounded
+transport scalar.
 
 Boozer ``.bc`` workflow
 -----------------------
