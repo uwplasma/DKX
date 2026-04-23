@@ -2396,3 +2396,184 @@ Testing docs should include:
   - regenerate the full W7-X collisionality figure family from the fixed writer,
   - regenerate the high-collisionality proxy only after its parent LHD/W7-X scans are
     pinned from the corrected script.
+
+### 19.25 JAX ecosystem adoption review after the focused solver split
+
+Scope of this review:
+- local source audited:
+  - `sfincs_jax/implicit_solve.py`,
+  - `sfincs_jax/solver.py`,
+  - `sfincs_jax/v3_system.py`,
+  - `sfincs_jax/v3_driver.py`,
+  - the extracted transport and Phi1 helpers,
+  - `examples/autodiff/`,
+  - `examples/optimization/`,
+  - `pyproject.toml`;
+- external primary sources checked:
+  - Lineax docs and source repository:
+    `https://docs.kidger.site/lineax/api/linear_solve/`,
+    `https://docs.kidger.site/lineax/api/operators/`,
+    `https://docs.kidger.site/lineax/api/solvers/`,
+    `https://github.com/patrick-kidger/lineax`;
+  - Equinox docs and source repository:
+    `https://docs.kidger.site/equinox/api/module/module/`,
+    `https://docs.kidger.site/equinox/api/transformations/`,
+    `https://github.com/patrick-kidger/equinox`;
+  - JAX docs:
+    `https://docs.jax.dev/en/latest/_autosummary/jax.lax.custom_linear_solve.html`,
+    `https://docs.jax.dev/en/latest/gradient-checkpointing.html`,
+    `https://docs.jax.dev/en/latest/jax.experimental.sparse.html`,
+    `https://docs.jax.dev/en/latest/notebooks/shard_map.html`,
+    `https://docs.jax.dev/en/latest/pallas/design/design.html`;
+  - nonlinear / optimization ecosystem docs:
+    `https://docs.kidger.site/optimistix/api/root_find/`,
+    `https://jaxopt.github.io/dev/implicit_diff.html`,
+    `https://optax.readthedocs.io/en/stable/api/optimizers.html`;
+  - specialized numerical-library docs:
+    `https://docs.kidger.site/diffrax/usage/getting-started/`,
+    `https://quadax.readthedocs.io/en/stable/api.html`,
+    `https://orthax.readthedocs.io/`,
+    `https://orthax.readthedocs.io/en/stable/api_general.html`.
+
+Current dependency decision:
+- Keep the base install unchanged for now:
+  - `jax`,
+  - `numpy`,
+  - `scipy`,
+  - `h5py`,
+  - `matplotlib`.
+- Do not add `lineax`, `equinox`, `optimistix`, `jaxopt`, `diffrax`,
+  `optax`, `quadax`, or `orthax` to production dependencies without a
+  pinned benchmark and parity gate.
+- If an ecosystem library is admitted only for research/autodiff examples, add
+  it as an explicitly documented optional install path rather than as a CLI
+  dependency. This preserves the current release goal: small install surface,
+  robust executable runs, and no unmeasured solver-stack change.
+
+Findings by library:
+- JAX native primitives remain the right core implementation layer:
+  - `jax.lax.custom_linear_solve` already matches the shipped implicit-diff
+    design in `implicit_solve.py`: matrix-free forward solve plus transpose
+    solve, with gradients defined by the implicit equation rather than by
+    unrolling Krylov iterations.
+  - `jax.checkpoint` / `jax.remat` should remain a targeted memory tool around
+    scanned kernels and differentiable collision / structured-velocity pieces,
+    not a broad decorator on whole solves.
+  - `jax.shard_map` is a future candidate for explicit halo/stencil kernels and
+    lower-synchronization domain-decomposition experiments. It should not
+    replace the current `pjit`/sharding path until a single-case benchmark
+    shows better strong scaling.
+  - `jax.experimental.sparse` is not a production-offender solution today:
+    JAX documents it as experimental reference sparse support and not
+    recommended for performance-critical code. Keep SciPy sparse/direct helpers
+    for executable fast paths and use JAX sparse only for small differentiable
+    reference experiments if needed.
+  - Pallas is a long-horizon candidate only for hand-written GPU kernels in
+    very specific hotspots, such as stencil halo packing or collision kernels.
+    It is experimental and too low-level for the current refactor branch.
+- `lineax` is the only ecosystem library with a plausible near-term solver-core
+  role:
+  - likely insertion point: `sfincs_jax/implicit_solve.py`;
+  - secondary insertion point: small/medium differentiable dense or structured
+    linear-solve examples, not the CLI offender path;
+  - potential benefits: function linear operators, transposes, reusable solver
+    state, PyTree-valued operators/vectors, and a unified linear-solve API;
+  - blocking evidence: the earlier local probe found a real small-SFINCS
+    speed win but also stagnation on a generic nonsymmetric stress matrix, so it
+    is not reliable enough for production defaults;
+  - admission gate: pass a benchmark matrix of current JAX GMRES/BiCGStab,
+    current SciPy host LGMRES where legal, and Lineax on:
+    - `tests/ref/pas_1species_PAS_noEr_tiny_scheme5.input.namelist`
+      implicit-diff solve,
+    - one small real full-system operator with a transpose-gradient check,
+    - one RHSMode=2/3 active-DOF transport reference solve,
+    - one generic nonsymmetric stress operator that previously exposed
+      stagnation,
+    - one repeated-RHS state-reuse case;
+  - pass criteria: parity-clean residuals, finite gradients, no stagnation,
+    no worse cold compile memory, and at least a `20%` warm-runtime or `25%`
+    RSS win on at least one pinned path without a comparable regression.
+- `equinox` is useful for future public differentiable APIs, but not yet for
+  the core physics operators:
+  - the current operators already use explicit `register_pytree_node_class`
+    methods to control which fields are dynamic arrays and which integer/bool
+    shape/layout options are static;
+  - replacing those with `equinox.Module` would reduce boilerplate, but it
+    changes a large amount of PyTree surface area and could alter compile cache
+    behavior without improving offender runtime;
+  - likely future insertion points are new standalone API objects such as
+    `SfincsProblem`, `GeometryParameters`, `TransportObjective`, and inverse
+    design / UQ examples, where `filter_jit`, `filter_grad`, `partition`, and
+    `combine` can simplify mixed static/dynamic parameter handling;
+  - admission gate: one small Equinox-backed objective wrapper must compile
+    with fewer static-argument seams, match the current JAX-native objective
+    gradients, and not slow hot solves.
+- `optimistix` is a candidate only for a differentiable nonlinear/Phi1
+  prototype:
+  - likely insertion points: `sfincs_jax/phi1_newton_linear.py`,
+    `sfincs_jax/phi1_line_search.py`, and a new experimental Phi1 nonlinear
+    solve wrapper;
+  - potential benefits: Newton/chord/root-finding abstractions, explicit
+    nonlinear-solver state, and coupling to Lineax linear solvers;
+  - blocker: the current production Phi1 path encodes v3/PETSc-like fallback,
+    residual-history, frozen-Jacobian, preconditioner, and line-search
+    semantics. Replacing it wholesale would be a high-risk behavioral change;
+  - admission gate: build a side-by-side experimental wrapper that preserves
+    the current accepted-iterate sequence on tiny/bounded Phi1 fixtures before
+    any production switch is considered.
+- `jaxopt` is useful for implicit-diff wrappers around existing solvers, not
+  for the CLI core:
+  - likely insertion point: future nonlinear sensitivity examples where the
+    forward solve remains the existing `sfincs_jax` solve but gradients are
+    exposed through `jaxopt.implicit_diff.custom_root` / `root_vjp`;
+  - this may be lower-risk than replacing the forward nonlinear solver because
+    it can wrap current semantics;
+  - admission gate: a nonlinear scalar/low-dimensional Phi1 or ambipolar-root
+    example must match finite-difference sensitivities and not require changing
+    production forward solves.
+- `optax` should stay an example-level dependency:
+  - current optimization examples already import it explicitly and tell users to
+    install it;
+  - it is appropriate for inverse-design and parameter-calibration examples;
+  - it should not enter the solver package dependencies unless optimization
+    APIs become first-class package features.
+- `diffrax` is not a current solver fit:
+  - the shipped equations are discretized steady-state kinetic systems, not
+    IVPs/SDEs/CDEs;
+  - only revisit if a future full-trajectory or characteristic-integration
+    module is implemented as an ODE solve rather than as the current
+    finite-difference/operator route.
+- `quadax` should not replace production quadrature:
+  - current integration uses fixed grids / weights tied to the SFINCS
+    discretization and parity tests;
+  - adaptive quadrature could be useful for analytic validation fixtures or
+    geometry-preprocessing research, but it would change discretization
+    semantics if inserted into production paths.
+- `orthax` is a test/reference or future spectral-basis candidate:
+  - it may help if a future collision or velocity-space module moves to an
+    explicit Legendre / orthogonal-polynomial spectral representation;
+  - it should not be added now because current velocity grids and collision
+    operators are already implemented directly and parity-tested.
+
+Concrete next experiments, if we decide to revisit implementation:
+1. Add a benchmark-only Lineax adapter outside the production path, likely
+   `sfincs_jax/experimental_lineax_solve.py` or a local benchmark script first.
+   It must be skipped cleanly when `lineax` is missing.
+2. Compare the adapter against the existing `implicit_solve.py` path on the
+   five cases listed above, including reverse-mode gradient checks and RSS.
+3. Prototype an Equinox-only public objective wrapper under `examples/autodiff/`
+   or `examples/optimization/`; do not convert core operators.
+4. Evaluate `jaxopt.custom_root` for nonlinear sensitivities around the current
+   forward solve before testing Optimistix as a replacement nonlinear driver.
+5. Revisit JAX-native `checkpoint` placement around `lax.scan` bodies in
+   structured velocity / collision-heavy differentiable paths if gradient RSS
+   becomes the next blocker.
+
+Decision:
+- No ecosystem dependency is ready to bake into production code today.
+- The highest-value future review is a bounded Lineax experiment for
+  differentiable small/medium linear solves and a JAXopt/Equinox wrapper for
+  research workflows.
+- Production CLI offender work should continue to use the current direct JAX,
+  SciPy sparse/direct, hand-tuned policy, and explicit sharding paths until a
+  library-backed experiment beats them under the same parity/runtime/RSS gates.
