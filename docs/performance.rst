@@ -641,6 +641,36 @@ Latest snapshot (3 repeats):
      - 1.3672
      - 0.0364
 
+Deep profiling without perturbing GPU timings
+---------------------------------------------
+
+For release benchmarking and the reduced/full example-suite audits, ``sfincs_jax``
+now keeps the lightweight timing/RSS profiler enabled by default but leaves
+per-mark device-memory sampling disabled. Repeated ``jax.devices()[0].memory_stats()``
+polling inside hot GPU phases can distort wall-clock timings badly on current
+JAX/CUDA stacks, so explicit device-memory inspection is opt-in:
+
+- ``SFINCS_JAX_PROFILE=1``:
+  keep phase timing + host RSS marks in logs.
+- ``SFINCS_JAX_PROFILE_DEVICE_MEM=1``:
+  also sample device memory at each mark. Use this only for targeted diagnosis,
+  not for benchmark lanes.
+- ``SFINCS_JAX_PROFILE=full``:
+  shorthand for timing/RSS plus per-mark device-memory sampling.
+
+For full XLA/kernel traces, prefer the dedicated write-output trace helper:
+
+.. code-block:: bash
+
+   python scripts/profile_write_output_trace.py \
+     --input tests/reduced_inputs/tokamak_2species_PASCollisions_noEr.input.namelist \
+     --trace-dir /tmp/sfincs_trace_tokamak2 \
+     --perfetto
+
+Use ``--warmup 0`` to include compile/lowering time in the trace, or ``--warmup 1``
+to focus on steady-state kernels. Add ``--device-memory-profile /tmp/sfincs_memory.pb``
+for a one-shot device-memory snapshot instead of per-mark polling.
+
 
 Memory footprint and compilation-time optimization (literature-backed)
 -----------------------------------------------------------------------
