@@ -75,6 +75,38 @@ def test_vmec_wout_from_wout_like_accepts_sfincs_mode_radius_arrays() -> None:
     assert converted.gmnc[1, 2] == pytest.approx(16.0)
 
 
+def test_vmec_wout_from_wout_like_path_override_is_metadata_only() -> None:
+    converted = vmec_wout_from_wout_like(_wout_like(radius_mode_order=True), path="custom/in_memory_wout.nc")
+    assert converted.path == Path("custom/in_memory_wout.nc")
+    assert converted.bmnc.shape == (5, 4)
+
+
+def test_vmec_wout_from_wout_like_zero_fills_optional_field_tables() -> None:
+    minimal = _wout_like(radius_mode_order=False)
+    del minimal.bsubumnc
+    del minimal.bsubvmnc
+    del minimal.bsubsmns
+    del minimal.bsupumnc
+    del minimal.bsupvmnc
+    del minimal.presf
+
+    converted = vmec_wout_from_wout_like(minimal)
+
+    np.testing.assert_allclose(converted.bsubumnc, np.zeros_like(converted.gmnc))
+    np.testing.assert_allclose(converted.bsubvmnc, np.zeros_like(converted.gmnc))
+    np.testing.assert_allclose(converted.bsubsmns, np.zeros_like(converted.gmnc))
+    np.testing.assert_allclose(converted.bsupumnc, np.zeros_like(converted.gmnc))
+    np.testing.assert_allclose(converted.bsupvmnc, np.zeros_like(converted.gmnc))
+    np.testing.assert_allclose(converted.presf, np.zeros((converted.ns,), dtype=np.float64))
+
+
+def test_vmec_wout_from_wout_like_rejects_missing_required_tables() -> None:
+    bad = _wout_like(radius_mode_order=False)
+    del bad.bmnc
+    with pytest.raises(AttributeError, match="bmnc"):
+        vmec_wout_from_wout_like(bad)
+
+
 def test_vmec_wout_from_wout_like_rejects_bad_shapes() -> None:
     bad = _wout_like(radius_mode_order=True)
     bad.bmnc = np.zeros((2, 2, 2))
