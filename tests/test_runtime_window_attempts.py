@@ -276,5 +276,6 @@ def test_run_jax_cli_defaults_to_profile_off(tmp_path: Path, monkeypatch: pytest
     assert warm is None
     assert rss_mb is None
     assert logged == pytest.approx(0.5)
+    assert seen_env["SFINCS_JAX_PRECOMPILE"] == "0"
     assert seen_env["SFINCS_JAX_PROFILE"] == "0"
     assert seen_env["SFINCS_JAX_PROFILE_DEVICE_MEM"] == "0"
