@@ -2846,6 +2846,43 @@ Decision:
          `vmec_jax.wout_from_fixed_boundary_run(...)`.
      - Refactor `sfincs_jax/vmec_geometry.py` so the file reader is just a thin
        wrapper around a new `vmec_geometry_from_wout_data(...)`.
+
+### 19.31 Resumable W7-X ambipolar scan lane and LHD full rerun completion
+
+- The generic scan helper now has an explicit resume path:
+  - `sfincs_jax/scans.py:run_er_scan(...)` accepts `skip_existing=True`,
+    reuses any existing `sfincsOutput.h5`, and only resolves missing scan points.
+  - this behavior is covered in
+    `tests/test_helper_module_coverage.py::test_scan_helpers_and_run_er_scan`,
+    including the partial-rerun case where one scan point is deleted and rebuilt.
+- The user-facing CLI now exposes the same capability:
+  - `sfincs_jax scan-er --skip-existing ...`
+  - this keeps the bounded restart semantics in the production scan interface,
+    not only in the publication scripts.
+- The W7-X ambipolar scaffold is now aligned with the collisionality rerun workflow:
+  - `examples/publication_figures/generate_w7x_ambipolar_validation.py` adds
+    `--skip-existing`, `--scan-only`, `--jobs`, `--index`, and `--stride`;
+  - split lanes can now fill the `E_r` ladder on separate devices with
+    `--scan-only --index k --stride N`, then finish with a final
+    `--skip-existing` aggregation pass that writes the ambipolar summary and
+    figure;
+  - focused coverage in `tests/test_generate_w7x_ambipolar_validation.py` now
+    verifies forwarding of the split/resume options and rejects the invalid
+    `--scan-only --plot-only` combination.
+- Validation for this hardening pass:
+  - `pytest -q tests/test_generate_w7x_ambipolar_validation.py tests/test_er_scan_and_ambipolar.py tests/test_helper_module_coverage.py -k 'w7x_ambipolar_validation or er_scan_writes_outputs_and_ambipolar_solve_runs or scan_helpers_and_run_er_scan'`
+    -> `7 passed`
+  - `python -m py_compile sfincs_jax/scans.py sfincs_jax/cli.py examples/publication_figures/generate_w7x_ambipolar_validation.py tests/test_generate_w7x_ambipolar_validation.py tests/test_helper_module_coverage.py`
+    -> passed
+  - `sphinx-build -W -b html docs docs/_build/html`
+    -> passed
+- `office` execution status at this point:
+  - the full LHD collisionality rerun has now completed both collision-operator
+    ladders in `/home/rjorge/sfincs_jax_refactor_v3/examples/publication_figures/output/lhd_reaudit_full`;
+  - the next remote action is no longer “wait for missing points”, but
+    “synthesize the audited full-resolution LHD summary/figure from the finished
+    output tree”, then immediately reuse the freed GPUs for the full W7-X
+    collisionality rerun or the heavier W7-X ambipolar reference lane.
      - Keep the CLI unchanged. This lane is Python-first; file-based `wout_path`
        remains the stable public CLI interface.
 

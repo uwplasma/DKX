@@ -88,6 +88,7 @@ def run_er_scan(
     values: Sequence[float],
     compute_transport_matrix: bool = False,
     compute_solution: bool = False,
+    skip_existing: bool = False,
     jobs: int | None = None,
     index: int | None = None,
     stride: int | None = None,
@@ -122,7 +123,7 @@ def run_er_scan(
         emit(0, f"scan-er: out_dir={out_dir}")
         emit(
             0,
-            f"scan-er: variable={var} n={len(vals)} compute_solution={bool(compute_solution)} compute_transport_matrix={bool(compute_transport_matrix)}",
+            f"scan-er: variable={var} n={len(vals)} compute_solution={bool(compute_solution)} compute_transport_matrix={bool(compute_transport_matrix)} skip_existing={bool(skip_existing)}",
         )
         if index is not None:
             emit(1, f"scan-er: subset index={index} stride={stride_val}")
@@ -147,6 +148,11 @@ def run_er_scan(
     def _run_one(v: float, i: int) -> tuple[Path, Path]:
         run_dir = out_dir / f"{var}{v:.4g}"
         run_dir.mkdir(parents=True, exist_ok=True)
+        out_path = run_dir / "sfincsOutput.h5"
+        if bool(skip_existing) and out_path.exists():
+            if emit is not None:
+                emit(1, f"scan-er: [{i}/{len(vals)}] {run_dir.name} already complete; skipping")
+            return run_dir, out_path
         if emit is not None:
             emit(0, f"scan-er: [{i}/{len(vals)}] {run_dir.name} {var}={v:.16g}")
 
@@ -167,7 +173,6 @@ def run_er_scan(
                 else:
                     os.environ.pop("SFINCS_JAX_STATE_IN", None)
 
-        out_path = run_dir / "sfincsOutput.h5"
         write_sfincs_jax_output_h5(
             input_namelist=w_input,
             output_path=out_path,

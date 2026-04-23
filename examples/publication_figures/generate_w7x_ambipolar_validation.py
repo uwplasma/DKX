@@ -133,10 +133,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Apply bounded low-resolution overrides for quicker exploratory scans.",
     )
     parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Reuse existing sfincsOutput.h5 files in the scan directory and only solve missing points.",
+    )
+    parser.add_argument(
+        "--scan-only",
+        action="store_true",
+        help="Populate the scan directory only; skip ambipolar postprocessing and figure generation.",
+    )
+    parser.add_argument(
         "--plot-only",
         action="store_true",
         help="Reuse an existing summary JSON and only regenerate the figure.",
     )
+    parser.add_argument("--jobs", type=int, default=1, help="Parallel worker processes for scan points.")
+    parser.add_argument("--index", type=int, default=None, help="Optional job-array index (0-based).")
+    parser.add_argument("--stride", type=int, default=1, help="Stride for job-array slicing.")
     return parser
 
 
@@ -323,10 +336,15 @@ def _run_validation(
     out_dir: Path,
     er_values: list[float],
     fast: bool,
+    skip_existing: bool,
+    scan_only: bool,
     n_fine: int,
     species_index: int,
     stem: str,
     title: str,
+    jobs: int,
+    index: int | None,
+    stride: int,
 ) -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
     scan_dir = work_dir / "scan"
@@ -338,7 +356,13 @@ def _run_validation(
         values=er_values,
         compute_solution=True,
         compute_transport_matrix=False,
+        skip_existing=bool(skip_existing),
+        jobs=int(jobs),
+        index=index,
+        stride=int(stride),
     )
+    if scan_only:
+        return
     ambi = solve_ambipolar_from_scan_dir(scan_dir=scan_dir, write_pickle=True, write_json=True, n_fine=int(n_fine))
     payload = build_summary_payload(
         base_input=input_path,
@@ -368,6 +392,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.summary_json is not None
         else work_dir / "w7x_ambipolar_validation_summary.json"
     )
+    if args.scan_only and args.plot_only:
+        raise ValueError("Cannot combine --scan-only and --plot-only.")
     if args.plot_only:
         payload = load_summary_json(summary_json)
         plot_w7x_ambipolar_summary(
@@ -390,10 +416,15 @@ def main(argv: list[str] | None = None) -> int:
         out_dir=out_dir,
         er_values=er_values,
         fast=bool(args.fast),
+        skip_existing=bool(args.skip_existing),
+        scan_only=bool(args.scan_only),
         n_fine=int(args.n_fine),
         species_index=int(args.species_index),
         stem=str(args.stem),
         title=str(args.title),
+        jobs=int(args.jobs),
+        index=int(args.index) if args.index is not None else None,
+        stride=int(args.stride),
     )
     return 0
 

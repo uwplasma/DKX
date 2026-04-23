@@ -127,3 +127,20 @@ python examples/publication_figures/generate_w7x_ambipolar_validation.py \
 This lane currently ships as an executable scaffold with a metadata-rich JSON summary
 and figure writer, but it is not promoted to a checked-in W7-X literature artifact
 until the heavier reference input is rerun and audited.
+
+The ambipolar scaffold now supports restart and split execution as well:
+
+```bash
+python examples/publication_figures/generate_w7x_ambipolar_validation.py \
+  --work-dir examples/publication_figures/output/w7x_ambipolar_validation_reference \
+  --summary-json examples/publication_figures/output/w7x_ambipolar_validation_reference/summary.json \
+  --out-dir docs/_static/figures/paper \
+  --skip-existing \
+  --scan-only \
+  --index 0 \
+  --stride 2
+```
+
+Launch a second process with ``--index 1 --stride 2`` to fill the other half of the
+``E_r`` ladder. Then rerun once without ``--scan-only`` and with ``--skip-existing``
+to reuse the finished scan points, write the ambipolar summary, and generate the figure.
