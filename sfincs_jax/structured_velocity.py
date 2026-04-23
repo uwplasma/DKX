@@ -122,7 +122,7 @@ def factor_block_tridiagonal(
     *,
     reverse: bool = False,
 ) -> BlockTridiagonalFactorization:
-    """Factor a block-tridiagonal matrix for later repeated solves.
+    r"""Factor a block-tridiagonal matrix for later repeated solves.
 
     The matrix is defined by the block arrays
 
