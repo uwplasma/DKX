@@ -9,6 +9,7 @@ POLICY_MODULES = (
     "sfincs_jax.rhs1_host_policy",
     "sfincs_jax.rhs1_large_cpu_policy",
     "sfincs_jax.rhs1_pas_policy",
+    "sfincs_jax.rhs1_post_xblock_policy",
     "sfincs_jax.rhs1_preconditioner_dispatch",
     "sfincs_jax.rhs1_sparse_polish_policy",
     "sfincs_jax.rhs1_sparse_exact_policy",

@@ -4208,3 +4208,26 @@ Notes:
   regression, CLI, docs-support, geometry, solver, or bounded parity tests.
 - The next bounded refactor lane is the adjacent post-x-block polish /
   targeted-polish / skip-global-sparse policy cluster in `v3_driver.py`.
+
+### 19.60 RHSMode=1 post-x-block polish policy extraction
+
+Completed the adjacent large-CPU handoff refactor:
+
+- Add `sfincs_jax/rhs1_post_xblock_policy.py` for fast post-x-block polish,
+  targeted FP polish, and explicit skip-global-sparse-after-xblock decisions.
+- Keep the existing `v3_driver.py` wrappers intact for compatibility with the
+  established heuristic tests.
+- Add direct tests for the active-size thresholds, residual thresholds, explicit
+  opt-in behavior, CPU/backend guards, implicit-solve guards, and full-FP-only
+  guards.
+- Update API docs, source map, testing docs, and module-docstring coverage.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_post_xblock_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_post_xblock_policy.py tests/test_policy_module_docstrings.py`
+- `python -m ruff check sfincs_jax/rhs1_post_xblock_policy.py tests/test_rhs1_post_xblock_policy.py tests/test_policy_module_docstrings.py`
+- `pytest -q tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_sparse_first_heuristic.py tests/test_policy_module_docstrings.py`
+  passed with `75 passed`.
+- `pytest -q tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_large_cpu_policy.py tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
+  passed with `183 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
