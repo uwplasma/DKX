@@ -98,6 +98,9 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
 ```
 
 The same split-and-synthesize pattern applies to the W7-X collisionality lane.
+When ``--skip-existing`` is used, the generator keeps completed scan points and
+prunes only stale subdirectories that do not contain ``sfincsOutput.h5`` before
+rerunning the missing points.
 
 The corrected bounded LHD rerun is currently pinned as:
 - `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`

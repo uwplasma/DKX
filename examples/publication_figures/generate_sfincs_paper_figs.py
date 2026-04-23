@@ -230,6 +230,47 @@ def _has_transport_outputs(work_dir: Path) -> bool:
     return any(work_dir.glob("*/sfincsOutput.h5"))
 
 
+def _scan_values(*, min_value: float, max_value: float, n_points: int, scale: str = "log") -> tuple[float, ...]:
+    n_points = int(n_points)
+    if n_points < 1:
+        return ()
+    if n_points == 1:
+        return (float(min_value),)
+    scale_kind = str(scale).strip().lower()
+    if scale_kind == "log":
+        sign = -1.0 if float(min_value) < 0.0 else 1.0
+        values = np.exp(np.linspace(np.log(abs(float(min_value))), np.log(abs(float(max_value))), n_points))
+        return tuple(float(sign * value) for value in values)
+    if scale_kind == "linear":
+        return tuple(float(value) for value in np.linspace(float(min_value), float(max_value), n_points))
+    raise ValueError(f"Unsupported scan scale {scale!r}.")
+
+
+def _expected_scan_subdirs(
+    *,
+    scan_variable: str,
+    min_value: float,
+    max_value: float,
+    n_points: int,
+    scale: str = "log",
+) -> tuple[str, ...]:
+    values = _scan_values(min_value=min_value, max_value=max_value, n_points=n_points, scale=scale)
+    return tuple(f"{scan_variable}_{value:.4g}" for value in values)
+
+
+def _scan_dir_complete(work_dir: Path, *, expected_subdirs: tuple[str, ...]) -> bool:
+    if not expected_subdirs:
+        return False
+    return all((work_dir / name / "sfincsOutput.h5").exists() for name in expected_subdirs)
+
+
+def _prune_incomplete_scan_dirs(work_dir: Path, *, expected_subdirs: tuple[str, ...]) -> None:
+    for name in expected_subdirs:
+        subdir = work_dir / name
+        if subdir.exists() and not (subdir / "sfincsOutput.h5").exists():
+            shutil.rmtree(subdir, ignore_errors=True)
+
+
 def _parse_collision_operators(value: str) -> tuple[int, ...]:
     parts = [part.strip() for part in str(value).split(",") if part.strip()]
     if not parts:
@@ -424,10 +465,21 @@ def main() -> None:
                 continue
             nu_n_min = nuprime_min * cfg.nuprime_factor
             nu_n_max = nuprime_max * cfg.nuprime_factor
+            expected_subdirs = _expected_scan_subdirs(
+                scan_variable="nu_n",
+                min_value=nu_n_min,
+                max_value=nu_n_max,
+                n_points=n_points,
+                scale="log",
+            )
             case_dir = work_dir / f"{cfg.name}_co{collision_operator}"
             case_dir.mkdir(parents=True, exist_ok=True)
             if not plot_only:
-                should_run = not (skip_existing and _has_transport_outputs(case_dir))
+                if skip_existing:
+                    _prune_incomplete_scan_dirs(case_dir, expected_subdirs=expected_subdirs)
+                    should_run = not _scan_dir_complete(case_dir, expected_subdirs=expected_subdirs)
+                else:
+                    should_run = True
                 if should_run:
                     _write_scan_input(
                         base_input=cfg.base_input,
@@ -480,10 +532,21 @@ def main() -> None:
                 continue
             nu_n_min = nuprime_min * w7x.nuprime_factor
             nu_n_max = nuprime_max * w7x.nuprime_factor
+            expected_subdirs = _expected_scan_subdirs(
+                scan_variable="nu_n",
+                min_value=nu_n_min,
+                max_value=nu_n_max,
+                n_points=n_points,
+                scale="log",
+            )
             case_dir = work_dir / f"w7x_co{collision_operator}"
             case_dir.mkdir(parents=True, exist_ok=True)
             if not plot_only:
-                should_run = not (skip_existing and _has_transport_outputs(case_dir))
+                if skip_existing:
+                    _prune_incomplete_scan_dirs(case_dir, expected_subdirs=expected_subdirs)
+                    should_run = not _scan_dir_complete(case_dir, expected_subdirs=expected_subdirs)
+                else:
+                    should_run = True
                 if should_run:
                     _write_scan_input(
                         base_input=w7x.base_input,
