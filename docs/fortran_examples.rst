@@ -8,7 +8,7 @@ validation**.
 For the current release-facing status on ``main`` use the full scaled example-suite audit instead:
 
 - ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix``
-- ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postkeyfix``
+- ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem``
 
 That audit is the one reflected in ``README.md`` and the release-facing parity claims. This page is
 still useful because it answers a different question: whether a vendored upstream input has an
