@@ -81,6 +81,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_pas_policy
    :members:
 
+.. automodule:: sfincs_jax.rhs1_post_xblock_policy
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_preconditioner_auto_policy
    :members:
 
