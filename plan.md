@@ -3968,3 +3968,24 @@ Validation:
 - `pytest -q tests/test_jax_geometry_adapters.py tests/test_geometry_grid_helper_coverage.py tests/test_geometry_autodiff_gates.py`
   passed with `19 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.50 Refactored policy module docstring regression guard
+
+Fixed a source-structure issue in the split policy/helper modules: several files had
+their explanatory string after `from __future__ import annotations`, so Python did
+not expose it as the module `__doc__`.
+
+- Moved the module docstrings ahead of the future import in the affected RHSMode=1
+  and transport policy/helper modules.
+- Added `tests/test_policy_module_docstrings.py` to import each split policy module
+  and assert that the public module docstring is present and non-empty.
+- Updated `docs/testing.rst` so this is documented as part of the maintainability
+  test layer, not just a style-only cleanup.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_handoff.py sfincs_jax/rhs1_pas_policy.py sfincs_jax/rhs1_preconditioner_dispatch.py sfincs_jax/rhs1_sparse_polish_policy.py sfincs_jax/rhs1_sparse_rescue_policy.py sfincs_jax/rhs1_stage2_policy.py sfincs_jax/rhs1_strong_auto_kind.py sfincs_jax/rhs1_strong_control.py sfincs_jax/rhs1_strong_fallback.py sfincs_jax/rhs1_strong_policy.py sfincs_jax/transport_dense_lu.py sfincs_jax/transport_handoff_policy.py sfincs_jax/transport_host_gmres.py sfincs_jax/transport_preconditioner_dispatch.py sfincs_jax/transport_solve_policy.py tests/test_policy_module_docstrings.py`
+- `python -m ruff check sfincs_jax/rhs1_handoff.py sfincs_jax/rhs1_pas_policy.py sfincs_jax/rhs1_preconditioner_dispatch.py sfincs_jax/rhs1_sparse_polish_policy.py sfincs_jax/rhs1_sparse_rescue_policy.py sfincs_jax/rhs1_stage2_policy.py sfincs_jax/rhs1_strong_auto_kind.py sfincs_jax/rhs1_strong_control.py sfincs_jax/rhs1_strong_fallback.py sfincs_jax/rhs1_strong_policy.py sfincs_jax/transport_dense_lu.py sfincs_jax/transport_handoff_policy.py sfincs_jax/transport_host_gmres.py sfincs_jax/transport_preconditioner_dispatch.py sfincs_jax/transport_solve_policy.py tests/test_policy_module_docstrings.py`
+- `pytest -q tests/test_policy_module_docstrings.py tests/test_rhs1_handoff.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_sparse_polish_policy.py tests/test_rhs1_sparse_rescue_policy.py tests/test_rhs1_stage2_policy.py tests/test_rhs1_strong_auto_kind.py tests/test_rhs1_strong_control.py tests/test_rhs1_strong_policy.py tests/test_transport_handoff_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_transport_solve_policy.py`
+  passed with `63 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.

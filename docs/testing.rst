@@ -237,6 +237,13 @@ uses the scheme-4 harmonic-amplitude hook to form a scalar from
 differences.  This keeps CI fast while protecting the JAX-native geometry path from
 silent regressions in array layout, dtype handling, or non-differentiable branches.
 
+The refactor branch also treats documentation discoverability as testable behavior.
+``tests/test_policy_module_docstrings.py`` imports the split RHSMode=1 and transport
+policy modules and checks that their explanatory module docstrings are real
+``__doc__`` strings rather than inert comments. This is intentionally small, but it
+keeps the source map and generated API documentation useful as the large driver is
+split into manageable pieces.
+
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
 treated as a real regression.

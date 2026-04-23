@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Policy helpers for RHSMode=1 stage-2 solve triggering."""
+
+from __future__ import annotations
 
 import os
 

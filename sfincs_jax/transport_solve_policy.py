@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Shared transport active-DOF and dense-policy helpers."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 import os

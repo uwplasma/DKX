@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Shared RHSMode=1 solve-handoff helpers."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
