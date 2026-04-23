@@ -2627,14 +2627,54 @@ Decision:
       - `sfincs_tiny_implicit`: relative residual about `1.4e-14`,
       - `sfincs_tiny_repeated_rhs`: relative residual about `4.3e-12`,
         max solution error about `2.8e-09`.
-- Next actions:
-  1. run the extended Lineax gate on a machine that actually has `lineax`
-     installed and record whether the tiny real operator and repeated-RHS lanes
-     remain residual-clean and materially faster or lighter than the in-tree
-     baseline;
-  2. add a similarly optional JAXopt/Equinox objective-wrapper gate for
-     nonlinear or ambipolar sensitivity once the forward solve target is
-     finalized;
+- The first real local run with `lineax` installed has now been audited:
+  - command:
+    `python examples/performance/benchmark_optional_lineax_implicit_solve.py --backend all --suite all --restart 20 --maxiter 120 --out-json /tmp/sfincs_jax_lineax_gate_all.json`;
+  - measured outcome:
+    - `synthetic_nonsymmetric`:
+      - in-tree path: about `0.99 s`, relative residual about `2.6e-16`, status `ok`;
+      - `lineax_gmres`: about `0.39 s`, relative residual about `2.1e-17`, status `ok`;
+    - `sfincs_tiny_implicit`:
+      - in-tree path: about `4.92 s`, relative residual about `1.4e-14`, status `ok`;
+      - `lineax_gmres`: about `0.80 s`, relative residual about `3.2e-16`, but status `error` with
+        `maximum number of solver steps was reached`;
+    - `sfincs_tiny_repeated_rhs`:
+      - in-tree path: about `1.92 s`, relative residual about `4.3e-12`, max solution error about `2.8e-09`, status `ok`;
+      - `lineax_gmres`: about `1.58 s`, relative residual about `7.5e-16`, but status `error` with iterative-breakdown messaging.
+  - conclusion:
+    - `lineax` remains promising on synthetic linear systems,
+    - but it is still not admissible for the real matrix-free SFINCS operator because solver status is not clean even when the residual is tiny,
+    - so it stays benchmark-only and out of the production solve ladder.
+- A second concrete ecosystem gate is now executable without changing
+  production dependencies:
+  - `examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py`
+    benchmarks optional `equinox` and `jaxopt` wrappers on a real
+    `geometryScheme=4` harmonic-fit objective;
+  - `equinox` is only used as a small callable module wrapper around the
+    differentiable objective;
+  - `jaxopt.GradientDescent` is only used as a bounded outer-optimization check,
+    not as a replacement for the production solve path;
+  - `tests/test_optional_eqx_jaxopt_scheme4_gate.py` verifies deterministic
+    problem construction, directional finite-difference agreement, bounded loss
+    reduction, parameter recovery, JSON output, and clean skip behavior.
+- Validation for the new objective-wrapper gate:
+  - direct benchmark smoke:
+    `python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py --backend all --n-theta 17 --n-zeta 17 --maxiter 5 --stepsize 0.1 --out-json /tmp/sfincs_jax_eqx_jaxopt_gate.json`
+    produced:
+    - `equinox_wrapper`: directional derivative about `-2.50332297435e-01`,
+      centered finite-difference derivative about `-2.50332297424e-01`,
+      absolute discrepancy about `1.08e-11`, status `ok`;
+    - `jaxopt_gradient_descent`: initial loss about `2.98e-02`,
+      final loss about `1.21e-15`, loss ratio about `4.07e-14`,
+      final parameter error about `1.59e-08`, status `ok`.
+  - focused tests:
+    - `pytest -q tests/test_optional_eqx_jaxopt_scheme4_gate.py`
+      -> `6 passed`.
+- Updated next actions:
+  1. keep the current Lineax result as a negative admission gate until a real
+     operator run is both faster and status-clean;
+  2. if a nonlinear or ambipolar objective wrapper is needed, add it as a
+     separate optional gate instead of broadening the production dependency set;
   3. keep full-resolution LHD/W7-X collisionality regeneration and W7-X
      ambipolar validation as open research lanes until their acceptance gates
      are satisfied by pinned artifacts.
