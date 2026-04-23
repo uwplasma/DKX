@@ -46,7 +46,7 @@ from .solver import (
 )
 from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
 from .structured_velocity import factor_block_tridiagonal
-from .pas_smoother import adaptive_pas_smoother, adaptive_pas_smoother_allowed
+from .pas_smoother import adaptive_pas_smoother
 from .explicit_sparse import build_operator_from_matvec, factorize_host_sparse_operator
 from .rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
@@ -54,6 +54,7 @@ from .rhs1_pas_policy import (
     pas_tokamak_theta_preconditioner_applicable as _pas_tokamak_theta_preconditioner_applicable,
     pas_tz_preconditioner_applicable as _pas_tz_preconditioner_applicable,
     pas_tz_preconditioner_memory_safe as _pas_tz_preconditioner_memory_safe,
+    rhs1_pas_adaptive_smoother_allowed as _rhs1_pas_adaptive_smoother_allowed_impl,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
 from .rhs1_preconditioner_dispatch import (
@@ -208,6 +209,7 @@ from .transport_parallel_execution import (
     run_transport_parallel_payloads,
     should_run_transport_parallel,
 )
+from .solve_mode_policy import resolve_use_implicit as _resolve_use_implicit_impl
 from .phi1_newton_policy import (
     phi1_frozen_jacobian_policy,
     phi1_gmres_restart,
@@ -438,10 +440,7 @@ def _precond_dtype(size_hint: int | None = None) -> jnp.dtype:
 
 def _resolve_use_implicit(*, differentiable: bool | None = None) -> bool:
     """Resolve whether to use the implicit/differentiable linear solve path."""
-    if differentiable is not None:
-        return bool(differentiable)
-    implicit_env = os.environ.get("SFINCS_JAX_IMPLICIT_SOLVE", "").strip().lower()
-    return implicit_env not in {"0", "false", "no", "off"}
+    return _resolve_use_implicit_impl(differentiable=differentiable)
 
 
 def _small_regularized_lstsq(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
@@ -785,22 +784,12 @@ def _rhsmode1_pas_adaptive_smoother_allowed(
     target: float,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER", "").strip().lower()
-    enabled = env not in {"0", "false", "no", "off"}
-    min_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_MIN", "").strip()
-    try:
-        min_size = int(min_env) if min_env else 2000
-    except ValueError:
-        min_size = 2000
-    return adaptive_pas_smoother_allowed(
-        enabled=enabled,
-        use_implicit=bool(use_implicit),
-        has_pas=op.fblock.pas is not None,
-        include_phi1=bool(op.include_phi1),
+    return _rhs1_pas_adaptive_smoother_allowed_impl(
+        op=op,
+        active_size=int(active_size),
         residual_norm=float(residual_norm),
         target=float(target),
-        active_size=int(active_size),
-        min_size=int(min_size),
+        use_implicit=bool(use_implicit),
     )
 
 

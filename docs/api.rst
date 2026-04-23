@@ -120,6 +120,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_strong_policy
    :members:
 
+.. automodule:: sfincs_jax.solve_mode_policy
+   :members:
+
 .. automodule:: sfincs_jax.transport_dense_lu
    :members:
 
