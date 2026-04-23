@@ -15,6 +15,18 @@
     "claims": [
       "Ion transport matrix elements versus collisionality at Er=0",
       "High-collisionality trend should agree with the SFINCS 2014 figure family"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_sfincs_paper_figs.py"
+    ],
+    "tests": [
+      "tests/test_generate_sfincs_paper_figs.py",
+      "tests/test_collisionality_artifact.py"
+    ],
+    "acceptance_gates": [
+      "Regenerate the full LHD collisionality scan from the fixed scan-input writer",
+      "Emit a machine-readable summary with collision-operator labels, collisionality values, and transport matrices",
+      "Verify FP/PAS separation and high-collisionality trend assertions before promoting the figure to publication grade"
     ]
   },
   {
@@ -35,6 +47,18 @@
     "claims": [
       "The corrected bounded LHD collisionality lane resolves clear FP/PAS separation again",
       "This branch artifact is suitable for regression and manuscript-layout work, but the full collisionality figure family still needs regenerated audited artifacts"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_sfincs_paper_figs.py"
+    ],
+    "tests": [
+      "tests/test_generate_sfincs_paper_figs.py",
+      "tests/test_collisionality_artifact.py"
+    ],
+    "acceptance_gates": [
+      "Summary artifact contains both Fokker-Planck and PAS labels on the pinned four-point collisionality ladder",
+      "For every pinned collisionality, PAS diagonal transport coefficients remain separated from FP coefficients",
+      "Figure and JSON artifacts stay checked in until the full-resolution lane replaces this bounded scaffold"
     ]
   },
   {
@@ -53,6 +77,18 @@
     "claims": [
       "Ion transport matrix elements versus collisionality at Er=0",
       "Low- versus high-collisionality operator ordering should match the SFINCS 2014 figure family"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_sfincs_paper_figs.py"
+    ],
+    "tests": [
+      "tests/test_generate_sfincs_paper_figs.py",
+      "tests/test_collisionality_artifact.py"
+    ],
+    "acceptance_gates": [
+      "Regenerate the full W7-X collisionality scan from the fixed scan-input writer",
+      "Emit a machine-readable summary with collision-operator labels, collisionality values, and transport matrices",
+      "Verify FP/PAS separation and operator-ordering assertions before promoting the figure to publication grade"
     ]
   },
   {
@@ -73,6 +109,18 @@
     "claims": [
       "The corrected bounded W7-X collisionality lane resolves clear FP/PAS separation again",
       "This branch artifact is suitable for regression and manuscript-layout work, but the full collisionality figure family still needs regenerated audited artifacts"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_sfincs_paper_figs.py"
+    ],
+    "tests": [
+      "tests/test_generate_sfincs_paper_figs.py",
+      "tests/test_collisionality_artifact.py"
+    ],
+    "acceptance_gates": [
+      "Summary artifact contains both Fokker-Planck and PAS labels on the pinned four-point collisionality ladder",
+      "For every pinned collisionality, PAS diagonal transport coefficients remain separated from FP coefficients",
+      "Figure and JSON artifacts stay checked in until the full-resolution lane replaces this bounded scaffold"
     ]
   },
   {
@@ -90,6 +138,17 @@
     ],
     "claims": [
       "High-collisionality transport-matrix trends should agree with analytic asymptotic limits"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_sfincs_paper_figs.py"
+    ],
+    "tests": [
+      "tests/test_generate_sfincs_paper_figs.py"
+    ],
+    "acceptance_gates": [
+      "Regenerate only after the parent LHD and W7-X collisionality scans are rebuilt from corrected summaries",
+      "Record the asymptotic normalization used for the Simakov-Helander comparison",
+      "Check the high-collisionality trend numerically from the JSON summary, not only visually from the plot"
     ]
   },
   {
@@ -110,6 +169,18 @@
     "claims": [
       "The three trajectory models agree at Er=0 on the fixed tokamak-like reference input",
       "Away from Er=0, the tokamak-like reference sweep resolves clear separation in fluxes and flows across DKES, partial, and full trajectories"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_er_trajectory_sweep.py"
+    ],
+    "tests": [
+      "tests/test_er_trajectory_sweep.py",
+      "tests/test_er_trajectory_sweep_artifact.py"
+    ],
+    "acceptance_gates": [
+      "Pinned summary contains DKES, partial, and full trajectory models at negative, zero, and positive Er",
+      "All trajectory models agree at Er=0 within the strict pinned tolerance",
+      "Finite-Er records resolve model separation in at least one flux or flow diagnostic"
     ]
   },
   {
@@ -130,6 +201,18 @@
     "claims": [
       "The three trajectory models agree at Er=0 on the fixed stellarator-like scaffold input",
       "A bounded fast stellarator-like sweep resolves nonzero-Er separation while the full-resolution version remains a heavier validation lane"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_er_trajectory_sweep.py"
+    ],
+    "tests": [
+      "tests/test_er_trajectory_sweep.py",
+      "tests/test_er_trajectory_sweep_artifact.py"
+    ],
+    "acceptance_gates": [
+      "Pinned summary contains DKES, partial, and full trajectory models at negative, zero, and positive Er",
+      "All trajectory models agree at Er=0 within the strict pinned tolerance",
+      "Finite-Er records resolve nonzero bootstrap-current or flow spread before this scaffold is used as a manuscript figure"
     ]
   },
   {
@@ -145,6 +228,18 @@
     "artifacts": [],
     "claims": [
       "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature"
+    ],
+    "source_code": [
+      "sfincs_jax/ambipolar.py",
+      "sfincs_jax/io.py"
+    ],
+    "tests": [
+      "tests/test_er_scan_and_ambipolar.py"
+    ],
+    "acceptance_gates": [
+      "Document the exact VMEC/Boozer/profile inputs used for the comparison",
+      "Solve a finite ambipolar-Er root with bracket/provenance stored in the artifact",
+      "Compare heat-flux ordering and Er sign/magnitude trend against the published W7-X validation context without claiming experimental agreement beyond the reconstructed inputs"
     ]
   },
   {
@@ -160,6 +255,19 @@
     "claims": [
       "Monoenergetic coefficients and low-collisionality trends should overlap with MONKES on shared model subsets",
       "KNOSOS-style low-collisionality ordering should be respected when exact model overlap is not available"
+    ],
+    "source_code": [
+      "sfincs_jax/transport_matrix.py",
+      "sfincs_jax/v3_driver.py"
+    ],
+    "tests": [
+      "tests/test_transport_matrix_rhsmode2_parity.py",
+      "tests/test_transport_matrix_rhsmode3_parity.py"
+    ],
+    "acceptance_gates": [
+      "Separate exact shared-model comparisons from qualitative low-collisionality trend checks",
+      "Pin all compared coefficients, normalizations, and geometry inputs in machine-readable artifacts",
+      "Use MONKES/KNOSOS only as cross-code evidence where the modeled equations and normalizations are explicitly aligned"
     ]
   },
   {
@@ -175,6 +283,20 @@
     "claims": [
       "Directional derivatives from autodiff should agree with finite differences and implicit-diff checks",
       "Geometry-sensitivity maps should be stable enough for optimization-oriented workflows"
+    ],
+    "source_code": [
+      "sfincs_jax/implicit_solve.py",
+      "examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py",
+      "examples/optimization/fit_geometry_harmonics_with_optax.py"
+    ],
+    "tests": [
+      "tests/test_implicit_linear_solve_grad.py",
+      "tests/test_full_system_residual_jvp.py"
+    ],
+    "acceptance_gates": [
+      "Directional derivatives agree with centered finite differences on pinned scalar objectives",
+      "Implicit-diff gradients remain finite and residual-clean for both GMRES and BiCGStab wrappers",
+      "Optimization examples keep optional dependencies explicit and do not change production solver defaults"
     ]
   }
 ]
