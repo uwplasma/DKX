@@ -4300,3 +4300,25 @@ Validation:
 - `pytest -q tests/test_rhs1_pas_policy.py tests/test_solve_mode_policy.py tests/test_rhs1_acceptance_policy.py tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_large_cpu_policy.py tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
   passed with `195 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.64 Full-suite gate after PAS smoother and solve-mode extraction
+
+Ran the full local suite after:
+
+- moving PAS adaptive-smoother eligibility into `rhs1_pas_policy.py`,
+- adding `solve_mode_policy.py`,
+- and keeping the `v3_driver.py` wrappers as compatibility seams.
+
+Validation:
+
+- `pytest -q` passed with `827 passed in 350.09s (0:05:50)`.
+
+Notes:
+
+- This is the second full-suite gate after the recent policy split series and
+  confirms the shared implicit-solve mode refactor did not regress the I/O,
+  driver, CLI, solver, or bounded parity tests.
+- The next lane should be chosen from the remaining plan items rather than
+  continuing to split already-small wrappers by default: driver refactor
+  residuals, stronger physics gates, coverage, PAS offender benchmarks, and
+  documentation completeness remain the main open research-grade tracks.
