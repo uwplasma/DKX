@@ -3449,3 +3449,147 @@ Immediate next actions:
   - continue splitting policy-only routing out of `v3_driver.py`, prioritizing
     the RHSMode=1 top-level preconditioner auto-selection block so the remaining
     offender routing can be tested without full solves.
+
+### 19.38 Pre-merge open-lane gate before `main` release
+
+Decision: do not merge/tag/release this branch until the following lanes are
+closed, or explicitly moved to a documented post-release research backlog with
+measured evidence and clear user-facing caveats.
+
+1. Code refactoring / maintainability.
+   - Finish policy-only extraction from `v3_driver.py` before deeper numerical
+     edits:
+     - RHSMode=1 top-level preconditioner auto-selection,
+     - RHSMode=1 retry/rescue ordering,
+     - dense/sparse/direct host handoff policy,
+     - transport solve-selection policy if it still has duplicate logic.
+   - Acceptance:
+     - no numerical behavior change,
+     - direct unit tests for each extracted module,
+     - representative parity fixture still clean,
+     - docs/source map updated.
+
+2. Better physics gates and validation.
+   - Promote the validation matrix from "example parity" to physics-invariant
+     gates:
+     - conservation / nullspace checks for collision terms,
+     - Onsager symmetry / transport-matrix reciprocity where applicable,
+     - collisionality trend gates for LHD/W7-X literature-style scans,
+     - Er trajectory-model small-field agreement and finite-field separation,
+     - ambipolar root bracketing and root-stability checks on bounded fixtures,
+     - monoenergetic normalization checks against DKES/KNOSOS-compatible
+       reference conventions where the model overlap is defensible.
+   - Acceptance:
+     - each new physics gate names the equation/identity and source reference,
+     - bounded CI test plus optional release/nightly larger artifact,
+     - generated plot or machine-readable validation artifact when useful for a
+       future paper.
+
+3. Coverage path to `95%` with literature-anchored tests.
+   - Do not chase `95%` by adding slow full-solve tests to PR CI.
+   - Raise coverage in stages:
+     - next floor: `60%` after more driver/I/O policy extraction,
+     - next floor: `75%` after solver orchestration is decomposed,
+     - research-grade target: `95%` after the deep driver body is split into
+       testable policy, assembly, linear algebra, diagnostics, and output
+       modules.
+   - Acceptance:
+     - every coverage batch is tied to a physical identity, numerical method
+       invariant, public CLI behavior, or real regression,
+     - PR CI remains near the 5-10 minute target,
+     - heavy validations stay in scheduled/release lanes.
+
+4. PAS memory/runtime offenders.
+   - Continue measured work on the remaining pinned offenders:
+     - `tokamak_1species_PASCollisions_withEr_fullTrajectories`,
+     - `HSX_PASCollisions_DKESTrajectories`,
+     - `HSX_PASCollisions_fullTrajectories`,
+     - `geometryScheme4_2species_PAS_noEr`,
+     - `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`,
+     - `monoenergetic_geometryScheme1`,
+     - `monoenergetic_geometryScheme5_ASCII`.
+   - Candidate methods:
+     - lower-memory PAS Schur bases,
+     - chunked/block factorizations over `(species,x,L,theta,zeta)`,
+     - better reuse across RHS/scan points,
+     - structured sparse host/device split only where measured,
+     - explicit regularized local-block gates before production promotion.
+   - Acceptance:
+     - parity-clean,
+     - strict output drift unchanged,
+     - `>=20%` warm runtime or `>=25%` RSS improvement on at least one pinned
+       offender,
+     - no suite runtime drift above `1.25x`.
+
+5. Stronger multi-GPU and multi-CPU algorithms.
+   - Keep release-facing claims honest:
+     - transport-worker scaling is production-recommended,
+     - one-GPU-per-case / scan-point parallelism is production-recommended,
+     - single-case multi-GPU RHSMode=1 sharding remains experimental until it
+       shows real strong scaling.
+   - Research implementation lanes:
+     - communication-avoiding / recycled Krylov for scan and RHS families,
+     - stronger additive-Schwarz / two-level correction with cheaper global
+       communication,
+     - lower-synchronization sharded matvec and halo-exchange kernels,
+     - process-level GPU isolation for one-worker-per-device throughput,
+     - CPU multi-core benchmarks using `--cores` on larger cases where per-core
+       work amortizes setup.
+   - Acceptance:
+     - 1 vs 2 vs 4/8 CPU scaling artifact where hardware permits,
+     - 1 vs 2 GPU artifact on office,
+     - parity-clean outputs,
+     - docs clarify production vs experimental lanes.
+
+6. `vmec_jax` and `booz_xform_jax` integration.
+   - Stage after the driver split is stable:
+     - add an adapter layer that accepts differentiable geometry coefficients
+       from `/Users/rogeriojorge/vmec_jax`,
+     - compare against file-based VMEC `wout_path` on the same equilibrium,
+     - optionally add `booz_xform_jax` for differentiable Boozer-coordinate
+       fields when available,
+     - expose Python examples for geometry sensitivity and optimization loops.
+   - Acceptance:
+     - file-VMEC and JAX-VMEC geometry coefficients agree on bounded fixtures,
+     - gradients pass finite-difference checks,
+     - no new required dependency for normal CLI users unless the performance
+       and usability case is proven,
+     - docs explain the JAX-native geometry path separately from `wout_path`.
+
+7. More example comparisons with SFINCS Fortran v3.
+   - Add a small set of new publication-facing comparison cases beyond the
+     vendored example suite:
+     - one collisionality scan,
+     - one Er / ambipolar scan,
+     - one VMEC geometry case,
+     - one PAS-heavy memory offender,
+     - one transport-matrix case.
+   - Acceptance:
+     - frozen Fortran v3 artifacts generated from
+       `/Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs`,
+     - JAX CPU/GPU comparison where hardware permits,
+     - strict key coverage audit,
+     - plotted diagnostics suitable for docs/manuscript use.
+
+8. More and better documentation.
+   - Before merge:
+     - update source-map pages for every new module,
+     - document each physics gate and what it proves,
+     - document coverage strategy and current coverage honestly,
+     - document PAS offender status and any remaining caveats,
+     - document production vs experimental parallel lanes,
+     - document `vmec_jax` / `booz_xform_jax` integration if implemented.
+   - Acceptance:
+     - `sphinx-build -W -b html docs docs/_build/html` passes,
+     - README matches docs and measured artifacts,
+     - no stale `jax_error`, `max_attempts`, or outdated runtime claims.
+
+Recommended order:
+1. Finish the driver/policy refactor enough to make the remaining lanes testable.
+2. Add coverage and physics gates around the extracted modules.
+3. Attack PAS offenders with benchmark gates and only promote measured wins.
+4. Revisit multi-device algorithms with larger, amortized benchmarks.
+5. Add `vmec_jax` / `booz_xform_jax` as an optional differentiable geometry lane.
+6. Generate the new Fortran-v3 comparison examples and plots.
+7. Perform the final docs/README pass.
+8. Merge to `main`, run full CPU/GPU suites, tag, publish, and write release notes.
