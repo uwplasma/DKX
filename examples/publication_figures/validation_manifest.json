@@ -18,6 +18,26 @@
     ]
   },
   {
+    "id": "sfincs2014_fig1_lhd_collisionality_reaudit_fast",
+    "status": "prototype_artifact",
+    "kind": "literature_reproduction",
+    "literature": [
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "scripts": [
+      "examples/publication_figures/generate_sfincs_paper_figs.py --case lhd --fast --scan-only --work-dir examples/publication_figures/output/lhd_reaudit_fast"
+    ],
+    "artifacts": [
+      "examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json",
+      "docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png",
+      "docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.pdf"
+    ],
+    "claims": [
+      "The corrected bounded LHD collisionality lane resolves clear FP/PAS separation again",
+      "This branch artifact is suitable for regression and manuscript-layout work, but the full collisionality figure family still needs regenerated audited artifacts"
+    ]
+  },
+  {
     "id": "sfincs2014_fig2_w7x_collisionality",
     "status": "needs_reaudit",
     "kind": "literature_reproduction",

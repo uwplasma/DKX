@@ -2250,3 +2250,13 @@ Testing docs should include:
   `sfincs_jax_fig{1,2,3}_*.png` files are no longer treated as publication-grade.
   They remain open re-audit lanes until regenerated from the corrected script with
   pinned machine-readable summaries.
+- The first corrected branch artifact is now pinned:
+  - summary: `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
+  - figure: `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png`
+- This artifact is backed by direct tests on:
+  - the collisionality ladder itself,
+  - and the restored FP/PAS separation in the diagonal transport coefficients.
+- Remaining open lanes are explicit:
+  - regenerate the full LHD collisionality figure family from the fixed writer,
+  - characterize whether corrected W7-X fast reruns are cheap enough for the branch workflow,
+  - regenerate the W7-X collisionality and high-collisionality-proxy artifacts only after that.
