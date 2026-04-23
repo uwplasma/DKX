@@ -34,8 +34,9 @@ The performance story is therefore:
 - correctness and robustness are release-ready for the current vendored example suite,
 - the default CLI path is explicit and tuned for throughput and reliable convergence,
 - the differentiable path is available from Python when gradients are needed,
+- the CPU runtime drift watchlist is clean against the previously promoted frozen CPU lane,
 - the GPU runtime drift watchlist is clean against the previously promoted frozen GPU lane,
-- and the remaining work is to reduce runtime and memory on a small number of heavy PAS and geometry-rich cases while closing the two remaining CPU runtime watchlist cases.
+- and the remaining work is to reduce runtime and memory on a small number of heavy PAS and geometry-rich cases.
 
 Current top offenders from the release artifacts are:
 
