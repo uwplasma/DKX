@@ -2208,7 +2208,8 @@ Testing docs should include:
   - strong-fallback / strong-control / stage-2 / sparse-rescue / sparse-polish policy helpers,
   - solve handoff helpers,
   - transport policy, transport solve policy, transport preconditioner dispatch,
-    transport handoff policy, transport-parallel policy/runtime/pool/execution helpers,
+    transport handoff policy, transport dense-LU helpers, transport-parallel
+    policy/runtime/pool/execution helpers,
   - Phi1 Newton policy, linear-step, and line-search helpers.
 - The first literature-facing validation lane is now live with pinned fixed-case artifacts:
   - script: `examples/publication_figures/generate_er_trajectory_sweep.py`
@@ -2303,6 +2304,30 @@ Testing docs should include:
 - New bounded regression coverage now lives in:
   - `tests/test_transport_handoff_policy.py`
 - Current validation for the handoff-policy slice:
+  - `tests/test_transport_handoff_policy.py`
+  - `tests/test_transport_solve_policy.py`
+  - `tests/test_transport_preconditioner_dispatch.py`
+  - `tests/test_transport_sparse_direct.py`
+  - `tests/test_transport_parallel.py`
+  - all passed together after the extraction.
+
+### 19.23 Transport dense-LU helper split
+
+- The bounded transport dense fallback and dense-preconditioner helpers were still
+  nested inside `solve_v3_transport_matrix_linear_gmres(...)`.
+- Those pure infrastructure helpers are now extracted into
+  `sfincs_jax/transport_dense_lu.py`.
+- `v3_driver.py` now calls the shared module for:
+  - cached dense-LU preconditioner construction,
+  - cached dense-LU direct solver construction.
+- This stayed structure-preserving:
+  - the cache keys and dense fallback call sites are unchanged,
+  - no default dense policy changed,
+  - existing transport tests stayed green.
+- New bounded regression coverage now lives in:
+  - `tests/test_transport_dense_lu.py`
+- Current validation for the dense-LU slice:
+  - `tests/test_transport_dense_lu.py`
   - `tests/test_transport_handoff_policy.py`
   - `tests/test_transport_solve_policy.py`
   - `tests/test_transport_preconditioner_dispatch.py`

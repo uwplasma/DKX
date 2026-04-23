@@ -161,6 +161,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   shared transport retry residual metrics, better-candidate comparisons, and RHSMode=3
   polish threshold/restart/maxiter policy used by the reduced and full transport solve
   branches.
+- ``sfincs_jax/transport_dense_lu.py``:
+  cached dense-LU solver and preconditioner construction used by bounded transport
+  dense fallback and dense-preconditioner paths.
 - ``sfincs_jax/transport_parallel_policy.py``:
   transport process-parallel backend selection, worker env, GPU worker env, and pool
   policy.
