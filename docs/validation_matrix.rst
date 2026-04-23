@@ -61,6 +61,22 @@ Current status note:
   figures need to be regenerated from the fixed script before they should be promoted
   back to publication-grade status
 
+Current corrected branch artifact:
+
+- bounded corrected LHD summary:
+  ``examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
+- bounded corrected LHD figure:
+  ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png``
+
+.. figure:: _static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png
+   :alt: Corrected bounded LHD collisionality scan for sfincs_jax
+   :width: 85%
+
+   Corrected bounded LHD collisionality rerun after fixing the scan-input writer.
+   This branch artifact now resolves the expected FP/PAS separation again and is backed
+   by direct JSON-based assertions, but it is still a bounded fast branch lane rather
+   than the final audited paper figure.
+
 Planned literature-driven lanes
 -------------------------------
 
@@ -139,7 +155,9 @@ Validation goal:
 
 - regenerate the LHD and W7-X collisionality figures from the fixed writer,
 - emit machine-readable summary artifacts for each scan,
-- and only then restore these lanes to ``implemented`` status in the validation manifest.
+- restore LHD first from the corrected artifact family,
+- and only then restore W7-X and the high-collisionality proxy once their regenerated
+  artifacts are equally pinned and audited.
 
 3. W7-X ambipolar-field validation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

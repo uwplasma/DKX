@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -30,6 +31,13 @@ class ScanConfig:
     nuprime_factor: float
     collision_operator: int
     label: str
+
+
+@dataclass(frozen=True)
+class TransportScanPoint:
+    label: str
+    nuprime: float
+    transport_matrix: list[list[float]]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -200,6 +208,22 @@ def _collect_transport_matrix(work_dir: Path) -> tuple[np.ndarray, np.ndarray]:
     nu = np.asarray([r[0] for r in rows])
     tm = np.asarray([r[1] for r in rows])
     return nu, tm
+
+
+def write_transport_scan_summary_json(summary_path: Path, datasets: dict[str, tuple[np.ndarray, np.ndarray]]) -> None:
+    payload: list[dict[str, object]] = []
+    for label, (nu, tm) in datasets.items():
+        for idx in range(len(nu)):
+            payload.append(
+                {
+                    "label": label,
+                    "nuprime": float(nu[idx]),
+                    "transport_matrix": np.asarray(tm[idx], dtype=float).tolist(),
+                }
+            )
+    payload.sort(key=lambda row: (str(row["label"]), float(row["nuprime"])))
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def _fit_high_collisionality(nu: np.ndarray, y: np.ndarray, n_fit: int = 2) -> np.ndarray:
