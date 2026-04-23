@@ -7,6 +7,10 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 
+def _env_flag(name: str) -> str:
+    return os.environ.get(name, "").strip().lower()
+
+
 def _rss_mb() -> float | None:
     try:
         import psutil  # type: ignore
@@ -41,9 +45,23 @@ def _device_mem_mb() -> float | None:
     return None
 
 
+def _profile_enabled() -> bool:
+    flag = _env_flag("SFINCS_JAX_PROFILE")
+    return flag in {"1", "true", "yes", "on", "timings", "full", "trace"}
+
+
+def _profile_device_mem_enabled() -> bool:
+    explicit = _env_flag("SFINCS_JAX_PROFILE_DEVICE_MEM")
+    if explicit:
+        return explicit in {"1", "true", "yes", "on"}
+    flag = _env_flag("SFINCS_JAX_PROFILE")
+    return flag in {"full", "device", "device_mem"}
+
+
 @dataclass
 class SimpleProfiler:
     emit: Callable[[int, str], None] | None = None
+    sample_device_mem: bool = False
     t0: float = field(default_factory=time.perf_counter)
     last: float = field(default_factory=time.perf_counter)
     rss0_mb: float | None = field(default_factory=_rss_mb)
@@ -52,7 +70,7 @@ class SimpleProfiler:
     def mark(self, label: str) -> None:
         now = time.perf_counter()
         rss_mb = _rss_mb()
-        dev_mb = _device_mem_mb()
+        dev_mb = _device_mem_mb() if self.sample_device_mem else None
         entry = {
             "label": label,
             "dt_s": now - self.last,
@@ -75,7 +93,6 @@ class SimpleProfiler:
 
 
 def maybe_profiler(emit: Callable[[int, str], None] | None = None) -> SimpleProfiler | None:
-    flag = os.environ.get("SFINCS_JAX_PROFILE", "").strip().lower()
-    if flag in {"1", "true", "yes", "on"}:
-        return SimpleProfiler(emit=emit)
+    if _profile_enabled():
+        return SimpleProfiler(emit=emit, sample_device_mem=_profile_device_mem_enabled())
     return None
