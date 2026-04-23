@@ -301,6 +301,16 @@ scan ladder, source input, and collision-operator labeling. That keeps the next
 full-resolution LHD/W7-X re-audit aligned with the manifest's provenance and
 acceptance-gate expectations instead of relying on plots alone.
 
+The next planned literature lane now has an executable scaffold as well:
+
+- script: ``examples/publication_figures/generate_w7x_ambipolar_validation.py``
+- focused test: ``tests/test_generate_w7x_ambipolar_validation.py``
+
+This keeps the W7-X ambipolar validation work out of the "purely aspirational" bucket:
+the scan, ambipolar postprocessing, summary JSON, and figure generation paths are now
+covered by a bounded end-to-end test on a tiny fixture, even though the heavy W7-X
+reference artifact is still an explicit open lane in the manifest.
+
 Further reading
 ---------------
 

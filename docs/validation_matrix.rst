@@ -208,6 +208,22 @@ Validation goal:
 - make any profile reconstruction assumptions explicit,
 - use this lane only if the reconstructed input set is scientifically defensible.
 
+Current scaffold:
+
+- ``examples/publication_figures/generate_w7x_ambipolar_validation.py``
+
+This script now exists as the executable lane scaffold. It defaults to the existing
+``filteredW7XNetCDF_2species_magneticDrifts_withEr`` example input, runs an
+``E_r`` scan, postprocesses the scan with ``sfincs_jax.ambipolar.solve_ambipolar_from_scan_dir``,
+and writes both a metadata-rich JSON summary and a publication-style figure.
+
+Current status note:
+
+- the script and focused tests are in place,
+- the checked-in literature artifact is still intentionally absent,
+- so this remains a planned lane until a defensible W7-X input reconstruction is run
+  and its summary/figure are pinned in the repository.
+
 4. MONKES / KNOSOS overlap
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
