@@ -14,7 +14,10 @@ def _load_rows(name: str) -> list[dict[str, object]]:
         / "artifacts"
         / name
     )
-    return json.loads(path.read_text())
+    payload = json.loads(path.read_text())
+    if isinstance(payload, dict):
+        return list(payload["rows"])
+    return payload
 
 
 def test_lhd_collisionality_artifact_has_expected_labels_and_grid() -> None:

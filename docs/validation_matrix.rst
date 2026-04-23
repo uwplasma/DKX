@@ -68,6 +68,9 @@ Current status note:
 - the scan writer in ``generate_sfincs_paper_figs.py`` was fixed on this branch after
   finding that duplicate namelist assignments could override the intended
   ``collisionOperator`` and fast-resolution settings
+- the generator now emits machine-readable collisionality summaries with top-level
+  metadata and sorted rows so future full-resolution reruns have pinned provenance
+  instead of relying only on figure files
 - a corrected bounded LHD fast rerun now cleanly separates FP and PAS transport
   matrices again, so the collisionality lane is scientifically alive, but the checked-in
   figures need to be regenerated from the fixed script before they should be promoted

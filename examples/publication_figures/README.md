@@ -55,6 +55,10 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
   --work-dir examples/publication_figures/output/lhd_reaudit_fast
 ```
 
+`generate_sfincs_paper_figs.py` now writes machine-readable collisionality summaries
+to `--summary-dir` as well. If `--summary-dir` is omitted, the summaries are written
+into the selected `--work-dir` with top-level `metadata` and sorted `rows`.
+
 The corrected bounded LHD rerun is currently pinned as:
 - `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png`
