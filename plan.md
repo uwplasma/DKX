@@ -2207,7 +2207,8 @@ Testing docs should include:
   - RHSMode=1 PAS policy and dispatch helpers,
   - strong-fallback / strong-control / stage-2 / sparse-rescue / sparse-polish policy helpers,
   - solve handoff helpers,
-  - transport policy, transport-parallel policy/runtime/pool/execution helpers,
+  - transport policy, transport preconditioner dispatch, transport-parallel
+    policy/runtime/pool/execution helpers,
   - Phi1 Newton policy, linear-step, and line-search helpers.
 - The first literature-facing validation lane is now live with pinned fixed-case artifacts:
   - script: `examples/publication_figures/generate_er_trajectory_sweep.py`
@@ -2224,12 +2225,38 @@ Testing docs should include:
   - the fixed stellarator-like lane is stable as a bounded fast branch artifact,
     while the full-resolution stellarator sweep is still too heavy for the regular branch workflow.
 - Immediate next actions on this branch:
-  1. deepen the remaining transport/distributed orchestration split if more of it is still
-     embedded in `v3_driver.py`,
+  1. deepen the remaining transport solve orchestration split beneath the new
+     transport preconditioner dispatch layer, especially active-DOF / dense-fallback /
+     solve-handoff sequencing that is still embedded in `v3_driver.py`,
   2. promote the stellarator-like `E_r` lane from fast branch artifact to a heavier
      audited release/nightly sweep once its runtime/cost is acceptable,
   3. re-audit the collisionality / collision-operator lane from the same validation manifest
      using the corrected scan writer.
+
+### 19.20 Transport preconditioner dispatch split
+
+- The remaining transport preconditioner normalization, auto-selection, DD block
+  parsing, sparse-JAX config parsing, and reduced/full builder dispatch has now been
+  extracted from `v3_driver.py` into
+  `sfincs_jax/transport_preconditioner_dispatch.py`.
+- `v3_driver.py` now uses that shared module for:
+  - user/env normalization of `SFINCS_JAX_TRANSPORT_PRECOND`,
+  - auto preconditioner/strong-preconditioner selection,
+  - DD overlap/block parsing,
+  - sparse-JAX transport preconditioner setup,
+  - lazy strong-preconditioner reuse/build.
+- The extraction stayed structure-preserving:
+  - no policy changes were introduced,
+  - bounded transport tests stayed green,
+  - transport behavior is still exercised through the existing public
+    `solve_v3_transport_matrix_linear_gmres(...)` seam.
+- New bounded regression coverage now lives in
+  `tests/test_transport_preconditioner_dispatch.py`.
+- Current validation for this slice:
+  - `tests/test_transport_preconditioner_dispatch.py`
+  - `tests/test_transport_sparse_direct.py`
+  - `tests/test_transport_parallel.py`
+  - all passed together after the extraction.
 
 ### 19.19 Collisionality lane status after writer fix
 
