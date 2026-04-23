@@ -276,6 +276,13 @@ primary-solve skipping, and the explicit multispecies species-x-block rescue
 opt-in. This keeps the CPU runtime-offender routing testable without running a
 large solve in CI.
 
+The follow-up post-x-block policy split is covered by
+``tests/test_rhs1_post_xblock_policy.py``. These tests check the residual and
+active-size gates for fast post-x-block polish, targeted FP polish, and explicit
+skip-global-sparse-after-xblock routing after a good x-block seed. The tests keep
+large-case convergence handoff decisions visible while avoiding heavyweight CI
+runs.
+
 The VMEC convention layer has its own bounded gate in
 ``tests/test_vmec_wout_conventions.py``. It checks the scheme-5 conventions that are
 easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh
