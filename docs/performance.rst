@@ -207,8 +207,8 @@ JAX-native performance patterns used in `sfincs_jax`
   the pitch basis, the linear solve now reduces to active unknowns by default, cutting
   both matrix-free solve cost and JIT work on upstream-style reduced cases.
 - **Persistent cache in automated suite runs**: ``scripts/run_reduced_upstream_suite.py`` and
-  the full example-suite runners can reuse a persistent JAX compilation cache, reducing
-  repeated-iteration benchmarking overhead.
+  the full example-suite runners can reuse a persistent JAX compilation cache when
+  ``--jax-cache-dir`` is set explicitly.
 - **Opt-in eager precompile**: ``SFINCS_JAX_PRECOMPILE`` is now explicit opt-in. A persistent
   JAX compilation cache can still amortize repeated workflows, but single-shot CLI solves and
   runtime audits no longer pay an extra eager compile pass just because a cache directory exists.

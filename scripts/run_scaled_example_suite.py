@@ -454,7 +454,7 @@ def _run_prepared_case(
     reuse_fortran: bool,
     collect_iterations: bool,
     jax_repeats: int,
-    jax_cache_dir: Path,
+    jax_cache_dir: Path | None,
     jax_profile_mode: str,
     equilibria_search_dir: Path | None,
     reference_results_root: Path | None,
@@ -648,8 +648,8 @@ def main() -> int:
     parser.add_argument(
         "--jax-cache-dir",
         type=Path,
-        default=Path("tests") / "scaled_example_suite" / ".jax_compilation_cache",
-        help="Persistent JAX compilation cache directory.",
+        default=None,
+        help="Optional persistent JAX compilation cache directory.",
     )
     parser.add_argument(
         "--jax-repeats",
@@ -860,7 +860,7 @@ def main() -> int:
                 reuse_fortran=bool(args.reuse_fortran),
                 collect_iterations=not bool(args.no_collect_iterations),
                 jax_repeats=int(args.jax_repeats),
-                jax_cache_dir=(REPO_ROOT / args.jax_cache_dir),
+                jax_cache_dir=(REPO_ROOT / args.jax_cache_dir) if args.jax_cache_dir is not None else None,
                 jax_profile_mode=str(args.jax_profile_marks),
                 equilibria_search_dir=seed_input.parent,
                 reference_results_root=reference_results_root,
@@ -899,7 +899,7 @@ def main() -> int:
                         reuse_fortran=bool(args.reuse_fortran),
                         collect_iterations=not bool(args.no_collect_iterations),
                         jax_repeats=int(args.jax_repeats),
-                        jax_cache_dir=(REPO_ROOT / args.jax_cache_dir),
+                        jax_cache_dir=(REPO_ROOT / args.jax_cache_dir) if args.jax_cache_dir is not None else None,
                         jax_profile_mode=str(args.jax_profile_marks),
                         equilibria_search_dir=seed_input.parent,
                         reference_results_root=reference_results_root,

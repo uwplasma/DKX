@@ -279,3 +279,36 @@ def test_run_jax_cli_defaults_to_profile_off(tmp_path: Path, monkeypatch: pytest
     assert seen_env["SFINCS_JAX_PRECOMPILE"] == "0"
     assert seen_env["SFINCS_JAX_PROFILE"] == "0"
     assert seen_env["SFINCS_JAX_PROFILE_DEVICE_MEM"] == "0"
+
+
+def test_run_jax_cli_leaves_compilation_cache_unset_when_not_requested(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&general\n/\n", encoding="utf-8")
+    output_path = tmp_path / "sfincsOutput.h5"
+    log_path = tmp_path / "sfincs_jax.log"
+    seen_env: dict[str, str] = {}
+
+    def fake_run(cmd, cwd, check, timeout, stdout, stderr, env):
+        seen_env.update(env)
+        output_path.write_text("jax-h5", encoding="utf-8")
+        stdout.write("elapsed_s=0.5\n")
+        return 0
+
+    monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
+    monkeypatch.setattr(suite.subprocess, "run", fake_run)
+
+    suite._run_jax_cli(
+        input_path=input_path,
+        output_path=output_path,
+        timeout_s=1.0,
+        log_path=log_path,
+        compute_solution=False,
+        compute_transport_matrix=False,
+        collect_iterations=False,
+        repeats=1,
+        cache_dir=None,
+    )
+
+    assert "JAX_COMPILATION_CACHE_DIR" not in seen_env
