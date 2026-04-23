@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Policy helpers for RHSMode=1 sparse-rescue ordering and skip decisions."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 

@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Policy helpers for RHSMode=1 sparse polish and retry settings."""
+
+from __future__ import annotations
 
 import os
 

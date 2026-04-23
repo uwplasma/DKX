@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Shared RHSMode=1 preconditioner dispatch helpers.
 
 This module isolates the decision ladder that maps a resolved RHSMode=1
@@ -8,6 +6,8 @@ the orchestration in ``v3_driver.py`` thin while preserving the exact runtime
 behavior and builder surface already validated by the existing regression
 tests.
 """
+
+from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass

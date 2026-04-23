@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Shared transport preconditioner selection and build helpers.
 
 This module keeps the transport preconditioner decision ladder and builder
@@ -7,6 +5,8 @@ dispatch out of ``v3_driver.py`` while preserving the existing runtime
 semantics. The goal is structural: make the transport solve orchestration
 readable and directly testable without changing parity behavior.
 """
+
+from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass

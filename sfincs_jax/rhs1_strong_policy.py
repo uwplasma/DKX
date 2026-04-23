@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Policy helpers for RHSMode=1 strong-preconditioner selection."""
+
+from __future__ import annotations
 
 
 def requested_rhs1_strong_preconditioner_kind(

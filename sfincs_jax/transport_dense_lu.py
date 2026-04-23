@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Cached dense LU helpers for bounded transport fallbacks."""
+
+from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any

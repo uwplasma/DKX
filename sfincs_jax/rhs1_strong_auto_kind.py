@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Automatic RHSMode=1 strong-preconditioner kind selection helpers."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 import os

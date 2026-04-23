@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Policy helpers for RHSMode=1 strong-preconditioner control."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 import os

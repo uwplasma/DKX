@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Helpers for RHSMode=1 strong-preconditioner fallback builds.
 
 These helpers sit one layer below the main solve orchestration. They keep the
 policy adjustment and preconditioner construction for strong fallback retries in
 one place while reusing the shared RHSMode=1 dispatch ladder.
 """
+
+from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any

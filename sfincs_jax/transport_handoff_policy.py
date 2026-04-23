@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Transport solve handoff and retry policy helpers.
 
 The transport solve loop has separate reduced/full execution branches, but the
@@ -7,6 +5,8 @@ retry thresholds and RHSMode=3 polish settings should remain identical across
 both. This module centralizes those small policy decisions without owning the
 actual solver calls.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 import os
