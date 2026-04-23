@@ -11,12 +11,13 @@ On the current ``main`` branch, `sfincs_jax` can claim:
 - full CPU and GPU parity for the vendored 39-case example suite, including
   ``examples/additional_examples/input.namelist``,
 - no ``jax_error`` or ``max_attempts`` in the current release-facing suite artifacts,
-- and matching ``sfincsOutput.h5`` datasets and required terminal-output signals for the supported examples.
+- matching ``sfincsOutput.h5`` common numeric datasets, zero missing Fortran top-level
+  output keys in JAX, and the required terminal-output signals for the supported examples.
 
 The authoritative release-facing artifacts for this state are:
 
-- ``tests/scaled_example_suite_fast_cpu_full_v7_refresh``
-- ``tests/scaled_example_suite_fast_gpu_full_v11_refresh``
+- ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix``
+- ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postkeyfix``
 
 What should still be stated carefully:
 
@@ -67,12 +68,38 @@ Release-facing full suite run (vendored upstream inputs):
      --examples-root examples/sfincs_examples \
      --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
      --fortran-exe /Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs \
-     --out-root tests/scaled_example_suite_fast_cpu_full_v7_refresh \
+     --out-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
      --scale-factor 1.0 \
      --runtime-target-basis fortran \
-     --fortran-min-runtime-s 1.0 \
-     --fortran-max-runtime-s 20.0 \
-     --runtime-adjustment-iters 3
+     --fortran-min-runtime-s 0.0 \
+     --runtime-adjustment-iters 0 \
+     --runtime-baseline-report tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json
+
+Each suite run now writes:
+
+- ``suite_output_key_coverage.json``
+- ``suite_output_key_coverage_summary.json``
+- and, when ``--runtime-baseline-report`` is provided,
+  ``suite_runtime_drift.json`` plus ``suite_runtime_drift_summary.json``.
+
+For release promotion, require:
+
+- ``suite_output_key_coverage_summary.json`` reports ``missing_total = 0``
+- and the candidate runtime lane is audited against the previous frozen CPU lane.
+
+Manual audit commands:
+
+.. code-block:: bash
+
+   python scripts/audit_suite_output_keys.py \
+     --suite-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+     --fail-on-missing
+
+   python scripts/audit_suite_runtime_drift.py \
+     --baseline-report tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json \
+     --candidate-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+     --threshold-ratio 1.25 \
+     --min-baseline-runtime-s 1.0
 
 Sync or regenerate the matching frozen-reference GPU lane against that CPU root before updating
 release-facing README or docs claims.
