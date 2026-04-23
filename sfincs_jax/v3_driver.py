@@ -6731,6 +6731,7 @@ def _build_rhsmode1_schur_preconditioner(
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Approximate Schur-complement preconditioner for constraintScheme=2 RHSMode=1 solves."""
     precond_dtype = _precond_dtype()
+    geom_scheme = int(_PRECOND_GEOM_SCHEME_HINT or 0)
     base_xblock_tz_lmax = 0
     species_block_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "").strip()
     try:

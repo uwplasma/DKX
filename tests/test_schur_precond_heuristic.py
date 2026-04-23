@@ -214,6 +214,69 @@ def test_schur_base_prefers_pas_tokamak_theta_for_tokamak_pas_noer(
     assert called == ["pas_tokamak_theta"]
 
 
+def test_schur_base_prefers_pas_tz_for_geometry4_pas_offender(monkeypatch: pytest.MonkeyPatch) -> None:
+    input_path = Path(__file__).parent / "reduced_inputs" / "geometryScheme4_2species_PAS_noEr.input.namelist"
+    op = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
+    called: list[str] = []
+
+    def _pas_tz_builder(**_kwargs):
+        called.append("pas_tz")
+        return lambda v: v
+
+    def _unexpected_builder(**_kwargs):
+        raise AssertionError("geometry4 PAS Schur base should select pas_tz for the pinned offender block")
+
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MIN", raising=False)
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_pas_tz_preconditioner", _pas_tz_builder)
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_xblock_tz_preconditioner", _unexpected_builder)
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_species_block_preconditioner", _unexpected_builder)
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_pas_schur_preconditioner", _unexpected_builder)
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_theta_zeta_preconditioner", _unexpected_builder)
+
+    _ = v3_driver._build_rhsmode1_schur_preconditioner(op=op)
+
+    assert called == ["pas_tz"]
+
+
+def test_schur_base_small_pas_fallback_uses_geom_hint_without_nameerror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_path = Path(__file__).parent / "reduced_inputs" / "geometryScheme4_2species_PAS_noEr.input.namelist"
+
+    txt = input_path.read_text()
+    txt = _patch_resolution_block(txt, ntheta=4, nzeta=4, nxi=4, nx=2, solver_tol=1e-6)
+    txt = _patch_export_block(txt)
+    patched = tmp_path / "input_small_pas_schur_base.namelist"
+    patched.write_text(txt)
+
+    op = full_system_operator_from_namelist(nml=read_sfincs_input(patched))
+    called: list[str] = []
+
+    def _pas_schur_builder(**_kwargs):
+        called.append("pas_schur")
+        return lambda v: v
+
+    def _unexpected_builder(**_kwargs):
+        raise AssertionError("small PAS fallback should reach pas_schur after cheaper block bases are disabled")
+
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "0")
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_pas_schur_preconditioner", _pas_schur_builder)
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_species_block_preconditioner", _unexpected_builder)
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_xblock_tz_preconditioner", _unexpected_builder)
+    monkeypatch.setattr(v3_driver, "_build_rhsmode1_theta_zeta_preconditioner", _unexpected_builder)
+    v3_driver._set_precond_policy_hints(geom_scheme=4)
+    try:
+        _ = v3_driver._build_rhsmode1_schur_preconditioner(op=op)
+    finally:
+        v3_driver._set_precond_policy_hints()
+
+    assert called == ["pas_schur"]
+
+
 def test_schur_auto_min_for_pas(tmp_path: Path, monkeypatch) -> None:
     """Auto Schur selection should respect SFINCS_JAX_RHSMODE1_SCHUR_AUTO_MIN."""
     input_path = Path(__file__).parent / "reduced_inputs" / "geometryScheme4_2species_PAS_noEr.input.namelist"

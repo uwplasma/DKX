@@ -3388,7 +3388,31 @@ Immediate next actions:
   - at least `20%` warm runtime improvement or `25%` memory reduction on a
     pinned offender,
   - no drift above the `1.25x` suite gates.
+- Pinned offender gate:
+  - ran `--case sfincs-pas-block` on
+    `tests/reduced_inputs/geometryScheme4_2species_PAS_noEr.input.namelist`,
+    species `0`, speed index `4`, `n_rhs=2`, benchmark-only regularization
+    `1e-4`;
+  - extracted block shape was `14 x 81 x 81` (`size=1134`) with
+    `off_band_norm=0`;
+  - structured storage was `2,099,520` bytes vs dense storage `10,287,648`
+    bytes, a `79.6%` local-block storage reduction;
+  - structured residual was `9.74e-10`, dense residual `2.25e-13`, and
+    max structured-vs-dense solution error was `2.94e-7`;
+  - CPU timing did not clear the runtime gate on this bounded local block:
+    dense solve `0.1100 s`, structured factor `0.1111 s`, structured solve
+    `0.1194 s`, structured total `0.2305 s`
+    (`speedup_vs_dense_solve=0.477`);
+  - current production auto policy still reaches the intended structured path:
+    the top-level solve logs `preconditioner=schur`, and the Schur base selects
+    `pas_tz` for this pinned geometry4 PAS offender.
+- Implementation follow-up:
+  - no broader production threshold change was made from this single local
+    block because it cleared memory but not runtime;
+  - fixed a latent `geom_scheme` fallback in the Schur base selector and added
+    focused tests pinning `geometry4 -> schur base pas_tz` and the smaller PAS
+    `pas_schur` fallback.
 - Next implementation step:
-  - extend the real-block mode from the tiny fixture to one pinned runtime/RSS
-    offender block, then test whether factor-once/repeated-RHS should enter a
-    production preconditioner.
+  - use this gate as the admission criterion for future structured production
+    changes: promote only when the full fixture is parity-clean and the local or
+    end-to-end benchmark clears runtime or memory without suite drift.
