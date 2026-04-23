@@ -4140,3 +4140,28 @@ Validation:
 - `pytest -q tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
   passed with `157 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.57 RHSMode=1 sparse exact-LU/prefer policy extraction
+
+Completed the next adjacent driver-refactor increment:
+
+- Add `sfincs_jax/rhs1_sparse_exact_policy.py` for sparse exact-LU request
+  policy, moderate-FP sparse-over-dense preference, and sparse-prefer stage-2
+  skip decisions.
+- Keep the existing `v3_driver.py` wrappers intact for compatibility with
+  existing tests and downstream debugging.
+- Add direct tests for full-x CPU exact-LU routing, accelerator DKES exact-LU
+  routing, small accelerator FP exact-LU routing, PAS full-preconditioner opt-in,
+  explicit environment enable/disable behavior, dense-method/size/Phi1 guards,
+  sparse-over-dense preference guards, and stage-2 skip guards.
+- Update API docs, source map, testing docs, and module-docstring coverage.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_sparse_exact_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_sparse_exact_policy.py tests/test_policy_module_docstrings.py`
+- `python -m ruff check sfincs_jax/rhs1_sparse_exact_policy.py tests/test_rhs1_sparse_exact_policy.py tests/test_policy_module_docstrings.py`
+- `pytest -q tests/test_rhs1_sparse_exact_policy.py tests/test_sparse_exact_lu_heuristic.py tests/test_rhs1_sparse_first_heuristic.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
+  passed with `97 passed`.
+- `pytest -q tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
+  passed with `169 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.

@@ -104,6 +104,11 @@ from .rhs1_constraint0_policy import (
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
     rhs1_constraint0_sparse_first as _rhs1_constraint0_sparse_first_impl,
 )
+from .rhs1_sparse_exact_policy import (
+    rhs1_prefer_sparse_over_dense_shortcut as _rhs1_prefer_sparse_over_dense_shortcut_impl,
+    rhs1_sparse_exact_lu_requested as _rhs1_sparse_exact_lu_requested_impl,
+    rhs1_sparse_prefer_skips_stage2 as _rhs1_sparse_prefer_skips_stage2_impl,
+)
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -853,42 +858,16 @@ def _rhsmode1_sparse_exact_lu_requested(
     preconditioner_x: int,
     use_dkes: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    has_fp = op.fblock.fp is not None
-    has_pas = getattr(op.fblock, "pas", None) is not None
-    allow_pas_full = bool(has_pas) and (
-        bool(full_precond_requested) or env in {"1", "true", "yes", "on"}
+    return _rhs1_sparse_exact_lu_requested_impl(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        full_precond_requested=bool(full_precond_requested),
+        preconditioner_x=int(preconditioner_x),
+        use_dkes=bool(use_dkes),
+        backend=jax.default_backend(),
     )
-    if (not has_fp) and (not allow_pas_full):
-        return False
-    if solve_method_kind in {"dense", "dense_ksp"}:
-        return False
-    exact_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU_MAX", "").strip()
-    accel_small_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU_ACCEL_SMALL_MAX", "").strip()
-    try:
-        exact_max = int(exact_max_env) if exact_max_env else (6000 if jax.default_backend() == "cpu" else 12000)
-    except ValueError:
-        exact_max = 6000 if jax.default_backend() == "cpu" else 12000
-    try:
-        accel_small_max = int(accel_small_max_env) if accel_small_max_env else 4000
-    except ValueError:
-        accel_small_max = 4000
-    exact_max = max(0, int(exact_max))
-    if int(active_size) > int(exact_max):
-        return False
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    # Honor full x-coupling requests from the original input, and strengthen
-    # accelerator FP solves where backend-dense fallback is unavailable.
-    accel_small_case = (
-        jax.default_backend() != "cpu"
-        and int(active_size) <= max(0, int(accel_small_max))
-    )
-    return int(preconditioner_x) == 0 or (jax.default_backend() != "cpu" and (bool(use_dkes) or accel_small_case))
 
 
 def _rhsmode1_prefer_sparse_over_dense_shortcut(
@@ -898,23 +877,12 @@ def _rhsmode1_prefer_sparse_over_dense_shortcut(
     sparse_max_size: int,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PREFER_OVER_DENSE_SHORTCUT", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.fp is None or bool(use_implicit):
-        return False
-    if int(active_size) > int(sparse_max_size):
-        return False
-    min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PREFER_OVER_DENSE_SHORTCUT_MIN", "").strip()
-    try:
-        min_size = int(min_env) if min_env else 2000
-    except ValueError:
-        min_size = 2000
-    if env in {"1", "true", "yes", "on"}:
-        return int(active_size) >= max(1, int(min_size))
-    return int(active_size) >= max(1, int(min_size))
+    return _rhs1_prefer_sparse_over_dense_shortcut_impl(
+        op=op,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        use_implicit=bool(use_implicit),
+    )
 
 
 def _rhsmode1_sparse_prefer_skips_stage2(
@@ -922,13 +890,10 @@ def _rhsmode1_sparse_prefer_skips_stage2(
     sparse_prefer_over_dense_shortcut: bool,
     sparse_precond_mode: str,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_SKIP_STAGE2", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    enabled = bool(sparse_prefer_over_dense_shortcut) and str(sparse_precond_mode).strip().lower() != "off"
-    if env in {"1", "true", "yes", "on"}:
-        return enabled
-    return enabled
+    return _rhs1_sparse_prefer_skips_stage2_impl(
+        sparse_prefer_over_dense_shortcut=bool(sparse_prefer_over_dense_shortcut),
+        sparse_precond_mode=sparse_precond_mode,
+    )
 
 
 def _rhsmode1_large_cpu_sparse_rescue_allowed(
