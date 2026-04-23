@@ -172,6 +172,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   sparse-rescue ordering, skip logic, and sparse-polish env parsing.
 - ``sfincs_jax/rhs1_handoff.py``:
   accepted-candidate handoff and Krylov replay-state updates.
+- ``sfincs_jax/rhs1_host_policy.py``:
+  RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
+  GMRES rescue, factor-dtype, and explicit sparse-helper policy.
 - ``sfincs_jax/transport_policy.py``:
   pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
 - ``sfincs_jax/transport_preconditioner_dispatch.py``:
