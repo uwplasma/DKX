@@ -224,7 +224,11 @@ test. When ``vmec_jax`` and its example data are importable, the test reads a re
 ``vmec_wout_from_wout_like(...)``, compares all VMEC Fourier coefficient arrays
 against the file reader, and verifies that ``vmec_geometry_from_wout(...)`` returns
 the same scheme-5 geometry arrays. In normal CI environments where the optional
-backend is not installed, the test skips rather than adding a hard dependency.
+backend is not installed, the test skips rather than adding a hard dependency. The
+same adapter file also has strict structural tests for mode/radius transposition,
+metadata-only path overrides, required-table failures, optional zero-filled
+magnetic-field coefficient tables, and invalid shapes, so lightweight CI still
+protects the public adapter contract.
 
 The differentiability gate starts with a cheaper analytic geometry check before
 attempting heavier end-to-end optimization examples.  ``tests/test_geometry_autodiff_gates.py``
