@@ -5,9 +5,11 @@ import argparse
 import json
 import os
 import re
+import selectors
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -111,17 +113,59 @@ def _run(cmd: list[str], *, cwd: Path, timeout_s: float | None, label: str) -> N
     sys.stdout.flush()
     env = os.environ.copy()
     env["MPLBACKEND"] = "Agg"
+    env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("MPLCONFIGDIR", str(cwd / ".mplconfig"))
+    t0 = time.perf_counter()
     with log_path.open("w") as log:
-        subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             cwd=str(cwd),
-            check=True,
             env=env,
-            timeout=timeout_s,
-            stdout=log,
-            stderr=log,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
         )
+        assert proc.stdout is not None
+        selector = selectors.DefaultSelector()
+        selector.register(proc.stdout, selectors.EVENT_READ)
+        try:
+            while True:
+                remaining_timeout = None
+                if timeout_s is not None:
+                    remaining_timeout = float(timeout_s) - float(time.perf_counter() - t0)
+                    if remaining_timeout <= 0.0:
+                        proc.kill()
+                        raise subprocess.TimeoutExpired(cmd=cmd, timeout=timeout_s)
+                wait_timeout = 1.0 if remaining_timeout is None else min(1.0, max(0.0, remaining_timeout))
+                events = selector.select(wait_timeout)
+                if not events:
+                    if proc.poll() is not None:
+                        break
+                    continue
+                saw_eof = False
+                for key, _ in events:
+                    line = key.fileobj.readline()
+                    if line == "":
+                        saw_eof = True
+                        continue
+                    print(line, end="")
+                    log.write(line)
+                    log.flush()
+                if saw_eof and proc.poll() is not None:
+                    break
+            remainder = proc.stdout.read()
+            if remainder:
+                print(remainder, end="")
+                log.write(remainder)
+                log.flush()
+        finally:
+            selector.close()
+        retcode = proc.wait()
+        if retcode != 0:
+            raise subprocess.CalledProcessError(retcode, cmd)
+    print(f"[{label}] completed elapsed={time.perf_counter() - t0:.1f}s")
+    sys.stdout.flush()
 
 
 def _strip_ss_lines(text: str) -> str:

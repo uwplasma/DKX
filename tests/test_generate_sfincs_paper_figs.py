@@ -209,6 +209,28 @@ def test_parse_collision_operators_rejects_unsupported_values() -> None:
         mod._parse_collision_operators("0,2")
 
 
+def test_run_streams_child_output_to_terminal_and_log(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mod = _load_module()
+    child = tmp_path / "child.py"
+    child.write_text(
+        "print('child-line-1')\n"
+        "print('child-progress 1/2')\n"
+        "print('child-line-2')\n"
+    )
+    mod._run([sys.executable, str(child)], cwd=tmp_path, timeout_s=5.0, label="child")
+    captured = capsys.readouterr().out
+    assert "[child] cwd=" in captured
+    assert "child-line-1" in captured
+    assert "child-progress 1/2" in captured
+    assert "[child] completed elapsed=" in captured
+    log_text = (tmp_path / "child.log").read_text()
+    assert "child-line-1" in log_text
+    assert "child-line-2" in log_text
+
+
 def test_expected_scan_subdirs_matches_log_ladder_format() -> None:
     mod = _load_module()
     got = mod._expected_scan_subdirs(
