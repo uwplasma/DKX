@@ -49,6 +49,14 @@ Compatibility and search-order logic for equilibrium files, input normalization,
 user overrides. This is the module to inspect first when a case fails to find a VMEC or
 Boozer file.
 
+``sfincs_jax/jax_geometry_adapters.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Optional structural adapters for JAX-native geometry producers such as ``vmec_jax``
+and ``booz_xform_jax``. These helpers do not make either package a required
+dependency; they normalize in-memory VMEC-like ``wout`` objects to the internal
+``VmecWout`` layout used by ``geometryScheme=5``.
+
 ``sfincs_jax/grids.py`` and ``sfincs_jax/xgrid.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

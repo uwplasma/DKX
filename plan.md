@@ -3738,3 +3738,45 @@ Next refactor target:
   resolve to the expected preconditioner policy hints. This bridges the pure
   policy tests to real namelist/operator construction before deeper physics
   gates and benchmark gates are expanded.
+
+### 19.43 Optional JAX-native geometry adapter stage
+
+Implemented the first concrete `vmec_jax` / `booz_xform_jax` integration step:
+
+- Local repository check:
+  - the originally referenced `/Users/rogeriojorge/vmec_jax` path is not present,
+  - the usable local `vmec_jax` repository is
+    `/Users/rogeriojorge/local/vmec_jax`,
+  - the usable local `booz_xform_jax` repository is
+    `/Users/rogeriojorge/local/booz_xform_jax`.
+- Added `sfincs_jax/jax_geometry_adapters.py`.
+  - It has no import-time dependency on either optional package.
+  - `optional_jax_geometry_backend_status()` reports whether `vmec_jax` and
+    `booz_xform_jax` are importable.
+  - `vmec_wout_from_wout_like(...)` converts VMEC-like in-memory objects,
+    including the `vmec_jax.wout.WoutData` field layout, to the internal
+    `sfincs_jax.vmec_wout.VmecWout` dataclass.
+  - The adapter accepts both `(radius, mode)` and `(mode, radius)` coefficient
+    arrays and normalizes them to the `sfincs_jax` `(mode, radius)` convention.
+- Added `tests/test_jax_geometry_adapters.py` for:
+  - backend-status structure,
+  - `vmec_jax`-style transposition,
+  - native `sfincs_jax` ordering,
+  - invalid-shape rejection.
+- Documented the adapter in `docs/geometry.rst` and `docs/source_map.rst`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/jax_geometry_adapters.py tests/test_jax_geometry_adapters.py`
+- `python -m ruff check sfincs_jax/jax_geometry_adapters.py tests/test_jax_geometry_adapters.py`
+- `pytest -q tests/test_jax_geometry_adapters.py`
+  passed with `4 passed`.
+
+Remaining work in this lane:
+
+- Refactor `vmec_geometry_from_wout_file(...)` so the Fourier-sum evaluator can
+  accept a `VmecWout` object directly, then add an end-to-end file-VMEC vs
+  in-memory `vmec_jax` geometry comparison.
+- Keep `booz_xform_jax` as the second-stage route for Boozer-coordinate studies:
+  `vmec_jax -> booz_xform_jax -> sfincs_jax` should only become public after the
+  field-component and harmonic-selection tests pass.
