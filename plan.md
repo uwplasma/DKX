@@ -4115,3 +4115,28 @@ Validation:
 - `pytest -q tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py`
   passed with `150 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.56 RHSMode=1 constraint-scheme-0 sparse-first policy extraction
+
+Completed the next driver-refactor increment:
+
+- Add `sfincs_jax/rhs1_constraint0_policy.py` for the constraint-scheme-0
+  RHSMode=1 sparse-first, explicit PETSc-compatible sparse, and dense-fallback
+  opt-in decisions.
+- Keep the existing `v3_driver.py` wrappers intact so downstream debugging and
+  monkeypatch-based tests continue to use the same private seam.
+- Add direct tests that cover accelerator-vs-CPU defaults, explicit environment
+  enable/disable behavior, RHSMode/Phi1/full-FP guards, dense-method rejection,
+  sparse-preconditioner rejection, and active-size limits.
+- Update the API docs, source map, testing guide, and policy-docstring regression
+  guard so the new split is discoverable.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_constraint0_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_constraint0_policy.py tests/test_policy_module_docstrings.py`
+- `python -m ruff check sfincs_jax/rhs1_constraint0_policy.py tests/test_rhs1_constraint0_policy.py tests/test_policy_module_docstrings.py`
+- `pytest -q tests/test_rhs1_constraint0_policy.py tests/test_rhs1_sparse_first_heuristic.py tests/test_policy_module_docstrings.py`
+  passed with `75 passed`.
+- `pytest -q tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
+  passed with `157 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
