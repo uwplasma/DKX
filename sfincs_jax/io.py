@@ -30,6 +30,7 @@ from .input_compat import (
 )
 from .namelist import Namelist, read_sfincs_input
 from .paths import resolve_existing_path
+from .solver_progress import format_duration, runtime_scale_hint
 from .vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 from .v3 import V3Grids, geometry_from_namelist, grids_from_namelist
 
@@ -2319,37 +2320,6 @@ def write_sfincs_jax_output_h5(
     def _fmt_fortran_i(val: int, width: int = 12) -> str:
         return f"{int(val):{width}d}"
 
-    def _format_duration(seconds: float) -> str:
-        seconds = max(0.0, float(seconds))
-        if seconds < 60.0:
-            return f"{seconds:.1f}s"
-        minutes, sec = divmod(int(round(seconds)), 60)
-        if minutes < 60:
-            return f"{minutes}m{sec:02d}s"
-        hours, minutes = divmod(minutes, 60)
-        if hours < 24:
-            return f"{hours}h{minutes:02d}m"
-        days, hours = divmod(hours, 24)
-        return f"{days}d{hours:02d}h"
-
-    def _runtime_scale_hint(*, rhs_mode_hint: int, total_size_hint: int, n_rhs_hint: int | None = None) -> str:
-        size = int(total_size_hint)
-        if rhs_mode_hint in {2, 3}:
-            n_rhs_use = max(1, int(n_rhs_hint or 1))
-            work = size * n_rhs_use
-            if work < 40_000:
-                return "usually seconds to a few minutes"
-            if work < 250_000:
-                return "often minutes"
-            return "often many minutes or longer"
-        if size < 8_000:
-            return "usually seconds"
-        if size < 50_000:
-            return "often tens of seconds to a few minutes"
-        if size < 200_000:
-            return "often minutes"
-        return "often many minutes or longer"
-
     input_namelist = Path(input_namelist)
     output_path = Path(output_path)
     run_t0 = time.perf_counter()
@@ -2398,7 +2368,7 @@ def write_sfincs_jax_output_h5(
     grids = grids_from_namelist(nml)
     _mark("grids_from_namelist")
     if emit is not None:
-        emit(1, f" timing: grids ready elapsed={_format_duration(time.perf_counter() - run_t0)}")
+        emit(1, f" timing: grids ready elapsed={format_duration(time.perf_counter() - run_t0)}")
     if emit is not None:
         rhs_mode = int(nml.group("general").get("RHSMODE", 1))
         res = nml.group("resolutionParameters")
@@ -2488,7 +2458,7 @@ def write_sfincs_jax_output_h5(
         emit(0, f" VMEC: output geometry fields ready in {time.perf_counter() - vmec_out_t0:.2f} s.")
     _mark("sfincs_jax_output_dict")
     if emit is not None:
-        emit(1, f" timing: geometry/output fields ready elapsed={_format_duration(time.perf_counter() - run_t0)}")
+        emit(1, f" timing: geometry/output fields ready elapsed={format_duration(time.perf_counter() - run_t0)}")
     if emit is not None:
         geom_params = nml.group("geometryParameters")
         input_radial_coordinate = _get_int(geom_params, "inputRadialCoordinate", 3)
@@ -2636,7 +2606,7 @@ def write_sfincs_jax_output_h5(
             emit(
                 0,
                 " Runtime hint: RHSMode=1 "
-                f"active_size={int(active_total_size)}. This size range is {_runtime_scale_hint(rhs_mode_hint=1, total_size_hint=int(active_total_size))}.",
+                f"active_size={int(active_total_size)}. This size range is {runtime_scale_hint(rhs_mode_hint=1, total_size_hint=int(active_total_size))}.",
             )
             if int(active_total_size) >= 80000:
                 emit(
@@ -3858,7 +3828,7 @@ def write_sfincs_jax_output_h5(
             emit(
                 0,
                 " timing: RHSMode=1 solve+diagnostics elapsed="
-                f"{_format_duration(time.perf_counter() - rhs1_branch_t0)} total_elapsed={_format_duration(time.perf_counter() - run_t0)}",
+                f"{format_duration(time.perf_counter() - rhs1_branch_t0)} total_elapsed={format_duration(time.perf_counter() - run_t0)}",
             )
 
     if bool(compute_transport_matrix):
@@ -3907,7 +3877,7 @@ def write_sfincs_jax_output_h5(
                     0,
                     " Runtime hint: transport solve "
                     f"whichRHS_count={int(n_rhs)} total_size={int(size_est)}. "
-                    f"This workload is {_runtime_scale_hint(rhs_mode_hint=int(rhs_mode), total_size_hint=int(size_est), n_rhs_hint=int(n_rhs))}.",
+                    f"This workload is {runtime_scale_hint(rhs_mode_hint=int(rhs_mode), total_size_hint=int(size_est), n_rhs_hint=int(n_rhs))}.",
                 )
                 emit(
                     0,
@@ -3961,7 +3931,7 @@ def write_sfincs_jax_output_h5(
                     emit(
                         0,
                         " timing: transport solve+diagnostics elapsed="
-                        f"{_format_duration(time.perf_counter() - transport_branch_t0)} total_elapsed={_format_duration(time.perf_counter() - run_t0)}",
+                        f"{format_duration(time.perf_counter() - transport_branch_t0)} total_elapsed={format_duration(time.perf_counter() - run_t0)}",
                     )
                     emit(1, f" wrote sfincsOutput.h5 -> {output_path.resolve()}")
                     emit(0, " Goodbye!")
@@ -4250,7 +4220,7 @@ def write_sfincs_jax_output_h5(
                 emit(
                     0,
                     " timing: transport solve+diagnostics elapsed="
-                    f"{_format_duration(time.perf_counter() - transport_branch_t0)} total_elapsed={_format_duration(time.perf_counter() - run_t0)}",
+                    f"{format_duration(time.perf_counter() - transport_branch_t0)} total_elapsed={format_duration(time.perf_counter() - run_t0)}",
                 )
 
     if int(rhs_mode) in {2, 3} and not bool(compute_transport_matrix):
@@ -4275,7 +4245,7 @@ def write_sfincs_jax_output_h5(
     write_sfincs_h5(path=output_path, data=data, fortran_layout=fortran_layout, overwrite=overwrite)
     _mark("write_h5_done")
     if emit is not None:
-        emit(0, f" timing: total run elapsed={_format_duration(time.perf_counter() - run_t0)}")
+        emit(0, f" timing: total run elapsed={format_duration(time.perf_counter() - run_t0)}")
         emit(1, f" wrote sfincsOutput.h5 -> {output_path.resolve()}")
         emit(0, " Goodbye!")
     out_path = output_path.resolve()

@@ -158,6 +158,11 @@ from .phi1_newton_linear import (
     solve_phi1_newton_linear_step,
 )
 from .phi1_line_search import advance_phi1_newton_iterate
+from .solver_progress import (
+    RHS1ProgressNotes,
+    rhs1_large_progress_enabled,
+    transport_progress_message,
+)
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
@@ -11198,13 +11203,10 @@ def solve_v3_full_system_linear_gmres(
     rhs_norm = jnp.linalg.norm(rhs)
     if emit is not None:
         emit(2, f"solve_v3_full_system_linear_gmres: rhs_norm={float(rhs_norm):.6e}")
-    progress_size_env = os.environ.get("SFINCS_JAX_PROGRESS_SIZE_MIN", "").strip()
-    try:
-        progress_size_min = int(progress_size_env) if progress_size_env else 20000
-    except ValueError:
-        progress_size_min = 20000
-    progress_large_rhs1 = int(op.rhs_mode) == 1 and int(op.total_size) >= max(1, int(progress_size_min))
-    progress_notes_emitted = {"precond": False, "solve": False}
+    rhs1_progress_notes = RHS1ProgressNotes(
+        emit=emit,
+        enabled=rhs1_large_progress_enabled(rhs_mode=int(op.rhs_mode), total_size=int(op.total_size)),
+    )
 
     recycle_k_env = os.environ.get("SFINCS_JAX_RHSMODE1_RECYCLE_K", "").strip()
     try:
@@ -13527,13 +13529,7 @@ def solve_v3_full_system_linear_gmres(
                     "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner="
                     f"{rhs1_precond_kind} (active-DOF)",
                 )
-                if progress_large_rhs1 and (not progress_notes_emitted["precond"]):
-                    emit(
-                        0,
-                        " solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner "
-                        f"({rhs1_precond_kind}); this stage can take a while for large systems.",
-                    )
-                    progress_notes_emitted["precond"] = True
+                rhs1_progress_notes.preconditioner_build(rhs1_precond_kind)
             sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
             try:
                 sweeps = int(sweeps_env) if sweeps_env else 2
@@ -14044,9 +14040,7 @@ def solve_v3_full_system_linear_gmres(
             def mv_pc(x: jnp.ndarray) -> jnp.ndarray:
                 return preconditioner_dense(mv_dense(x))
 
-            if emit is not None and progress_large_rhs1 and (not progress_notes_emitted["solve"]):
-                emit(0, " solve_v3_full_system_linear_gmres: starting Krylov iterations.")
-                progress_notes_emitted["solve"] = True
+            rhs1_progress_notes.krylov_start()
             _mark("rhs1_krylov_solve_start")
             res_reduced = _solve_linear(
                 matvec_fn=mv_pc,
@@ -14124,9 +14118,7 @@ def solve_v3_full_system_linear_gmres(
                 ksp_precond_side = gmres_precond_side
                 ksp_solver_kind = _solver_kind(solve_method)[0]
             else:
-                if emit is not None and progress_large_rhs1 and (not progress_notes_emitted["solve"]):
-                    emit(0, " solve_v3_full_system_linear_gmres: starting Krylov iterations.")
-                    progress_notes_emitted["solve"] = True
+                rhs1_progress_notes.krylov_start()
                 _mark("rhs1_krylov_solve_start")
                 res_reduced = _solve_linear(
                     matvec_fn=mv_reduced,
@@ -16926,13 +16918,7 @@ def solve_v3_full_system_linear_gmres(
                 _mark("rhs1_precond_build_start")
                 if emit is not None:
                     emit(1, f"solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner={rhs1_precond_kind}")
-                    if progress_large_rhs1 and (not progress_notes_emitted["precond"]):
-                        emit(
-                            0,
-                            " solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner "
-                            f"({rhs1_precond_kind}); this stage can take a while for large systems.",
-                        )
-                        progress_notes_emitted["precond"] = True
+                    rhs1_progress_notes.preconditioner_build(rhs1_precond_kind)
                 sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
                 try:
                     sweeps = int(sweeps_env) if sweeps_env else 2
@@ -17035,9 +17021,7 @@ def solve_v3_full_system_linear_gmres(
                             if jnp.isfinite(r1) and (not jnp.isfinite(r0) or float(r1) < float(r0)):
                                 x0 = x0_recycled
             if not host_dense_shortcut_full:
-                if emit is not None and progress_large_rhs1 and (not progress_notes_emitted["solve"]):
-                    emit(0, " solve_v3_full_system_linear_gmres: starting Krylov iterations.")
-                    progress_notes_emitted["solve"] = True
+                rhs1_progress_notes.krylov_start()
                 _mark("rhs1_krylov_solve_start")
                 result, residual_vec = _solve_linear_with_residual(
                     matvec_fn=mv,
@@ -19195,16 +19179,6 @@ def solve_v3_transport_matrix_linear_gmres(
     - Use `diagnostics.F90` formulas to fill `transportMatrix`
     """
     t_all = Timer()
-
-    def _format_duration(seconds: float) -> str:
-        seconds = max(0.0, float(seconds))
-        if seconds < 60.0:
-            return f"{seconds:.1f}s"
-        minutes, sec = divmod(int(round(seconds)), 60)
-        if minutes < 60:
-            return f"{minutes}m{sec:02d}s"
-        hours, minutes = divmod(minutes, 60)
-        return f"{hours}h{minutes:02d}m"
 
     if emit is not None:
         emit(0, "solve_v3_transport_matrix_linear_gmres: starting whichRHS loop")
@@ -21562,13 +21536,15 @@ def solve_v3_transport_matrix_linear_gmres(
             elapsed_history_transport.append(float(t_rhs.elapsed_s()))
             if emit is not None:
                 completed_rhs = len(elapsed_history_transport)
-                remaining_rhs = max(0, len(which_rhs_values) - completed_rhs)
                 avg_rhs_s = float(sum(elapsed_history_transport) / max(1, completed_rhs))
                 emit(
                     0,
-                    f"solve_v3_transport_matrix_linear_gmres: progress {completed_rhs}/{len(which_rhs_values)} "
-                    f"avg_rhs={_format_duration(avg_rhs_s)} elapsed={_format_duration(t_all.elapsed_s())} "
-                    f"est_remaining={_format_duration(avg_rhs_s * remaining_rhs)}",
+                    transport_progress_message(
+                        completed=completed_rhs,
+                        total=len(which_rhs_values),
+                        avg_rhs_s=avg_rhs_s,
+                        elapsed_s=t_all.elapsed_s(),
+                    ),
                 )
 
     if emit is not None:

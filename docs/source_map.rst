@@ -190,6 +190,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/phi1_line_search.py``:
   accepted-iterate update logic for the Newton path, including PETSc-like backtracking,
   fixed-candidate ``best`` search, and finite-state fallback handling.
+- ``sfincs_jax/solver_progress.py``:
+  user-facing duration formatting, coarse runtime hints, one-shot large RHSMode=1
+  progress messages, and transport whichRHS ETA text. This module is intentionally
+  solver-neutral: it improves observability without affecting numerical decisions.
 
 ``sfincs_jax/solver.py`` and ``sfincs_jax/implicit_solve.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
