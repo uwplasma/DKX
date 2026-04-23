@@ -175,6 +175,8 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   skip decisions for moderate RHSMode=1 full-FP systems.
 - ``sfincs_jax/rhs1_handoff.py``:
   accepted-candidate handoff and Krylov replay-state updates.
+- ``sfincs_jax/rhs1_acceptance_policy.py``:
+  large-PAS fast-accept gates and host x-block factor-probe safety checks.
 - ``sfincs_jax/rhs1_constraint0_policy.py``:
   RHSMode=1 constraint-scheme-0 sparse-first, PETSc-compatible sparse routing, and
   dense-fallback opt-in policy.

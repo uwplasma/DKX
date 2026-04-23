@@ -124,6 +124,10 @@ from .rhs1_post_xblock_policy import (
     rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
     rhs1_skip_global_sparse_after_xblock_allowed as _rhs1_skip_global_sparse_after_xblock_allowed_impl,
 )
+from .rhs1_acceptance_policy import (
+    rhs1_host_factor_probe_ok as _rhs1_host_factor_probe_ok_impl,
+    rhs1_pas_fast_accept as _rhs1_pas_fast_accept_impl,
+)
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -763,38 +767,14 @@ def _rhsmode1_pas_fast_accept(
     target: float,
     use_implicit: bool,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_PAS_FAST_ACCEPT", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if bool(use_implicit):
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
-        return False
-    if op.fblock.pas is None:
-        return False
-    min_env = os.environ.get("SFINCS_JAX_PAS_FAST_ACCEPT_MIN", "").strip()
-    ratio_env = os.environ.get("SFINCS_JAX_PAS_FAST_ACCEPT_RATIO", "").strip()
-    abs_env = os.environ.get("SFINCS_JAX_PAS_FAST_ACCEPT_ABS", "").strip()
-    try:
-        min_size = int(min_env) if min_env else 20000
-    except ValueError:
-        min_size = 20000
-    try:
-        ratio = float(ratio_env) if ratio_env else 1.0e2
-    except ValueError:
-        ratio = 1.0e2
-    try:
-        abs_floor = float(abs_env) if abs_env else 1.0e-7
-    except ValueError:
-        abs_floor = 1.0e-7
-    if int(active_size) < max(1, int(min_size)):
-        return False
-    if not np.isfinite(float(residual_norm)):
-        return False
-    accept_thresh = max(float(target) * max(1.0, float(ratio)), max(0.0, float(abs_floor)))
-    return float(residual_norm) <= float(accept_thresh)
+    return _rhs1_pas_fast_accept_impl(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
 
 
 def _rhsmode1_pas_adaptive_smoother_allowed(
@@ -2181,23 +2161,7 @@ def _factorize_sparse_matrix_csr_host(
 
 
 def _rhsmode1_host_factor_probe_ok(*, factor: object | None, block_size: int) -> bool:
-    if factor is None or int(block_size) <= 0:
-        return False
-    probe_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_FACTOR_PROBE_MAX", "").strip()
-    try:
-        probe_max = float(probe_env) if probe_env else 1.0e8
-    except ValueError:
-        probe_max = 1.0e8
-    probe_max = max(float(probe_max), 1.0)
-    probe = np.ones((int(block_size),), dtype=np.float64)
-    try:
-        solved = np.asarray(factor.solve(probe), dtype=np.float64).reshape((-1,))
-    except Exception:
-        return False
-    if solved.shape != probe.shape or not np.all(np.isfinite(solved)):
-        return False
-    ratio = float(np.linalg.norm(solved)) / max(float(np.linalg.norm(probe)), 1.0e-300)
-    return np.isfinite(ratio) and ratio <= probe_max
+    return _rhs1_host_factor_probe_ok_impl(factor=factor, block_size=int(block_size))
 
 
 def _assemble_selected_theta_tz_operator(*, dd_plus: np.ndarray, dd_minus: np.ndarray, use_plus: np.ndarray):

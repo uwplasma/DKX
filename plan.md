@@ -4231,3 +4231,28 @@ Validation:
 - `pytest -q tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_large_cpu_policy.py tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
   passed with `183 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
+
+### 19.61 RHSMode=1 PAS fast-accept and host-factor probe extraction
+
+Completed the small policy extraction:
+
+- Add `sfincs_jax/rhs1_acceptance_policy.py` for large-PAS fast-accept gates and
+  host x-block factor-probe safety checks.
+- Reuse `pas_smoother.pas_fast_accept(...)` for the residual acceptance formula
+  so the PAS threshold remains single-sourced.
+- Keep the existing `v3_driver.py` wrappers intact for compatibility with the
+  established heuristic tests.
+- Add direct tests for PAS fast-accept environment parsing, backend/implicit/Phi1
+  and PAS guards, nonfinite residuals, factor-probe exceptions, shape mismatches,
+  nonfinite factor solves, invalid probe thresholds, and excessive amplification.
+- Update API docs, source map, testing docs, and module-docstring coverage.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_acceptance_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_acceptance_policy.py tests/test_policy_module_docstrings.py`
+- `python -m ruff check sfincs_jax/rhs1_acceptance_policy.py tests/test_rhs1_acceptance_policy.py tests/test_policy_module_docstrings.py`
+- `pytest -q tests/test_rhs1_acceptance_policy.py tests/test_rhs1_sparse_first_heuristic.py tests/test_policy_module_docstrings.py`
+  passed with `75 passed`.
+- `pytest -q tests/test_rhs1_acceptance_policy.py tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_large_cpu_policy.py tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_constraint0_policy.py tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
+  passed with `189 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
