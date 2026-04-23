@@ -75,3 +75,24 @@ def test_audit_suite_output_keys_cli_can_fail_on_missing(tmp_path: Path) -> None
 
     rc = mod.main(["--suite-root", str(suite_root), "--fail-on-missing"])
     assert rc == 1
+
+
+def test_audit_suite_output_keys_skips_cases_without_h5_paths(tmp_path: Path) -> None:
+    mod = _load_module()
+    suite_root = tmp_path / "suite"
+    report_path = suite_root / "suite_report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(
+            [
+                {"case": "missing_paths", "fortran_h5": None, "jax_h5": None},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    coverage = mod.audit_suite_output_keys(suite_root=suite_root)
+    assert len(coverage) == 1
+    assert coverage[0].case == "missing_paths"
+    assert coverage[0].skipped is True
+    assert coverage[0].skip_reason == "missing_h5_path"

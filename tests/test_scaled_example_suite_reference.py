@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 
+import h5py
 import pytest
 
 
@@ -17,6 +18,7 @@ _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
 _stage_reference_fortran_artifacts = _MODULE._stage_reference_fortran_artifacts
 _run_prepared_case = _MODULE._run_prepared_case
+_write_suite_audits = _MODULE._write_suite_audits
 _write_suite_outputs = _MODULE._write_suite_outputs
 _iter_inputs = _MODULE._iter_inputs
 
@@ -263,6 +265,13 @@ def _case_result(case: str, *, status: str = "parity_ok", strict_mismatches: int
     )
 
 
+def _write_h5(path: Path, keys: dict[str, float]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(path, "w") as h5:
+        for key, value in keys.items():
+            h5[key] = float(value)
+
+
 def test_write_suite_outputs_writes_incremental_reports(tmp_path: Path) -> None:
     rows = [_case_result("b_case"), _case_result("a_case", strict_mismatches=1)]
 
@@ -286,6 +295,34 @@ def test_write_suite_outputs_writes_incremental_reports(tmp_path: Path) -> None:
     assert strict_rows[0]["jax_logged_elapsed_s"] == 1.7
     assert strict_rows[0]["n_mismatch_common"] == 1
     assert "Scaled Example Suite Summary" in summary.read_text(encoding="utf-8")
+
+
+def test_write_suite_audits_emits_key_coverage_and_runtime_drift(tmp_path: Path) -> None:
+    case_dir = tmp_path / "a_case"
+    _write_h5(case_dir / "fortran.h5", {"a": 1.0, "b": 2.0})
+    _write_h5(case_dir / "jax.h5", {"a": 1.0, "b": 2.0, "c": 3.0})
+    rows = [_case_result("a_case")]
+    rows[0].fortran_h5 = str(case_dir / "fortran.h5")
+    rows[0].jax_h5 = str(case_dir / "jax.h5")
+    _write_suite_outputs(rows, tmp_path)
+
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps([{"case": "a_case", "jax_runtime_s": 1.0}]), encoding="utf-8")
+
+    audit = _write_suite_audits(
+        out_root=tmp_path,
+        runtime_baseline_report=baseline,
+        runtime_drift_threshold_ratio=1.25,
+        runtime_drift_min_baseline_runtime_s=0.0,
+    )
+
+    assert (tmp_path / "suite_output_key_coverage.json").exists()
+    assert (tmp_path / "suite_output_key_coverage_summary.json").exists()
+    assert (tmp_path / "suite_runtime_drift.json").exists()
+    assert (tmp_path / "suite_runtime_drift_summary.json").exists()
+    assert audit["output_key_coverage"]["missing_total"] == 0
+    assert audit["output_key_coverage"]["extra_total"] == 1
+    assert audit["runtime_drift"]["flagged_cases"] == 1
 
 
 def test_classify_blocker_treats_cuda_dense_custom_calls_as_solver_branch(tmp_path: Path) -> None:

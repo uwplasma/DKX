@@ -18,8 +18,8 @@ Current release snapshot
 
 The current ``main`` branch release artifacts are:
 
-- CPU: ``tests/scaled_example_suite_fast_cpu_full_v7_refresh``
-- GPU: ``tests/scaled_example_suite_fast_gpu_full_v11_refresh``
+- CPU: ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix``
+- GPU: ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postkeyfix``
 
 These report:
 

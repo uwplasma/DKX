@@ -10,7 +10,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 README = REPO_ROOT / "README.md"
 DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_fast_cpu_full_v7_refresh"
-DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_fast_gpu_full_v8"
+DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_fast_gpu_full_v11_refresh"
 BASELINE_REPORT = REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_v4" / "suite_report.json"
 EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
 EXTRA_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
@@ -21,6 +21,12 @@ END = "<!-- END FAST_BRANCH_AUDIT -->"
 
 def _load_json(path: Path) -> object:
     return json.loads(path.read_text())
+
+
+def _load_optional_json(path: Path) -> object | None:
+    if not path.exists():
+        return None
+    return _load_json(path)
 
 
 def _repo_rel(path: Path) -> str:
@@ -273,6 +279,10 @@ def main() -> int:
     gpu_out_root = Path(args.gpu_out_root)
     gpu_report_path = gpu_out_root / "suite_report.json"
     gpu_rows = list(_load_json(gpu_report_path)) if gpu_report_path.exists() else []
+    cpu_key_summary = _load_optional_json(out_root / "suite_output_key_coverage_summary.json")
+    gpu_key_summary = _load_optional_json(gpu_out_root / "suite_output_key_coverage_summary.json")
+    cpu_runtime_drift_summary = _load_optional_json(out_root / "suite_runtime_drift_summary.json")
+    gpu_runtime_drift_summary = _load_optional_json(gpu_out_root / "suite_runtime_drift_summary.json")
 
     rows = list(_load_json(report_path))
     case_order = _expected_cases()
@@ -330,6 +340,48 @@ def main() -> int:
         lines.append(
             f"- GPU strict status counts: `{', '.join(f'{k}={gpu_strict_counts[k]}' for k in sorted(gpu_strict_counts))}`"
         )
+    if cpu_key_summary is not None:
+        lines.append(
+            "- CPU output-key coverage: "
+            f"`missing_total={cpu_key_summary.get('missing_total', '-')}, "
+            f"extra_total={cpu_key_summary.get('extra_total', '-')}, "
+            f"audited_cases={cpu_key_summary.get('audited_cases', '-')}, "
+            f"skipped_cases={cpu_key_summary.get('skipped_cases', '-')}`"
+        )
+    if gpu_key_summary is not None:
+        lines.append(
+            "- GPU output-key coverage: "
+            f"`missing_total={gpu_key_summary.get('missing_total', '-')}, "
+            f"extra_total={gpu_key_summary.get('extra_total', '-')}, "
+            f"audited_cases={gpu_key_summary.get('audited_cases', '-')}, "
+            f"skipped_cases={gpu_key_summary.get('skipped_cases', '-')}`"
+        )
+    if cpu_runtime_drift_summary is not None:
+        cpu_flagged = int(cpu_runtime_drift_summary.get("flagged_cases", 0))
+        cpu_threshold = cpu_runtime_drift_summary.get("threshold_ratio", "-")
+        cpu_baseline = cpu_runtime_drift_summary.get("baseline_report", "-")
+        cpu_cases = list(cpu_runtime_drift_summary.get("cases", []))
+        if cpu_flagged > 0:
+            lines.append(
+                f"- CPU runtime drift watchlist vs `{cpu_baseline}`: "
+                f"`{cpu_flagged}` cases above `{cpu_threshold}x` "
+                f"({', '.join(cpu_cases[:4])})"
+            )
+        else:
+            lines.append(f"- CPU runtime drift watchlist vs `{cpu_baseline}`: none")
+    if gpu_runtime_drift_summary is not None:
+        gpu_flagged = int(gpu_runtime_drift_summary.get("flagged_cases", 0))
+        gpu_threshold = gpu_runtime_drift_summary.get("threshold_ratio", "-")
+        gpu_baseline = gpu_runtime_drift_summary.get("baseline_report", "-")
+        gpu_cases = list(gpu_runtime_drift_summary.get("cases", []))
+        if gpu_flagged > 0:
+            lines.append(
+                f"- GPU runtime drift watchlist vs `{gpu_baseline}`: "
+                f"`{gpu_flagged}` cases above `{gpu_threshold}x` "
+                f"({', '.join(gpu_cases[:4])})"
+            )
+        else:
+            lines.append(f"- GPU runtime drift watchlist vs `{gpu_baseline}`: none")
     if manifest:
         resolution_policy = manifest.get("resolution_policy")
         scale_factor = manifest.get("scale_factor")
