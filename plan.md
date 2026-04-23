@@ -3355,6 +3355,16 @@ Immediate next actions:
   - `examples/performance/README.md` now lists the harness;
   - `docs/performance_techniques.rst` documents how to run it and the admission
     rule before touching production defaults.
+- Follow-up real-block extension:
+  - the harness now supports `--case sfincs-pas-block`;
+  - this mode loads a real SFINCS PAS fixture, fixes one species and one speed
+    index, extracts the active Legendre chain and angular block from the
+    matrix-free F-block, checks that off-band Legendre coupling is below the
+    block-tridiagonal tolerance, and solves the regularized local block with
+    both dense and structured paths;
+  - the regularization is explicit in the JSON output and is benchmark-only,
+    matching a preconditioner-style local block rather than changing production
+    solver behavior.
 - Validation:
   - `pytest -q tests/test_benchmark_structured_solve.py tests/test_structured_velocity.py`
     -> `8 passed`;
@@ -3366,6 +3376,10 @@ Immediate next actions:
     produced `max_solution_error = 1.11e-16`, structured residual `1.50e-16`,
     dense bytes `1800`, structured bytes `936`, and a small CPU warm timing
     speedup on this tiny proxy;
+  - real SFINCS PAS block CLI smoke with
+    `--case sfincs-pas-block --sfincs-input tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist --n-rhs 2 --warmup 0 --repeats 1`
+    produced `max_solution_error = 2.96e-12`, structured residual `2.20e-13`,
+    dense bytes `10368`, structured bytes `6480`, and `off_band_norm = 0`;
   - `sphinx-build -W -b html docs docs/_build/html`
     -> passed.
 - Acceptance rule for future structured production changes:
@@ -3375,6 +3389,6 @@ Immediate next actions:
     pinned offender,
   - no drift above the `1.25x` suite gates.
 - Next implementation step:
-  - extend this harness from synthetic block-tridiagonal systems to one real
-    reduced monoenergetic/PAS block extracted from a pinned offender, then test
-    whether factor-once/repeated-RHS should enter a production preconditioner.
+  - extend the real-block mode from the tiny fixture to one pinned runtime/RSS
+    offender block, then test whether factor-once/repeated-RHS should enter a
+    production preconditioner.

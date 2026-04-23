@@ -4,9 +4,11 @@ import json
 from pathlib import Path
 
 from examples.performance.benchmark_structured_solve import (
+    extract_sfincs_pas_block_problem,
     main,
     make_structured_problem,
     run_benchmark,
+    run_sfincs_pas_block_benchmark,
 )
 
 
@@ -44,6 +46,42 @@ def test_structured_solve_benchmark_is_accuracy_and_memory_gate() -> None:
     assert result.dense_solve_s >= 0.0
 
 
+def test_extract_sfincs_pas_block_problem_uses_real_operator_coefficients() -> None:
+    input_path = Path("tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist")
+    diagonal, lower, upper, rhs, off_band_norm = extract_sfincs_pas_block_problem(
+        input_path=input_path,
+        n_rhs=2,
+        seed=9,
+    )
+
+    assert diagonal.shape == (4, 9, 9)
+    assert lower.shape == (3, 9, 9)
+    assert upper.shape == (3, 9, 9)
+    assert rhs.shape == (2, 36)
+    assert off_band_norm == 0.0
+
+
+def test_sfincs_pas_block_benchmark_is_accuracy_and_memory_gate() -> None:
+    result = run_sfincs_pas_block_benchmark(
+        input_path=Path("tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist"),
+        n_rhs=2,
+        seed=10,
+        warmup=0,
+        repeats=1,
+    )
+
+    assert result.status == "ok"
+    assert result.case == "sfincs_pas_local_block"
+    assert result.source_input is not None
+    assert result.size == 36
+    assert result.off_band_norm == 0.0
+    assert result.regularization == 1.0e-4
+    assert result.structured_bytes < result.dense_bytes
+    assert result.structured_relative_residual < 1.0e-11
+    assert result.dense_relative_residual < 1.0e-11
+    assert result.max_solution_error < 1.0e-11
+
+
 def test_structured_solve_benchmark_main_writes_json(tmp_path: Path) -> None:
     out_json = tmp_path / "structured.json"
 
@@ -66,5 +104,33 @@ def test_structured_solve_benchmark_main_writes_json(tmp_path: Path) -> None:
 
     payload = json.loads(out_json.read_text(encoding="utf-8"))
     assert payload["status"] == "ok"
+    assert payload["case"] == "synthetic_block_tridiagonal"
     assert payload["size"] == 8
+    assert payload["structured_bytes"] < payload["dense_bytes"]
+
+
+def test_structured_solve_benchmark_main_writes_sfincs_pas_json(tmp_path: Path) -> None:
+    out_json = tmp_path / "structured_sfincs.json"
+
+    assert main(
+        [
+            "--case",
+            "sfincs-pas-block",
+            "--sfincs-input",
+            "tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist",
+            "--n-rhs",
+            "2",
+            "--warmup",
+            "0",
+            "--repeats",
+            "1",
+            "--out-json",
+            str(out_json),
+        ]
+    ) == 0
+
+    payload = json.loads(out_json.read_text(encoding="utf-8"))
+    assert payload["status"] == "ok"
+    assert payload["case"] == "sfincs_pas_local_block"
+    assert payload["size"] == 36
     assert payload["structured_bytes"] < payload["dense_bytes"]
