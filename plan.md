@@ -3943,3 +3943,28 @@ Next validation targets:
 - After this cheap gate is stable, keep `vmec_jax`/`booz_xform_jax` end-to-end
   optimization examples as a separate research-grade lane rather than merging
   them into the lightweight CI path prematurely.
+
+### 19.49 VMEC-like adapter structural hardening
+
+Tightened the optional JAX-native VMEC adapter contract without adding new required
+dependencies:
+
+- Added docstrings/comments in `sfincs_jax/jax_geometry_adapters.py` explaining
+  shallow backend discovery, mode/radius normalization, metadata-only path
+  overrides, and why absent optional covariant/contravariant field tables may be
+  zero-filled for minimal stellarator-symmetric producers while required field,
+  metric, and shape tables remain strict.
+- Added tests for:
+  - metadata-only `path=...` override behavior,
+  - zero-filling absent optional field-coefficient tables,
+  - default zero pressure-profile handling,
+  - and rejection of a missing required `bmnc` table.
+- Updated geometry/testing docs so the adapter behavior is no longer implicit.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/jax_geometry_adapters.py tests/test_jax_geometry_adapters.py`
+- `python -m ruff check sfincs_jax/jax_geometry_adapters.py tests/test_jax_geometry_adapters.py`
+- `pytest -q tests/test_jax_geometry_adapters.py tests/test_geometry_grid_helper_coverage.py tests/test_geometry_autodiff_gates.py`
+  passed with `19 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.

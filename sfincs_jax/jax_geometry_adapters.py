@@ -18,7 +18,13 @@ from .vmec_wout import VmecWout
 
 
 def optional_jax_geometry_backend_status() -> dict[str, bool]:
-    """Return whether optional JAX geometry backends are importable."""
+    """Return whether optional JAX geometry backends are importable.
+
+    The check is deliberately shallow: it reports importability without importing
+    the packages, initializing devices, or changing JAX configuration.  This keeps
+    CLI startup and normal CI independent of optional differentiable-geometry
+    packages.
+    """
     return {
         "vmec_jax": find_spec("vmec_jax") is not None,
         "booz_xform_jax": find_spec("booz_xform_jax") is not None,
@@ -49,6 +55,7 @@ def _mode_radius_array(
     radius_options: tuple[int, ...],
     name: str,
 ) -> np.ndarray:
+    """Normalize a VMEC coefficient table to internal ``(mode, radius)`` layout."""
     arr = np.asarray(value, dtype=np.float64)
     if arr.ndim != 2:
         raise ValueError(f"{name} must be 2D, got shape {arr.shape}")
@@ -70,6 +77,13 @@ def _mode_radius_attr(
     radius_options: tuple[int, ...],
     default_like: np.ndarray | None = None,
 ) -> np.ndarray:
+    """Read and normalize a coefficient table, optionally zero-filling one table.
+
+    Some in-memory VMEC producers expose a minimal stellarator-symmetric subset.
+    For those objects, covariant/contravariant magnetic-field coefficient tables
+    that are absent from the producer can be represented as zeros.  Required field
+    strength, metric/Jacobian, and shape tables remain strict and raise if absent.
+    """
     if hasattr(obj, name):
         value = getattr(obj, name)
     elif default_like is not None:
@@ -85,7 +99,9 @@ def vmec_wout_from_wout_like(wout_like: Any, *, path: str | Path | None = None) 
     This covers the field names used by ``vmec_jax.wout.WoutData`` and by
     ``sfincs_jax.vmec_wout.VmecWout``. Arrays may be stored either as
     ``(radius, mode)`` or ``(mode, radius)``; the returned object always uses the
-    ``sfincs_jax`` convention ``(mode, radius)``.
+    ``sfincs_jax`` convention ``(mode, radius)``.  The optional ``path`` argument
+    is metadata only and is useful when the source object is produced entirely in
+    memory.
     """
     ns = int(_attr(wout_like, "ns"))
     mnmax = int(_attr(wout_like, "mnmax", default=np.asarray(_attr(wout_like, "xm")).size, required=False))
