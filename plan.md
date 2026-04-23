@@ -3292,12 +3292,49 @@ Highest-ROI implementation sequence from this audit:
      - PyPI build and tag publish.
 
 Immediate next actions:
-1. Finish focused verification for the promoted LHD/W7-X collisionality
-   artifacts, update docs, then commit and push this planning/validation audit.
-2. Start the driver split with one low-risk extraction: progress/provenance
+1. Start the driver split with one low-risk extraction: progress/provenance
    logging or preconditioner dispatch helpers, then run focused tests.
-3. Add a small structured-solve benchmark harness that can compare current
+2. Add a small structured-solve benchmark harness that can compare current
    full-system Krylov against a factor-once / repeated-RHS prototype on a
    bounded monoenergetic or PAS block.
-4. Raise the CI coverage floor only after the first extraction lands; do not
+3. Raise the CI coverage floor only after the first extraction lands; do not
    chase `95%` by adding slow full-solve tests to PR CI.
+
+### 19.35 Driver split step 1: solver progress/provenance helper extraction
+
+- First low-risk split from Section 19.34 is implemented without changing solver
+  numerics:
+  - added `sfincs_jax/solver_progress.py`,
+  - moved shared duration formatting and coarse runtime-class hints out of
+    `io.py`,
+  - moved RHSMode=1 large-solve one-shot progress notes out of `v3_driver.py`,
+  - moved transport whichRHS ETA message construction out of the deep transport
+    solve loop.
+- Rationale:
+  - these helpers are observability-only, so they are a safe first extraction
+    before touching preconditioner or Krylov decision logic;
+  - keeping progress/provenance formatting in one module makes the future driver
+    split easier and keeps CLI messages testable without running heavy solves;
+  - the public log text is preserved for large RHSMode=1 solves and transport
+    ETA lines.
+- Documentation:
+  - `docs/source_map.rst` now lists `solver_progress.py` as a solver-neutral
+    progress/provenance helper.
+- Validation:
+  - `pytest -q tests/test_solver_progress.py tests/test_runtime_helper_coverage.py`
+    -> `8 passed`;
+  - `pytest -q tests/test_solver_progress.py tests/test_runtime_helper_coverage.py tests/test_validation_manifest_schema.py`
+    -> `11 passed`;
+  - `pytest -q tests/test_cli_solve_mode.py::test_write_output_full_system_regression tests/test_output_h5_scheme1_parity.py::test_output_scheme1_matches_fortran_fixture`
+    -> `2 passed`;
+  - `python -m ruff check sfincs_jax/solver_progress.py tests/test_solver_progress.py`
+    -> passed;
+  - `python -m py_compile sfincs_jax/solver_progress.py sfincs_jax/io.py sfincs_jax/v3_driver.py`
+    -> passed.
+- Note:
+  - running Ruff over the full legacy `io.py` / `v3_driver.py` surfaces many
+    pre-existing lint findings unrelated to this extraction; the new helper and
+    focused tests are clean.
+- Next implementation step:
+  - add the structured-solve benchmark harness from Section 19.34 before changing
+    any default preconditioner/Krylov path.
