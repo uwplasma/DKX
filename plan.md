@@ -2932,6 +2932,37 @@ Decision:
      `sfincs_jax_fig2_w7x_collisionality.png`;
   3. only after both full LHD and full W7-X artifacts are pinned, revisit the
      high-collisionality proxy and the heavier W7-X ambipolar literature lane.
+
+### 19.33 CPU runtime-watchlist closeout after harness fixes
+
+- The two remaining CPU runtime-drift watchlist cases were rechecked with the
+  post-profiling-fix suite harness instead of the older `postkeyfix` timing
+  data alone.
+  - bounded probe root without host-RSS collection:
+    `tests/scaled_example_suite_cpu_watchlist_probe_2026-04-23`
+  - bounded probe root with safe host-RSS collection:
+    `tests/scaled_example_suite_cpu_watchlist_probe_mem_2026-04-23`
+- Both cases stayed parity-clean and dropped back below the `1.25x` drift gate
+  against `tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json`.
+  - `monoenergetic_geometryScheme11`
+    - baseline `jax_runtime_s = 3.056`
+    - refreshed `jax_runtime_s = 3.185`
+    - refreshed `jax_logged_elapsed_s = 2.497`
+    - refreshed `jax_max_rss_mb = 1187.3`
+  - `transportMatrix_geometryScheme11`
+    - baseline `jax_runtime_s = 1.667`
+    - refreshed `jax_runtime_s = 1.764`
+    - refreshed `jax_logged_elapsed_s = 1.188`
+    - refreshed `jax_max_rss_mb = 439.9`
+- The authoritative CPU release root was then refreshed in place:
+  - `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix`
+  - `suite_runtime_drift_summary.json` now reports:
+    - `flagged_cases = 0`
+    - `cases = []`
+- README/docs should now treat both CPU and GPU runtime-drift watchlists as
+  clean on the current release artifacts. The remaining performance work is the
+  structural runtime/memory reduction lane on heavy PAS and geometry-rich cases,
+  not another artifact-hygiene pass.
      - Keep the CLI unchanged. This lane is Python-first; file-based `wout_path`
        remains the stable public CLI interface.
 
