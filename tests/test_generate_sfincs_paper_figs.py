@@ -5,7 +5,9 @@ import json
 import sys
 from pathlib import Path
 
+import h5py
 import numpy as np
+import pytest
 
 
 def _load_module():
@@ -17,6 +19,25 @@ def _load_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _write_fake_transport_output(
+    run_dir: Path,
+    *,
+    nu_n: float,
+    diagonal_scale: float = 1.0,
+) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with h5py.File(run_dir / "sfincsOutput.h5", "w") as h5:
+        h5["nu_n"] = float(nu_n)
+        h5["GHat"] = 1.0
+        h5["IHat"] = 0.0
+        h5["iota"] = 0.0
+        h5["B0OverBBar"] = 1.0
+        h5["transportMatrix"] = np.asarray(
+            [[diagonal_scale * nu_n, 0.1 * diagonal_scale], [0.2 * diagonal_scale, 2.0 * diagonal_scale * nu_n]],
+            dtype=float,
+        )
 
 
 def test_write_scan_input_replaces_collision_operator_and_fast_resolution(tmp_path: Path) -> None:
@@ -174,3 +195,106 @@ def test_summary_metadata_records_case_resolution_and_paths(tmp_path: Path) -> N
     assert metadata["base_input"] == "examples/sfincs_examples/transportMatrix_geometryScheme11/input.namelist"
     assert metadata["source_script"] == "examples/publication_figures/generate_sfincs_paper_figs.py"
     assert metadata["labels_to_collision_operator"] == {"Fokker-Planck": 0, "PAS": 1}
+
+
+def test_parse_collision_operators_deduplicates_and_preserves_order() -> None:
+    mod = _load_module()
+    assert mod._parse_collision_operators("1, 0, 1") == (1, 0)
+    assert mod._parse_collision_operators("") == (0, 1)
+
+
+def test_parse_collision_operators_rejects_unsupported_values() -> None:
+    mod = _load_module()
+    with pytest.raises(ValueError, match="Unsupported collision operator 2"):
+        mod._parse_collision_operators("0,2")
+
+
+def test_main_skip_existing_reuses_selected_operator_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _load_module()
+    work_dir = tmp_path / "work"
+    summary_dir = tmp_path / "summary"
+    out_dir = tmp_path / "figures"
+    _write_fake_transport_output(work_dir / "lhd_co1" / "nu_n_0.5", nu_n=0.5, diagonal_scale=3.0)
+
+    write_calls = 0
+    run_calls = 0
+
+    def _unexpected_write_scan_input(**kwargs):
+        nonlocal write_calls
+        write_calls += 1
+
+    def _unexpected_run(*args, **kwargs):
+        nonlocal run_calls
+        run_calls += 1
+
+    monkeypatch.setattr(mod, "_write_scan_input", _unexpected_write_scan_input)
+    monkeypatch.setattr(mod, "_run", _unexpected_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate_sfincs_paper_figs.py",
+            "--case",
+            "lhd",
+            "--scan-only",
+            "--skip-existing",
+            "--collision-operators",
+            "1",
+            "--work-dir",
+            str(work_dir),
+            "--summary-dir",
+            str(summary_dir),
+            "--out-dir",
+            str(out_dir),
+        ],
+    )
+
+    mod.main()
+
+    assert write_calls == 0
+    assert run_calls == 0
+    payload = json.loads((summary_dir / "lhd_collisionality_summary.json").read_text())
+    assert payload["metadata"]["labels_to_collision_operator"] == {"PAS": 1}
+    assert [row["label"] for row in payload["rows"]] == ["PAS"]
+    assert not (out_dir / "sfincs_jax_fig1_lhd_collisionality.png").exists()
+
+
+def test_main_plot_only_allows_single_selected_operator_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _load_module()
+    work_dir = tmp_path / "work"
+    summary_dir = tmp_path / "summary"
+    out_dir = tmp_path / "figures"
+    _write_fake_transport_output(work_dir / "lhd_co1" / "nu_n_0.25", nu_n=0.25, diagonal_scale=2.0)
+    _write_fake_transport_output(work_dir / "lhd_co1" / "nu_n_1.0", nu_n=1.0, diagonal_scale=4.0)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate_sfincs_paper_figs.py",
+            "--case",
+            "lhd",
+            "--plot-only",
+            "--collision-operators",
+            "1",
+            "--work-dir",
+            str(work_dir),
+            "--summary-dir",
+            str(summary_dir),
+            "--out-dir",
+            str(out_dir),
+        ],
+    )
+
+    mod.main()
+
+    payload = json.loads((summary_dir / "lhd_collisionality_summary.json").read_text())
+    assert payload["metadata"]["labels_to_collision_operator"] == {"PAS": 1}
+    assert [row["label"] for row in payload["rows"]] == ["PAS", "PAS"]
+    assert (out_dir / "sfincs_jax_fig1_lhd_collisionality.png").exists()
