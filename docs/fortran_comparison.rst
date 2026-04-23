@@ -10,7 +10,7 @@ On the current ``main`` branch, the release-facing comparison is the full vendor
 example-suite audit:
 
 - CPU: ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix``
-- GPU: ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postkeyfix``
+- GPU: ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem``
 
 Those artifacts currently report:
 
