@@ -1908,11 +1908,15 @@ def sfincs_jax_output_dict(
     out["withAdiabatic"] = _fortran_logical(with_adiabatic)
     out["withNBIspec"] = _fortran_logical(bool(phys.get("WITHNBISPEC", False)))
 
-    # v3 only writes these adiabatic/Phi1-related options when enabled.
+    # v3 writes quasineutralityOption for Phi1/QN runs even when no adiabatic
+    # species block is active, while the adiabatic parameters themselves remain
+    # conditional on withAdiabatic.
     if bool(out["includePhi1"] == 1):
         out["readExternalPhi1"] = _fortran_logical(bool(phys.get("READEXTERNALPHI1", False)))
-    if with_adiabatic:
         out["quasineutralityOption"] = np.asarray(_get_int(phys, "quasineutralityOption", 1), dtype=np.int32)
+    elif with_adiabatic:
+        out["quasineutralityOption"] = np.asarray(_get_int(phys, "quasineutralityOption", 1), dtype=np.int32)
+    if with_adiabatic:
         # Adiabatic-species parameters (v3 defaults in globalVariables.F90).
         out["adiabaticZ"] = np.asarray(_get_float(species, "adiabaticZ", -1.0), dtype=np.float64)
         out["adiabaticMHat"] = np.asarray(_get_float(species, "adiabaticMHat", 5.446170214e-4), dtype=np.float64)
@@ -3977,6 +3981,34 @@ def write_sfincs_jax_output_h5(
                     state_vectors_by_rhs=result.state_vectors_by_rhs,
                     chunk_size=diag_chunk,
                 )
+
+            export_full_f = int(np.asarray(data.get("export_full_f", 0)).reshape(())) == 1
+            export_delta_f = int(np.asarray(data.get("export_delta_f", 0)).reshape(())) == 1
+            if (export_full_f or export_delta_f) and result.state_vectors_by_rhs:
+                from .transport_matrix import f0_l0_v3_from_operator  # noqa: PLC0415
+
+                f0_l0 = f0_l0_v3_from_operator(result.op0)
+                delta_list: list[np.ndarray] = []
+                full_list: list[np.ndarray] = []
+                for which_rhs in sorted(result.state_vectors_by_rhs):
+                    x_full = result.state_vectors_by_rhs[int(which_rhs)]
+                    f_delta = jnp.asarray(x_full[: result.op0.f_size], dtype=jnp.float64).reshape(result.op0.fblock.f_shape)
+                    if export_delta_f:
+                        delta_np = np.asarray(f_delta, dtype=np.float64)
+                        if export_cfg is not None:
+                            delta_np = _apply_export_f_maps(delta_np, export_cfg)
+                        delta_list.append(np.transpose(delta_np, (1, 2, 4, 3, 0)))
+                    if export_full_f:
+                        f_full = f_delta.at[:, :, 0, :, :].add(f0_l0)
+                        full_np = np.asarray(f_full, dtype=np.float64)
+                        if export_cfg is not None:
+                            full_np = _apply_export_f_maps(full_np, export_cfg)
+                        full_list.append(np.transpose(full_np, (1, 2, 4, 3, 0)))
+
+                if export_delta_f and delta_list:
+                    data["delta_f"] = _fortran_h5_layout(np.stack(delta_list, axis=-1))
+                if export_full_f and full_list:
+                    data["full_f"] = _fortran_h5_layout(np.stack(full_list, axis=-1))
 
             # Add transportMatrix (Fortran reads it transposed vs mathematical row/col).
             fields["transportMatrix"] = np.asarray(result.transport_matrix, dtype=np.float64).T
