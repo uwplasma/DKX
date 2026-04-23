@@ -1,0 +1,247 @@
+"""RHSMode=1 automatic preconditioner policy helpers.
+
+These helpers encode small routing decisions used by ``v3_driver.py`` before a
+preconditioner builder is called. They are kept free of operator construction so
+the policy can be tested directly without running full SFINCS solves.
+"""
+
+from __future__ import annotations
+
+import os
+
+
+PAS_AUTO_STRONG_BASE_KINDS = frozenset(
+    {
+        "schur",
+        "xblock_tz",
+        "xblock_tz_lmax",
+        "sxblock_tz",
+        "species_block",
+        "theta_zeta",
+        "pas_lite",
+        "pas_hybrid",
+        "pas_schur",
+        "pas_tz",
+        "pas_tokamak_theta",
+    }
+)
+
+
+def _env_int(name: str, default: int) -> int:
+    env = os.environ.get(name, "").strip()
+    try:
+        return int(env) if env else int(default)
+    except ValueError:
+        return int(default)
+
+
+def _env_float(name: str, default: float) -> float:
+    env = os.environ.get(name, "").strip()
+    try:
+        return float(env) if env else float(default)
+    except ValueError:
+        return float(default)
+
+
+def rhs1_pas_auto_large_base_kind(*, active_size: int) -> str:
+    """Keep large auto-selected PAS solves in the PAS-native preconditioner family."""
+    pas_lite_min = _env_int("SFINCS_JAX_PAS_LITE_MIN", 20000)
+    if int(active_size) >= max(1, int(pas_lite_min)):
+        return "pas_lite"
+    return "pas_hybrid"
+
+
+def pas_auto_skip_strong_retry(
+    *,
+    has_pas: bool,
+    strong_precond_env: str,
+    rhs1_precond_kind: str | None,
+    residual_norm: float,
+    target: float,
+    ratio: float,
+) -> bool:
+    """Skip PAS strong retry when the current strong base already met the relaxed target."""
+    if not has_pas or ratio <= 0.0:
+        return False
+    if strong_precond_env not in {"", "auto"}:
+        return False
+    if rhs1_precond_kind not in PAS_AUTO_STRONG_BASE_KINDS:
+        return False
+    return float(residual_norm) <= float(target) * float(ratio)
+
+
+def rhs1_pas_dkes_xblock_allowed(
+    *,
+    has_pas: bool,
+    use_dkes: bool,
+    backend: str,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    """Return whether bounded PAS DKES runs may use dense xblock_tz preconditioning."""
+    if not has_pas or not use_dkes:
+        return False
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in {"cpu", "gpu", "tpu"}:
+        return False
+    if int(n_theta) <= 1:
+        return False
+    if int(xblock_tz_limit) <= 0:
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
+def rhs1_pas_tokamak_gpu_theta_allowed(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+) -> bool:
+    """Return whether the bounded GPU tokamak PAS theta/L path is eligible."""
+    if not has_pas or has_fp:
+        return False
+    if str(backend).strip().lower() == "cpu":
+        return False
+    if not tokamak_like or not has_collisionless:
+        return False
+    if float(er_abs) <= float(schur_er_min):
+        return False
+    if has_magdrift:
+        return False
+    theta_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_MAX", 8000)
+    return int(active_size) <= max(1, int(theta_max))
+
+
+def rhs1_pas_tokamak_gpu_xblock_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    """Prefer xblock_tz over theta/L for bounded GPU tokamak PAS+Er branches."""
+    if not rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=has_pas,
+        has_fp=has_fp,
+        backend=backend,
+        tokamak_like=tokamak_like,
+        active_size=active_size,
+        er_abs=er_abs,
+        schur_er_min=schur_er_min,
+        has_magdrift=has_magdrift,
+        has_collisionless=has_collisionless,
+    ):
+        return False
+    if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
+        return False
+    prefer_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", 12000)
+    if int(active_size) > max(1, int(prefer_max)):
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
+def rhs1_pas_tokamak_cpu_xblock_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    """Prefer xblock_tz for bounded CPU tokamak PAS+Er branches before pas_schur."""
+    if not has_pas or has_fp:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if not tokamak_like or not has_collisionless:
+        return False
+    if float(er_abs) <= float(schur_er_min) and (not has_magdrift):
+        return False
+    if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
+        return False
+    prefer_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_CPU_XBLOCK_ACTIVE_MAX", 4000)
+    if int(active_size) > max(1, int(prefer_max)):
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
+def rhs1_gpu_sparse_fallback_skip_allowed(
+    *,
+    backend: str,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_pas: bool,
+    rhs1_precond_kind: str | None,
+    use_active_dof_mode: bool,
+    residual_norm: float,
+    target: float,
+) -> bool:
+    """Return whether a GPU PAS sparse fallback can be skipped after Schur acceptance."""
+    if str(backend).strip().lower() == "cpu":
+        return False
+    if not bool(use_active_dof_mode):
+        return False
+    if int(rhs_mode) != 1 or bool(include_phi1):
+        return False
+    if not has_pas:
+        return False
+    if str(rhs1_precond_kind or "").strip().lower() not in {"schur", "pas_schur"}:
+        return False
+    skip_ratio = _env_float("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", 10.0)
+    if skip_ratio <= 0.0:
+        return False
+    return float(residual_norm) <= float(skip_ratio) * max(float(target), 1.0e-300)
+
+
+def rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
+    """Return whether sharded auto-selection may demote the current preconditioner to line DD."""
+    return rhs1_precond_kind in {
+        None,
+        "point",
+        "point_xdiag",
+        "theta_line",
+        "theta_line_xdiag",
+        "zeta_line",
+        "xmg",
+        "collision",
+        "pas_lite",
+        "pas_hybrid",
+    }
+
+
+__all__ = [
+    "PAS_AUTO_STRONG_BASE_KINDS",
+    "pas_auto_skip_strong_retry",
+    "rhs1_gpu_sparse_fallback_skip_allowed",
+    "rhs1_pas_auto_large_base_kind",
+    "rhs1_pas_dkes_xblock_allowed",
+    "rhs1_pas_tokamak_cpu_xblock_preferred",
+    "rhs1_pas_tokamak_gpu_theta_allowed",
+    "rhs1_pas_tokamak_gpu_xblock_preferred",
+    "rhs1_sharded_line_override_allowed",
+]
