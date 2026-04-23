@@ -304,8 +304,12 @@ The VMEC convention layer has its own bounded gate in
 easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh
 radial interpolation weights, radial-option snapping, endpoint half-mesh
 extrapolation, invalid radius/option rejection, and helicity-based
-``rippleScale`` selection. These tests protect the VMEC geometry path without
-loading a large equilibrium or running a transport solve.
+``rippleScale`` selection. The same gate also writes a tiny synthetic NetCDF
+``wout`` file and checks the reader contract directly: ASCII path resolution to a
+neighboring ``.nc`` file, radius/mode transposition, required-variable failures,
+unsupported ``lasym=true`` rejection, and invalid first Fourier-mode metadata.
+These tests protect the VMEC geometry path without loading a large equilibrium or
+running a transport solve.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
