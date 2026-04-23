@@ -92,6 +92,43 @@ def rhs1_host_dense_shortcut_allowed(
     return int(active_size) <= dense_cap
 
 
+def rhs1_dense_fallback_max(op: Any) -> int:
+    """Resolve the RHSMode=1 dense fallback active-size ceiling.
+
+    Full Fokker-Planck systems use a larger conservative default because dense
+    fallback is often the cheapest robust path for small/medium FP systems. PAS
+    systems are stricter: dense fallback can drift away from PETSc-style
+    approximate branches, so PAS is disabled by default except for
+    ``constraintScheme=0`` or explicit user opt-in.
+    """
+    base_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX", 400)
+    if op.fblock.fp is None:
+        dense_pas_raw = str(os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", "")).strip()
+        if dense_pas_raw:
+            dense_pas_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", base_max)
+            if dense_pas_max <= 0:
+                return 0
+            return max(base_max, dense_pas_max)
+        if int(op.constraint_scheme) != 0:
+            return 0
+        dense_pas_max = 5000
+        if dense_pas_max <= 0:
+            return base_max
+        return max(base_max, dense_pas_max)
+
+    dense_fp_raw = str(os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", "")).strip()
+    dense_fp_cutoff_raw = str(os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "")).strip()
+    if dense_fp_raw:
+        dense_fp_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", base_max)
+    elif dense_fp_cutoff_raw:
+        dense_fp_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", base_max)
+    else:
+        dense_fp_max = 5000
+    if dense_fp_max <= 0:
+        return base_max
+    return max(base_max, dense_fp_max)
+
+
 def rhs1_dense_krylov_allowed() -> bool:
     """Return whether dense Krylov fallback is enabled."""
     env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV")
@@ -195,6 +232,7 @@ __all__ = [
     "host_sparse_direct_refine_steps",
     "host_sparse_factor_dtype",
     "rhs1_dense_backend_allowed",
+    "rhs1_dense_fallback_max",
     "rhs1_dense_krylov_allowed",
     "rhs1_explicit_sparse_host_direct_allowed",
     "rhs1_host_dense_fallback_allowed",

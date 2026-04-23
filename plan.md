@@ -4090,3 +4090,28 @@ Notes:
 - `v3_driver.py` still has broad pre-existing ruff debt, so the scoped lint gate for
   this increment is the new module plus tests; the driver itself is covered by
   py_compile and focused wrapper tests.
+
+### 19.55 RHSMode=1 dense fallback cap extraction
+
+Completed the adjacent dense-fallback policy extraction:
+
+- Moved `_rhsmode1_dense_fallback_max(...)` logic into
+  `rhs1_host_policy.rhs1_dense_fallback_max(...)`.
+- Kept the `v3_driver.py` wrapper intact for compatibility with existing tests and
+  downstream debugging.
+- Added direct tests for:
+  - default FP dense fallback cap,
+  - default PAS disablement for non-constraint-0 systems,
+  - constraint-0 PAS carve-out,
+  - FP max/cutoff override behavior,
+  - and explicit PAS opt-in/disable behavior.
+- Updated testing docs to include the dense-fallback ceiling in the extracted host
+  policy contract.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_host_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_host_policy.py`
+- `python -m ruff check sfincs_jax/rhs1_host_policy.py tests/test_rhs1_host_policy.py`
+- `pytest -q tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py`
+  passed with `150 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
