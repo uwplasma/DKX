@@ -1015,3 +1015,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         os.environ.setdefault("SFINCS_JAX_FORTRAN_STDOUT", "1" if not getattr(args, "quiet", False) else "0")
     return int(args.func(args))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
