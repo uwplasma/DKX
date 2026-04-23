@@ -3593,3 +3593,42 @@ Recommended order:
 6. Generate the new Fortran-v3 comparison examples and plots.
 7. Perform the final docs/README pass.
 8. Merge to `main`, run full CPU/GPU suites, tag, publish, and write release notes.
+
+### 19.39 Driver split step 3: RHSMode=1 auto-preconditioner policy extraction
+
+Implemented the next bounded code-refactoring increment from the pre-merge
+open-lane gate:
+
+- Added `sfincs_jax/rhs1_preconditioner_auto_policy.py` for pure
+  RHSMode=1 automatic preconditioner predicates:
+  - PAS large-problem base-kind selection,
+  - PAS strong-retry skipping,
+  - DKES `xblock_tz` gating,
+  - tokamak PAS CPU/GPU `xblock_tz` and GPU `theta` gating,
+  - GPU sparse fallback skipping,
+  - sharded-line override safety.
+- Updated `sfincs_jax/v3_driver.py` to import those predicates while keeping the
+  existing `_rhs1_gpu_sparse_fallback_skip_allowed(op=...)` wrapper because the
+  driver call sites still pass full operator objects and need the local backend.
+- Added direct policy coverage in
+  `tests/test_rhs1_preconditioner_auto_policy.py` so the routing thresholds are
+  testable without constructing the full SFINCS operator.
+- Updated `docs/source_map.rst` so the extracted module is visible in the
+  architecture map.
+
+This is intentionally a maintainability/testability change only: it does not
+change the numerical operator, Krylov method, preconditioner formulas, or
+acceptance thresholds.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_preconditioner_auto_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py tests/test_v3_driver_policy_helpers.py tests/test_rhs1_sparse_first_heuristic.py`
+- `python -m ruff check sfincs_jax/rhs1_preconditioner_auto_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py tests/test_v3_driver_policy_helpers.py tests/test_rhs1_sparse_first_heuristic.py`
+- `pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py tests/test_v3_driver_policy_helpers.py tests/test_rhs1_sparse_first_heuristic.py`
+  passed with `111 passed`.
+
+Next refactor target:
+
+- Extract RHSMode=1 preconditioner environment alias normalization and top-level
+  initial-kind selection into pure helpers, then add direct tests before moving
+  to the physics-gate and benchmark-gate lanes.

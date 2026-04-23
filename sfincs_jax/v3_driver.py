@@ -60,6 +60,18 @@ from .rhs1_preconditioner_dispatch import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
+from .rhs1_preconditioner_auto_policy import (
+    pas_auto_skip_strong_retry as _pas_auto_skip_strong_retry,
+    rhs1_pas_auto_large_base_kind as _rhs1_pas_auto_large_base_kind,
+    rhs1_pas_dkes_xblock_allowed as _rhs1_pas_dkes_xblock_allowed,
+    rhs1_pas_tokamak_cpu_xblock_preferred as _rhs1_pas_tokamak_cpu_xblock_preferred,
+    rhs1_pas_tokamak_gpu_theta_allowed as _rhs1_pas_tokamak_gpu_theta_allowed,
+    rhs1_pas_tokamak_gpu_xblock_preferred as _rhs1_pas_tokamak_gpu_xblock_preferred,
+    rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
+)
+from .rhs1_preconditioner_auto_policy import (
+    rhs1_gpu_sparse_fallback_skip_allowed as _rhs1_gpu_sparse_fallback_skip_allowed_impl,
+)
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .rhs1_handoff import rhs1_accept_candidate
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
@@ -217,170 +229,6 @@ def _use_solver_jit(size_hint: int | None = None) -> bool:
     return int(size_hint) <= thresh
 
 
-_PAS_AUTO_STRONG_BASE_KINDS = frozenset(
-    {
-        "schur",
-        "xblock_tz",
-        "xblock_tz_lmax",
-        "sxblock_tz",
-        "species_block",
-        "theta_zeta",
-        "pas_lite",
-        "pas_hybrid",
-        "pas_schur",
-        "pas_tz",
-        "pas_tokamak_theta",
-    }
-)
-
-
-def _pas_auto_skip_strong_retry(
-    *,
-    has_pas: bool,
-    strong_precond_env: str,
-    rhs1_precond_kind: str | None,
-    residual_norm: float,
-    target: float,
-    ratio: float,
-) -> bool:
-    if not has_pas or ratio <= 0.0:
-        return False
-    if strong_precond_env not in {"", "auto"}:
-        return False
-    if rhs1_precond_kind not in _PAS_AUTO_STRONG_BASE_KINDS:
-        return False
-    return float(residual_norm) <= float(target) * float(ratio)
-
-
-def _rhs1_pas_dkes_xblock_allowed(
-    *,
-    has_pas: bool,
-    use_dkes: bool,
-    backend: str,
-    n_theta: int,
-    n_zeta: int,
-    max_l: int,
-    xblock_tz_limit: int,
-) -> bool:
-    if not has_pas or not use_dkes:
-        return False
-    backend_norm = str(backend).strip().lower()
-    if backend_norm not in {"cpu", "gpu", "tpu"}:
-        return False
-    if int(n_theta) <= 1:
-        return False
-    if int(xblock_tz_limit) <= 0:
-        return False
-    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
-
-
-def _rhs1_pas_tokamak_gpu_theta_allowed(
-    *,
-    has_pas: bool,
-    has_fp: bool,
-    backend: str,
-    tokamak_like: bool,
-    active_size: int,
-    er_abs: float,
-    schur_er_min: float,
-    has_magdrift: bool,
-    has_collisionless: bool,
-) -> bool:
-    if not has_pas or has_fp:
-        return False
-    if str(backend).strip().lower() == "cpu":
-        return False
-    if not tokamak_like or not has_collisionless:
-        return False
-    if float(er_abs) <= float(schur_er_min):
-        return False
-    if has_magdrift:
-        return False
-    theta_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_MAX", "").strip()
-    try:
-        theta_max = int(theta_max_env) if theta_max_env else 8000
-    except ValueError:
-        theta_max = 8000
-    return int(active_size) <= max(1, int(theta_max))
-
-
-def _rhs1_pas_tokamak_gpu_xblock_preferred(
-    *,
-    has_pas: bool,
-    has_fp: bool,
-    backend: str,
-    tokamak_like: bool,
-    active_size: int,
-    er_abs: float,
-    schur_er_min: float,
-    has_magdrift: bool,
-    has_collisionless: bool,
-    n_theta: int,
-    n_zeta: int,
-    max_l: int,
-    xblock_tz_limit: int,
-) -> bool:
-    if not _rhs1_pas_tokamak_gpu_theta_allowed(
-        has_pas=has_pas,
-        has_fp=has_fp,
-        backend=backend,
-        tokamak_like=tokamak_like,
-        active_size=active_size,
-        er_abs=er_abs,
-        schur_er_min=schur_er_min,
-        has_magdrift=has_magdrift,
-        has_collisionless=has_collisionless,
-    ):
-        return False
-    if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
-        return False
-    prefer_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "").strip()
-    try:
-        prefer_max = int(prefer_max_env) if prefer_max_env else 12000
-    except ValueError:
-        prefer_max = 12000
-    if int(active_size) > max(1, int(prefer_max)):
-        return False
-    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
-
-
-def _rhs1_pas_tokamak_cpu_xblock_preferred(
-    *,
-    has_pas: bool,
-    has_fp: bool,
-    backend: str,
-    tokamak_like: bool,
-    active_size: int,
-    er_abs: float,
-    schur_er_min: float,
-    has_magdrift: bool,
-    has_collisionless: bool,
-    n_theta: int,
-    n_zeta: int,
-    max_l: int,
-    xblock_tz_limit: int,
-) -> bool:
-    """Prefer xblock_tz for bounded CPU tokamak PAS+Er branches before pas_schur."""
-    if not has_pas or has_fp:
-        return False
-    if str(backend).strip().lower() != "cpu":
-        return False
-    if not tokamak_like or not has_collisionless:
-        return False
-    if float(er_abs) <= float(schur_er_min) and (not has_magdrift):
-        return False
-    if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
-        return False
-    prefer_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_CPU_XBLOCK_ACTIVE_MAX", "").strip()
-    try:
-        prefer_max = int(prefer_max_env) if prefer_max_env else 4000
-    except ValueError:
-        prefer_max = 4000
-    if int(active_size) > max(1, int(prefer_max)):
-        return False
-    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
-
-
 def _rhs1_gpu_sparse_fallback_skip_allowed(
     *,
     op: V3FullSystemOperator,
@@ -389,39 +237,16 @@ def _rhs1_gpu_sparse_fallback_skip_allowed(
     residual_norm: float,
     target: float,
 ) -> bool:
-    if jax.default_backend() == "cpu":
-        return False
-    if not bool(use_active_dof_mode):
-        return False
-    if int(getattr(op, "rhs_mode", 0) or 0) != 1 or bool(getattr(op, "include_phi1", False)):
-        return False
-    if getattr(getattr(op, "fblock", None), "pas", None) is None:
-        return False
-    if str(rhs1_precond_kind or "").strip().lower() not in {"schur", "pas_schur"}:
-        return False
-    skip_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", "").strip()
-    try:
-        skip_ratio = float(skip_ratio_env) if skip_ratio_env else 10.0
-    except ValueError:
-        skip_ratio = 10.0
-    if skip_ratio <= 0.0:
-        return False
-    return float(residual_norm) <= float(skip_ratio) * max(float(target), 1.0e-300)
-
-
-def _rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
-    return rhs1_precond_kind in {
-        None,
-        "point",
-        "point_xdiag",
-        "theta_line",
-        "theta_line_xdiag",
-        "zeta_line",
-        "xmg",
-        "collision",
-        "pas_lite",
-        "pas_hybrid",
-    }
+    return _rhs1_gpu_sparse_fallback_skip_allowed_impl(
+        backend=jax.default_backend(),
+        rhs_mode=int(getattr(op, "rhs_mode", 0) or 0),
+        include_phi1=bool(getattr(op, "include_phi1", False)),
+        has_pas=getattr(getattr(op, "fblock", None), "pas", None) is not None,
+        rhs1_precond_kind=rhs1_precond_kind,
+        use_active_dof_mode=bool(use_active_dof_mode),
+        residual_norm=float(residual_norm),
+        target=float(target),
+    )
 
 
 def _is_resource_exhausted_error(exc: Exception) -> bool:
@@ -956,18 +781,6 @@ def _build_host_sparse_direct_factor_from_matvec(
         )
     factor_bundle = factorize_host_sparse_operator(operator_bundle, kind="lu")
     return operator_bundle, factor_bundle
-
-
-def _rhs1_pas_auto_large_base_kind(*, active_size: int) -> str:
-    """Keep large auto-selected PAS solves in the PAS-native preconditioner family."""
-    pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-    try:
-        pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-    except ValueError:
-        pas_lite_min = 20000
-    if int(active_size) >= max(1, int(pas_lite_min)):
-        return "pas_lite"
-    return "pas_hybrid"
 
 
 def _rhsmode1_pas_fast_accept(
