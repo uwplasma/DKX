@@ -10,6 +10,7 @@ POLICY_MODULES = (
     "sfincs_jax.rhs1_pas_policy",
     "sfincs_jax.rhs1_preconditioner_dispatch",
     "sfincs_jax.rhs1_sparse_polish_policy",
+    "sfincs_jax.rhs1_sparse_exact_policy",
     "sfincs_jax.rhs1_sparse_rescue_policy",
     "sfincs_jax.rhs1_stage2_policy",
     "sfincs_jax.rhs1_strong_auto_kind",

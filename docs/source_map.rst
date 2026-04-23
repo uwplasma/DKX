@@ -170,6 +170,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/rhs1_sparse_rescue_policy.py`` and
   ``sfincs_jax/rhs1_sparse_polish_policy.py``:
   sparse-rescue ordering, skip logic, and sparse-polish env parsing.
+- ``sfincs_jax/rhs1_sparse_exact_policy.py``:
+  sparse exact-LU request policy, sparse-over-dense preference, and stage-2
+  skip decisions for moderate RHSMode=1 full-FP systems.
 - ``sfincs_jax/rhs1_handoff.py``:
   accepted-candidate handoff and Krylov replay-state updates.
 - ``sfincs_jax/rhs1_constraint0_policy.py``:
