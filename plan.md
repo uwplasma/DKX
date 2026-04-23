@@ -4052,3 +4052,41 @@ Notes:
   refactoring, better physics validation figures, PAS runtime/memory offenders,
   multi-device algorithms, and end-to-end `vmec_jax` / `booz_xform_jax`
   differentiable examples.
+
+### 19.54 RHSMode=1 host dense/sparse policy extraction
+
+Started the next deeper-driver-refactor increment by extracting pure host
+dense/sparse-direct policy out of `v3_driver.py`:
+
+- Added `sfincs_jax/rhs1_host_policy.py`.
+- Kept the public/private driver wrappers intact so existing tests and downstream
+  monkeypatch-based debugging do not break.
+- The extracted policy covers:
+  - RHSMode=1 dense backend permission,
+  - host dense fallback permission,
+  - small accelerator FP host-dense shortcut,
+  - dense Krylov enablement,
+  - exact host sparse-direct permission,
+  - sparse-preconditioned GMRES rescue gating,
+  - host sparse factor dtype selection,
+  - iterative-refinement step parsing,
+  - sparse-direct skip-dense residual ratio,
+  - and explicit sparse-helper bounds.
+- Added `tests/test_rhs1_host_policy.py` for direct coverage of the extracted
+  policy logic.
+- Updated API docs, source map, testing docs, and the module-docstring regression
+  guard so the new split is discoverable.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_host_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_host_policy.py tests/test_policy_module_docstrings.py`
+- `python -m ruff check sfincs_jax/rhs1_host_policy.py tests/test_rhs1_host_policy.py tests/test_policy_module_docstrings.py`
+- `pytest -q tests/test_rhs1_host_policy.py tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py tests/test_transport_sparse_direct.py tests/test_v3_driver_solve_policy_coverage.py tests/test_policy_module_docstrings.py`
+  passed with `150 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+
+Notes:
+
+- `v3_driver.py` still has broad pre-existing ruff debt, so the scoped lint gate for
+  this increment is the new module plus tests; the driver itself is covered by
+  py_compile and focused wrapper tests.

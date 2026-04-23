@@ -1,0 +1,156 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import numpy as np
+
+from sfincs_jax.rhs1_host_policy import (
+    host_sparse_direct_refine_steps,
+    host_sparse_factor_dtype,
+    rhs1_dense_backend_allowed,
+    rhs1_dense_krylov_allowed,
+    rhs1_explicit_sparse_host_direct_allowed,
+    rhs1_host_dense_fallback_allowed,
+    rhs1_host_dense_shortcut_allowed,
+    rhs1_host_sparse_direct_allowed,
+    rhs1_host_sparse_skip_dense_ratio,
+    rhs1_sparse_operator_preconditioned_rescue_allowed,
+)
+
+
+def _op(*, has_fp: bool = True, has_pas: bool = False, rhs_mode: int = 1, include_phi1: bool = False, constraint_scheme: int = 1):
+    return SimpleNamespace(
+        rhs_mode=rhs_mode,
+        include_phi1=include_phi1,
+        constraint_scheme=constraint_scheme,
+        fblock=SimpleNamespace(fp=object() if has_fp else None, pas=object() if has_pas else None),
+    )
+
+
+def test_rhs1_dense_backend_policy_respects_backend_and_env(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", raising=False)
+    assert rhs1_dense_backend_allowed(backend="cpu")
+    assert not rhs1_dense_backend_allowed(backend="gpu")
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "on")
+    assert rhs1_dense_backend_allowed(backend="gpu")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "0")
+    assert not rhs1_dense_backend_allowed(backend="cpu")
+
+
+def test_rhs1_host_dense_fallback_and_krylov_policy(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV", raising=False)
+    assert rhs1_host_dense_fallback_allowed(backend="cpu")
+    assert not rhs1_host_dense_fallback_allowed(backend="gpu")
+    assert rhs1_dense_krylov_allowed()
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "yes")
+    assert rhs1_host_dense_fallback_allowed(backend="gpu")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV", "off")
+    assert not rhs1_dense_krylov_allowed()
+
+
+def test_rhs1_host_dense_shortcut_guards_small_accelerator_fp(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", raising=False)
+
+    assert rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=600,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+    assert not rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=600,
+        use_implicit=True,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+    assert not rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=False, has_pas=True),
+        active_size=600,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "off")
+    assert not rhs1_host_dense_shortcut_allowed(
+        op=_op(has_fp=True),
+        active_size=600,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="gpu",
+        dense_fallback_max=5000,
+    )
+
+
+def test_rhs1_host_sparse_direct_and_pc_rescue_policy(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES", raising=False)
+
+    assert not rhs1_host_sparse_direct_allowed(sparse_exact_lu=False)
+    assert not rhs1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=True)
+    assert rhs1_host_sparse_direct_allowed(sparse_exact_lu=True)
+
+    assert rhs1_sparse_operator_preconditioned_rescue_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        sparse_exact_lu=True,
+        host_sparse_direct_wanted=True,
+        backend="cpu",
+    )
+    assert not rhs1_sparse_operator_preconditioned_rescue_allowed(
+        op=_op(has_fp=True, constraint_scheme=0),
+        sparse_exact_lu=True,
+        host_sparse_direct_wanted=True,
+        backend="cpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES", "off")
+    assert not rhs1_sparse_operator_preconditioned_rescue_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        sparse_exact_lu=True,
+        host_sparse_direct_wanted=True,
+        backend="cpu",
+    )
+
+
+def test_host_sparse_factor_dtype_and_refinement_policy(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_HOST_SPARSE_FACTOR_FLOAT32_MIN", raising=False)
+
+    assert host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=False, backend="cpu") == np.dtype(np.float32)
+    assert host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=False, backend="gpu") == np.dtype(np.float64)
+    assert host_sparse_factor_dtype(size=20_000, factorization="ilu", use_implicit=False, backend="cpu") == np.dtype(np.float64)
+    assert host_sparse_factor_dtype(size=20_000, factorization="lu", use_implicit=True, backend="cpu") == np.dtype(np.float64)
+
+    monkeypatch.setenv("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", "32")
+    assert host_sparse_factor_dtype(size=1, factorization="lu", use_implicit=True, backend="gpu") == np.dtype(np.float32)
+
+    monkeypatch.delenv("MY_REFINE_STEPS", raising=False)
+    assert host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=3) == 3
+    monkeypatch.setenv("MY_REFINE_STEPS", "bad")
+    assert host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 2
+    monkeypatch.setenv("MY_REFINE_STEPS", "-4")
+    assert host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 0
+
+
+def test_rhs1_sparse_helper_bounds_and_skip_dense_ratio(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_SKIP_DENSE_RATIO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER_MAX", raising=False)
+
+    assert rhs1_host_sparse_skip_dense_ratio() == 1.0e4
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_SKIP_DENSE_RATIO", "bad")
+    assert rhs1_host_sparse_skip_dense_ratio() == 1.0e4
+
+    assert rhs1_explicit_sparse_host_direct_allowed(sparse_exact_lu=True, use_implicit=False, active_size=20_000)
+    assert not rhs1_explicit_sparse_host_direct_allowed(sparse_exact_lu=True, use_implicit=False, active_size=20_001)
+    assert not rhs1_explicit_sparse_host_direct_allowed(sparse_exact_lu=False, use_implicit=False, active_size=10)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER", "off")
+    assert not rhs1_explicit_sparse_host_direct_allowed(sparse_exact_lu=True, use_implicit=False, active_size=10)
