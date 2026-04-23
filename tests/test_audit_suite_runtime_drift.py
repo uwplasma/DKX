@@ -69,3 +69,26 @@ def test_audit_suite_runtime_drift_cli_can_fail(tmp_path: Path) -> None:
         ]
     )
     assert rc == 1
+
+
+def test_audit_suite_runtime_drift_prefers_logged_elapsed_when_available(tmp_path: Path) -> None:
+    mod = _load_module()
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+    baseline.write_text(
+        json.dumps([{"case": "case", "jax_runtime_s": 10.0, "jax_logged_elapsed_s": 8.0}]),
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        json.dumps([{"case": "case", "jax_runtime_s": 11.0, "jax_logged_elapsed_s": 8.5}]),
+        encoding="utf-8",
+    )
+
+    flagged = mod.audit_suite_runtime_drift(
+        baseline_report=baseline,
+        candidate_report=candidate,
+        threshold_ratio=1.10,
+        min_baseline_runtime_s=1.0,
+    )
+
+    assert flagged == []
