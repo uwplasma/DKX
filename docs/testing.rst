@@ -244,6 +244,14 @@ policy modules and checks that their explanatory module docstrings are real
 keeps the source map and generated API documentation useful as the large driver is
 split into manageable pieces.
 
+The latest driver split also extracts RHSMode=1 host dense/sparse-direct policy into
+``sfincs_jax/rhs1_host_policy.py``. ``tests/test_rhs1_host_policy.py`` covers the
+backend/env rules for host dense fallback, small accelerator dense shortcuts,
+host sparse-direct enablement, sparse-preconditioned GMRES rescue, sparse factor
+dtype selection, iterative-refinement step parsing, and explicit sparse-helper
+bounds.  The public driver wrappers remain tested separately, so this is a
+behavior-preserving refactor with a smaller directly testable policy surface.
+
 The VMEC convention layer has its own bounded gate in
 ``tests/test_vmec_wout_conventions.py``. It checks the scheme-5 conventions that are
 easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh
