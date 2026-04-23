@@ -22,6 +22,18 @@ That file is intended to become the stable spine for:
 - reproducible benchmark reruns,
 - and test/benchmark dashboards that distinguish implemented and planned lanes.
 
+Each manifest lane now also carries explicit research gates:
+
+- ``source_code``: the implementation files that define the lane,
+- ``tests``: the tests that protect the lane or its scaffold,
+- ``acceptance_gates``: the concrete criteria required before the lane can support a
+  manuscript or release claim.
+
+The schema is enforced by ``tests/test_validation_manifest_schema.py``. Implemented and
+prototype lanes must point to existing scripts, artifacts, source files, and tests.
+Planned lanes are allowed to have empty artifact lists, but their acceptance criteria
+must still be explicit so that open research work is not lost.
+
 Implemented literature reproductions
 ------------------------------------
 

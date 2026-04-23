@@ -2577,3 +2577,48 @@ Decision:
 - Production CLI offender work should continue to use the current direct JAX,
   SciPy sparse/direct, hand-tuned policy, and explicit sharding paths until a
   library-backed experiment beats them under the same parity/runtime/RSS gates.
+
+### 19.26 Research-gate hardening after the ecosystem review
+
+- The first concrete ecosystem gate is now executable without changing
+  production dependencies:
+  - `examples/performance/benchmark_optional_lineax_implicit_solve.py`
+    benchmarks the current in-tree implicit solve and optionally benchmarks
+    Lineax GMRES when `lineax` is installed;
+  - the benchmark uses a deterministic nonsymmetric stress system, records
+    residuals, finite-difference gradient agreement, and elapsed time, and
+    writes JSON for later comparison;
+  - `tests/test_optional_lineax_implicit_gate.py` verifies deterministic system
+    construction, current-solver residual/gradient quality, JSON output, and
+    clean skip behavior when Lineax is absent.
+- The manuscript validation manifest now carries explicit research gates:
+  - every lane has `source_code`, `tests`, and `acceptance_gates` fields;
+  - implemented/prototype lanes point to existing scripts, artifacts, source
+    files, and tests;
+  - planned and `needs_reaudit` lanes keep open work explicit rather than
+    silently implying publication readiness.
+- New schema coverage:
+  - `tests/test_validation_manifest_schema.py` checks uniqueness, valid status
+    and kind values, nonempty literature/claim/source/test/gate lists, existing
+    paths for non-planned lanes, and the expected open-lane set.
+- Documentation updates:
+  - `docs/performance.rst` documents the optional Lineax gate and reiterates
+    that Lineax is not a production CLI dependency;
+  - `docs/validation_matrix.rst` documents the manifest schema and acceptance
+    gate role;
+  - `docs/testing.rst` documents the manifest schema test and optional ecosystem
+    benchmark gate;
+  - `examples/performance/README.md` lists the optional benchmark.
+- Validation run:
+  - `pytest -q tests/test_validation_manifest_schema.py tests/test_optional_lineax_implicit_gate.py`
+    -> `7 passed`.
+- Next actions:
+  1. extend the optional Lineax gate from the synthetic nonsymmetric stress
+     system to a tiny real SFINCS implicit-diff operator and a repeated-RHS
+     state-reuse case;
+  2. add a similarly optional JAXopt/Equinox objective-wrapper gate for
+     nonlinear or ambipolar sensitivity once the forward solve target is
+     finalized;
+  3. keep full-resolution LHD/W7-X collisionality regeneration and W7-X
+     ambipolar validation as open research lanes until their acceptance gates
+     are satisfied by pinned artifacts.

@@ -241,6 +241,8 @@ unit/regression suite:
 - ``examples/publication_figures/validation_manifest.json`` is the machine-readable
   map from literature claim to script and artifact.
 - :doc:`validation_matrix` is the corresponding human-facing documentation page.
+- ``tests/test_validation_manifest_schema.py`` enforces that every lane has explicit
+  source-code anchors, protecting tests, and acceptance gates.
 
 The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep family:
 
@@ -299,3 +301,19 @@ Further reading
 For the current benchmark/performance state, see :doc:`performance` and
 :doc:`parallelism`. For the external validation story, see :doc:`fortran_comparison`.
 For the manuscript-facing literature/figure lanes, see :doc:`validation_matrix`.
+
+Optional ecosystem gates
+------------------------
+
+External JAX ecosystem libraries are evaluated through benchmark gates before they are
+allowed into production code. The current example is the Lineax implicit-solve gate:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_optional_lineax_implicit_solve.py --backend all
+
+This gate always benchmarks the in-tree implicit solve and only runs the Lineax branch
+when ``lineax`` is installed. The associated test
+``tests/test_optional_lineax_implicit_gate.py`` verifies the deterministic
+nonsymmetric stress system, finite implicit gradients, small current-solver residuals,
+and clean skip behavior when Lineax is absent.
