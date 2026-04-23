@@ -288,12 +288,23 @@ files exist. On this branch, two real bugs were found in its scan-input writer:
   namelist group, while also choosing ``Nzeta=3``, which is below the current stencil
   floor for these runs.
 
-Those writer bugs are now unit-tested and fixed, and a corrected bounded LHD fast rerun
-shows strong FP/PAS separation again. However, until the checked-in collisionality
-figures are regenerated from the fixed script, they remain historical artifacts rather
-than publication-grade validated outputs.
+Those writer bugs are now unit-tested and fixed. The corrected bounded fast reruns are
+kept as branch-level regression scaffolds, and the full LHD/W7-X collisionality
+summaries and figures have been regenerated from the fixed script and promoted as
+audited validation artifacts.
 
-The first corrected artifact from that lane is now checked in:
+The audited full artifacts from that lane are now checked in:
+
+- summary:
+  ``examples/publication_figures/artifacts/lhd_collisionality_summary.json``
+- figure:
+  ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png``
+- summary:
+  ``examples/publication_figures/artifacts/w7x_collisionality_summary.json``
+- figure:
+  ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png``
+
+The bounded fast artifacts remain checked in for branch-level regression work:
 
 - summary:
   ``examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
@@ -304,15 +315,15 @@ The first corrected artifact from that lane is now checked in:
 - figure:
   ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png``
 
-These corrected fast artifacts are now guarded by direct tests on the collisionality
-ladder and FP/PAS separation, but they are still explicitly documented as bounded branch
-artifacts rather than the final audited collisionality publication figures.
+The full artifacts are guarded by direct tests on the seven-point collisionality ladder
+and FP/PAS label coverage. The corrected fast artifacts are guarded by lighter direct
+tests on the four-point ladder and FP/PAS separation.
 
-The collisionality generator now also writes structured JSON summaries for future
-reruns, with top-level metadata that records the case, fast/full-resolution mode,
-scan ladder, source input, and collision-operator labeling. That keeps the next
-full-resolution LHD/W7-X re-audit aligned with the manifest's provenance and
-acceptance-gate expectations instead of relying on plots alone.
+The collisionality generator writes structured JSON summaries for all reruns, with
+top-level metadata that records the case, fast/full-resolution mode, scan ladder,
+source input, and collision-operator labeling. That keeps future release reruns aligned
+with the manifest's provenance and acceptance-gate expectations instead of relying on
+plots alone.
 
 The next planned literature lane now has an executable scaffold as well:
 

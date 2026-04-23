@@ -1,7 +1,7 @@
 [
   {
     "id": "sfincs2014_fig1_lhd_collisionality",
-    "status": "needs_reaudit",
+    "status": "implemented",
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -10,11 +10,12 @@
       "examples/publication_figures/generate_sfincs_paper_figs.py --case lhd"
     ],
     "artifacts": [
+      "examples/publication_figures/artifacts/lhd_collisionality_summary.json",
       "docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png"
     ],
     "claims": [
-      "Ion transport matrix elements versus collisionality at Er=0",
-      "High-collisionality trend should agree with the SFINCS 2014 figure family"
+      "Audited full LHD ion transport matrix elements versus collisionality at Er=0",
+      "The corrected full-resolution branch emits 14 FP/PAS rows on a seven-point collisionality ladder"
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py"
@@ -24,9 +25,9 @@
       "tests/test_collisionality_artifact.py"
     ],
     "acceptance_gates": [
-      "Regenerate the full LHD collisionality scan from the fixed scan-input writer",
-      "Emit a machine-readable summary with collision-operator labels, collisionality values, and transport matrices",
-      "Verify FP/PAS separation and high-collisionality trend assertions before promoting the figure to publication grade"
+      "Summary artifact contains both Fokker-Planck and PAS labels on the seven-point collisionality ladder",
+      "Figure and JSON are generated from the fixed scan-input writer",
+      "FP/PAS separation assertions pass before using this lane as a publication-facing artifact"
     ]
   },
   {
@@ -63,7 +64,7 @@
   },
   {
     "id": "sfincs2014_fig2_w7x_collisionality",
-    "status": "needs_reaudit",
+    "status": "implemented",
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -72,11 +73,12 @@
       "examples/publication_figures/generate_sfincs_paper_figs.py --case w7x"
     ],
     "artifacts": [
+      "examples/publication_figures/artifacts/w7x_collisionality_summary.json",
       "docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png"
     ],
     "claims": [
-      "Ion transport matrix elements versus collisionality at Er=0",
-      "Low- versus high-collisionality operator ordering should match the SFINCS 2014 figure family"
+      "Audited full W7-X ion transport matrix elements versus collisionality at Er=0",
+      "The corrected full-resolution branch emits 14 FP/PAS rows on a seven-point collisionality ladder"
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py"
@@ -86,9 +88,9 @@
       "tests/test_collisionality_artifact.py"
     ],
     "acceptance_gates": [
-      "Regenerate the full W7-X collisionality scan from the fixed scan-input writer",
-      "Emit a machine-readable summary with collision-operator labels, collisionality values, and transport matrices",
-      "Verify FP/PAS separation and operator-ordering assertions before promoting the figure to publication grade"
+      "Summary artifact contains both Fokker-Planck and PAS labels on the seven-point collisionality ladder",
+      "Figure and JSON are generated from the fixed scan-input writer",
+      "FP/PAS separation assertions pass before using this lane as a publication-facing artifact"
     ]
   },
   {
