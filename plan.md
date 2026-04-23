@@ -3845,3 +3845,35 @@ Next validation targets:
   and interpolation identities.
 - Add a geometry gate around VMEC in-memory conversion once the optional
   `vmec_jax` fixture can be pinned cleanly.
+
+### 19.46 Collision-kernel gate: Chandrasekhar small-x stability and interpolation identity
+
+Extended the collision physics/numerics gate:
+
+- Added tests for:
+  - the Chandrasekhar function small-`x` limit
+    `Psi(x) / x -> 2 / (3 sqrt(pi))`,
+  - positivity of the small-`x` branch,
+  - identity behavior of the v3 barycentric interpolation matrix when source
+    and target nodes match.
+- The new small-`x` test exposed a real cancellation bug:
+  - `_psi_chandra(...)` and `_psi_chandra_np(...)` used the direct
+    `erf(x) - 2 x exp(-x^2)/sqrt(pi)` formula until `|x| < 1e-14`,
+  - for `x ~ 1e-8` to `1e-12`, this produced catastrophic cancellation instead
+    of the linear Chandrasekhar limit.
+- Fixed both JAX and NumPy paths with the analytic series
+  `Psi(x) = [(2/3)x - (2/5)x^3 + (1/7)x^5 + O(x^7)] / sqrt(pi)` for
+  `|x| < 1e-5`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/collisions.py tests/test_collision_physics_gates.py`
+- `python -m ruff check tests/test_collision_physics_gates.py`
+- `pytest -q tests/test_collision_physics_gates.py tests/test_fokker_planck_phi1_reduces_to_no_phi1.py tests/test_pas_collision_operator_parity.py tests/test_fblock_fokker_planck_matvec_parity.py`
+  passed with `7 passed`.
+
+Next validation targets:
+
+- Run the broader focused parity subset after the collision-kernel change.
+- Add a finite-difference/JAX-gradient gate around a bounded differentiable
+  geometry or transport scalar once the refactored geometry path is stable.

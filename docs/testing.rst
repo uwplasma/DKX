@@ -211,7 +211,12 @@ large operators. Second, it adds an explicit PAS physics gate: the pitch-angle
 scattering collision operator must annihilate the isotropic ``L=0`` Legendre mode,
 mask inactive Legendre slots, and scale active higher modes as ``L(L+1)/2`` when the
 Krook term is zero. That gate is cheap enough for CI, but it is a real physics
-invariant rather than coverage padding.
+invariant rather than coverage padding. A companion collision-kernel gate checks the
+Chandrasekhar function small-``x`` limit and the identity property of the v3
+barycentric interpolation matrix. That pass found and fixed a real numerical issue:
+the direct Chandrasekhar formula was used down to ``x≈1e-14``, which is below the
+range where cancellation is safe in double precision. The JAX and NumPy paths now use
+the analytic small-``x`` series for ``|x| < 1e-5``.
 
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be

@@ -44,10 +44,12 @@ def _psi_chandra(x: jnp.ndarray) -> jnp.ndarray:
     num = erf(x) - (2.0 / sqrt_pi) * x * jnp.exp(-(x * x))
     den = 2.0 * x * x
     # Avoid NaNs at x=0 (not typically used with v3 default x grids, but keep robust).
-    eps = jnp.asarray(1e-14, dtype=jnp.float64)
+    eps = jnp.asarray(1e-5, dtype=jnp.float64)
     small = jnp.abs(x) < eps
-    # Series: Ψ(x) ~ (2/sqrt(pi)) * x/3 + O(x^3)
-    series = (2.0 / sqrt_pi) * x / 3.0
+    # Series after cancellation:
+    # Ψ(x) = (1/sqrt(pi)) * [(2/3)x - (2/5)x^3 + (1/7)x^5 + O(x^7)].
+    x2 = x * x
+    series = ((2.0 / 3.0) * x - (2.0 / 5.0) * x * x2 + (1.0 / 7.0) * x * x2 * x2) / sqrt_pi
     return jnp.where(small, series, num / den)
 
 
@@ -58,9 +60,15 @@ def _psi_chandra_np(x: np.ndarray) -> np.ndarray:
     num = _erf_np(x) - (2.0 / sqrt_pi) * x * np.exp(-(x * x))
     den = 2.0 * x * x
     out = np.empty_like(x)
-    eps = 1e-14
+    eps = 1e-5
     small = np.abs(x) < eps
-    out[small] = (2.0 / sqrt_pi) * x[small] / 3.0
+    x_small = x[small]
+    x2_small = x_small * x_small
+    out[small] = (
+        (2.0 / 3.0) * x_small
+        - (2.0 / 5.0) * x_small * x2_small
+        + (1.0 / 7.0) * x_small * x2_small * x2_small
+    ) / sqrt_pi
     out[~small] = num[~small] / den[~small]
     return out
 
