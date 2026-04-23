@@ -115,6 +115,12 @@ from .transport_solve_policy import (
     resolve_transport_active_dof_mode,
     resolve_transport_dense_policy,
 )
+from .transport_handoff_policy import (
+    transport_candidate_is_better,
+    transport_polish_config_from_env,
+    transport_residual_value,
+    transport_result_needs_retry,
+)
 from .transport_parallel_policy import (
     transport_parallel_backend as _transport_parallel_backend_impl,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
@@ -20532,11 +20538,14 @@ def solve_v3_transport_matrix_linear_gmres(
             recycle_basis_reduced_au = recycle_basis_reduced_au[-recycle_k:]
 
     def _residual_value(res: GMRESSolveResult) -> float:
-        val = float(res.residual_norm)
-        return val if np.isfinite(val) else float("inf")
+        return transport_residual_value(res)
 
     def _needs_retry(res: GMRESSolveResult, target: float) -> bool:
-        return (not _gmres_result_is_finite(res)) or (_residual_value(res) > target)
+        return transport_result_needs_retry(
+            res,
+            float(target),
+            result_is_finite=_gmres_result_is_finite,
+        )
 
     def _recycled_initial_guess(
         rhs_vec: jnp.ndarray,
@@ -21117,60 +21126,43 @@ def solve_v3_transport_matrix_linear_gmres(
                                 "solve_v3_transport_matrix_linear_gmres: dense fallback failed "
                                 f"({type(exc).__name__}: {exc})",
                             )
-                if _needs_retry(res_reduced, target_rhs) and int(rhs_mode) == 3:
-                    polish_ratio_env = os.environ.get("SFINCS_JAX_TRANSPORT_POLISH_RATIO", "").strip()
-                    polish_abs_env = os.environ.get("SFINCS_JAX_TRANSPORT_POLISH_ABS", "").strip()
-                    try:
-                        polish_ratio = float(polish_ratio_env) if polish_ratio_env else 2.0
-                    except ValueError:
-                        polish_ratio = 2.0
-                    try:
-                        polish_abs = float(polish_abs_env) if polish_abs_env else 1e-8
-                    except ValueError:
-                        polish_abs = 1e-8
-                    polish_thresh = max(target_rhs * polish_ratio, polish_abs)
-                    if _residual_value(res_reduced) > polish_thresh:
-                        polish_restart_env = os.environ.get("SFINCS_JAX_TRANSPORT_POLISH_RESTART", "").strip()
-                        polish_maxiter_env = os.environ.get("SFINCS_JAX_TRANSPORT_POLISH_MAXITER", "").strip()
-                        base_restart = max(int(gmres_restart), 40)
-                        base_maxiter = int(maxiter) if maxiter is not None else 800
-                        try:
-                            polish_restart = int(polish_restart_env) if polish_restart_env else max(base_restart * 2, 80)
-                        except ValueError:
-                            polish_restart = max(base_restart * 2, 80)
-                        try:
-                            polish_maxiter = int(polish_maxiter_env) if polish_maxiter_env else max(base_maxiter * 2, 1200)
-                        except ValueError:
-                            polish_maxiter = max(base_maxiter * 2, 1200)
-                        polish_precond = _get_strong_preconditioner(True)
-                        if polish_precond is None:
-                            polish_precond = preconditioner_use
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_transport_matrix_linear_gmres: polish solve for RHSMode=3 "
-                                f"(residual={float(res_reduced.residual_norm):.3e} > "
-                                f"max({polish_ratio:.1f}x target, {polish_abs:.1e}), "
-                                f"restart={polish_restart} maxiter={polish_maxiter})",
-                            )
-                        res_polish = _solve_linear(
-                            matvec_fn=mv_reduced,
-                            b_vec=rhs_reduced,
-                            x0_vec=res_reduced.x,
-                            tol_val=tol_rhs,
-                            atol_val=atol,
-                            restart_val=polish_restart,
-                            maxiter_val=polish_maxiter,
-                            solve_method_val="incremental",
-                            preconditioner_val=polish_precond,
-                            precondition_side_val=transport_precondition_side,
+                polish_config = transport_polish_config_from_env(
+                    rhs_mode=int(rhs_mode),
+                    residual_norm=_residual_value(res_reduced),
+                    target=float(target_rhs),
+                    gmres_restart=int(gmres_restart),
+                    maxiter=maxiter,
+                )
+                if _needs_retry(res_reduced, target_rhs) and polish_config.enabled:
+                    polish_precond = _get_strong_preconditioner(True)
+                    if polish_precond is None:
+                        polish_precond = preconditioner_use
+                    if emit is not None:
+                        emit(
+                            0,
+                            "solve_v3_transport_matrix_linear_gmres: polish solve for RHSMode=3 "
+                            f"(residual={float(res_reduced.residual_norm):.3e} > "
+                            f"max({polish_config.ratio:.1f}x target, {polish_config.abs_tol:.1e}), "
+                            f"restart={polish_config.restart} maxiter={polish_config.maxiter})",
                         )
-                        if _residual_value(res_polish) < _residual_value(res_reduced):
-                            res_reduced = res_polish
-                            preconditioner_used = polish_precond
-                            solver_kind_used = "gmres"
-                            solve_method_used = "incremental"
-                            restart_used = polish_restart
+                    res_polish = _solve_linear(
+                        matvec_fn=mv_reduced,
+                        b_vec=rhs_reduced,
+                        x0_vec=res_reduced.x,
+                        tol_val=tol_rhs,
+                        atol_val=atol,
+                        restart_val=int(polish_config.restart),
+                        maxiter_val=int(polish_config.maxiter),
+                        solve_method_val="incremental",
+                        preconditioner_val=polish_precond,
+                        precondition_side_val=transport_precondition_side,
+                    )
+                    if transport_candidate_is_better(candidate=res_polish, current=res_reduced):
+                        res_reduced = res_polish
+                        preconditioner_used = polish_precond
+                        solver_kind_used = "gmres"
+                        solve_method_used = "incremental"
+                        restart_used = int(polish_config.restart)
                 x_full = expand_reduced(res_reduced.x)
                 x_full = _maybe_project_constraint_nullspace(
                     x_full, which_rhs=int(which_rhs), op_matvec=op_matvec, rhs_vec=rhs
@@ -21565,61 +21557,44 @@ def solve_v3_transport_matrix_linear_gmres(
                                 "solve_v3_transport_matrix_linear_gmres: dense fallback failed "
                                 f"({type(exc).__name__}: {exc})",
                             )
-                if _needs_retry(res, target_rhs) and int(rhs_mode) == 3:
-                    polish_ratio_env = os.environ.get("SFINCS_JAX_TRANSPORT_POLISH_RATIO", "").strip()
-                    polish_abs_env = os.environ.get("SFINCS_JAX_TRANSPORT_POLISH_ABS", "").strip()
-                    try:
-                        polish_ratio = float(polish_ratio_env) if polish_ratio_env else 2.0
-                    except ValueError:
-                        polish_ratio = 2.0
-                    try:
-                        polish_abs = float(polish_abs_env) if polish_abs_env else 1e-8
-                    except ValueError:
-                        polish_abs = 1e-8
-                    polish_thresh = max(target_rhs * polish_ratio, polish_abs)
-                    if _residual_value(res) > polish_thresh:
-                        polish_restart_env = os.environ.get("SFINCS_JAX_TRANSPORT_POLISH_RESTART", "").strip()
-                        polish_maxiter_env = os.environ.get("SFINCS_JAX_TRANSPORT_POLISH_MAXITER", "").strip()
-                        base_restart = max(int(gmres_restart), 40)
-                        base_maxiter = int(maxiter) if maxiter is not None else 800
-                        try:
-                            polish_restart = int(polish_restart_env) if polish_restart_env else max(base_restart * 2, 80)
-                        except ValueError:
-                            polish_restart = max(base_restart * 2, 80)
-                        try:
-                            polish_maxiter = int(polish_maxiter_env) if polish_maxiter_env else max(base_maxiter * 2, 1200)
-                        except ValueError:
-                            polish_maxiter = max(base_maxiter * 2, 1200)
-                        polish_precond = _get_strong_preconditioner(False)
-                        if polish_precond is None:
-                            polish_precond = preconditioner_use
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_transport_matrix_linear_gmres: polish solve for RHSMode=3 "
-                                f"(residual={float(res.residual_norm):.3e} > "
-                                f"max({polish_ratio:.1f}x target, {polish_abs:.1e}), "
-                                f"restart={polish_restart} maxiter={polish_maxiter})",
-                            )
-                        res_polish, residual_polish = _solve_linear_with_residual(
-                            matvec_fn=mv,
-                            b_vec=rhs,
-                            x0_vec=res.x,
-                            tol_val=tol_rhs,
-                            atol_val=atol,
-                            restart_val=polish_restart,
-                            maxiter_val=polish_maxiter,
-                            solve_method_val="incremental",
-                            preconditioner_val=polish_precond,
-                            precondition_side_val=transport_precondition_side,
+                polish_config = transport_polish_config_from_env(
+                    rhs_mode=int(rhs_mode),
+                    residual_norm=_residual_value(res),
+                    target=float(target_rhs),
+                    gmres_restart=int(gmres_restart),
+                    maxiter=maxiter,
+                )
+                if _needs_retry(res, target_rhs) and polish_config.enabled:
+                    polish_precond = _get_strong_preconditioner(False)
+                    if polish_precond is None:
+                        polish_precond = preconditioner_use
+                    if emit is not None:
+                        emit(
+                            0,
+                            "solve_v3_transport_matrix_linear_gmres: polish solve for RHSMode=3 "
+                            f"(residual={float(res.residual_norm):.3e} > "
+                            f"max({polish_config.ratio:.1f}x target, {polish_config.abs_tol:.1e}), "
+                            f"restart={polish_config.restart} maxiter={polish_config.maxiter})",
                         )
-                        if _residual_value(res_polish) < _residual_value(res):
-                            res = res_polish
-                            residual_vec = residual_polish
-                            preconditioner_used = polish_precond
-                            solver_kind_used = "gmres"
-                            solve_method_used = "incremental"
-                            restart_used = polish_restart
+                    res_polish, residual_polish = _solve_linear_with_residual(
+                        matvec_fn=mv,
+                        b_vec=rhs,
+                        x0_vec=res.x,
+                        tol_val=tol_rhs,
+                        atol_val=atol,
+                        restart_val=int(polish_config.restart),
+                        maxiter_val=int(polish_config.maxiter),
+                        solve_method_val="incremental",
+                        preconditioner_val=polish_precond,
+                        precondition_side_val=transport_precondition_side,
+                    )
+                    if transport_candidate_is_better(candidate=res_polish, current=res):
+                        res = res_polish
+                        residual_vec = residual_polish
+                        preconditioner_used = polish_precond
+                        solver_kind_used = "gmres"
+                        solve_method_used = "incremental"
+                        restart_used = int(polish_config.restart)
                 if (
                     dense_used
                     and dense_batch_fallback_enabled
