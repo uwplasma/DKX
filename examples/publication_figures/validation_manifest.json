@@ -32,7 +32,7 @@
   },
   {
     "id": "sfincs2014_fig1_lhd_collisionality_reaudit_fast",
-    "status": "prototype_artifact",
+    "status": "implemented",
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -47,7 +47,7 @@
     ],
     "claims": [
       "The corrected bounded LHD collisionality lane resolves clear FP/PAS separation again",
-      "This branch artifact is suitable for regression and manuscript-layout work, but the full collisionality figure family still needs regenerated audited artifacts"
+      "This bounded artifact is suitable for regression and manuscript-layout work and is superseded by the full collisionality figure family for release claims"
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py"
@@ -95,7 +95,7 @@
   },
   {
     "id": "sfincs2014_fig2_w7x_collisionality_reaudit_fast",
-    "status": "prototype_artifact",
+    "status": "implemented",
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -110,7 +110,7 @@
     ],
     "claims": [
       "The corrected bounded W7-X collisionality lane resolves clear FP/PAS separation again",
-      "This branch artifact is suitable for regression and manuscript-layout work, but the full collisionality figure family still needs regenerated audited artifacts"
+      "This bounded artifact is suitable for regression and manuscript-layout work and is superseded by the full collisionality figure family for release claims"
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py"
@@ -127,7 +127,7 @@
   },
   {
     "id": "sfincs2014_fig3_high_collisionality_limit",
-    "status": "needs_reaudit",
+    "status": "deferred_post_release",
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -139,7 +139,8 @@
       "docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png"
     ],
     "claims": [
-      "High-collisionality transport-matrix trends should agree with analytic asymptotic limits"
+      "High-collisionality transport-matrix trends should agree with analytic asymptotic limits",
+      "This full analytic-limit reproduction is closed as a post-release research lane until a wider high-nu scan and normalization audit are available"
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py"
@@ -155,7 +156,7 @@
   },
   {
     "id": "sfincs2014_high_collisionality_trend_proxy",
-    "status": "prototype_artifact",
+    "status": "implemented",
     "kind": "literature_validation",
     "literature": [
       "https://doi.org/10.1063/1.4870077",
@@ -172,7 +173,7 @@
     "claims": [
       "PAS L11/L12 high-collisionality tails have positive power-law slopes on both corrected full collisionality artifacts",
       "W7-X Fokker-Planck L11/L12 tails show inverse-nu-like slopes on the checked-in nu'<=10 artifact",
-      "LHD Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so the full Simakov-Helander analytic-limit lane remains open"
+      "LHD Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so this implemented artifact is a bounded trend proxy rather than the full analytic-limit reproduction"
     ],
     "source_code": [
       "examples/publication_figures/generate_high_collisionality_trend_proxy.py",
@@ -222,7 +223,7 @@
   },
   {
     "id": "sfincs2014_er_sweep_stellarator_fast_scaffold",
-    "status": "prototype_artifact",
+    "status": "implemented",
     "kind": "literature_validation",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -237,7 +238,7 @@
     ],
     "claims": [
       "The three trajectory models agree at Er=0 on the fixed stellarator-like scaffold input",
-      "A bounded fast stellarator-like sweep resolves nonzero-Er separation while the full-resolution version remains a heavier validation lane"
+      "A bounded fast stellarator-like sweep resolves nonzero-Er separation and is closed as the release-facing stellarator scaffold; full-resolution profile validation remains post-release research work"
     ],
     "source_code": [
       "examples/publication_figures/generate_er_trajectory_sweep.py"
@@ -325,7 +326,7 @@
   },
   {
     "id": "w7x_ambipolar_er_validation",
-    "status": "planned",
+    "status": "deferred_post_release",
     "kind": "profile_validation",
     "literature": [
       "https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf",
@@ -337,7 +338,8 @@
     ],
     "artifacts": [],
     "claims": [
-      "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature"
+      "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature",
+      "This lane is closed for the 1.0.2 release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
     ],
     "source_code": [
       "examples/publication_figures/generate_w7x_ambipolar_validation.py",
@@ -356,7 +358,7 @@
   },
   {
     "id": "monkes_monoenergetic_overlap",
-    "status": "planned",
+    "status": "deferred_post_release",
     "kind": "cross_code_validation",
     "literature": [
       "https://arxiv.org/abs/2312.12248",
@@ -366,7 +368,8 @@
     "artifacts": [],
     "claims": [
       "Monoenergetic coefficients and low-collisionality trends should overlap with MONKES on shared model subsets",
-      "KNOSOS-style low-collisionality ordering should be respected when exact model overlap is not available"
+      "KNOSOS-style low-collisionality ordering should be respected when exact model overlap is not available",
+      "This lane is closed for the 1.0.2 release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
     ],
     "source_code": [
       "sfincs_jax/transport_matrix.py",
@@ -384,7 +387,7 @@
   },
   {
     "id": "adjoint_sensitivity_gradient_checks",
-    "status": "planned",
+    "status": "deferred_post_release",
     "kind": "autodiff_validation",
     "literature": [
       "https://arxiv.org/abs/1904.06430",
@@ -394,7 +397,8 @@
     "artifacts": [],
     "claims": [
       "Directional derivatives from autodiff should agree with finite differences and implicit-diff checks",
-      "Geometry-sensitivity maps should be stable enough for optimization-oriented workflows"
+      "Geometry-sensitivity maps should be stable enough for optimization-oriented workflows",
+      "This lane is closed for the 1.0.2 release as a post-release research target; current CI covers implicit and JVP gradients but not full manuscript-scale optimization maps"
     ],
     "source_code": [
       "sfincs_jax/implicit_solve.py",
