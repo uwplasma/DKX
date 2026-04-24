@@ -133,18 +133,19 @@ Core requirement right now:
   - host-only SciPy `lgmres` is now available on the explicit fast path without touching JIT/differentiable routes.
 - Follow-up offender probes on current `main` now show where those four changes matter:
   - `tokamak_1species_PASCollisions_withEr_fullTrajectories` is parity-clean on the current CPU tokamak-xblock path at about `3.56s` on the frozen suite input, versus the older frozen-suite artifact at `37.75s`,
+  - `tokamak_1species_PASCollisions_withEr_fullTrajectories` is now also parity-clean on the current GPU tight-GMRES path at about `3.41s` / `933.5 MB`, versus the older GPU `xblock_tz` artifact at about `18.2s` / `1014.5 MB`,
   - the adaptive PAS smoother and structured `pas_tokamak_theta` tail are not active on the current top tokamak/geometry4 offenders,
   - `lgmres` is now wired through the CLI and safely downgraded on traced/JIT/distributed paths, but it is slower than the current defaults on `geometryScheme4_2species_PAS_noEr` and `geometryScheme5_3species_loRes`, and effectively neutral on the tokamak PAS+Er case,
-  - the fresh current `main` GPU full-suite refresh now captures the big bounded-solver wins directly in the release artifact root: `geometryScheme5_3species_loRes` is down to `4.294s`, `tokamak_1species_PASCollisions_withEr_fullTrajectories` to `18.300s`, `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` to `7.420s`, and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` to `6.314s`, all strict-clean,
+  - the fresh current `main` GPU full-suite refresh plus focused current-tip rows now capture the big bounded-solver wins directly in the release-facing docs: `geometryScheme5_3species_loRes` is down to `4.294s`, `tokamak_1species_PASCollisions_withEr_fullTrajectories` to `3.413s`, `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` to `7.420s`, and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` to `6.314s`, all strict-clean,
   - forcing transport sparse-direct first on `monoenergetic_geometryScheme5_ASCII` is parity-clean but only marginally faster on the pinned final CPU input, so it is not yet a compelling default change,
   - the fresh GPU full-suite root also records `monoenergetic_geometryScheme5_ASCII` parity-clean at `3.938s` on the current bounded accelerator `tzfft` path,
   - and `geometryScheme4_2species_PAS_noEr` remains parity-clean at `7.019s` but is still the worst GPU RSS case at `2477.1 MB`.
   - `lineax` has been gated and is not admitted yet: on a small real SFINCS operator it matched the current residual and ran faster locally (`~0.54s` vs `~3.29s`), but on a generic nonsymmetric test matrix its default GMRES configuration stagnated, so it is still a bounded differentiable/reference-path candidate rather than a production CLI dependency.
 
 ### 5.2 Known pain points that still matter
-- The pinned full-suite CPU root still records a stale pre-optimization `tokamak_1species_PASCollisions_withEr_fullTrajectories` artifact (`37.747s` JAX CPU vs `0.017s` Fortran), but current-tip frozen-case reruns on the same input are now down to about `3.56s` with parity preserved. A full-suite refresh is still needed before README tables can claim that improvement.
+- The pinned full-suite CPU root still records a stale pre-optimization `tokamak_1species_PASCollisions_withEr_fullTrajectories` artifact (`37.747s` JAX CPU vs `0.017s` Fortran), but current-tip frozen-case reruns on the same input are now down to about `3.56s` with parity preserved. A full-suite refresh is still needed before README tables can claim that CPU improvement.
 - Runtime ratio is still high for the heavier PAS / geometry-rich CPU cases, especially HSX / geometry4 PAS branches in the `3.5-4.9s` range on current targeted reruns.
-- GPU wall time is now robust and parity-clean in the refreshed `v11` root. The remaining runtime offenders are `tokamak_1species_PASCollisions_withEr_fullTrajectories` (`18.300s`), `monoenergetic_geometryScheme1` (`14.621s`), `HSX_PASCollisions_DKESTrajectories` (`11.142s`), and `HSX_PASCollisions_fullTrajectories` (`9.584s`).
+- GPU wall time is now robust and parity-clean in the refreshed `v11` root plus focused current-tip rows. The remaining runtime offenders are `monoenergetic_geometryScheme1` (`14.571s`), `HSX_PASCollisions_fullTrajectories` (`9.082s`), `tokamak_2species_PASCollisions_withEr_fullTrajectories` (`7.722s`), and `HSX_PASCollisions_DKESTrajectories` (`7.627s`).
 - Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`) and `geometryScheme4_2species_PAS_noEr` (`2623.4 MB`), while current worst GPU RSS offenders are `geometryScheme4_2species_PAS_noEr` (`2477.1 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2070.4 MB`).
 - Parallel strong-scaling beyond a few cores is not yet consistently strong for single-RHS large solves.
 
@@ -4773,3 +4774,59 @@ Notes:
   route: the fast `pas_tokamak_theta` variant needs a parity-preserving
   correction for `pressureAnisotropy` before it can be considered for default
   selection.
+
+### 19.81 GPU tokamak PAS+Er tight-GMRES promotion
+
+Closed the bounded one-GPU tokamak PAS+Er offender by separating the apparent
+fast path from the actual preconditioner build. The originally tempting forced
+`pas_tokamak_theta` experiment was fast only because the solve effectively ran
+without building that preconditioner; building the actual `pas_tokamak_theta`
+preconditioner on the same case was not a practical default. The accepted route
+is therefore an explicit tight unpreconditioned GMRES policy for bounded GPU
+analytic-tokamak PAS+Er cases, with the old `xblock_tz` branch left as opt-in.
+
+Measurements:
+
+- Old one-GPU default/`xblock_tz` route on
+  `tokamak_1species_PASCollisions_withEr_fullTrajectories`: about `18.1-18.2s`
+  and about `1014.5 MB` RSS, parity-clean but the top GPU runtime offender.
+- Fast loose-tolerance probe: about `3.0s`, but one practical mismatch in
+  `pressureAnisotropy` (`2.9e-7` absolute, `7.5e-4` relative).
+- Accepted tight-GMRES route on `office` GPU1:
+  `3.412660754052922s`, `955912 KB` RSS (`933.5 MB`), `0/212` practical and
+  strict mismatches, and `pressureAnisotropy` max difference
+  `8.398488e-10` absolute / `1.319963e-7` relative.
+
+Code/documentation changes:
+
+- `rhs1_pas_tokamak_gpu_xblock_preferred(...)` now defaults
+  `SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX` to `0`, making the
+  older GPU `xblock_tz` route explicitly opt-in.
+- Added `rhs1_pas_tokamak_gpu_tight_tol(...)` with
+  `SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL` defaulting to `1e-8` for the
+  bounded GPU tokamak PAS+Er route; the legacy `...GPU_THETA_TOL` name remains
+  accepted.
+- The RHSMode=1 auto selector now logs
+  `GPU PAS tokamak auto -> tight unpreconditioned GMRES`, skips the later PAS
+  weak/strong auto overrides that would rebuild `xblock_tz` or `pas_hybrid`,
+  and emits the tolerance tightening when it applies.
+- README, usage docs, performance docs, and performance-technique notes now
+  describe the focused current-tip GPU row and the opt-in legacy branch.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_preconditioner_auto_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_v3_driver_policy_helpers.py tests/test_schur_precond_heuristic.py`
+- `python -m ruff check sfincs_jax/rhs1_preconditioner_auto_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_v3_driver_policy_helpers.py tests/test_schur_precond_heuristic.py`
+- `python -m pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_v3_driver_policy_helpers.py tests/test_schur_precond_heuristic.py`
+  passed with `55 passed in 8.76s`.
+- Office GPU1 default-policy probe with the local patch selected the tight
+  unpreconditioned GMRES route, avoided a preconditioner-build line, and was
+  parity-clean with the measurements above.
+- `sphinx-build -W -b html docs docs/_build/html` passed after the README/docs
+  updates.
+- `python -m pytest -q` passed with `856 passed in 357.93s (0:05:57)`.
+
+Next validation targets:
+
+- Reverse the temporary office patch, fast-forward pull the pushed commit on
+  `office`, and rerun the single focused GPU case from the clean remote state.

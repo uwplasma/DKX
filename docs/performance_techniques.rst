@@ -740,6 +740,16 @@ fits inside ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX``. Set
 ``SFINCS_JAX_RHSMODE1_SCHUR_TOKAMAK=1`` to force Schur in the no-Er tokamak-like
 cases that still use that gate.
 
+For bounded one-GPU analytic tokamak PAS+Er branches, the default takes a
+different route: it avoids the expensive ``xblock_tz`` setup and uses
+unpreconditioned full-restart GMRES with a tightened tolerance. This was chosen
+because the actual ``pas_tokamak_theta`` preconditioner build was not the fast
+path in the focused probe, while the tight unpreconditioned solve preserved all
+Fortran-output comparisons and reduced the runtime from about ``18.2 s`` to
+``3.4 s`` on ``tokamak_1species_PASCollisions_withEr_fullTrajectories``. The
+older ``xblock_tz`` GPU route remains available behind an explicit active-size
+cap for users who want to benchmark it on a different accelerator.
+
 **Sparse ILU (FP-heavy RHSMode=1).** For FP-heavy RHSMode=1 systems, a PETSc‑like
 incomplete factorization is available to avoid dense fallback while retaining
 matrix‑free accuracy. We form a sparsified operator :math:`\tilde{A}` and build
@@ -803,6 +813,8 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_DKES_XBLOCK_TZ_SMALL_MAX`` (DKES PAS only: cap on dense xblock_tz base; default matches ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX``)
 - ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX`` and ``SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_ACTIVE_MAX`` (PAS DKES only: prefer the structured ``pas_tz`` angular block above this backend-specific angular-block size and below this active-DOF cap; defaults ``950`` and ``15000``)
 - ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX`` (CPU full-trajectory PAS only: prefer ``pas_tz`` over Schur for bounded HSX-like geometryScheme=11 cases; defaults ``15``, ``950``, and ``15000``)
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL`` (bounded one-GPU tokamak PAS+Er only: default tight-GMRES tolerance ``1e-8``; ``0`` disables the tightening; legacy ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted)
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX`` (bounded one-GPU tokamak PAS+Er only: opt-in cap for the older ``xblock_tz`` branch; default ``0`` disables it)
 - ``SFINCS_JAX_RHSMODE1_PAS_XMG_MIN`` (auto switch to the lightweight PAS x‑multigrid preconditioner for large systems; default ``80000``)
 - ``SFINCS_JAX_RHSMODE1_FP_XMG_MAX`` (near-zero-``Er`` FP systems below this size use x‑multigrid preconditioning by default; default ``100000``)
 - ``SFINCS_JAX_RHSMODE1_SXBLOCK_TZ_ACTIVE_MAX`` (caps auto ``sxblock_tz`` selection for FP systems to avoid expensive setup on large RHSMode=1 runs; default ``20000``)

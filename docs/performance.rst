@@ -43,7 +43,7 @@ reruns are:
 
 - CPU runtime: ``HSX_PASCollisions_fullTrajectories`` at ``4.027 s``
 - CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``3066.4 MB``
-- GPU runtime: ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` at ``18.199 s``
+- GPU runtime: ``monoenergetic_geometryScheme1`` at ``14.571 s``
 - GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2507.0 MB``
 
 In other words, all examples run on CPU and GPU, but a handful of cases remain the clear optimization targets.
@@ -61,6 +61,10 @@ Recent current-tip PAS-DKES fix:
 Recent current-tip PAS full-trajectory fix:
 
 - ``HSX_PASCollisions_fullTrajectories`` now auto-selects the structured ``pas_tz`` angular preconditioner on the bounded CPU HSX-like full-trajectory PAS case. The focused CPU frozen-reference probe completed parity-clean in ``4.027 s`` with about ``1384 MB`` RSS, down from the prior release table entry of ``5.274 s`` and ``2002 MB``. The guard intentionally stays off for larger-W7X geometry11 full-trajectory and GPU full-trajectory cases unless a future measured gate proves both faster runtime and unchanged parity.
+
+Recent current-tip GPU tokamak PAS+Er fix:
+
+- ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now uses a bounded one-GPU analytic-tokamak PAS+Er route that avoids the expensive ``xblock_tz`` setup and tightens the GMRES tolerance to ``1e-8``. The focused ``office`` GPU probe completed parity-clean in ``3.413 s`` with about ``934 MB`` RSS, down from the previous release-table entry of ``18.199 s`` and ``1014.5 MB``. The older ``xblock_tz`` route remains available as an explicit opt-in with ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``.
 
 External solver-library gates
 -----------------------------
@@ -368,10 +372,17 @@ summary. For current release claims, use the full example-suite artifacts listed
 - Current bounded CPU benchmark on the same frozen scaled case:
   default auto path now promotes to ``xblock_tz`` and runs in ``~3.6 s`` with
   ``0`` mismatches versus the pinned output artifact.
+- Current bounded one-GPU benchmark on ``office``:
+  default auto path skips the expensive ``xblock_tz`` setup, tightens GMRES to
+  ``1e-8``, and runs in ``~3.4 s`` with ``0`` mismatches versus the pinned output
+  artifact. The maximum ``pressureAnisotropy`` difference against the frozen
+  reference was below ``9e-10`` absolute and ``2e-7`` relative.
 - The key change is not a new equation or solver family. It is a better default
-  branch choice for bounded tokamak PAS+Er CPU cases: prefer ``xblock_tz`` before
-  ``pas_schur`` when the active system and :math:`(L,\theta,\zeta)` block stay
-  inside the configured cap.
+  branch choice for bounded tokamak PAS+Er cases: on CPU, prefer ``xblock_tz``
+  before ``pas_schur`` when the active system and
+  :math:`(L,\theta,\zeta)` block stay inside the configured cap; on GPU, avoid
+  that setup when the bounded unpreconditioned route converges parity-clean with
+  the tighter tolerance.
 - This removes the old ``pas_schur -> xblock_tz`` fallback ladder on the pinned
   offender and turns it into a direct parity-clean solve.
 

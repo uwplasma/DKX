@@ -280,9 +280,11 @@ of the same artifact set as the standard suite.
 <!-- BEGIN FAST_BRANCH_AUDIT -->
 Current `main` CPU audit comes from `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix`.
 Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem`.
-The `HSX_PASCollisions_DKESTrajectories` CPU/GPU row and
-`HSX_PASCollisions_fullTrajectories` CPU row include the latest focused
-current-tip PAS reruns after the guarded `pas_tz` auto-selection updates.
+The `HSX_PASCollisions_DKESTrajectories` CPU/GPU row,
+`HSX_PASCollisions_fullTrajectories` CPU row, and
+`tokamak_1species_PASCollisions_withEr_fullTrajectories` GPU row include the
+latest focused current-tip PAS reruns after the guarded PAS auto-selection
+updates.
 
 - Recorded cases: `39/39`
 - Practical status counts: `parity_ok=39`
@@ -339,7 +341,7 @@ Full per-case runtime / memory table:
 | `tokamak_1species_PASCollisions_noEr` | 0.309 | 2.658 | 8.60x | 4.899 | 15.86x | 114.2 | 612.9 | 5.36x | 985.8 | 8.63x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_PASCollisions_noEr_Nx1` | 0.017 | 2.432 | 143.08x | 3.393 | 199.58x | 100.9 | 520.3 | 5.16x | 928.5 | 9.20x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_PASCollisions_noEr_withQN` | 0.888 | 2.316 | 2.61x | 3.439 | 3.87x | 120.9 | 526.1 | 4.35x | 987.1 | 8.17x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 0.017 | 3.410 | 200.59x | 18.199 | 1070.54x | 102.0 | 628.3 | 6.16x | 1014.5 | 9.94x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 0.017 | 3.410 | 200.59x | 3.413 | 200.76x | 102.0 | 628.3 | 6.16x | 933.5 | 9.15x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_noEr` | 0.331 | 4.004 | 12.10x | 4.649 | 14.04x | 123.6 | 2088.6 | 16.90x | 1148.7 | 9.29x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 1.330 | 3.611 | 2.72x | 7.722 | 5.81x | 121.8 | 1601.9 | 13.15x | 1245.1 | 10.22x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `transportMatrix_geometryScheme11` | 0.025 | 1.806 | 72.23x | 3.289 | 131.57x | 102.6 | 440.9 | 4.30x | 919.1 | 8.96x | 0/194 (strict 0/194) | 0/194 (strict 0/194) | 9/9 | 9/9 | parity_ok | parity_ok |

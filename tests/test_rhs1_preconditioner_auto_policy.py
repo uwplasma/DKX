@@ -15,6 +15,7 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     rhs1_pas_full_cpu_pas_tz_preferred,
     rhs1_pas_tokamak_cpu_xblock_preferred,
     rhs1_pas_tokamak_gpu_theta_allowed,
+    rhs1_pas_tokamak_gpu_tight_tol,
     rhs1_pas_tokamak_gpu_xblock_preferred,
     rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed,
@@ -550,6 +551,15 @@ def test_tokamak_pas_gpu_and_cpu_xblock_policies(monkeypatch) -> None:
         has_collisionless=True,
     )
     assert rhs1_pas_tokamak_gpu_theta_allowed(backend="gpu", **common)
+    assert not rhs1_pas_tokamak_gpu_xblock_preferred(
+        backend="gpu",
+        n_theta=10,
+        n_zeta=1,
+        max_l=14,
+        xblock_tz_limit=1200,
+        **common,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "12000")
     assert rhs1_pas_tokamak_gpu_xblock_preferred(
         backend="gpu",
         n_theta=10,
@@ -558,6 +568,7 @@ def test_tokamak_pas_gpu_and_cpu_xblock_policies(monkeypatch) -> None:
         xblock_tz_limit=1200,
         **common,
     )
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", raising=False)
     assert not rhs1_pas_tokamak_gpu_xblock_preferred(
         backend="cpu",
         n_theta=10,
@@ -582,6 +593,32 @@ def test_tokamak_pas_gpu_and_cpu_xblock_policies(monkeypatch) -> None:
         xblock_tz_limit=1200,
         **common,
     )
+
+
+def test_tokamak_pas_gpu_tight_tol_policy(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL", raising=False)
+    common = dict(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=500,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+    )
+    assert rhs1_pas_tokamak_gpu_tight_tol(enabled=True, **common) == 1.0e-8
+    assert rhs1_pas_tokamak_gpu_tight_tol(enabled=False, **common) is None
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL", "1e-9")
+    assert rhs1_pas_tokamak_gpu_tight_tol(enabled=True, **common) == 1.0e-9
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL", "0")
+    assert rhs1_pas_tokamak_gpu_tight_tol(enabled=True, **common) is None
+    assert rhs1_pas_tokamak_gpu_tight_tol(
+        enabled=True,
+        **{**common, "backend": "cpu"},
+    ) is None
 
 
 def test_gpu_sparse_fallback_skip_policy(monkeypatch) -> None:

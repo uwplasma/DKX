@@ -478,6 +478,22 @@ def test_pas_tokamak_gpu_theta_allowed_only_for_small_er_tokamak_pas() -> None:
 
 def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", raising=False)
+    assert not v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
+        has_pas=True,
+        has_fp=False,
+        backend="gpu",
+        tokamak_like=True,
+        active_size=245,
+        er_abs=1.0e-2,
+        schur_er_min=1.0e-12,
+        has_magdrift=False,
+        has_collisionless=True,
+        n_theta=10,
+        n_zeta=1,
+        max_l=14,
+        xblock_tz_limit=1200,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "12000")
     assert v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
@@ -613,8 +629,10 @@ def test_gpu_pas_tokamak_er_path_does_not_promote_to_pas_schur(tmp_path: Path, m
     )
 
     joined = "\n".join(logs)
-    assert "GPU PAS tokamak auto -> xblock_tz preconditioner" in joined
-    assert "building RHSMode=1 preconditioner=xblock_tz" in joined
+    assert "GPU PAS tokamak auto -> tight unpreconditioned GMRES" in joined
+    assert "GPU PAS tokamak tol tightened" in joined
+    assert "building RHSMode=1 preconditioner=pas_tokamak_theta" not in joined
+    assert "building RHSMode=1 preconditioner=xblock_tz" not in joined
     assert "building RHSMode=1 preconditioner=pas_schur" not in joined
     assert not v3_driver._rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=True,
