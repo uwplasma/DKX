@@ -484,15 +484,16 @@ source input, and collision-operator labeling. That keeps future release reruns 
 with the manifest's provenance and acceptance-gate expectations instead of relying on
 plots alone.
 
-The next planned literature lane now has an executable scaffold as well:
+The W7-X ambipolar literature lane has an executable scaffold as well:
 
 - script: ``examples/publication_figures/generate_w7x_ambipolar_validation.py``
 - focused test: ``tests/test_generate_w7x_ambipolar_validation.py``
 
 This keeps the W7-X ambipolar validation work out of the "purely aspirational" bucket:
 the scan, ambipolar postprocessing, summary JSON, and figure generation paths are now
-covered by a bounded end-to-end test on a tiny fixture, even though the heavy W7-X
-reference artifact is still an explicit open lane in the manifest.
+covered by a bounded end-to-end test on a tiny fixture. The heavy W7-X reference
+artifact is closed in the manifest as ``deferred_post_release`` until a defensible
+profile/equilibrium reconstruction is pinned.
 
 The same scaffold is now resumable for heavy runs: ``run_er_scan`` accepts
 ``skip_existing=True``, the ``sfincs_jax scan-er`` CLI exposes ``--skip-existing``,

@@ -20,7 +20,8 @@ That file is intended to become the stable spine for:
 
 - future manuscript figure generation,
 - reproducible benchmark reruns,
-- and test/benchmark dashboards that distinguish implemented and planned lanes.
+- and test/benchmark dashboards that distinguish implemented release lanes from
+  deferred post-release research lanes.
 
 Each manifest lane now also carries explicit research gates:
 
@@ -29,10 +30,11 @@ Each manifest lane now also carries explicit research gates:
 - ``acceptance_gates``: the concrete criteria required before the lane can support a
   manuscript or release claim.
 
-The schema is enforced by ``tests/test_validation_manifest_schema.py``. Implemented and
-prototype lanes must point to existing scripts, artifacts, source files, and tests.
-Planned lanes are allowed to have empty artifact lists, but their acceptance criteria
-must still be explicit so that open research work is not lost.
+The schema is enforced by ``tests/test_validation_manifest_schema.py``. Implemented
+release lanes must point to existing scripts, artifacts, source files, and tests.
+Deferred post-release lanes are closed for the tagged release but retain literature
+anchors, implementation targets, tests, and acceptance criteria so follow-up research
+work is not lost.
 
 Implemented literature reproductions
 ------------------------------------
@@ -175,10 +177,12 @@ Corrected bounded branch artifacts:
    validation, but it remains a bounded fast artifact rather than the final audited
    paper figure.
 
-Planned literature-driven lanes
--------------------------------
+Closed post-release research lanes
+----------------------------------
 
-The next figure/test lanes should be built in this order.
+The following lanes are not release blockers. They are closed in the manifest as
+``deferred_post_release`` with explicit criteria for reopening them in a later
+research/nightly cycle.
 
 1. Electric-field sweeps
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -263,9 +267,9 @@ Closed branch evidence:
    momentum-conserving FP/model-operator results should approach inverse-``nu``
    scaling in the ``nu' >> 1`` limit. The checked-in W7-X artifact satisfies the
    inverse-tail proxy, but the LHD artifact does not yet, so this figure is kept as a
-   prototype trend gate rather than the final analytic-limit reproduction.
+   implemented trend gate rather than the final analytic-limit reproduction.
 
-Validation goal:
+Post-release acceptance criteria:
 
 - keep machine-readable summary artifacts for each full scan,
 - use the full LHD/W7-X summaries as the parent gates for later high-collisionality
@@ -305,12 +309,13 @@ It also supports ``--skip-existing`` plus ``--index/--stride`` split execution, 
 the heavy reference scan can be resumed or distributed across devices before the final
 ambipolar postprocess/figure pass.
 
-Current status note:
+Current closure note:
 
 - the script and focused tests are in place,
 - the checked-in literature artifact is still intentionally absent,
-- so this remains a planned lane until a defensible W7-X input reconstruction is run
-  and its summary/figure are pinned in the repository.
+- this lane is closed for the 1.0.2 release as ``deferred_post_release`` until a
+  defensible W7-X input reconstruction is run and its summary/figure are pinned in
+  the repository.
 
 4. MONKES / KNOSOS overlap
 ^^^^^^^^^^^^^^^^^^^^^^^^^^

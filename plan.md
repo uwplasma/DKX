@@ -3939,6 +3939,41 @@ Validation:
   passed with `17 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
 
+### 19.90 Release 1.0.2 preparation and manifest closure
+
+Prepared the branch for the final 1.0.2 ship pass:
+
+- Bumped `pyproject.toml` from `1.0.1` to `1.0.2`.
+- Fixed the stale release-checklist workflow name from `publish.yml` to
+  `publish-pypi.yml`.
+- Closed all manifest lanes into one of two statuses:
+  - `implemented` for release-facing checked-in artifacts and bounded scaffolds with
+    existing tests/artifacts,
+  - `deferred_post_release` for research/nightly lanes that must not block the 1.0.2
+    tag and must not be overclaimed in release notes.
+- Converted the previous open lanes as follows:
+  - corrected LHD/W7-X fast collisionality scaffolds: `implemented`,
+  - high-collisionality trend proxy: `implemented`,
+  - stellarator fast Er sweep scaffold: `implemented`,
+  - full Simakov-Helander analytic-limit reproduction: `deferred_post_release`,
+  - W7-X ambipolar profile validation: `deferred_post_release`,
+  - MONKES/KNOSOS overlap: `deferred_post_release`,
+  - manuscript-scale adjoint/sensitivity maps: `deferred_post_release`.
+- Updated `tests/test_validation_manifest_schema.py` so CI now asserts there are no
+  `planned`, `prototype_artifact`, or `needs_reaudit` manifest statuses left.
+- Updated the validation/testing docs to explain that deferred lanes are closed
+  post-release research items with explicit acceptance gates, not release blockers.
+
+Validation:
+
+- `python -m pytest -q tests/test_validation_manifest_schema.py` passed with
+  `4 passed in 0.03s`.
+- `python -m ruff check tests/test_validation_manifest_schema.py` passed.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m build` passed and built `sfincs_jax-1.0.2.tar.gz` plus
+  `sfincs_jax-1.0.2-py3-none-any.whl`.
+- `python -m pytest -q` passed with `869 passed in 325.09s (0:05:25)`.
+
 Next validation targets:
 
 - After this cheap gate is stable, keep `vmec_jax`/`booz_xform_jax` end-to-end
