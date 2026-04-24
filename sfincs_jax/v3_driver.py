@@ -66,6 +66,7 @@ from .rhs1_preconditioner_auto_policy import (
     pas_auto_skip_strong_retry as _pas_auto_skip_strong_retry,
     rhs1_fp_dkes_default_kind as _rhs1_fp_dkes_default_kind,
     rhs1_fp_dkes_env_preconditioner_kind as _rhs1_fp_dkes_env_preconditioner_kind,
+    rhs1_geometry4_pas_memory_pas_tz_preferred as _rhs1_geometry4_pas_memory_pas_tz_preferred,
     rhs1_large_fp_near_zero_er_override_kind as _rhs1_large_fp_near_zero_er_override_kind,
     rhs1_pas_auto_large_base_kind as _rhs1_pas_auto_large_base_kind,
     rhs1_pas_dkes_pas_tz_preferred as _rhs1_pas_dkes_pas_tz_preferred,
@@ -10537,6 +10538,7 @@ def solve_v3_full_system_linear_gmres(
 
     active_env = os.environ.get("SFINCS_JAX_ACTIVE_DOF", "").strip().lower()
     nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
     has_reduced_modes = bool(np.any(nxi_for_x < int(op.n_xi)))
     phys_params = nml.group("physicsParameters")
     def _nml_get(group: dict, key: str, default=None):
@@ -11538,6 +11540,28 @@ def solve_v3_full_system_linear_gmres(
             emit(
                 1,
                 "solve_v3_full_system_linear_gmres: CPU full-trajectory PAS "
+                "auto -> pas_tz preconditioner",
+            )
+    if _rhs1_geometry4_pas_memory_pas_tz_preferred(
+        rhs1_precond_env=rhs1_precond_env,
+        current_kind=rhs1_precond_kind,
+        has_pas=op.fblock.pas is not None,
+        has_fp=op.fblock.fp is not None,
+        use_dkes=bool(use_dkes),
+        geom_scheme=int(geom_scheme),
+        n_theta=int(op.n_theta),
+        n_zeta=int(op.n_zeta),
+        max_l=int(max_l),
+        active_size=int(active_size),
+        er_abs=float(er_abs),
+        schur_er_min=float(schur_er_min),
+        pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
+    ):
+        rhs1_precond_kind = "pas_tz"
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: geometry4 PAS memory "
                 "auto -> pas_tz preconditioner",
             )
     if (

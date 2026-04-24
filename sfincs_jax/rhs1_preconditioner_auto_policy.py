@@ -486,6 +486,56 @@ def rhs1_pas_full_cpu_pas_tz_preferred(
     )
 
 
+def rhs1_geometry4_pas_memory_pas_tz_preferred(
+    *,
+    rhs1_precond_env: str | None,
+    current_kind: str | None,
+    has_pas: bool,
+    has_fp: bool,
+    use_dkes: bool,
+    geom_scheme: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    pas_tz_applicable: bool,
+) -> bool:
+    """Return whether geometryScheme=4 PAS should use memory-oriented ``pas_tz``.
+
+    This targets the bounded no-Er geometry4 PAS offender where direct top-level
+    ``pas_tz`` is parity-clean and materially lower-memory than wrapping the same
+    angular block inside the constraint-Schur preconditioner.
+    """
+    mode = _env_token("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ")
+    if mode in _FALSE_VALUES:
+        return False
+    if (rhs1_precond_env or "").strip().lower() not in {"", "auto", "default"}:
+        return False
+    if current_kind != "schur":
+        return False
+    if not has_pas or has_fp or use_dkes:
+        return False
+    if not pas_tz_applicable:
+        return False
+    if int(geom_scheme) != 4:
+        return False
+    if int(n_theta) <= 1 or int(n_zeta) <= 1:
+        return False
+    if float(er_abs) > float(schur_er_min):
+        return False
+    block_size = int(max_l) * int(n_theta) * int(n_zeta)
+    min_block = _env_int("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_MIN", 1500)
+    min_active = _env_int("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MIN", 8000)
+    max_active = _env_int("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MAX", 25000)
+    return (
+        block_size >= max(1, int(min_block))
+        and int(active_size) >= max(1, int(min_active))
+        and int(active_size) <= max(1, int(max_active))
+    )
+
+
 def rhs1_pas_tokamak_gpu_theta_allowed(
     *,
     has_pas: bool,
@@ -682,6 +732,7 @@ __all__ = [
     "pas_auto_skip_strong_retry",
     "rhs1_fp_dkes_default_kind",
     "rhs1_fp_dkes_env_preconditioner_kind",
+    "rhs1_geometry4_pas_memory_pas_tz_preferred",
     "rhs1_large_fp_near_zero_er_override_kind",
     "rhs1_pas_family_refinement_kind",
     "rhs1_gpu_sparse_fallback_skip_allowed",
