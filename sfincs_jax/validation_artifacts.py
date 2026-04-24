@@ -816,6 +816,7 @@ def build_simakov_helander_limit_audit_summary(
     artifact_dir: Path,
     artifacts: Mapping[str, str] = DEFAULT_PUBLICATION_ARTIFACTS,
     geometry_outputs: Mapping[str, Path] | None = None,
+    precomputed_geometry_audits: Mapping[str, Mapping[str, object]] | None = None,
     n_fit: int = 3,
     min_nuprime_for_full_limit: float = 50.0,
     target_slope: float = -1.0,
@@ -827,6 +828,11 @@ def build_simakov_helander_limit_audit_summary(
     lhd = load_collisionality_records(artifact_dir / artifacts["lhd_collisionality"])
     w7x = load_collisionality_records(artifact_dir / artifacts["w7x_collisionality"])
     geometry_audits: dict[str, Mapping[str, object] | None] = {"lhd": None, "w7x": None}
+    if precomputed_geometry_audits is not None:
+        for case in ("lhd", "w7x"):
+            audit = precomputed_geometry_audits.get(case)
+            if audit is not None:
+                geometry_audits[case] = dict(audit)
     if geometry_outputs is not None:
         for case in ("lhd", "w7x"):
             path = geometry_outputs.get(case)
