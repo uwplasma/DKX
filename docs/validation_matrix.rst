@@ -68,6 +68,36 @@ Current artifacts:
    trajectory sweeps retain exact zero-field agreement while resolving finite-field
    model separation.
 
+Fortran v3 CPU/GPU suite benchmark
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Literature and reference anchors:
+
+- `Landreman et al. 2014 <https://doi.org/10.1063/1.4870073>`_
+- `Open PDF mirror <https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf>`_
+- `SFINCS Fortran repository <https://github.com/landreman/sfincs>`_
+
+Current script:
+
+- ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
+
+Current artifacts:
+
+- ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``
+- ``docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png``
+- ``docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.pdf``
+
+.. figure:: _static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png
+   :alt: Frozen CPU and GPU suite benchmark against SFINCS Fortran v3
+   :width: 92%
+
+   Cross-code release benchmark generated from frozen CPU/GPU suite reports. The
+   acceptance tests require all 39 audited cases to remain ``parity_ok`` on both
+   backends, with zero strict mismatches and no ``jax_error`` or ``max_attempts``
+   failures. Runtime and maximum-RSS ratios are recomputed from the checked-in
+   reports before plotting, and the top runtime/memory offenders are stored in the
+   JSON summary for manuscript tables and regression triage.
+
 SFINCS 2014 collisionality figures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

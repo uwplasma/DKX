@@ -5109,3 +5109,42 @@ Next validation targets:
   Simakov-Helander lane from `needs_reaudit`.
 - Keep the W7-X ambipolar and MONKES/KNOSOS lanes explicit in the manifest until their
   input reconstruction / normalization choices are pinned.
+
+### 19.88 Frozen CPU/GPU Fortran-suite benchmark artifact
+
+Closed the publication-facing cross-code benchmark summary for the final frozen CPU and
+GPU suite reports without rerunning the heavy examples in CI:
+
+- Added suite-report loaders and metrics to `sfincs_jax/validation_artifacts.py`:
+  `load_suite_report(...)`, `suite_case_metrics(...)`, `suite_report_summary(...)`,
+  and `build_fortran_suite_benchmark_summary(...)`.
+- Added `examples/publication_figures/generate_fortran_suite_benchmark_summary.py`.
+- Generated:
+  - `docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png`,
+  - `docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.pdf`,
+  - `examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json`.
+- Updated the validation manifest, paper-figures page, validation matrix, Fortran
+  comparison page, performance page, testing docs, and source map.
+
+Measured release-gate metrics from the frozen reports:
+
+- CPU report `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
+  `39/39 parity_ok`, zero `jax_error`, zero `max_attempts`, zero strict mismatches,
+  median JAX/Fortran runtime ratio `0.039x`, median maximum-RSS ratio `5.18x`.
+- GPU report `tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem/suite_report.json`:
+  `39/39 parity_ok`, zero `jax_error`, zero `max_attempts`, zero strict mismatches,
+  median JAX/Fortran runtime ratio `0.059x`, median maximum-RSS ratio `9.20x`.
+
+The high runtime-ratio tail is now explicitly stored in JSON instead of being hidden in
+hand-written docs. This matters because several Fortran reference runs take only about
+`0.017 s`, so ratio plots can look severe even when the JAX absolute runtime remains a
+few seconds.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/validation_artifacts.py examples/publication_figures/generate_fortran_suite_benchmark_summary.py tests/test_validation_artifacts.py tests/test_generate_fortran_suite_benchmark_summary.py`
+  passed.
+- `python -m pytest -q tests/test_validation_artifacts.py tests/test_generate_fortran_suite_benchmark_summary.py tests/test_generate_validation_dashboard.py tests/test_generate_high_collisionality_trend_proxy.py tests/test_validation_manifest_schema.py`
+  passed with `13 passed in 2.40s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `868 passed in 344.52s (0:05:44)`.
