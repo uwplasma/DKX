@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import h5py
 import numpy as np
 
 from sfincs_jax.validation_artifacts import (
@@ -53,6 +54,36 @@ def _synthetic_suite_rows(n: int = 39) -> list[dict[str, object]]:
             }
         )
     return rows
+
+
+def _write_appendix_b_geometry_fixture(path: Path) -> None:
+    theta = np.linspace(0.0, 2.0 * np.pi, 6, endpoint=False)
+    zeta = np.linspace(0.0, 2.0 * np.pi / 5.0, 5, endpoint=False)
+    theta_2d = theta[:, None]
+    zeta_2d = zeta[None, :]
+    b_hat = 1.0 + 0.08 * np.cos(theta_2d) + 0.04 * np.cos(5.0 * zeta_2d)
+    g_hat = 3.0
+    i_hat = 0.2
+    iota = 0.45
+    d_hat = b_hat * b_hat / (g_hat + iota * i_hat)
+    u_hat = 0.12 * np.sin(theta_2d) + 0.03 * np.sin(5.0 * zeta_2d)
+    weights = 1.0 / d_hat
+    fsab_hat2 = float(np.sum(weights * b_hat * b_hat) / np.sum(weights))
+
+    with h5py.File(path, "w") as h5:
+        h5["BHat"] = b_hat
+        h5["DHat"] = d_hat
+        h5["uHat"] = u_hat
+        h5["BHat_sup_theta"] = iota * d_hat
+        h5["BHat_sup_zeta"] = d_hat
+        h5["dBHatdtheta"] = -0.08 * np.sin(theta_2d) + np.zeros_like(zeta_2d)
+        h5["dBHatdzeta"] = np.zeros_like(theta_2d) - 0.2 * np.sin(5.0 * zeta_2d)
+        h5["theta"] = theta
+        h5["zeta"] = zeta
+        h5["GHat"] = np.asarray(g_hat)
+        h5["IHat"] = np.asarray(i_hat)
+        h5["iota"] = np.asarray(iota)
+        h5["FSABHat2"] = np.asarray(fsab_hat2)
 
 
 def test_collisionality_artifact_metrics_are_literature_consistent() -> None:
@@ -118,19 +149,23 @@ def test_high_collisionality_proxy_summary_keeps_analytic_limit_lane_honest() ->
     assert payload["cases"]["w7x"]["state"] == "asymptotic_trend_proxy"
 
 
-def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed() -> None:
-    repo = Path(__file__).resolve().parents[1]
-    lhd_output = repo / "examples" / "publication_figures" / "output" / "lhd_co0" / "nu_n_2.668" / "sfincsOutput.h5"
-    w7x_output = repo / "examples" / "publication_figures" / "output" / "w7x_co0" / "nu_n_1.727" / "sfincsOutput.h5"
+def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed(tmp_path: Path) -> None:
+    fixture_h5 = tmp_path / "appendix_b_fixture.h5"
+    _write_appendix_b_geometry_fixture(fixture_h5)
 
-    geometry = appendix_b_geometry_audit_from_h5(lhd_output)
+    geometry = appendix_b_geometry_audit_from_h5(fixture_h5)
     assert geometry["geometry_scalars"]["FSABHat2_relative_error"] < 1.0e-12
     assert "G1" in geometry["appendix_b_discrete_quantities"]
     assert "L11" in geometry["transport_matrix_coefficients_over_nuprime"]
 
+    pinned = json.loads((_artifact_dir() / "sfincs_jax_simakov_helander_limit_audit_summary.json").read_text())
+    precomputed = {
+        case: pinned["cases"][case]["appendix_b_geometry_audit"]
+        for case in ("lhd", "w7x")
+    }
     payload = build_simakov_helander_limit_audit_summary(
         artifact_dir=_artifact_dir(),
-        geometry_outputs={"lhd": lhd_output, "w7x": w7x_output},
+        precomputed_geometry_audits=precomputed,
         n_fit=3,
     )
     assert payload["metadata"]["kind"] == "simakov_helander_limit_audit"
