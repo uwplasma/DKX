@@ -133,10 +133,10 @@ Core requirement right now:
   - host-only SciPy `lgmres` is now available on the explicit fast path without touching JIT/differentiable routes.
 - Follow-up offender probes on current `main` now show where those four changes matter:
   - `tokamak_1species_PASCollisions_withEr_fullTrajectories` is parity-clean on the current CPU tokamak-xblock path at about `3.56s` on the frozen suite input, versus the older frozen-suite artifact at `37.75s`,
-  - `tokamak_1species_PASCollisions_withEr_fullTrajectories` is now also parity-clean on the current GPU tight-GMRES path at about `3.41s` / `933.5 MB`, versus the older GPU `xblock_tz` artifact at about `18.2s` / `1014.5 MB`,
+  - `tokamak_1species_PASCollisions_withEr_fullTrajectories` is now also parity-clean on the current GPU tight-GMRES path at about `3.25s` / `922.3 MB`, versus the older GPU `xblock_tz` artifact at about `18.2s` / `1014.5 MB`,
   - the adaptive PAS smoother and structured `pas_tokamak_theta` tail are not active on the current top tokamak/geometry4 offenders,
   - `lgmres` is now wired through the CLI and safely downgraded on traced/JIT/distributed paths, but it is slower than the current defaults on `geometryScheme4_2species_PAS_noEr` and `geometryScheme5_3species_loRes`, and effectively neutral on the tokamak PAS+Er case,
-  - the fresh current `main` GPU full-suite refresh plus focused current-tip rows now capture the big bounded-solver wins directly in the release-facing docs: `geometryScheme5_3species_loRes` is down to `4.294s`, `tokamak_1species_PASCollisions_withEr_fullTrajectories` to `3.413s`, `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` to `7.420s`, and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` to `6.314s`, all strict-clean,
+  - the fresh current `main` GPU full-suite refresh plus focused current-tip rows now capture the big bounded-solver wins directly in the release-facing docs: `geometryScheme5_3species_loRes` is down to `4.294s`, `tokamak_1species_PASCollisions_withEr_fullTrajectories` to `3.249s`, `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` to `7.420s`, and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` to `6.314s`, all strict-clean,
   - forcing transport sparse-direct first on `monoenergetic_geometryScheme5_ASCII` is parity-clean but only marginally faster on the pinned final CPU input, so it is not yet a compelling default change,
   - the fresh GPU full-suite root also records `monoenergetic_geometryScheme5_ASCII` parity-clean at `3.938s` on the current bounded accelerator `tzfft` path,
   - and `geometryScheme4_2species_PAS_noEr` remains parity-clean at `7.019s` but is still the worst GPU RSS case at `2477.1 MB`.
@@ -4792,10 +4792,15 @@ Measurements:
   and about `1014.5 MB` RSS, parity-clean but the top GPU runtime offender.
 - Fast loose-tolerance probe: about `3.0s`, but one practical mismatch in
   `pressureAnisotropy` (`2.9e-7` absolute, `7.5e-4` relative).
-- Accepted tight-GMRES route on `office` GPU1:
+- Accepted tight-GMRES route on `office` GPU1 during the local-patch probe:
   `3.412660754052922s`, `955912 KB` RSS (`933.5 MB`), `0/212` practical and
   strict mismatches, and `pressureAnisotropy` max difference
   `8.398488e-10` absolute / `1.319963e-7` relative.
+- Clean remote rerun after pushing commit `2d988b7`:
+  `3.249s` elapsed, `944388 KB` RSS (`922.3 MB`), no preconditioner build,
+  no `pas_tokamak_theta`, `0/212` mismatches, and the same
+  `pressureAnisotropy` max difference (`8.398488e-10` absolute /
+  `1.319963e-7` relative).
 
 Code/documentation changes:
 
@@ -4822,11 +4827,15 @@ Validation:
 - Office GPU1 default-policy probe with the local patch selected the tight
   unpreconditioned GMRES route, avoided a preconditioner-build line, and was
   parity-clean with the measurements above.
+- Clean `office` checkout validation after reversing the temporary patch and
+  fast-forward pulling `2d988b7` selected the same route and was parity-clean
+  with `0/212` mismatches.
 - `sphinx-build -W -b html docs docs/_build/html` passed after the README/docs
   updates.
 - `python -m pytest -q` passed with `856 passed in 357.93s (0:05:57)`.
 
 Next validation targets:
 
-- Reverse the temporary office patch, fast-forward pull the pushed commit on
-  `office`, and rerun the single focused GPU case from the clean remote state.
+- Continue with the remaining post-refactor open lanes: CPU memory offenders,
+  GPU memory offenders, and distributed-solve scaling. The bounded one-GPU
+  tokamak PAS+Er runtime offender is closed for this case.

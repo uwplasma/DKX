@@ -746,7 +746,7 @@ unpreconditioned full-restart GMRES with a tightened tolerance. This was chosen
 because the actual ``pas_tokamak_theta`` preconditioner build was not the fast
 path in the focused probe, while the tight unpreconditioned solve preserved all
 Fortran-output comparisons and reduced the runtime from about ``18.2 s`` to
-``3.4 s`` on ``tokamak_1species_PASCollisions_withEr_fullTrajectories``. The
+``3.25 s`` on ``tokamak_1species_PASCollisions_withEr_fullTrajectories``. The
 older ``xblock_tz`` GPU route remains available behind an explicit active-size
 cap for users who want to benchmark it on a different accelerator.
 
