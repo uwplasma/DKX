@@ -282,9 +282,9 @@ Current `main` CPU audit comes from `tests/scaled_example_suite_recheck_cpu_froz
 Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem`.
 The `HSX_PASCollisions_DKESTrajectories` CPU/GPU row,
 `HSX_PASCollisions_fullTrajectories` CPU row, and
-`tokamak_1species_PASCollisions_withEr_fullTrajectories` GPU row include the
-latest focused current-tip PAS reruns after the guarded PAS auto-selection
-updates.
+`tokamak_1species_PASCollisions_withEr_fullTrajectories` GPU row, and
+`geometryScheme4_2species_PAS_noEr` CPU/GPU row include the latest focused
+current-tip PAS reruns after the guarded PAS auto-selection updates.
 
 - Recorded cases: `39/39`
 - Practical status counts: `parity_ok=39`
@@ -316,7 +316,7 @@ Full per-case runtime / memory table:
 | `filteredW7XNetCDF_2species_magneticDrifts_withEr` | 95.440 | 2.264 | 0.02x | 3.085 | 0.03x | 96.2 | 536.3 | 5.58x | 904.8 | 9.41x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `filteredW7XNetCDF_2species_noEr` | 128.508 | 1.930 | 0.02x | 2.886 | 0.02x | 100.3 | 471.2 | 4.70x | 893.5 | 8.91x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `geometryScheme4_1species_PAS_withEr_DKESTrajectories` | 1.365 | 2.967 | 2.17x | 4.750 | 3.48x | 127.3 | 1064.0 | 8.36x | 1254.4 | 9.86x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_PAS_noEr` | 0.953 | 3.525 | 3.70x | 6.764 | 7.10x | 162.7 | 2013.1 | 12.37x | 2507.0 | 15.41x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `geometryScheme4_2species_PAS_noEr` | 0.953 | 1.962 | 2.06x | 4.774 | 5.01x | 162.7 | 1728.0 | 10.62x | 1817.0 | 11.17x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `geometryScheme4_2species_noEr` | 139.240 | 1.932 | 0.01x | 2.830 | 0.02x | 92.2 | 483.2 | 5.24x | 912.7 | 9.89x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `geometryScheme4_2species_noEr_withPhi1InDKE` | 293.275 | 2.256 | 0.01x | 3.339 | 0.01x | 100.6 | 506.0 | 5.03x | 943.0 | 9.37x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `geometryScheme4_2species_noEr_withQN` | 146.734 | 1.985 | 0.01x | 3.134 | 0.02x | 95.1 | 482.3 | 5.07x | 931.0 | 9.79x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |

@@ -44,7 +44,7 @@ reruns are:
 - CPU runtime: ``HSX_PASCollisions_fullTrajectories`` at ``4.027 s``
 - CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``3066.4 MB``
 - GPU runtime: ``monoenergetic_geometryScheme1`` at ``14.571 s``
-- GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2507.0 MB``
+- GPU memory: ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` at ``2097.0 MB``
 
 In other words, all examples run on CPU and GPU, but a handful of cases remain the clear optimization targets.
 
@@ -65,6 +65,10 @@ Recent current-tip PAS full-trajectory fix:
 Recent current-tip GPU tokamak PAS+Er fix:
 
 - ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now uses a bounded one-GPU analytic-tokamak PAS+Er route that avoids the expensive ``xblock_tz`` setup and tightens the GMRES tolerance to ``1e-8``. The focused clean-remote ``office`` GPU probe completed parity-clean in ``3.249 s`` with about ``922 MB`` RSS, down from the previous release-table entry of ``18.199 s`` and ``1014.5 MB``. The older ``xblock_tz`` route remains available as an explicit opt-in with ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``.
+
+Recent current-tip geometry4 PAS memory fix:
+
+- ``geometryScheme4_2species_PAS_noEr`` now uses direct top-level ``pas_tz`` instead of wrapping the same angular block inside the constraint-Schur preconditioner on bounded near-zero-:math:`E_r` geometryScheme=4 PAS cases. The focused CPU probe completed parity-clean in ``1.962 s`` with about ``1728 MB`` RSS, while the clean-remote ``office`` GPU probe completed parity-clean in ``4.774 s`` with about ``1817 MB`` RSS. Disabling the policy with ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ=0`` restored the heavier Schur route in the same GPU probe (``5.899 s`` and about ``2507 MB`` RSS).
 
 External solver-library gates
 -----------------------------

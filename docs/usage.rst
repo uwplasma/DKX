@@ -762,6 +762,13 @@ performance without changing the input file:
   cap for the older GPU ``xblock_tz`` branch on bounded tokamak PAS+Er cases
   (default: ``0``, disabled). Set this to a positive active-DOF cap only when a
   local benchmark shows ``xblock_tz`` is preferable for that GPU/case.
+- ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ``: enable the bounded
+  geometryScheme=4 PAS no-Er memory policy that selects top-level ``pas_tz``
+  instead of Schur (default: auto/on; set ``0``/``false`` to restore Schur).
+- ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_MIN`` /
+  ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MIN`` /
+  ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MAX``: angular-block and
+  active-DOF guards for that geometry4 PAS memory policy.
 
 - ``SFINCS_JAX_PAS_PROJECT_CONSTRAINTS``: enable PAS-specific constraint projection for
   ``constraintScheme=2`` RHSMode=1 solves (drop explicit source unknowns and enforce the
