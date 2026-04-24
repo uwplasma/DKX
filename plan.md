@@ -4435,3 +4435,17 @@ Validation:
   `5 passed in 1.86s`.
 - `COVERAGE_FILE=/tmp/sfincs_jax_warning_probe.coverage python -m pytest -q tests/test_collision_physics_gates.py --cov=sfincs_jax --cov-report=term | rg 'DeprecationWarning|structured_velocity|passed'`
   reported no `DeprecationWarning` and `7 passed in 3.17s`.
+
+### 19.70 Full-suite gate at branch tip after warning cleanup
+
+Ran the full local suite at branch tip after the structured-velocity docstring
+warning cleanup.
+
+Validation:
+
+- `python -m pytest -q` passed with `838 passed in 344.44s (0:05:44)`.
+
+Notes:
+
+- This confirms the pushed branch tip remains green after the collision,
+  VMEC-reader, documentation, and CI-warning batches.
