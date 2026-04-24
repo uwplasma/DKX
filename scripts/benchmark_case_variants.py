@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import resource
 import subprocess
 import sys
 import tempfile
@@ -35,6 +34,32 @@ def _mismatch_summary(a: Path, b: Path, *, rtol: float, atol: float) -> dict[str
     diffs = compare_sfincs_outputs(a_path=a, b_path=b, rtol=rtol, atol=atol)
     bad = [d.key for d in diffs if not d.ok]
     return {"count": len(bad), "sample": bad[:8]}
+
+
+def _tail_text(value: str | bytes | None, limit: int) -> str:
+    """Return a JSON-safe tail for subprocess output.
+
+    ``subprocess.TimeoutExpired`` can expose captured streams as bytes even when
+    ``subprocess.run(..., text=True)`` was requested, so normalize here before
+    serializing benchmark rows.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        text = value.decode(errors="replace")
+    else:
+        text = value
+    return text[-int(limit) :]
+
+
+def _last_rhs1_preconditioner(stdout: str) -> str | None:
+    marker = "building RHSMode=1 preconditioner="
+    for line in reversed(str(stdout).splitlines()):
+        if marker not in line:
+            continue
+        value = line.split(marker, 1)[1].strip()
+        return value.split()[0] if value else None
+    return None
 
 
 def main() -> int:
@@ -127,8 +152,8 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_kb": resource.
                         "returncode": None,
                         "env": extra_env,
                         "status": "timeout",
-                        "stdout_tail": (exc.stdout or "")[-2500:],
-                        "stderr_tail": (exc.stderr or "")[-2000:],
+                        "stdout_tail": _tail_text(exc.stdout, 2500),
+                        "stderr_tail": _tail_text(exc.stderr, 2000),
                     }
                 )
                 continue
@@ -141,8 +166,8 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_kb": resource.
             }
             if proc.returncode != 0:
                 row["status"] = "error"
-                row["stderr_tail"] = proc.stderr[-2000:]
-                row["stdout_tail"] = proc.stdout[-2500:]
+                row["stderr_tail"] = _tail_text(proc.stderr, 2000)
+                row["stdout_tail"] = _tail_text(proc.stdout, 2500)
                 rows.append(row)
                 continue
             marker = [line for line in proc.stdout.splitlines() if line.startswith("@@RESULT@@")][-1]
@@ -154,6 +179,7 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_kb": resource.
                     "status": "ok",
                     "elapsed_s": round(float(result["elapsed_s"]), 3),
                     "ru_maxrss_kb": int(result["ru_maxrss_kb"]),
+                    "rhs1_preconditioner": _last_rhs1_preconditioner(proc.stdout),
                     "used_adaptive_pas_smoother": "adaptive PAS smoother" in proc.stdout,
                     "used_pas_tokamak_theta": "preconditioner=pas_tokamak_theta" in proc.stdout,
                     "used_lgmres": "solve method forced by env -> lgmres" in proc.stdout,

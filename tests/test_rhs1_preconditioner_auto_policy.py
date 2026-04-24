@@ -8,6 +8,7 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     rhs1_fp_dkes_env_preconditioner_kind,
     rhs1_large_fp_near_zero_er_override_kind,
     rhs1_pas_auto_large_base_kind,
+    rhs1_pas_dkes_cpu_pas_tz_preferred,
     rhs1_pas_dkes_xblock_allowed,
     rhs1_pas_family_refinement_kind,
     rhs1_pas_tokamak_cpu_xblock_preferred,
@@ -375,6 +376,56 @@ def test_dkes_xblock_policy_bounds_backend_and_block_size() -> None:
         max_l=36,
         xblock_tz_limit=2500,
     )
+
+
+def test_dkes_cpu_pas_tz_policy_targets_large_cpu_angular_blocks(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX", raising=False)
+
+    assert rhs1_pas_dkes_cpu_pas_tz_preferred(
+        has_pas=True,
+        use_dkes=True,
+        backend="cpu",
+        n_theta=5,
+        n_zeta=15,
+        max_l=20,
+        active_size=7000,
+    )
+    assert not rhs1_pas_dkes_cpu_pas_tz_preferred(
+        has_pas=True,
+        use_dkes=True,
+        backend="gpu",
+        n_theta=5,
+        n_zeta=15,
+        max_l=20,
+        active_size=7000,
+    )
+    assert not rhs1_pas_dkes_cpu_pas_tz_preferred(
+        has_pas=True,
+        use_dkes=True,
+        backend="cpu",
+        n_theta=5,
+        n_zeta=15,
+        max_l=10,
+        active_size=7000,
+    )
+
+
+def test_dkes_cpu_pas_tz_policy_env_bounds(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN", "2000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX", "6000")
+
+    kwargs = dict(
+        has_pas=True,
+        use_dkes=True,
+        backend="cpu",
+        n_theta=5,
+        n_zeta=15,
+        max_l=20,
+    )
+    assert not rhs1_pas_dkes_cpu_pas_tz_preferred(**kwargs, active_size=7000)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN", "1200")
+    assert rhs1_pas_dkes_cpu_pas_tz_preferred(**kwargs, active_size=6000)
 
 
 def test_tokamak_pas_gpu_and_cpu_xblock_policies(monkeypatch) -> None:
