@@ -4449,3 +4449,52 @@ Notes:
 
 - This confirms the pushed branch tip remains green after the collision,
   VMEC-reader, documentation, and CI-warning batches.
+
+### 19.71 IO helper validation extension: export-f, Phi1 history, and localization
+
+Extended the cheap IO/helper validation lane without adding a solve:
+
+- Added export-`f` tests for periodic linear wrapping in theta/zeta, identity
+  X and xi maps, the single-zeta shortcut, and invalid zeta/x/xi option errors.
+- Added `Phi1` history-alignment tests for empty histories and short non-frozen
+  histories, verifying that output diagnostics are padded with the result or
+  latest accepted iterate rather than silently reusing an initial guess.
+- Added equilibrium localization tests for inputs without an equilibrium file
+  and for unquoted legacy Boozer keys, complementing the existing quoted,
+  VMEC, Boozer, and non-stellarator-symmetric localization coverage.
+- Updated `docs/testing.rst` to describe the IO/helper gate as part of the
+  release validation stack.
+
+Validation:
+
+- `python -m py_compile tests/test_io_export_and_h5_coverage.py tests/test_phi1_history_alignment.py tests/test_input_compat.py`
+- `python -m ruff check tests/test_io_export_and_h5_coverage.py tests/test_phi1_history_alignment.py tests/test_input_compat.py`
+- `python -m pytest -q tests/test_io_export_and_h5_coverage.py tests/test_phi1_history_alignment.py tests/test_input_compat.py tests/test_io_output_policy_coverage.py tests/test_io_cache_helpers.py`
+  passed with `47 passed in 3.10s`.
+- `COVERAGE_FILE=/tmp/sfincs_jax_io_probe.coverage python -m pytest -q tests/test_io_export_and_h5_coverage.py tests/test_phi1_history_alignment.py tests/test_input_compat.py tests/test_io_output_policy_coverage.py tests/test_io_cache_helpers.py --cov=sfincs_jax --cov-report=term | rg 'sfincs_jax/io.py|sfincs_jax/input_compat.py|TOTAL|passed|failed|Fatal|DeprecationWarning'`
+  reported `sfincs_jax/io.py` at `29%`, `sfincs_jax/input_compat.py` at
+  `79%`, and `47 passed in 6.63s`.
+
+Next validation targets:
+
+- Build docs with warnings as errors, then run the full suite once the IO docs
+  paragraph is in place.
+- Continue choosing cheap physics/numerics invariants from the remaining
+  Fokker-Planck branches before opening a larger PAS performance benchmark.
+
+### 19.72 Full-suite gate after IO helper validation extension
+
+Ran the full local suite after the export-`f`, `Phi1` history, localization,
+and testing-documentation updates.
+
+Validation:
+
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `844 passed in 425.55s (0:07:05)`.
+
+Notes:
+
+- The test count increased from `838` to `844`, matching the six new bounded
+  IO/helper tests.
+- The full-suite runtime stayed within the local CI target band and the branch
+  remains green after touching output/export/path validation.

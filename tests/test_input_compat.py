@@ -226,6 +226,41 @@ def test_localize_equilibrium_file_in_place_patches_nonstelsym_boozer_key(tmp_pa
     assert f'JGboozer_file_NonStelSym = "{localized.name}"' in patched
 
 
+def test_localize_equilibrium_file_in_place_handles_no_equilibrium_file(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 1\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    assert localize_equilibrium_file_in_place(input_namelist=input_path, overwrite=True) is None
+    assert "equilibriumFile" not in input_path.read_text(encoding="utf-8")
+
+
+def test_localize_equilibrium_file_in_place_patches_unquoted_legacy_key(tmp_path: Path) -> None:
+    source_dir = tmp_path / "equilibria"
+    source_dir.mkdir()
+    source_bc = source_dir / "source.bc"
+    source_bc.write_text("placeholder", encoding="utf-8")
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 10\n"
+        f"  fort996boozer_file = {source_bc}\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    localized = localize_equilibrium_file_in_place(input_namelist=input_path, overwrite=True)
+
+    assert localized == (tmp_path / source_bc.name).resolve()
+    assert localized.read_text(encoding="utf-8") == "placeholder"
+    patched = input_path.read_text(encoding="utf-8")
+    assert f'fort996boozer_file = "{source_bc.name}"' in patched
+
+
 def test_resolve_equilibrium_prefers_vmec_netcdf_sibling(tmp_path: Path) -> None:
     txt = tmp_path / "eq.txt"
     nc = tmp_path / "eq.nc"
