@@ -6,6 +6,7 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     rhs1_gpu_sparse_fallback_skip_allowed,
     rhs1_fp_dkes_default_kind,
     rhs1_fp_dkes_env_preconditioner_kind,
+    rhs1_geometry4_pas_memory_pas_tz_preferred,
     rhs1_large_fp_near_zero_er_override_kind,
     rhs1_pas_auto_large_base_kind,
     rhs1_pas_dkes_cpu_pas_tz_preferred,
@@ -533,6 +534,39 @@ def test_full_cpu_pas_tz_policy_env_bounds(monkeypatch) -> None:
     assert not rhs1_pas_full_cpu_pas_tz_preferred(**kwargs, active_size=7000)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", "950")
     assert rhs1_pas_full_cpu_pas_tz_preferred(**kwargs, active_size=6000)
+
+
+def test_geometry4_pas_memory_pas_tz_policy(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MAX", raising=False)
+    common = dict(
+        rhs1_precond_env="",
+        current_kind="schur",
+        has_pas=True,
+        has_fp=False,
+        use_dkes=False,
+        geom_scheme=4,
+        n_theta=8,
+        n_zeta=11,
+        max_l=25,
+        active_size=10898,
+        er_abs=0.0,
+        schur_er_min=1.0e-12,
+        pas_tz_applicable=True,
+    )
+    assert rhs1_geometry4_pas_memory_pas_tz_preferred(**common)
+    assert not rhs1_geometry4_pas_memory_pas_tz_preferred(**{**common, "current_kind": "pas_tz"})
+    assert not rhs1_geometry4_pas_memory_pas_tz_preferred(**{**common, "rhs1_precond_env": "schur"})
+    assert not rhs1_geometry4_pas_memory_pas_tz_preferred(**{**common, "geom_scheme": 11})
+    assert not rhs1_geometry4_pas_memory_pas_tz_preferred(**{**common, "active_size": 1000})
+    assert not rhs1_geometry4_pas_memory_pas_tz_preferred(**{**common, "er_abs": 1.0e-3})
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ", "0")
+    assert not rhs1_geometry4_pas_memory_pas_tz_preferred(**common)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MAX", "9000")
+    assert not rhs1_geometry4_pas_memory_pas_tz_preferred(**common)
 
 
 def test_tokamak_pas_gpu_and_cpu_xblock_policies(monkeypatch) -> None:
