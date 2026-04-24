@@ -713,14 +713,6 @@ The current executable-side scaling story is functional but not yet the final
 research-grade result. On the challenging geometryScheme=2 benchmark inputs used
 in this repository, the current `main` branch produced the following measurements:
 
-.. figure:: _static/figures/parallel/strong_scaling_snapshot.png
-   :alt: Publication-style strong scaling summary for sfincs_jax and SFINCS v3
-   :width: 96%
-
-   Current measured scaling snapshot. The figure compares matched CPU strong
-   scaling against Fortran MPI, shows the current transport-worker behavior,
-   and records the current office GPU status including the large-case timeout.
-
 - Local CPU sharded RHSMode=1 benchmark on
   ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
 
@@ -800,12 +792,6 @@ The fresh measured result on current ``main`` was still below ideal:
 - sequential 1-GPU execution of two cases: ``107.65 s`` wall time
 - two concurrent 1-GPU runs on two GPUs: ``194.08 s`` wall time
 - measured throughput speedup: ``0.55x``
-
-.. figure:: _static/figures/parallel/gpu_case_throughput.png
-   :alt: Two-GPU throughput comparison on office
-   :width: 88%
-
-   Fresh office rerun of the production-style two-case GPU throughput lane.
 
 This confirms the current technical state more clearly than the older snapshot:
 the code is correct and reproducible on multi-GPU launches, but the current
