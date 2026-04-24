@@ -4839,3 +4839,50 @@ Next validation targets:
 - Continue with the remaining post-refactor open lanes: CPU memory offenders,
   GPU memory offenders, and distributed-solve scaling. The bounded one-GPU
   tokamak PAS+Er runtime offender is closed for this case.
+
+### 19.82 Geometry4 PAS memory-knob rejection sweep
+
+Ran a bounded memory-offender check on `geometryScheme4_2species_PAS_noEr`
+before changing more defaults. This was intentionally a small knob sweep, not a
+new algorithm, to verify whether existing chunk/cap/mixed-precision controls
+already provide a safe win on the current branch.
+
+CPU frozen-reference sweep:
+
+- Case:
+  `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/geometryScheme4_2species_PAS_noEr`
+- Default: `2.743s` elapsed, `1883340800` macOS `ru_maxrss` units,
+  `rhs1_preconditioner=schur`, `0` Fortran mismatches.
+- `SFINCS_JAX_PRECOND_DTYPE=float32`: parity-clean and faster (`2.343s`),
+  but higher RSS (`1997324288`), so not a memory win.
+- `SFINCS_JAX_PRECOND_PAS_MAX_COLS=32`: parity-clean and faster (`2.312s`),
+  but higher RSS (`1999585280`), so not a memory win.
+- `SFINCS_JAX_PRECOND_MAX_MB=64`: parity-clean, `2.674s`, higher RSS
+  (`1929150464`).
+- `SFINCS_JAX_PRECOND_CHUNK=64`: parity-clean, `2.579s`, higher RSS
+  (`1960198144`).
+
+GPU clean-remote sweep on `office` GPU1:
+
+- Case staged at
+  `/tmp/sfincs_jax_gpu_cases/geometryScheme4_2species_PAS_noEr`.
+- Default: `6.246s` elapsed, `2603768 KB` RSS,
+  `rhs1_preconditioner=schur`, `0` Fortran mismatches.
+- `SFINCS_JAX_PRECOND_DTYPE=float32`: timed out at `180s` after a bad
+  stage-2/`pas_hybrid` fallback; reject for automatic use.
+- `SFINCS_JAX_PRECOND_PAS_MAX_COLS=32`: parity-clean, but slower
+  (`8.559s`) and only reduced RSS to `2566568 KB` (~1.4%).
+- `SFINCS_JAX_PRECOND_MAX_MB=64`: parity-clean, but slower (`8.862s`) and
+  only reduced RSS to `2567608 KB`.
+- `SFINCS_JAX_PRECOND_CHUNK=64`: parity-clean, but slower (`8.192s`) and
+  only reduced RSS to `2564480 KB`.
+
+Decision:
+
+- Do not promote any existing memory cap/chunk/mixed-precision knob for this
+  offender. The GPU memory savings are too small for the runtime cost, and the
+  CPU variants do not reduce RSS.
+- The next real memory step for geometry4 PAS should be algorithmic: reduce the
+  Schur/PAS preconditioner live working set, avoid duplicated dense block
+  materialization, or add a genuinely streaming/apply-only angular solve rather
+  than only retuning chunk sizes.
