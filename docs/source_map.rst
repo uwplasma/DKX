@@ -229,7 +229,8 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   lightweight loaders and physics metrics for checked-in publication artifacts. This
   module is independent of the heavy solver path, so documentation and CI can verify
   collisionality, high-collisionality trend, trajectory-sweep, and dashboard artifacts
-  without rerunning large scans.
+  plus frozen CPU/GPU Fortran-suite benchmark summaries without rerunning large scans
+  or example-suite audits.
 - ``sfincs_jax/phi1_newton_policy.py``:
   bounded nonlinear/Newton policy for Phi1 solves, including active-DOF mode
   selection, restart sizing, frozen-Jacobian cache policy, and line-search policy.
