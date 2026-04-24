@@ -85,16 +85,46 @@ def write_audit_summary(
     w7x_geometry_output: Path,
     n_fit: int,
     min_nuprime_for_full_limit: float,
+    fallback_summary_json: Path = DEFAULT_SUMMARY_JSON,
 ) -> dict[str, object]:
+    precomputed = _load_precomputed_geometry_audits(
+        fallback_summary_json=Path(fallback_summary_json),
+        lhd_geometry_output=Path(lhd_geometry_output),
+        w7x_geometry_output=Path(w7x_geometry_output),
+    )
     payload = build_simakov_helander_limit_audit_summary(
         artifact_dir=Path(artifact_dir),
         geometry_outputs={"lhd": Path(lhd_geometry_output), "w7x": Path(w7x_geometry_output)},
+        precomputed_geometry_audits=precomputed,
         n_fit=int(n_fit),
         min_nuprime_for_full_limit=float(min_nuprime_for_full_limit),
     )
     summary_json.parent.mkdir(parents=True, exist_ok=True)
     summary_json.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return payload
+
+
+def _load_precomputed_geometry_audits(
+    *,
+    fallback_summary_json: Path,
+    lhd_geometry_output: Path,
+    w7x_geometry_output: Path,
+) -> dict[str, dict[str, object]]:
+    """Load checked-in geometry audits when bulky HDF5 outputs are unavailable."""
+
+    if Path(lhd_geometry_output).exists() and Path(w7x_geometry_output).exists():
+        return {}
+    if not Path(fallback_summary_json).exists():
+        return {}
+    payload = json.loads(Path(fallback_summary_json).read_text())
+    if payload.get("metadata", {}).get("kind") != "simakov_helander_limit_audit":
+        return {}
+    audits: dict[str, dict[str, object]] = {}
+    for case in ("lhd", "w7x"):
+        audit = payload.get("cases", {}).get(case, {}).get("appendix_b_geometry_audit")
+        if isinstance(audit, dict):
+            audits[case] = audit
+    return audits
 
 
 def _plot_inverse_tail_panel(ax, *, artifact_dir: Path) -> None:
@@ -240,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
         w7x_geometry_output=Path(args.w7x_geometry_output),
         n_fit=int(args.n_fit),
         min_nuprime_for_full_limit=float(args.min_nuprime_for_full_limit),
+        fallback_summary_json=DEFAULT_SUMMARY_JSON,
     )
     plot_audit(payload=payload, artifact_dir=Path(args.artifact_dir), out_dir=Path(args.out_dir), stem=str(args.stem))
     print(f"Wrote Simakov-Helander audit summary to {Path(args.summary_json)}")
