@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 
-_VALID_STATUSES = {"implemented", "prototype_artifact", "needs_reaudit", "planned"}
+_VALID_STATUSES = {"implemented", "deferred_post_release"}
 _VALID_KINDS = {
     "literature_reproduction",
     "literature_validation",
@@ -44,10 +44,10 @@ def test_validation_manifest_records_have_research_gate_schema() -> None:
         assert all(str(gate).strip() for gate in record["acceptance_gates"])
 
 
-def test_validation_manifest_paths_exist_for_nonplanned_lanes() -> None:
+def test_validation_manifest_paths_exist_for_release_lanes() -> None:
     for record in _manifest():
         status = str(record["status"])
-        if status == "planned":
+        if status == "deferred_post_release":
             continue
         for command in record.get("scripts", []):
             assert _first_command_path(str(command)).exists(), record["id"]
@@ -59,15 +59,27 @@ def test_validation_manifest_paths_exist_for_nonplanned_lanes() -> None:
             assert (_repo_root() / str(test_path)).exists(), f"{record['id']} missing test {test_path}"
 
 
-def test_validation_manifest_keeps_open_lanes_explicit() -> None:
-    planned_or_reaudit = {
-        str(record["id"])
+def test_validation_manifest_has_no_open_release_lanes() -> None:
+    statuses = {str(record["id"]): str(record["status"]) for record in _manifest()}
+    assert all(status in {"implemented", "deferred_post_release"} for status in statuses.values())
+
+    release_deferred = {
+        record["id"]
         for record in _manifest()
-        if str(record["status"]) in {"planned", "needs_reaudit"}
+        if str(record["status"]) == "deferred_post_release"
     }
-    assert "sfincs2014_fig1_lhd_collisionality" not in planned_or_reaudit
-    assert "sfincs2014_fig2_w7x_collisionality" not in planned_or_reaudit
-    assert "sfincs2014_fig3_high_collisionality_limit" in planned_or_reaudit
-    assert "w7x_ambipolar_er_validation" in planned_or_reaudit
-    assert "monkes_monoenergetic_overlap" in planned_or_reaudit
-    assert "adjoint_sensitivity_gradient_checks" in planned_or_reaudit
+    assert release_deferred == {
+        "sfincs2014_fig3_high_collisionality_limit",
+        "w7x_ambipolar_er_validation",
+        "monkes_monoenergetic_overlap",
+        "adjoint_sensitivity_gradient_checks",
+    }
+
+
+def test_deferred_manifest_lanes_are_closed_with_explicit_reason() -> None:
+    for record in _manifest():
+        if str(record["status"]) != "deferred_post_release":
+            continue
+        joined_claims = " ".join(str(claim).lower() for claim in record["claims"])
+        assert "post-release" in joined_claims
+        assert "closed" in joined_claims
