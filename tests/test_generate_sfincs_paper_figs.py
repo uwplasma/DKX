@@ -366,8 +366,12 @@ def test_main_plot_only_allows_single_selected_operator_output(
     work_dir = tmp_path / "work"
     summary_dir = tmp_path / "summary"
     out_dir = tmp_path / "figures"
-    _write_fake_transport_output(work_dir / "lhd_co1" / "nu_n_0.25", nu_n=0.25, diagonal_scale=2.0)
-    _write_fake_transport_output(work_dir / "lhd_co1" / "nu_n_1.0", nu_n=1.0, diagonal_scale=4.0)
+    for nu_n, scale in ((0.02668, 1.0), (0.1238, 2.0), (0.5748, 3.0), (2.668, 4.0)):
+        _write_fake_transport_output(
+            work_dir / "lhd_co1" / f"nu_n_{nu_n:.4g}",
+            nu_n=nu_n,
+            diagonal_scale=scale,
+        )
 
     monkeypatch.setattr(
         sys,
@@ -377,6 +381,7 @@ def test_main_plot_only_allows_single_selected_operator_output(
             "--case",
             "lhd",
             "--plot-only",
+            "--fast",
             "--collision-operators",
             "1",
             "--work-dir",
@@ -390,7 +395,44 @@ def test_main_plot_only_allows_single_selected_operator_output(
 
     mod.main()
 
-    payload = json.loads((summary_dir / "lhd_collisionality_summary.json").read_text())
+    payload = json.loads((summary_dir / "lhd_collisionality_fast_summary.json").read_text())
     assert payload["metadata"]["labels_to_collision_operator"] == {"PAS": 1}
-    assert [row["label"] for row in payload["rows"]] == ["PAS", "PAS"]
+    assert [row["label"] for row in payload["rows"]] == ["PAS", "PAS", "PAS", "PAS"]
     assert (out_dir / "sfincs_jax_fig1_lhd_collisionality.png").exists()
+
+
+def test_main_plot_only_rejects_incomplete_scan_before_rewriting_summary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _load_module()
+    work_dir = tmp_path / "work"
+    summary_dir = tmp_path / "summary"
+    out_dir = tmp_path / "figures"
+    _write_fake_transport_output(work_dir / "lhd_co1" / "nu_n_0.02668", nu_n=0.02668)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate_sfincs_paper_figs.py",
+            "--case",
+            "lhd",
+            "--plot-only",
+            "--fast",
+            "--collision-operators",
+            "1",
+            "--work-dir",
+            str(work_dir),
+            "--summary-dir",
+            str(summary_dir),
+            "--out-dir",
+            str(out_dir),
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match=r"--plot-only requires a complete scan"):
+        mod.main()
+
+    assert not (summary_dir / "lhd_collisionality_fast_summary.json").exists()
+    assert not (out_dir / "sfincs_jax_fig1_lhd_collisionality.png").exists()

@@ -377,7 +377,7 @@
     "artifacts": [],
     "claims": [
       "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature",
-      "This lane is closed for the 1.0.2 release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
+      "This lane is closed for the current release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
     ],
     "source_code": [
       "examples/publication_figures/generate_w7x_ambipolar_validation.py",
@@ -407,7 +407,7 @@
     "claims": [
       "Monoenergetic coefficients and low-collisionality trends should overlap with MONKES on shared model subsets",
       "KNOSOS-style low-collisionality ordering should be respected when exact model overlap is not available",
-      "This lane is closed for the 1.0.2 release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
+      "This lane is closed for the current release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
     ],
     "source_code": [
       "sfincs_jax/transport_matrix.py",
