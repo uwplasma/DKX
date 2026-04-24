@@ -295,6 +295,10 @@ Closed branch evidence:
 - a checked-in trend proxy now records high-collisionality tail slopes from those
   corrected artifacts:
   ``examples/publication_figures/artifacts/sfincs_jax_high_collisionality_trend_proxy_summary.json``
+- a checked-in Simakov-Helander normalization audit now records the Appendix-B
+  geometry ingredients, ``FSABHat2`` recomputation, inverse-``nu`` slope gates, and
+  explicit readiness status:
+  ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json``
 
 .. figure:: _static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png
    :alt: High-collisionality trend proxy from checked-in collisionality artifacts
@@ -307,13 +311,23 @@ Closed branch evidence:
    inverse-tail proxy, but the LHD artifact does not yet, so this figure is kept as a
    implemented trend gate rather than the final analytic-limit reproduction.
 
+.. figure:: _static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png
+   :alt: Simakov-Helander high-collisionality readiness audit
+   :width: 92%
+
+   Normalization and readiness audit for the full Simakov-Helander lane. The audit
+   confirms that checked-in ``sfincsOutput.h5`` files contain the geometry quantities
+   needed for an Appendix-B comparison, but it keeps the full analytic-limit
+   reproduction closed because the current full collisionality summaries stop near
+   ``nu'=10`` rather than a wider ``nu' >> 1`` range.
+
 Post-release acceptance criteria:
 
 - keep machine-readable summary artifacts for each full scan,
-- use the full LHD/W7-X summaries as the parent gates for later high-collisionality
-  proxy work,
-- and only restore the high-collisionality proxy after its analytic-limit comparison is
-  regenerated from the corrected artifact family.
+- keep the Simakov-Helander audit artifact in CI as the parent gate for future
+  high-collisionality scan work,
+- and only promote the deferred full analytic-limit reproduction after wider
+  high-``nu`` LHD and W7-X scans are regenerated and the readiness gate flips true.
 
 3. W7-X ambipolar-field validation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

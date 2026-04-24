@@ -121,6 +121,24 @@ fixed script:
 The full artifacts are the validation-facing collisionality lane. The fast artifacts
 remain useful as cheap branch-level regression scaffolds.
 
+Simakov-Helander high-collisionality audit:
+
+```bash
+python examples/publication_figures/generate_simakov_helander_limit_audit.py
+```
+
+This writes a bounded normalization/readiness audit for the full Appendix-B analytic
+limit lane. It uses the checked-in LHD/W7-X collisionality summaries plus
+representative `sfincsOutput.h5` geometry outputs to recompute `FSABHat2`, record the
+available Appendix-B geometry quantities, fit inverse-`nu` FP tails, and keep the full
+Simakov-Helander reproduction explicitly closed until wider high-`nu` scans are
+pinned.
+
+Pinned outputs:
+- `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json`
+- `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png`
+- `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.pdf`
+
 Autodiff and sensitivity validation:
 
 ```bash

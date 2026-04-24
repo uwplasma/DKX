@@ -5654,3 +5654,57 @@ Next deferred lane:
 - Begin `sfincs2014_fig3_high_collisionality_limit` by implementing the
   normalization-audit helpers and a wider high-`nu` run plan before launching the
   expensive LHD/W7-X scan points.
+
+### 20.9 Simakov-Helander high-collisionality audit implementation
+
+Implemented the bounded normalization/readiness audit for the deferred
+`sfincs2014_fig3_high_collisionality_limit` lane without overclaiming the full
+analytic-limit reproduction.
+
+Files and artifacts added:
+
+- `examples/publication_figures/generate_simakov_helander_limit_audit.py`,
+- `tests/test_generate_simakov_helander_limit_audit.py`,
+- `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json`,
+- `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.{png,pdf}`.
+
+Validation helper additions in `sfincs_jax/validation_artifacts.py`:
+
+- `appendix_b_geometry_audit_from_h5(...)` recomputes `FSABHat2` from `BHat`
+  and `DHat`, records the available Appendix-B geometry quantities, and emits
+  discrete proxy coefficients for the analytic high-collisionality comparison.
+- `high_collisionality_slope_sensitivity(...)` records how FP tail slopes change
+  with the number of high-`nu` points used in the log-log fit.
+- `build_simakov_helander_limit_audit_summary(...)` combines the checked-in LHD
+  and W7-X collisionality summaries with representative geometry output files and
+  records explicit readiness gates.
+
+Current audit result:
+
+- LHD and W7-X geometry outputs contain the required fields for the bounded
+  Appendix-B normalization audit.
+- Recomputed `FSABHat2` relative errors are machine precision:
+  - LHD: about `1.1e-15`,
+  - W7-X: about `5.2e-15`.
+- W7-X FP `L11`/`L12` tails satisfy the inverse-`nu` slope proxy on the current
+  checked-in scan.
+- LHD FP `L11`/`L12` tails still fail the inverse-`nu` slope proxy on the current
+  checked-in scan.
+- Both full collisionality summaries still stop near `nu'=10`, below the new
+  full-limit readiness threshold of `nu' >= 50`.
+
+Manifest and docs status:
+
+- Added the implemented `sfincs2014_simakov_helander_limit_audit` lane to
+  `examples/publication_figures/validation_manifest.json`.
+- Kept `sfincs2014_fig3_high_collisionality_limit` as
+  `deferred_post_release`; the full reproduction remains closed until wider
+  high-`nu` scans are pinned.
+- Updated `docs/paper_figures.rst`, `docs/validation_matrix.rst`,
+  `docs/testing.rst`, and `examples/publication_figures/README.md`.
+
+Next lane:
+
+- Continue to `w7x_ambipolar_er_validation`: pin defensible W7-X VMEC/Boozer
+  geometry and profiles, record finite ambipolar-root provenance, and keep the
+  literature comparison qualitative until those inputs are auditable.

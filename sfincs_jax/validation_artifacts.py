@@ -11,6 +11,7 @@ import numpy as np
 LANDREMAN_2014_URL = "https://doi.org/10.1063/1.4870077"
 LANDREMAN_2014_OPEN_PDF = "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
 SFINCS_FORTRAN_REPO_URL = "https://github.com/landreman/sfincs"
+SIMAKOV_HELANDER_HIGH_COLLISIONALITY_URL = "https://doi.org/10.1063/1.3104715"
 PAUL_2019_ADJOINT_URL = "https://arxiv.org/abs/1904.06430"
 SFINCS_ADJOINT_APS_URL = "https://meetings-archive.aps.org/dpp/2018/bp11/36/"
 
@@ -559,6 +560,330 @@ def high_collisionality_trend_summary(
             "fp_l11_l12_inverse_like": bool(fp_l11_l12_inverse_like),
         },
         "state": "asymptotic_trend_proxy" if fp_l11_l12_inverse_like else "needs_wider_high_nu_scan",
+    }
+
+
+def high_collisionality_slope_sensitivity(
+    records: Sequence[CollisionalityRecord],
+    *,
+    label: str = "Fokker-Planck",
+    elements: Sequence[str] = ("L11", "L12"),
+    n_fit_values: Sequence[int] = (2, 3, 4, 5),
+) -> list[dict[str, object]]:
+    """Return tail-slope fits for several fit-window lengths.
+
+    This is used for the Simakov-Helander audit: a robust high-collisionality
+    claim should not depend sensitively on whether the last two, three, or four
+    scan points are used for the log-log fit.
+    """
+
+    rows: list[dict[str, object]] = []
+    max_points = len([record for record in records if record.label == label])
+    for n_fit in n_fit_values:
+        if int(n_fit) < 2 or int(n_fit) > max_points:
+            continue
+        slopes = {
+            element_name: collisionality_power_law_slope(
+                records,
+                label=label,
+                element=TRANSPORT_ELEMENTS[element_name],
+                n_fit=int(n_fit),
+            )
+            for element_name in elements
+        }
+        rows.append({"n_fit": int(n_fit), "slopes": slopes})
+    return rows
+
+
+def _periodic_central_derivative(values: np.ndarray, coordinates: np.ndarray, *, axis: int) -> np.ndarray:
+    values = np.asarray(values, dtype=np.float64)
+    coordinates = np.asarray(coordinates, dtype=np.float64)
+    if coordinates.size < 2:
+        return np.zeros_like(values)
+    spacing = float(coordinates[1] - coordinates[0])
+    if not np.isfinite(spacing) or spacing == 0.0:
+        raise ValueError("Periodic derivative coordinates must have finite nonzero spacing.")
+    return (np.roll(values, -1, axis=int(axis)) - np.roll(values, 1, axis=int(axis))) / (2.0 * spacing)
+
+
+def _theta_zeta_axes(shape: tuple[int, ...], *, n_theta: int, n_zeta: int) -> tuple[int, int]:
+    if len(shape) != 2:
+        raise ValueError(f"Expected a two-dimensional geometry field, got shape {shape}.")
+    if shape == (int(n_theta), int(n_zeta)):
+        return 0, 1
+    if shape == (int(n_zeta), int(n_theta)):
+        return 1, 0
+    raise ValueError(
+        f"Geometry field shape {shape} does not match theta/zeta sizes {(int(n_theta), int(n_zeta))}."
+    )
+
+
+def appendix_b_geometry_audit_from_h5(output_h5: Path) -> dict[str, object]:
+    """Compute discrete Appendix-B geometry ingredients from a SFINCS output file.
+
+    The returned coefficients are a normalization audit, not a final validation
+    claim. They use the same checked-in geometry fields that appear in
+    ``sfincsOutput.h5`` and make the Simakov-Helander/Pfirsch-Schluter comparison
+    reproducible enough to identify which high-collisionality scans are still
+    missing before an analytic-limit overlay is promoted.
+    """
+
+    try:
+        import h5py
+    except Exception as exc:  # pragma: no cover - h5py is a package dependency.
+        raise RuntimeError("appendix_b_geometry_audit_from_h5 requires h5py.") from exc
+
+    output_h5 = Path(output_h5)
+    required = (
+        "BHat",
+        "DHat",
+        "uHat",
+        "BHat_sup_theta",
+        "BHat_sup_zeta",
+        "dBHatdtheta",
+        "dBHatdzeta",
+        "theta",
+        "zeta",
+        "GHat",
+        "IHat",
+        "iota",
+        "FSABHat2",
+    )
+    with h5py.File(output_h5, "r") as h5:
+        missing = [name for name in required if name not in h5]
+        if missing:
+            raise ValueError(f"{output_h5} is missing Appendix-B audit fields: {missing}")
+        b_hat = np.asarray(h5["BHat"], dtype=np.float64)
+        d_hat = np.asarray(h5["DHat"], dtype=np.float64)
+        u_hat = np.asarray(h5["uHat"], dtype=np.float64)
+        b_sup_theta = np.asarray(h5["BHat_sup_theta"], dtype=np.float64)
+        b_sup_zeta = np.asarray(h5["BHat_sup_zeta"], dtype=np.float64)
+        db_dtheta = np.asarray(h5["dBHatdtheta"], dtype=np.float64)
+        db_dzeta = np.asarray(h5["dBHatdzeta"], dtype=np.float64)
+        theta = np.asarray(h5["theta"], dtype=np.float64)
+        zeta = np.asarray(h5["zeta"], dtype=np.float64)
+        g_hat = float(np.asarray(h5["GHat"], dtype=np.float64))
+        i_hat = float(np.asarray(h5["IHat"], dtype=np.float64))
+        iota = float(np.asarray(h5["iota"], dtype=np.float64))
+        fsab_hat2 = float(np.asarray(h5["FSABHat2"], dtype=np.float64))
+
+    theta_axis, zeta_axis = _theta_zeta_axes(b_hat.shape, n_theta=theta.size, n_zeta=zeta.size)
+    if np.any(d_hat == 0.0):
+        raise ValueError(f"{output_h5} contains zero DHat entries.")
+    weights = 1.0 / d_hat
+    weight_sum = float(np.sum(weights))
+    if weight_sum <= 0.0 or not np.isfinite(weight_sum):
+        raise ValueError(f"{output_h5} has invalid flux-surface-average weights.")
+
+    def fsa(quantity: np.ndarray) -> float:
+        return float(np.sum(weights * np.asarray(quantity, dtype=np.float64)) / weight_sum)
+
+    def grad_parallel(quantity: np.ndarray) -> np.ndarray:
+        dtheta = _periodic_central_derivative(quantity, theta, axis=theta_axis)
+        dzeta = _periodic_central_derivative(quantity, zeta, axis=zeta_axis)
+        return (b_sup_theta * dtheta + b_sup_zeta * dzeta) / b_hat
+
+    gradpar_b = (b_sup_theta * db_dtheta + b_sup_zeta * db_dzeta) / b_hat
+    gradpar_ln_b = gradpar_b / b_hat
+    gradpar_u_b2 = grad_parallel(u_hat * b_hat * b_hat)
+    gradpar_b2_fsa = fsa(gradpar_b * gradpar_b)
+    if abs(gradpar_b2_fsa) <= np.finfo(float).tiny:
+        raise ValueError(f"{output_h5} has a near-zero <(grad_parallel B)^2> denominator.")
+
+    fsa_b2 = fsa(b_hat * b_hat)
+    fsa_u_b2 = fsa(u_hat * b_hat * b_hat)
+    fsa_u2_b2 = fsa(u_hat * u_hat * b_hat * b_hat)
+    fsa_gradlnb_gradu_b2 = fsa(gradpar_ln_b * gradpar_u_b2)
+    fsa_u_gradpar_b2 = fsa(u_hat * gradpar_b * gradpar_b)
+    g1 = (fsa_gradlnb_gradu_b2 * fsa_gradlnb_gradu_b2) / gradpar_b2_fsa - fsa(
+        (gradpar_u_b2 / b_hat) ** 2
+    )
+    g2 = fsa(u_hat * gradpar_ln_b * gradpar_u_b2) - fsa_gradlnb_gradu_b2 * fsa_u_gradpar_b2 / gradpar_b2_fsa
+    k1 = fsa_gradlnb_gradu_b2 / (2.0 * gradpar_b2_fsa)
+    k2 = 1.97213 * fsa_u_b2 / fsa_b2 - 1.03287 * 2.0 * k1 + 0.09361 * fsa_u_gradpar_b2 / gradpar_b2_fsa
+    h_geom = (fsa_u_b2 * fsa_u_b2) / fsa_b2 - fsa_u2_b2
+    g_plus_iota_i = g_hat + iota * i_hat
+    common = 0.96 * np.sqrt(2.0) * (g_plus_iota_i**2) / (iota * iota * g_hat * g_hat)
+    coefficients = {
+        "L11": float(common * 0.75 * g1),
+        "L12": float(common * (3.245 * g1 + 0.085 * g2)),
+        "L22": float(np.sqrt(2.0) * 8.0 / 5.0 * fsa_b2 * h_geom / (iota * iota * g_hat * g_hat)),
+        "L33": float(fsa_b2 * fsa_b2 / (3.0 * 0.96 * np.sqrt(2.0) * (g_plus_iota_i**2) * gradpar_b2_fsa)),
+    }
+    return {
+        "source_output": str(output_h5),
+        "grid": {
+            "n_theta": int(theta.size),
+            "n_zeta": int(zeta.size),
+            "theta_axis": int(theta_axis),
+            "zeta_axis": int(zeta_axis),
+        },
+        "geometry_scalars": {
+            "GHat": float(g_hat),
+            "IHat": float(i_hat),
+            "iota": float(iota),
+            "G_plus_iota_I": float(g_plus_iota_i),
+            "FSABHat2_output": float(fsab_hat2),
+            "FSABHat2_recomputed": float(fsa_b2),
+            "FSABHat2_relative_error": float(abs(fsa_b2 - fsab_hat2) / max(abs(fsab_hat2), np.finfo(float).tiny)),
+        },
+        "appendix_b_discrete_quantities": {
+            "G1": float(g1),
+            "G2": float(g2),
+            "K1": float(k1),
+            "K2": float(k2),
+            "H": float(h_geom),
+            "gradpar_b_rms": float(np.sqrt(abs(gradpar_b2_fsa))),
+            "fsa_u_b2": float(fsa_u_b2),
+            "fsa_u2_b2": float(fsa_u2_b2),
+        },
+        "transport_matrix_coefficients_over_nuprime": coefficients,
+        "notes": [
+            "Coefficients follow the Appendix-B structure using checked-in normalized sfincs_jax output fields.",
+            "Use these values as an audit of normalization and geometry ingredients, not as a final analytic-limit acceptance gate.",
+        ],
+    }
+
+
+def _inverse_tail_ratio(
+    records: Sequence[CollisionalityRecord],
+    *,
+    label: str,
+    element: tuple[int, int],
+    coefficient_over_nuprime: float,
+) -> dict[str, float]:
+    nuprime, values = transport_element_abs_series(records, label=label, element=element)
+    last_nu = float(nuprime[-1])
+    last_value = float(values[-1])
+    predicted = abs(float(coefficient_over_nuprime)) / max(last_nu, np.finfo(float).tiny)
+    return {
+        "nuprime": last_nu,
+        "observed_abs": last_value,
+        "appendix_b_proxy_abs": float(predicted),
+        "observed_to_proxy_ratio": float(last_value / max(predicted, np.finfo(float).tiny)),
+    }
+
+
+def _simakov_case_summary(
+    records: Sequence[CollisionalityRecord],
+    *,
+    geometry_audit: Mapping[str, object] | None,
+    n_fit: int,
+    min_nuprime_for_full_limit: float,
+    target_slope: float,
+    slope_tolerance: float,
+) -> dict[str, object]:
+    trend = high_collisionality_trend_summary(records, n_fit=n_fit)
+    sensitivity = high_collisionality_slope_sensitivity(records, n_fit_values=(2, 3, 4, 5))
+    slopes = trend["slopes"]["Fokker-Planck"]  # type: ignore[index]
+    fp_l11_l12_target_like = all(
+        abs(float(slopes[name]) - float(target_slope)) <= float(slope_tolerance) for name in ("L11", "L12")
+    )
+    grid = collisionality_grid(records)
+    max_nuprime = float(max(grid))
+    scan_extends_to_required_high_nu = max_nuprime >= float(min_nuprime_for_full_limit)
+    appendix_ratios: dict[str, object] = {}
+    if geometry_audit is not None:
+        coeffs = geometry_audit.get("transport_matrix_coefficients_over_nuprime", {})
+        if isinstance(coeffs, Mapping):
+            for name in ("L11", "L12", "L22", "L33"):
+                if name in coeffs:
+                    appendix_ratios[name] = _inverse_tail_ratio(
+                        records,
+                        label="Fokker-Planck",
+                        element=TRANSPORT_ELEMENTS[name],
+                        coefficient_over_nuprime=float(coeffs[name]),
+                    )
+    return {
+        "nuprime_grid": grid,
+        "max_nuprime": max_nuprime,
+        "trend": trend,
+        "slope_sensitivity": sensitivity,
+        "appendix_b_geometry_audit": dict(geometry_audit) if geometry_audit is not None else None,
+        "appendix_b_proxy_ratios_at_max_nuprime": appendix_ratios,
+        "gates": {
+            "scan_extends_to_required_high_nu": bool(scan_extends_to_required_high_nu),
+            "fp_l11_l12_target_inverse_slope": bool(fp_l11_l12_target_like),
+            "pas_l11_l12_positive": bool(trend["gates"]["pas_l11_l12_positive"]),  # type: ignore[index]
+            "appendix_b_geometry_inputs_available": bool(geometry_audit is not None),
+        },
+        "state": "ready_for_full_overlay" if scan_extends_to_required_high_nu and fp_l11_l12_target_like else "needs_wider_high_nu_scan",
+    }
+
+
+def build_simakov_helander_limit_audit_summary(
+    *,
+    artifact_dir: Path,
+    artifacts: Mapping[str, str] = DEFAULT_PUBLICATION_ARTIFACTS,
+    geometry_outputs: Mapping[str, Path] | None = None,
+    n_fit: int = 3,
+    min_nuprime_for_full_limit: float = 50.0,
+    target_slope: float = -1.0,
+    slope_tolerance: float = 0.35,
+) -> dict[str, object]:
+    """Build the bounded audit for the Simakov-Helander high-collisionality lane."""
+
+    artifact_dir = Path(artifact_dir)
+    lhd = load_collisionality_records(artifact_dir / artifacts["lhd_collisionality"])
+    w7x = load_collisionality_records(artifact_dir / artifacts["w7x_collisionality"])
+    geometry_audits: dict[str, Mapping[str, object] | None] = {"lhd": None, "w7x": None}
+    if geometry_outputs is not None:
+        for case in ("lhd", "w7x"):
+            path = geometry_outputs.get(case)
+            if path is not None and Path(path).exists():
+                geometry_audits[case] = appendix_b_geometry_audit_from_h5(Path(path))
+
+    cases = {
+        "lhd": _simakov_case_summary(
+            lhd,
+            geometry_audit=geometry_audits["lhd"],
+            n_fit=n_fit,
+            min_nuprime_for_full_limit=min_nuprime_for_full_limit,
+            target_slope=target_slope,
+            slope_tolerance=slope_tolerance,
+        ),
+        "w7x": _simakov_case_summary(
+            w7x,
+            geometry_audit=geometry_audits["w7x"],
+            n_fit=n_fit,
+            min_nuprime_for_full_limit=min_nuprime_for_full_limit,
+            target_slope=target_slope,
+            slope_tolerance=slope_tolerance,
+        ),
+    }
+    full_ready = all(bool(case["state"] == "ready_for_full_overlay") for case in cases.values())
+    geometry_ready = all(bool(case["gates"]["appendix_b_geometry_inputs_available"]) for case in cases.values())  # type: ignore[index]
+    return {
+        "metadata": {
+            "schema_version": 1,
+            "kind": "simakov_helander_limit_audit",
+            "literature": [
+                LANDREMAN_2014_URL,
+                LANDREMAN_2014_OPEN_PDF,
+                SIMAKOV_HELANDER_HIGH_COLLISIONALITY_URL,
+            ],
+            "source_artifacts": {
+                "lhd_collisionality": artifacts["lhd_collisionality"],
+                "w7x_collisionality": artifacts["w7x_collisionality"],
+            },
+            "notes": [
+                "This artifact audits the normalization and high-nu sufficiency for the Appendix-B analytic-limit lane.",
+                "It intentionally keeps the full reproduction gate closed until a wider nu' >> 1 scan is checked in.",
+                "The current full collisionality summaries stop near nu'=10, below the default full-limit threshold.",
+            ],
+        },
+        "configuration": {
+            "n_fit": int(n_fit),
+            "min_nuprime_for_full_limit": float(min_nuprime_for_full_limit),
+            "target_fp_slope": float(target_slope),
+            "slope_tolerance": float(slope_tolerance),
+        },
+        "cases": cases,
+        "gates": {
+            "appendix_b_geometry_inputs_available": bool(geometry_ready),
+            "all_cases_ready_for_full_overlay": bool(full_ready),
+            "full_simakov_helander_reproduction_closed": bool(not full_ready),
+        },
     }
 
 

@@ -1,0 +1,317 @@
+{
+  "cases": {
+    "lhd": {
+      "appendix_b_geometry_audit": {
+        "appendix_b_discrete_quantities": {
+          "G1": -0.007328502478398558,
+          "G2": 0.0021607004158803985,
+          "H": -0.1391193011366216,
+          "K1": -0.18084411392857827,
+          "K2": 0.3872753905171791,
+          "fsa_u2_b2": 0.1391193011366216,
+          "fsa_u_b2": 2.1625601031662795e-17,
+          "gradpar_b_rms": 0.09056531169137183
+        },
+        "geometry_scalars": {
+          "FSABHat2_output": 0.9886469829487684,
+          "FSABHat2_recomputed": 0.9886469829487673,
+          "FSABHat2_relative_error": 1.1229721465530312e-15,
+          "GHat": 3.7481,
+          "G_plus_iota_I": 3.7481,
+          "IHat": 0.0,
+          "iota": 0.4542
+        },
+        "grid": {
+          "n_theta": 15,
+          "n_zeta": 13,
+          "theta_axis": 1,
+          "zeta_axis": 0
+        },
+        "notes": [
+          "Coefficients follow the Appendix-B structure using checked-in normalized sfincs_jax output fields.",
+          "Use these values as an audit of normalization and geometry ingredients, not as a final analytic-limit acceptance gate."
+        ],
+        "source_output": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/publication_figures/output/lhd_co0/nu_n_2.668/sfincsOutput.h5",
+        "transport_matrix_coefficients_over_nuprime": {
+          "L11": -0.0361716627961521,
+          "L12": -0.15529406407239038,
+          "L22": -0.10738583898785325,
+          "L33": 2.082710439941521
+        }
+      },
+      "appendix_b_proxy_ratios_at_max_nuprime": {
+        "L11": {
+          "appendix_b_proxy_abs": 0.003617166906904296,
+          "nuprime": 9.999998265799999,
+          "observed_abs": 0.009556720728196192,
+          "observed_to_proxy_ratio": 2.642045825962503
+        },
+        "L12": {
+          "appendix_b_proxy_abs": 0.015529409100349166,
+          "nuprime": 9.999998265799999,
+          "observed_abs": 0.03284035490507749,
+          "observed_to_proxy_ratio": 2.1147201862522316
+        },
+        "L22": {
+          "appendix_b_proxy_abs": 0.01073858576107087,
+          "nuprime": 9.999998265799999,
+          "observed_abs": 0.01782075593227131,
+          "observed_to_proxy_ratio": 1.65950678504375
+        },
+        "L33": {
+          "appendix_b_proxy_abs": 0.20827108011252285,
+          "nuprime": 9.999998265799999,
+          "observed_abs": 25.87055441015528,
+          "observed_to_proxy_ratio": 124.21577876380228
+        }
+      },
+      "gates": {
+        "appendix_b_geometry_inputs_available": true,
+        "fp_l11_l12_target_inverse_slope": false,
+        "pas_l11_l12_positive": true,
+        "scan_extends_to_required_high_nu": false
+      },
+      "max_nuprime": 9.9999982658,
+      "nuprime_grid": [
+        0.099999982658,
+        0.215443431641,
+        0.464158802867,
+        0.99999982658,
+        2.15443431641,
+        4.641588028668,
+        9.9999982658
+      ],
+      "slope_sensitivity": [
+        {
+          "n_fit": 2,
+          "slopes": {
+            "L11": 0.13932165839855273,
+            "L12": 0.14844794399618383
+          }
+        },
+        {
+          "n_fit": 3,
+          "slopes": {
+            "L11": 0.19157316719932224,
+            "L12": 0.1995639566349404
+          }
+        },
+        {
+          "n_fit": 4,
+          "slopes": {
+            "L11": -0.01995679811894981,
+            "L12": -0.05219610210517921
+          }
+        },
+        {
+          "n_fit": 5,
+          "slopes": {
+            "L11": -0.0687917367228869,
+            "L12": -0.08301856479888
+          }
+        }
+      ],
+      "state": "needs_wider_high_nu_scan",
+      "trend": {
+        "gates": {
+          "fp_l11_l12_inverse_like": false,
+          "pas_l11_l12_positive": true
+        },
+        "n_fit": 3,
+        "nuprime_tail": [
+          2.15443431641,
+          4.641588028668,
+          9.9999982658
+        ],
+        "slopes": {
+          "Fokker-Planck": {
+            "L11": 0.19157316719932224,
+            "L12": 0.1995639566349404,
+            "L21": -0.3713325569802452,
+            "L22": -0.44130959102679485,
+            "L33": 0.012315991488182798
+          },
+          "PAS": {
+            "L11": 0.8473307916798364,
+            "L12": 0.8407935840668392,
+            "L21": 0.8425702383841356,
+            "L22": 0.7467142154368668,
+            "L33": -0.9610420901378249
+          }
+        },
+        "state": "needs_wider_high_nu_scan"
+      }
+    },
+    "w7x": {
+      "appendix_b_geometry_audit": {
+        "appendix_b_discrete_quantities": {
+          "G1": -0.002147453470684493,
+          "G2": -6.763957911411926e-05,
+          "H": -0.02352127917441267,
+          "K1": -0.09827210156519331,
+          "K2": 0.20516017009248116,
+          "fsa_u2_b2": 0.02352127917441267,
+          "fsa_u_b2": 1.2849475892087991e-17,
+          "gradpar_b_rms": 0.11887464728421358
+        },
+        "geometry_scalars": {
+          "FSABHat2_output": 9.479523493431824,
+          "FSABHat2_recomputed": 9.479523493431874,
+          "FSABHat2_relative_error": 5.2468873079611535e-15,
+          "GHat": 17.885,
+          "G_plus_iota_I": 17.885000191950432,
+          "IHat": -2.2062e-07,
+          "iota": -0.87005
+        },
+        "grid": {
+          "n_theta": 13,
+          "n_zeta": 31,
+          "theta_axis": 1,
+          "zeta_axis": 0
+        },
+        "notes": [
+          "Coefficients follow the Appendix-B structure using checked-in normalized sfincs_jax output fields.",
+          "Use these values as an audit of normalization and geometry ingredients, not as a final analytic-limit acceptance gate."
+        ],
+        "source_output": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/publication_figures/output/w7x_co0/nu_n_1.727/sfincsOutput.h5",
+        "transport_matrix_coefficients_over_nuprime": {
+          "L11": -0.0028885696480061653,
+          "L12": -0.012508189410501611,
+          "L22": -0.002083608462501054,
+          "L33": 4.881003824008629
+        }
+      },
+      "appendix_b_proxy_ratios_at_max_nuprime": {
+        "L11": {
+          "appendix_b_proxy_abs": 0.00028884827252197897,
+          "nuprime": 10.000300928877355,
+          "observed_abs": 0.00017768404532271759,
+          "observed_to_proxy_ratio": 0.6151466435001695
+        },
+        "L12": {
+          "appendix_b_proxy_abs": 0.0012507813014288756,
+          "nuprime": 10.000300928877355,
+          "observed_abs": 0.0005273248121306693,
+          "observed_to_proxy_ratio": 0.42159633464959906
+        },
+        "L22": {
+          "appendix_b_proxy_abs": 0.00020835457625923288,
+          "nuprime": 10.000300928877355,
+          "observed_abs": 0.005064572763565026,
+          "observed_to_proxy_ratio": 24.30747072847457
+        },
+        "L33": {
+          "appendix_b_proxy_abs": 0.4880856944928532,
+          "nuprime": 10.000300928877355,
+          "observed_abs": 36.97284417281602,
+          "observed_to_proxy_ratio": 75.7507228545855
+        }
+      },
+      "gates": {
+        "appendix_b_geometry_inputs_available": true,
+        "fp_l11_l12_target_inverse_slope": true,
+        "pas_l11_l12_positive": true,
+        "scan_extends_to_required_high_nu": false
+      },
+      "max_nuprime": 10.000300928877,
+      "nuprime_grid": [
+        0.100003009289,
+        0.215449952319,
+        0.464172851242,
+        1.000030092888,
+        2.154499523193,
+        4.641728512424,
+        10.000300928877
+      ],
+      "slope_sensitivity": [
+        {
+          "n_fit": 2,
+          "slopes": {
+            "L11": -2.6044995078312563,
+            "L12": -2.6981237193936223
+          }
+        },
+        {
+          "n_fit": 3,
+          "slopes": {
+            "L11": -1.2322222190198149,
+            "L12": -1.2992715987627899
+          }
+        },
+        {
+          "n_fit": 4,
+          "slopes": {
+            "L11": -0.4885525504721531,
+            "L12": -0.507129916850478
+          }
+        },
+        {
+          "n_fit": 5,
+          "slopes": {
+            "L11": -0.2578407051834329,
+            "L12": -0.2544352841645185
+          }
+        }
+      ],
+      "state": "needs_wider_high_nu_scan",
+      "trend": {
+        "gates": {
+          "fp_l11_l12_inverse_like": true,
+          "pas_l11_l12_positive": true
+        },
+        "n_fit": 3,
+        "nuprime_tail": [
+          2.154499523193,
+          4.641728512424,
+          10.000300928877
+        ],
+        "slopes": {
+          "Fokker-Planck": {
+            "L11": -1.2322222190198149,
+            "L12": -1.2992715987627899,
+            "L21": 0.07813807324601882,
+            "L22": 0.09937496852593715,
+            "L33": 0.006021259256153748
+          },
+          "PAS": {
+            "L11": 0.7902182794999172,
+            "L12": 0.6877009879951754,
+            "L21": 0.7005492457779741,
+            "L22": 0.5608530974849533,
+            "L33": -0.9684258721645608
+          }
+        },
+        "state": "asymptotic_trend_proxy"
+      }
+    }
+  },
+  "configuration": {
+    "min_nuprime_for_full_limit": 50.0,
+    "n_fit": 3,
+    "slope_tolerance": 0.35,
+    "target_fp_slope": -1.0
+  },
+  "gates": {
+    "all_cases_ready_for_full_overlay": false,
+    "appendix_b_geometry_inputs_available": true,
+    "full_simakov_helander_reproduction_closed": true
+  },
+  "metadata": {
+    "kind": "simakov_helander_limit_audit",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf",
+      "https://doi.org/10.1063/1.3104715"
+    ],
+    "notes": [
+      "This artifact audits the normalization and high-nu sufficiency for the Appendix-B analytic-limit lane.",
+      "It intentionally keeps the full reproduction gate closed until a wider nu' >> 1 scan is checked in.",
+      "The current full collisionality summaries stop near nu'=10, below the default full-limit threshold."
+    ],
+    "schema_version": 1,
+    "source_artifacts": {
+      "lhd_collisionality": "lhd_collisionality_summary.json",
+      "w7x_collisionality": "w7x_collisionality_summary.json"
+    }
+  }
+}
