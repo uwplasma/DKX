@@ -4621,3 +4621,68 @@ Notes:
 - The docs build and full test runtime remain inside the target local CI budget.
 - The next PAS performance lane should be GPU-only measurement for PAS-DKES on
   `ssh office`, not another CPU default change.
+
+### 19.77 GPU PAS-DKES structured preconditioner promotion
+
+Completed the GPU follow-up for the HSX PAS-DKES offender on `office`.
+
+Measurements:
+
+- Pulled `refactor/v3-driver-split` in `/home/rjorge/sfincs_jax_refactor_v3`
+  and copied only the frozen HSX PAS-DKES case directory to
+  `/tmp/sfincs_jax_gpu_cases/HSX_PASCollisions_DKESTrajectories`.
+- One-GPU baseline before the GPU policy change:
+  - default `xblock_tz`: `14.181s` wall / `13.005s` elapsed, `1530084 KB`
+    RSS, `0/123` Fortran mismatches;
+  - forced `pas_tz`: `12.583s` wall / `11.480s` elapsed, `1259792 KB` RSS,
+    `0/123` Fortran mismatches.
+- After generalizing the guarded PAS-DKES preference to CPU/GPU, the default
+  one-GPU run selected `rhs1_preconditioner=pas_tz`, completed in `7.627s`
+  wall / `6.515s` elapsed, used `1203084 KB` RSS, and had `0/123` Fortran
+  mismatches.
+
+Code/documentation changes:
+
+- Replaced the CPU-only helper with `rhs1_pas_dkes_pas_tz_preferred(...)`,
+  retaining `rhs1_pas_dkes_cpu_pas_tz_preferred(...)` as a compatibility alias.
+- Added backend-specific knobs:
+  `SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN`,
+  `SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX`,
+  `SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_MIN`, and
+  `SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_ACTIVE_MAX`.
+- Updated README and performance docs with the focused current-tip CPU/GPU
+  HSX PAS-DKES row.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_preconditioner_auto_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_preconditioner_auto_policy.py`
+- `python -m ruff check sfincs_jax/rhs1_preconditioner_auto_policy.py tests/test_rhs1_preconditioner_auto_policy.py scripts/benchmark_case_variants.py tests/test_benchmark_case_variants.py`
+- `python -m pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_benchmark_case_variants.py`
+  passed with `18 passed in 7.51s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed after the GPU
+  documentation update.
+
+Next validation targets:
+
+- Run the full local pytest suite after the final README/docs updates.
+- The remaining PAS runtime/memory offender work should move to
+  `HSX_PASCollisions_fullTrajectories`, `geometryScheme4_2species_PAS_noEr`,
+  and the larger tokamak PAS+Er GPU lane; the HSX DKES CPU/GPU default is now
+  closed for the current focused benchmark.
+
+### 19.78 Full-suite gate after GPU PAS-DKES promotion
+
+Ran the final local validation after updating the README/performance docs with
+the one-GPU HSX PAS-DKES default rerun.
+
+Validation:
+
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `853 passed in 345.15s (0:05:45)`.
+
+Notes:
+
+- The local suite count increased from `852` to `853`, matching the new GPU
+  backend-bound policy test.
+- The branch remains within the target local CI runtime after the CPU/GPU
+  PAS-DKES preconditioner policy changes.
