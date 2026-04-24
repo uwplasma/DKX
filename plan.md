@@ -139,14 +139,14 @@ Core requirement right now:
   - the fresh current `main` GPU full-suite refresh plus focused current-tip rows now capture the big bounded-solver wins directly in the release-facing docs: `geometryScheme5_3species_loRes` is down to `4.294s`, `tokamak_1species_PASCollisions_withEr_fullTrajectories` to `3.249s`, `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` to `7.420s`, and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` to `6.314s`, all strict-clean,
   - forcing transport sparse-direct first on `monoenergetic_geometryScheme5_ASCII` is parity-clean but only marginally faster on the pinned final CPU input, so it is not yet a compelling default change,
   - the fresh GPU full-suite root also records `monoenergetic_geometryScheme5_ASCII` parity-clean at `3.938s` on the current bounded accelerator `tzfft` path,
-  - and `geometryScheme4_2species_PAS_noEr` remains parity-clean at `7.019s` but is still the worst GPU RSS case at `2477.1 MB`.
+  - and `geometryScheme4_2species_PAS_noEr` now uses direct `pas_tz` by default on the bounded near-zero-Er PAS lane, dropping the focused GPU RSS to about `1817.0 MB` while preserving parity.
   - `lineax` has been gated and is not admitted yet: on a small real SFINCS operator it matched the current residual and ran faster locally (`~0.54s` vs `~3.29s`), but on a generic nonsymmetric test matrix its default GMRES configuration stagnated, so it is still a bounded differentiable/reference-path candidate rather than a production CLI dependency.
 
 ### 5.2 Known pain points that still matter
 - The pinned full-suite CPU root still records a stale pre-optimization `tokamak_1species_PASCollisions_withEr_fullTrajectories` artifact (`37.747s` JAX CPU vs `0.017s` Fortran), but current-tip frozen-case reruns on the same input are now down to about `3.56s` with parity preserved. A full-suite refresh is still needed before README tables can claim that CPU improvement.
 - Runtime ratio is still high for the heavier PAS / geometry-rich CPU cases, especially HSX / geometry4 PAS branches in the `3.5-4.9s` range on current targeted reruns.
-- GPU wall time is now robust and parity-clean in the refreshed `v11` root plus focused current-tip rows. The remaining runtime offenders are `monoenergetic_geometryScheme1` (`14.571s`), `HSX_PASCollisions_fullTrajectories` (`9.082s`), `tokamak_2species_PASCollisions_withEr_fullTrajectories` (`7.722s`), and `HSX_PASCollisions_DKESTrajectories` (`7.627s`).
-- Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`2773.9 MB`) and `geometryScheme4_2species_PAS_noEr` (`2623.4 MB`), while current worst GPU RSS offenders are `geometryScheme4_2species_PAS_noEr` (`2477.1 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2070.4 MB`).
+- GPU wall time is now robust and parity-clean in the refreshed `v11` root plus focused current-tip rows. The remaining runtime offenders are `monoenergetic_geometryScheme1` (`14.571s`), `HSX_PASCollisions_fullTrajectories` (`9.082s`), `tokamak_2species_PASCollisions_withEr_fullTrajectories` (`7.722s`), and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (`6.458s`).
+- Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`3066.4 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2298.6 MB`), while current worst GPU RSS offenders are `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2097.0 MB`) and `HSX_PASCollisions_fullTrajectories` (`2042.1 MB`).
 - Parallel strong-scaling beyond a few cores is not yet consistently strong for single-RHS large solves.
 
 ### 5.3 Product posture
@@ -4886,3 +4886,51 @@ Decision:
   Schur/PAS preconditioner live working set, avoid duplicated dense block
   materialization, or add a genuinely streaming/apply-only angular solve rather
   than only retuning chunk sizes.
+
+### 19.83 Geometry4 PAS direct-pas_tz memory policy
+
+Implemented the next algorithmic memory step for
+`geometryScheme4_2species_PAS_noEr`: select direct top-level `pas_tz` for
+bounded geometryScheme=4 PAS, non-DKES, near-zero-Er, no-FP cases instead of
+wrapping the same angular block inside the constraint-Schur preconditioner.
+
+Code changes:
+
+- Added `rhs1_geometry4_pas_memory_pas_tz_preferred(...)` with guards on default
+  preconditioner mode, geometryScheme=4, PAS-only, non-DKES, near-zero `Er`,
+  `pas_tz` applicability, angular block size, and active DOFs.
+- Added environment controls:
+  `SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ`,
+  `SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_MIN`,
+  `SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MIN`, and
+  `SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MAX`.
+- The previous Schur route remains available with
+  `SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ=0`.
+
+Measurements:
+
+- Local CPU focused rerun after the policy selected `rhs1_preconditioner=pas_tz`,
+  completed in `1.962s` elapsed, used `1811988480` macOS `ru_maxrss` units
+  (`1728.0 MB`), and had `0` Fortran mismatches. Disabling the policy restored
+  `schur`, ran in `2.476s`, and used `1923727360` macOS `ru_maxrss` units.
+- Clean-remote `office` GPU1 rerun after pulling commit `e721a6f` selected
+  `rhs1_preconditioner=pas_tz`, completed in `4.774s` elapsed, used
+  `1860564 KB` RSS (`1817.0 MB`), and had `0` Fortran mismatches. Disabling the
+  policy restored `schur`, ran in `5.899s`, and used `2567152 KB` RSS
+  (`2507.0 MB`).
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_preconditioner_auto_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py`
+- `python -m ruff check sfincs_jax/rhs1_preconditioner_auto_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py`
+- `python -m pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py`
+  passed with `42 passed in 9.46s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed after README/docs
+  updates.
+- `python -m pytest -q` passed with `857 passed in 350.71s (0:05:50)`.
+
+Next validation targets:
+
+- Continue memory-offender work on
+  `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`
+  and CPU `monoenergetic_geometryScheme5_ASCII`.
