@@ -53,9 +53,9 @@ Recent current-tip GPU fixes that are now reflected in the release artifacts:
 - ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue and completed parity-clean in about ``3.94 s``.
 - ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` now skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``7.42 s``.
 
-Recent current-tip CPU PAS-DKES fix:
+Recent current-tip PAS-DKES fix:
 
-- ``HSX_PASCollisions_DKESTrajectories`` now auto-selects the structured ``pas_tz`` angular preconditioner on bounded CPU PAS-DKES cases. The focused frozen-reference probe completed parity-clean in ``3.94 s`` with about ``1019 MB`` RSS, down from the previous table entry of ``5.481 s`` and ``2053.6 MB``.
+- ``HSX_PASCollisions_DKESTrajectories`` now auto-selects the structured ``pas_tz`` angular preconditioner on bounded CPU/GPU PAS-DKES cases. The focused CPU frozen-reference probe completed parity-clean in ``3.94 s`` with about ``1019 MB`` RSS, down from the previous table entry of ``5.481 s`` and ``2053.6 MB``. The matching one-GPU probe on ``office`` completed parity-clean in ``12.58 s`` with about ``1260 MB`` RSS, down from ``14.18 s`` and ``1530 MB`` for dense ``xblock_tz``.
 
 External solver-library gates
 -----------------------------
