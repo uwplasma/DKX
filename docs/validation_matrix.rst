@@ -220,6 +220,20 @@ Closed branch evidence:
   four-point ``\\nu'`` ladders that previously collapsed onto identical stored outputs
 - audited full LHD and W7-X collisionality summaries now resolve both FP and PAS labels
   on seven-point ``\\nu'`` ladders
+- a checked-in trend proxy now records high-collisionality tail slopes from those
+  corrected artifacts:
+  ``examples/publication_figures/artifacts/sfincs_jax_high_collisionality_trend_proxy_summary.json``
+
+.. figure:: _static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png
+   :alt: High-collisionality trend proxy from checked-in collisionality artifacts
+   :width: 92%
+
+   Trend proxy for the ``L11`` and ``L12`` tails. The SFINCS 2014 paper states that
+   PAS ``L11``/``L12`` scale like ``+nu`` at high collisionality, while
+   momentum-conserving FP/model-operator results should approach inverse-``nu``
+   scaling in the ``nu' >> 1`` limit. The checked-in W7-X artifact satisfies the
+   inverse-tail proxy, but the LHD artifact does not yet, so this figure is kept as a
+   prototype trend gate rather than the final analytic-limit reproduction.
 
 Validation goal:
 

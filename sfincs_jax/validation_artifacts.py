@@ -43,6 +43,14 @@ DEFAULT_PUBLICATION_ARTIFACTS: dict[str, str] = {
     "stellarator_er_sweep": "er_sweep_stellarator_fast_reference_summary.json",
 }
 
+TRANSPORT_ELEMENTS: dict[str, tuple[int, int]] = {
+    "L11": (0, 0),
+    "L12": (0, 1),
+    "L21": (1, 0),
+    "L22": (1, 1),
+    "L33": (2, 2),
+}
+
 
 def load_collisionality_records(path: Path) -> list[CollisionalityRecord]:
     """Load FP/PAS transport-matrix records from a checked-in summary artifact."""
@@ -96,12 +104,44 @@ def collisionality_labels(records: Sequence[CollisionalityRecord]) -> list[str]:
 def l11_abs_series(records: Sequence[CollisionalityRecord], *, label: str) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(nu', |L11|)`` for one collision model."""
 
+    return transport_element_abs_series(records, label=label, element=TRANSPORT_ELEMENTS["L11"])
+
+
+def transport_element_abs_series(
+    records: Sequence[CollisionalityRecord],
+    *,
+    label: str,
+    element: tuple[int, int],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return ``(nu', |L_ij|)`` for one collision model and matrix element."""
+
     selected = sorted((record for record in records if record.label == label), key=lambda record: record.nuprime)
     if not selected:
         raise ValueError(f"No collisionality records found for label {label!r}.")
+    i, j = (int(element[0]), int(element[1]))
     nuprime = np.asarray([record.nuprime for record in selected], dtype=np.float64)
-    l11 = np.asarray([abs(float(record.transport_matrix[0, 0])) for record in selected], dtype=np.float64)
-    return nuprime, l11
+    values = np.asarray([abs(float(record.transport_matrix[i, j])) for record in selected], dtype=np.float64)
+    return nuprime, values
+
+
+def collisionality_power_law_slope(
+    records: Sequence[CollisionalityRecord],
+    *,
+    label: str,
+    element: tuple[int, int],
+    n_fit: int = 3,
+) -> float:
+    """Fit ``|L_ij| ~ (nu')**slope`` on the high-collisionality tail."""
+
+    nuprime, values = transport_element_abs_series(records, label=label, element=element)
+    n_fit = int(n_fit)
+    if n_fit < 2:
+        raise ValueError("n_fit must be at least 2.")
+    if nuprime.size < n_fit:
+        raise ValueError(f"Need at least {n_fit} records to fit a power-law slope.")
+    tail_nu = nuprime[-n_fit:]
+    tail_values = np.maximum(values[-n_fit:], np.finfo(float).tiny)
+    return float(np.polyfit(np.log(tail_nu), np.log(tail_values), 1)[0])
 
 
 def fp_pas_l11_separation(records: Sequence[CollisionalityRecord]) -> list[dict[str, float]]:
@@ -184,6 +224,33 @@ def _summarize_collisionality(records: Sequence[CollisionalityRecord]) -> dict[s
     }
 
 
+def high_collisionality_trend_summary(
+    records: Sequence[CollisionalityRecord],
+    *,
+    n_fit: int = 3,
+) -> dict[str, object]:
+    """Summarize high-collisionality power-law trends from a corrected scan artifact."""
+
+    slopes: dict[str, dict[str, float]] = {}
+    for label in collisionality_labels(records):
+        slopes[label] = {
+            name: collisionality_power_law_slope(records, label=label, element=element, n_fit=n_fit)
+            for name, element in TRANSPORT_ELEMENTS.items()
+        }
+    pas_l11_l12_positive = all(slopes["PAS"][name] > 0.5 for name in ("L11", "L12"))
+    fp_l11_l12_inverse_like = all(slopes["Fokker-Planck"][name] < -0.5 for name in ("L11", "L12"))
+    return {
+        "n_fit": int(n_fit),
+        "nuprime_tail": collisionality_grid(records)[-int(n_fit) :],
+        "slopes": slopes,
+        "gates": {
+            "pas_l11_l12_positive": bool(pas_l11_l12_positive),
+            "fp_l11_l12_inverse_like": bool(fp_l11_l12_inverse_like),
+        },
+        "state": "asymptotic_trend_proxy" if fp_l11_l12_inverse_like else "needs_wider_high_nu_scan",
+    }
+
+
 def _summarize_er_sweep(records: Sequence[ErSweepRecord]) -> dict[str, object]:
     return {
         "models": sorted({record.model for record in records}),
@@ -220,5 +287,38 @@ def build_publication_validation_summary(
         "trajectory_sweeps": {
             "tokamak": _summarize_er_sweep(tokamak),
             "stellarator": _summarize_er_sweep(stellarator),
+        },
+    }
+
+
+def build_high_collisionality_trend_proxy_summary(
+    *,
+    artifact_dir: Path,
+    artifacts: Mapping[str, str] = DEFAULT_PUBLICATION_ARTIFACTS,
+    n_fit: int = 3,
+) -> dict[str, object]:
+    """Build the high-collisionality trend proxy summary from corrected artifacts."""
+
+    artifact_dir = Path(artifact_dir)
+    lhd = load_collisionality_records(artifact_dir / artifacts["lhd_collisionality"])
+    w7x = load_collisionality_records(artifact_dir / artifacts["w7x_collisionality"])
+    return {
+        "metadata": {
+            "schema_version": 1,
+            "kind": "high_collisionality_trend_proxy",
+            "literature": [LANDREMAN_2014_URL, LANDREMAN_2014_OPEN_PDF],
+            "source_artifacts": {
+                "lhd_collisionality": artifacts["lhd_collisionality"],
+                "w7x_collisionality": artifacts["w7x_collisionality"],
+            },
+            "notes": [
+                "The SFINCS 2014 paper states that PAS L11/L12 scale like +nu at high collisionality.",
+                "Momentum-conserving FP/model-operator L11/L12 should approach inverse-nu scaling only in the nu' >> 1 limit.",
+                "The checked-in scans stop at nu'=10, so this artifact is a trend proxy, not the full Simakov-Helander analytic-limit reproduction.",
+            ],
+        },
+        "cases": {
+            "lhd": high_collisionality_trend_summary(lhd, n_fit=n_fit),
+            "w7x": high_collisionality_trend_summary(w7x, n_fit=n_fit),
         },
     }

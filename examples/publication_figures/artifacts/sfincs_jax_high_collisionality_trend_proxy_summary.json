@@ -1,0 +1,79 @@
+{
+  "cases": {
+    "lhd": {
+      "gates": {
+        "fp_l11_l12_inverse_like": false,
+        "pas_l11_l12_positive": true
+      },
+      "n_fit": 3,
+      "nuprime_tail": [
+        2.15443431641,
+        4.641588028668,
+        9.9999982658
+      ],
+      "slopes": {
+        "Fokker-Planck": {
+          "L11": 0.19157316719932224,
+          "L12": 0.1995639566349404,
+          "L21": -0.3713325569802452,
+          "L22": -0.44130959102679485,
+          "L33": 0.012315991488182798
+        },
+        "PAS": {
+          "L11": 0.8473307916798364,
+          "L12": 0.8407935840668392,
+          "L21": 0.8425702383841356,
+          "L22": 0.7467142154368668,
+          "L33": -0.9610420901378249
+        }
+      },
+      "state": "needs_wider_high_nu_scan"
+    },
+    "w7x": {
+      "gates": {
+        "fp_l11_l12_inverse_like": true,
+        "pas_l11_l12_positive": true
+      },
+      "n_fit": 3,
+      "nuprime_tail": [
+        2.154499523193,
+        4.641728512424,
+        10.000300928877
+      ],
+      "slopes": {
+        "Fokker-Planck": {
+          "L11": -1.2322222190198149,
+          "L12": -1.2992715987627899,
+          "L21": 0.07813807324601882,
+          "L22": 0.09937496852593715,
+          "L33": 0.006021259256153748
+        },
+        "PAS": {
+          "L11": 0.7902182794999172,
+          "L12": 0.6877009879951754,
+          "L21": 0.7005492457779741,
+          "L22": 0.5608530974849533,
+          "L33": -0.9684258721645608
+        }
+      },
+      "state": "asymptotic_trend_proxy"
+    }
+  },
+  "metadata": {
+    "kind": "high_collisionality_trend_proxy",
+    "literature": [
+      "https://doi.org/10.1063/1.4870073",
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "notes": [
+      "The SFINCS 2014 paper states that PAS L11/L12 scale like +nu at high collisionality.",
+      "Momentum-conserving FP/model-operator L11/L12 should approach inverse-nu scaling only in the nu' >> 1 limit.",
+      "The checked-in scans stop at nu'=10, so this artifact is a trend proxy, not the full Simakov-Helander analytic-limit reproduction."
+    ],
+    "schema_version": 1,
+    "source_artifacts": {
+      "lhd_collisionality": "lhd_collisionality_summary.json",
+      "w7x_collisionality": "w7x_collisionality_summary.json"
+    }
+  }
+}

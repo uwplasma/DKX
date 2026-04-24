@@ -154,6 +154,41 @@
     ]
   },
   {
+    "id": "sfincs2014_high_collisionality_trend_proxy",
+    "status": "prototype_artifact",
+    "kind": "literature_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870073",
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "scripts": [
+      "examples/publication_figures/generate_high_collisionality_trend_proxy.py"
+    ],
+    "artifacts": [
+      "examples/publication_figures/artifacts/sfincs_jax_high_collisionality_trend_proxy_summary.json",
+      "docs/_static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png",
+      "docs/_static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.pdf"
+    ],
+    "claims": [
+      "PAS L11/L12 high-collisionality tails have positive power-law slopes on both corrected full collisionality artifacts",
+      "W7-X Fokker-Planck L11/L12 tails show inverse-nu-like slopes on the checked-in nu'<=10 artifact",
+      "LHD Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so the full Simakov-Helander analytic-limit lane remains open"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_high_collisionality_trend_proxy.py",
+      "sfincs_jax/validation_artifacts.py"
+    ],
+    "tests": [
+      "tests/test_generate_high_collisionality_trend_proxy.py",
+      "tests/test_validation_artifacts.py"
+    ],
+    "acceptance_gates": [
+      "Summary JSON records the high-collisionality tail slopes and source artifacts",
+      "PAS L11/L12 slopes are positive on both LHD and W7-X corrected full scans",
+      "The artifact must explicitly mark LHD as needing a wider high-nu scan before replacing the analytic-limit reproduction"
+    ]
+  },
+  {
     "id": "sfincs2014_er_sweep_tokamak_reference",
     "status": "implemented",
     "kind": "literature_validation",

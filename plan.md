@@ -5057,3 +5057,55 @@ Next validation targets:
   reconstruction is pinned with provenance.
 - Build the MONKES/KNOSOS monoenergetic overlap lane only on a documented shared-model
   subset, so exact equality claims and qualitative trend claims stay separate.
+
+### 19.87 High-collisionality trend proxy artifact
+
+Added a second publication-facing artifact that closes the cheap, machine-readable part
+of the high-collisionality lane without overclaiming the full Simakov-Helander
+analytic-limit reproduction:
+
+- Added high-collisionality slope utilities to `sfincs_jax/validation_artifacts.py`:
+  `transport_element_abs_series(...)`, `collisionality_power_law_slope(...)`,
+  `high_collisionality_trend_summary(...)`, and
+  `build_high_collisionality_trend_proxy_summary(...)`.
+- Added `examples/publication_figures/generate_high_collisionality_trend_proxy.py`.
+- Generated:
+  - `docs/_static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png`,
+  - `docs/_static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.pdf`,
+  - `examples/publication_figures/artifacts/sfincs_jax_high_collisionality_trend_proxy_summary.json`.
+- Updated the validation manifest, paper-figures page, validation matrix, testing docs,
+  and source map.
+
+Physics gate rationale:
+
+- The SFINCS 2014 paper states that, at high collisionality, PAS `L11`/`L12` scale
+  like `+nu`, while momentum-conserving FP/model-operator `L11`/`L12` should approach
+  inverse-`nu` scaling only in the true `nu' >> 1` limit.
+- The checked-in corrected scans only reach `nu'=10`, so this branch now records tail
+  slopes from the last three points as a trend proxy rather than treating the existing
+  `sfincs_jax_fig3_simakov_helander.png` as a finalized analytic-limit reproduction.
+
+Measured slopes from the checked-in artifact:
+
+- LHD PAS: `L11` slope `+0.847`, `L12` slope `+0.841`.
+- LHD FP: `L11` slope `+0.192`, `L12` slope `+0.200`; state is therefore
+  `needs_wider_high_nu_scan`.
+- W7-X PAS: `L11` slope `+0.790`, `L12` slope `+0.688`.
+- W7-X FP: `L11` slope `-1.232`, `L12` slope `-1.299`; state is
+  `asymptotic_trend_proxy`.
+
+Validation:
+
+- `python -m pytest -q tests/test_validation_artifacts.py tests/test_generate_high_collisionality_trend_proxy.py tests/test_generate_validation_dashboard.py tests/test_validation_manifest_schema.py`
+  passed with `10 passed in 1.73s`.
+- `python -m ruff check sfincs_jax/validation_artifacts.py examples/publication_figures/generate_high_collisionality_trend_proxy.py examples/publication_figures/generate_validation_dashboard.py tests/test_validation_artifacts.py tests/test_generate_high_collisionality_trend_proxy.py tests/test_generate_validation_dashboard.py`
+  passed.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `865 passed in 336.37s (0:05:36)`.
+
+Next validation targets:
+
+- Generate a wider high-collisionality collisionality ladder before promoting the
+  Simakov-Helander lane from `needs_reaudit`.
+- Keep the W7-X ambipolar and MONKES/KNOSOS lanes explicit in the manifest until their
+  input reconstruction / normalization choices are pinned.
