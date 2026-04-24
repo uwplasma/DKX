@@ -750,6 +750,17 @@ Fortran-output comparisons and reduced the runtime from about ``18.2 s`` to
 older ``xblock_tz`` GPU route remains available behind an explicit active-size
 cap for users who want to benchmark it on a different accelerator.
 
+For bounded near-zero-:math:`E_r` geometryScheme=4 PAS branches, the default now
+uses direct top-level ``pas_tz`` instead of the constraint-Schur wrapper. This is
+a measured memory policy, not a new physics approximation: the same PAS
+angular-block model is used, but the extra Schur applications and buffers are
+avoided. On ``geometryScheme4_2species_PAS_noEr`` this preserved all Fortran
+output comparisons and reduced focused GPU RSS from about ``2507 MB`` to
+``1817 MB`` while also reducing the clean-remote elapsed time from ``5.899 s``
+with the disabled Schur route to ``4.774 s``. Set
+``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ=0`` to restore the previous Schur
+route for comparison.
+
 **Sparse ILU (FP-heavy RHSMode=1).** For FP-heavy RHSMode=1 systems, a PETSc‑like
 incomplete factorization is available to avoid dense fallback while retaining
 matrix‑free accuracy. We form a sparsified operator :math:`\tilde{A}` and build
@@ -815,6 +826,10 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX`` (CPU full-trajectory PAS only: prefer ``pas_tz`` over Schur for bounded HSX-like geometryScheme=11 cases; defaults ``15``, ``950``, and ``15000``)
 - ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL`` (bounded one-GPU tokamak PAS+Er only: default tight-GMRES tolerance ``1e-8``; ``0`` disables the tightening; legacy ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted)
 - ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX`` (bounded one-GPU tokamak PAS+Er only: opt-in cap for the older ``xblock_tz`` branch; default ``0`` disables it)
+- ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ`` and
+  ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_*`` (geometryScheme=4 PAS no-Er
+  memory policy: prefer top-level ``pas_tz`` over Schur; default on for the
+  bounded measured offender)
 - ``SFINCS_JAX_RHSMODE1_PAS_XMG_MIN`` (auto switch to the lightweight PAS x‑multigrid preconditioner for large systems; default ``80000``)
 - ``SFINCS_JAX_RHSMODE1_FP_XMG_MAX`` (near-zero-``Er`` FP systems below this size use x‑multigrid preconditioning by default; default ``100000``)
 - ``SFINCS_JAX_RHSMODE1_SXBLOCK_TZ_ACTIVE_MAX`` (caps auto ``sxblock_tz`` selection for FP systems to avoid expensive setup on large RHSMode=1 runs; default ``20000``)
