@@ -8,7 +8,7 @@ Core neoclassical and SFINCS literature
 ---------------------------------------
 
 - M. Landreman, H. M. Smith, M. Mollén, and P. Helander,
-  `Comparison of particle trajectories and collision operators for collisional transport in nonaxisymmetric plasmas <https://doi.org/10.1063/1.4870073>`_.
+  `Comparison of particle trajectories and collision operators for collisional transport in nonaxisymmetric plasmas <https://doi.org/10.1063/1.4870077>`_.
 - M. Mollén et al.,
   `Implementation of a full linearized Fokker-Planck collision operator in SFINCS <https://arxiv.org/abs/1504.04810>`_.
 - A. H. Boozer,

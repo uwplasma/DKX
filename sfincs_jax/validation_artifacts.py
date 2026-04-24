@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 
-LANDREMAN_2014_URL = "https://doi.org/10.1063/1.4870073"
+LANDREMAN_2014_URL = "https://doi.org/10.1063/1.4870077"
 LANDREMAN_2014_OPEN_PDF = "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
 SFINCS_FORTRAN_REPO_URL = "https://github.com/landreman/sfincs"
 

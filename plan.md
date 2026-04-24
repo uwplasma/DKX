@@ -5148,3 +5148,31 @@ Validation:
   passed with `13 passed in 2.40s`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
 - `python -m pytest -q` passed with `868 passed in 344.52s (0:05:44)`.
+
+### 19.89 Literature DOI correction for validation artifacts
+
+The follow-up literature check found a real provenance error: the SFINCS 2014
+validation paper DOI is `10.1063/1.4870077`; an earlier local metadata entry used
+the wrong DOI suffix. Corrected:
+
+- `sfincs_jax/validation_artifacts.py`,
+- `examples/publication_figures/validation_manifest.json`,
+- `docs/references.rst`,
+- `docs/validation_matrix.rst`,
+- and the generated validation/benchmark summary JSON artifacts.
+
+The corrected DOI is backed by the local upstream bibliography and the public paper
+records:
+
+- `docs/upstream/manual/version3/SFINCSUserManual.bib`,
+- `https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf`,
+- `https://www.osti.gov/biblio/22253325`,
+- `https://github.com/landreman/sfincs`.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/validation_artifacts.py tests/test_validation_artifacts.py`
+  passed.
+- `python -m pytest -q tests/test_validation_artifacts.py tests/test_generate_validation_dashboard.py tests/test_generate_high_collisionality_trend_proxy.py tests/test_generate_fortran_suite_benchmark_summary.py tests/test_validation_manifest_schema.py`
+  passed with `13 passed in 2.30s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
