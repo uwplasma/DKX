@@ -319,13 +319,22 @@ Closed branch evidence:
    confirms that checked-in ``sfincsOutput.h5`` files contain the geometry quantities
    needed for an Appendix-B comparison, but it keeps the full analytic-limit
    reproduction closed because the current full collisionality summaries stop near
-   ``nu'=10`` rather than a wider ``nu' >> 1`` range.
+   ``nu'=10`` rather than a wider ``nu' >> 1`` range. The JSON summary now also
+   carries a recommended logarithmic high-``nu'`` extension grid for each case,
+   ending near ``nu'`` of ``100``, so the next heavy run is pinned and reviewable.
 
 Post-release acceptance criteria:
 
 - keep machine-readable summary artifacts for each full scan,
 - keep the Simakov-Helander audit artifact in CI as the parent gate for future
   high-collisionality scan work,
+- use
+  ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json``
+  as the executable high-``nu'`` extension plan; it is generated from the audit
+  and currently pins LHD and W7-X extension commands ending near ``nu'=100``,
+- run each plan entry's ``pilot_command`` first; the first LHD FP pilot at
+  ``nu'=17.78`` on the office GPU took about ``569 s`` for one transport point,
+  so the complete FP/PAS LHD+W7-X extension is a nightly/workstation campaign,
 - and only promote the deferred full analytic-limit reproduction after wider
   high-``nu`` LHD and W7-X scans are regenerated and the readiness gate flips true.
 
@@ -360,6 +369,22 @@ and writes both a metadata-rich JSON summary and a publication-style figure.
 It also supports ``--skip-existing`` plus ``--index/--stride`` split execution, so
 the heavy reference scan can be resumed or distributed across devices before the final
 ambipolar postprocess/figure pass.
+
+The summary JSON now includes explicit ``acceptance_gates``:
+
+- finite ambipolar roots,
+- radial-current sign bracketing,
+- an ion-root candidate,
+- complete equilibrium/profile/discharge/literature provenance,
+- and the combined ``ready_for_literature_claim`` gate.
+
+Without a provenance JSON containing ``equilibrium_source``, ``profile_source``,
+``configuration_or_shot``, and ``literature_reference``, generated artifacts remain
+``w7x_like_scaffold`` rather than ``w7x_literature_validation``.
+Start from
+``examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json``;
+it is intentionally incomplete and should be copied/finalized for a specific
+equilibrium/profile reconstruction before any literature-facing W7-X claim.
 
 Current closure note:
 

@@ -127,11 +127,19 @@ write_sfincs_jax_output_h5(
 )
 ```
 
-`sfincs_jax write-output` and `write_sfincs_jax_output_h5(...)` use the explicit
-performance-oriented solve path by default. Request the implicit/differentiable linear-solve path only when
-you need it:
+`sfincs_jax write-output` and the scan utilities use the explicit
+performance-oriented solve path by default. When calling
+`write_sfincs_jax_output_h5(...)` directly, pass `differentiable=False` for the
+same fast path or request the implicit/differentiable linear-solve path only when
+you need gradients:
 
 ```python
+write_sfincs_jax_output_h5(
+    input_namelist=input_namelist,
+    output_path=Path("sfincsOutput.h5"),
+    differentiable=False,
+)
+
 write_sfincs_jax_output_h5(
     input_namelist=input_namelist,
     output_path=Path("sfincsOutput.h5"),
@@ -146,7 +154,8 @@ Repository examples that map directly onto common first tasks:
 - write a tiny VMEC output with `wout_path`: `python examples/getting_started/write_sfincs_output_vmec.py`
 - plot an output file: `python examples/getting_started/plot_sfincs_output.py`
 - run autodiff examples: `python examples/autodiff/autodiff_gradient_nu_n_residual.py`
-- benchmark CPU/GPU parallel solves: `python examples/performance/benchmark_sharded_solve_scaling.py ...`
+- run the optional VMEC/Boozer differentiable geometry handoff: `python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --wout /path/to/wout.nc`
+- benchmark CPU/GPU parallel solves: `python examples/performance/benchmark_sharded_solve_scaling.py --backend cpu --devices 1 2 --inner-warmup-solves 1 --sample-timeout-s 300 ...`
 
 Parallel CLI controls are now first-class:
 
@@ -158,6 +167,28 @@ sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
 sfincs_jax transport-matrix-v3 \
   --input /path/to/input.namelist \
   --transport-workers 4
+
+# High-nu LHD/W7-X campaign pilot on a dual-GPU node
+CUDA_VISIBLE_DEVICES=0,1 \
+python examples/publication_figures/generate_sfincs_paper_figs.py \
+  --case lhd \
+  --collision-operators 0 \
+  --nuprime-min 17.78279101649707 \
+  --nuprime-max 17.78279101649707 \
+  --n-points 1 \
+  --transport-workers 2 \
+  --transport-parallel-backend gpu \
+  --transport-sparse-direct-max 30000 \
+  --require-residuals \
+  --max-transport-residual 1e-6 \
+  --max-transport-relative-residual 1e-6 \
+  --scan-only
+
+# The current office dual-GPU pilot for that point is residual-clean in ~262 s,
+# compared with ~345 s on one GPU and ~569 s on the older implicit path. The
+# W7-X high-nu FP pilot currently finishes in ~407 s on two office GPUs but
+# fails the relative-residual gate; new runs now fail fast on those residual
+# thresholds so stale or unconverged outputs are not reused for figures.
 
 # One-node multi-GPU sharded solve (experimental for very large single-RHS cases)
 CUDA_VISIBLE_DEVICES=0,1 \

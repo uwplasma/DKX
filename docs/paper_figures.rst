@@ -115,6 +115,7 @@ Generate the normalization/readiness audit with
 .. code-block:: bash
 
    python examples/publication_figures/generate_simakov_helander_limit_audit.py
+   python examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py
 
 .. figure:: _static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png
    :alt: Simakov-Helander high-collisionality normalization audit for sfincs_jax
@@ -127,6 +128,60 @@ Generate the normalization/readiness audit with
    keeps the full Simakov-Helander reproduction closed until wider high-``nu``
    scans are pinned. The machine-readable summary is
    ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json``.
+   The paired high-``nu'`` run plan is
+   ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json``.
+
+Launch the bounded pilot first so the terminal ETA and residual behavior are
+visible before committing to the full FP/PAS LHD+W7-X extension:
+
+.. code-block:: bash
+
+   CUDA_VISIBLE_DEVICES=0,1 \
+   python examples/publication_figures/generate_sfincs_paper_figs.py \
+     --case lhd \
+     --collision-operators 0 \
+     --nuprime-min 17.78279101649707 \
+     --nuprime-max 17.78279101649707 \
+     --n-points 1 \
+     --timeout-s 900 \
+     --transport-workers 2 \
+     --transport-parallel-backend gpu \
+     --transport-sparse-direct-max 30000 \
+     --require-residuals \
+     --max-transport-residual 1e-6 \
+     --max-transport-relative-residual 1e-6 \
+     --skip-existing \
+     --scan-only
+
+The publication-figure scan launcher forces ``SFINCS_JAX_IMPLICIT_SOLVE=0`` for
+these executable scans. That keeps high-collisionality transport on the explicit
+performance path. The run plan caps sparse direct solves at ``30000`` active
+unknowns by default: the LHD FP pilot remains on the accurate host sparse-LU
+path, while the larger W7-X FP high-``nu'`` pilot is forced to prove Krylov
+convergence through the residual gate instead of silently spending many minutes
+in an oversized host sparse factorization. The same residual thresholds are also
+used as fail-fast aborts for sequential and GPU-worker runs, so a bad high-``nu'``
+point does not waste the rest of a campaign once the first failed RHS is known.
+GPU runs can still opt into larger host sparse-LU first attempts/rescues when a
+bounded pilot shows they are useful,
+instead of the differentiable implicit path that intentionally avoids host-only
+direct solvers.
+
+On the current two-GPU ``office`` pilot for the first LHD FP high-``nu'`` point,
+this explicit worker lane produced residuals ``4.33e-16``, ``5.33e-14``, and
+``4.06e-11`` in about ``262 s``. The same explicit point on one GPU took about
+``345 s``; the older implicit-path pilot took about ``569 s`` and stalled at much
+larger residuals. The current W7-X FP high-``nu'`` pilot is not yet accepted:
+the oversized sparse-LU path was stopped after more than 18 minutes, and the
+bounded two-GPU path with ``--transport-sparse-direct-max 30000`` finished the
+scan solve in ``406.9 s`` but failed the residual gate with relative residuals
+``0.768``, ``0.896``, and ``0.975`` for the three RHS solves. The checked-in run
+plan therefore records W7-X FP high-``nu'`` as an active preconditioner lane
+rather than a completed publication validation. Follow-up single-RHS probes did
+not close it: ``xmg`` with a larger GMRES budget reproduced the same RHS2
+relative residual in about ``320 s``, ``theta_schwarz`` timed out at ``500 s``,
+and admitting the W7-X active size into float64 sparse LU timed out at ``600 s``
+after CSR materialization.
 
 Figure 1 (LHD collisionality scan)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
