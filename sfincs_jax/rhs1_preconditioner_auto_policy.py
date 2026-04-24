@@ -438,6 +438,47 @@ def rhs1_pas_dkes_cpu_pas_tz_preferred(
     )
 
 
+def rhs1_pas_full_cpu_pas_tz_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    use_dkes: bool,
+    backend: str,
+    geom_scheme: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    active_size: int,
+    pas_tz_applicable: bool,
+) -> bool:
+    """Return whether bounded CPU full-trajectory PAS should prefer ``pas_tz``.
+
+    This targets the HSX-like geometryScheme=11 full-trajectory case where
+    ``pas_tz`` is faster and much lower-memory than the default Schur block, while
+    leaving the larger-W7X geometry11 full case and GPU path on their measured
+    faster Schur defaults.
+    """
+    if not has_pas or has_fp or use_dkes:
+        return False
+    if not pas_tz_applicable:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if int(geom_scheme) != 11:
+        return False
+    if int(n_theta) <= 1 or int(n_zeta) <= 1:
+        return False
+    max_zeta = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX", 15)
+    min_block = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", 950)
+    max_active = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX", 15000)
+    block_size = int(max_l) * int(n_theta) * int(n_zeta)
+    return (
+        int(n_zeta) <= max(1, int(max_zeta))
+        and block_size >= max(1, int(min_block))
+        and int(active_size) <= max(1, int(max_active))
+    )
+
+
 def rhs1_pas_tokamak_gpu_theta_allowed(
     *,
     has_pas: bool,
@@ -594,6 +635,7 @@ __all__ = [
     "rhs1_pas_dkes_cpu_pas_tz_preferred",
     "rhs1_pas_dkes_pas_tz_preferred",
     "rhs1_pas_dkes_xblock_allowed",
+    "rhs1_pas_full_cpu_pas_tz_preferred",
     "rhs1_pas_weak_auto_override_kind",
     "rhs1_pas_tokamak_cpu_xblock_preferred",
     "rhs1_pas_tokamak_gpu_theta_allowed",
