@@ -285,6 +285,13 @@ uses the scheme-4 harmonic-amplitude hook to form a scalar from
 ``mean(BHat**2)`` and ``mean(DHat)`` and compares ``jax.grad`` against central finite
 differences.  This keeps CI fast while protecting the JAX-native geometry path from
 silent regressions in array layout, dtype handling, or non-differentiable branches.
+``tests/test_jax_geometry_adapters.py`` also checks the Boozer-spectrum objective
+used by the optional ``vmec_jax -> booz_xform_jax -> sfincs_jax`` example.  The
+mandatory unit part verifies the cosine-series evaluator and a directional
+gradient against centered finite differences.  When both optional geometry
+packages and a small VMEC fixture are available, the same file runs a real
+``booz_xform_jax`` transform and checks the differentiable scalar gradient through
+that transform.
 
 The refactor branch also treats documentation discoverability as testable behavior.
 ``tests/test_policy_module_docstrings.py`` imports the split RHSMode=1 and transport
@@ -292,6 +299,13 @@ policy modules and checks that their explanatory module docstrings are real
 ``__doc__`` strings rather than inert comments. This is intentionally small, but it
 keeps the source map and generated API documentation useful as the large driver is
 split into manageable pieces.
+
+The scan/CLI progress surface is also guarded without running expensive scan
+points.  ``tests/test_scans_progress_and_recycle.py`` covers duration formatting,
+ETA/reused-output messages, radial-gradient variable selection, namelist scalar
+patching, stride/index subsetting, and serial scan-recycle state handoff.  These
+tests protect user-facing runtime-estimate behavior and cross-run Krylov reuse
+while keeping CI cost below one second for the new file.
 
 The latest driver split also extracts RHSMode=1 host dense/sparse-direct policy into
 ``sfincs_jax/rhs1_host_policy.py``. ``tests/test_rhs1_host_policy.py`` covers the

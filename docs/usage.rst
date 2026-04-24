@@ -189,6 +189,18 @@ one-node and multi-host runs.
      --input /path/to/input.namelist \
      --transport-workers 4
 
+   # High-nu publication pilot with one transport RHS worker per visible GPU
+   CUDA_VISIBLE_DEVICES=0,1 \
+   python examples/publication_figures/generate_sfincs_paper_figs.py \
+     --case lhd \
+     --collision-operators 0 \
+     --nuprime-min 17.78279101649707 \
+     --nuprime-max 17.78279101649707 \
+     --n-points 1 \
+     --transport-workers 2 \
+     --transport-parallel-backend gpu \
+     --scan-only
+
    # One-node multi-GPU sharded solve
    CUDA_VISIBLE_DEVICES=0,1 \
    sfincs_jax write-output \
@@ -430,6 +442,23 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_TRANSPORT_GMRES_RESTART``: GMRES restart length for transport fallback (default: 40).
 
+- ``SFINCS_JAX_TRANSPORT_MAXITER``: override the maximum Krylov iterations used by
+  RHSMode=2/3 transport solves. This is mainly for bounded high-``nu'`` pilots and
+  should be recorded with any benchmark artifact.
+
+- ``SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS``: when set to ``1``, transport H5 output
+  includes ``transportResidualNorms``, ``transportRhsNorms``,
+  ``transportRelativeResidualNorms``, ``transportMaxResidualNorm``, and
+  ``transportMaxRelativeResidualNorm``. Publication scan scripts use these fields
+  to reject stale or unconverged high-``nu'`` outputs.
+
+- ``SFINCS_JAX_TRANSPORT_ABORT_MAX_RESIDUAL`` and
+  ``SFINCS_JAX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL``: optional fail-fast gates
+  for RHSMode=2/3 transport solves. When either threshold is positive, sfincs_jax
+  aborts remaining ``whichRHS`` work as soon as a completed RHS exceeds the
+  absolute or RHS-normalized residual gate. This is intended for high-``nu'``
+  campaigns where unconverged W7-X/LHD points should not be reused silently.
+
 - ``SFINCS_JAX_TRANSPORT_FORCE_DENSE``: force dense transport solves (debugging only; quadratic cost).
 
 - ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK``: allow dense transport fallback for small ill-conditioned
@@ -487,8 +516,12 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_IMPLICIT_SOLVE``: control implicit differentiation through linear solves.
 
-  - Default: enabled (implicit gradients via ``jax.lax.custom_linear_solve``).
-  - ``0``/``false``: disable (differentiate through Krylov iterations; slower / higher memory).
+  - Low-level Python calls that leave ``differentiable=None`` default to enabled
+    (implicit gradients via ``jax.lax.custom_linear_solve``).
+  - CLI, utility, and publication-scan paths pass ``differentiable=False`` or
+    ``SFINCS_JAX_IMPLICIT_SOLVE=0`` for the fast explicit executable path.
+  - ``0``/``false``: disable implicit mode and enable explicit host/direct rescue
+    policies where allowed.
 
 - ``SFINCS_JAX_PRECOND_DTYPE``: preconditioner storage dtype (``float64`` default).
   Set to ``float32`` to reduce memory and speed up preconditioner application while
@@ -661,9 +694,9 @@ performance without changing the input file:
 - ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX``,
   ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN``, and
   ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX``: CPU full-trajectory
-  PAS bounds for preferring ``pas_tz`` over Schur on HSX-like geometryScheme=11
-  cases. Defaults keep larger-W7X geometry11 and GPU full-trajectory cases on
-  their measured faster Schur route.
+  PAS bounds for preferring ``pas_tz`` over Schur on bounded geometryScheme=11
+  cases. The default ``Nzeta`` cap is ``19``; GPU full-trajectory cases stay on
+  their measured default route unless explicitly overridden.
 
 - ``SFINCS_JAX_RHSMODE1_SCHUR_MODE``: constraintScheme=2 Schur preconditioner mode
   (``auto``/``diag``/``full``). ``auto`` selects a dense Schur complement when the

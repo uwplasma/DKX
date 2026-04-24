@@ -112,6 +112,25 @@ based on `jax.lax.custom_linear_solve` and demonstrates it here:
    python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver gmres
    python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab
 
+VMEC-to-Boozer differentiable geometry handoff
+----------------------------------------------
+
+For optional ``vmec_jax`` and ``booz_xform_jax`` installations, this example
+checks a public differentiable geometry handoff into ``sfincs_jax``:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
+     --wout /path/to/wout_circular_tokamak.nc \
+     --mboz 3 \
+     --nboz 3 \
+     --surface 0.5
+
+The script reports a Boozer-spectrum geometry proxy, its JAX gradient, a centered
+finite-difference gradient, and a few scalar optimization steps.  It is a fast
+research workflow gate for JAX-native geometry coupling; it is not a full kinetic
+transport optimization solve.
+
 JIT-compiled optimization with implicit gradients
 --------------------------------------------------
 
@@ -150,6 +169,8 @@ For sharded single-RHS solves on CPU or GPU:
      --backend cpu \
      --input examples/performance/rhsmode1_sharded.input.namelist \
      --devices 1 2 4 8 \
+     --inner-warmup-solves 1 \
+     --sample-timeout-s 300 \
      --rhs1-precond theta_schwarz \
      --schwarz-coarse-levels 2
 
