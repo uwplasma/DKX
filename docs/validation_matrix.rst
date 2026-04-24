@@ -177,6 +177,44 @@ Corrected bounded branch artifacts:
    validation, but it remains a bounded fast artifact rather than the final audited
    paper figure.
 
+Autodiff / sensitivity validation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Literature anchors:
+
+- `Paul et al. 2019 adjoint optimization <https://arxiv.org/abs/1904.06430>`_
+- `APS adjoint optimization abstract <https://meetings-archive.aps.org/dpp/2018/bp11/36/>`_
+
+Current script:
+
+- ``examples/publication_figures/generate_autodiff_sensitivity_validation.py``
+
+Current artifacts:
+
+- ``examples/publication_figures/artifacts/sfincs_jax_autodiff_sensitivity_validation_summary.json``
+- ``docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.png``
+- ``docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.pdf``
+- ``docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png``
+- ``docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.pdf``
+
+.. figure:: _static/figures/paper/sfincs_jax_autodiff_gradient_check.png
+   :alt: Autodiff gradient validation for sfincs_jax
+   :width: 92%
+
+   Bounded manuscript-grade autodiff validation. The checked-in summary records
+   centered finite-difference comparisons, primal residuals, and adjoint residuals
+   for custom-linear-solve gradients. The SFINCS full-system panel uses a pinned
+   tiny PAS fixture and validates the implicit-differentiation path without changing
+   production solver defaults.
+
+.. figure:: _static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png
+   :alt: Boozer harmonic sensitivity maps for sfincs_jax
+   :width: 92%
+
+   Differentiable ``geometryScheme=4`` Boozer-harmonic sensitivity maps. This
+   artifact validates the public analytic-Boozer geometry path used by examples and
+   optimization scaffolds; it does not claim full VMEC-boundary optimization.
+
 Closed post-release research lanes
 ----------------------------------
 
@@ -334,25 +372,6 @@ Validation goal:
 
 - separate exact overlap claims from qualitative trend/ordering claims,
 - keep this lane focused on the model subset that is genuinely comparable.
-
-5. Adjoint / sensitivity validation
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Literature anchors:
-
-- [Paul et al. 2019 adjoint optimization](https://arxiv.org/abs/1904.06430)
-- [APS adjoint optimization abstract](https://meetings-archive.aps.org/dpp/2018/bp11/36/)
-
-Publication target:
-
-- directional-derivative agreement figure,
-- one sensitivity-map figure,
-- one small inverse-design or calibration demo.
-
-Validation goal:
-
-- show that the differentiable path is not just available, but numerically trustworthy
-  for optimization-oriented workflows.
 
 How this page should evolve
 ---------------------------

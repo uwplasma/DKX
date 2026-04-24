@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.validation_artifacts import (
+    autodiff_gradient_error_summary,
+    load_autodiff_sensitivity_summary,
     build_high_collisionality_trend_proxy_summary,
     build_publication_validation_summary,
     collisionality_power_law_slope,
@@ -143,3 +145,21 @@ def test_fortran_suite_benchmark_summary_records_source_reports_and_gates() -> N
     assert payload["reports"]["gpu"]["parity_ok_cases"] == 39
     assert payload["reports"]["cpu"]["strict_mismatch_total"] == 0
     assert payload["reports"]["gpu"]["strict_mismatch_total"] == 0
+
+
+def test_autodiff_sensitivity_summary_records_gradient_and_residual_gates() -> None:
+    payload = load_autodiff_sensitivity_summary(
+        _artifact_dir() / "sfincs_jax_autodiff_sensitivity_validation_summary.json"
+    )
+    errors = autodiff_gradient_error_summary(payload)
+
+    assert errors["count"] == 3
+    assert errors["max_relative_error"] < 1.0e-4
+    assert payload["gates"]["gradient_relative_error_ok"] is True
+    assert payload["gates"]["primal_residual_ok"] is True
+    assert payload["gates"]["adjoint_residual_ok"] is True
+    assert payload["geometry_sensitivity"]["kind"] == "scheme4_boozer_harmonic_map"
+    assert payload["geometry_sensitivity"]["gradient_relative_error"] < 1.0e-8
+    assert payload["cost_scaling"][-1]["centered_finite_difference_solve_count_model"] > payload["cost_scaling"][-1][
+        "implicit_solve_count_model"
+    ]
