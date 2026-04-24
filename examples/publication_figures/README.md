@@ -18,6 +18,7 @@ Examples:
 - `generate_sfincs_paper_figs.py`
 - `generate_er_trajectory_sweep.py`
 - `generate_w7x_ambipolar_validation.py`
+- `generate_autodiff_sensitivity_validation.py`
 
 Pinned fixed-case runs on the refactor branch:
 
@@ -119,6 +120,23 @@ fixed script:
 
 The full artifacts are the validation-facing collisionality lane. The fast artifacts
 remain useful as cheap branch-level regression scaffolds.
+
+Autodiff and sensitivity validation:
+
+```bash
+python examples/publication_figures/generate_autodiff_sensitivity_validation.py
+```
+
+This writes a machine-readable summary plus PNG/PDF figures for:
+- centered finite-difference agreement with JAX implicit-diff gradients,
+- primal and adjoint residual gates for `custom_linear_solve`,
+- solve-count scaling for implicit gradients versus finite differences,
+- differentiable `geometryScheme=4` Boozer harmonic sensitivity maps.
+
+Pinned outputs:
+- `examples/publication_figures/artifacts/sfincs_jax_autodiff_sensitivity_validation_summary.json`
+- `docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.png`
+- `docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png`
 
 W7-X ambipolar validation scaffold:
 

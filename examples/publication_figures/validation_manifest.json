@@ -387,32 +387,43 @@
   },
   {
     "id": "adjoint_sensitivity_gradient_checks",
-    "status": "deferred_post_release",
+    "status": "implemented",
     "kind": "autodiff_validation",
     "literature": [
       "https://arxiv.org/abs/1904.06430",
       "https://meetings-archive.aps.org/dpp/2018/bp11/36/"
     ],
-    "scripts": [],
-    "artifacts": [],
+    "scripts": [
+      "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
+    ],
+    "artifacts": [
+      "examples/publication_figures/artifacts/sfincs_jax_autodiff_sensitivity_validation_summary.json",
+      "docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.png",
+      "docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.pdf",
+      "docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png",
+      "docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.pdf"
+    ],
     "claims": [
-      "Directional derivatives from autodiff should agree with finite differences and implicit-diff checks",
-      "Geometry-sensitivity maps should be stable enough for optimization-oriented workflows",
-      "This lane is closed for the 1.0.2 release as a post-release research target; current CI covers implicit and JVP gradients but not full manuscript-scale optimization maps"
+      "Implicit-diff gradients through a pinned full-system linear solve agree with centered finite differences below the recorded 1e-4 relative-error gate",
+      "GMRES and BiCGStab custom-linear-solve wrappers are checked on stable scalar objectives, with primal and adjoint residuals recorded in the artifact",
+      "Scheme-4 Boozer harmonic sensitivity maps are generated as publication-ready figures; full VMEC-boundary optimization remains outside this bounded validation claim"
     ],
     "source_code": [
       "sfincs_jax/implicit_solve.py",
-      "examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py",
-      "examples/optimization/fit_geometry_harmonics_with_optax.py"
+      "sfincs_jax/geometry.py",
+      "sfincs_jax/validation_artifacts.py",
+      "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
     ],
     "tests": [
+      "tests/test_generate_autodiff_sensitivity_validation.py",
       "tests/test_implicit_linear_solve_grad.py",
-      "tests/test_full_system_residual_jvp.py"
+      "tests/test_full_system_residual_jvp.py",
+      "tests/test_validation_artifacts.py"
     ],
     "acceptance_gates": [
-      "Directional derivatives agree with centered finite differences on pinned scalar objectives",
-      "Implicit-diff gradients remain finite and residual-clean for both GMRES and BiCGStab wrappers",
-      "Optimization examples keep optional dependencies explicit and do not change production solver defaults"
+      "Gradient relative errors stay below the pinned summary gate",
+      "Primal and adjoint residual norms remain below the pinned residual gate",
+      "Figures are regenerated from the machine-readable summary artifact and do not require optional optimization dependencies"
     ]
   }
 ]
