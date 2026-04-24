@@ -215,7 +215,10 @@ invariant rather than coverage padding. A companion collision-kernel gate checks
 Chandrasekhar function small-``x`` limit, Coulomb deflection-frequency scaling with
 density and charge, the identity and polynomial-exactness properties of the v3
 barycentric interpolation matrix, and agreement between the analytic and quadrature
-Rosenbluth-potential assembly paths on a bounded grid. That pass found and fixed a
+Rosenbluth-potential assembly paths on a bounded grid. The same collision gate now
+also checks the full Fokker-Planck apply path directly: dense speed-space matvecs,
+inactive Legendre masking, shape guards, and the ``Phi1`` Boltzmann density factor
+used when ``includePhi1InCollisionOperator`` is active. That pass found and fixed a
 real numerical issue:
 the direct Chandrasekhar formula was used down to ``x≈1e-14``, which is below the
 range where cancellation is safe in double precision. The JAX and NumPy paths now use

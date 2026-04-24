@@ -4498,3 +4498,52 @@ Notes:
   IO/helper tests.
 - The full-suite runtime stayed within the local CI target band and the branch
   remains green after touching output/export/path validation.
+
+### 19.73 Fokker-Planck apply-path validation extension
+
+Extended the bounded collision validation gate beyond coefficient construction:
+
+- Added a direct `apply_fokker_planck_v3(...)` test for dense speed-space
+  matrix application, including runtime rebuilding of inactive-Legendre masks.
+- Added shape-guard tests for malformed no-`Phi1` Fokker-Planck inputs and
+  operator tensors.
+- Added a direct `apply_fokker_planck_v3_phi1(...)` test for the
+  `nHat * exp(-Z alpha Phi1Hat / THat)` Boltzmann density factor and inactive
+  Legendre masking.
+- Added `Phi1` shape/operator guard tests for the collision operator.
+- Updated `docs/testing.rst` to document this as part of the collision physics
+  validation gate.
+
+Validation:
+
+- `python -m py_compile tests/test_collision_physics_gates.py`
+- `python -m ruff check tests/test_collision_physics_gates.py`
+- `python -m pytest -q tests/test_collision_physics_gates.py tests/test_fokker_planck_phi1_reduces_to_no_phi1.py tests/test_fblock_fokker_planck_matvec_parity.py tests/test_pas_collision_operator_parity.py`
+  passed with `14 passed in 4.90s`.
+- `COVERAGE_FILE=/tmp/sfincs_jax_collision2_probe.coverage python -m pytest -q tests/test_collision_physics_gates.py --cov=sfincs_jax --cov-report=term | rg 'sfincs_jax/collisions.py|TOTAL|passed|failed|Fatal|DeprecationWarning'`
+  reported `sfincs_jax/collisions.py` at `67%` and `11 passed in 3.89s`.
+
+Next validation targets:
+
+- Build docs with warnings as errors and run the full suite.
+- After this bounded collision gate, the next high-ROI item is a performance
+  pass on PAS runtime/memory offenders rather than continuing to add small
+  helper tests indefinitely.
+
+### 19.74 Full-suite gate after Fokker-Planck apply-path validation
+
+Ran the full local suite after adding the Fokker-Planck apply-path tests and
+updating the testing documentation.
+
+Validation:
+
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `848 passed in 367.34s (0:06:07)`.
+
+Notes:
+
+- The test count increased from `844` to `848`, matching the four new
+  Fokker-Planck apply/guard tests.
+- This closes the current cheap collision-validation lane; the next practical
+  target should shift to PAS performance/runtime offender work unless a new
+  correctness regression appears.
