@@ -5007,3 +5007,53 @@ Next validation targets:
 - Continue CPU/GPU offender work with geometry11 PAS full-trajectory as the
   remaining memory target; treat direct `pas_tz` there as an opt-in knob until
   runtime improves.
+
+### 19.86 Publication validation dashboard and artifact gates
+
+Implemented a bounded, literature-anchored publication validation lane that does not
+rerun large scans in CI:
+
+- Added `sfincs_jax/validation_artifacts.py` with focused loaders and metrics for
+  checked-in collisionality and radial-electric-field sweep artifacts.
+- Added `examples/publication_figures/generate_validation_dashboard.py`, producing
+  `docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.{png,pdf}`
+  and
+  `examples/publication_figures/artifacts/sfincs_jax_publication_validation_dashboard_summary.json`.
+- Added tests that assert the artifact physics gates directly:
+  - LHD/W7-X collisionality summaries contain both FP and PAS rows on the audited
+    seven-point grid,
+  - high-collisionality `L11` FP/PAS separation exceeds low-collisionality
+    separation, consistent with the collision-operator discussion in Landreman et
+    al. 2014,
+  - pinned DKES/partial/full trajectory sweeps agree exactly at `Er = 0`,
+  - finite-`Er` sweeps preserve nonzero model separation.
+- Updated the validation manifest, source map, testing docs, references, paper
+  figures page, validation matrix, and landing page.
+
+Measured dashboard metrics from the checked-in artifacts:
+
+- LHD `L11` high/low FP-PAS relative-separation ratio: `52.90`.
+- W7-X `L11` high/low FP-PAS relative-separation ratio: `146.91`.
+- Tokamak-like trajectory sweep zero-field spread across all plotted diagnostics:
+  exactly `0.0` in the pinned artifact.
+
+Validation:
+
+- `python -m pytest -q tests/test_validation_artifacts.py tests/test_generate_validation_dashboard.py tests/test_validation_manifest_schema.py`
+  passed with `7 passed in 1.05s`.
+- `python -m pytest -q tests/test_collisionality_artifact.py tests/test_er_trajectory_sweep_artifact.py tests/test_generate_sfincs_paper_figs.py tests/test_er_trajectory_sweep.py`
+  passed with `29 passed in 1.80s`.
+- `python -m ruff check sfincs_jax/validation_artifacts.py examples/publication_figures/generate_validation_dashboard.py tests/test_validation_artifacts.py tests/test_generate_validation_dashboard.py`
+  passed.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `862 passed in 326.23s (0:05:26)`.
+
+Next validation targets:
+
+- Promote `sfincs2014_fig3_high_collisionality_limit` from `needs_reaudit` only
+  after the analytic Simakov-Helander normalization is regenerated from the corrected
+  full collisionality artifact family.
+- Keep `w7x_ambipolar_er_validation` planned until a defensible profile/equilibrium
+  reconstruction is pinned with provenance.
+- Build the MONKES/KNOSOS monoenergetic overlap lane only on a documented shared-model
+  subset, so exact equality claims and qualitative trend claims stay separate.

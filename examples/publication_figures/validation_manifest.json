@@ -218,6 +218,41 @@
     ]
   },
   {
+    "id": "publication_validation_dashboard",
+    "status": "implemented",
+    "kind": "literature_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870073",
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "scripts": [
+      "examples/publication_figures/generate_validation_dashboard.py"
+    ],
+    "artifacts": [
+      "examples/publication_figures/artifacts/sfincs_jax_publication_validation_dashboard_summary.json",
+      "docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.png",
+      "docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.pdf"
+    ],
+    "claims": [
+      "The dashboard is generated entirely from checked-in validation artifacts, not hand-edited figure data",
+      "Collisionality panels expose the FP/PAS L11 separation used in the 2014 SFINCS collision-operator validation",
+      "Electric-field panels expose zero-field model agreement and finite-field trajectory-model separation on pinned branch artifacts"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_validation_dashboard.py",
+      "sfincs_jax/validation_artifacts.py"
+    ],
+    "tests": [
+      "tests/test_generate_validation_dashboard.py",
+      "tests/test_validation_artifacts.py"
+    ],
+    "acceptance_gates": [
+      "Summary JSON records the input artifact filenames and literature links",
+      "FP/PAS collisionality records contain both labels on the seven-point grid before plotting",
+      "Trajectory sweeps retain exact zero-field agreement across DKES, partial, and full models while resolving nonzero-field spread"
+    ]
+  },
+  {
     "id": "w7x_ambipolar_er_validation",
     "status": "planned",
     "kind": "profile_validation",

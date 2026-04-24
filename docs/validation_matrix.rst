@@ -39,6 +39,35 @@ Implemented literature reproductions
 
 These lanes already have scripts and figure artifacts in the repository.
 
+Publication validation dashboard
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Literature anchor:
+
+- `Landreman et al. 2014 <https://doi.org/10.1063/1.4870073>`_
+- `Open PDF mirror <https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf>`_
+
+Current script:
+
+- ``examples/publication_figures/generate_validation_dashboard.py``
+
+Current artifacts:
+
+- ``examples/publication_figures/artifacts/sfincs_jax_publication_validation_dashboard_summary.json``
+- ``docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.png``
+- ``docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.pdf``
+
+.. figure:: _static/figures/paper/sfincs_jax_publication_validation_dashboard.png
+   :alt: Literature-anchored sfincs_jax validation dashboard
+   :width: 92%
+
+   Dashboard assembled from checked-in validation artifacts rather than hand-edited
+   plot data. The acceptance tests assert that the collisionality scans contain both
+   FP and PAS rows on the seven-point grid, that the high-collisionality ``L11``
+   separation remains larger than the low-collisionality separation, and that the
+   trajectory sweeps retain exact zero-field agreement while resolving finite-field
+   model separation.
+
 SFINCS 2014 collisionality figures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

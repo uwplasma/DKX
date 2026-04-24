@@ -14,6 +14,20 @@ Core neoclassical and SFINCS literature
 - A. H. Boozer,
   `Guiding center drift equations <https://www.osti.gov/biblio/5655342>`_.
 
+Experimental and cross-code validation anchors
+----------------------------------------------
+
+- N. A. Pablant et al.,
+  `Core radial electric field and transport in Wendelstein 7-X plasmas <https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2018er.pdf>`_.
+- N. A. Pablant et al.,
+  `Investigation of the ion-root solution in Wendelstein 7-X <https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf>`_.
+- C. D. Beidler et al.,
+  `Demonstration of reduced neoclassical energy transport in Wendelstein 7-X <https://www.nature.com/articles/s41586-021-03687-w>`_.
+- F. J. Escoto et al.,
+  `MONKES: a fast neoclassical code for the evaluation of monoenergetic transport coefficients <https://arxiv.org/abs/2312.12248>`_.
+- J. L. Velasco et al.,
+  `KNOSOS: A fast orbit-averaging neoclassical code for stellarator optimization studies <https://arxiv.org/abs/1908.11615>`_.
+
 Bundled technical notes and manuals
 -----------------------------------
 
