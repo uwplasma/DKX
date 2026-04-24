@@ -42,7 +42,7 @@ CI/CD also enforces this through:
 
 - ``.github/workflows/ci.yml``
 - ``.github/workflows/docs.yml``
-- ``.github/workflows/publish.yml``
+- ``.github/workflows/publish-pypi.yml``
 
 Smoke-run the examples that do not require optional dependencies:
 
