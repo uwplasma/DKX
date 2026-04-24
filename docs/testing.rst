@@ -299,6 +299,16 @@ Those tests keep the PAS smoother activation threshold and
 ``SFINCS_JAX_IMPLICIT_SOLVE`` / differentiability precedence rules explicit while
 the driver wrappers remain stable for compatibility tests.
 
+The output/helper layer is kept under small, direct tests rather than only
+end-to-end HDF5 comparisons. ``tests/test_io_export_and_h5_coverage.py`` covers
+Fortran-layout HDF5 round trips, export-``f`` identity, nearest-neighbor, periodic
+linear wrapping, single-zeta, and invalid-option branches. ``tests/test_phi1_history_alignment.py``
+checks the accepted-iterate padding rules used when writing ``Phi1`` diagnostics,
+and ``tests/test_input_compat.py`` checks equilibrium-file localization for quoted,
+unquoted, missing, VMEC, Boozer, and non-stellarator-symmetric input conventions.
+These tests protect user-facing CLI/output behavior without adding long solve
+cases to CI.
+
 The VMEC convention layer has its own bounded gate in
 ``tests/test_vmec_wout_conventions.py``. It checks the scheme-5 conventions that are
 easy to break during refactors: ``psi_a_hat = phi[-1]/(2*pi)``, full- and half-mesh
