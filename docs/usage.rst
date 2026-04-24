@@ -658,6 +658,12 @@ performance without changing the input file:
   trajectory auto-selection bounds for preferring the structured ``pas_tz``
   angular block over dense ``xblock_tz`` when the angular block is large enough
   to make the dense setup memory-heavy.
+- ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX``,
+  ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN``, and
+  ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX``: CPU full-trajectory
+  PAS bounds for preferring ``pas_tz`` over Schur on HSX-like geometryScheme=11
+  cases. Defaults keep larger-W7X geometry11 and GPU full-trajectory cases on
+  their measured faster Schur route.
 
 - ``SFINCS_JAX_RHSMODE1_SCHUR_MODE``: constraintScheme=2 Schur preconditioner mode
   (``auto``/``diag``/``full``). ``auto`` selects a dense Schur complement when the

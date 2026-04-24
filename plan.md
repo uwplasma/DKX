@@ -4686,3 +4686,90 @@ Notes:
   backend-bound policy test.
 - The branch remains within the target local CI runtime after the CPU/GPU
   PAS-DKES preconditioner policy changes.
+
+### 19.79 CPU HSX full-trajectory PAS structured preconditioner promotion
+
+Closed the next bounded CPU PAS offender after the DKES lane by testing the
+full-trajectory HSX case and the geometry11 W7X guard case before changing the
+default.
+
+Measurements:
+
+- `HSX_PASCollisions_fullTrajectories`: explicit `pas_tz` completed
+  parity-clean and improved both runtime and memory versus the previous Schur
+  default (`4.222s` wall / `3.301s` elapsed / about `1390 MB` RSS versus
+  `4.558s` wall / `3.603s` elapsed / about `2101 MB` RSS in the confirmation
+  A/B run).
+- Post-policy `HSX_PASCollisions_fullTrajectories` selected
+  `rhs1_preconditioner=pas_tz`, completed in `4.027s` wall / `3.134s`
+  elapsed, used about `1384 MB` RSS, and had `0/193` mismatches against the
+  frozen Fortran reference.
+- The larger W7X paper geometry11 full-trajectory guard stayed on Schur after
+  the policy, completed in `3.347s` wall / `2.422s` elapsed, and remained
+  parity-clean with `0/193` mismatches. The forced `pas_tz` W7X probe was
+  slower (`5.239s`), so the new rule is intentionally bounded by `n_zeta` and
+  active DOFs.
+- `geometryScheme4_2species_PAS_noEr` preconditioner-column and dtype variants
+  only changed memory/runtime at noise level, so no default change was made for
+  that memory offender in this pass.
+- The one-GPU `tokamak_1species_PASCollisions_withEr_fullTrajectories` probe
+  rejected a tempting `pas_tokamak_theta` default: it was much faster
+  (`3.969s` versus the default `18.113s`) and lower-memory, but introduced one
+  Fortran-output mismatch (`pressureAnisotropy`). The parity-clean GPU routes
+  remained the default/explicit `xblock_tz` and `lgmres` variants, while
+  `pas_hybrid` timed out. This stays an open algorithmic lane rather than a
+  production default.
+
+Code/documentation changes:
+
+- Added `rhs1_pas_full_cpu_pas_tz_preferred(...)` with CPU-only, PAS-only,
+  full-trajectory, geometryScheme=11, `n_zeta`, angular-block-size, and active
+  DOF guards.
+- Routed the RHSMode=1 auto preconditioner selection through that helper only
+  when the current default is Schur and the user did not force a
+  preconditioner.
+- Added policy tests covering the HSX-like target, GPU exclusion, DKES
+  exclusion, larger-W7X exclusion, and environment bounds.
+- Updated README and performance docs with the focused HSX full-trajectory CPU
+  row (`5.274s` / `2002 MB` to `4.027s` / `1384 MB`) and documented the new
+  environment controls.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_preconditioner_auto_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_preconditioner_auto_policy.py`
+- `python -m ruff check sfincs_jax/rhs1_preconditioner_auto_policy.py tests/test_rhs1_preconditioner_auto_policy.py`
+- `python -m pytest -q tests/test_rhs1_preconditioner_auto_policy.py`
+  passed with `17 passed in 0.32s`.
+- Focused frozen-reference probes passed on
+  `HSX_PASCollisions_fullTrajectories` and
+  `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`
+  as described above.
+
+Next validation targets:
+
+- Build docs with warnings as errors and run the full local pytest suite after
+  the README/docs/plan updates.
+- Keep the tokamak PAS+Er GPU fast route as a research item until a bounded
+  correction removes the `pressureAnisotropy` mismatch without giving back the
+  runtime win.
+
+### 19.80 Full-suite gate after CPU HSX full-trajectory PAS promotion
+
+Ran the final local validation after the CPU HSX full-trajectory PAS policy,
+README, performance docs, usage docs, and performance-technique notes.
+
+Validation:
+
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `855 passed in 329.66s (0:05:29)`.
+
+Notes:
+
+- The local suite count increased from `853` to `855`, matching the two new
+  bounded full-trajectory PAS policy tests.
+- The branch remains inside the target local CI runtime after the PAS-DKES and
+  HSX full-trajectory preconditioner promotions.
+- The next unresolved high-ROI performance lane is still the tokamak PAS+Er GPU
+  route: the fast `pas_tokamak_theta` variant needs a parity-preserving
+  correction for `pressureAnisotropy` before it can be considered for default
+  selection.

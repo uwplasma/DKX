@@ -12,6 +12,7 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     rhs1_pas_dkes_pas_tz_preferred,
     rhs1_pas_dkes_xblock_allowed,
     rhs1_pas_family_refinement_kind,
+    rhs1_pas_full_cpu_pas_tz_preferred,
     rhs1_pas_tokamak_cpu_xblock_preferred,
     rhs1_pas_tokamak_gpu_theta_allowed,
     rhs1_pas_tokamak_gpu_xblock_preferred,
@@ -455,6 +456,82 @@ def test_dkes_gpu_pas_tz_policy_uses_gpu_env_bounds(monkeypatch) -> None:
     assert not rhs1_pas_dkes_pas_tz_preferred(**kwargs, active_size=7000)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_MIN", "950")
     assert rhs1_pas_dkes_pas_tz_preferred(**kwargs, active_size=6000)
+
+
+def test_full_cpu_pas_tz_policy_targets_hsx_like_geometry11(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX", raising=False)
+
+    assert rhs1_pas_full_cpu_pas_tz_preferred(
+        has_pas=True,
+        has_fp=False,
+        use_dkes=False,
+        backend="cpu",
+        geom_scheme=11,
+        n_theta=6,
+        n_zeta=15,
+        max_l=20,
+        active_size=7000,
+        pas_tz_applicable=True,
+    )
+    assert not rhs1_pas_full_cpu_pas_tz_preferred(
+        has_pas=True,
+        has_fp=False,
+        use_dkes=False,
+        backend="gpu",
+        geom_scheme=11,
+        n_theta=6,
+        n_zeta=15,
+        max_l=20,
+        active_size=7000,
+        pas_tz_applicable=True,
+    )
+    assert not rhs1_pas_full_cpu_pas_tz_preferred(
+        has_pas=True,
+        has_fp=False,
+        use_dkes=False,
+        backend="cpu",
+        geom_scheme=11,
+        n_theta=6,
+        n_zeta=19,
+        max_l=20,
+        active_size=7000,
+        pas_tz_applicable=True,
+    )
+    assert not rhs1_pas_full_cpu_pas_tz_preferred(
+        has_pas=True,
+        has_fp=False,
+        use_dkes=True,
+        backend="cpu",
+        geom_scheme=11,
+        n_theta=6,
+        n_zeta=15,
+        max_l=20,
+        active_size=7000,
+        pas_tz_applicable=True,
+    )
+
+
+def test_full_cpu_pas_tz_policy_env_bounds(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX", "20")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", "2000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX", "6000")
+
+    kwargs = dict(
+        has_pas=True,
+        has_fp=False,
+        use_dkes=False,
+        backend="cpu",
+        geom_scheme=11,
+        n_theta=6,
+        n_zeta=15,
+        max_l=20,
+        pas_tz_applicable=True,
+    )
+    assert not rhs1_pas_full_cpu_pas_tz_preferred(**kwargs, active_size=7000)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", "950")
+    assert rhs1_pas_full_cpu_pas_tz_preferred(**kwargs, active_size=6000)
 
 
 def test_tokamak_pas_gpu_and_cpu_xblock_policies(monkeypatch) -> None:

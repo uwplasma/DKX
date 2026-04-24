@@ -38,10 +38,11 @@ The performance story is therefore:
 - the GPU runtime drift watchlist is clean against the previously promoted frozen GPU lane,
 - and the remaining work is to reduce runtime and memory on a small number of heavy PAS and geometry-rich cases.
 
-Current top offenders from the release artifacts are:
+Current top offenders from the release artifacts plus focused current-tip
+reruns are:
 
-- CPU runtime: ``HSX_PASCollisions_fullTrajectories`` at ``5.274 s``
-- CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``2916.8 MB``
+- CPU runtime: ``HSX_PASCollisions_fullTrajectories`` at ``4.027 s``
+- CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``3066.4 MB``
 - GPU runtime: ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` at ``18.199 s``
 - GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2507.0 MB``
 
@@ -56,6 +57,10 @@ Recent current-tip GPU fixes that are now reflected in the release artifacts:
 Recent current-tip PAS-DKES fix:
 
 - ``HSX_PASCollisions_DKESTrajectories`` now auto-selects the structured ``pas_tz`` angular preconditioner on bounded CPU/GPU PAS-DKES cases. The focused CPU frozen-reference probe completed parity-clean in ``3.94 s`` with about ``1019 MB`` RSS, down from the previous table entry of ``5.481 s`` and ``2053.6 MB``. The matching one-GPU default probe on ``office`` completed parity-clean in ``7.63 s`` with about ``1175 MB`` RSS, down from the earlier dense-``xblock_tz`` probe of ``14.18 s`` and ``1530 MB`` on the same machine.
+
+Recent current-tip PAS full-trajectory fix:
+
+- ``HSX_PASCollisions_fullTrajectories`` now auto-selects the structured ``pas_tz`` angular preconditioner on the bounded CPU HSX-like full-trajectory PAS case. The focused CPU frozen-reference probe completed parity-clean in ``4.027 s`` with about ``1384 MB`` RSS, down from the prior release table entry of ``5.274 s`` and ``2002 MB``. The guard intentionally stays off for larger-W7X geometry11 full-trajectory and GPU full-trajectory cases unless a future measured gate proves both faster runtime and unchanged parity.
 
 External solver-library gates
 -----------------------------
