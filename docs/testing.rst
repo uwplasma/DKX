@@ -68,6 +68,7 @@ the checked-in scientific artifact rather than a single function. The key files 
 - ``examples/publication_figures/validation_manifest.json``
 - ``examples/publication_figures/artifacts/*.json``
 - ``examples/publication_figures/generate_validation_dashboard.py``
+- ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
 - ``sfincs_jax/validation_artifacts.py``
 
 The dashboard tests are intentionally cheap enough for CI. They do not rerun the full
@@ -86,10 +87,15 @@ physics invariants that come directly from the SFINCS validation literature:
   pinned branch artifacts.
 - Finite-``E_r`` trajectory sweeps must preserve nonzero model separation before the
   figure can be used as a manuscript-facing validation panel.
+- The frozen CPU/GPU Fortran-suite benchmark artifact must retain ``39/39`` audited
+  cases on both backends, with zero strict mismatches, zero ``jax_error`` cases, and
+  zero ``max_attempts`` cases before the release comparison figure can be regenerated.
 
 The corresponding tests are ``tests/test_validation_artifacts.py`` and
 ``tests/test_generate_validation_dashboard.py``. The high-collisionality plot smoke
-test is ``tests/test_generate_high_collisionality_trend_proxy.py``.
+test is ``tests/test_generate_high_collisionality_trend_proxy.py``. The frozen
+Fortran-suite benchmark figure is protected by
+``tests/test_generate_fortran_suite_benchmark_summary.py``.
 
 Full suite and release checks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

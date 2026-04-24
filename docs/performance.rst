@@ -29,6 +29,20 @@ These report:
 - no ``jax_error``,
 - no ``max_attempts``.
 
+The same reports are summarized by the checked-in publication benchmark artifact:
+
+- figure:
+  ``docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png``
+- summary JSON:
+  ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``
+- generator:
+  ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
+
+That artifact records median JAX/Fortran wall-clock ratios of about ``0.039x`` on CPU
+and ``0.059x`` on GPU for the frozen suite. It also records the high-ratio tail
+explicitly, since a few tiny Fortran reference runs make wall-clock ratios look large
+even when the absolute JAX runtime remains only seconds.
+
 The performance story is therefore:
 
 - correctness and robustness are release-ready for the current vendored example suite,

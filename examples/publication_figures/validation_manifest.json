@@ -288,6 +288,42 @@
     ]
   },
   {
+    "id": "fortran_v3_cpu_gpu_suite_benchmark_summary",
+    "status": "implemented",
+    "kind": "cross_code_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870073",
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "examples/publication_figures/generate_fortran_suite_benchmark_summary.py"
+    ],
+    "artifacts": [
+      "examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json",
+      "docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png",
+      "docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.pdf"
+    ],
+    "claims": [
+      "The release-facing frozen CPU suite has 39/39 parity_ok cases with no strict mismatches",
+      "The release-facing frozen GPU suite has 39/39 parity_ok cases with no strict mismatches",
+      "Runtime and maximum-RSS ratios are generated from checked-in suite reports, with top offenders recorded in machine-readable JSON"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_fortran_suite_benchmark_summary.py",
+      "sfincs_jax/validation_artifacts.py"
+    ],
+    "tests": [
+      "tests/test_generate_fortran_suite_benchmark_summary.py",
+      "tests/test_validation_artifacts.py"
+    ],
+    "acceptance_gates": [
+      "CPU and GPU frozen reports each contain all 39 audited example-suite cases",
+      "Every audited case is parity_ok with zero jax_error, zero max_attempts, and zero strict mismatches",
+      "Runtime and memory ratios are recomputed from the frozen reports before plotting, not copied into the figure by hand"
+    ]
+  },
+  {
     "id": "w7x_ambipolar_er_validation",
     "status": "planned",
     "kind": "profile_validation",

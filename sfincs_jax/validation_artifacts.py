@@ -10,6 +10,19 @@ import numpy as np
 
 LANDREMAN_2014_URL = "https://doi.org/10.1063/1.4870073"
 LANDREMAN_2014_OPEN_PDF = "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+SFINCS_FORTRAN_REPO_URL = "https://github.com/landreman/sfincs"
+
+SUITE_MISMATCH_FIELDS = (
+    "n_mismatch_common",
+    "n_mismatch_physics",
+    "n_mismatch_solver",
+)
+
+SUITE_STRICT_MISMATCH_FIELDS = (
+    "strict_n_mismatch_common",
+    "strict_n_mismatch_physics",
+    "strict_n_mismatch_solver",
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +47,40 @@ class ErSweepRecord:
     fsab_flow: float
     fsab_jhat: float
     output_path: str
+
+
+@dataclass(frozen=True)
+class SuiteCaseMetric:
+    """Runtime, memory, and parity metrics for one audited example-suite case."""
+
+    case: str
+    status: str
+    blocker_type: str
+    fortran_runtime_s: float | None
+    jax_runtime_s: float | None
+    jax_logged_elapsed_s: float | None
+    fortran_max_rss_mb: float | None
+    jax_max_rss_mb: float | None
+    practical_mismatches: int
+    strict_mismatches: int
+
+    @property
+    def runtime_ratio(self) -> float | None:
+        """Return ``jax_runtime_s / fortran_runtime_s`` when both values are finite."""
+
+        return _safe_ratio(self.jax_runtime_s, self.fortran_runtime_s)
+
+    @property
+    def logged_runtime_ratio(self) -> float | None:
+        """Return logged JAX elapsed time divided by Fortran runtime when available."""
+
+        return _safe_ratio(self.jax_logged_elapsed_s, self.fortran_runtime_s)
+
+    @property
+    def memory_ratio(self) -> float | None:
+        """Return ``jax_max_rss_mb / fortran_max_rss_mb`` when both values are finite."""
+
+        return _safe_ratio(self.jax_max_rss_mb, self.fortran_max_rss_mb)
 
 
 DEFAULT_PUBLICATION_ARTIFACTS: dict[str, str] = {
@@ -89,6 +136,21 @@ def load_er_sweep_records(path: Path) -> list[ErSweepRecord]:
     ]
 
 
+def load_suite_report(path: Path) -> list[Mapping[str, object]]:
+    """Load a frozen CPU/GPU suite report from ``scripts/run_scaled_example_suite.py``.
+
+    The release-facing report is a list of per-case dictionaries. Some archived
+    summary artifacts wrap that list in a top-level ``rows`` key, so this loader
+    accepts both layouts while rejecting anything else.
+    """
+
+    payload = json.loads(Path(path).read_text())
+    rows = payload.get("rows") if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        raise ValueError(f"Suite report {path} must contain a list of case rows.")
+    return [row for row in rows if isinstance(row, Mapping)]
+
+
 def collisionality_grid(records: Sequence[CollisionalityRecord]) -> list[float]:
     """Return the sorted normalized-collisionality grid in a scan."""
 
@@ -99,6 +161,152 @@ def collisionality_labels(records: Sequence[CollisionalityRecord]) -> list[str]:
     """Return the sorted collision-model labels in a scan."""
 
     return sorted({record.label for record in records})
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(result):
+        return None
+    return result
+
+
+def _safe_ratio(numerator: float | None, denominator: float | None) -> float | None:
+    if numerator is None or denominator is None:
+        return None
+    if not np.isfinite(numerator) or not np.isfinite(denominator) or denominator <= 0.0:
+        return None
+    return float(numerator / denominator)
+
+
+def _mismatch_count(row: Mapping[str, object], fields: Sequence[str]) -> int:
+    count = 0
+    for field in fields:
+        try:
+            count += int(row.get(field, 0) or 0)
+        except (TypeError, ValueError):
+            count += 0
+    return int(count)
+
+
+def suite_case_metrics(rows: Sequence[Mapping[str, object]]) -> list[SuiteCaseMetric]:
+    """Normalize raw suite rows into typed benchmark/parity metrics."""
+
+    metrics: list[SuiteCaseMetric] = []
+    for row in rows:
+        metrics.append(
+            SuiteCaseMetric(
+                case=str(row.get("case", "")),
+                status=str(row.get("status", "")),
+                blocker_type=str(row.get("blocker_type", "none")),
+                fortran_runtime_s=_optional_float(row.get("fortran_runtime_s")),
+                jax_runtime_s=_optional_float(row.get("jax_runtime_s")),
+                jax_logged_elapsed_s=_optional_float(row.get("jax_logged_elapsed_s")),
+                fortran_max_rss_mb=_optional_float(row.get("fortran_max_rss_mb")),
+                jax_max_rss_mb=_optional_float(row.get("jax_max_rss_mb")),
+                practical_mismatches=_mismatch_count(row, SUITE_MISMATCH_FIELDS),
+                strict_mismatches=_mismatch_count(row, SUITE_STRICT_MISMATCH_FIELDS),
+            )
+        )
+    return sorted(metrics, key=lambda item: item.case)
+
+
+def _counts(values: Sequence[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _ratio_summary(values: Sequence[float | None]) -> dict[str, float | int | None]:
+    finite = np.asarray([value for value in values if value is not None and np.isfinite(value)], dtype=np.float64)
+    if finite.size == 0:
+        return {"count": 0, "min": None, "median": None, "mean": None, "max": None}
+    return {
+        "count": int(finite.size),
+        "min": float(np.min(finite)),
+        "median": float(np.median(finite)),
+        "mean": float(np.mean(finite)),
+        "max": float(np.max(finite)),
+    }
+
+
+def _metric_row(metric: SuiteCaseMetric, *, field: str) -> dict[str, object]:
+    return {
+        "case": metric.case,
+        "status": metric.status,
+        "blocker_type": metric.blocker_type,
+        "fortran_runtime_s": metric.fortran_runtime_s,
+        "jax_runtime_s": metric.jax_runtime_s,
+        "jax_logged_elapsed_s": metric.jax_logged_elapsed_s,
+        "fortran_max_rss_mb": metric.fortran_max_rss_mb,
+        "jax_max_rss_mb": metric.jax_max_rss_mb,
+        "runtime_ratio": metric.runtime_ratio,
+        "logged_runtime_ratio": metric.logged_runtime_ratio,
+        "memory_ratio": metric.memory_ratio,
+        "practical_mismatches": metric.practical_mismatches,
+        "strict_mismatches": metric.strict_mismatches,
+        "sort_field": field,
+    }
+
+
+def _top_metrics(
+    metrics: Sequence[SuiteCaseMetric],
+    *,
+    key: str,
+    n: int = 5,
+    reverse: bool = True,
+) -> list[dict[str, object]]:
+    keyed: list[tuple[float, SuiteCaseMetric]] = []
+    for metric in metrics:
+        value = getattr(metric, key)
+        if value is None or not np.isfinite(float(value)):
+            continue
+        keyed.append((float(value), metric))
+    keyed.sort(key=lambda item: item[0], reverse=reverse)
+    return [_metric_row(metric, field=key) for _, metric in keyed[: int(n)]]
+
+
+def suite_report_summary(
+    rows: Sequence[Mapping[str, object]],
+    *,
+    label: str,
+    n_top: int = 5,
+) -> dict[str, object]:
+    """Summarize one frozen suite report for release and manuscript dashboards."""
+
+    metrics = suite_case_metrics(rows)
+    statuses = [metric.status for metric in metrics]
+    blocker_types = [metric.blocker_type for metric in metrics]
+    practical_totals = [metric.practical_mismatches for metric in metrics]
+    strict_totals = [metric.strict_mismatches for metric in metrics]
+    return {
+        "label": str(label),
+        "total_cases": int(len(metrics)),
+        "status_counts": _counts(statuses),
+        "blocker_counts": _counts(blocker_types),
+        "parity_ok_cases": int(sum(status == "parity_ok" for status in statuses)),
+        "jax_error_cases": int(sum(status == "jax_error" or blocker == "jax_error" for status, blocker in zip(statuses, blocker_types))),
+        "max_attempts_cases": int(
+            sum(status == "max_attempts" or blocker == "max_attempts" for status, blocker in zip(statuses, blocker_types))
+        ),
+        "practical_mismatch_cases": int(sum(count > 0 for count in practical_totals)),
+        "practical_mismatch_total": int(sum(practical_totals)),
+        "strict_mismatch_cases": int(sum(count > 0 for count in strict_totals)),
+        "strict_mismatch_total": int(sum(strict_totals)),
+        "runtime_ratio_summary": _ratio_summary([metric.runtime_ratio for metric in metrics]),
+        "logged_runtime_ratio_summary": _ratio_summary([metric.logged_runtime_ratio for metric in metrics]),
+        "memory_ratio_summary": _ratio_summary([metric.memory_ratio for metric in metrics]),
+        "fastest_jax_vs_fortran_cases": _top_metrics(metrics, key="runtime_ratio", n=n_top, reverse=False),
+        "slowest_jax_vs_fortran_cases": _top_metrics(metrics, key="runtime_ratio", n=n_top, reverse=True),
+        "highest_memory_ratio_cases": _top_metrics(metrics, key="memory_ratio", n=n_top, reverse=True),
+        "highest_jax_runtime_cases": _top_metrics(metrics, key="jax_runtime_s", n=n_top, reverse=True),
+        "highest_jax_memory_cases": _top_metrics(metrics, key="jax_max_rss_mb", n=n_top, reverse=True),
+    }
 
 
 def l11_abs_series(records: Sequence[CollisionalityRecord], *, label: str) -> tuple[np.ndarray, np.ndarray]:
@@ -287,6 +495,41 @@ def build_publication_validation_summary(
         "trajectory_sweeps": {
             "tokamak": _summarize_er_sweep(tokamak),
             "stellarator": _summarize_er_sweep(stellarator),
+        },
+    }
+
+
+def build_fortran_suite_benchmark_summary(
+    *,
+    cpu_report: Path,
+    gpu_report: Path,
+) -> dict[str, object]:
+    """Build a CPU/GPU suite benchmark summary against the Fortran v3 reference."""
+
+    cpu_report = Path(cpu_report)
+    gpu_report = Path(gpu_report)
+    return {
+        "metadata": {
+            "schema_version": 1,
+            "kind": "fortran_v3_suite_benchmark_summary",
+            "literature": [
+                LANDREMAN_2014_URL,
+                LANDREMAN_2014_OPEN_PDF,
+                SFINCS_FORTRAN_REPO_URL,
+            ],
+            "source_reports": {
+                "cpu": str(cpu_report),
+                "gpu": str(gpu_report),
+            },
+            "notes": [
+                "Ratios use the audited wall-clock and maximum-RSS fields stored in the frozen suite reports.",
+                "The summary is a release gate: all audited CPU/GPU cases must remain parity_ok with no strict mismatches.",
+                "The artifacts compare sfincs_jax against the Fortran v3 reference implementation on the vendored example suite.",
+            ],
+        },
+        "reports": {
+            "cpu": suite_report_summary(load_suite_report(cpu_report), label="CPU"),
+            "gpu": suite_report_summary(load_suite_report(gpu_report), label="GPU"),
         },
     }
 
