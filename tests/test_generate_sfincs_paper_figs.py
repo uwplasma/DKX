@@ -26,6 +26,8 @@ def _write_fake_transport_output(
     *,
     nu_n: float,
     diagonal_scale: float = 1.0,
+    residuals: tuple[float, ...] | None = None,
+    rhs_norms: tuple[float, ...] | None = None,
 ) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     with h5py.File(run_dir / "sfincsOutput.h5", "w") as h5:
@@ -38,6 +40,16 @@ def _write_fake_transport_output(
             [[diagonal_scale * nu_n, 0.1 * diagonal_scale], [0.2 * diagonal_scale, 2.0 * diagonal_scale * nu_n]],
             dtype=float,
         )
+        if residuals is not None:
+            residual_arr = np.asarray(residuals, dtype=float)
+            h5["transportResidualNorms"] = residual_arr
+            h5["transportMaxResidualNorm"] = float(np.max(np.abs(residual_arr)))
+            if rhs_norms is not None:
+                rhs_arr = np.asarray(rhs_norms, dtype=float)
+                rel = residual_arr / rhs_arr
+                h5["transportRhsNorms"] = rhs_arr
+                h5["transportRelativeResidualNorms"] = rel
+                h5["transportMaxRelativeResidualNorm"] = float(np.max(np.abs(rel)))
 
 
 def test_write_scan_input_replaces_collision_operator_and_fast_resolution(tmp_path: Path) -> None:
@@ -186,6 +198,8 @@ def test_summary_metadata_records_case_resolution_and_paths(tmp_path: Path) -> N
         summary_path=summary_path,
         base_input=mod.EXAMPLES / "transportMatrix_geometryScheme11" / "input.namelist",
         labels_to_collision_operator={"Fokker-Planck": 0, "PAS": 1},
+        transport_workers=2,
+        transport_parallel_backend="gpu",
     )
     assert metadata["case"] == "w7x"
     assert metadata["fast"] is False
@@ -195,6 +209,9 @@ def test_summary_metadata_records_case_resolution_and_paths(tmp_path: Path) -> N
     assert metadata["base_input"] == "examples/sfincs_examples/transportMatrix_geometryScheme11/input.namelist"
     assert metadata["source_script"] == "examples/publication_figures/generate_sfincs_paper_figs.py"
     assert metadata["labels_to_collision_operator"] == {"Fokker-Planck": 0, "PAS": 1}
+    assert metadata["implicit_solve"] is False
+    assert metadata["transport_workers"] == 2
+    assert metadata["transport_parallel_backend"] == "gpu"
 
 
 def test_parse_collision_operators_deduplicates_and_preserves_order() -> None:
@@ -207,6 +224,71 @@ def test_parse_collision_operators_rejects_unsupported_values() -> None:
     mod = _load_module()
     with pytest.raises(ValueError, match="Unsupported collision operator 2"):
         mod._parse_collision_operators("0,2")
+
+
+def test_main_custom_nuprime_window_writes_expected_scan_bounds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _load_module()
+    calls: list[dict[str, object]] = []
+
+    def _fake_write_scan_input(**kwargs):
+        calls.append(dict(kwargs))
+        Path(kwargs["dest"]).write_text("&physicsParameters\n/\n")
+
+    monkeypatch.setattr(mod, "_write_scan_input", _fake_write_scan_input)
+    monkeypatch.setattr(mod, "_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate_sfincs_paper_figs.py",
+            "--case",
+            "lhd",
+            "--scan-only",
+            "--collision-operators",
+            "0",
+            "--nuprime-min",
+            "17.7828",
+            "--nuprime-max",
+            "100.0",
+            "--n-points",
+            "4",
+            "--work-dir",
+            str(tmp_path / "work"),
+            "--summary-dir",
+            str(tmp_path / "summary"),
+            "--out-dir",
+            str(tmp_path / "figures"),
+        ],
+    )
+
+    mod.main()
+
+    assert len(calls) == 1
+    assert calls[0]["n_points"] == 4
+    np.testing.assert_allclose(calls[0]["nu_n_min"], 17.7828 * 0.2668018)
+    np.testing.assert_allclose(calls[0]["nu_n_max"], 100.0 * 0.2668018)
+
+
+def test_main_rejects_invalid_custom_nuprime_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _load_module()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate_sfincs_paper_figs.py",
+            "--scan-only",
+            "--nuprime-min",
+            "10",
+            "--nuprime-max",
+            "1",
+        ],
+    )
+
+    with pytest.raises(ValueError, match="positive with max >= min"):
+        mod.main()
 
 
 def test_run_streams_child_output_to_terminal_and_log(
@@ -229,6 +311,82 @@ def test_run_streams_child_output_to_terminal_and_log(
     log_text = (tmp_path / "child.log").read_text()
     assert "child-line-1" in log_text
     assert "child-line-2" in log_text
+
+
+def test_run_applies_extra_environment_to_child(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mod = _load_module()
+    child = tmp_path / "child_env.py"
+    child.write_text(
+        "import os\n"
+        "print('implicit=' + os.environ.get('SFINCS_JAX_IMPLICIT_SOLVE', ''))\n"
+        "print('workers=' + os.environ.get('SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS', ''))\n"
+    )
+    mod._run(
+        [sys.executable, str(child)],
+        cwd=tmp_path,
+        timeout_s=5.0,
+        label="child-env",
+        extra_env={
+            "SFINCS_JAX_IMPLICIT_SOLVE": "0",
+            "SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS": "2",
+        },
+    )
+    captured = capsys.readouterr().out
+    assert "implicit=0" in captured
+    assert "workers=2" in captured
+
+
+def test_transport_scan_env_defaults_to_explicit_and_enables_parallel_workers() -> None:
+    mod = _load_module()
+    serial = mod._transport_scan_env(transport_workers=1, transport_parallel_backend="gpu")
+    assert serial == {
+        "SFINCS_JAX_IMPLICIT_SOLVE": "0",
+        "SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS": "1",
+    }
+
+    parallel = mod._transport_scan_env(
+        transport_workers=2,
+        transport_parallel_backend="gpu",
+        transport_sparse_direct_max=90000,
+        transport_maxiter=1200,
+        abort_max_residual=1.0e-6,
+        abort_max_relative_residual=2.0e-6,
+    )
+    assert parallel["SFINCS_JAX_IMPLICIT_SOLVE"] == "0"
+    assert parallel["SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS"] == "1"
+    assert parallel["SFINCS_JAX_TRANSPORT_PARALLEL"] == "process"
+    assert parallel["SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS"] == "2"
+    assert parallel["SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND"] == "gpu"
+    assert parallel["SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX"] == "90000"
+    assert parallel["SFINCS_JAX_TRANSPORT_MAXITER"] == "1200"
+    assert parallel["SFINCS_JAX_TRANSPORT_ABORT_MAX_RESIDUAL"] == "1e-06"
+    assert parallel["SFINCS_JAX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL"] == "2e-06"
+
+
+def test_residual_quality_gates_missing_and_bad_transport_outputs(tmp_path: Path) -> None:
+    mod = _load_module()
+    good = tmp_path / "good" / "sfincsOutput.h5"
+    bad = tmp_path / "bad" / "sfincsOutput.h5"
+    missing = tmp_path / "missing" / "sfincsOutput.h5"
+    _write_fake_transport_output(good.parent, nu_n=1.0, residuals=(1.0e-12, 2.0e-12, 3.0e-12))
+    _write_fake_transport_output(bad.parent, nu_n=1.0, residuals=(1.0e-12, 2.0e-3, 3.0e-12))
+    _write_fake_transport_output(missing.parent, nu_n=1.0)
+    rel_bad = tmp_path / "rel_bad" / "sfincsOutput.h5"
+    _write_fake_transport_output(rel_bad.parent, nu_n=1.0, residuals=(1.0e-12,), rhs_norms=(1.0e-9,))
+
+    assert mod._output_passes_transport_quality(good, require_residuals=True, max_residual=1.0e-6)
+    assert not mod._output_passes_transport_quality(bad, require_residuals=True, max_residual=1.0e-6)
+    assert not mod._output_passes_transport_quality(missing, require_residuals=True, max_residual=1.0e-6)
+    assert mod._output_passes_transport_quality(missing, require_residuals=False, max_residual=1.0e-6)
+    assert not mod._output_passes_transport_quality(
+        rel_bad,
+        require_residuals=True,
+        max_residual=1.0e-6,
+        max_relative_residual=1.0e-6,
+    )
 
 
 def test_expected_scan_subdirs_matches_log_ladder_format() -> None:
@@ -356,6 +514,116 @@ def test_main_skip_existing_prunes_incomplete_dirs_and_reruns_partial_operator(
     assert write_calls == 1
     assert run_calls == 1
     assert not stale_dir.exists()
+
+
+def test_main_transport_workers_forwarded_to_scan_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _load_module()
+    captured_envs: list[dict[str, str]] = []
+
+    def _fake_write_scan_input(**kwargs):
+        Path(kwargs["dest"]).write_text("&physicsParameters\n/\n")
+
+    def _fake_run(*_args, **kwargs):
+        captured_envs.append(dict(kwargs["extra_env"]))
+
+    monkeypatch.setattr(mod, "_write_scan_input", _fake_write_scan_input)
+    monkeypatch.setattr(mod, "_run", _fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate_sfincs_paper_figs.py",
+            "--case",
+            "lhd",
+            "--scan-only",
+            "--collision-operators",
+            "0",
+            "--transport-workers",
+            "2",
+            "--transport-parallel-backend",
+            "gpu",
+            "--work-dir",
+            str(tmp_path / "work"),
+            "--summary-dir",
+            str(tmp_path / "summary"),
+            "--out-dir",
+            str(tmp_path / "figures"),
+        ],
+    )
+
+    mod.main()
+
+    assert captured_envs == [
+        {
+            "SFINCS_JAX_IMPLICIT_SOLVE": "0",
+            "SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS": "1",
+            "SFINCS_JAX_TRANSPORT_PARALLEL": "process",
+            "SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS": "2",
+            "SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND": "gpu",
+        }
+    ]
+
+
+def test_main_require_residuals_rejects_bad_outputs_after_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _load_module()
+    work_dir = tmp_path / "work"
+    summary_dir = tmp_path / "summary"
+    out_dir = tmp_path / "figures"
+
+    def _fake_write_scan_input(**kwargs):
+        Path(kwargs["dest"]).write_text("&physicsParameters\n/\n")
+
+    def _fake_run(*_args, **kwargs):
+        case_dir = Path(kwargs["cwd"])
+        _write_fake_transport_output(
+            case_dir / "nu_n_4.744",
+            nu_n=4.744,
+            residuals=(1.0e-12, 1.0e-4, 1.0e-12),
+            rhs_norms=(1.0, 1.0, 1.0),
+        )
+
+    monkeypatch.setattr(mod, "_write_scan_input", _fake_write_scan_input)
+    monkeypatch.setattr(mod, "_run", _fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate_sfincs_paper_figs.py",
+            "--case",
+            "lhd",
+            "--scan-only",
+            "--collision-operators",
+            "0",
+            "--nuprime-min",
+            "17.7828",
+            "--nuprime-max",
+            "17.7828",
+            "--n-points",
+            "1",
+            "--require-residuals",
+            "--max-transport-residual",
+            "1e-6",
+            "--max-transport-relative-residual",
+            "1e-6",
+            "--work-dir",
+            str(work_dir),
+            "--summary-dir",
+            str(summary_dir),
+            "--out-dir",
+            str(out_dir),
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="transport residual gate failed"):
+        mod.main()
+
+    assert not (summary_dir / "lhd_collisionality_summary.json").exists()
 
 
 def test_main_plot_only_allows_single_selected_operator_output(

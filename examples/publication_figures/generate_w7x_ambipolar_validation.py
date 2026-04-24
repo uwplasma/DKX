@@ -51,6 +51,38 @@ class ScanRunRecord:
     outputs: dict[str, float]
 
 
+def load_provenance_json(path: Path | None) -> dict[str, object]:
+    if path is None:
+        return {}
+    payload = json.loads(Path(path).read_text())
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object.")
+    return payload
+
+
+def ambipolar_acceptance_gates(
+    *,
+    ambipolar_result: AmbipolarSolveResult,
+    provenance: dict[str, object] | None = None,
+) -> dict[str, bool]:
+    roots = np.asarray(ambipolar_result.roots_er, dtype=np.float64)
+    currents = np.asarray(ambipolar_result.radial_currents, dtype=np.float64)
+    finite_roots = bool(roots.size > 0 and np.all(np.isfinite(roots)))
+    bracketed = bool(currents.size >= 2 and np.nanmin(currents) <= 0.0 <= np.nanmax(currents))
+    root_types = [str(value).lower() for value in ambipolar_result.root_types]
+    ion_root_candidate = bool(any("ion" in value for value in root_types) or np.any(roots < 0.0))
+    provenance = dict(provenance or {})
+    required = ("equilibrium_source", "profile_source", "configuration_or_shot", "literature_reference")
+    provenance_complete = bool(all(str(provenance.get(key, "")).strip() for key in required))
+    return {
+        "finite_ambipolar_roots": finite_roots,
+        "radial_current_brackets_zero": bracketed,
+        "ion_root_candidate": ion_root_candidate,
+        "provenance_complete": provenance_complete,
+        "ready_for_literature_claim": bool(finite_roots and bracketed and ion_root_candidate and provenance_complete),
+    }
+
+
 def _setup_mpl() -> None:
     mpl.rcParams.update(
         {
@@ -93,6 +125,15 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Summary JSON path. Defaults to WORK_DIR/w7x_ambipolar_validation_summary.json.",
+    )
+    parser.add_argument(
+        "--provenance-json",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON file documenting W7-X equilibrium/profile provenance. "
+            "Required before the summary can claim literature-grade W7-X validation."
+        ),
     )
     parser.add_argument(
         "--er-values",
@@ -203,7 +244,10 @@ def build_summary_payload(
     requested_er_values: list[float],
     ambipolar_result: AmbipolarSolveResult,
     fast: bool,
+    provenance: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    provenance_payload = dict(provenance or {})
+    gates = ambipolar_acceptance_gates(ambipolar_result=ambipolar_result, provenance=provenance_payload)
     run_records: list[ScanRunRecord] = []
     for idx, er in enumerate(np.asarray(ambipolar_result.er_values, dtype=np.float64), start=0):
         outputs = {
@@ -233,7 +277,10 @@ def build_summary_payload(
             "requested_er_values": [float(v) for v in requested_er_values],
             "var_name": str(ambipolar_result.var_name),
             "literature": list(W7X_LITERATURE),
+            "validation_scope": "w7x_literature_validation" if gates["ready_for_literature_claim"] else "w7x_like_scaffold",
         },
+        "provenance": provenance_payload,
+        "acceptance_gates": gates,
         "runs": [asdict(record) for record in run_records],
         "ambipolar": {
             "roots_var": [float(v) for v in np.asarray(ambipolar_result.roots_var, dtype=np.float64).tolist()],
@@ -345,6 +392,7 @@ def _run_validation(
     jobs: int,
     index: int | None,
     stride: int,
+    provenance_json: Path | None,
 ) -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
     scan_dir = work_dir / "scan"
@@ -370,6 +418,7 @@ def _run_validation(
         requested_er_values=er_values,
         ambipolar_result=ambi,
         fast=bool(fast),
+        provenance=load_provenance_json(provenance_json),
     )
     write_summary_json(summary_path=summary_json, payload=payload)
     plot_w7x_ambipolar_summary(
@@ -425,6 +474,7 @@ def main(argv: list[str] | None = None) -> int:
         jobs=int(args.jobs),
         index=int(args.index) if args.index is not None else None,
         stride=int(args.stride),
+        provenance_json=Path(args.provenance_json).resolve() if args.provenance_json is not None else None,
     )
     return 0
 

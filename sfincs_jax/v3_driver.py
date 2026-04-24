@@ -208,6 +208,10 @@ from .transport_parallel_runtime import (
     partition_transport_rhs,
     run_transport_parallel_gpu_subprocesses as _run_transport_parallel_gpu_subprocesses_impl,
 )
+from .transport_residual_quality import (
+    transport_residual_gate_failure,
+    transport_residual_gate_thresholds_from_env,
+)
 from .transport_parallel_pool import TransportParallelPoolCache
 from .transport_parallel_execution import (
     build_transport_parallel_payloads,
@@ -18169,6 +18173,7 @@ class V3TransportMatrixSolveResult:
     heat_flux_vm_psi_hat: jnp.ndarray  # (S, N)
     elapsed_time_s: jnp.ndarray  # (N,)
     transport_output_fields: dict[str, np.ndarray] | None = None
+    rhs_norms_by_rhs: dict[int, jnp.ndarray] | None = None
 
 
 def _rewrite_xla_flags(flags: str, *, cpu_threads: int | None, host_devices: int | None) -> str:
@@ -18211,6 +18216,9 @@ def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
     solve_method = str(payload.get("solve_method", "auto"))
     identity_shift = float(payload.get("identity_shift", 0.0))
     collect_transport_output_fields = bool(payload.get("collect_transport_output_fields", True))
+    differentiable_payload = payload.get("differentiable", None)
+    if differentiable_payload is not None:
+        differentiable_payload = bool(differentiable_payload)
     phi1_hat_base = payload.get("phi1_hat_base")
     if phi1_hat_base is not None:
         phi1_hat_base = jnp.asarray(phi1_hat_base, dtype=jnp.float64)
@@ -18229,6 +18237,7 @@ def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
         solve_method=solve_method,
         identity_shift=identity_shift,
         phi1_hat_base=phi1_hat_base,
+        differentiable=differentiable_payload,
         input_namelist=input_path,
         which_rhs_values=which_rhs_values,
         force_stream_diagnostics=True,
@@ -18240,6 +18249,10 @@ def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
         "which_rhs_values": which_rhs_values,
         "state_vectors_by_rhs": {int(k): np.asarray(v) for k, v in result.state_vectors_by_rhs.items()},
         "residual_norms_by_rhs": {int(k): float(np.asarray(v)) for k, v in result.residual_norms_by_rhs.items()},
+        "rhs_norms_by_rhs": {
+            int(k): float(np.asarray(v))
+            for k, v in (getattr(result, "rhs_norms_by_rhs", None) or {}).items()
+        },
         "elapsed_time_s": np.asarray(result.elapsed_time_s, dtype=np.float64),
     }
 
@@ -18488,6 +18501,20 @@ def solve_v3_transport_matrix_linear_gmres(
     """
     t_all = Timer()
 
+    maxiter_env = os.environ.get("SFINCS_JAX_TRANSPORT_MAXITER", "").strip()
+    if maxiter_env:
+        try:
+            maxiter = max(1, int(maxiter_env))
+            if emit is not None:
+                emit(1, f"solve_v3_transport_matrix_linear_gmres: maxiter override={int(maxiter)}")
+        except ValueError:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: ignoring invalid "
+                    f"SFINCS_JAX_TRANSPORT_MAXITER={maxiter_env!r}",
+                )
+
     if emit is not None:
         emit(0, "solve_v3_transport_matrix_linear_gmres: starting whichRHS loop")
     op0 = full_system_operator_from_namelist(nml=nml, identity_shift=identity_shift, phi1_hat_base=phi1_hat_base)
@@ -18577,6 +18604,7 @@ def solve_v3_transport_matrix_linear_gmres(
             identity_shift=identity_shift,
             collect_transport_output_fields=bool(collect_transport_output_fields),
             phi1_hat_base=phi1_hat_base,
+            differentiable=differentiable,
         )
 
         results = run_transport_parallel_payloads(
@@ -18594,12 +18622,13 @@ def solve_v3_transport_matrix_linear_gmres(
             emit=emit,
         )
 
-        state_vectors_np, residual_norms_np, elapsed_s = merge_transport_parallel_results(
+        state_vectors_np, residual_norms_np, rhs_norms_np, elapsed_s = merge_transport_parallel_results(
             n_rhs=n,
             results=results,
         )
         state_vectors = {int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in state_vectors_np.items()}
         residual_norms = {int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in residual_norms_np.items()}
+        rhs_norms = {int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in rhs_norms_np.items()}
 
         missing_rhs = [which_rhs for which_rhs in range(1, n + 1) if which_rhs not in state_vectors]
         if missing_rhs:
@@ -18608,9 +18637,12 @@ def solve_v3_transport_matrix_linear_gmres(
         if emit is not None:
             for which_rhs in range(1, n + 1):
                 rn = float(np.asarray(residual_norms.get(which_rhs, np.nan), dtype=np.float64))
+                rhsn = float(np.asarray(rhs_norms.get(which_rhs, np.nan), dtype=np.float64))
+                rel = rn / rhsn if np.isfinite(rhsn) and rhsn > 0.0 else float("nan")
                 emit(
                     0,
-                    f"whichRHS={which_rhs}: residual_norm={rn:.6e} "
+                    f"whichRHS={which_rhs}: residual_norm={rn:.6e} rhs_norm={rhsn:.6e} "
+                    f"relative_residual={rel:.6e} "
                     f"elapsed_s={float(elapsed_s[which_rhs - 1]):.3f}",
                 )
             emit(0, "solve_v3_transport_matrix_linear_gmres: computing whichRHS diagnostics (batched)")
@@ -18644,6 +18676,7 @@ def solve_v3_transport_matrix_linear_gmres(
             heat_flux_vm_psi_hat=diag_hf,
             elapsed_time_s=jnp.asarray(elapsed_s, dtype=jnp.float64),
             transport_output_fields=transport_output_fields,
+            rhs_norms_by_rhs=rhs_norms,
         )
     if emit is not None:
         emit(1, f"solve_v3_transport_matrix_linear_gmres: rhs_mode={rhs_mode} whichRHS_count={n} total_size={int(op0.total_size)}")
@@ -19384,6 +19417,22 @@ def solve_v3_transport_matrix_linear_gmres(
     elapsed_history_transport: list[float] = []
     op_rhs_by_index = [with_transport_rhs_settings(op0, which_rhs=which_rhs) for which_rhs in which_rhs_values]
     rhs_by_index = [rhs_v3_full_system_jit(op_rhs) for op_rhs in op_rhs_by_index]
+    rhs_norms: dict[int, jnp.ndarray] = {
+        int(which_rhs): jnp.linalg.norm(rhs_by_index[idx])
+        for idx, which_rhs in enumerate(which_rhs_values)
+    }
+    abort_max_residual, abort_max_relative_residual = transport_residual_gate_thresholds_from_env()
+
+    def _transport_abort_failure(which_rhs: int) -> str | None:
+        if abort_max_residual <= 0.0 and abort_max_relative_residual <= 0.0:
+            return None
+        return transport_residual_gate_failure(
+            which_rhs=int(which_rhs),
+            residual_norm=float(residual_norms[int(which_rhs)]),
+            rhs_norm=float(rhs_norms[int(which_rhs)]),
+            max_abs=float(abort_max_residual),
+            max_relative=float(abort_max_relative_residual),
+        )
 
     use_op_rhs_in_matvec = bool(op0.include_phi1_in_kinetic)
     env_transport_matvec = os.environ.get("SFINCS_JAX_TRANSPORT_MATVEC_MODE", "").strip().lower()
@@ -19947,10 +19996,18 @@ def solve_v3_transport_matrix_linear_gmres(
                 residual_norms[which_rhs] = res_norms[idx]
                 elapsed_s[int(which_rhs) - 1] = float(t_dense.elapsed_s() / float(n))
                 if emit is not None:
+                    rhs_norm_val = float(rhs_norms[int(which_rhs)])
+                    residual_norm_val = float(residual_norms[which_rhs])
+                    relative_residual_val = (
+                        residual_norm_val / rhs_norm_val
+                        if np.isfinite(rhs_norm_val) and rhs_norm_val > 0.0
+                        else float("nan")
+                    )
                     emit(
                         0,
-                        f"whichRHS={which_rhs}: residual_norm={float(residual_norms[which_rhs]):.6e} "
-                        f"elapsed_s={float(elapsed_s[-1]):.3f}",
+                        f"whichRHS={which_rhs}: residual_norm={residual_norm_val:.6e} "
+                        f"rhs_norm={rhs_norm_val:.6e} relative_residual={relative_residual_val:.6e} "
+                        f"elapsed_s={float(elapsed_s[int(which_rhs) - 1]):.3f}",
                     )
             return True
 
@@ -19990,10 +20047,18 @@ def solve_v3_transport_matrix_linear_gmres(
             residual_norms[which_rhs] = res_norms[idx]
             elapsed_s[int(which_rhs) - 1] = float(t_dense.elapsed_s() / float(n))
             if emit is not None:
+                rhs_norm_val = float(rhs_norms[int(which_rhs)])
+                residual_norm_val = float(residual_norms[which_rhs])
+                relative_residual_val = (
+                    residual_norm_val / rhs_norm_val
+                    if np.isfinite(rhs_norm_val) and rhs_norm_val > 0.0
+                    else float("nan")
+                )
                 emit(
                     0,
-                    f"whichRHS={which_rhs}: residual_norm={float(residual_norms[which_rhs]):.6e} "
-                    f"elapsed_s={float(elapsed_s[-1]):.3f}",
+                    f"whichRHS={which_rhs}: residual_norm={residual_norm_val:.6e} "
+                    f"rhs_norm={rhs_norm_val:.6e} relative_residual={relative_residual_val:.6e} "
+                    f"elapsed_s={float(elapsed_s[int(which_rhs) - 1]):.3f}",
                 )
         return True
 
@@ -20855,12 +20920,29 @@ def solve_v3_transport_matrix_linear_gmres(
                         solver_kind=solver_kind_used,
                     )
             if emit is not None:
+                rhs_norm_val = float(rhs_norms[int(which_rhs)])
+                residual_norm_val = float(residual_norms[which_rhs])
+                relative_residual_val = (
+                    residual_norm_val / rhs_norm_val
+                    if np.isfinite(rhs_norm_val) and rhs_norm_val > 0.0
+                    else float("nan")
+                )
                 emit(
                     0,
-                    f"whichRHS={which_rhs}: residual_norm={float(residual_norms[which_rhs]):.6e} "
+                    f"whichRHS={which_rhs}: residual_norm={residual_norm_val:.6e} "
+                    f"rhs_norm={rhs_norm_val:.6e} relative_residual={relative_residual_val:.6e} "
                     f"elapsed_s={t_rhs.elapsed_s():.3f}",
                 )
             elapsed_s[int(which_rhs) - 1] = float(t_rhs.elapsed_s())
+            residual_gate_failure = _transport_abort_failure(int(which_rhs))
+            if residual_gate_failure is not None:
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_transport_matrix_linear_gmres: transport residual gate failed; "
+                        f"aborting remaining whichRHS solves ({residual_gate_failure})",
+                    )
+                raise RuntimeError(f"transport residual gate failed: {residual_gate_failure}")
             elapsed_history_transport.append(float(t_rhs.elapsed_s()))
             if emit is not None:
                 completed_rhs = len(elapsed_history_transport)
@@ -21083,4 +21165,5 @@ def solve_v3_transport_matrix_linear_gmres(
         heat_flux_vm_psi_hat=diag_hf_jnp,
         elapsed_time_s=jnp.asarray(elapsed_s, dtype=jnp.float64),
         transport_output_fields=transport_output_fields,
+        rhs_norms_by_rhs=rhs_norms,
     )

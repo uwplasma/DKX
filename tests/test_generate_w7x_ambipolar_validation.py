@@ -55,10 +55,70 @@ def test_build_summary_payload_serializes_runs_and_roots(tmp_path: Path) -> None
     )
     assert payload["metadata"]["kind"] == "w7x_ambipolar_validation_scaffold"
     assert payload["metadata"]["fast"] is True
+    assert payload["metadata"]["validation_scope"] == "w7x_like_scaffold"
+    assert payload["acceptance_gates"]["finite_ambipolar_roots"] is True
+    assert payload["acceptance_gates"]["radial_current_brackets_zero"] is True
+    assert payload["acceptance_gates"]["ion_root_candidate"] is True
+    assert payload["acceptance_gates"]["provenance_complete"] is False
+    assert payload["acceptance_gates"]["ready_for_literature_claim"] is False
     assert len(payload["runs"]) == 3
     assert payload["runs"][0]["outputs"]["heatFlux_vm_rHat"] == 3.0
     assert payload["ambipolar"]["roots_er"] == [-0.25]
     assert payload["ambipolar"]["outputs_at_roots"]["FSABjHat"] == [-0.1]
+
+
+def test_build_summary_payload_promotes_only_with_complete_provenance(tmp_path: Path) -> None:
+    mod = _load_module()
+    ambi = AmbipolarSolveResult(
+        var_name="Er",
+        var_values=np.asarray([1.0, 0.0, -1.0], dtype=np.float64),
+        er_values=np.asarray([1.0, 0.0, -1.0], dtype=np.float64),
+        radial_currents=np.asarray([1.0, 0.0, -1.0], dtype=np.float64),
+        roots_var=np.asarray([-0.2], dtype=np.float64),
+        roots_er=np.asarray([-0.2], dtype=np.float64),
+        root_types=["ion"],
+        outputs_labels=["heatFlux_vm_rHat"],
+        outputs_by_run=np.asarray([[3.0], [2.0], [1.0]], dtype=np.float64),
+        outputs_at_roots=[np.asarray([1.5], dtype=np.float64)],
+        radius_wish=0.5,
+        radius_actual=0.49,
+    )
+    provenance = {
+        "equilibrium_source": "wout_reference.nc",
+        "profile_source": "published profile table",
+        "configuration_or_shot": "W7-X reference discharge",
+        "literature_reference": "https://doi.org/10.1088/1741-4326/ab6ea8",
+    }
+
+    payload = mod.build_summary_payload(
+        base_input=mod.DEFAULT_W7X_INPUT,
+        scan_dir=tmp_path / "scan",
+        requested_er_values=[1.0, 0.0, -1.0],
+        ambipolar_result=ambi,
+        fast=False,
+        provenance=provenance,
+    )
+
+    assert payload["metadata"]["validation_scope"] == "w7x_literature_validation"
+    assert payload["acceptance_gates"]["ready_for_literature_claim"] is True
+    assert payload["provenance"]["profile_source"] == "published profile table"
+
+
+def test_checked_in_w7x_provenance_template_is_incomplete_by_design() -> None:
+    mod = _load_module()
+    repo = Path(__file__).resolve().parents[1]
+    template = (
+        repo
+        / "examples"
+        / "publication_figures"
+        / "provenance"
+        / "w7x_ambipolar_provenance_template.json"
+    )
+    payload = mod.load_provenance_json(template)
+    assert payload["schema_version"] == 1
+    for key in payload["required_fields"]:
+        assert key in payload
+    assert all(payload[key] == "" for key in payload["required_fields"])
 
 
 def test_generate_w7x_ambipolar_validation_tiny_fixture_end_to_end(tmp_path: Path) -> None:

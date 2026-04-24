@@ -138,6 +138,41 @@ Pinned outputs:
 - `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json`
 - `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png`
 - `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.pdf`
+- `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json`
+
+Launch high-`nu` pilots before full FP/PAS scans:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1 \
+python examples/publication_figures/generate_sfincs_paper_figs.py \
+  --case lhd \
+  --collision-operators 0 \
+  --nuprime-min 17.78279101649707 \
+  --nuprime-max 17.78279101649707 \
+  --n-points 1 \
+  --timeout-s 900 \
+  --transport-workers 2 \
+  --transport-parallel-backend gpu \
+  --transport-sparse-direct-max 30000 \
+  --require-residuals \
+  --max-transport-residual 1e-6 \
+  --max-transport-relative-residual 1e-6 \
+  --skip-existing \
+  --scan-only
+```
+
+The launcher forces the explicit executable solve path for scans
+(`SFINCS_JAX_IMPLICIT_SOLVE=0`) so high-collisionality transport can use sparse-LU
+first attempts/rescues when Krylov residuals stall. The checked-in high-`nu'`
+run plan uses a bounded sparse-direct cap and strict absolute/relative residual
+gates: LHD FP is accepted only with clean residuals, while the current W7-X FP
+high-`nu'` pilot finishes in about 407 s on two office GPUs but fails with
+relative residuals near 0.8-1.0, so it remains an open preconditioner lane
+rather than a completed figure source. Those residual thresholds are also wired
+as fail-fast aborts for new runs. Current W7-X single-RHS probes did not close
+the lane: `xmg` kept the same RHS2 relative residual, `theta_schwarz` timed out,
+and a float64 sparse-LU probe for the 35,063 active-DOF system timed out after
+CSR materialization.
 
 Autodiff and sensitivity validation:
 

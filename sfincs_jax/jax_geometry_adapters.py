@@ -12,6 +12,7 @@ from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
+import jax.numpy as jnp
 import numpy as np
 
 from .vmec_wout import VmecWout
@@ -157,7 +158,91 @@ def vmec_wout_from_wout_like(wout_like: Any, *, path: str | Path | None = None) 
     )
 
 
+def boozer_bhat_from_spectrum(
+    theta: Any,
+    zeta: Any,
+    *,
+    bmnc_b: Any,
+    ixm_b: Any,
+    ixn_b: Any,
+    normalize: bool = True,
+    eps: float = 1.0e-14,
+) -> jnp.ndarray:
+    """Evaluate normalized magnetic-field strength from a Boozer cosine spectrum.
+
+    Parameters use the public ``booz_xform_jax`` output convention: ``bmnc_b`` is a
+    one-dimensional Boozer :math:`|B|` cosine spectrum, while ``ixm_b`` and
+    ``ixn_b`` are the corresponding integer mode numbers.  In ``booz_xform_jax``
+    output, ``ixn_b`` already includes the field-period factor, so this function
+    evaluates :math:`m\theta - n\zeta` directly.
+
+    The helper is intentionally small and pure JAX.  It is used by optional
+    vmec_jax/booz_xform_jax workflow gates without making either package a
+    required dependency of ``sfincs_jax``.
+    """
+    theta_arr = jnp.asarray(theta)
+    zeta_arr = jnp.asarray(zeta)
+    coeff = jnp.asarray(bmnc_b)
+    m_mode = jnp.asarray(ixm_b)
+    n_mode = jnp.asarray(ixn_b)
+
+    if coeff.ndim != 1:
+        raise ValueError(f"bmnc_b must be 1D, got shape {coeff.shape}")
+    if m_mode.ndim != 1 or n_mode.ndim != 1:
+        raise ValueError("ixm_b and ixn_b must be 1D")
+    if coeff.shape[0] != m_mode.shape[0] or coeff.shape[0] != n_mode.shape[0]:
+        raise ValueError(
+            "bmnc_b, ixm_b, and ixn_b must have the same length; "
+            f"got {coeff.shape[0]}, {m_mode.shape[0]}, {n_mode.shape[0]}"
+        )
+
+    angle = (
+        m_mode[:, None, None] * theta_arr[None, :, None]
+        - n_mode[:, None, None] * zeta_arr[None, None, :]
+    )
+    bmod = jnp.sum(coeff[:, None, None] * jnp.cos(angle), axis=0)
+    if not normalize:
+        return bmod
+
+    b00 = jnp.sum(jnp.where((m_mode == 0) & (n_mode == 0), coeff, 0.0))
+    fallback = jnp.mean(jnp.abs(bmod)) + eps
+    denom = jnp.where(jnp.abs(b00) > eps, b00, fallback)
+    return bmod / denom
+
+
+def boozer_spectrum_geometry_proxy_objective(
+    bmnc_b: Any,
+    ixm_b: Any,
+    ixn_b: Any,
+    *,
+    theta: Any,
+    zeta: Any,
+    normalize: bool = True,
+) -> jnp.ndarray:
+    """Return a differentiable scalar proxy from a Boozer :math:`|B|` spectrum.
+
+    This is a geometry/transport proxy, not a kinetic solve.  It measures the
+    normalized field-strength variation plus a small angular-roughness penalty,
+    giving optional vmec_jax/booz_xform_jax examples a bounded scalar that can be
+    differentiated, finite-difference checked, and optimized quickly.
+    """
+    bhat = boozer_bhat_from_spectrum(
+        theta,
+        zeta,
+        bmnc_b=bmnc_b,
+        ixm_b=ixm_b,
+        ixn_b=ixn_b,
+        normalize=normalize,
+    )
+    centered = bhat - jnp.mean(bhat)
+    theta_slope = jnp.mean((jnp.roll(bhat, -1, axis=0) - bhat) ** 2)
+    zeta_slope = jnp.mean((jnp.roll(bhat, -1, axis=1) - bhat) ** 2)
+    return jnp.mean(centered**2) + 0.05 * (theta_slope + zeta_slope)
+
+
 __all__ = [
+    "boozer_bhat_from_spectrum",
+    "boozer_spectrum_geometry_proxy_objective",
     "optional_jax_geometry_backend_status",
     "vmec_wout_from_wout_like",
 ]

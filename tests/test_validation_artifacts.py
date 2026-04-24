@@ -23,6 +23,7 @@ from sfincs_jax.validation_artifacts import (
     load_collisionality_records,
     load_er_sweep_records,
     load_suite_report,
+    recommended_high_collisionality_nuprime_grid,
     suite_case_metrics,
     suite_report_summary,
 )
@@ -149,6 +150,24 @@ def test_high_collisionality_proxy_summary_keeps_analytic_limit_lane_honest() ->
     assert payload["cases"]["w7x"]["state"] == "asymptotic_trend_proxy"
 
 
+def test_recommended_high_collisionality_nuprime_grid_extends_beyond_current_tail() -> None:
+    extension = recommended_high_collisionality_nuprime_grid(
+        [0.1, 1.0, 10.0],
+        min_nuprime_for_full_limit=50.0,
+    )
+    assert extension[0] > 10.0
+    assert extension[-1] >= 100.0
+    assert all(b > a for a, b in zip(extension, extension[1:]))
+
+    assert (
+        recommended_high_collisionality_nuprime_grid(
+            [0.1, 10.0, 100.0],
+            min_nuprime_for_full_limit=50.0,
+        )
+        == []
+    )
+
+
 def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed(tmp_path: Path) -> None:
     fixture_h5 = tmp_path / "appendix_b_fixture.h5"
     _write_appendix_b_geometry_fixture(fixture_h5)
@@ -170,6 +189,7 @@ def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed(tmp_
     )
     assert payload["metadata"]["kind"] == "simakov_helander_limit_audit"
     assert payload["cases"]["lhd"]["gates"]["scan_extends_to_required_high_nu"] is False
+    assert payload["cases"]["lhd"]["recommended_high_nuprime_extension"][0] > payload["cases"]["lhd"]["max_nuprime"]
     assert payload["cases"]["w7x"]["gates"]["fp_l11_l12_target_inverse_slope"] is True
     assert payload["gates"]["all_cases_ready_for_full_overlay"] is False
     assert payload["gates"]["full_simakov_helander_reproduction_closed"] is True

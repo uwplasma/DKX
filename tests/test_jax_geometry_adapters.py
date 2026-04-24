@@ -1,12 +1,21 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from sfincs_jax.jax_geometry_adapters import optional_jax_geometry_backend_status, vmec_wout_from_wout_like
+import jax
+import jax.numpy as jnp
+
+from sfincs_jax.jax_geometry_adapters import (
+    boozer_bhat_from_spectrum,
+    boozer_spectrum_geometry_proxy_objective,
+    optional_jax_geometry_backend_status,
+    vmec_wout_from_wout_like,
+)
 from sfincs_jax.vmec_geometry import vmec_geometry_from_wout
 from sfincs_jax.vmec_wout import read_vmec_wout
 
@@ -114,14 +123,156 @@ def test_vmec_wout_from_wout_like_rejects_bad_shapes() -> None:
         vmec_wout_from_wout_like(bad)
 
 
+def test_boozer_bhat_from_spectrum_matches_manual_cosine_sum() -> None:
+    theta = jnp.asarray([0.0, 0.5 * jnp.pi])
+    zeta = jnp.asarray([0.0, 0.1, 0.2])
+    bmnc_b = jnp.asarray([2.0, 0.4, 0.2])
+    ixm_b = jnp.asarray([0, 1, 0])
+    ixn_b = jnp.asarray([0, 0, 5])
+
+    bhat = boozer_bhat_from_spectrum(
+        theta,
+        zeta,
+        bmnc_b=bmnc_b,
+        ixm_b=ixm_b,
+        ixn_b=ixn_b,
+    )
+
+    expected = (
+        2.0
+        + 0.4 * np.cos(np.asarray(theta))[:, None]
+        + 0.2 * np.cos(-5.0 * np.asarray(zeta))[None, :]
+    ) / 2.0
+    np.testing.assert_allclose(np.asarray(bhat), expected, rtol=1.0e-14, atol=1.0e-14)
+
+
+def test_boozer_spectrum_proxy_gradient_matches_centered_difference() -> None:
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, 9, endpoint=False)
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / 5.0, 7, endpoint=False)
+    bmnc_b = jnp.asarray([2.0, 0.2, -0.1, 0.05])
+    direction = jnp.asarray([0.0, 0.7, -0.3, 0.2])
+    ixm_b = jnp.asarray([0, 1, 1, 2])
+    ixn_b = jnp.asarray([0, 0, 5, -5])
+
+    def objective(alpha: jnp.ndarray) -> jnp.ndarray:
+        return boozer_spectrum_geometry_proxy_objective(
+            bmnc_b + alpha * direction,
+            ixm_b,
+            ixn_b,
+            theta=theta,
+            zeta=zeta,
+        )
+
+    step = 1.0e-5
+    autodiff = float(jax.grad(objective)(0.0))
+    finite_difference = float((objective(step) - objective(-step)) / (2.0 * step))
+
+    assert autodiff == pytest.approx(finite_difference, rel=5.0e-6, abs=1.0e-9)
+
+
+def _optional_vmec_jax_wout_fixture(vmec_jax_module) -> Path | None:
+    candidates: list[Path] = []
+    env_text = os.environ.get("SFINCS_JAX_VMEC_JAX_WOUT", "").strip()
+    if env_text:
+        candidates.append(Path(env_text))
+    candidates.extend(
+        [
+            Path(vmec_jax_module.__file__).resolve().parents[1]
+            / "examples"
+            / "data"
+            / "wout_circular_tokamak.nc",
+            Path("/Users/rogeriojorge/local/vmec_jax/examples/data/wout_circular_tokamak.nc"),
+            Path.cwd() / "tests" / "ref" / "wout_w7x_standardConfig.nc",
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def test_vmec_jax_boozer_spectrum_proxy_gradient_matches_fd_on_optional_backends() -> None:
+    vmec_jax = pytest.importorskip("vmec_jax")
+    pytest.importorskip("booz_xform_jax")
+    from booz_xform_jax import Booz_xform
+    from booz_xform_jax.jax_api import booz_xform_jax
+    from vmec_jax.wout import read_wout as read_vmec_jax_wout
+
+    fixture = _optional_vmec_jax_wout_fixture(vmec_jax)
+    if fixture is None:
+        pytest.skip("optional vmec_jax wout fixture not found")
+
+    wout_like = read_vmec_jax_wout(fixture)
+    bx = Booz_xform()
+    try:
+        bx.read_wout_data(wout_like)
+    except AttributeError:
+        bx.read_wout(str(fixture))
+    bx.mboz = 3
+    bx.nboz = 3
+
+    surface_index = int(np.argmin(np.abs(np.asarray(bx.s_in) - 0.5)))
+    rmnc = jnp.asarray(np.asarray(bx.rmnc).T)
+    zmns = jnp.asarray(np.asarray(bx.zmns).T)
+    lmns = jnp.asarray(np.asarray(bx.lmns).T)
+    bmnc0 = jnp.asarray(np.asarray(bx.bmnc).T)
+    bsubumnc = jnp.asarray(np.asarray(bx.bsubumnc).T)
+    bsubvmnc = jnp.asarray(np.asarray(bx.bsubvmnc).T)
+    iota = jnp.asarray(np.asarray(bx.iota))
+    xm_nyq = jnp.asarray(np.asarray(bx.xm_nyq))
+    xn_nyq = jnp.asarray(np.asarray(bx.xn_nyq))
+    non_axis = (xm_nyq != 0) | (xn_nyq != 0)
+
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, 8, endpoint=False)
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / float(bx.nfp), 6, endpoint=False)
+
+    def objective(scale: jnp.ndarray) -> jnp.ndarray:
+        bmnc = jnp.where(non_axis[None, :], bmnc0 * scale, bmnc0)
+        out = booz_xform_jax(
+            rmnc=rmnc,
+            zmns=zmns,
+            lmns=lmns,
+            bmnc=bmnc,
+            bsubumnc=bsubumnc,
+            bsubvmnc=bsubvmnc,
+            iota=iota,
+            xm=bx.xm,
+            xn=bx.xn,
+            xm_nyq=bx.xm_nyq,
+            xn_nyq=bx.xn_nyq,
+            nfp=int(bx.nfp),
+            mboz=int(bx.mboz),
+            nboz=int(bx.nboz),
+            asym=bool(bx.asym),
+            surface_indices=[surface_index],
+        )
+        return boozer_spectrum_geometry_proxy_objective(
+            out["bmnc_b"][0],
+            out["ixm_b"],
+            out["ixn_b"],
+            theta=theta,
+            zeta=zeta,
+        )
+
+    scale0 = 1.0
+    step = 1.0e-4
+    value = float(objective(scale0))
+    autodiff = float(jax.grad(objective)(scale0))
+    finite_difference = float((objective(scale0 + step) - objective(scale0 - step)) / (2.0 * step))
+
+    assert np.isfinite(value)
+    assert np.isfinite(autodiff)
+    assert autodiff == pytest.approx(finite_difference, rel=5.0e-3, abs=1.0e-7)
+
+
 def test_vmec_jax_woutdata_adapter_matches_file_reader_on_optional_fixture() -> None:
     vmec_jax = pytest.importorskip("vmec_jax")
     pytest.importorskip("netCDF4")
     from vmec_jax.wout import read_wout as read_vmec_jax_wout
 
-    fixture = Path(vmec_jax.__file__).resolve().parents[1] / "examples" / "data" / "wout_circular_tokamak.nc"
-    if not fixture.exists():
-        pytest.skip(f"optional vmec_jax fixture not found: {fixture}")
+    fixture = _optional_vmec_jax_wout_fixture(vmec_jax)
+    if fixture is None:
+        pytest.skip("optional vmec_jax fixture not found")
 
     sfincs_file = read_vmec_wout(fixture)
     sfincs_from_vmec_jax = vmec_wout_from_wout_like(read_vmec_jax_wout(fixture))

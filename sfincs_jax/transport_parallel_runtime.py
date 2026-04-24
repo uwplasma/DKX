@@ -2,12 +2,114 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 
 import numpy as np
+
+from .transport_residual_quality import (
+    transport_residual_gate_failures_from_arrays,
+    transport_residual_gate_thresholds_from_env,
+)
+
+
+_GPU_WORKER_LOG_MARKERS = (
+    "whichRHS=",
+    "rhs_norm=",
+    "preconditioner=",
+    "active-DOF",
+    "host sparse",
+    "sparse LU",
+    "fallback",
+    "retry",
+    "residual_norm=",
+    "elapsed_s=",
+)
+
+
+def summarize_transport_worker_output(text: str, *, max_lines: int = 24) -> list[str]:
+    """Return the useful progress lines from a successful transport worker log."""
+    selected: list[str] = []
+    for raw_line in str(text).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if any(marker in line for marker in _GPU_WORKER_LOG_MARKERS):
+            selected.append(line)
+    if len(selected) <= int(max_lines):
+        return selected
+    head = max(1, int(max_lines) // 3)
+    tail = max(1, int(max_lines) - head - 1)
+    return [*selected[:head], "...", *selected[-tail:]]
+
+
+def transport_worker_subprocess_env(base_env: dict[str, str]) -> dict[str, str]:
+    """Return worker env with the source checkout importable from scan subdirs."""
+    env = dict(base_env)
+    repo_root = str(Path(__file__).resolve().parents[1])
+    existing = env.get("PYTHONPATH", "").strip()
+    parts = [repo_root]
+    if existing:
+        parts.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(parts)
+    return env
+
+
+def _quality_failure_from_worker_result(output_path: Path) -> str | None:
+    max_abs, max_rel = transport_residual_gate_thresholds_from_env()
+    if max_abs <= 0.0 and max_rel <= 0.0:
+        return None
+    if not output_path.exists():
+        return None
+    with np.load(output_path) as data:
+        rhs_values = np.asarray(data["which_rhs_values"], dtype=np.int32)
+        residual_norms = np.asarray(data["residual_norms"], dtype=np.float64)
+        rhs_norms = (
+            np.asarray(data["rhs_norms"], dtype=np.float64)
+            if "rhs_norms" in data.files
+            else np.full_like(residual_norms, np.nan, dtype=np.float64)
+        )
+    failures = transport_residual_gate_failures_from_arrays(
+        which_rhs_values=rhs_values,
+        residual_norms=residual_norms,
+        rhs_norms=rhs_norms,
+        max_abs=float(max_abs),
+        max_relative=float(max_rel),
+    )
+    if not failures:
+        return None
+    return "; ".join(failures)
+
+
+def _quality_failure_from_worker_text(stdout: str, stderr: str) -> str | None:
+    text = "\n".join([str(stdout), str(stderr)])
+    marker = "transport residual gate failed:"
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if marker in line:
+            return line.split(marker, 1)[1].strip()
+    return None
+
+
+def _terminate_pending_workers(
+    procs: list[tuple[subprocess.Popen[str], Path, list[int], str]],
+    pending: set[int],
+) -> None:
+    for idx in list(pending):
+        proc = procs[idx][0]
+        if proc.poll() is None:
+            proc.terminate()
+    deadline = time.perf_counter() + 5.0
+    for idx in list(pending):
+        proc = procs[idx][0]
+        while proc.poll() is None and time.perf_counter() < deadline:
+            time.sleep(0.1)
+        if proc.poll() is None:
+            proc.kill()
 
 
 def partition_transport_rhs(values: list[int], workers: int) -> list[list[int]]:
@@ -57,6 +159,7 @@ def run_transport_parallel_gpu_subprocesses(
                 "--output",
                 str(output_path),
             ]
+            env = transport_worker_subprocess_env(env)
             proc = subprocess.Popen(
                 cmd,
                 env=env,
@@ -66,8 +169,75 @@ def run_transport_parallel_gpu_subprocesses(
             )
             procs.append((proc, output_path, rhs_vals, gpu_id))
 
-        for proc, output_path, rhs_vals, gpu_id in procs:
-            out, err = proc.communicate()
+        interval_env = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_STATUS_INTERVAL", "").strip()
+        try:
+            status_interval_s = float(interval_env) if interval_env else 30.0
+        except ValueError:
+            status_interval_s = 30.0
+        started = time.perf_counter()
+        last_status = started
+        pending = set(range(len(procs)))
+        completed: dict[int, tuple[str, str]] = {}
+        while pending:
+            for idx in list(pending):
+                proc, output_path, rhs_vals, gpu_id = procs[idx]
+                if proc.poll() is None:
+                    continue
+                out, err = proc.communicate()
+                completed[idx] = (out, err)
+                pending.remove(idx)
+                if emit is not None:
+                    emit(
+                        0,
+                        "solve_v3_transport_matrix_linear_gmres: GPU transport worker done "
+                        f"(gpu={gpu_id} whichRHS={rhs_vals} elapsed={time.perf_counter() - started:.1f}s)",
+                    )
+                if proc.returncode == 0:
+                    quality_failure = _quality_failure_from_worker_result(output_path)
+                    if quality_failure is not None:
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_transport_matrix_linear_gmres: GPU transport worker "
+                                "residual gate failed; terminating remaining workers "
+                                f"({quality_failure})",
+                            )
+                        _terminate_pending_workers(procs, pending)
+                        raise RuntimeError(
+                            "GPU transport worker residual gate failed: "
+                            f"gpu={gpu_id} whichRHS={rhs_vals}: {quality_failure}"
+                        )
+                else:
+                    quality_failure = _quality_failure_from_worker_text(out, err)
+                    if quality_failure is not None:
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_transport_matrix_linear_gmres: GPU transport worker "
+                                "residual gate failed; terminating remaining workers "
+                                f"({quality_failure})",
+                            )
+                        _terminate_pending_workers(procs, pending)
+                        raise RuntimeError(
+                            "GPU transport worker residual gate failed: "
+                            f"gpu={gpu_id} whichRHS={rhs_vals}: {quality_failure}"
+                        )
+            if pending:
+                now = time.perf_counter()
+                if emit is not None and status_interval_s > 0.0 and now - last_status >= status_interval_s:
+                    running = ", ".join(
+                        f"gpu={procs[idx][3]} rhs={procs[idx][2]}" for idx in sorted(pending)
+                    )
+                    emit(
+                        0,
+                        "solve_v3_transport_matrix_linear_gmres: GPU transport workers running "
+                        f"({running}; elapsed={now - started:.1f}s)",
+                    )
+                    last_status = now
+                time.sleep(0.5)
+
+        for idx, (proc, output_path, rhs_vals, gpu_id) in enumerate(procs):
+            out, err = completed.get(idx, ("", ""))
             if proc.returncode != 0:
                 raise RuntimeError(
                     "GPU transport worker failed "
@@ -75,11 +245,41 @@ def run_transport_parallel_gpu_subprocesses(
                     f"stdout:\n{out}\n"
                     f"stderr:\n{err}"
                 )
-            data = np.load(output_path)
-            rhs_values = [int(v) for v in np.asarray(data["which_rhs_values"], dtype=np.int32)]
-            state_vectors = np.asarray(data["state_vectors"], dtype=np.float64)
-            residual_norms = np.asarray(data["residual_norms"], dtype=np.float64)
-            elapsed_time_s = np.asarray(data["elapsed_time_s"], dtype=np.float64)
+            with np.load(output_path) as data:
+                rhs_values = [int(v) for v in np.asarray(data["which_rhs_values"], dtype=np.int32)]
+                state_vectors = np.asarray(data["state_vectors"], dtype=np.float64)
+                residual_norms = np.asarray(data["residual_norms"], dtype=np.float64)
+                if "rhs_norms" in data.files:
+                    rhs_norms = np.asarray(data["rhs_norms"], dtype=np.float64)
+                else:
+                    rhs_norms = np.full_like(residual_norms, np.nan, dtype=np.float64)
+                elapsed_time_s = np.asarray(data["elapsed_time_s"], dtype=np.float64)
+            if emit is not None:
+                for line in summarize_transport_worker_output(out):
+                    emit(
+                        1,
+                        "solve_v3_transport_matrix_linear_gmres: GPU transport worker log "
+                        f"(gpu={gpu_id} whichRHS={rhs_vals}): {line}",
+                    )
+                for rhs_value, residual_norm, rhs_norm, elapsed in zip(
+                    rhs_values,
+                    residual_norms,
+                    rhs_norms,
+                    elapsed_time_s,
+                    strict=False,
+                ):
+                    rel = (
+                        float(residual_norm) / float(rhs_norm)
+                        if np.isfinite(float(rhs_norm)) and float(rhs_norm) > 0.0
+                        else float("nan")
+                    )
+                    emit(
+                        0,
+                        "solve_v3_transport_matrix_linear_gmres: GPU transport worker result "
+                        f"(gpu={gpu_id} whichRHS={int(rhs_value)} residual_norm={float(residual_norm):.6e} "
+                        f"rhs_norm={float(rhs_norm):.6e} relative_residual={rel:.6e} "
+                        f"elapsed_s={float(elapsed):.3f})",
+                    )
             results.append(
                 {
                     "which_rhs_values": rhs_values,
@@ -88,6 +288,9 @@ def run_transport_parallel_gpu_subprocesses(
                     },
                     "residual_norms_by_rhs": {
                         int(rhs): float(residual_norms[idx]) for idx, rhs in enumerate(rhs_values)
+                    },
+                    "rhs_norms_by_rhs": {
+                        int(rhs): float(rhs_norms[idx]) for idx, rhs in enumerate(rhs_values)
                     },
                     "elapsed_time_s": elapsed_time_s,
                 }
@@ -99,9 +302,10 @@ def merge_transport_parallel_results(
     *,
     n_rhs: int,
     results: list[dict[str, object]],
-) -> tuple[dict[int, np.ndarray], dict[int, float], np.ndarray]:
+) -> tuple[dict[int, np.ndarray], dict[int, float], dict[int, float], np.ndarray]:
     state_vectors: dict[int, np.ndarray] = {}
     residual_norms: dict[int, float] = {}
+    rhs_norms: dict[int, float] = {}
     elapsed_s = np.zeros((int(n_rhs),), dtype=np.float64)
     for res in results:
         rhs_vals = [int(v) for v in res.get("which_rhs_values", [])]
@@ -119,5 +323,6 @@ def merge_transport_parallel_results(
             if count > 0:
                 elapsed_s[idxs[:count]] = elapsed_chunk[:count]
         residual_norms.update({int(k): float(v) for k, v in res.get("residual_norms_by_rhs", {}).items()})
+        rhs_norms.update({int(k): float(v) for k, v in res.get("rhs_norms_by_rhs", {}).items()})
         state_vectors.update({int(k): np.asarray(v, dtype=np.float64) for k, v in res.get("state_vectors_by_rhs", {}).items()})
-    return state_vectors, residual_norms, elapsed_s
+    return state_vectors, residual_norms, rhs_norms, elapsed_s

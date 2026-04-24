@@ -163,10 +163,29 @@ Minimal adapter workflow:
    zeta = np.linspace(0.0, 2.0 * np.pi / wout.nfp, 16, endpoint=False)
    geom = vmec_geometry_from_wout(w=wout, theta=theta, zeta=zeta, psi_n_wish=0.25)
 
-The remaining research-grade work is to expose an end-to-end public
-``vmec_jax -> sfincs_jax`` optimization example once the differentiable geometry
-producer can be validated with finite-difference/JAX-gradient checks on a bounded
-transport scalar.
+The public optional JAX-native handoff example is:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
+     --wout /path/to/wout_circular_tokamak.nc \
+     --mboz 3 \
+     --nboz 3 \
+     --surface 0.5
+
+This script uses ``vmec_jax`` provenance for a VMEC ``wout`` object,
+``booz_xform_jax`` for the Boozer transform, and
+``sfincs_jax.jax_geometry_adapters.boozer_spectrum_geometry_proxy_objective``
+for a differentiable scalar objective.  It reports the objective, the JAX
+gradient with respect to a VMEC magnetic-spectrum scale parameter, a centered
+finite-difference check, and a few gradient-descent steps.
+
+The current example validates the differentiable
+``VMEC-like spectral arrays -> booz_xform_jax -> sfincs_jax Boozer-spectrum
+objective`` graph.  File I/O and the default ``vmec_geometry_from_wout`` file
+adapter remain outside the differentiable graph.  Full VMEC-boundary-to-kinetic
+transport optimization is still a larger research workflow, but the public handoff
+now has a fast, tested gradient gate.
 
 Boozer ``.bc`` workflow
 -----------------------

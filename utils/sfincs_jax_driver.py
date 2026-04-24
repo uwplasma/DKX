@@ -33,6 +33,7 @@ def run_sfincs_jax(
     overwrite: bool = True,
     verbose: bool = True,
     ensure_equilibrium: bool = True,
+    differentiable: bool = False,
 ) -> Path:
     input_namelist = Path(input_namelist).resolve()
     if output_path is None:
@@ -54,7 +55,8 @@ def run_sfincs_jax(
             "sfincs_jax_driver: start "
             f"input={input_namelist.name} output={Path(output_path).name} "
             f"rhs_mode={rhs_mode} compute_solution={bool(compute_solution)} "
-            f"compute_transport_matrix={bool(compute_transport_matrix)}",
+            f"compute_transport_matrix={bool(compute_transport_matrix)} "
+            f"differentiable={bool(differentiable)}",
             flush=True,
         )
     t0 = time.perf_counter()
@@ -65,6 +67,7 @@ def run_sfincs_jax(
         compute_solution=bool(compute_solution),
         overwrite=overwrite,
         verbose=verbose,
+        differentiable=bool(differentiable),
     )
     if verbose:
         print(
@@ -101,6 +104,14 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Suppress verbose sfincs-style logging.",
     )
+    parser.add_argument(
+        "--differentiable",
+        action="store_true",
+        help=(
+            "Use the implicit/differentiable linear-solve path. The default utility "
+            "path is explicit and performance-oriented for scans and parity runs."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -119,6 +130,7 @@ def main() -> None:
         compute_solution=compute_solution,
         overwrite=not args.no_overwrite,
         verbose=not args.quiet,
+        differentiable=bool(args.differentiable),
     )
 
 

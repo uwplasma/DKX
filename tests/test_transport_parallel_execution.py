@@ -50,9 +50,11 @@ def test_build_transport_parallel_payloads_preserves_solver_inputs(tmp_path: Pat
         identity_shift=0.25,
         collect_transport_output_fields=False,
         phi1_hat_base=np.array([1.0, 2.0]),
+        differentiable=False,
     )
     assert [p["which_rhs_values"] for p in payloads] == [[1, 3], [2]]
     assert payloads[0]["input_path"] == str(input_path)
+    assert payloads[0]["differentiable"] is False
     np.testing.assert_allclose(payloads[0]["phi1_hat_base"], np.array([1.0, 2.0]))
 
 

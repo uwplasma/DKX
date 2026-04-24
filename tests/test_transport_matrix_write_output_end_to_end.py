@@ -138,3 +138,45 @@ def test_transport_matrix_recycle_matches_fixture(tmp_path: Path, monkeypatch: p
         rtol=0.0,
         atol=atol,
     )
+
+
+def test_transport_output_can_include_solver_residual_diagnostics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    here = Path(__file__).parent
+    input_path = here / "ref" / "transportMatrix_PAS_tiny_rhsMode2_scheme2.input.namelist"
+    out_path = tmp_path / "sfincsOutput_with_residuals.h5"
+
+    monkeypatch.setenv("SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS", "1")
+    write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=out_path,
+        compute_transport_matrix=True,
+    )
+
+    out = read_sfincs_h5(out_path)
+    n_rhs = int(np.asarray(out["transportMatrix"]).shape[1])
+    residuals = np.asarray(out["transportResidualNorms"], dtype=np.float64)
+    rhs_norms = np.asarray(out["transportRhsNorms"], dtype=np.float64)
+    relative_residuals = np.asarray(out["transportRelativeResidualNorms"], dtype=np.float64)
+    assert residuals.shape == (n_rhs,)
+    assert rhs_norms.shape == (n_rhs,)
+    assert relative_residuals.shape == (n_rhs,)
+    assert np.all(np.isfinite(residuals))
+    assert np.all(np.isfinite(rhs_norms))
+    assert np.all(np.isfinite(relative_residuals))
+    assert np.all(rhs_norms > 0.0)
+    np.testing.assert_allclose(relative_residuals, residuals / rhs_norms, rtol=1.0e-12, atol=1.0e-18)
+    np.testing.assert_allclose(
+        np.asarray(out["transportMaxResidualNorm"], dtype=np.float64),
+        np.max(np.abs(residuals)),
+        rtol=0.0,
+        atol=0.0,
+    )
+    np.testing.assert_allclose(
+        np.asarray(out["transportMaxRelativeResidualNorm"], dtype=np.float64),
+        np.max(np.abs(relative_residuals)),
+        rtol=0.0,
+        atol=0.0,
+    )
