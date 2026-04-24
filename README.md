@@ -326,8 +326,8 @@ Full per-case runtime / memory table:
 | `inductiveE_noEr` | 166.614 | 2.147 | 0.01x | 3.036 | 0.02x | 99.2 | 477.5 | 4.81x | 913.8 | 9.21x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `monoenergetic_geometryScheme1` | 0.795 | 2.046 | 2.57x | 14.571 | 18.33x | 110.2 | 710.5 | 6.45x | 996.7 | 9.04x | 0/203 (strict 0/203) | 0/203 (strict 0/203) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `monoenergetic_geometryScheme11` | 0.861 | 3.116 | 3.62x | 5.758 | 6.69x | 118.7 | 1201.2 | 10.12x | 1003.6 | 8.46x | 0/210 (strict 0/210) | 0/210 (strict 0/210) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme5_ASCII` | 1.052 | 3.471 | 3.30x | 4.296 | 4.08x | 142.1 | 3066.4 | 21.58x | 989.0 | 6.96x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme5_netCDF` | 1.029 | 2.522 | 2.45x | 4.196 | 4.08x | 131.4 | 1162.7 | 8.85x | 988.3 | 7.52x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `monoenergetic_geometryScheme5_ASCII` | 1.052 | 1.518 | 1.44x | 4.296 | 4.08x | 142.1 | 506.5 | 3.56x | 989.0 | 6.96x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `monoenergetic_geometryScheme5_netCDF` | 1.029 | 2.242 | 2.18x | 4.196 | 4.08x | 131.4 | 603.2 | 4.59x | 988.3 | 7.52x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `quick_2species_FPCollisions_noEr` | 166.945 | 2.097 | 0.01x | 2.784 | 0.02x | 97.1 | 478.7 | 4.93x | 913.3 | 9.40x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories` | 76.666 | 2.164 | 0.03x | 3.137 | 0.04x | 106.7 | 492.9 | 4.62x | 917.2 | 8.59x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` | 93.439 | 2.278 | 0.02x | 3.185 | 0.03x | 94.0 | 513.8 | 5.47x | 922.2 | 9.82x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
