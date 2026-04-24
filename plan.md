@@ -4547,3 +4547,77 @@ Notes:
 - This closes the current cheap collision-validation lane; the next practical
   target should shift to PAS performance/runtime offender work unless a new
   correctness regression appears.
+
+### 19.75 CPU PAS-DKES structured preconditioner promotion
+
+Ran a bounded current-tip PAS offender sweep before changing solver defaults.
+
+Measurements:
+
+- `geometryScheme4_2species_PAS_noEr`: default stayed the only viable CPU
+  route in the tested set, completing in `3.605s` wall / `2.530s` solve elapsed
+  with `0` Fortran mismatches. Forced `xmg`, `pas_lite`, `point_xdiag`, and
+  `xblock_tz_lmax` each hit the `45s` cap, so no default-policy change was made
+  for this case.
+- `HSX_PASCollisions_DKESTrajectories`: explicit `pas_tz` completed
+  parity-clean and lowered both runtime and memory versus the previous default
+  (`4.005s` / about `1007 MB` versus `5.200s` / about `2063 MB` in the initial
+  sweep). `pas_ilu` was rejected (`41.601s` and output deltas versus default).
+- `HSX_PASCollisions_fullTrajectories`: default remained better for runtime
+  (`4.571s`) while explicit `pas_tz` was lower-memory but slower (`6.233s`), so
+  the new rule is explicitly restricted to DKES trajectory cases.
+- `geometryScheme4_1species_PAS_withEr_DKESTrajectories` and
+  `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`
+  were already selecting `pas_tz` by default and stayed parity-clean.
+
+Code changes:
+
+- Added `rhs1_pas_dkes_cpu_pas_tz_preferred(...)` with bounded CPU-only guards
+  to promote PAS-DKES auto-selection from dense `xblock_tz` to structured
+  `pas_tz` when the angular block is large enough and `active_size <= 15000`.
+- Routed both the Schur-auto and weak-auto PAS default paths through this
+  helper.
+- Extended `scripts/benchmark_case_variants.py` so benchmark rows record the
+  selected RHSMode=1 preconditioner and timeout stdout/stderr tails remain
+  JSON-safe.
+- Documented the new knobs
+  `SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN` and
+  `SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_preconditioner_auto_policy.py sfincs_jax/v3_driver.py scripts/benchmark_case_variants.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_benchmark_case_variants.py`
+- `python -m ruff check sfincs_jax/rhs1_preconditioner_auto_policy.py scripts/benchmark_case_variants.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_benchmark_case_variants.py`
+- `python -m pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_benchmark_case_variants.py`
+  passed with `17 passed in 6.18s`.
+- Post-policy `HSX_PASCollisions_DKESTrajectories` default probe selected
+  `rhs1_preconditioner=pas_tz`, completed in `3.940s` wall / `3.123s` solve
+  elapsed, used about `1019 MB` RSS, and had `0/123` Fortran mismatches.
+- Non-DKES guard probe `HSX_PASCollisions_fullTrajectories` stayed default
+  `rhs1_preconditioner=schur`, completed in `4.121s`, and had `0/193` Fortran
+  mismatches.
+
+Next validation targets:
+
+- Build docs with warnings as errors and run the full local suite once the
+  README/performance-table updates are complete.
+- GPU PAS-DKES should be measured on `ssh office` before enabling any analogous
+  GPU default; this change intentionally leaves the GPU path untouched.
+
+### 19.76 Full-suite gate after CPU PAS-DKES promotion
+
+Ran the release-style local validation after the CPU PAS-DKES policy, benchmark
+harness, README, and documentation updates.
+
+Validation:
+
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `852 passed in 342.08s (0:05:42)`.
+
+Notes:
+
+- The local suite count increased from `848` to `852`, matching the four new
+  benchmark/policy helper tests added in this pass.
+- The docs build and full test runtime remain inside the target local CI budget.
+- The next PAS performance lane should be GPU-only measurement for PAS-DKES on
+  `ssh office`, not another CPU default change.

@@ -651,6 +651,11 @@ performance without changing the input file:
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX``: truncate the L dimension used by the
   PAS ``xblock_tz`` preconditioner (or ``xblock_tz_lmax``), reducing block size.
   This is used automatically for large PAS runs when ``xblock_tz_lmax`` is selected.
+- ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN`` and
+  ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX``: CPU PAS DKES trajectory
+  auto-selection bounds for preferring the structured ``pas_tz`` angular block
+  over dense ``xblock_tz`` when the angular block is large enough to make the
+  dense setup memory-heavy.
 
 - ``SFINCS_JAX_RHSMODE1_SCHUR_MODE``: constraintScheme=2 Schur preconditioner mode
   (``auto``/``diag``/``full``). ``auto`` selects a dense Schur complement when the

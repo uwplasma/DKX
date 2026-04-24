@@ -68,6 +68,7 @@ from .rhs1_preconditioner_auto_policy import (
     rhs1_fp_dkes_env_preconditioner_kind as _rhs1_fp_dkes_env_preconditioner_kind,
     rhs1_large_fp_near_zero_er_override_kind as _rhs1_large_fp_near_zero_er_override_kind,
     rhs1_pas_auto_large_base_kind as _rhs1_pas_auto_large_base_kind,
+    rhs1_pas_dkes_cpu_pas_tz_preferred as _rhs1_pas_dkes_cpu_pas_tz_preferred,
     rhs1_pas_dkes_xblock_allowed as _rhs1_pas_dkes_xblock_allowed,
     rhs1_pas_family_refinement_kind as _rhs1_pas_family_refinement_kind,
     rhs1_pas_tokamak_cpu_xblock_preferred as _rhs1_pas_tokamak_cpu_xblock_preferred,
@@ -11254,6 +11255,22 @@ def solve_v3_full_system_linear_gmres(
                                 "solve_v3_full_system_linear_gmres: sharded PAS near-zero-Er "
                                 "schur_auto -> xmg preconditioner",
                             )
+                    elif _rhs1_pas_dkes_cpu_pas_tz_preferred(
+                        has_pas=op.fblock.pas is not None,
+                        use_dkes=bool(use_dkes),
+                        backend=jax.default_backend(),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        max_l=int(max_l),
+                        active_size=int(active_size),
+                    ):
+                        rhs1_precond_kind = "pas_tz"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: CPU PAS DKES "
+                                "schur_auto -> pas_tz preconditioner",
+                            )
                     elif _rhs1_pas_dkes_xblock_allowed(
                         has_pas=op.fblock.pas is not None,
                         use_dkes=bool(use_dkes),
@@ -11320,6 +11337,22 @@ def solve_v3_full_system_linear_gmres(
                     and dke_size <= species_block_max
                 ):
                     rhs1_precond_kind = "species_block"
+                elif _rhs1_pas_dkes_cpu_pas_tz_preferred(
+                    has_pas=op.fblock.pas is not None,
+                    use_dkes=bool(use_dkes),
+                    backend=jax.default_backend(),
+                    n_theta=int(op.n_theta),
+                    n_zeta=int(op.n_zeta),
+                    max_l=int(max_l),
+                    active_size=int(active_size),
+                ):
+                    rhs1_precond_kind = "pas_tz"
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: CPU PAS DKES "
+                            "auto -> pas_tz preconditioner",
+                        )
                 elif (
                     op.fblock.pas is not None
                     and int(op.n_theta) > 1
@@ -11447,6 +11480,25 @@ def solve_v3_full_system_linear_gmres(
             n_zeta=int(op.n_zeta),
             max_l=int(max_l_local),
         )
+        if (
+            rhs1_precond_kind == "xblock_tz"
+            and _rhs1_pas_dkes_cpu_pas_tz_preferred(
+                has_pas=op.fblock.pas is not None,
+                use_dkes=bool(use_dkes),
+                backend=jax.default_backend(),
+                n_theta=int(op.n_theta),
+                n_zeta=int(op.n_zeta),
+                max_l=int(max_l_local),
+                active_size=int(active_size),
+            )
+        ):
+            rhs1_precond_kind = "pas_tz"
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: CPU PAS DKES "
+                    "weak-auto override -> pas_tz preconditioner",
+                )
     tokamak_like = bool(geom_scheme == 1 or int(op.n_zeta) <= 5)
     rhs1_precond_kind = _rhs1_pas_family_refinement_kind(
         rhs1_precond_env=rhs1_precond_env,

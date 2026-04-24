@@ -1,9 +1,44 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _load_benchmark_module():
+    repo = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "benchmark_case_variants_under_test",
+        repo / "scripts" / "benchmark_case_variants.py",
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_tail_text_normalizes_timeout_bytes() -> None:
+    module = _load_benchmark_module()
+
+    assert module._tail_text(b"alpha\nbeta", 4) == "beta"
+    assert module._tail_text("alpha\nbeta", 5) == "\nbeta"
+    assert module._tail_text(None, 4) == ""
+
+
+def test_last_rhs1_preconditioner_parses_final_solver_line() -> None:
+    module = _load_benchmark_module()
+
+    stdout = "\n".join(
+        [
+            "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=xblock_tz (active-DOF)",
+            "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)",
+        ]
+    )
+    assert module._last_rhs1_preconditioner(stdout) == "pas_tz"
+    assert module._last_rhs1_preconditioner("no preconditioner line") is None
 
 
 def test_benchmark_case_variants_smoke(tmp_path: Path) -> None:
