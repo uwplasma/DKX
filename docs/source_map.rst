@@ -225,6 +225,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   top-level transport process-parallel execution control, including run/no-run gating,
   per-worker payload construction, backend-specific execution, retry, and sequential
   fallback.
+- ``sfincs_jax/validation_artifacts.py``:
+  lightweight loaders and physics metrics for checked-in publication artifacts. This
+  module is independent of the heavy solver path, so documentation and CI can verify
+  collisionality, trajectory-sweep, and dashboard artifacts without rerunning large
+  scans.
 - ``sfincs_jax/phi1_newton_policy.py``:
   bounded nonlinear/Newton policy for Phi1 solves, including active-DOF mode
   selection, restart sizing, frozen-Jacobian cache policy, and line-search policy.

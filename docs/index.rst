@@ -37,6 +37,15 @@ This manual is organized around the actual user and developer workflows:
    cases. ``sfincs_jax`` runtime excludes first-time compilation. Reproduce with
    ``examples/performance/benchmark_transport_l11_vs_fortran.py``.
 
+.. figure:: _static/figures/paper/sfincs_jax_publication_validation_dashboard.png
+   :alt: Literature-anchored validation dashboard for sfincs_jax.
+   :align: center
+   :width: 90%
+
+   Publication-facing validation dashboard from checked-in collisionality and
+   electric-field sweep artifacts. Reproduce with
+   ``examples/publication_figures/generate_validation_dashboard.py``.
+
 .. figure:: _static/figures/transport_compile_runtime_cache_2x2.png
    :alt: Compile/runtime split with the persistent JAX cache across four reference cases.
    :align: center
