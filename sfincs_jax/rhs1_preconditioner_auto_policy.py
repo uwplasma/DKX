@@ -165,6 +165,13 @@ def _env_float(name: str, default: float) -> float:
         return float(default)
 
 
+def _env_token(name: str) -> str:
+    return os.environ.get(name, "").strip().lower()
+
+
+_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
 def canonical_rhs1_preconditioner_kind(raw: str | None) -> str | None:
     """Canonicalize ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` aliases.
 
@@ -522,7 +529,12 @@ def rhs1_pas_tokamak_gpu_xblock_preferred(
     max_l: int,
     xblock_tz_limit: int,
 ) -> bool:
-    """Prefer xblock_tz over theta/L for bounded GPU tokamak PAS+Er branches."""
+    """Return whether GPU tokamak PAS+Er should opt into ``xblock_tz``.
+
+    The default GPU route is a lower-runtime unpreconditioned GMRES path with a
+    tightened solve tolerance. Keep this helper as an explicit escape hatch for
+    users who want the older, heavier ``xblock_tz`` branch on bounded cases.
+    """
     if not rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=has_pas,
         has_fp=has_fp,
@@ -537,10 +549,52 @@ def rhs1_pas_tokamak_gpu_xblock_preferred(
         return False
     if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
         return False
-    prefer_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", 12000)
-    if int(active_size) > max(1, int(prefer_max)):
+    prefer_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", 0)
+    if int(prefer_max) <= 0:
+        return False
+    if int(active_size) > int(prefer_max):
         return False
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
+def rhs1_pas_tokamak_gpu_tight_tol(
+    *,
+    enabled: bool,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+) -> float | None:
+    """Return the auto-tightened GPU tokamak PAS tolerance, if applicable."""
+    if not enabled:
+        return None
+    if not rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=has_pas,
+        has_fp=has_fp,
+        backend=backend,
+        tokamak_like=tokamak_like,
+        active_size=active_size,
+        er_abs=er_abs,
+        schur_er_min=schur_er_min,
+        has_magdrift=has_magdrift,
+        has_collisionless=has_collisionless,
+    ):
+        return None
+    raw = _env_token("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL")
+    if not raw:
+        raw = _env_token("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL")
+    if raw in _FALSE_VALUES:
+        return None
+    try:
+        tol = float(raw) if raw else 1.0e-8
+    except ValueError:
+        tol = 1.0e-8
+    return tol if tol > 0.0 else None
 
 
 def rhs1_pas_tokamak_cpu_xblock_preferred(
@@ -639,6 +693,7 @@ __all__ = [
     "rhs1_pas_weak_auto_override_kind",
     "rhs1_pas_tokamak_cpu_xblock_preferred",
     "rhs1_pas_tokamak_gpu_theta_allowed",
+    "rhs1_pas_tokamak_gpu_tight_tol",
     "rhs1_pas_tokamak_gpu_xblock_preferred",
     "rhs1_sharded_line_override_allowed",
 ]

@@ -74,6 +74,7 @@ from .rhs1_preconditioner_auto_policy import (
     rhs1_pas_full_cpu_pas_tz_preferred as _rhs1_pas_full_cpu_pas_tz_preferred,
     rhs1_pas_tokamak_cpu_xblock_preferred as _rhs1_pas_tokamak_cpu_xblock_preferred,
     rhs1_pas_tokamak_gpu_theta_allowed as _rhs1_pas_tokamak_gpu_theta_allowed,
+    rhs1_pas_tokamak_gpu_tight_tol as _rhs1_pas_tokamak_gpu_tight_tol,
     rhs1_pas_tokamak_gpu_xblock_preferred as _rhs1_pas_tokamak_gpu_xblock_preferred,
     rhs1_pas_weak_auto_override_kind as _rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
@@ -10859,6 +10860,7 @@ def solve_v3_full_system_linear_gmres(
         pre_zeta = 0
     rhs1_precond_kind: str | None
     rhs1_xblock_tz_lmax: int | None = None
+    rhs1_gpu_tokamak_pas_tight_gmres = False
     def _rhs1_dd_sharded_axis() -> str | None:
         gmres_dist_env = os.environ.get("SFINCS_JAX_GMRES_DISTRIBUTED", "").strip().lower()
         if gmres_dist_env in {"0", "false", "no", "off"}:
@@ -10939,6 +10941,7 @@ def solve_v3_full_system_linear_gmres(
     except ValueError:
         pas_auto_strong_ratio = 10.0
     er_abs = 0.0
+    schur_er_min = 1.0e-12
 
     if rhs1_precond_env:
         rhs1_precond_kind = _canonical_rhs1_preconditioner_kind(rhs1_precond_env)
@@ -11178,12 +11181,13 @@ def solve_v3_full_system_linear_gmres(
                             ),
                             has_collisionless=op.fblock.collisionless is not None,
                         ):
-                            rhs1_precond_kind = "pas_tokamak_theta"
+                            rhs1_precond_kind = None
+                            rhs1_gpu_tokamak_pas_tight_gmres = True
                             if emit is not None:
                                 emit(
                                     1,
                                     "solve_v3_full_system_linear_gmres: GPU PAS tokamak "
-                                    "auto -> pas_tokamak_theta preconditioner",
+                                    "auto -> tight unpreconditioned GMRES",
                                 )
                         elif op.fblock.pas is not None and int(op.total_size) >= pas_xmg_min:
                             # Large constrained PAS+Er systems need stronger x/L coupling than
@@ -11464,6 +11468,7 @@ def solve_v3_full_system_linear_gmres(
             "xblock_tz_lmax",
             "theta_line_xdiag",
         }
+        and not rhs1_gpu_tokamak_pas_tight_gmres
     ):
         # PAS runs can stagnate with weak preconditioners; use the
         # PAS hybrid (line + x-coarse) preconditioner by default. For large systems,
@@ -11619,6 +11624,7 @@ def solve_v3_full_system_linear_gmres(
         and int(op.rhs_mode) == 1
         and op.fblock.pas is not None
         and rhs1_precond_kind in {None, "collision", "point"}
+        and not rhs1_gpu_tokamak_pas_tight_gmres
     ):
         pas_strong_max_env = os.environ.get("SFINCS_JAX_PAS_STRONG_MAX", "").strip()
         try:
@@ -11734,6 +11740,31 @@ def solve_v3_full_system_linear_gmres(
                     )
     if str(solve_method).strip().lower() in {"dense", "dense_ksp", "dense_row_scaled"}:
         rhs1_precond_kind = None
+    pas_tokamak_gpu_tol = _rhs1_pas_tokamak_gpu_tight_tol(
+        enabled=rhs1_gpu_tokamak_pas_tight_gmres or rhs1_precond_kind == "pas_tokamak_theta",
+        has_pas=op.fblock.pas is not None,
+        has_fp=op.fblock.fp is not None,
+        backend=jax.default_backend(),
+        tokamak_like=tokamak_like,
+        active_size=int(active_size),
+        er_abs=float(er_abs),
+        schur_er_min=float(schur_er_min),
+        has_magdrift=(
+            op.fblock.magdrift_theta is not None
+            or op.fblock.magdrift_zeta is not None
+            or op.fblock.magdrift_xidot is not None
+        ),
+        has_collisionless=op.fblock.collisionless is not None,
+    )
+    if pas_tokamak_gpu_tol is not None:
+        tol_old = float(tol)
+        tol = min(float(tol), float(pas_tokamak_gpu_tol))
+        if emit is not None and float(tol) < tol_old:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: GPU PAS tokamak "
+                f"tol tightened {tol_old:.1e} -> {float(tol):.1e}",
+            )
     if (
         (not rhs1_precond_env)
         and maxiter_env == ""
