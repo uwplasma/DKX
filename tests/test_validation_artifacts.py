@@ -65,7 +65,7 @@ def test_er_sweep_artifact_metrics_pin_zero_field_and_finite_field_behavior() ->
 def test_publication_validation_summary_has_research_gate_payload() -> None:
     payload = build_publication_validation_summary(artifact_dir=_artifact_dir())
     assert payload["metadata"]["kind"] == "publication_validation_dashboard"
-    assert "https://doi.org/10.1063/1.4870073" in payload["metadata"]["literature"]
+    assert "https://doi.org/10.1063/1.4870077" in payload["metadata"]["literature"]
     assert payload["collisionality"]["lhd"]["l11_high_to_low_relative_separation_ratio"] > 10.0
     assert payload["collisionality"]["w7x"]["l11_high_to_low_relative_separation_ratio"] > 10.0
     assert payload["trajectory_sweeps"]["tokamak"]["models"] == ["dkes", "full", "partial"]
