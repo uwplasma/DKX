@@ -42,6 +42,46 @@ class TransportDensePolicy:
     dense_mem_est_active_mb64: float
 
 
+def transport_geometry5_mono_low_memory_preferred(
+    *,
+    rhs_mode: int,
+    geometry_scheme: int,
+    backend: str,
+    has_fp: bool,
+    n_x: int,
+    total_size: int,
+) -> bool:
+    """Return whether VMEC monoenergetic transport should avoid dense fallback.
+
+    The CPU VMEC RHSMode=3 examples are small enough that dense batched solves are
+    numerically safe, but the CLI/XLA dense path can transiently retain multi-GB
+    allocations. The existing Krylov + ``tzfft`` path is parity-clean on the
+    geometryScheme=5 monoenergetic examples and has much lower peak RSS.
+    """
+    mode = os.environ.get("SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY", "").strip().lower()
+    if mode in {"0", "false", "no", "off"}:
+        return False
+    if int(rhs_mode) != 3 or int(geometry_scheme) != 5:
+        return False
+    if bool(has_fp) or int(n_x) > 2:
+        return False
+    if mode in {"1", "true", "yes", "on"}:
+        return True
+    if str(backend).strip().lower() != "cpu":
+        return False
+    min_env = os.environ.get("SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MIN", "").strip()
+    max_env = os.environ.get("SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MAX", "").strip()
+    try:
+        min_size = int(min_env) if min_env else 1000
+    except ValueError:
+        min_size = 1000
+    try:
+        max_size = int(max_env) if max_env else 20000
+    except ValueError:
+        max_size = 20000
+    return max(1, int(min_size)) <= int(total_size) <= max(1, int(max_size))
+
+
 def resolve_transport_active_dof_mode(
     *,
     op: Any,
@@ -207,4 +247,5 @@ __all__ = [
     "build_transport_active_dof_state",
     "resolve_transport_active_dof_mode",
     "resolve_transport_dense_policy",
+    "transport_geometry5_mono_low_memory_preferred",
 ]

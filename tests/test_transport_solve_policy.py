@@ -8,6 +8,7 @@ from sfincs_jax.transport_solve_policy import (
     build_transport_active_dof_state,
     resolve_transport_active_dof_mode,
     resolve_transport_dense_policy,
+    transport_geometry5_mono_low_memory_preferred,
 )
 
 
@@ -108,3 +109,57 @@ def test_resolve_transport_dense_policy_handles_memory_caps_and_auto_dense(monke
     assert capped.solve_method_use == "incremental"
     assert not capped.force_dense
     assert not capped.dense_fallback
+
+
+def test_geometry5_mono_low_memory_policy_is_guarded(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY", raising=False)
+    assert transport_geometry5_mono_low_memory_preferred(
+        rhs_mode=3,
+        geometry_scheme=5,
+        backend="cpu",
+        has_fp=False,
+        n_x=1,
+        total_size=3697,
+    )
+    assert not transport_geometry5_mono_low_memory_preferred(
+        rhs_mode=3,
+        geometry_scheme=11,
+        backend="cpu",
+        has_fp=False,
+        n_x=1,
+        total_size=3697,
+    )
+    assert not transport_geometry5_mono_low_memory_preferred(
+        rhs_mode=3,
+        geometry_scheme=5,
+        backend="gpu",
+        has_fp=False,
+        n_x=1,
+        total_size=3697,
+    )
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY", "0")
+    assert not transport_geometry5_mono_low_memory_preferred(
+        rhs_mode=3,
+        geometry_scheme=5,
+        backend="cpu",
+        has_fp=False,
+        n_x=1,
+        total_size=3697,
+    )
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY", "1")
+    assert transport_geometry5_mono_low_memory_preferred(
+        rhs_mode=3,
+        geometry_scheme=5,
+        backend="gpu",
+        has_fp=False,
+        n_x=1,
+        total_size=1,
+    )
+    assert not transport_geometry5_mono_low_memory_preferred(
+        rhs_mode=2,
+        geometry_scheme=1,
+        backend="gpu",
+        has_fp=True,
+        n_x=16,
+        total_size=1,
+    )

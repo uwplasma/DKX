@@ -180,6 +180,7 @@ from .transport_solve_policy import (
     build_transport_active_dof_state,
     resolve_transport_active_dof_mode,
     resolve_transport_dense_policy,
+    transport_geometry5_mono_low_memory_preferred,
 )
 from .transport_handoff_policy import (
     transport_candidate_is_better,
@@ -18652,11 +18653,31 @@ def solve_v3_transport_matrix_linear_gmres(
             "The first solve may include one-time JIT compilation, so later solves can be faster.",
         )
 
+    geom_params = nml.group("geometryParameters")
+    try:
+        transport_geom_scheme = int(geom_params.get("GEOMETRYSCHEME", geom_params.get("geometryScheme", -1)) or -1)
+    except (TypeError, ValueError):
+        transport_geom_scheme = -1
     low_memory_env = os.environ.get("SFINCS_JAX_TRANSPORT_LOW_MEMORY", "").strip().lower()
     if low_memory_env in {"1", "true", "yes", "on"}:
         low_memory_outputs = True
     elif low_memory_env in {"0", "false", "no", "off"}:
         low_memory_outputs = False
+    elif transport_geometry5_mono_low_memory_preferred(
+        rhs_mode=int(rhs_mode),
+        geometry_scheme=int(transport_geom_scheme),
+        backend=jax.default_backend(),
+        has_fp=op0.fblock.fp is not None,
+        n_x=int(op0.n_x),
+        total_size=int(op0.total_size),
+    ):
+        low_memory_outputs = True
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_transport_matrix_linear_gmres: geometryScheme=5 RHSMode=3 "
+                "auto -> low-memory Krylov transport path",
+            )
     else:
         low_memory_outputs = int(op0.total_size) * int(n) >= 200_000
     stream_env = os.environ.get("SFINCS_JAX_TRANSPORT_STREAM_DIAGNOSTICS", "").strip().lower()

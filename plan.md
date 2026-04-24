@@ -137,7 +137,7 @@ Core requirement right now:
   - the adaptive PAS smoother and structured `pas_tokamak_theta` tail are not active on the current top tokamak/geometry4 offenders,
   - `lgmres` is now wired through the CLI and safely downgraded on traced/JIT/distributed paths, but it is slower than the current defaults on `geometryScheme4_2species_PAS_noEr` and `geometryScheme5_3species_loRes`, and effectively neutral on the tokamak PAS+Er case,
   - the fresh current `main` GPU full-suite refresh plus focused current-tip rows now capture the big bounded-solver wins directly in the release-facing docs: `geometryScheme5_3species_loRes` is down to `4.294s`, `tokamak_1species_PASCollisions_withEr_fullTrajectories` to `3.249s`, `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` to `7.420s`, and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` to `6.314s`, all strict-clean,
-  - forcing transport sparse-direct first on `monoenergetic_geometryScheme5_ASCII` is parity-clean but only marginally faster on the pinned final CPU input, so it is not yet a compelling default change,
+  - CPU `geometryScheme=5` monoenergetic transport now prefers the low-memory Krylov/`tzfft` path by default on bounded VMEC RHSMode=3 cases; focused CLI probes reduced `monoenergetic_geometryScheme5_ASCII` from about `2950-3066 MB` to `506.5 MB` and `monoenergetic_geometryScheme5_netCDF` to `603.2 MB`, both with `0` Fortran mismatches,
   - the fresh GPU full-suite root also records `monoenergetic_geometryScheme5_ASCII` parity-clean at `3.938s` on the current bounded accelerator `tzfft` path,
   - and `geometryScheme4_2species_PAS_noEr` now uses direct `pas_tz` by default on the bounded near-zero-Er PAS lane, dropping the focused GPU RSS to about `1817.0 MB` while preserving parity.
   - `lineax` has been gated and is not admitted yet: on a small real SFINCS operator it matched the current residual and ran faster locally (`~0.54s` vs `~3.29s`), but on a generic nonsymmetric test matrix its default GMRES configuration stagnated, so it is still a bounded differentiable/reference-path candidate rather than a production CLI dependency.
@@ -146,7 +146,7 @@ Core requirement right now:
 - The pinned full-suite CPU root still records a stale pre-optimization `tokamak_1species_PASCollisions_withEr_fullTrajectories` artifact (`37.747s` JAX CPU vs `0.017s` Fortran), but current-tip frozen-case reruns on the same input are now down to about `3.56s` with parity preserved. A full-suite refresh is still needed before README tables can claim that CPU improvement.
 - Runtime ratio is still high for the heavier PAS / geometry-rich CPU cases, especially HSX / geometry4 PAS branches in the `3.5-4.9s` range on current targeted reruns.
 - GPU wall time is now robust and parity-clean in the refreshed `v11` root plus focused current-tip rows. The remaining runtime offenders are `monoenergetic_geometryScheme1` (`14.571s`), `HSX_PASCollisions_fullTrajectories` (`9.082s`), `tokamak_2species_PASCollisions_withEr_fullTrajectories` (`7.722s`), and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (`6.458s`).
-- Memory ratio remains high on select PAS/FP cases. Current worst CPU RSS offenders are `monoenergetic_geometryScheme5_ASCII` (`3066.4 MB`) and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2298.6 MB`), while current worst GPU RSS offenders are `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2097.0 MB`) and `HSX_PASCollisions_fullTrajectories` (`2042.1 MB`).
+- Memory ratio remains high on select PAS/FP cases. After the geometry5 monoenergetic low-memory default, the current worst CPU RSS offender is `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2298.6 MB`), while current worst GPU RSS offenders are `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2097.0 MB`) and `HSX_PASCollisions_fullTrajectories` (`2042.1 MB`).
 - Parallel strong-scaling beyond a few cores is not yet consistently strong for single-RHS large solves.
 
 ### 5.3 Product posture
@@ -4934,3 +4934,76 @@ Next validation targets:
 - Continue memory-offender work on
   `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`
   and CPU `monoenergetic_geometryScheme5_ASCII`.
+
+### 19.84 Geometry11 PAS GPU memory sweep
+
+Ran a clean `office` GPU1 focused sweep on
+`sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`
+from the frozen GPU case directory.
+
+Measured variants:
+
+- Default `schur`: `12.267s`, `2146300 KB` RSS (`2096.0 MB`), `0` Fortran
+  mismatches.
+- Forced `pas_tz`: `20.156s`, `1687252 KB` RSS (`1647.7 MB`), `0` mismatches.
+- Forced `pas_tz` with `SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX=8`: `37.569s`,
+  `1906340 KB` RSS, `0` mismatches.
+- Forced `schur` with `SFINCS_JAX_RHSMODE1_SCHUR_MODE=diag`: `32.086s`,
+  `1994784 KB` RSS, `0` mismatches.
+- Forced `schur` with `SFINCS_JAX_RHSMODE1_SCHUR_BASE=pas_tz`: `14.159s`,
+  `2145628 KB` RSS, `0` mismatches.
+- Forced `point_xdiag`: timed out at `180s`.
+- Follow-up solver/restart sweep: `bicgstab`, `pas_tz+bicgstab`,
+  `pas_hybrid`, and `pas_lite` all timed out at `120s`; GMRES restart caps
+  (`40`/`20`) were parity-clean but slower (`15-16s`) for only ~7-8% RSS
+  reduction.
+
+Decision:
+
+- Do not promote a default geometry11 GPU memory policy yet. Direct `pas_tz`
+  is a useful manual low-memory knob, but the runtime penalty is too large for
+  the default release path. The safe default remains Schur until a genuinely
+  faster streaming/angular solve is available.
+
+### 19.85 VMEC monoenergetic CPU low-memory default
+
+Implemented a guarded CPU low-memory default for bounded VMEC monoenergetic
+transport:
+
+- Added `transport_geometry5_mono_low_memory_preferred(...)` in
+  `sfincs_jax/transport_solve_policy.py`.
+- The automatic guard applies to CPU `RHSMode=3`, `geometryScheme=5`, PAS/no-FP,
+  `Nx <= 2`, and total size between
+  `SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MIN` and
+  `SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MAX` (defaults `1000` and
+  `20000`).
+- `SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY=0` restores the previous dense
+  batched fallback; `=1` forces the low-memory path for comparison.
+
+Measurements:
+
+- `monoenergetic_geometryScheme5_ASCII`, CLI default before the policy:
+  `2.445s` wall, `2950.7 MB` profiled RSS, `0` Fortran mismatches.
+- `monoenergetic_geometryScheme5_ASCII`, new default after the policy:
+  `1.518s` logged total, `506.5 MB` profiled RSS, `0` Fortran mismatches.
+- `monoenergetic_geometryScheme5_netCDF`, new default:
+  `2.242s` logged total, `603.2 MB` profiled RSS, `0` Fortran mismatches.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/transport_solve_policy.py sfincs_jax/v3_driver.py tests/test_transport_solve_policy.py`
+- `python -m ruff check sfincs_jax/transport_solve_policy.py tests/test_transport_solve_policy.py`
+- `python -m pytest -q tests/test_transport_solve_policy.py`
+- Focused CLI parity probes for `monoenergetic_geometryScheme5_ASCII` and
+  `monoenergetic_geometryScheme5_netCDF` against their frozen Fortran
+  `sfincsOutput.h5` references, both `0` mismatches.
+- `pytest -q tests/test_transport_solve_policy.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_transport_matrix_write_output_end_to_end.py`
+  passed with `14 passed in 4.89s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `858 passed in 333.60s (0:05:33)`.
+
+Next validation targets:
+
+- Continue CPU/GPU offender work with geometry11 PAS full-trajectory as the
+  remaining memory target; treat direct `pas_tz` there as an opt-in knob until
+  runtime improves.
