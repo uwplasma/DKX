@@ -308,6 +308,24 @@ def _scan_dir_complete(work_dir: Path, *, expected_subdirs: tuple[str, ...]) -> 
     return all((work_dir / name / "sfincsOutput.h5").exists() for name in expected_subdirs)
 
 
+def _require_complete_plot_only_scan(
+    work_dir: Path,
+    *,
+    case_name: str,
+    collision_operator: int,
+    expected_subdirs: tuple[str, ...],
+) -> None:
+    if _scan_dir_complete(work_dir, expected_subdirs=expected_subdirs):
+        return
+    found = sum(1 for _ in work_dir.glob("*/sfincsOutput.h5"))
+    expected = len(expected_subdirs)
+    raise RuntimeError(
+        "--plot-only requires a complete scan before publication summaries are "
+        f"rewritten: case={case_name}, collisionOperator={collision_operator}, "
+        f"found={found}/{expected}, work_dir={work_dir}"
+    )
+
+
 def _prune_incomplete_scan_dirs(work_dir: Path, *, expected_subdirs: tuple[str, ...]) -> None:
     for name in expected_subdirs:
         subdir = work_dir / name
@@ -518,7 +536,14 @@ def main() -> None:
             )
             case_dir = work_dir / f"{cfg.name}_co{collision_operator}"
             case_dir.mkdir(parents=True, exist_ok=True)
-            if not plot_only:
+            if plot_only:
+                _require_complete_plot_only_scan(
+                    case_dir,
+                    case_name=cfg.name,
+                    collision_operator=collision_operator,
+                    expected_subdirs=expected_subdirs,
+                )
+            else:
                 if skip_existing:
                     _prune_incomplete_scan_dirs(case_dir, expected_subdirs=expected_subdirs)
                     should_run = not _scan_dir_complete(case_dir, expected_subdirs=expected_subdirs)
@@ -585,7 +610,14 @@ def main() -> None:
             )
             case_dir = work_dir / f"w7x_co{collision_operator}"
             case_dir.mkdir(parents=True, exist_ok=True)
-            if not plot_only:
+            if plot_only:
+                _require_complete_plot_only_scan(
+                    case_dir,
+                    case_name=w7x.name,
+                    collision_operator=collision_operator,
+                    expected_subdirs=expected_subdirs,
+                )
+            else:
                 if skip_existing:
                     _prune_incomplete_scan_dirs(case_dir, expected_subdirs=expected_subdirs)
                     should_run = not _scan_dir_complete(case_dir, expected_subdirs=expected_subdirs)
