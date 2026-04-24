@@ -754,6 +754,14 @@ performance without changing the input file:
   (default: ``4000``). This is intended for explicit CLI/default solves on moderate
   tokamak PAS branches where ``xblock_tz`` is parity-clean and much cheaper than
   the old ``pas_schur -> xblock_tz`` fallback ladder.
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL``: solve tolerance for bounded
+  one-GPU tokamak PAS+Er runs that use the tight unpreconditioned GMRES route
+  (default: ``1e-8``; set ``0``/``false`` to disable). The legacy
+  ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` name is still accepted.
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``: opt-in active-size
+  cap for the older GPU ``xblock_tz`` branch on bounded tokamak PAS+Er cases
+  (default: ``0``, disabled). Set this to a positive active-DOF cap only when a
+  local benchmark shows ``xblock_tz`` is preferable for that GPU/case.
 
 - ``SFINCS_JAX_PAS_PROJECT_CONSTRAINTS``: enable PAS-specific constraint projection for
   ``constraintScheme=2`` RHSMode=1 solves (drop explicit source unknowns and enforce the
