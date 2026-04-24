@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from sfincs_jax.collisions import (
     _V3_SQRTPI,
     _psi_chandra,
     apply_pitch_angle_scattering_v3,
+    apply_fokker_planck_v3,
+    apply_fokker_planck_v3_phi1,
+    FokkerPlanckV3Operator,
+    FokkerPlanckV3Phi1Operator,
     make_pitch_angle_scattering_v3_operator,
     nu_d_hat_pitch_angle_scattering_v3,
     polynomial_interpolation_matrix_np,
@@ -142,3 +147,108 @@ def test_rosenbluth_analytic_terms_match_quadpack_reference() -> None:
     assert np.all(np.isfinite(quadpack))
     assert np.all(np.isfinite(analytic))
     np.testing.assert_allclose(analytic, quadpack, rtol=2.0e-13, atol=2.0e-13)
+
+
+def test_fokker_planck_apply_matches_dense_x_matvec_and_masks_inactive_l() -> None:
+    mat = np.zeros((1, 1, 3, 2, 2), dtype=np.float64)
+    mat[0, 0, 0] = np.asarray([[1.0, 2.0], [3.0, 4.0]])
+    mat[0, 0, 1] = np.asarray([[0.5, -1.0], [2.0, 0.25]])
+    mat[0, 0, 2] = np.asarray([[2.0, 0.0], [0.0, -1.0]])
+    op = FokkerPlanckV3Operator(
+        mat=jnp.asarray(mat),
+        n_xi_for_x=jnp.asarray([3, 1], dtype=jnp.int32),
+        # Deliberately use the wrong L-width so apply_fokker_planck_v3 must rebuild
+        # the mask for the runtime n_xi.
+        mask_xi=jnp.ones((2, 1), dtype=jnp.float64),
+    )
+    f = np.arange(1 * 2 * 3 * 2 * 1, dtype=np.float64).reshape(1, 2, 3, 2, 1)
+
+    out = np.asarray(apply_fokker_planck_v3(op, jnp.asarray(f)))
+    expected = np.zeros_like(f)
+    for ell in range(3):
+        for itheta in range(2):
+            expected[0, :, ell, itheta, 0] = mat[0, 0, ell] @ f[0, :, ell, itheta, 0]
+    expected[0, 1, 1:, :, :] = 0.0
+
+    np.testing.assert_allclose(out, expected, rtol=0.0, atol=0.0)
+
+
+def test_fokker_planck_apply_rejects_bad_shapes() -> None:
+    op = FokkerPlanckV3Operator(
+        mat=jnp.zeros((1, 1, 1, 1, 1), dtype=jnp.float64),
+        n_xi_for_x=jnp.asarray([1], dtype=jnp.int32),
+        mask_xi=jnp.ones((1, 1), dtype=jnp.float64),
+    )
+    with pytest.raises(ValueError, match="f must have shape"):
+        apply_fokker_planck_v3(op, jnp.ones((1, 1, 1, 1), dtype=jnp.float64))
+
+    bad_op = FokkerPlanckV3Operator(
+        mat=jnp.zeros((1, 1, 2, 1, 1), dtype=jnp.float64),
+        n_xi_for_x=jnp.asarray([1], dtype=jnp.int32),
+        mask_xi=jnp.ones((1, 1), dtype=jnp.float64),
+    )
+    with pytest.raises(ValueError, match="op.mat has shape"):
+        apply_fokker_planck_v3(bad_op, jnp.ones((1, 1, 1, 1, 1), dtype=jnp.float64))
+
+
+def test_phi1_fokker_planck_apply_uses_boltzmann_density_factor_and_mask() -> None:
+    op = FokkerPlanckV3Phi1Operator(
+        nu_n=jnp.asarray(1.0, dtype=jnp.float64),
+        krook=jnp.asarray(0.0, dtype=jnp.float64),
+        alpha=jnp.asarray(2.0, dtype=jnp.float64),
+        z_s=jnp.asarray([1.0], dtype=jnp.float64),
+        n_hats=jnp.asarray([3.0], dtype=jnp.float64),
+        t_hats=jnp.asarray([4.0], dtype=jnp.float64),
+        nl=0,
+        k_nu=jnp.zeros((1, 1, 1), dtype=jnp.float64),
+        k_cd=jnp.asarray([[[[2.0]]]], dtype=jnp.float64),
+        k_ce=jnp.zeros((1, 1, 1, 1), dtype=jnp.float64),
+        k_rosen=jnp.zeros((1, 1, 0, 1, 1), dtype=jnp.float64),
+        n_xi_for_x=jnp.asarray([1], dtype=jnp.int32),
+    )
+    f = jnp.ones((1, 1, 2, 2, 1), dtype=jnp.float64)
+    phi1_hat = jnp.asarray([[0.0], [np.log(4.0)]], dtype=jnp.float64)
+
+    out = np.asarray(apply_fokker_planck_v3_phi1(op, f, phi1_hat=phi1_hat))
+
+    expected = np.zeros((1, 1, 2, 2, 1), dtype=np.float64)
+    n_pol = np.asarray([3.0, 1.5], dtype=np.float64)
+    expected[0, 0, 0, :, 0] = -2.0 * n_pol
+    np.testing.assert_allclose(out, expected, rtol=0.0, atol=2.0e-15)
+
+
+def test_phi1_fokker_planck_apply_rejects_bad_shapes() -> None:
+    op = FokkerPlanckV3Phi1Operator(
+        nu_n=jnp.asarray(1.0, dtype=jnp.float64),
+        krook=jnp.asarray(0.0, dtype=jnp.float64),
+        alpha=jnp.asarray(1.0, dtype=jnp.float64),
+        z_s=jnp.asarray([1.0], dtype=jnp.float64),
+        n_hats=jnp.asarray([1.0], dtype=jnp.float64),
+        t_hats=jnp.asarray([1.0], dtype=jnp.float64),
+        nl=0,
+        k_nu=jnp.zeros((1, 1, 1), dtype=jnp.float64),
+        k_cd=jnp.zeros((1, 1, 1, 1), dtype=jnp.float64),
+        k_ce=jnp.zeros((1, 1, 1, 1), dtype=jnp.float64),
+        k_rosen=jnp.zeros((1, 1, 0, 1, 1), dtype=jnp.float64),
+        n_xi_for_x=jnp.asarray([1], dtype=jnp.int32),
+    )
+    f = jnp.ones((1, 1, 1, 1, 1), dtype=jnp.float64)
+    with pytest.raises(ValueError, match="phi1_hat must have shape"):
+        apply_fokker_planck_v3_phi1(op, f, phi1_hat=jnp.ones((2, 1), dtype=jnp.float64))
+
+    bad_op = FokkerPlanckV3Phi1Operator(
+        nu_n=op.nu_n,
+        krook=op.krook,
+        alpha=op.alpha,
+        z_s=op.z_s,
+        n_hats=op.n_hats,
+        t_hats=op.t_hats,
+        nl=0,
+        k_nu=jnp.zeros((1, 2, 1), dtype=jnp.float64),
+        k_cd=op.k_cd,
+        k_ce=op.k_ce,
+        k_rosen=op.k_rosen,
+        n_xi_for_x=op.n_xi_for_x,
+    )
+    with pytest.raises(ValueError, match="op.k_nu has shape"):
+        apply_fokker_planck_v3_phi1(bad_op, f, phi1_hat=jnp.zeros((1, 1), dtype=jnp.float64))
