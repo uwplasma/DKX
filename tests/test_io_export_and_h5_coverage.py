@@ -145,3 +145,70 @@ def test_export_f_config_nearest_neighbor_x_and_invalid_theta_option() -> None:
     }
     with pytest.raises(ValueError, match="Invalid export_f_theta_option"):
         _export_f_config(nml=_minimal_namelist(bad_groups), grids=grids, geom=geom)
+
+
+def test_export_f_config_periodic_linear_maps_wrap_theta_and_zeta() -> None:
+    nml = _minimal_namelist(
+        {
+            "export_f": {
+                "EXPORT_DELTA_F": True,
+                "EXPORT_F_THETA_OPTION": 1,
+                "EXPORT_F_THETA": [7.0 * np.pi / 4.0],
+                "EXPORT_F_ZETA_OPTION": 1,
+                "EXPORT_F_ZETA": [3.0 * np.pi / 10.0],
+                "EXPORT_F_X_OPTION": 0,
+                "EXPORT_F_XI_OPTION": 0,
+            },
+            "otherNumericalParameters": {},
+        }
+    )
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, 0.5 * np.pi, np.pi, 1.5 * np.pi]),
+        zeta=np.asarray([0.0, np.pi / 5.0]),
+        x=np.asarray([0.4, 1.2]),
+        n_xi=3,
+    )
+    geom = SimpleNamespace(n_periods=5)
+
+    cfg = _export_f_config(nml=nml, grids=grids, geom=geom)
+    assert cfg is not None
+    np.testing.assert_allclose(cfg.map_theta, np.asarray([[0.5, 0.0, 0.0, 0.5]]), atol=1e-15)
+    np.testing.assert_allclose(cfg.map_zeta, np.asarray([[0.5, 0.5]]), atol=1e-15)
+    np.testing.assert_allclose(cfg.map_x, np.eye(2))
+    np.testing.assert_allclose(cfg.map_xi, np.eye(3))
+
+
+def test_export_f_config_single_zeta_and_invalid_non_theta_options() -> None:
+    grids = SimpleNamespace(
+        theta=np.asarray([0.0, np.pi]),
+        zeta=np.asarray([0.0]),
+        x=np.asarray([0.4, 1.2]),
+        n_xi=2,
+    )
+    geom = SimpleNamespace(n_periods=5)
+    base = {
+        "export_f": {
+            "EXPORT_FULL_F": True,
+            "EXPORT_F_THETA_OPTION": 0,
+            "EXPORT_F_ZETA_OPTION": 99,
+            "EXPORT_F_X_OPTION": 0,
+            "EXPORT_F_XI_OPTION": 0,
+        },
+        "otherNumericalParameters": {},
+    }
+
+    cfg = _export_f_config(nml=_minimal_namelist(base), grids=grids, geom=geom)
+    assert cfg is not None
+    np.testing.assert_allclose(cfg.map_zeta, np.ones((1, 1)))
+
+    bad_x = {"export_f": {**base["export_f"], "EXPORT_F_X_OPTION": 99}, "otherNumericalParameters": {}}
+    with pytest.raises(ValueError, match="Invalid export_f_x_option"):
+        _export_f_config(nml=_minimal_namelist(bad_x), grids=grids, geom=geom)
+
+    bad_xi = {"export_f": {**base["export_f"], "EXPORT_F_XI_OPTION": 99}, "otherNumericalParameters": {}}
+    with pytest.raises(ValueError, match="Invalid export_f_xi_option"):
+        _export_f_config(nml=_minimal_namelist(bad_xi), grids=grids, geom=geom)
+
+    grids_two_zeta = SimpleNamespace(theta=grids.theta, zeta=np.asarray([0.0, np.pi / 5.0]), x=grids.x, n_xi=2)
+    with pytest.raises(ValueError, match="Invalid export_f_zeta_option"):
+        _export_f_config(nml=_minimal_namelist(base), grids=grids_two_zeta, geom=geom)
