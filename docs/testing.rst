@@ -83,6 +83,10 @@ physics invariants that come directly from the SFINCS validation literature:
 - PAS ``L11``/``L12`` tails must have positive high-collisionality power-law slopes,
   and any FP inverse-``nu`` claim must be recorded per geometry instead of inferred
   visually from a plot.
+- The Simakov-Helander high-collisionality audit must recompute the Appendix-B
+  geometry ingredients from checked-in ``sfincsOutput.h5`` fields and must keep the
+  full analytic-limit gate closed unless the scan reaches the configured high-``nu``
+  threshold.
 - DKES, partial, and full trajectory models must agree exactly at ``E_r = 0`` on the
   pinned branch artifacts.
 - Finite-``E_r`` trajectory sweeps must preserve nonzero model separation before the
@@ -93,8 +97,9 @@ physics invariants that come directly from the SFINCS validation literature:
 
 The corresponding tests are ``tests/test_validation_artifacts.py`` and
 ``tests/test_generate_validation_dashboard.py``. The high-collisionality plot smoke
-test is ``tests/test_generate_high_collisionality_trend_proxy.py``. The frozen
-Fortran-suite benchmark figure is protected by
+tests are ``tests/test_generate_high_collisionality_trend_proxy.py`` and
+``tests/test_generate_simakov_helander_limit_audit.py``. The frozen Fortran-suite
+benchmark figure is protected by
 ``tests/test_generate_fortran_suite_benchmark_summary.py``.
 
 Full suite and release checks
@@ -483,6 +488,18 @@ top-level metadata that records the case, fast/full-resolution mode, scan ladder
 source input, and collision-operator labeling. That keeps future release reruns aligned
 with the manifest's provenance and acceptance-gate expectations instead of relying on
 plots alone.
+
+The high-collisionality Simakov-Helander lane now has a bounded normalization audit:
+
+- script: ``examples/publication_figures/generate_simakov_helander_limit_audit.py``
+- artifact:
+  ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json``
+- focused test: ``tests/test_generate_simakov_helander_limit_audit.py``
+
+This audit checks that the checked-in geometry output fields are sufficient for the
+Appendix-B comparison and that ``FSABHat2`` is reproduced from ``BHat`` and ``DHat``.
+It intentionally does not close the full analytic-limit reproduction, because the
+current audited collisionality scans stop near ``nu'=10``.
 
 The W7-X ambipolar literature lane has an executable scaffold as well:
 

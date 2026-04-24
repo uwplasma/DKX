@@ -6,10 +6,12 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.validation_artifacts import (
+    appendix_b_geometry_audit_from_h5,
     autodiff_gradient_error_summary,
     load_autodiff_sensitivity_summary,
     build_high_collisionality_trend_proxy_summary,
     build_publication_validation_summary,
+    build_simakov_helander_limit_audit_summary,
     collisionality_power_law_slope,
     collisionality_grid,
     collisionality_labels,
@@ -114,6 +116,28 @@ def test_high_collisionality_proxy_summary_keeps_analytic_limit_lane_honest() ->
     assert "nu' >> 1" in " ".join(payload["metadata"]["notes"])
     assert payload["cases"]["lhd"]["state"] == "needs_wider_high_nu_scan"
     assert payload["cases"]["w7x"]["state"] == "asymptotic_trend_proxy"
+
+
+def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    lhd_output = repo / "examples" / "publication_figures" / "output" / "lhd_co0" / "nu_n_2.668" / "sfincsOutput.h5"
+    w7x_output = repo / "examples" / "publication_figures" / "output" / "w7x_co0" / "nu_n_1.727" / "sfincsOutput.h5"
+
+    geometry = appendix_b_geometry_audit_from_h5(lhd_output)
+    assert geometry["geometry_scalars"]["FSABHat2_relative_error"] < 1.0e-12
+    assert "G1" in geometry["appendix_b_discrete_quantities"]
+    assert "L11" in geometry["transport_matrix_coefficients_over_nuprime"]
+
+    payload = build_simakov_helander_limit_audit_summary(
+        artifact_dir=_artifact_dir(),
+        geometry_outputs={"lhd": lhd_output, "w7x": w7x_output},
+        n_fit=3,
+    )
+    assert payload["metadata"]["kind"] == "simakov_helander_limit_audit"
+    assert payload["cases"]["lhd"]["gates"]["scan_extends_to_required_high_nu"] is False
+    assert payload["cases"]["w7x"]["gates"]["fp_l11_l12_target_inverse_slope"] is True
+    assert payload["gates"]["all_cases_ready_for_full_overlay"] is False
+    assert payload["gates"]["full_simakov_helander_reproduction_closed"] is True
 
 
 def test_fortran_suite_report_summary_closes_cpu_gpu_release_gate_on_synthetic_rows(tmp_path: Path) -> None:

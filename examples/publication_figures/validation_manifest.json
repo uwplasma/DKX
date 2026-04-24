@@ -136,11 +136,13 @@
       "examples/publication_figures/generate_sfincs_paper_figs.py --plot-only"
     ],
     "artifacts": [
-      "docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png"
+      "docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png",
+      "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json",
+      "docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png"
     ],
     "claims": [
       "High-collisionality transport-matrix trends should agree with analytic asymptotic limits",
-      "This full analytic-limit reproduction is closed as a post-release research lane until a wider high-nu scan and normalization audit are available"
+      "This full analytic-limit reproduction is closed as a post-release research lane until a wider high-nu scan is available; a bounded normalization audit is now checked in"
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py"
@@ -187,6 +189,42 @@
       "Summary JSON records the high-collisionality tail slopes and source artifacts",
       "PAS L11/L12 slopes are positive on both LHD and W7-X corrected full scans",
       "The artifact must explicitly mark LHD as needing a wider high-nu scan before replacing the analytic-limit reproduction"
+    ]
+  },
+  {
+    "id": "sfincs2014_simakov_helander_limit_audit",
+    "status": "implemented",
+    "kind": "literature_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf",
+      "https://doi.org/10.1063/1.3104715"
+    ],
+    "scripts": [
+      "examples/publication_figures/generate_simakov_helander_limit_audit.py"
+    ],
+    "artifacts": [
+      "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json",
+      "docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png",
+      "docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.pdf"
+    ],
+    "claims": [
+      "The checked-in LHD and W7-X output files contain the Appendix-B geometry ingredients needed for a reproducible normalization audit",
+      "The current full collisionality summaries stop near nu'=10, so the audit keeps the full Simakov-Helander analytic-limit reproduction closed until wider high-nu scans are pinned",
+      "W7-X FP L11/L12 tails satisfy the inverse-nu slope proxy on the current range, while LHD still fails that gate"
+    ],
+    "source_code": [
+      "examples/publication_figures/generate_simakov_helander_limit_audit.py",
+      "sfincs_jax/validation_artifacts.py"
+    ],
+    "tests": [
+      "tests/test_generate_simakov_helander_limit_audit.py",
+      "tests/test_validation_artifacts.py"
+    ],
+    "acceptance_gates": [
+      "Summary JSON records Appendix-B geometry quantities, FSABHat2 recomputation error, tail slopes, and full-overlay readiness gates",
+      "The full analytic-limit gate remains false unless both cases extend to the configured high-nu threshold",
+      "The figure must show the inverse-nu tail proxy, slope-window sensitivity, and explicit readiness table"
     ]
   },
   {
