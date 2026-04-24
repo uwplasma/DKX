@@ -3974,6 +3974,27 @@ Validation:
   `sfincs_jax-1.0.2-py3-none-any.whl`.
 - `python -m pytest -q` passed with `869 passed in 325.09s (0:05:25)`.
 
+### 19.91 CI portability fix for suite benchmark tests
+
+The first `main` CI run for the 1.0.2 release-prep commit exposed a CI-only issue:
+the raw frozen suite-report directories used locally are not tracked in the GitHub
+checkout, even though the generated benchmark summary JSON is tracked.
+
+Fix:
+
+- `tests/test_validation_artifacts.py` now tests suite-report parsing and summary
+  metrics using synthetic 39-case report rows, and validates the release gate from the
+  checked-in benchmark summary artifact.
+- `tests/test_generate_fortran_suite_benchmark_summary.py` now builds temporary
+  synthetic CPU/GPU suite reports before exercising the figure/JSON generator.
+
+Validation:
+
+- `python -m ruff check tests/test_validation_artifacts.py tests/test_generate_fortran_suite_benchmark_summary.py`
+  passed.
+- `python -m pytest -q tests/test_validation_artifacts.py tests/test_generate_fortran_suite_benchmark_summary.py tests/test_validation_manifest_schema.py`
+  passed with `12 passed in 0.94s`.
+
 Next validation targets:
 
 - After this cheap gate is stable, keep `vmec_jax`/`booz_xform_jax` end-to-end
