@@ -216,6 +216,10 @@ docs/upstream/**/*.synctex.gz
 # PyPI configuration file
 .pypirc
 
+# Local benchmark scratch outputs.
+tests/current_*.json
+tests/current_sharded_*/
+
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
