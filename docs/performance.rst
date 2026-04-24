@@ -42,7 +42,7 @@ Current top offenders from the release artifacts plus focused current-tip
 reruns are:
 
 - CPU runtime: ``HSX_PASCollisions_fullTrajectories`` at ``4.027 s``
-- CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``3066.4 MB``
+- CPU memory: ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` at ``2298.6 MB``
 - GPU runtime: ``monoenergetic_geometryScheme1`` at ``14.571 s``
 - GPU memory: ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` at ``2097.0 MB``
 
@@ -51,7 +51,7 @@ In other words, all examples run on CPU and GPU, but a handful of cases remain t
 Recent current-tip GPU fixes that are now reflected in the release artifacts:
 
 - ``geometryScheme5_3species_loRes`` now takes the bounded host-dense shortcut on the small GPU full-FP branch and completed parity-clean in about ``3.99 s``, down from the older ``144.597 s`` artifact.
-- ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue and completed parity-clean in about ``3.94 s``.
+- ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue on GPU and completed parity-clean in about ``3.94 s``.
 - ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` now skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``7.42 s``.
 
 Recent current-tip PAS-DKES fix:
@@ -69,6 +69,10 @@ Recent current-tip GPU tokamak PAS+Er fix:
 Recent current-tip geometry4 PAS memory fix:
 
 - ``geometryScheme4_2species_PAS_noEr`` now uses direct top-level ``pas_tz`` instead of wrapping the same angular block inside the constraint-Schur preconditioner on bounded near-zero-:math:`E_r` geometryScheme=4 PAS cases. The focused CPU probe completed parity-clean in ``1.962 s`` with about ``1728 MB`` RSS, while the clean-remote ``office`` GPU probe completed parity-clean in ``4.774 s`` with about ``1817 MB`` RSS. Disabling the policy with ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ=0`` restored the heavier Schur route in the same GPU probe (``5.899 s`` and about ``2507 MB`` RSS).
+
+Recent current-tip VMEC monoenergetic memory fix:
+
+- ``monoenergetic_geometryScheme5_ASCII`` and ``monoenergetic_geometryScheme5_netCDF`` now use the low-memory Krylov/``tzfft`` transport path by default for bounded CPU ``RHSMode=3`` VMEC cases. The focused CLI probes stayed parity-clean and reduced profiled RSS from about ``2950-3066 MB`` to ``506.5 MB`` for the ASCII fixture and ``603.2 MB`` for the netCDF fixture. Set ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY=0`` to restore the previous dense batched fallback for comparison.
 
 External solver-library gates
 -----------------------------

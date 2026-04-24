@@ -1166,6 +1166,12 @@ rescue transport-matrix solves that stall.
   dense solve is likely anyway. For other transport cases, dense fallback remains
   **disabled** unless explicitly requested, but a dense retry is enabled for
   RHSMode=2/3 when the active system size is modest.
+- For CPU VMEC monoenergetic transport (``RHSMode=3``, ``geometryScheme=5``,
+  PAS/no-FP, small ``Nx``), ``sfincs_jax`` avoids the dense batched fallback by
+  default and uses the existing Krylov + ``tzfft`` path. This is a measured
+  memory policy: on ``monoenergetic_geometryScheme5_ASCII`` it preserved all
+  Fortran output comparisons while reducing CLI-profiled RSS from about
+  ``3.0 GB`` to about ``0.5 GB``.
 
 Controls:
 
@@ -1195,6 +1201,14 @@ Controls:
   one refinement step.
 - ``SFINCS_JAX_TRANSPORT_DENSE_PRECOND_MAX_MB`` (default: ``min(32, dense_max_mb)``).
   Disables dense LU preconditioners when they would exceed the memory budget.
+- ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY`` (default: auto). Set ``0`` to
+  restore the previous dense batched fallback for CPU VMEC monoenergetic
+  comparison runs; set ``1`` to force the low-memory path regardless of the
+  backend/size guard.
+- ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MIN`` /
+  ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MAX`` bound the automatic
+  geometryScheme=5 monoenergetic low-memory policy (defaults ``1000`` and
+  ``20000`` total DOFs).
 - ``SFINCS_JAX_DENSE_ASSEMBLE_JIT``: JIT-compile dense matrix assembly
   (auto by default: off for ``n<=800``, on for larger matrices).
 - ``SFINCS_JAX_DENSE_MAX`` (default: ``8000``): guardrail for dense solves
