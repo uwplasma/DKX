@@ -35,6 +35,26 @@ Dashboard
    summary is
    ``examples/publication_figures/artifacts/sfincs_jax_publication_validation_dashboard_summary.json``.
 
+High-collisionality trend proxy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Generate the trend proxy with
+
+.. code-block:: bash
+
+   python examples/publication_figures/generate_high_collisionality_trend_proxy.py
+
+.. figure:: _static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png
+   :alt: High-collisionality trend proxy from checked-in collisionality artifacts
+   :width: 92%
+
+   Power-law tail fits for ``L11`` and ``L12`` from the corrected full LHD and W7-X
+   collisionality artifacts. This is a trend proxy, not the final
+   Simakov-Helander analytic-limit reproduction: the W7-X Fokker-Planck tail shows
+   the expected inverse-``nu`` trend on the checked-in range, while the LHD
+   Fokker-Planck tail still needs a wider ``nu' >> 1`` scan before it can support the
+   analytic-limit claim.
+
 Figure 1 (LHD collisionality scan)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -79,13 +79,17 @@ physics invariants that come directly from the SFINCS validation literature:
 - The high-collisionality ``L11`` FP/PAS separation must remain larger than the
   low-collisionality separation, matching the expected increased sensitivity to
   momentum conservation.
+- PAS ``L11``/``L12`` tails must have positive high-collisionality power-law slopes,
+  and any FP inverse-``nu`` claim must be recorded per geometry instead of inferred
+  visually from a plot.
 - DKES, partial, and full trajectory models must agree exactly at ``E_r = 0`` on the
   pinned branch artifacts.
 - Finite-``E_r`` trajectory sweeps must preserve nonzero model separation before the
   figure can be used as a manuscript-facing validation panel.
 
 The corresponding tests are ``tests/test_validation_artifacts.py`` and
-``tests/test_generate_validation_dashboard.py``.
+``tests/test_generate_validation_dashboard.py``. The high-collisionality plot smoke
+test is ``tests/test_generate_high_collisionality_trend_proxy.py``.
 
 Full suite and release checks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
