@@ -158,7 +158,7 @@
     "status": "prototype_artifact",
     "kind": "literature_validation",
     "literature": [
-      "https://doi.org/10.1063/1.4870073",
+      "https://doi.org/10.1063/1.4870077",
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
     "scripts": [
@@ -257,7 +257,7 @@
     "status": "implemented",
     "kind": "literature_validation",
     "literature": [
-      "https://doi.org/10.1063/1.4870073",
+      "https://doi.org/10.1063/1.4870077",
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
     "scripts": [
@@ -292,7 +292,7 @@
     "status": "implemented",
     "kind": "cross_code_validation",
     "literature": [
-      "https://doi.org/10.1063/1.4870073",
+      "https://doi.org/10.1063/1.4870077",
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf",
       "https://github.com/landreman/sfincs"
     ],
