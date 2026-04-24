@@ -17,23 +17,45 @@ def _load_module():
     return module
 
 
-def test_generate_fortran_suite_benchmark_summary_from_frozen_reports(tmp_path: Path) -> None:
+def _write_synthetic_report(path: Path, *, backend_scale: float) -> None:
+    rows: list[dict[str, object]] = []
+    for idx in range(39):
+        rows.append(
+            {
+                "case": f"case_{idx:02d}",
+                "status": "parity_ok",
+                "blocker_type": "none",
+                "fortran_runtime_s": 10.0 + idx,
+                "jax_runtime_s": backend_scale * (1.0 + 0.1 * idx),
+                "jax_logged_elapsed_s": backend_scale * (0.8 + 0.1 * idx),
+                "fortran_max_rss_mb": 100.0 + idx,
+                "jax_max_rss_mb": backend_scale * (500.0 + idx),
+                "n_mismatch_common": 0,
+                "n_mismatch_physics": 0,
+                "n_mismatch_solver": 0,
+                "strict_n_mismatch_common": 0,
+                "strict_n_mismatch_physics": 0,
+                "strict_n_mismatch_solver": 0,
+            }
+        )
+    path.write_text(json.dumps(rows, indent=2) + "\n")
+
+
+def test_generate_fortran_suite_benchmark_summary_from_reports(tmp_path: Path) -> None:
     mod = _load_module()
-    repo = Path(__file__).resolve().parents[1]
     out_dir = tmp_path / "figures"
     summary_json = tmp_path / "summary.json"
+    cpu_report = tmp_path / "cpu_suite_report.json"
+    gpu_report = tmp_path / "gpu_suite_report.json"
+    _write_synthetic_report(cpu_report, backend_scale=1.0)
+    _write_synthetic_report(gpu_report, backend_scale=1.4)
 
     rc = mod.main(
         [
             "--cpu-report",
-            str(repo / "tests" / "scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix" / "suite_report.json"),
+            str(cpu_report),
             "--gpu-report",
-            str(
-                repo
-                / "tests"
-                / "scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem"
-                / "suite_report.json"
-            ),
+            str(gpu_report),
             "--out-dir",
             str(out_dir),
             "--summary-json",
