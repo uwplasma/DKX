@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.validation_artifacts import (
+    build_fortran_suite_benchmark_summary,
     build_high_collisionality_trend_proxy_summary,
     build_publication_validation_summary,
     collisionality_power_law_slope,
@@ -16,11 +17,25 @@ from sfincs_jax.validation_artifacts import (
     high_collisionality_trend_summary,
     load_collisionality_records,
     load_er_sweep_records,
+    load_suite_report,
+    suite_case_metrics,
+    suite_report_summary,
 )
 
 
 def _artifact_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "examples" / "publication_figures" / "artifacts"
+
+
+def _suite_report(name: str) -> Path:
+    root = Path(__file__).resolve().parents[1] / "tests"
+    reports = {
+        "cpu": root / "scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix" / "suite_report.json",
+        "gpu": root
+        / "scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem"
+        / "suite_report.json",
+    }
+    return reports[name]
 
 
 def test_collisionality_artifact_metrics_are_literature_consistent() -> None:
@@ -84,3 +99,36 @@ def test_high_collisionality_proxy_summary_keeps_analytic_limit_lane_honest() ->
     assert "nu' >> 1" in " ".join(payload["metadata"]["notes"])
     assert payload["cases"]["lhd"]["state"] == "needs_wider_high_nu_scan"
     assert payload["cases"]["w7x"]["state"] == "asymptotic_trend_proxy"
+
+
+def test_fortran_suite_report_summary_closes_cpu_gpu_release_gate() -> None:
+    for name in ("cpu", "gpu"):
+        rows = load_suite_report(_suite_report(name))
+        metrics = suite_case_metrics(rows)
+        payload = suite_report_summary(rows, label=name.upper())
+
+        assert len(metrics) == 39
+        assert payload["total_cases"] == 39
+        assert payload["parity_ok_cases"] == 39
+        assert payload["jax_error_cases"] == 0
+        assert payload["max_attempts_cases"] == 0
+        assert payload["practical_mismatch_cases"] == 0
+        assert payload["strict_mismatch_cases"] == 0
+        assert payload["runtime_ratio_summary"]["count"] == 39
+        assert payload["memory_ratio_summary"]["count"] == 39
+        assert all(metric.runtime_ratio is not None and metric.runtime_ratio > 0.0 for metric in metrics)
+        assert all(metric.memory_ratio is not None and metric.memory_ratio > 0.0 for metric in metrics)
+
+
+def test_fortran_suite_benchmark_summary_records_source_reports_and_gates() -> None:
+    payload = build_fortran_suite_benchmark_summary(
+        cpu_report=_suite_report("cpu"),
+        gpu_report=_suite_report("gpu"),
+    )
+
+    assert payload["metadata"]["kind"] == "fortran_v3_suite_benchmark_summary"
+    assert "https://github.com/landreman/sfincs" in payload["metadata"]["literature"]
+    assert payload["reports"]["cpu"]["parity_ok_cases"] == 39
+    assert payload["reports"]["gpu"]["parity_ok_cases"] == 39
+    assert payload["reports"]["cpu"]["strict_mismatch_total"] == 0
+    assert payload["reports"]["gpu"]["strict_mismatch_total"] == 0

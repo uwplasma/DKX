@@ -20,6 +20,12 @@ Generate the publication validation dashboard with
 
    python examples/publication_figures/generate_validation_dashboard.py
 
+Generate the frozen CPU/GPU Fortran-suite benchmark dashboard with
+
+.. code-block:: bash
+
+   python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
+
 Dashboard
 ~~~~~~~~~
 
@@ -34,6 +40,21 @@ Dashboard
    separation between DKES, partial, and full trajectory models. The machine-readable
    summary is
    ``examples/publication_figures/artifacts/sfincs_jax_publication_validation_dashboard_summary.json``.
+
+Fortran v3 suite benchmark
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. figure:: _static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png
+   :alt: Frozen CPU and GPU sfincs_jax benchmark summary against SFINCS Fortran v3
+   :width: 92%
+
+   CPU/GPU benchmark dashboard generated from the frozen full-suite comparison
+   reports. Panel A is the release gate: both backends retain ``39/39`` audited
+   cases with no ``jax_error`` or ``max_attempts`` failures. Panels B-D summarize
+   wall-clock runtime ratios, maximum-RSS memory ratios, and the runtime-memory
+   trade space against the Fortran v3 reference implementation. The machine-readable
+   summary is
+   ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``.
 
 High-collisionality trend proxy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
