@@ -5708,3 +5708,43 @@ Next lane:
 - Continue to `w7x_ambipolar_er_validation`: pin defensible W7-X VMEC/Boozer
   geometry and profiles, record finite ambipolar-root provenance, and keep the
   literature comparison qualitative until those inputs are auditable.
+
+### 20.10 v1.0.3 release hygiene and documentation closeout
+
+Prepared the next patch release after the Simakov-Helander audit work.
+
+Closed items:
+
+- synchronized package metadata to `1.0.3` in both `pyproject.toml` and
+  `sfincs_jax.__version__`,
+- added `tests/test_package_metadata.py` so package-version drift is caught in CI,
+- removed the non-publication-grade `strong_scaling_snapshot.png` and
+  `gpu_case_throughput.png` embeds from `docs/parallelism.rst`; the docs keep the
+  measurements in text and show the stronger transport-worker GPU scaling figure,
+- hardened `examples/publication_figures/generate_sfincs_paper_figs.py` so
+  `--plot-only` refuses to rewrite publication summaries from incomplete scratch
+  scan directories,
+- made deferred-lane release wording version-neutral in the validation manifest
+  and validation matrix.
+
+Validation:
+
+- `python -m ruff check pyproject.toml sfincs_jax/__init__.py examples/publication_figures/generate_sfincs_paper_figs.py tests/test_generate_sfincs_paper_figs.py tests/test_package_metadata.py tests/test_validation_manifest_schema.py`
+  passed.
+- `python -m pytest -q tests/test_generate_sfincs_paper_figs.py tests/test_package_metadata.py tests/test_validation_manifest_schema.py`
+  passed with `18 passed`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m pytest -q` passed with `875 passed, 1 skipped in 358.57s`.
+- `python -m build` built `sfincs_jax-1.0.3.tar.gz` and
+  `sfincs_jax-1.0.3-py3-none-any.whl`.
+
+Release state:
+
+- `main` remains the active release branch.
+- Existing extra branch `codex/cli-fast-paths` is still present locally and on
+  origin; it is not part of the v1.0.3 release path and can be cleaned up after
+  explicit approval.
+- Remaining validation manifest lanes are intentionally
+  `deferred_post_release`: full high-collisionality analytic-limit reproduction,
+  W7-X ambipolar validation, and MONKES/KNOSOS overlap. They are research/nightly
+  lanes, not v1.0.3 release blockers.

@@ -365,7 +365,7 @@ Current closure note:
 
 - the script and focused tests are in place,
 - the checked-in literature artifact is still intentionally absent,
-- this lane is closed for the 1.0.2 release as ``deferred_post_release`` until a
+- this lane is closed for the current release as ``deferred_post_release`` until a
   defensible W7-X input reconstruction is run and its summary/figure are pinned in
   the repository.
 
