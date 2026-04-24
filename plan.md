@@ -5602,3 +5602,55 @@ Start with the autodiff lane:
 5. Run focused tests, docs build, and then decide whether the lane can become
    `implemented` or whether it remains a stronger deferred lane pending the
    medium/full sensitivity map.
+
+### 20.8 Autodiff/sensitivity validation lane implementation
+
+Implemented the first deferred research lane,
+`adjoint_sensitivity_gradient_checks`, as a bounded manuscript-grade artifact:
+
+- Added `examples/publication_figures/generate_autodiff_sensitivity_validation.py`.
+  It writes a summary JSON plus two PNG/PDF figures:
+  - `docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.{png,pdf}`,
+  - `docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.{png,pdf}`.
+- Added autodiff artifact helpers in `sfincs_jax/validation_artifacts.py`:
+  - `load_autodiff_sensitivity_summary(...)`,
+  - `autodiff_gradient_error_summary(...)`,
+  - `build_autodiff_sensitivity_validation_summary(...)`.
+- Generated and pinned:
+  - `examples/publication_figures/artifacts/sfincs_jax_autodiff_sensitivity_validation_summary.json`,
+  - the gradient-check dashboard,
+  - and the scheme-4 Boozer harmonic sensitivity-map figure.
+- Updated the validation manifest from `deferred_post_release` to `implemented`
+  for `adjoint_sensitivity_gradient_checks`.
+- Updated `docs/paper_figures.rst`, `docs/validation_matrix.rst`, and
+  `examples/publication_figures/README.md`.
+
+The current artifact deliberately makes a bounded claim:
+
+- implicit-diff gradients through a pinned full-system linear solve agree with
+  centered finite differences below the recorded `1e-4` relative-error gate,
+- GMRES and BiCGStab `custom_linear_solve` wrappers are covered on stable scalar
+  objectives,
+- primal and adjoint residuals remain below the recorded `1e-8` gate,
+- scheme-4 Boozer harmonic sensitivity maps are generated from JAX derivatives,
+- full VMEC-boundary optimization remains outside this implemented claim.
+
+Recorded artifact gates:
+
+- maximum gradient relative error: `4.9043124911696375e-05`,
+- maximum primal residual norm: `5.507597669163346e-15`,
+- maximum adjoint residual norm: `3.857384703608713e-12`,
+- scheme-4 geometry-gradient relative error: `1.895064628198389e-10`.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/validation_artifacts.py examples/publication_figures/generate_autodiff_sensitivity_validation.py tests/test_generate_autodiff_sensitivity_validation.py tests/test_validation_artifacts.py tests/test_validation_manifest_schema.py`
+  passed.
+- `python -m pytest -q tests/test_generate_autodiff_sensitivity_validation.py tests/test_validation_artifacts.py tests/test_validation_manifest_schema.py`
+  passed with `13 passed in 2.02s`.
+
+Next deferred lane:
+
+- Begin `sfincs2014_fig3_high_collisionality_limit` by implementing the
+  normalization-audit helpers and a wider high-`nu` run plan before launching the
+  expensive LHD/W7-X scan points.

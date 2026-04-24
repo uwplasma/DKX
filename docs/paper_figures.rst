@@ -26,6 +26,12 @@ Generate the frozen CPU/GPU Fortran-suite benchmark dashboard with
 
    python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
+Generate the autodiff/sensitivity validation figures with
+
+.. code-block:: bash
+
+   python examples/publication_figures/generate_autodiff_sensitivity_validation.py
+
 Dashboard
 ~~~~~~~~~
 
@@ -55,6 +61,31 @@ Fortran v3 suite benchmark
    trade space against the Fortran v3 reference implementation. The machine-readable
    summary is
    ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``.
+
+Autodiff and sensitivity validation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. figure:: _static/figures/paper/sfincs_jax_autodiff_gradient_check.png
+   :alt: Autodiff gradient and implicit-solve validation for sfincs_jax
+   :width: 92%
+
+   Gradient-validation dashboard for the differentiable solve path. Panel A compares
+   autodiff/implicit-diff gradients with centered finite differences for stable scalar
+   objectives, including a pinned SFINCS full-system linear solve. Panel B records the
+   finite-difference step sweep used for the SFINCS gradient gate. Panel C shows primal
+   and adjoint residuals for the solve checks. Panel D shows the solve-count advantage
+   of implicit differentiation over centered finite differences as the number of
+   parameters grows. The machine-readable summary is
+   ``examples/publication_figures/artifacts/sfincs_jax_autodiff_sensitivity_validation_summary.json``.
+
+.. figure:: _static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png
+   :alt: Boozer harmonic sensitivity maps for sfincs_jax
+   :width: 92%
+
+   Spatial sensitivity maps for the differentiable ``geometryScheme=4`` Boozer
+   harmonic amplitudes. This is a bounded manuscript artifact: it validates the JAX
+   sensitivity machinery for the public analytic-Boozer geometry path, while full
+   VMEC-boundary optimization remains a separate research workflow.
 
 High-collisionality trend proxy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -11,6 +11,8 @@ import numpy as np
 LANDREMAN_2014_URL = "https://doi.org/10.1063/1.4870077"
 LANDREMAN_2014_OPEN_PDF = "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
 SFINCS_FORTRAN_REPO_URL = "https://github.com/landreman/sfincs"
+PAUL_2019_ADJOINT_URL = "https://arxiv.org/abs/1904.06430"
+SFINCS_ADJOINT_APS_URL = "https://meetings-archive.aps.org/dpp/2018/bp11/36/"
 
 SUITE_MISMATCH_FIELDS = (
     "n_mismatch_common",
@@ -149,6 +151,107 @@ def load_suite_report(path: Path) -> list[Mapping[str, object]]:
     if not isinstance(rows, list):
         raise ValueError(f"Suite report {path} must contain a list of case rows.")
     return [row for row in rows if isinstance(row, Mapping)]
+
+
+def load_autodiff_sensitivity_summary(path: Path) -> Mapping[str, object]:
+    """Load a checked-in autodiff/sensitivity validation summary artifact."""
+
+    payload = json.loads(Path(path).read_text())
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"Autodiff summary {path} must contain a JSON object.")
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping) or metadata.get("kind") != "autodiff_sensitivity_validation":
+        raise ValueError(f"Autodiff summary {path} has an unexpected metadata.kind.")
+    return payload
+
+
+def autodiff_gradient_error_summary(payload: Mapping[str, object]) -> dict[str, float | int]:
+    """Summarize finite-difference agreement from an autodiff validation payload."""
+
+    checks = payload.get("gradient_checks", [])
+    if not isinstance(checks, Sequence):
+        raise ValueError("gradient_checks must be a sequence.")
+    rel_errors: list[float] = []
+    abs_errors: list[float] = []
+    for check in checks:
+        if not isinstance(check, Mapping):
+            continue
+        rel_error = _optional_float(check.get("relative_error"))
+        abs_error = _optional_float(check.get("absolute_error"))
+        if rel_error is not None:
+            rel_errors.append(rel_error)
+        if abs_error is not None:
+            abs_errors.append(abs_error)
+    return {
+        "count": int(len(rel_errors)),
+        "max_relative_error": float(max(rel_errors)) if rel_errors else float("nan"),
+        "median_relative_error": float(np.median(rel_errors)) if rel_errors else float("nan"),
+        "max_absolute_error": float(max(abs_errors)) if abs_errors else float("nan"),
+    }
+
+
+def build_autodiff_sensitivity_validation_summary(
+    *,
+    gradient_checks: Sequence[Mapping[str, object]],
+    finite_difference_sweep: Sequence[Mapping[str, object]],
+    geometry_sensitivity: Mapping[str, object],
+    cost_scaling: Sequence[Mapping[str, object]],
+    metadata: Mapping[str, object] | None = None,
+    relative_error_gate: float = 1.0e-4,
+    residual_gate: float = 1.0e-8,
+) -> dict[str, object]:
+    """Build the machine-readable summary for the autodiff validation figure lane."""
+
+    gradient_rows = [dict(row) for row in gradient_checks]
+    fd_rows = [dict(row) for row in finite_difference_sweep]
+    cost_rows = [dict(row) for row in cost_scaling]
+    meta = dict(metadata or {})
+    meta.setdefault("schema_version", 1)
+    meta.setdefault("kind", "autodiff_sensitivity_validation")
+    meta.setdefault("literature", [PAUL_2019_ADJOINT_URL, SFINCS_ADJOINT_APS_URL])
+    meta.setdefault(
+        "notes",
+        [
+            "Gradients through the linear solve use jax.lax.custom_linear_solve.",
+            "The validation checks implicit differentiation against centered finite differences.",
+            "The geometry map is a differentiable Boozer-harmonic sensitivity scaffold, not a full VMEC boundary optimization claim.",
+        ],
+    )
+    payload: dict[str, object] = {
+        "metadata": meta,
+        "gradient_checks": gradient_rows,
+        "finite_difference_sweep": fd_rows,
+        "geometry_sensitivity": dict(geometry_sensitivity),
+        "cost_scaling": cost_rows,
+    }
+    err = autodiff_gradient_error_summary(payload)
+    residuals = [
+        _optional_float(row.get("primal_residual_norm"))
+        for row in gradient_rows
+        if _optional_float(row.get("primal_residual_norm")) is not None
+    ]
+    adjoint_residuals = [
+        _optional_float(row.get("adjoint_residual_norm"))
+        for row in gradient_rows
+        if _optional_float(row.get("adjoint_residual_norm")) is not None
+    ]
+    max_residual = max(residuals) if residuals else float("nan")
+    max_adjoint_residual = max(adjoint_residuals) if adjoint_residuals else float("nan")
+    max_rel = float(err["max_relative_error"])
+    payload["gates"] = {
+        "relative_error_gate": float(relative_error_gate),
+        "residual_gate": float(residual_gate),
+        "max_relative_error": max_rel,
+        "max_primal_residual_norm": float(max_residual),
+        "max_adjoint_residual_norm": float(max_adjoint_residual),
+        "gradient_relative_error_ok": bool(np.isfinite(max_rel) and max_rel <= float(relative_error_gate)),
+        "primal_residual_ok": bool(np.isfinite(max_residual) and max_residual <= float(residual_gate)),
+        "adjoint_residual_ok": bool(
+            not adjoint_residuals or (np.isfinite(max_adjoint_residual) and max_adjoint_residual <= float(residual_gate))
+        ),
+    }
+    payload["gradient_error_summary"] = err
+    return payload
 
 
 def collisionality_grid(records: Sequence[CollisionalityRecord]) -> list[float]:

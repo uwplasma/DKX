@@ -72,7 +72,6 @@ def test_validation_manifest_has_no_open_release_lanes() -> None:
         "sfincs2014_fig3_high_collisionality_limit",
         "w7x_ambipolar_er_validation",
         "monkes_monoenergetic_overlap",
-        "adjoint_sensitivity_gradient_checks",
     }
 
 
