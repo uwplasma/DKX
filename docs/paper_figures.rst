@@ -6,13 +6,34 @@ corresponding sfincs_jax cases. Figures 1 and 2 are backed by audited full-resol
 JSON summaries; fast variants remain available in the publication-figure scripts for
 branch-level regression checks.
 
-Generate the figures with
+Generate the SFINCS-paper reproduction figures with
 
 .. code-block:: bash
 
    python examples/publication_figures/generate_sfincs_paper_figs.py --fast
 
 Omit ``--fast`` to use the default scan resolution.
+
+Generate the publication validation dashboard with
+
+.. code-block:: bash
+
+   python examples/publication_figures/generate_validation_dashboard.py
+
+Dashboard
+~~~~~~~~~
+
+.. figure:: _static/figures/paper/sfincs_jax_publication_validation_dashboard.png
+   :alt: Literature-anchored sfincs_jax validation dashboard
+   :width: 92%
+
+   Publication dashboard generated from checked-in JSON artifacts. Panels A-B show
+   the LHD and W7-X collision-operator collisionality scans used to audit FP/PAS
+   behavior in the SFINCS 2014 validation setting. Panels C-D show the pinned
+   trajectory-model sweeps used to verify exact zero-field agreement and finite-field
+   separation between DKES, partial, and full trajectory models. The machine-readable
+   summary is
+   ``examples/publication_figures/artifacts/sfincs_jax_publication_validation_dashboard_summary.json``.
 
 Figure 1 (LHD collisionality scan)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
