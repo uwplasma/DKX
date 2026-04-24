@@ -59,6 +59,34 @@ Representative examples:
 - ``tests/test_full_system_gmres_solution_parity.py``
 - ``tests/test_rhs1_schwarz_heuristic.py``
 
+Literature-artifact gates
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Publication-facing validations use the same layered idea, but the unit under test is
+the checked-in scientific artifact rather than a single function. The key files are:
+
+- ``examples/publication_figures/validation_manifest.json``
+- ``examples/publication_figures/artifacts/*.json``
+- ``examples/publication_figures/generate_validation_dashboard.py``
+- ``sfincs_jax/validation_artifacts.py``
+
+The dashboard tests are intentionally cheap enough for CI. They do not rerun the full
+collisionality or electric-field scans; instead, they check the frozen artifacts for
+physics invariants that come directly from the SFINCS validation literature:
+
+- FP and PAS collision-operator scans must both be present on the audited
+  collisionality grid.
+- The high-collisionality ``L11`` FP/PAS separation must remain larger than the
+  low-collisionality separation, matching the expected increased sensitivity to
+  momentum conservation.
+- DKES, partial, and full trajectory models must agree exactly at ``E_r = 0`` on the
+  pinned branch artifacts.
+- Finite-``E_r`` trajectory sweeps must preserve nonzero model separation before the
+  figure can be used as a manuscript-facing validation panel.
+
+The corresponding tests are ``tests/test_validation_artifacts.py`` and
+``tests/test_generate_validation_dashboard.py``.
+
 Full suite and release checks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
