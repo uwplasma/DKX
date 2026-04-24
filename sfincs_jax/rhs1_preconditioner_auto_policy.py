@@ -386,6 +386,36 @@ def rhs1_pas_dkes_xblock_allowed(
     return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
 
 
+def rhs1_pas_dkes_pas_tz_preferred(
+    *,
+    has_pas: bool,
+    use_dkes: bool,
+    backend: str,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    active_size: int,
+) -> bool:
+    """Return whether PAS DKES auto-selection should prefer ``pas_tz``.
+
+    Dense x-blocks are robust for small DKES angular blocks, but on the HSX DKES
+    benchmark the structured PAS angular block is faster and lower-memory on
+    both CPU and GPU once the angular block reaches O(10^3) DOFs.
+    """
+    if not has_pas or not use_dkes:
+        return False
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in {"cpu", "gpu"}:
+        return False
+    if int(n_theta) <= 1 or int(n_zeta) <= 1:
+        return False
+    backend_key = backend_norm.upper()
+    min_block = _env_int(f"SFINCS_JAX_RHSMODE1_PAS_DKES_{backend_key}_PAS_TZ_MIN", 950)
+    max_active = _env_int(f"SFINCS_JAX_RHSMODE1_PAS_DKES_{backend_key}_PAS_TZ_ACTIVE_MAX", 15000)
+    block_size = int(max_l) * int(n_theta) * int(n_zeta)
+    return block_size >= max(1, int(min_block)) and int(active_size) <= max(1, int(max_active))
+
+
 def rhs1_pas_dkes_cpu_pas_tz_preferred(
     *,
     has_pas: bool,
@@ -396,23 +426,16 @@ def rhs1_pas_dkes_cpu_pas_tz_preferred(
     max_l: int,
     active_size: int,
 ) -> bool:
-    """Return whether CPU PAS DKES auto-selection should prefer ``pas_tz``.
-
-    Dense x-blocks are robust for small DKES angular blocks, but on the HSX
-    DKES benchmark the structured PAS angular block is both faster and much
-    lower-memory once the block reaches O(10^3) DOFs. Keep the rule CPU-only
-    until a matching GPU measurement supports changing that lane.
-    """
-    if not has_pas or not use_dkes:
-        return False
-    if str(backend).strip().lower() != "cpu":
-        return False
-    if int(n_theta) <= 1 or int(n_zeta) <= 1:
-        return False
-    min_block = _env_int("SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN", 950)
-    max_active = _env_int("SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX", 15000)
-    block_size = int(max_l) * int(n_theta) * int(n_zeta)
-    return block_size >= max(1, int(min_block)) and int(active_size) <= max(1, int(max_active))
+    """Backward-compatible CPU PAS-DKES alias for older policy tests/callers."""
+    return rhs1_pas_dkes_pas_tz_preferred(
+        has_pas=has_pas,
+        use_dkes=use_dkes,
+        backend=backend,
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        max_l=max_l,
+        active_size=active_size,
+    )
 
 
 def rhs1_pas_tokamak_gpu_theta_allowed(
@@ -569,6 +592,7 @@ __all__ = [
     "rhs1_gpu_sparse_fallback_skip_allowed",
     "rhs1_pas_auto_large_base_kind",
     "rhs1_pas_dkes_cpu_pas_tz_preferred",
+    "rhs1_pas_dkes_pas_tz_preferred",
     "rhs1_pas_dkes_xblock_allowed",
     "rhs1_pas_weak_auto_override_kind",
     "rhs1_pas_tokamak_cpu_xblock_preferred",
