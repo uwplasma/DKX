@@ -75,6 +75,13 @@ Recent current-tip PAS-DKES fix:
 Recent current-tip PAS full-trajectory fix:
 
 - ``HSX_PASCollisions_fullTrajectories`` now auto-selects the structured ``pas_tz`` angular preconditioner on the bounded CPU HSX-like full-trajectory PAS case. The focused CPU frozen-reference probe completed parity-clean in ``4.027 s`` with about ``1384 MB`` RSS, down from the prior release table entry of ``5.274 s`` and ``2002 MB``. The guard intentionally stays off for larger-W7X geometry11 full-trajectory and GPU full-trajectory cases unless a future measured gate proves both faster runtime and unchanged parity.
+- The same CPU full-trajectory PAS policy now covers the bounded
+  ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories``
+  row after a focused current-tip sweep showed ``pas_tz`` parity-clean and lower
+  memory than Schur.  On the local CPU probe, default elapsed time dropped from
+  about ``2.76 s`` / ``2263 MB`` to about ``2.01 s`` / ``1474 MB``.  The GPU
+  full-trajectory default remains unchanged until a matching measured GPU gate
+  proves a win.
 
 Recent current-tip GPU tokamak PAS+Er fix:
 
@@ -160,6 +167,9 @@ differentiate objectives with respect to them. For example:
 
 - Differentiate a residual norm w.r.t. ``nu_n`` (see ``examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py``).
 - Differentiate a diagnostics functional w.r.t. a differentiable geometry parameter in ``geometryScheme=4`` optimization demos.
+- Differentiate a Boozer-spectrum geometry proxy through the optional
+  ``vmec_jax -> booz_xform_jax -> sfincs_jax`` handoff in
+  ``examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py``.
 - Differentiate **through a linear solve** via implicit differentiation (see
   ``examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py``).
 
@@ -167,6 +177,11 @@ The release-facing CLI defaults do not force the differentiable path. For Python
 you can request implicit differentiation through the solve using ``differentiable=True``
 or the corresponding lower-level solve configuration. When the differentiable path is active,
 linear solves use implicit differentiation (``jax.lax.custom_linear_solve``).
+
+The VMEC/Boozer handoff example differentiates through JAX arrays and the
+``booz_xform_jax`` transform, not through file I/O.  The current file-based
+``wout`` and ``.bc`` readers remain provenance and parity tools; JAX-native
+producers are the route for geometry sensitivities.
 
 
 JAX-native performance patterns used in `sfincs_jax`

@@ -133,11 +133,13 @@
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
     "scripts": [
-      "examples/publication_figures/generate_sfincs_paper_figs.py --plot-only"
+      "examples/publication_figures/generate_sfincs_paper_figs.py --plot-only",
+      "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py"
     ],
     "artifacts": [
       "docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png",
       "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json",
+      "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json",
       "docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png"
     ],
     "claims": [
@@ -145,10 +147,14 @@
       "This full analytic-limit reproduction is closed as a post-release research lane until a wider high-nu scan is available; a bounded normalization audit is now checked in"
     ],
     "source_code": [
-      "examples/publication_figures/generate_sfincs_paper_figs.py"
+      "examples/publication_figures/generate_sfincs_paper_figs.py",
+      "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py",
+      "sfincs_jax/validation_artifacts.py"
     ],
     "tests": [
-      "tests/test_generate_sfincs_paper_figs.py"
+      "tests/test_generate_sfincs_paper_figs.py",
+      "tests/test_generate_simakov_helander_high_nu_run_plan.py",
+      "tests/test_validation_artifacts.py"
     ],
     "acceptance_gates": [
       "Regenerate only after the parent LHD and W7-X collisionality scans are rebuilt from corrected summaries",
@@ -372,9 +378,11 @@
       "https://www.nature.com/articles/s41586-021-03687-w"
     ],
     "scripts": [
-      "examples/publication_figures/generate_w7x_ambipolar_validation.py --fast --n-points 7"
+      "examples/publication_figures/generate_w7x_ambipolar_validation.py --fast --n-points 7 --provenance-json examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json"
     ],
-    "artifacts": [],
+    "artifacts": [
+      "examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json"
+    ],
     "claims": [
       "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature",
       "This lane is closed for the current release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
@@ -391,6 +399,7 @@
     "acceptance_gates": [
       "Document the exact VMEC/Boozer/profile inputs used for the comparison",
       "Solve a finite ambipolar-Er root with bracket/provenance stored in the artifact",
+      "Generated summaries must report ready_for_literature_claim=false unless complete provenance is supplied",
       "Compare heat-flux ordering and Er sign/magnitude trend against the published W7-X validation context without claiming experimental agreement beyond the reconstructed inputs"
     ]
   },

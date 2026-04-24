@@ -494,6 +494,8 @@ We also benchmarked a **single RHSMode=1 solve** with theta-sharded matvecs:
      --repeats 1 \
      --global-warmup 0 \
      --nsolve 240 \
+     --inner-warmup-solves 1 \
+     --sample-timeout-s 300 \
      --shard-axis theta \
      --gmres-distributed 1 \
      --distributed-krylov auto
@@ -501,7 +503,7 @@ We also benchmarked a **single RHSMode=1 solve** with theta-sharded matvecs:
 Input: `examples/performance/rhsmode1_sharded_scaling.input.namelist`
 (``Ntheta=30, Nzeta=10, Nxi=12, NL=8, Nx=12``).
 
-Latest long-run measurement (Macbook M3 Max, ``nsolve=240``, baseline >2 min):
+Historical long-run measurement (Macbook M3 Max, ``nsolve=240``, baseline >2 min):
 
 - 1 device: 136.25 s
 - 2 devices: 98.70 s (1.38x speedup)
@@ -509,7 +511,11 @@ Latest long-run measurement (Macbook M3 Max, ``nsolve=240``, baseline >2 min):
 - 4 devices: 110.78 s (1.23x speedup)
 
 The benchmark now runs with implicit linear solves enabled
-(``SFINCS_JAX_IMPLICIT_SOLVE=1``) to match production defaults.
+(``SFINCS_JAX_IMPLICIT_SOLVE=1``) to match production defaults. Since the
+2026-04-24 benchmark audit, use ``--inner-warmup-solves`` for hot-solve scaling
+and ``--sample-timeout-s`` to keep cold XLA setup bounded. Pre-audit sharded
+timings are retained only as regression context and should be regenerated before
+publication claims.
 
 For A/B comparison against distributed GMRES on the same setup, run:
 
@@ -522,6 +528,8 @@ For A/B comparison against distributed GMRES on the same setup, run:
      --repeats 1 \
      --global-warmup 0 \
      --nsolve 240 \
+     --inner-warmup-solves 1 \
+     --sample-timeout-s 300 \
      --shard-axis theta \
      --gmres-distributed 1 \
      --distributed-krylov gmres
@@ -681,6 +689,65 @@ The new CLI flags are the public entry point for that rollout:
      --shard-axis theta \
      --distributed-gmres auto
 
+High-collisionality transport scans
+-----------------------------------
+
+The FP/PAS high-``nu'`` LHD/W7-X campaign is dominated by independent
+transport-matrix RHS solves. Use process-level ``whichRHS`` parallelism first;
+it is simpler and more reliable than sharding one ill-conditioned RHS solve:
+
+.. code-block:: bash
+
+   CUDA_VISIBLE_DEVICES=0,1 \
+   python examples/publication_figures/generate_sfincs_paper_figs.py \
+     --case lhd \
+     --collision-operators 0 \
+     --nuprime-min 17.78279101649707 \
+     --nuprime-max 17.78279101649707 \
+     --n-points 1 \
+     --transport-workers 2 \
+     --transport-parallel-backend gpu \
+     --transport-sparse-direct-max 30000 \
+     --require-residuals \
+     --max-transport-residual 1e-6 \
+     --max-transport-relative-residual 1e-6 \
+     --scan-only
+
+The launcher passes ``SFINCS_JAX_IMPLICIT_SOLVE=0`` to scan subprocesses. This
+is intentional: the executable campaign prioritizes robust residuals and
+throughput, so high-``nu'`` transport may use host sparse-LU first attempts or
+rescue solves. The campaign command also writes solver diagnostics and rejects
+outputs whose absolute or relative transport residual exceeds the configured
+gate. It also wires those thresholds into fail-fast aborts: sequential runs stop
+after the first bad ``whichRHS`` and GPU-worker runs terminate still-pending
+workers as soon as a completed worker writes a bad residual artifact. If
+``differentiable=True`` or ``SFINCS_JAX_IMPLICIT_SOLVE=1`` is used instead,
+host-only direct rescues are disabled to preserve the implicit JAX
+differentiation contract.
+
+Current bounded ``office`` pilot for the first LHD FP high-``nu'`` point:
+
+- implicit one-GPU path: about ``569 s`` and residuals up to ``5e-1``;
+- explicit one-GPU sparse-LU path: about ``345 s`` and residuals below
+  ``5e-11``;
+- explicit two-GPU worker path: about ``262 s`` with the same clean residuals.
+
+This is useful task/RHS parallelism for the high-``nu'`` campaign. It should not
+be described as single-RHS strong scaling: one worker still owns two RHS solves,
+and host sparse materialization/factorization remains a visible cost.
+
+The W7-X FP high-``nu'`` point is deliberately still gated. On the current
+office pilots, an enlarged sparse-direct cap entered a long host factorization
+and is not a default route. A single-RHS float64 sparse-LU probe with active size
+``35063`` materialized CSR but timed out at ``600 s`` after a transient RSS near
+``20 GB``. The bounded cap (``--transport-sparse-direct-max 30000``) finished in
+``406.9 s`` but produced relative residuals ``0.768``, ``0.896``, and ``0.975``.
+Increasing GMRES work with ``SFINCS_JAX_TRANSPORT_PRECOND=xmg`` did not improve
+RHS2 (same ``0.896`` relative residual in about ``320 s``), and forced
+``theta_schwarz`` timed out at ``500 s`` for RHS2. Until the preconditioner lane
+closes that gap, the full W7-X high-``nu'`` FP/PAS campaign should fail its
+residual gate rather than produce publication figures.
+
    sfincs_jax write-output \
      --input /path/to/input.namelist \
      --distributed \
@@ -711,7 +778,10 @@ Measured large-case scaling snapshot
 
 The current executable-side scaling story is functional but not yet the final
 research-grade result. On the challenging geometryScheme=2 benchmark inputs used
-in this repository, the current `main` branch produced the following measurements:
+in this repository, the `main` branch has produced the following regression
+measurements. Treat single-case sharded entries as non-publication snapshots
+until they are regenerated with the audited child-option propagation,
+``--inner-warmup-solves``, and ``--sample-timeout-s`` controls:
 
 - Local CPU sharded RHSMode=1 benchmark on
   ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
@@ -874,7 +944,7 @@ correction level can be enabled automatically. This improves the worst
 high-device fragmentation cases without changing the operator or output parity.
 
 The sharded solve benchmark driver also now supports explicit backend
-selection:
+selection, hot-solve timing, and bounded child-process samples:
 
 .. code-block:: bash
 
@@ -883,6 +953,8 @@ selection:
      --backend cpu \
      --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
      --devices 1 2 4 8 \
+     --inner-warmup-solves 1 \
+     --sample-timeout-s 300 \
      --rhs1-precond theta_schwarz \
      --schwarz-coarse-levels 2
 
@@ -891,6 +963,8 @@ selection:
      --backend gpu \
      --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
      --devices 1 2 \
+     --inner-warmup-solves 1 \
+     --sample-timeout-s 300 \
      --rhs1-precond theta_schwarz \
      --schwarz-coarse-levels 2
 

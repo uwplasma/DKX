@@ -5748,3 +5748,623 @@ Release state:
   `deferred_post_release`: full high-collisionality analytic-limit reproduction,
   W7-X ambipolar validation, and MONKES/KNOSOS overlap. They are research/nightly
   lanes, not v1.0.3 release blockers.
+
+### 20.11 Optional VMEC/Boozer differentiable geometry handoff
+
+Closed the first open lane in the 2026-04-24 continuation pass:
+`vmec_jax -> booz_xform_jax -> sfincs_jax` now has a public, tested, fast
+example rather than only internal adapter gates.
+
+Files changed:
+
+- `sfincs_jax/jax_geometry_adapters.py` adds
+  `boozer_bhat_from_spectrum(...)` and
+  `boozer_spectrum_geometry_proxy_objective(...)`.
+- `examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py` reads or produces a
+  VMEC-like `wout` through optional `vmec_jax`, transforms one surface with
+  optional `booz_xform_jax`, evaluates the `sfincs_jax` Boozer-spectrum proxy,
+  checks `jax.grad` against centered finite differences, and performs bounded
+  scalar gradient-descent steps.
+- `tests/test_jax_geometry_adapters.py` now covers the cosine-series evaluator,
+  the Boozer-spectrum proxy gradient, and an optional real
+  `vmec_jax`/`booz_xform_jax` transform gradient gate when those packages and a
+  fixture are available.
+- `README.md`, `docs/geometry.rst`, `docs/examples.rst`,
+  `docs/performance.rst`, `docs/testing.rst`, and
+  `examples/autodiff/README.md` document the workflow and its scope boundary.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/jax_geometry_adapters.py tests/test_jax_geometry_adapters.py examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py`
+  passed.
+- `python -m pytest -q tests/test_jax_geometry_adapters.py tests/test_geometry_autodiff_gates.py`
+  passed with `12 passed in 6.24s`.
+- Local optional workflow run with
+  `/Users/rogeriojorge/local/vmec_jax/examples/data/wout_circular_tokamak.nc`
+  completed. The proxy objective at scale `1.0` was
+  `2.554265610191e-02`, the JAX gradient was
+  `4.934993422978e-02`, the centered finite-difference gradient was
+  `4.934993421392e-02`, and the absolute gradient error was `1.586e-11`.
+
+Scope boundary:
+
+- This closes the public handoff from VMEC-like JAX arrays through
+  `booz_xform_jax` into a differentiable `sfincs_jax` geometry proxy.
+- It does not yet claim full VMEC-boundary-to-kinetic-transport-solve
+  differentiation. That remains a larger research lane after the code-refactor,
+  validation, and PAS/scaling work.
+
+Next steps, in order:
+
+1. Attack PAS/geometry-rich runtime and memory offenders with focused
+   parity-preserving benchmarks.
+2. Continue the coverage/refactor path toward 95% by extracting heavy driver
+   policy pieces into unit-testable modules rather than adding slow full-solve
+   tests.
+3. Revisit single-case multi-GPU and multi-CPU strong scaling after the local
+   offender path is smaller and less setup-bound.
+4. Promote the Simakov-Helander and W7-X ambipolar lanes only after defensible
+   wider-scan/profile/equilibrium artifacts are pinned.
+
+### 20.12 PAS/geometry-rich CPU offender policy update
+
+Started the PAS/geometry-rich runtime and memory lane with bounded current-tip
+variant sweeps before changing defaults.
+
+Benchmark results:
+
+- `HSX_PASCollisions_DKESTrajectories` CPU:
+  - default already selected `pas_tz`,
+  - default elapsed `3.434 s`, forced `pas_tz` `3.180 s`,
+  - forced `xblock_tz` and `schur` were slower and heavier,
+  - forced `pas_hybrid` was much slower,
+  - all variants stayed Fortran parity-clean, but only default/`pas_tz` also
+    matched the default output exactly at the practical comparison tolerance.
+- `HSX_PASCollisions_fullTrajectories` CPU:
+  - default already selected `pas_tz`,
+  - default elapsed `3.255 s`, forced `pas_tz` `3.200 s`,
+  - forced `schur` was slower/heavier,
+  - forced `xblock_tz` was much slower, much heavier, and produced practical
+    comparison mismatches.
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`
+  CPU:
+  - default previously selected `schur`,
+  - forced `pas_tz` was parity-clean and improved elapsed time
+    `2.759 s -> 2.218 s` while reducing peak RSS
+    `2263 MB -> 1491 MB`,
+  - forced `pas_tz` with `SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX=6` was slower.
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`
+  CPU:
+  - default already selected `pas_tz`,
+  - default elapsed `1.891 s`, forced `schur` `8.413 s`,
+  - default and forced `pas_tz` stayed parity-clean.
+
+Code change:
+
+- `rhs1_pas_full_cpu_pas_tz_preferred(...)` now allows bounded
+  geometryScheme=11 CPU full-trajectory PAS cases through `Nzeta <= 19`
+  instead of only `Nzeta <= 15`.
+- This promotes the measured geometry11 full-trajectory CPU offender to `pas_tz`
+  by default while leaving GPU full-trajectory defaults unchanged.
+- Policy tests now cover the new `Nzeta=19` inclusion and keep a larger
+  `Nzeta=23` exclusion.
+
+Validation:
+
+- `python -m pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_schur_precond_heuristic.py`
+  passed with `42 passed in 9.97s`.
+- Post-policy default rerun on
+  `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`
+  selected `pas_tz`, stayed Fortran parity-clean, and measured
+  `2.013 s` elapsed with about `1474 MB` peak RSS.
+
+Next PAS/offender steps:
+
+1. Run the matching GPU current-tip variant on `office` before changing any GPU
+   default.
+2. Re-rank the current CPU/GPU offender table using fresh post-policy rows.
+3. Continue with compile-amortization and setup profiling on the remaining
+   monoenergetic/GPU-heavy cases only after this PAS policy remains stable.
+
+### 20.13 Coverage/refactor lane: scan progress and recycle gates
+
+Advanced the coverage/refactor lane with focused user-facing tests rather than
+slow full-solve coverage padding.
+
+Files changed:
+
+- Added `tests/test_scans_progress_and_recycle.py`.
+- Updated `docs/testing.rst` to describe the scan progress/recycle gate.
+
+Coverage/behavior protected:
+
+- Runtime-duration formatting across seconds, minutes, hours, and days.
+- `scan-er` progress messages, including ETA and reused-output reporting.
+- Radial-gradient variable resolution for all supported
+  `inputRadialCoordinateForGradients` values and invalid-coordinate rejection.
+- Namelist scalar patching for both replacement and append paths, plus malformed
+  namelist errors.
+- Stride/index scan subsetting.
+- Serial `SFINCS_JAX_SCAN_RECYCLE=1` state handoff from one scan point to the
+  next without launching real solves.
+
+Validation:
+
+- `python -m pytest -q tests/test_scans_progress_and_recycle.py tests/test_helper_module_coverage.py::test_scan_helpers_and_run_er_scan`
+  passed with `13 passed in 0.63s`.
+
+Notes:
+
+- A package-scoped coverage probe with `pytest --cov=sfincs_jax.scans` aborted
+  while importing the local JAX installation in this macOS environment before
+  running tests. The non-coverage pytest command passed cleanly; keep coverage
+  probing for this area on CI/Linux or after the local JAX import issue is
+  isolated.
+
+Next coverage/refactor steps:
+
+1. Continue using the existing `coverage.xml` to pick real low-cost invariants
+   from `scans.py`, `vmec_wout.py`, `io.py`, and collision/geometry helpers.
+2. Do not raise CI `--cov-fail-under` toward `95%` until the remaining
+   `v3_driver.py` execution body is split into smaller, directly testable
+   modules.
+
+### 20.14 Single-case sharded scaling benchmark hygiene
+
+Advanced the single-case multi-device scaling lane by fixing the benchmark
+driver before collecting new CPU/GPU evidence.
+
+Files changed:
+
+- `examples/performance/benchmark_sharded_solve_scaling.py`
+- `tests/test_benchmark_sharded_solve_scaling.py`
+
+Issues found and fixed:
+
+- `_run_once_subprocess(...)` recorded the requested sharding/Krylov/backend
+  settings in the parent JSON, but did not pass all of those settings to the
+  child process. The child then re-applied parser defaults inside
+  `--run-once`, so some historical runs could have recorded a configuration
+  that was not exactly the configuration timed.
+- The benchmark subprocess now passes `--shard-axis`,
+  `--gmres-distributed`, `--distributed-krylov`,
+  `--periodic-stencil-on-sharded`, `--backend`, `--rhs1-precond`, and the
+  Schwarz coarse controls explicitly to the child.
+- Child processes now raise JAX/C++ log levels to keep benchmark output focused
+  on progress and timings.
+- Added `--inner-warmup-solves` so publication scaling can report hot-solve
+  timing after compile/setup in the same child process.
+- Added `--sample-timeout-s` so a CPU/GPU sample that remains in XLA setup is
+  bounded instead of consuming unbounded machine time.
+- The generated figure now labels the device axis as CPU or GPU based on the
+  selected backend.
+
+Corrected local CPU smoke:
+
+- Non-distributed small-case CPU smoke on
+  `examples/performance/rhsmode1_sharded_scaling.input.namelist`:
+  `1 device = 28.668 s`, `2 devices = 47.616 s` (`0.60x` speedup).
+- Distributed-GMRES small-case CPU smoke on the same input:
+  `1 device = 23.748 s`, `2 devices = 48.368 s` (`0.49x` speedup).
+- These are cold one-shot samples and show that this small local case is
+  setup/overhead dominated; they should not be used as strong-scaling claims.
+
+Office GPU smoke:
+
+- A temporary up-to-date worktree was prepared on `office` at
+  `/tmp/sfincs_jax_scaling_r4k9WD`.
+- The one-shot 1-vs-2 GPU smoke was stopped during the device-1 sample after
+  more than three minutes because it remained CPU-bound in compile/setup
+  (`~1900%` CPU, 0% GPU utilization), so it was not yet measuring GPU solve
+  throughput.
+
+Validation:
+
+- `python -m pytest -q tests/test_benchmark_sharded_solve_scaling.py` passed
+  with `7 passed in 1.83s`.
+- `python -m py_compile examples/performance/benchmark_sharded_solve_scaling.py tests/test_benchmark_sharded_solve_scaling.py`
+  passed.
+
+Next scaling steps:
+
+1. Re-run single-case CPU/GPU scaling with `--inner-warmup-solves 1`,
+   `--sample-timeout-s`, and enough `--nsolve` repeats to amortize setup.
+2. If the hot-solve single-case path still does not scale, keep the
+   single-case multi-GPU lane open and document the reason: single-RHS GMRES is
+   reduction/setup dominated at these sizes.
+3. Keep the production scaling claim on transport-worker throughput unless and
+   until the single-case sharded lane has measured hot-solve speedup on `office`.
+
+### 20.15 Simakov-Helander and W7-X validation gates
+
+Advanced the two deferred physics-validation lanes without overclaiming them.
+
+Literature pass:
+
+- Landreman, Smith, Mollen, and Helander 2014 remains the parent SFINCS
+  collisionality/trajectory/collision-operator reference.
+- Simakov-Helander high-collisionality work remains the analytic parent for the
+  Appendix-B/Pfirsch-Schluter high-`nu'` comparison.
+- Pablant et al. 2018 and 2020, plus the W7-X neoclassical-transport validation
+  literature, remain the W7-X ambipolar `E_r` acceptance anchors.
+
+Simakov-Helander changes:
+
+- Added `recommended_high_collisionality_nuprime_grid(...)` in
+  `sfincs_jax/validation_artifacts.py`.
+- The Simakov-Helander audit summary now records a per-case
+  `recommended_high_nuprime_extension`; current checked-in LHD/W7-X scans stop
+  near `nu'=10`, and the recommended extensions reach about `nu'=100`.
+- Regenerated
+  `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json`
+  and `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png`.
+- The full analytic-limit reproduction remains closed until those wider
+  high-`nu'` runs are actually generated and the readiness gates flip true.
+
+W7-X ambipolar changes:
+
+- Added optional `--provenance-json` support to
+  `examples/publication_figures/generate_w7x_ambipolar_validation.py`.
+- The W7-X ambipolar summary now writes explicit `acceptance_gates`:
+  finite roots, radial-current sign bracketing, ion-root candidate,
+  complete provenance, and combined `ready_for_literature_claim`.
+- Without complete `equilibrium_source`, `profile_source`,
+  `configuration_or_shot`, and `literature_reference` provenance, generated
+  artifacts remain `w7x_like_scaffold` rather than
+  `w7x_literature_validation`.
+
+Validation:
+
+- `python -m pytest -q tests/test_validation_artifacts.py::test_recommended_high_collisionality_nuprime_grid_extends_beyond_current_tail tests/test_validation_artifacts.py::test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed`
+  passed with `2 passed in 0.31s`.
+- `python -m pytest -q tests/test_generate_w7x_ambipolar_validation.py`
+  passed with `6 passed in 4.70s`.
+- `python -m py_compile sfincs_jax/validation_artifacts.py tests/test_validation_artifacts.py`
+  and `python -m py_compile examples/publication_figures/generate_w7x_ambipolar_validation.py tests/test_generate_w7x_ambipolar_validation.py`
+  passed.
+
+Next validation steps:
+
+1. Launch the recommended high-`nu'` LHD/W7-X scan extension as a nightly or
+   office-bounded campaign, not as a fast CI test.
+2. Build or import a defensible W7-X provenance JSON before checking in any
+   W7-X ambipolar literature-validation figure.
+3. Keep fast CI on the summary/gate logic and reserve expensive full solves for
+   release/nightly artifacts.
+
+### 20.16 Executable high-nu plan and W7-X provenance template
+
+Moved the next deferred validation steps from prose to executable, reviewable
+artifacts.
+
+High-collisionality lane:
+
+- `examples/publication_figures/generate_sfincs_paper_figs.py` now accepts
+  explicit `--nuprime-min`, `--nuprime-max`, and `--n-points` controls.
+- Added
+  `examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py`.
+- Generated
+  `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json`.
+- The checked-in plan contains concrete scan-only commands for:
+  - LHD: `nu' = 17.78, 31.62, 56.23, 100.0`
+  - W7-X: `nu' = 17.78, 31.62, 56.24, 100.0`
+- These commands are intentionally scan-only with `--skip-existing`; run them on
+  `office` or a nightly workstation lane, then regenerate the audit.
+
+W7-X ambipolar lane:
+
+- Added
+  `examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json`.
+- The template is intentionally incomplete; generated summaries still report
+  `w7x_like_scaffold` until a case-specific provenance JSON fills
+  `configuration_or_shot`, `equilibrium_source`, `profile_source`, and
+  `literature_reference`.
+- Updated the validation manifest and docs to point to the run-plan and
+  provenance template.
+
+Validation:
+
+- `python -m pytest -q tests/test_generate_sfincs_paper_figs.py::test_main_custom_nuprime_window_writes_expected_scan_bounds tests/test_generate_sfincs_paper_figs.py::test_main_rejects_invalid_custom_nuprime_window tests/test_generate_simakov_helander_high_nu_run_plan.py`
+  passed with `4 passed in 0.31s`.
+- `python -m pytest -q tests/test_generate_w7x_ambipolar_validation.py::test_checked_in_w7x_provenance_template_is_incomplete_by_design tests/test_generate_w7x_ambipolar_validation.py::test_build_summary_payload_promotes_only_with_complete_provenance`
+  passed with `2 passed in 0.79s`.
+- `python -m py_compile examples/publication_figures/generate_sfincs_paper_figs.py examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py tests/test_generate_sfincs_paper_figs.py tests/test_generate_simakov_helander_high_nu_run_plan.py`
+  passed.
+
+Next concrete execution step:
+
+1. Run the generated high-`nu'` scan-only commands on `office` with one case at a
+   time and watch the first point long enough to estimate the full wall time.
+2. If the first high-`nu'` point is too expensive, reduce the run to FP-only
+   first (`--collision-operators 0`) and keep PAS for a later/nightly pass.
+3. Once high-`nu'` output exists, aggregate/plot-only and rerun the
+   Simakov-Helander audit to see whether the readiness gate flips.
+
+### 20.17 Office high-nu pilot timing
+
+Ran the first bounded high-`nu'` pilot point on `office` from a disposable copy
+of the current working tree.
+
+Command shape:
+
+- `CUDA_VISIBLE_DEVICES=0 ... python3 examples/publication_figures/generate_sfincs_paper_figs.py --case lhd --collision-operators 0 --nuprime-min 17.78279101649707 --nuprime-max 17.78279101649707 --n-points 1 --work-dir /tmp/sfincs_jax_highnu_pilot/lhd --summary-dir /tmp/sfincs_jax_highnu_pilot/summary --out-dir /tmp/sfincs_jax_highnu_pilot/figures --timeout-s 900 --skip-existing --scan-only`
+
+Observed result:
+
+- The run completed successfully and wrote
+  `/tmp/sfincs_jax_highnu_pilot/lhd/lhd_co0/nu_n_4.744/sfincsOutput.h5`.
+- Total scan elapsed: about `569 s` (`9m28s`) for one LHD FP high-`nu'`
+  transport point at `nu'=17.78`.
+- Per-RHS timings were about `188.8 s`, `188.2 s`, and `189.1 s`.
+- The solver retried from `sxblock` through unpreconditioned/strong paths; final
+  residual logs were `1.99e-04`, `3.38e-04`, and `5.00e-01` for the three RHS
+  solves, so the high-`nu'` ladder is scientifically useful as a trend pilot but
+  needs acceptance scrutiny before promotion.
+- The output transport matrix was finite; selected values:
+  `L11=-3.958e-03`, `L12=-1.351e-02`, `L33=3.361e+01`.
+
+Run-plan update:
+
+- `examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py`
+  now writes both the full extension command and a `pilot_command` for each case.
+- Regenerated
+  `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json`.
+
+Decision:
+
+- Do not launch the full FP/PAS LHD+W7-X high-`nu'` extension in an interactive
+  turn. At the measured pilot rate, the full plan is a multi-hour
+  workstation/nightly campaign.
+- Next implementation step should either improve high-`nu'` transport
+  preconditioning/residual acceptance or run the FP-only extension first as a
+  bounded overnight job.
+
+### 20.18 High-nu transport residual and parallel campaign fix
+
+Root cause found:
+
+- The high-`nu'` pilot was launched through `utils/sfincs_jax_driver.py`, which
+  previously deferred to the low-level implicit/differentiable solve default.
+- The implicit path intentionally disables host sparse direct first attempts and
+  rescues, so the GPU pilot stayed on iterative `sxblock`/unpreconditioned retry
+  branches and reported residuals far above target.
+- Transport process/GPU workers also failed to carry the parent
+  `differentiable` mode in their payloads, so parallel worker solves could
+  silently fall back to the implicit path even when the parent requested the
+  explicit executable lane.
+
+Implemented changes:
+
+- `utils/sfincs_jax_driver.py` now defaults to
+  `write_sfincs_jax_output_h5(..., differentiable=False)` and exposes
+  `--differentiable` for the explicit opt-in implicit/gradient path.
+- Transport parallel payloads now preserve `differentiable` and both in-process
+  and GPU subprocess workers pass it through to
+  `solve_v3_transport_matrix_linear_gmres(...)`.
+- `examples/publication_figures/generate_sfincs_paper_figs.py` now has
+  `--transport-workers` and `--transport-parallel-backend` controls and forces
+  `SFINCS_JAX_IMPLICIT_SOLVE=0` for publication scan subprocesses.
+- The Simakov-Helander high-`nu'` run-plan generator now emits GPU-parallel
+  pilot/full scan commands by default (`--transport-workers 2
+  --transport-parallel-backend gpu`), while remaining regenerable for CPU lanes.
+- README, docs, and publication-figure notes now document the explicit scan
+  lane and the reason host direct transport rescue is unavailable in implicit
+  differentiable solves.
+- `sfincs_jax/transport_parallel_runtime.py` now emits periodic GPU-worker
+  heartbeat/status messages so future long parallel transport launches do not
+  sit silently between worker launch and completion.
+
+Office validation:
+
+- Re-ran the first LHD FP high-`nu'` pilot point on `office` with
+  `SFINCS_JAX_IMPLICIT_SOLVE=0`.
+- The run triggered `host sparse LU first attempt (size=16382 backend=gpu)` for
+  each RHS.
+- Final RHS residuals dropped from the previous stalled values
+  (`1.99e-04`, `3.38e-04`, `5.00e-01`) to `4.33e-16`, `5.33e-14`, and
+  `4.06e-11`.
+- Per-RHS elapsed times were about `114.5 s`, `113.4 s`, and `114.3 s`, down
+  from about `188 s` each.
+- Total scan elapsed was about `345 s` (`5m45s`), down from `569 s` (`9m28s`).
+- Re-ran the same point with `--transport-workers 2
+  --transport-parallel-backend gpu` and `CUDA_VISIBLE_DEVICES=0,1`.
+- The two-GPU worker run preserved the clean residuals (`4.33e-16`,
+  `5.33e-14`, `4.06e-11`) and completed in about `262 s` (`4m22s`).
+- Observed single-point speedup was `1.32x` over the explicit serial GPU lane
+  and `2.17x` over the original implicit/stalled pilot. This is enough to use
+  the two-GPU worker lane for the full campaign, but it is not a strong-scaling
+  claim because one worker owns two RHS solves and host sparse assembly/factor
+  time is still substantial.
+- The explicit one-GPU and two-GPU transport matrices were identical for this
+  point (`max_abs=0`, `rel=0`). The old implicit/stalled pilot differed
+  materially, so it is not a valid reference for the corrected high-`nu'`
+  output.
+- A local Fortran v3 attempt on the same generated input was aborted after more
+  than `1300` PETSc GMRES iterations on the first RHS because this local PETSc
+  build reported no MUMPS/SuperLU_DIST and used the fragile built-in direct
+  preconditioner. Do not use that aborted run as a physics/parity reference;
+  use a proper Fortran v3 build with MUMPS/SuperLU_DIST for the high-`nu'`
+  comparison campaign.
+
+Validation added:
+
+- Utility driver tests assert the default explicit path and the
+  `--differentiable` opt-in behavior.
+- Transport payload tests assert `differentiable` propagation.
+- Publication-figure tests assert scan subprocess environment propagation for
+  explicit solves and GPU worker counts.
+- GPU-worker runtime tests assert completed worker collection and progress
+  messages.
+- Local validation passed:
+  `python -m pytest -q tests/test_transport_parallel_runtime.py tests/test_transport_parallel_execution.py tests/test_transport_parallel.py::test_transport_parallel_worker_preserves_differentiable_payload tests/test_transport_sparse_direct.py tests/test_generate_sfincs_paper_figs.py tests/test_generate_simakov_helander_high_nu_run_plan.py tests/test_utils_sfincs_jax_driver.py tests/test_cli_solve_mode.py tests/test_solve_mode_policy.py tests/test_validation_manifest_schema.py`
+  (`102 passed`), `python -m py_compile ...`, and
+  `python -m sphinx -W -b html docs docs/_build/html`.
+
+Next concrete steps:
+
+1. Treat `--transport-workers 2 --transport-parallel-backend gpu` as the
+   recommended `office` lane for the full high-`nu'` campaign.
+2. Run the full FP-only LHD/W7-X extension first, then widen to PAS if the
+   first few PAS points show the same residual and runtime behavior.
+3. Keep single-RHS strong GPU scaling separate from this campaign result; this
+   fix is RHS/task parallelism plus robust explicit sparse direct transport.
+
+### 20.19 High-nu residual diagnostics and W7-X preconditioner gate
+
+Scope:
+
+- Close the silent-failure mode in the high-`nu'` FP/PAS LHD+W7-X campaign by
+  carrying RHS norms through transport solves, GPU workers, H5 output, and
+  publication scan quality gates.
+- Keep the campaign parallelized with process/GPU `whichRHS` workers, but avoid
+  letting W7-X FP enter an unbounded host sparse-LU path before the preconditioner
+  issue is solved.
+
+Implemented changes:
+
+- `V3TransportMatrixSolveResult` now records `rhs_norms_by_rhs` in addition to
+  `residual_norms_by_rhs`.
+- In-process and GPU transport workers now return RHS norms, and GPU worker
+  subprocess logs replay selected progress lines on success (`rhs_norm`,
+  preconditioner choice, sparse/direct/fallback messages, residuals, elapsed
+  time). This makes long dual-GPU high-`nu'` runs inspectable while they are
+  running and after each worker completes.
+- GPU transport subprocess launch now prepends the source checkout to
+  `PYTHONPATH`, so workers remain importable when `sfincsScan` changes into a
+  scan-point subdirectory.
+- `SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS=1` now writes
+  `transportResidualNorms`, `transportRhsNorms`,
+  `transportRelativeResidualNorms`, `transportMaxResidualNorm`, and
+  `transportMaxRelativeResidualNorm` to `sfincsOutput.h5`.
+- `examples/publication_figures/generate_sfincs_paper_figs.py` now supports
+  `--max-transport-relative-residual` and `--transport-maxiter`, and it rejects
+  just-created scan outputs when absolute or relative residual gates fail.
+- `examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py`
+  now defaults to `--transport-sparse-direct-max 30000` instead of the earlier
+  oversized cap. That keeps the current LHD FP high-`nu'` pilot on the accurate
+  direct path while preventing W7-X FP from silently spending many minutes in a
+  host sparse factorization known not to be a good default.
+- `sfincs_jax.transport_residual_quality` now centralizes absolute and
+  RHS-normalized residual-gate checks. The same thresholds are used by
+  sequential solves and GPU worker result collection.
+- `SFINCS_JAX_TRANSPORT_ABORT_MAX_RESIDUAL` and
+  `SFINCS_JAX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL` now fail fast for
+  RHSMode=2/3 transport solves. Sequential runs abort after the first bad
+  `whichRHS`; GPU-worker runs abort as soon as a completed worker writes a bad
+  residual artifact and terminate still-running workers.
+- README, docs, and publication-figure notes now state that LHD FP high-`nu'`
+  is the currently clean parallel pilot and W7-X FP high-`nu'` remains a
+  residual/preconditioner lane until a bounded iterative or direct strategy
+  reaches the recorded gates.
+
+Validation run:
+
+- `python -m py_compile sfincs_jax/io.py sfincs_jax/v3_driver.py sfincs_jax/transport_parallel_runtime.py sfincs_jax/transport_parallel_worker.py examples/publication_figures/generate_sfincs_paper_figs.py examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py`
+- `python -m pytest -q tests/test_generate_sfincs_paper_figs.py tests/test_generate_simakov_helander_high_nu_run_plan.py tests/test_transport_matrix_write_output_end_to_end.py::test_transport_output_can_include_solver_residual_diagnostics tests/test_transport_parallel_runtime.py tests/test_transport_parallel_execution.py tests/test_transport_parallel.py::test_transport_parallel_worker_preserves_differentiable_payload tests/test_transport_parallel.py::test_transport_parallel_gpu_backend_merges_subset_elapsed tests/test_utils_sfincs_jax_driver.py tests/test_transport_sparse_direct.py` (`74 passed`)
+- `python -m pytest -q tests/test_transport_parallel.py tests/test_transport_parallel_runtime.py tests/test_transport_parallel_execution.py tests/test_transport_sparse_direct.py tests/test_generate_sfincs_paper_figs.py tests/test_generate_simakov_helander_high_nu_run_plan.py tests/test_transport_matrix_write_output_end_to_end.py tests/test_utils_sfincs_jax_driver.py` (`93 passed`)
+- Remote `office` validation after the fail-fast residual-gate wiring:
+  `python3 -m pytest -q tests/test_transport_residual_quality.py tests/test_transport_parallel_runtime.py tests/test_generate_sfincs_paper_figs.py::test_main_require_residuals_rejects_bad_outputs_after_scan tests/test_transport_matrix_write_output_end_to_end.py::test_transport_output_can_include_solver_residual_diagnostics`
+  (`12 passed`).
+- Local focused transport/publication slice after the same wiring:
+  `python -m pytest -q tests/test_transport_residual_quality.py tests/test_transport_parallel_runtime.py tests/test_transport_parallel.py tests/test_transport_parallel_execution.py tests/test_transport_sparse_direct.py tests/test_generate_sfincs_paper_figs.py tests/test_generate_simakov_helander_high_nu_run_plan.py tests/test_transport_matrix_write_output_end_to_end.py tests/test_utils_sfincs_jax_driver.py`
+  (`99 passed` after adding worker-exit classification coverage).
+- Docs build: `python -m sphinx -W -b html docs docs/_build/html`.
+
+Current GPU pilot facts:
+
+- LHD FP first high-`nu'` point: explicit two-GPU worker path remains the clean
+  campaign baseline (`~262 s`, residuals `4.33e-16`, `5.33e-14`, `4.06e-11`).
+- W7-X FP first high-`nu'` point: oversized sparse-direct cap was stopped after
+  more than 18 minutes; forcing iterative GPU workers completed in about
+  `416 s` but residuals were `1.45e-04`, `2.35e-04`, and `6.42e-01`, i.e. order
+  unity relative to the corresponding RHS norms. Forced theta-Schwarz was slower
+  and did not improve RHS2. This is not publication-grade and must remain gated.
+- Fresh residual-gated `office` rerun with `--transport-sparse-direct-max 30000`
+  completed the scan solve in `406.9 s` and failed exactly at the intended
+  post-run quality gate. The recorded residual/RHS/relative residual tuples were:
+  RHS1 `1.447246e-04 / 1.885192e-04 / 7.676920e-01`, RHS2
+  `2.352155e-04 / 2.623896e-04 / 8.964357e-01`, and RHS3
+  `6.422668e-01 / 6.589011e-01 / 9.747544e-01`. The max absolute residual was
+  `0.6422667543`; the max relative residual was `0.9747544008`. This proves the
+  campaign now refuses the known-bad W7-X FP high-`nu'` branch instead of
+  silently producing a reusable H5/figure artifact.
+- Single-RHS W7-X FP probes on `office`:
+  `SFINCS_JAX_TRANSPORT_PRECOND=xmg`, `restart=120`, `maxiter=800`, and
+  `SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX=30000` returned the same bad RHS2
+  relative residual (`8.964357e-01`) in `~320 s`. This is slower than the
+  earlier default RHS2 worker (`~214 s`) and does not improve accuracy.
+- Forced `theta_schwarz` with the same sparse cap timed out at `500 s` before
+  producing a RHS2 result, so it is not a viable default W7-X FP high-`nu'`
+  accelerator.
+- Allowing sparse direct for the W7-X active size (`SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX=40000`,
+  float64 factors) materialized the reduced operator as CSR but timed out at
+  `600 s` for a single RHS after a transient RSS near `20 GB`. This remains a
+  bounded diagnostic option on large nodes, not a default campaign route.
+- A real W7-X two-GPU fail-fast run with the sequential worker gate enabled
+  aborted inside the `[1, 3]` worker after RHS1 at about `203 s`, before writing
+  a reusable output. The first parent-side implementation reported this as a
+  generic worker failure because the worker exited before writing its NPZ result;
+  the parent runtime now classifies worker stderr/stdout residual-gate exits as
+  `GPU transport worker residual gate failed` and terminates pending workers.
+  This classification is covered by local and `office` unit tests; a second
+  real `office` rerun was interrupted by SSH timeout, so the unit-tested
+  classification should be rechecked in the next GPU window.
+
+Next concrete steps:
+
+1. Run the LHD FP/PAS high-`nu'` pilot/full extension with the same residual
+   gates and record runtime, residual, and memory artifacts.
+2. For W7-X FP, attack the remaining preconditioner lane with a bounded
+   streaming+FP diagonal angular preconditioner or another demonstrably cheaper
+   Krylov accelerator; do not claim the W7-X high-`nu'` campaign until the
+   relative residual gate is clean.
+3. Add a permanent W7-X single-RHS preconditioner benchmark harness that records
+   residual, RHS norm, relative residual, wall time, peak RSS, and preconditioner
+   choice for candidate algorithms without running the full publication scan.
+
+### 20.20 v1.0.4 release closeout
+
+Release scope:
+
+- Ship the research-grade documentation/refactor/testing work accumulated after
+  `v1.0.3`.
+- Close the high-`nu'` transport silent-failure lane by making residual quality
+  explicit in H5 output, publication scan gates, sequential runs, and GPU worker
+  runs.
+- Publish the differentiable VMEC/Boozer/SFINCS handoff scaffold and validation
+  provenance machinery without claiming unavailable W7-X ambipolar or W7-X
+  high-`nu'` convergence.
+- Keep runtime-heavy or unresolved research items as documented follow-up lanes
+  rather than release blockers.
+
+Closed for this release:
+
+- Explicit executable scan path is now the default for utilities and publication
+  scans; implicit/differentiable solves remain available as an opt-in gradient
+  path.
+- Transport worker parallelism now carries `differentiable` mode, RHS norms,
+  residual diagnostics, status logs, and GPU-worker import paths correctly.
+- High-`nu'` LHD FP pilot has clean two-GPU residuals and documented runtime.
+- W7-X FP high-`nu'` no longer silently writes reusable artifacts when it fails
+  the residual gate.
+- Documentation now explains the high-`nu'` campaign lane, fail-fast residual
+  thresholds, optional JAX-native geometry handoff, validation provenance, and
+  current scaling caveats.
+
+Deferred after ship:
+
+- W7-X FP high-`nu'` preconditioning remains open; current `xmg`,
+  `theta_schwarz`, and sparse-LU probes do not close the relative residual gate.
+- Full FP/PAS LHD+W7-X high-`nu'` campaign should proceed only after the W7-X
+  preconditioner benchmark harness identifies a bounded accurate route.
+- W7-X ambipolar validation remains provenance-gated until defensible checked-in
+  equilibrium/profile artifacts are available.
+- Single-RHS multi-GPU strong scaling remains experimental; current release
+  claims only correctness, task/RHS parallelism, and documented caveats.
+
+Release checks planned before tagging:
+
+- Focused transport/publication tests.
+- Documentation build with `sphinx -W`.
+- Package build with `python -m build`.
+- Import/version smoke test for `sfincs_jax.__version__ == "1.0.4"`.

@@ -35,6 +35,7 @@ def build_transport_parallel_payloads(
     identity_shift: float,
     collect_transport_output_fields: bool,
     phi1_hat_base,
+    differentiable: bool | None,
 ) -> list[dict[str, object]]:
     phi1_payload = np.asarray(phi1_hat_base) if phi1_hat_base is not None else None
     payloads: list[dict[str, object]] = []
@@ -51,6 +52,7 @@ def build_transport_parallel_payloads(
                 "identity_shift": float(identity_shift),
                 "collect_transport_output_fields": bool(collect_transport_output_fields),
                 "phi1_hat_base": phi1_payload,
+                "differentiable": differentiable,
             }
         )
     return payloads

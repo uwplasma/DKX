@@ -84,6 +84,17 @@ def _configure_solver_env(
         env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP"] = str(float(schwarz_coarse_damp))
 
 
+def _configure_benchmark_subprocess_env(env: dict[str, str]) -> None:
+    """Keep child-process benchmark logs focused on progress and timings."""
+
+    for key in ("TF_CPP_MIN_LOG_LEVEL", "GLOG_minloglevel", "ABSL_MIN_LOG_LEVEL"):
+        try:
+            current = int(env.get(key, "0"))
+        except ValueError:
+            current = 0
+        env[key] = str(max(current, 2))
+
+
 def _run_once(
     input_path: Path,
     *,
@@ -92,6 +103,7 @@ def _run_once(
     distributed_krylov: str,
     periodic_stencil_on_sharded: str,
     nsolve: int,
+    inner_warmup_solves: int,
     rhs1_precond: str,
     backend: str,
     schwarz_coarse_levels: int | None,
@@ -111,6 +123,12 @@ def _run_once(
         schwarz_coarse_damp=schwarz_coarse_damp,
     )
     nml = read_sfincs_input(input_path)
+    for _ in range(max(0, int(inner_warmup_solves))):
+        warm = solve_v3_full_system_linear_gmres(
+            nml=nml,
+            tol=1e-10,
+        )
+        jax.block_until_ready(warm.x)
     t0 = time.perf_counter()
     for _ in range(max(1, int(nsolve))):
         res = solve_v3_full_system_linear_gmres(
@@ -131,6 +149,8 @@ def _run_once_subprocess(
     distributed_krylov: str,
     periodic_stencil_on_sharded: str,
     nsolve: int,
+    inner_warmup_solves: int,
+    sample_timeout_s: float | None,
     rhs1_precond: str,
     backend: str,
     schwarz_coarse_levels: int | None,
@@ -138,6 +158,7 @@ def _run_once_subprocess(
     schwarz_coarse_damp: float | None,
 ) -> float:
     env = os.environ.copy()
+    _configure_benchmark_subprocess_env(env)
     _configure_backend_env(env=env, devices=devices, backend=backend)
     _configure_solver_env(
         env=env,
@@ -161,8 +182,35 @@ def _run_once_subprocess(
         str(input_path),
         "--nsolve",
         str(int(nsolve)),
+        "--inner-warmup-solves",
+        str(int(inner_warmup_solves)),
+        "--shard-axis",
+        str(shard_axis),
+        "--gmres-distributed",
+        str(gmres_distributed),
+        "--distributed-krylov",
+        str(distributed_krylov),
+        "--periodic-stencil-on-sharded",
+        str(periodic_stencil_on_sharded),
+        "--backend",
+        str(backend),
     ]
-    out = subprocess.check_output(cmd, env=env, text=True)
+    if rhs1_precond:
+        cmd.extend(["--rhs1-precond", str(rhs1_precond)])
+    if schwarz_coarse_levels is not None:
+        cmd.extend(["--schwarz-coarse-levels", str(int(schwarz_coarse_levels))])
+    if schwarz_coarse_steps is not None:
+        cmd.extend(["--schwarz-coarse-steps", str(int(schwarz_coarse_steps))])
+    if schwarz_coarse_damp is not None:
+        cmd.extend(["--schwarz-coarse-damp", str(float(schwarz_coarse_damp))])
+    timeout = None if sample_timeout_s is None or sample_timeout_s <= 0 else float(sample_timeout_s)
+    try:
+        out = subprocess.check_output(cmd, env=env, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Timed out after {timeout:.1f}s while benchmarking devices={devices}; "
+            "increase --sample-timeout-s or use a smaller case."
+        ) from exc
     return float(out.strip().splitlines()[-1])
 
 
@@ -198,6 +246,18 @@ def main() -> None:
         type=int,
         default=1,
         help="Number of RHSMode=1 solves per timed sample.",
+    )
+    parser.add_argument(
+        "--inner-warmup-solves",
+        type=int,
+        default=0,
+        help="Untimed solves inside each child process before timing; use 1 to report hot-solve scaling.",
+    )
+    parser.add_argument(
+        "--sample-timeout-s",
+        type=float,
+        default=0.0,
+        help="Optional timeout for each child-process sample; 0 disables the timeout.",
     )
     parser.add_argument(
         "--global-warmup",
@@ -292,6 +352,7 @@ def main() -> None:
             distributed_krylov=str(args.distributed_krylov),
             periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
             nsolve=int(args.nsolve),
+            inner_warmup_solves=int(args.inner_warmup_solves),
             rhs1_precond=str(args.rhs1_precond),
             backend=str(args.backend),
             schwarz_coarse_levels=args.schwarz_coarse_levels,
@@ -319,6 +380,8 @@ def main() -> None:
                 distributed_krylov=str(args.distributed_krylov),
                 periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
                 nsolve=int(args.nsolve),
+                inner_warmup_solves=int(args.inner_warmup_solves),
+                sample_timeout_s=float(args.sample_timeout_s),
                 rhs1_precond=str(args.rhs1_precond),
                 backend=str(args.backend),
                 schwarz_coarse_levels=args.schwarz_coarse_levels,
@@ -333,7 +396,8 @@ def main() -> None:
             f"shard_axis={args.shard_axis} gmres_distributed={args.gmres_distributed} "
             f"distributed_krylov={args.distributed_krylov} "
             f"stencil_on_sharded={args.periodic_stencil_on_sharded} "
-            f"nsolve={int(args.nsolve)} rhs1_precond={args.rhs1_precond or 'auto'} "
+            f"nsolve={int(args.nsolve)} inner_warmup_solves={int(args.inner_warmup_solves)} "
+            f"rhs1_precond={args.rhs1_precond or 'auto'} "
             f"backend={args.backend} coarse_levels={args.schwarz_coarse_levels if args.schwarz_coarse_levels is not None else 'auto'} "
             f"coarse_steps={args.schwarz_coarse_steps if args.schwarz_coarse_steps is not None else 'auto'} "
             f"coarse_damp={args.schwarz_coarse_damp if args.schwarz_coarse_damp is not None else 'auto'}",
@@ -350,6 +414,8 @@ def main() -> None:
                 distributed_krylov=str(args.distributed_krylov),
                 periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
                 nsolve=int(args.nsolve),
+                inner_warmup_solves=int(args.inner_warmup_solves),
+                sample_timeout_s=float(args.sample_timeout_s),
                 rhs1_precond=str(args.rhs1_precond),
                 backend=str(args.backend),
                 schwarz_coarse_levels=args.schwarz_coarse_levels,
@@ -369,6 +435,8 @@ def main() -> None:
                 distributed_krylov=str(args.distributed_krylov),
                 periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
                 nsolve=int(args.nsolve),
+                inner_warmup_solves=int(args.inner_warmup_solves),
+                sample_timeout_s=float(args.sample_timeout_s),
                 rhs1_precond=str(args.rhs1_precond),
                 backend=str(args.backend),
                 schwarz_coarse_levels=args.schwarz_coarse_levels,
@@ -406,6 +474,8 @@ def main() -> None:
         "distributed_krylov": str(args.distributed_krylov),
         "periodic_stencil_on_sharded": str(args.periodic_stencil_on_sharded),
         "nsolve": int(args.nsolve),
+        "inner_warmup_solves": int(args.inner_warmup_solves),
+        "sample_timeout_s": float(args.sample_timeout_s),
         "rhs1_precond": str(args.rhs1_precond),
         "backend": str(args.backend),
         "schwarz_coarse_levels": args.schwarz_coarse_levels,
@@ -428,14 +498,15 @@ def main() -> None:
 
         fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.2))
         axes[0].plot(d, mean_s, "o-", label="measured")
-        axes[0].set_xlabel("CPU devices")
+        device_label = "GPU devices" if _normalized_backend(args.backend) == "gpu" else "CPU devices"
+        axes[0].set_xlabel(device_label)
         axes[0].set_ylabel("time (s)")
         axes[0].set_title("Runtime vs devices")
         axes[0].grid(True, alpha=0.3)
 
         axes[1].plot(d, speedup, "o-", label="measured")
         axes[1].plot(d, d, "--", label="ideal")
-        axes[1].set_xlabel("CPU devices")
+        axes[1].set_xlabel(device_label)
         axes[1].set_ylabel("speedup")
         axes[1].set_title("Speedup vs devices")
         axes[1].grid(True, alpha=0.3)

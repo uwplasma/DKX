@@ -410,6 +410,44 @@ def _fortran_h5_layout(x: Any) -> Any:
     return np.ascontiguousarray(np.transpose(arr, axes=axes))
 
 
+def _transport_solver_diagnostic_arrays(result: Any, n_rhs: int) -> dict[str, np.ndarray]:
+    """Return absolute and relative transport residual diagnostics for H5 output."""
+    residuals_by_rhs = getattr(result, "residual_norms_by_rhs", None) or {}
+    rhs_norms_by_rhs = getattr(result, "rhs_norms_by_rhs", None) or {}
+    residuals = np.asarray(
+        [
+            float(np.asarray(residuals_by_rhs.get(i, np.nan), dtype=np.float64))
+            for i in range(1, int(n_rhs) + 1)
+        ],
+        dtype=np.float64,
+    )
+    rhs_norms = np.asarray(
+        [
+            float(np.asarray(rhs_norms_by_rhs.get(i, np.nan), dtype=np.float64))
+            for i in range(1, int(n_rhs) + 1)
+        ],
+        dtype=np.float64,
+    )
+    rel = np.full_like(residuals, np.nan, dtype=np.float64)
+    valid = np.isfinite(residuals) & np.isfinite(rhs_norms) & (rhs_norms > 0.0)
+    rel[valid] = residuals[valid] / rhs_norms[valid]
+    finite_residuals = residuals[np.isfinite(residuals)]
+    finite_rel = rel[np.isfinite(rel)]
+    return {
+        "transportResidualNorms": residuals,
+        "transportRhsNorms": rhs_norms,
+        "transportRelativeResidualNorms": rel,
+        "transportMaxResidualNorm": np.asarray(
+            float(np.max(finite_residuals)) if finite_residuals.size else float("nan"),
+            dtype=np.float64,
+        ),
+        "transportMaxRelativeResidualNorm": np.asarray(
+            float(np.max(finite_rel)) if finite_rel.size else float("nan"),
+            dtype=np.float64,
+        ),
+    }
+
+
 def write_sfincs_h5(
     *,
     path: Path,
@@ -461,6 +499,12 @@ def _write_transport_h5_streaming(
     t = int(op0.n_theta)
     s = int(op0.n_species)
     x = int(op0.n_x)
+    write_solver_diagnostics = os.environ.get("SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
     if len(result.state_vectors_by_rhs) < n_rhs:
         raise ValueError("Streaming transport H5 requires state vectors for every whichRHS.")
@@ -539,6 +583,14 @@ def _write_transport_h5_streaming(
 
     transport_keys = set(ztsn_fields) | set(ztn_fields) | set(xsn_fields) | set(sn_fields) | set(n_fields)
     transport_keys |= {"transportMatrix", "NIterations", "input.namelist", "elapsed time (s)"}
+    if write_solver_diagnostics:
+        transport_keys |= {
+            "transportResidualNorms",
+            "transportRhsNorms",
+            "transportRelativeResidualNorms",
+            "transportMaxResidualNorm",
+            "transportMaxRelativeResidualNorm",
+        }
     if sources_shape is not None:
         transport_keys.add("sources")
 
@@ -838,6 +890,9 @@ def _write_transport_h5_streaming(
         elapsed = np.asarray(result.elapsed_time_s, dtype=np.float64)
         elapsed_out = _fortran_h5_layout(elapsed) if not fortran_layout else elapsed
         f.create_dataset("elapsed time (s)", data=elapsed_out)
+        if write_solver_diagnostics:
+            for name, arr in _transport_solver_diagnostic_arrays(result, n_rhs).items():
+                f.create_dataset(name, data=arr)
 
     return output_path.resolve()
 
@@ -3993,6 +4048,13 @@ def write_sfincs_jax_output_h5(
             # Add transportMatrix (Fortran reads it transposed vs mathematical row/col).
             fields["transportMatrix"] = np.asarray(result.transport_matrix, dtype=np.float64).T
             fields["elapsed time (s)"] = np.asarray(result.elapsed_time_s, dtype=np.float64)
+            if os.environ.get("SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS", "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }:
+                fields.update(_transport_solver_diagnostic_arrays(result, n_rhs))
 
             # The transport-matrix fixtures store the full set of `diagnostics.F90` outputs
             # (moments, momentum flux, and NTV) for each whichRHS solve. Populate these

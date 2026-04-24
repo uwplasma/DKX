@@ -595,6 +595,36 @@ def high_collisionality_slope_sensitivity(
     return rows
 
 
+def recommended_high_collisionality_nuprime_grid(
+    current_grid: Sequence[float],
+    *,
+    min_nuprime_for_full_limit: float,
+    points_per_decade: int = 4,
+) -> list[float]:
+    """Recommend additional ``nu'`` values for a full high-collisionality audit.
+
+    The Simakov-Helander comparison is only defensible once the fitted tail is
+    clearly in ``nu' >> 1``. This helper converts the current scan extent into a
+    compact logarithmic extension that reaches at least one decade past the last
+    checked point or the configured full-limit threshold, whichever is larger.
+    """
+
+    grid = np.asarray([float(v) for v in current_grid if np.isfinite(float(v)) and float(v) > 0.0], dtype=np.float64)
+    if grid.size == 0:
+        raise ValueError("current_grid must contain at least one positive finite nuprime value.")
+    current_max = float(np.max(grid))
+    required = float(min_nuprime_for_full_limit)
+    if current_max >= required:
+        return []
+    target = max(required, 10.0 * current_max)
+    n_points = max(2, int(np.ceil((np.log10(target) - np.log10(current_max)) * int(points_per_decade))) + 1)
+    values = np.logspace(np.log10(current_max), np.log10(target), n_points)
+    extension = [float(v) for v in values if v > current_max * (1.0 + 1.0e-12)]
+    if not extension or extension[-1] < target * (1.0 - 1.0e-12):
+        extension.append(float(target))
+    return extension
+
+
 def _periodic_central_derivative(values: np.ndarray, coordinates: np.ndarray, *, axis: int) -> np.ndarray:
     values = np.asarray(values, dtype=np.float64)
     coordinates = np.asarray(coordinates, dtype=np.float64)
@@ -782,6 +812,10 @@ def _simakov_case_summary(
     grid = collisionality_grid(records)
     max_nuprime = float(max(grid))
     scan_extends_to_required_high_nu = max_nuprime >= float(min_nuprime_for_full_limit)
+    high_nu_extension = recommended_high_collisionality_nuprime_grid(
+        grid,
+        min_nuprime_for_full_limit=float(min_nuprime_for_full_limit),
+    )
     appendix_ratios: dict[str, object] = {}
     if geometry_audit is not None:
         coeffs = geometry_audit.get("transport_matrix_coefficients_over_nuprime", {})
@@ -797,6 +831,7 @@ def _simakov_case_summary(
     return {
         "nuprime_grid": grid,
         "max_nuprime": max_nuprime,
+        "recommended_high_nuprime_extension": high_nu_extension,
         "trend": trend,
         "slope_sensitivity": sensitivity,
         "appendix_b_geometry_audit": dict(geometry_audit) if geometry_audit is not None else None,

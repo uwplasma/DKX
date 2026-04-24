@@ -1,0 +1,17 @@
+{
+  "configuration_or_shot": "",
+  "equilibrium_source": "",
+  "literature_reference": "",
+  "notes": [
+    "Fill all required fields before using a W7-X ambipolar artifact for a literature-validation claim.",
+    "A generated summary remains w7x_like_scaffold until configuration_or_shot, equilibrium_source, profile_source, and literature_reference are non-empty."
+  ],
+  "profile_source": "",
+  "required_fields": [
+    "configuration_or_shot",
+    "equilibrium_source",
+    "profile_source",
+    "literature_reference"
+  ],
+  "schema_version": 1
+}

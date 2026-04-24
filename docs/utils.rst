@@ -12,6 +12,24 @@ present, the scripts will call ``utils/sfincs_jax_driver.py`` to generate one
 from a local ``input.namelist``. For scan workflows, the scripts create run
 directories and populate them with ``sfincsOutput.h5`` outputs.
 
+Execution mode
+--------------
+
+The utility driver is performance-oriented by default. It calls
+``write_sfincs_jax_output_h5(..., differentiable=False)`` so scan jobs can use
+the explicit host/direct rescue paths needed by difficult transport cases such
+as high-collisionality FP/PAS scans. Request the implicit/differentiable solve
+path only for gradient experiments:
+
+.. code-block:: bash
+
+   python utils/sfincs_jax_driver.py --input input.namelist --out sfincsOutput.h5
+   python utils/sfincs_jax_driver.py --input input.namelist --out sfincsOutput.h5 --differentiable
+
+The first command is the default scan/parity path. The second command keeps the
+solve on the implicit-differentiation path and intentionally disables host-only
+direct-rescue shortcuts.
+
 .. note::
    The export‑f grid currently uses the **full internal grids**. ``sfincsPlotF``
    expects ``export_delta_f`` or ``export_full_f`` to be enabled in the input

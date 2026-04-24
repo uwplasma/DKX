@@ -460,7 +460,7 @@ def test_dkes_gpu_pas_tz_policy_uses_gpu_env_bounds(monkeypatch) -> None:
     assert rhs1_pas_dkes_pas_tz_preferred(**kwargs, active_size=6000)
 
 
-def test_full_cpu_pas_tz_policy_targets_hsx_like_geometry11(monkeypatch) -> None:
+def test_full_cpu_pas_tz_policy_targets_bounded_geometry11_cpu_cases(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX", raising=False)
@@ -489,7 +489,7 @@ def test_full_cpu_pas_tz_policy_targets_hsx_like_geometry11(monkeypatch) -> None
         active_size=7000,
         pas_tz_applicable=True,
     )
-    assert not rhs1_pas_full_cpu_pas_tz_preferred(
+    assert rhs1_pas_full_cpu_pas_tz_preferred(
         has_pas=True,
         has_fp=False,
         use_dkes=False,
@@ -497,6 +497,18 @@ def test_full_cpu_pas_tz_policy_targets_hsx_like_geometry11(monkeypatch) -> None
         geom_scheme=11,
         n_theta=6,
         n_zeta=19,
+        max_l=20,
+        active_size=7000,
+        pas_tz_applicable=True,
+    )
+    assert not rhs1_pas_full_cpu_pas_tz_preferred(
+        has_pas=True,
+        has_fp=False,
+        use_dkes=False,
+        backend="cpu",
+        geom_scheme=11,
+        n_theta=6,
+        n_zeta=23,
         max_l=20,
         active_size=7000,
         pas_tz_applicable=True,

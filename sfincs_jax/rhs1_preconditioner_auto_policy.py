@@ -460,10 +460,10 @@ def rhs1_pas_full_cpu_pas_tz_preferred(
 ) -> bool:
     """Return whether bounded CPU full-trajectory PAS should prefer ``pas_tz``.
 
-    This targets the HSX-like geometryScheme=11 full-trajectory case where
-    ``pas_tz`` is faster and much lower-memory than the default Schur block, while
-    leaving the larger-W7X geometry11 full case and GPU path on their measured
-    faster Schur defaults.
+    This targets bounded geometryScheme=11 full-trajectory PAS cases where
+    ``pas_tz`` is faster and much lower-memory than the default Schur block on
+    CPU.  The GPU path remains unchanged unless a future measured gate proves the
+    same improvement there.
     """
     if not has_pas or has_fp or use_dkes:
         return False
@@ -475,7 +475,7 @@ def rhs1_pas_full_cpu_pas_tz_preferred(
         return False
     if int(n_theta) <= 1 or int(n_zeta) <= 1:
         return False
-    max_zeta = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX", 15)
+    max_zeta = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX", 19)
     min_block = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", 950)
     max_active = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX", 15000)
     block_size = int(max_l) * int(n_theta) * int(n_zeta)
