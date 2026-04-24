@@ -64,7 +64,7 @@ Recent current-tip PAS full-trajectory fix:
 
 Recent current-tip GPU tokamak PAS+Er fix:
 
-- ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now uses a bounded one-GPU analytic-tokamak PAS+Er route that avoids the expensive ``xblock_tz`` setup and tightens the GMRES tolerance to ``1e-8``. The focused ``office`` GPU probe completed parity-clean in ``3.413 s`` with about ``934 MB`` RSS, down from the previous release-table entry of ``18.199 s`` and ``1014.5 MB``. The older ``xblock_tz`` route remains available as an explicit opt-in with ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``.
+- ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now uses a bounded one-GPU analytic-tokamak PAS+Er route that avoids the expensive ``xblock_tz`` setup and tightens the GMRES tolerance to ``1e-8``. The focused clean-remote ``office`` GPU probe completed parity-clean in ``3.249 s`` with about ``922 MB`` RSS, down from the previous release-table entry of ``18.199 s`` and ``1014.5 MB``. The older ``xblock_tz`` route remains available as an explicit opt-in with ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``.
 
 External solver-library gates
 -----------------------------
@@ -374,7 +374,7 @@ summary. For current release claims, use the full example-suite artifacts listed
   ``0`` mismatches versus the pinned output artifact.
 - Current bounded one-GPU benchmark on ``office``:
   default auto path skips the expensive ``xblock_tz`` setup, tightens GMRES to
-  ``1e-8``, and runs in ``~3.4 s`` with ``0`` mismatches versus the pinned output
+  ``1e-8``, and runs in ``~3.25 s`` with ``0`` mismatches versus the pinned output
   artifact. The maximum ``pressureAnisotropy`` difference against the frozen
   reference was below ``9e-10`` absolute and ``2e-7`` relative.
 - The key change is not a new equation or solver family. It is a better default
