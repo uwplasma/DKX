@@ -280,9 +280,8 @@ of the same artifact set as the standard suite.
 <!-- BEGIN FAST_BRANCH_AUDIT -->
 Current `main` CPU audit comes from `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix`.
 Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem`.
-The `HSX_PASCollisions_DKESTrajectories` CPU row includes the latest focused
-current-tip PAS-DKES rerun after the CPU `pas_tz` auto-selection update; GPU
-values remain from the frozen GPU audit root.
+The `HSX_PASCollisions_DKESTrajectories` CPU/GPU row includes the latest focused
+current-tip PAS-DKES reruns after the `pas_tz` auto-selection update.
 
 - Recorded cases: `39/39`
 - Practical status counts: `parity_ok=39`
@@ -307,7 +306,7 @@ Full per-case runtime / memory table:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |
 | `HSX_FPCollisions_DKESTrajectories` | 29.664 | 3.280 | 0.11x | 5.099 | 0.17x | 103.0 | 510.3 | 4.95x | 919.8 | 8.93x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `HSX_FPCollisions_fullTrajectories` | 88.504 | 3.439 | 0.04x | 5.201 | 0.06x | 100.8 | 525.7 | 5.21x | 923.3 | 9.16x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `HSX_PASCollisions_DKESTrajectories` | 0.994 | 3.940 | 3.96x | 11.183 | 11.25x | 112.0 | 1019.2 | 9.10x | 1444.9 | 12.90x | 0/123 (strict 0/123) | 0/123 (strict 0/123) | 7/7 | 7/7 | parity_ok | parity_ok |
+| `HSX_PASCollisions_DKESTrajectories` | 0.994 | 3.940 | 3.96x | 7.627 | 7.67x | 112.0 | 1019.2 | 9.10x | 1174.9 | 10.49x | 0/123 (strict 0/123) | 0/123 (strict 0/123) | 7/7 | 7/7 | parity_ok | parity_ok |
 | `HSX_PASCollisions_fullTrajectories` | 2.510 | 5.274 | 2.10x | 9.082 | 3.62x | 179.2 | 2002.2 | 11.17x | 2042.1 | 11.40x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `additional_examples` | 120.074 | 1.883 | 0.02x | 2.684 | 0.02x | 102.1 | 442.4 | 4.33x | 885.4 | 8.67x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `filteredW7XNetCDF_2species_magneticDrifts_noEr` | 89.052 | 2.198 | 0.02x | 3.034 | 0.03x | 103.2 | 501.3 | 4.86x | 899.3 | 8.71x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
