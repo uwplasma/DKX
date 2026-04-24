@@ -40,7 +40,7 @@ The performance story is therefore:
 
 Current top offenders from the release artifacts are:
 
-- CPU runtime: ``HSX_PASCollisions_DKESTrajectories`` at ``7.220 s``
+- CPU runtime: ``HSX_PASCollisions_fullTrajectories`` at ``5.274 s``
 - CPU memory: ``monoenergetic_geometryScheme5_ASCII`` at ``2916.8 MB``
 - GPU runtime: ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` at ``18.199 s``
 - GPU memory: ``geometryScheme4_2species_PAS_noEr`` at ``2507.0 MB``
@@ -52,6 +52,10 @@ Recent current-tip GPU fixes that are now reflected in the release artifacts:
 - ``geometryScheme5_3species_loRes`` now takes the bounded host-dense shortcut on the small GPU full-FP branch and completed parity-clean in about ``3.99 s``, down from the older ``144.597 s`` artifact.
 - ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue and completed parity-clean in about ``3.94 s``.
 - ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` now skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``7.42 s``.
+
+Recent current-tip CPU PAS-DKES fix:
+
+- ``HSX_PASCollisions_DKESTrajectories`` now auto-selects the structured ``pas_tz`` angular preconditioner on bounded CPU PAS-DKES cases. The focused frozen-reference probe completed parity-clean in ``3.94 s`` with about ``1019 MB`` RSS, down from the previous table entry of ``5.481 s`` and ``2053.6 MB``.
 
 External solver-library gates
 -----------------------------
