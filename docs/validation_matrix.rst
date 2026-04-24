@@ -44,7 +44,7 @@ Publication validation dashboard
 
 Literature anchor:
 
-- `Landreman et al. 2014 <https://doi.org/10.1063/1.4870073>`_
+- `Landreman et al. 2014 <https://doi.org/10.1063/1.4870077>`_
 - `Open PDF mirror <https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf>`_
 
 Current script:
@@ -73,7 +73,7 @@ Fortran v3 CPU/GPU suite benchmark
 
 Literature and reference anchors:
 
-- `Landreman et al. 2014 <https://doi.org/10.1063/1.4870073>`_
+- `Landreman et al. 2014 <https://doi.org/10.1063/1.4870077>`_
 - `Open PDF mirror <https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf>`_
 - `SFINCS Fortran repository <https://github.com/landreman/sfincs>`_
 
