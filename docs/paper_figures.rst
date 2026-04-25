@@ -176,10 +176,34 @@ has a residual-clean route: with one GPU worker,
 ``--transport-sparse-direct-max 40000``, the three RHS residual/RHS/relative
 tuples were ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
 ``1.975724e-12 / 2.623896e-04 / 7.529734e-09``, and
-``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. The scan took about
-``2028 s`` on one office GPU. The smaller ``30000`` cap and the current
-Krylov-only preconditioners still fail this point, so this is a correctness
-closure, not a claim that W7-X high-``nu'`` is already cheap.
+``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. With sparse-helper factor
+reuse, the scan took about ``582 s`` on one office GPU instead of about
+``2028 s`` before reuse; RHS timings were about ``574.0 s``, ``2.47 s``, and
+``2.38 s``. The smaller ``30000`` cap and the current Krylov-only
+preconditioners still fail this point, so the strict residual gates remain
+mandatory for widened scans.
+
+W7-X high-nu preconditioning/performance
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Generate the W7-X high-``nu'`` performance figure with
+
+.. code-block:: bash
+
+   python examples/publication_figures/generate_w7x_high_nu_performance.py
+
+.. figure:: _static/figures/paper/sfincs_jax_w7x_high_nu_performance.png
+   :alt: W7-X high-nu sparse-helper factor reuse performance
+   :width: 92%
+
+   Runtime, residual, setup-count, and peak-RSS comparison for the first
+   full-resolution W7-X FP high-``nu'`` point. The bounded ``30000`` cap is
+   shown as a rejected route because it fails the residual gate. The
+   factor-reuse sparse-LU route preserves the residual-clean transport matrix
+   exactly while reducing wall time from about ``33.8 min`` to ``9.7 min`` and
+   measured peak RSS from about ``19.9 GB`` to ``15.3 GB``. The machine-readable
+   summary is
+   ``examples/publication_figures/artifacts/sfincs_jax_w7x_high_nu_performance_summary.json``.
 
 Figure 1 (LHD collisionality scan)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

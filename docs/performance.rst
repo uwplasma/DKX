@@ -231,6 +231,11 @@ JAX-native performance patterns used in `sfincs_jax`
   ``SFINCS_JAX_TRANSPORT_PRECOND=auto`` promotes a lightweight **species×x block-Jacobi**
   (per-L) preconditioner for modest system sizes. This cuts iterations without matvec-based
   assembly and preserves parity on the reduced suite.
+- **Explicit sparse-helper factor reuse**: hard RHSMode=2/3 high-``nu'`` executable
+  runs can opt into bounded host sparse-LU rescue. The W7-X FP high-``nu'`` pilot
+  now assembles/factorizes the active transport operator once and reuses it across
+  the later RHS solves, reducing the one-point office GPU wall time from about
+  ``2028 s`` to ``582 s`` while preserving identical transport outputs.
 - **FP collision preconditioning (RHSMode=1)**: when the collision preconditioner is active
   and ``SFINCS_JAX_RHSMODE1_COLLISION_PRECOND_KIND`` is unset, FP cases auto-select a
   species×x block (``sxblock``) for small ``S*X`` and fall back to per-species x-blocks
