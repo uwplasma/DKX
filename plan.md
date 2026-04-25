@@ -6356,9 +6356,10 @@ Closed for this release:
 
 Deferred after ship:
 
-- Cheaper W7-X FP high-`nu'` preconditioning remains open; current `xmg`,
-  `theta_schwarz`, and `fp_tzfft` probes do not close the full point without
-  sparse-LU rescue.
+- Cheaper W7-X FP high-`nu'` *Krylov-only* preconditioning remains open; current
+  `xmg`, `theta_schwarz`, and `fp_tzfft` probes do not close the full point
+  without sparse-LU rescue. The executable sparse-LU route itself is now much
+  cheaper for the first full W7-X point after Section 20.22 factor reuse.
 - Full FP/PAS LHD+W7-X high-`nu'` campaign should proceed as a nightly/release
   lane with residual gates and the bounded W7-X sparse-LU command from Section
   20.21, not as a short CI path.
@@ -6479,3 +6480,73 @@ Next concrete steps:
 3. Treat widened W7-X high-`nu'` scans as a nightly/release campaign, not CI:
    each point is expensive, but residual gates now prevent bad artifacts from
    being reused silently.
+
+### 20.22 W7-X high-nu sparse-helper factor reuse and performance artifact
+
+Scope:
+
+- Close the remaining concrete W7-X FP high-`nu'` performance lane for the first
+  full-resolution point by reusing the same explicit sparse helper/factorization
+  across the three RHSMode=2 transport drives, reducing sparse materialization
+  memory, and publishing a reviewer-facing runtime/residual/memory figure.
+
+Implemented changes:
+
+- `solve_v3_transport_matrix_linear_gmres` now keeps a solve-local
+  `transport_sparse_direct_factor_cache` for the explicit sparse-helper path.
+  The cache key includes the operator signature, active/full mode, factor dtype,
+  backend, helper block size, storage caps, and sparse/dense storage choice.
+- The explicit transport sparse helper now passes a batched `matmat` callback
+  into `build_operator_from_matvec`, using `jax.vmap` over column blocks instead
+  of repeatedly calling one-column matvecs from Python.
+- `explicit_sparse._matvec_to_dense` no longer builds a full identity matrix or
+  a list of all column blocks. It creates only the current local basis block and
+  writes each output block into one preallocated dense operator. This materially
+  reduces transient host memory for every explicit sparse-helper user.
+- Added `examples/publication_figures/generate_w7x_high_nu_performance.py`,
+  which writes the checked JSON summary plus PNG/PDF performance figure.
+- Added regression coverage:
+  - `tests/test_explicit_sparse.py` verifies block-basis assembly without a full
+    identity matrix.
+  - `tests/test_benchmark_w7x_high_nu_preconditioners.py` forces the sparse
+    helper on a reduced W7-X two-RHS run and verifies the reuse log plus clean
+    residuals.
+  - `tests/test_generate_w7x_high_nu_performance.py` checks the performance
+    summary gates and plot writer.
+
+Validation:
+
+- Focused local tests:
+  `python -m pytest -q tests/test_benchmark_w7x_high_nu_preconditioners.py tests/test_explicit_sparse.py tests/test_transport_sparse_direct.py tests/test_generate_w7x_high_nu_performance.py`
+  passed (`55 passed in 7.54s`).
+- Static checks passed:
+  `python -m py_compile sfincs_jax/explicit_sparse.py sfincs_jax/v3_driver.py examples/publication_figures/generate_w7x_high_nu_performance.py tests/test_benchmark_w7x_high_nu_preconditioners.py tests/test_explicit_sparse.py tests/test_generate_w7x_high_nu_performance.py`,
+  `python -m ruff check --select F821 ...`, and `git diff --check`.
+- Office GPU full W7-X FP high-`nu'` one-point rerun:
+  `CUDA_VISIBLE_DEVICES=0 PYTHONPATH=/tmp/sfincs_jax_w7x_precond SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32 /usr/bin/time -v ... generate_sfincs_paper_figs.py --case w7x --collision-operators 0 --nuprime-min 17.78332923601508 --nuprime-max 17.78332923601508 --n-points 1 --transport-workers 1 --transport-parallel-backend gpu --transport-sparse-direct-max 40000 --transport-maxiter 800 --require-residuals --max-transport-residual 1e-6 --max-transport-relative-residual 1e-6 --scan-only`.
+- Final H5 diagnostics matched the previous clean no-reuse run exactly:
+  transport matrix max absolute difference `0.0`, FSAB flow max absolute
+  difference `0.0`, residual diagnostics max absolute difference `0.0`.
+
+Runtime/memory delta:
+
+- No-reuse clean sparse-LU route: about `2028 s`, three sparse factorizations,
+  peak RSS reference about `19.9 GB`.
+- New factor-reuse sparse-LU route: `/usr/bin/time -v` wall time `582.35 s`,
+  one sparse factorization, peak RSS `15.3 GB`.
+- Per-RHS solver timings: `573.997 s`, `2.469 s`, `2.378 s`.
+- Speedup vs no-reuse: `3.48x`; wall time saved: about `1446 s`.
+- Residual/RHS/relative tuples stayed
+  `1.297471e-10 / 1.885192e-04 / 6.882435e-07`,
+  `1.975724e-12 / 2.623896e-04 / 7.529734e-09`, and
+  `4.841651e-09 / 6.589011e-01 / 7.348069e-09`.
+
+Current state:
+
+- The first W7-X FP high-`nu'` point is now both residual-clean and cheap enough
+  to use as a publication-facing pilot: under 10 minutes on one office GPU.
+- The stricter research lane remains: widened W7-X FP/PAS high-`nu'` scans must
+  still be treated as nightly/release campaigns with residual gates, not CI.
+- `fp_tzfft`, `xmg`, and Schwarz remain candidate preconditioners; they are not
+  promoted to W7-X defaults because they still do not close the full point
+  without sparse-direct rescue.

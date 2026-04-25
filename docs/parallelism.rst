@@ -760,16 +760,29 @@ residual verification, and ``--transport-sparse-direct-max 40000``:
      --max-transport-relative-residual 1e-6 \
      --scan-only
 
-On ``office`` this first W7-X FP high-``nu'`` point took about ``2028 s`` and
-passed with residual/RHS/relative tuples
+On ``office`` this first W7-X FP high-``nu'`` point now takes about ``582 s``
+with sparse-helper factor reuse, down from about ``2028 s`` when the same CSR
+operator and sparse-LU factors were rebuilt separately for every RHS. It passed
+with residual/RHS/relative tuples
 ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
 ``1.975724e-12 / 2.623896e-04 / 7.529734e-09``, and
-``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. The previous bounded
-``30000`` cap finished faster but failed with order-unity relative residuals,
-and the current Krylov preconditioners do not close the full point by themselves.
-Widened W7-X high-``nu'`` campaigns should therefore keep the strict residual
-gates enabled and use this sparse-LU lane until a cheaper preconditioner is
-demonstrated.
+``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. The measured per-RHS timings
+were about ``574.0 s``, ``2.47 s``, and ``2.38 s``; the later RHS solves reuse
+the explicit sparse helper. Peak RSS from ``/usr/bin/time -v`` was about
+``15.3 GB``. The previous bounded ``30000`` cap finished faster but failed with
+order-unity relative residuals, and the current Krylov preconditioners do not
+close the full point by themselves. Widened W7-X high-``nu'`` campaigns should
+therefore keep the strict residual gates enabled and use this sparse-LU lane
+until a cheaper preconditioner is demonstrated.
+
+.. figure:: _static/figures/paper/sfincs_jax_w7x_high_nu_performance.png
+   :alt: W7-X high-nu sparse-helper factor reuse performance
+   :width: 92%
+
+   Publication-ready W7-X high-``nu'`` preconditioning/performance artifact.
+   The residual-clean factor-reuse route has the same transport outputs as the
+   earlier no-reuse sparse-LU route, but performs one host sparse factorization
+   instead of three.
 
 A focused single-RHS harness is checked in so preconditioner candidates can be
 tested before launching the full high-``nu'`` figure workflow:

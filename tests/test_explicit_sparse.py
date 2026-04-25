@@ -124,6 +124,35 @@ def test_build_operator_from_matvec_can_assemble_csr_from_columns() -> None:
     assert bundle.metadata.storage_kind == "csr"
 
 
+def test_build_operator_from_matvec_uses_block_basis_without_full_eye() -> None:
+    a = np.diag([1.0, 2.0, 3.0, 4.0, 5.0])
+    seen_shapes: list[tuple[int, int]] = []
+    seen_nnz: list[int] = []
+
+    def mv(x):
+        return a @ np.asarray(x)
+
+    def mm(cols):
+        cols_np = np.asarray(cols)
+        seen_shapes.append(tuple(cols_np.shape))
+        seen_nnz.append(int(np.count_nonzero(cols_np)))
+        return a @ cols_np
+
+    bundle = build_operator_from_matvec(
+        mv,
+        n=5,
+        backend="gpu",
+        dense_max_mb=1.0,
+        csr_max_mb=1.0,
+        block_cols=2,
+        matmat=mm,
+    )
+
+    assert seen_shapes == [(5, 2), (5, 2), (5, 1)]
+    assert seen_nnz == [2, 2, 1]
+    np.testing.assert_allclose(bundle.matrix.toarray(), a)
+
+
 def test_factorize_host_sparse_operator_solves_exactly() -> None:
     dense = np.array([[4.0, 1.0], [2.0, 3.0]])
     bundle = build_operator_from_dense(dense, backend="cpu", force_sparse=True)
