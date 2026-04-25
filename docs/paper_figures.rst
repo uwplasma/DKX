@@ -157,13 +157,12 @@ The publication-figure scan launcher forces ``SFINCS_JAX_IMPLICIT_SOLVE=0`` for
 these executable scans. That keeps high-collisionality transport on the explicit
 performance path. The run plan caps sparse direct solves at ``30000`` active
 unknowns by default: the LHD FP pilot remains on the accurate host sparse-LU
-path, while the larger W7-X FP high-``nu'`` pilot is forced to prove Krylov
-convergence through the residual gate instead of silently spending many minutes
-in an oversized host sparse factorization. The same residual thresholds are also
-used as fail-fast aborts for sequential and GPU-worker runs, so a bad high-``nu'``
-point does not waste the rest of a campaign once the first failed RHS is known.
-GPU runs can still opt into larger host sparse-LU first attempts/rescues when a
-bounded pilot shows they are useful,
+path, while larger W7-X FP high-``nu'`` runs must explicitly opt into the
+``40000`` cap after a bounded pilot proves the residual gate is clean. The same
+residual thresholds are also used as fail-fast aborts for sequential and
+GPU-worker runs, so a bad high-``nu'`` point does not waste the rest of a
+campaign once the first failed RHS is known. GPU runs can still opt into larger
+host sparse-LU first attempts/rescues when a bounded pilot shows they are useful,
 instead of the differentiable implicit path that intentionally avoids host-only
 direct solvers.
 
@@ -171,17 +170,16 @@ On the current two-GPU ``office`` pilot for the first LHD FP high-``nu'`` point,
 this explicit worker lane produced residuals ``4.33e-16``, ``5.33e-14``, and
 ``4.06e-11`` in about ``262 s``. The same explicit point on one GPU took about
 ``345 s``; the older implicit-path pilot took about ``569 s`` and stalled at much
-larger residuals. The current W7-X FP high-``nu'`` pilot is not yet accepted:
-the oversized sparse-LU path was stopped after more than 18 minutes, and the
-bounded two-GPU path with ``--transport-sparse-direct-max 30000`` finished the
-scan solve in ``406.9 s`` but failed the residual gate with relative residuals
-``0.768``, ``0.896``, and ``0.975`` for the three RHS solves. The checked-in run
-plan therefore records W7-X FP high-``nu'`` as an active preconditioner lane
-rather than a completed publication validation. Follow-up single-RHS probes did
-not close it: ``xmg`` with a larger GMRES budget reproduced the same RHS2
-relative residual in about ``320 s``, ``theta_schwarz`` timed out at ``500 s``,
-and admitting the W7-X active size into float64 sparse LU timed out at ``600 s``
-after CSR materialization.
+larger residuals. The first full-resolution W7-X FP high-``nu'`` point now also
+has a residual-clean route: with one GPU worker,
+``SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32``, and
+``--transport-sparse-direct-max 40000``, the three RHS residual/RHS/relative
+tuples were ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
+``1.975724e-12 / 2.623896e-04 / 7.529734e-09``, and
+``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. The scan took about
+``2028 s`` on one office GPU. The smaller ``30000`` cap and the current
+Krylov-only preconditioners still fail this point, so this is a correctness
+closure, not a claim that W7-X high-``nu'`` is already cheap.
 
 Figure 1 (LHD collisionality scan)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -537,6 +537,43 @@ Controls:
 - ``SFINCS_JAX_TRANSPORT_DD_AUTO_MIN`` (optional auto-enable threshold in
   ``TRANSPORT_PRECOND=auto``; default ``0`` disables auto path)
 
+**FP angular Fourier preconditioner (experimental).**
+
+``SFINCS_JAX_TRANSPORT_PRECOND=fp_tzfft`` targets stiff FP
+high-collisionality transport matrix solves in three-dimensional geometry.  For
+each angular Fourier mode :math:`(k_\theta, k_\zeta)`, it builds a dense block
+over Legendre mode, species, and speed:
+
+.. math::
+
+   M_{k_\theta,k_\zeta}
+   \approx C_\mathrm{FP}
+          + I
+          + \widehat{v_\parallel \mathbf{b}\cdot\nabla}_{k_\theta,k_\zeta}
+          + \widehat{\mu\,\mathbf{b}\cdot\nabla B\,\partial_{v_\parallel}}_{k_\theta,k_\zeta}
+          + \widehat{\mathbf{v}_E\cdot\nabla}_{k_\theta,k_\zeta}.
+
+The FP collision block :math:`C_\mathrm{FP}` is kept dense in species and speed
+for each Legendre mode.  Streaming, mirror, and optional :math:`E\times B`
+terms use flux-surface-averaged symbols so the angular part diagonalizes by
+FFT. The apply stage FFTs the residual over ``(theta,zeta)``, multiplies by the
+cached inverse block for each Fourier mode, and inverse-FFTs the correction.
+
+This path is deliberately opt-in. It reduced the reduced W7-X FP RHS2
+pre-rescue residual by several orders of magnitude in the benchmark harness, but
+the full W7-X high-``nu'`` point still requires the explicit sparse-direct
+rescue to pass the strict residual gate. Use ``fp_tzfft`` for candidate
+benchmarking before enabling it in a widened publication scan.
+
+Controls:
+
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_MAX_MB`` (inverse-table memory cap; default
+  ``384`` MB)
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_REG`` (diagonal regularization; default
+  ``1e-10``)
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_PINV_RCOND`` (pseudo-inverse cutoff; default
+  ``1e-12``)
+
 **JAX sparse Jacobi (optional).**
 
 ``SFINCS_JAX_TRANSPORT_PRECOND=sparse_jax`` builds a sparsified operator and applies
@@ -552,6 +589,7 @@ preconditioners while staying differentiable. Controls mirror the RHSMode=1
   in ``sfincs_jax.v3_driver``.
 - ``_build_rhsmode23_theta_schwarz_preconditioner`` /
   ``_build_rhsmode23_zeta_schwarz_preconditioner`` in ``sfincs_jax.v3_driver``.
+- ``_build_rhsmode23_fp_tzfft_preconditioner`` in ``sfincs_jax.v3_driver``.
 - Controlled by ``SFINCS_JAX_TRANSPORT_PRECOND`` (``auto``, ``sxblock``, ``collision``, etc.).
   ``auto`` picks the collision-diagonal preconditioner for the default BiCGStab transport
   solver and upgrades to species×x blocks for modest FP systems when GMRES is selected.

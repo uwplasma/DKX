@@ -59,11 +59,13 @@ def _builders(calls: list[tuple[str, dict]]) -> TransportPreconditionerDispatchB
         sparse_jax_cache_key=lambda op, key: ("cache", key, int(op.total_size)),
         apply_operator_cached=lambda op, x: x,
         precond_dtype=lambda size: jnp.float32 if int(size) > 100 else jnp.float64,
+        fp_tzfft_builder=_mk("fp_tzfft"),
     )
 
 
 def test_normalize_transport_preconditioner_kind_maps_aliases() -> None:
     assert normalize_transport_preconditioner_kind(env_value="stream_fft") == "tzfft"
+    assert normalize_transport_preconditioner_kind(env_value="fp_streaming_fft") == "fp_tzfft"
     assert normalize_transport_preconditioner_kind(env_value="dd_theta") == "theta_dd"
     assert normalize_transport_preconditioner_kind(env_value="schwarz_zeta") == "zeta_schwarz"
     assert normalize_transport_preconditioner_kind(env_value="none") is None
@@ -162,6 +164,22 @@ def test_build_transport_preconditioner_from_kind_passes_dd_reduced_kwargs() -> 
     assert calls[0][0] == "theta_schwarz"
     assert "reduce_full" in calls[0][1]
     assert "expand_reduced" in calls[0][1]
+
+
+def test_build_transport_preconditioner_from_kind_dispatches_fp_tzfft() -> None:
+    calls: list[tuple[str, dict]] = []
+    builders = _builders(calls)
+    context = TransportPreconditionerContext(op=_op(), active_size=128, use_active_dof_mode=False)
+    precond = build_transport_preconditioner_from_kind(
+        kind="fp_tzfft",
+        context=context,
+        builders=builders,
+        dd_config=transport_dd_config_from_env(op=_op()),
+        sparse_jax_config=TransportSparseJaxConfig(0.0, 1.0e-6, 1.0e-10, 0.8, 2, 128.0),
+        use_reduced=False,
+    )
+    assert callable(precond)
+    assert calls[0][0] == "fp_tzfft"
 
 
 def test_build_transport_preconditioner_from_kind_falls_back_from_sparse_jax_on_memory_cap() -> None:
