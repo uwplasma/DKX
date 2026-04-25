@@ -736,17 +736,65 @@ This is useful task/RHS parallelism for the high-``nu'`` campaign. It should not
 be described as single-RHS strong scaling: one worker still owns two RHS solves,
 and host sparse materialization/factorization remains a visible cost.
 
-The W7-X FP high-``nu'`` point is deliberately still gated. On the current
-office pilots, an enlarged sparse-direct cap entered a long host factorization
-and is not a default route. A single-RHS float64 sparse-LU probe with active size
-``35063`` materialized CSR but timed out at ``600 s`` after a transient RSS near
-``20 GB``. The bounded cap (``--transport-sparse-direct-max 30000``) finished in
-``406.9 s`` but produced relative residuals ``0.768``, ``0.896``, and ``0.975``.
-Increasing GMRES work with ``SFINCS_JAX_TRANSPORT_PRECOND=xmg`` did not improve
-RHS2 (same ``0.896`` relative residual in about ``320 s``), and forced
-``theta_schwarz`` timed out at ``500 s`` for RHS2. Until the preconditioner lane
-closes that gap, the full W7-X high-``nu'`` FP/PAS campaign should fail its
-residual gate rather than produce publication figures.
+The W7-X FP high-``nu'`` point is no longer a correctness blocker, but it remains
+the expensive case that should be launched conservatively. The clean bounded
+route uses one GPU worker, float32 host sparse-LU factors with matrix-free true
+residual verification, and ``--transport-sparse-direct-max 40000``:
+
+.. code-block:: bash
+
+   CUDA_VISIBLE_DEVICES=0 \
+   SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32 \
+   python examples/publication_figures/generate_sfincs_paper_figs.py \
+     --case w7x \
+     --collision-operators 0 \
+     --nuprime-min 17.78332923601508 \
+     --nuprime-max 17.78332923601508 \
+     --n-points 1 \
+     --transport-workers 1 \
+     --transport-parallel-backend gpu \
+     --transport-sparse-direct-max 40000 \
+     --transport-maxiter 800 \
+     --require-residuals \
+     --max-transport-residual 1e-6 \
+     --max-transport-relative-residual 1e-6 \
+     --scan-only
+
+On ``office`` this first W7-X FP high-``nu'`` point took about ``2028 s`` and
+passed with residual/RHS/relative tuples
+``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
+``1.975724e-12 / 2.623896e-04 / 7.529734e-09``, and
+``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. The previous bounded
+``30000`` cap finished faster but failed with order-unity relative residuals,
+and the current Krylov preconditioners do not close the full point by themselves.
+Widened W7-X high-``nu'`` campaigns should therefore keep the strict residual
+gates enabled and use this sparse-LU lane until a cheaper preconditioner is
+demonstrated.
+
+A focused single-RHS harness is checked in so preconditioner candidates can be
+tested before launching the full high-``nu'`` figure workflow:
+
+.. code-block:: bash
+
+   CUDA_VISIBLE_DEVICES=0 \
+   python examples/performance/benchmark_w7x_high_nu_preconditioners.py \
+     --preconditioners auto,fp_tzfft,xmg \
+     --which-rhs 2 \
+     --sparse-direct-max 40000 \
+     --sparse-factor-dtype float32 \
+     --maxiter 800 \
+     --timeout-s 900
+
+The harness writes one generated W7-X high-``nu'`` input, runs each candidate in
+a fresh subprocess, and records residual norms, RHS norms, relative residuals,
+elapsed time, peak RSS, command environment, and logs. Use
+``--reduced-resolution`` for local smoke tests, and keep full-resolution W7-X
+runs on GPU nodes with explicit residual gates.
+
+For multi-host bootstrap, keep one process per host/rank and pass the shared
+coordinator address explicitly:
+
+.. code-block:: bash
 
    sfincs_jax write-output \
      --input /path/to/input.namelist \

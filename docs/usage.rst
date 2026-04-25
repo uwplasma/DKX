@@ -413,6 +413,11 @@ performance without changing the input file:
   - ``zeta_schwarz``: zeta-line restricted additive Schwarz preconditioner with overlap.
   - ``xmg``/``multigrid``: two-level additive x-grid preconditioner (coarse x solve +
     fine diagonal smoother).
+  - ``fp_tzfft``/``fp_streaming_fft``: experimental FP transport preconditioner
+    for high-collisionality 3D RHSMode=2/3 runs. It keeps dense FP
+    species×speed blocks and adds flux-surface-averaged streaming/mirror
+    symbols in Fourier space. It is opt-in because the current full W7-X
+    high-``nu'`` route still needs explicit sparse-direct residual rescue.
   - ``collision``: collision-diagonal preconditioner (PAS/FP + identity shift).
   - ``0``/``none``: disable.
 
@@ -436,6 +441,15 @@ performance without changing the input file:
   for the FP species×x transport preconditioner. ``auto`` (default when unset) selects
   a small rank (up to 8) for larger FP blocks. Set to ``0`` to disable.
   ``SFINCS_JAX_FP_LOW_RANK_K`` provides a global fallback.
+
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_MAX_MB``: memory cap for the experimental
+  ``fp_tzfft`` inverse table (default: ``384`` MB). If the estimated table is
+  larger, sfincs_jax falls back to the lighter species×x block preconditioner.
+
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_REG`` and
+  ``SFINCS_JAX_TRANSPORT_FP_TZFFT_PINV_RCOND``: diagonal regularization and
+  pseudo-inverse cutoff for ``fp_tzfft`` setup. These are benchmark controls,
+  not recommended user knobs for production scans.
 
 - ``SFINCS_JAX_XMG_STRIDE``: coarse-grid stride for ``xmg`` transport preconditioning
   (default: ``2``).
