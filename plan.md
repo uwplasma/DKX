@@ -6270,7 +6270,8 @@ Validation run:
   (`99 passed` after adding worker-exit classification coverage).
 - Docs build: `python -m sphinx -W -b html docs docs/_build/html`.
 
-Current GPU pilot facts:
+GPU pilot facts from this stage, superseded by the Section 20.21 W7-X sparse-LU
+closure:
 
 - LHD FP first high-`nu'` point: explicit two-GPU worker path remains the clean
   campaign baseline (`~262 s`, residuals `4.33e-16`, `5.33e-14`, `4.06e-11`).
@@ -6278,7 +6279,8 @@ Current GPU pilot facts:
   more than 18 minutes; forcing iterative GPU workers completed in about
   `416 s` but residuals were `1.45e-04`, `2.35e-04`, and `6.42e-01`, i.e. order
   unity relative to the corresponding RHS norms. Forced theta-Schwarz was slower
-  and did not improve RHS2. This is not publication-grade and must remain gated.
+  and did not improve RHS2. This branch was not publication-grade; Section 20.21
+  later closes the first W7-X point with an explicit sparse-LU route.
 - Fresh residual-gated `office` rerun with `--transport-sparse-direct-max 30000`
   completed the scan solve in `406.9 s` and failed exactly at the intended
   post-run quality gate. The recorded residual/RHS/relative residual tuples were:
@@ -6286,7 +6288,7 @@ Current GPU pilot facts:
   `2.352155e-04 / 2.623896e-04 / 8.964357e-01`, and RHS3
   `6.422668e-01 / 6.589011e-01 / 9.747544e-01`. The max absolute residual was
   `0.6422667543`; the max relative residual was `0.9747544008`. This proves the
-  campaign now refuses the known-bad W7-X FP high-`nu'` branch instead of
+  campaign refused this known-bad W7-X FP high-`nu'` branch instead of
   silently producing a reusable H5/figure artifact.
 - Single-RHS W7-X FP probes on `office`:
   `SFINCS_JAX_TRANSPORT_PRECOND=xmg`, `restart=120`, `maxiter=800`, and
@@ -6346,17 +6348,20 @@ Closed for this release:
   residual diagnostics, status logs, and GPU-worker import paths correctly.
 - High-`nu'` LHD FP pilot has clean two-GPU residuals and documented runtime.
 - W7-X FP high-`nu'` no longer silently writes reusable artifacts when it fails
-  the residual gate.
+  the residual gate; Section 20.21 later closes the first full-resolution W7-X
+  point with a bounded sparse-LU route.
 - Documentation now explains the high-`nu'` campaign lane, fail-fast residual
   thresholds, optional JAX-native geometry handoff, validation provenance, and
   current scaling caveats.
 
 Deferred after ship:
 
-- W7-X FP high-`nu'` preconditioning remains open; current `xmg`,
-  `theta_schwarz`, and sparse-LU probes do not close the relative residual gate.
-- Full FP/PAS LHD+W7-X high-`nu'` campaign should proceed only after the W7-X
-  preconditioner benchmark harness identifies a bounded accurate route.
+- Cheaper W7-X FP high-`nu'` preconditioning remains open; current `xmg`,
+  `theta_schwarz`, and `fp_tzfft` probes do not close the full point without
+  sparse-LU rescue.
+- Full FP/PAS LHD+W7-X high-`nu'` campaign should proceed as a nightly/release
+  lane with residual gates and the bounded W7-X sparse-LU command from Section
+  20.21, not as a short CI path.
 - W7-X ambipolar validation remains provenance-gated until defensible checked-in
   equilibrium/profile artifacts are available.
 - Single-RHS multi-GPU strong scaling remains experimental; current release
@@ -6368,3 +6373,109 @@ Release checks planned before tagging:
 - Documentation build with `sphinx -W`.
 - Package build with `python -m build`.
 - Import/version smoke test for `sfincs_jax.__version__ == "1.0.4"`.
+
+### 20.21 W7-X FP high-nu preconditioner campaign
+
+Scope:
+
+- Close the next concrete W7-X FP high-`nu'` lane by making preconditioner
+  candidates reproducible, fixing any solver-path bugs found by the campaign,
+  and keeping full-resolution W7-X claims gated until a residual-clean GPU run
+  is recorded.
+
+Implemented changes:
+
+- Added `SFINCS_JAX_TRANSPORT_PRECOND=fp_tzfft` as an opt-in RHSMode=2/3 FP
+  transport preconditioner.
+- `fp_tzfft` keeps the dense FP collision block in `(species, x)` for each
+  Legendre mode and adds flux-surface-averaged streaming, mirror, and optional
+  `E x B` symbols in `(theta,zeta)` Fourier space.
+- The preconditioner is memory bounded by
+  `SFINCS_JAX_TRANSPORT_FP_TZFFT_MAX_MB` and falls back to the lighter
+  species-x block preconditioner when the inverse table would be too large.
+- Added alias normalization for `fp_streaming_fft -> fp_tzfft` and dispatch
+  coverage in `transport_preconditioner_dispatch.py`.
+- Added
+  `examples/performance/benchmark_w7x_high_nu_preconditioners.py`, a
+  single-RHS harness that generates a W7-X high-`nu'` FP input, runs each
+  preconditioner in a fresh subprocess, and records residual norms, RHS norms,
+  relative residuals, elapsed time, peak RSS, logs, and environment.
+- Fixed the sparse-LU direct rescue path exposed by this campaign: invalid or
+  unset `SFINCS_JAX_TRANSPORT_SPARSE_DROP_TOL` /
+  `SFINCS_JAX_TRANSPORT_SPARSE_DROP_REL` are now parsed before
+  `_transport_sparse_direct_solve`, eliminating the `NameError` that prevented
+  exact sparse rescue from closing W7-X reduced tests.
+- Fixed the float32 sparse-direct acceptance path exposed by the full W7-X
+  scan: transport sparse-direct solves now recompute the matrix-free true
+  residual before accepting a host sparse residual. If the matrix-free residual
+  is worse, iterative refinement / polish / retry decisions use that true
+  residual. This prevents scan-level `solverTolerance=1e-6` from accepting a
+  sparse-helper residual that still fails the JAX operator residual gate.
+
+Local validation:
+
+- `python -m pytest -q tests/test_transport_preconditioner_dispatch.py tests/test_benchmark_w7x_high_nu_preconditioners.py tests/test_transport_sparse_direct.py`
+  passed (`50 passed`).
+- Reduced W7-X FP RHS2 benchmark with `--sparse-direct-max 30000` completed
+  residual-clean for both `auto` and `fp_tzfft`:
+  relative residual `3.37e-12`, elapsed about `0.89-0.97 s`.
+- The same reduced benchmark with `--sparse-direct-max 1` confirmed that Krylov
+  alone is still not sufficient (`relative residual ~= 0.602`) but `fp_tzfft`
+  reduced runtime and peak RSS relative to `auto` in that bounded no-rescue
+  probe.
+- The reduced sparse-rescue logs show `fp_tzfft` lowers the pre-rescue residual
+  from about `6.21e+01` (`auto`) to about `1.90e-03`, so the new preconditioner
+  is a useful candidate even though direct rescue still closes the solve.
+- Full-resolution W7-X FP RHS2 on `office` with `--sparse-direct-max 30000`
+  confirmed that `auto` and `fp_tzfft` do not close the real high-`nu'` point
+  without direct rescue: both ended near relative residual `0.898`, with
+  `fp_tzfft` only slightly faster (`~204 s` vs `~207 s`) and materially higher
+  memory.
+- Full-resolution W7-X FP RHS2 on `office` with `--sparse-direct-max 40000` and
+  `SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32` closed the single-RHS gate:
+  relative residual `2.77e-11`, elapsed about `680 s`, peak RSS about `19.9 GB`.
+- Full-resolution isolated RHS1 and RHS3 probes with the same bounded sparse-LU
+  route also closed: RHS1 relative residual about `1.27e-11`, RHS3 about
+  `1.77e-11`, each in about `679-680 s`.
+- After the matrix-free true-residual acceptance fix, the full one-point W7-X
+  FP high-`nu'` publication scan passed the `1e-6` absolute and relative gates
+  on one office GPU with one transport worker. The H5 diagnostics were:
+  residual norms `[1.29747083e-10, 1.97572435e-12, 4.84165063e-09]`,
+  RHS norms `[1.88519158e-04, 2.62389647e-04, 6.58901108e-01]`,
+  relative residuals `[6.88243489e-07, 7.52973442e-09, 7.34806874e-09]`,
+  max absolute residual `4.841650632107985e-09`, and max relative residual
+  `6.88243488581383e-07`. Total scan elapsed was about `2028 s`.
+- Final local release checks after the W7-X closure patch:
+  `python -m pytest -q` passed (`922 passed in 314.13s`),
+  `python -m sphinx -W -b html docs docs/_build/html` passed,
+  `python -m ruff check --select F821 sfincs_jax/v3_driver.py examples/performance/benchmark_w7x_high_nu_preconditioners.py`
+  passed, `python -m py_compile` on the touched code/tests passed, and
+  `git diff --check` passed.
+
+Current state:
+
+- The W7-X FP high-`nu'` correctness lane is closed for the first full-resolution
+  point: a bounded one-worker GPU sparse-LU route now passes the same
+  `1e-6`-level absolute and relative residual thresholds used by the publication
+  scans.
+- This is not yet a performance claim for W7-X high-`nu'`. The clean route costs
+  about `33.8 min` for one point and depends on host sparse factorization, so it
+  should be widened carefully with residual gates and memory monitoring.
+- `fp_tzfft` remains an opt-in experimental preconditioner. It is useful in
+  reduced probes and may reduce pre-rescue residuals, but it does not close the
+  full W7-X high-`nu'` point without sparse-direct rescue.
+- The dirty, stale `office` checkout should not be mutated directly. Use an
+  isolated scratch rsync checkout for GPU probes.
+
+Next concrete steps:
+
+1. Keep the W7-X high-`nu'` run command pinned to one worker,
+   `--transport-sparse-direct-max 40000`, and
+   `SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32` until a cheaper
+   preconditioner is demonstrated.
+2. Do not promote `fp_tzfft`, `xmg`, or Schwarz preconditioners to W7-X defaults
+   based on the current data; use the single-RHS harness for future algorithm
+   probes.
+3. Treat widened W7-X high-`nu'` scans as a nightly/release campaign, not CI:
+   each point is expensive, but residual gates now prevent bad artifacts from
+   being reused silently.

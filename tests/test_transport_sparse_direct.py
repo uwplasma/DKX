@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
+from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_driver import (
     _host_sparse_factor_dtype,
     _transport_tzfft_accelerator_auto_allowed,
@@ -19,6 +20,7 @@ from sfincs_jax.v3_driver import (
     _transport_sparse_direct_rescue_first,
     _transport_sparse_direct_use_explicit_helper,
     _transport_tzfft_backend_allowed,
+    solve_v3_transport_matrix_linear_gmres,
 )
 
 
@@ -368,6 +370,29 @@ def test_transport_disable_auto_recycle_respects_guards_and_env(monkeypatch) -> 
         op=_op(rhs_mode=3, has_fp=False, n_x=1, constraint_scheme=2),
         use_implicit=False,
     )
+
+
+def test_transport_sparse_direct_rescue_has_defined_drop_controls(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FORCE_KRYLOV", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX", "2000")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_RETRY_MAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_MAXITER", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_DROP_TOL", "bad")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_DROP_REL", "bad")
+
+    nml = read_sfincs_input("tests/ref/transportMatrix_PAS_tiny_rhsMode2_scheme2.input.namelist")
+    result = solve_v3_transport_matrix_linear_gmres(
+        nml=nml,
+        tol=1.0e-14,
+        maxiter=1,
+        which_rhs_values=[2],
+        collect_transport_output_fields=False,
+        emit=None,
+    )
+    residual = float(np.asarray(result.residual_norms_by_rhs[2], dtype=np.float64))
+    assert np.isfinite(residual)
+    assert residual < 1.0e-8
 
 
 def test_transport_host_gmres_accepts_preconditioned_residual_for_branch_sensitive_mono_cpu_gap(monkeypatch) -> None:

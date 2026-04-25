@@ -45,6 +45,7 @@ class TransportPreconditionerDispatchBuilders:
     sparse_jax_cache_key: Callable[[Any, str], tuple[object, ...]]
     apply_operator_cached: Callable[[Any, jnp.ndarray], jnp.ndarray]
     precond_dtype: Callable[[int], jnp.dtype]
+    fp_tzfft_builder: Builder | None = None
 
 
 @dataclass(frozen=True)
@@ -91,12 +92,16 @@ def normalize_transport_preconditioner_kind(*, env_value: str) -> str | None:
         "zeta_schwarz",
         "schwarz_zeta",
         "tzfft",
+        "fp_tzfft",
+        "fp_streaming_fft",
         "streaming_fft",
         "stream_fft",
         "sparse_jax",
     }:
         if env in {"streaming_fft", "stream_fft"}:
             return "tzfft"
+        if env in {"fp_streaming_fft"}:
+            return "fp_tzfft"
         if env in {"theta_block", "dd_theta", "dd_t"}:
             return "theta_dd"
         if env in {"theta_schwarz", "schwarz_theta"}:
@@ -329,6 +334,12 @@ def build_transport_preconditioner_from_kind(
         )
     if kind == "tzfft":
         return builders.tzfft_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if kind == "fp_tzfft":
+        # Older builder bundles do not know this experimental preconditioner.
+        fp_tzfft_builder = getattr(builders, "fp_tzfft_builder", None)
+        if fp_tzfft_builder is None:
+            return builders.tzfft_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        return fp_tzfft_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
     if kind == "sparse_jax":
         precond_dtype = builders.precond_dtype(int(size_est))
         bytes_per = 4.0 if precond_dtype == jnp.float32 else 8.0

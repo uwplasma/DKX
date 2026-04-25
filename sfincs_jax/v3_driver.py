@@ -2680,6 +2680,12 @@ class _TransportTzFftPrecondCache:
 
 
 @dataclass(frozen=True)
+class _TransportFpTzFftPrecondCache:
+    inv_mode: jnp.ndarray  # (T,Z,L*S*X,L*S*X) complex inverse per Fourier mode
+    n_block: int
+
+
+@dataclass(frozen=True)
 class _SparseJaxPrecondCache:
     a_sp: object
     d_inv: jnp.ndarray
@@ -2750,6 +2756,7 @@ _RHSMODE1_SXBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _TransportXBlockPrecon
 _TRANSPORT_XBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _TransportXBlockPrecondCache] = {}
 _TRANSPORT_SXBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _TransportXBlockPrecondCache] = {}
 _TRANSPORT_TZFFT_PRECOND_CACHE: dict[tuple[object, ...], _TransportTzFftPrecondCache] = {}
+_TRANSPORT_FP_TZFFT_PRECOND_CACHE: dict[tuple[object, ...], _TransportFpTzFftPrecondCache] = {}
 _RHSMODE23_PRECOND_CACHE: dict[tuple[object, ...], _RHSMode1PrecondCache] = {}
 _RHSMODE1_SPARSE_JAX_CACHE: dict[tuple[object, ...], _SparseJaxPrecondCache] = {}
 _RHSMODE1_PAS_TOKAMAK_THETA_CACHE: dict[tuple[object, ...], _PasTokamakThetaPrecondCache] = {}
@@ -6170,6 +6177,250 @@ def _build_rhsmode23_block_preconditioner(
             r_extra = r_full[extra_idx_jnp]
             z_extra = extra_inv_jnp @ r_extra
             z_full = z_full.at[extra_idx_jnp].set(z_extra, unique_indices=True)
+        return jnp.asarray(z_full, dtype=jnp.float64)
+
+    if reduce_full is None or expand_reduced is None:
+        return _apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = _apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    return _apply_reduced
+
+
+def _build_rhsmode23_fp_tzfft_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Fourier-space FP transport preconditioner for high-collisionality 3D runs.
+
+    The W7-X high-``nu'`` FP transport lane is stiff because the Fokker-Planck
+    collision block is dense in speed/species while the streaming/mirror terms
+    dominate the angular Krylov spectrum. This preconditioner keeps the full FP
+    dense block in ``(species, x)`` for each Legendre mode and adds a
+    flux-surface-averaged streaming/mirror symbol in Fourier space. Each
+    ``(k_theta, k_zeta)`` mode then solves one modest dense block over
+    ``L * species * x``.
+
+    It is intentionally opt-in through ``SFINCS_JAX_TRANSPORT_PRECOND=fp_tzfft``
+    until full W7-X high-``nu'`` GPU residual benchmarks prove it should become
+    a default.
+    """
+    if op.fblock.fp is None:
+        return _build_rhsmode23_tzfft_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_l = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    n_block = int(n_species * n_x)
+    n_mode = int(n_l * n_block)
+    if n_mode <= 0 or n_theta <= 0 or n_zeta <= 0:
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    precond_dtype = _precond_dtype()
+    complex_dtype = jnp.complex64 if precond_dtype == jnp.float32 else jnp.complex128
+    bytes_per_complex = 8.0 if complex_dtype == jnp.complex64 else 16.0
+    est_mb = float(n_theta * n_zeta * n_mode * n_mode) * bytes_per_complex / 1.0e6
+    max_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_MAX_MB", "").strip()
+    try:
+        max_mb = float(max_env) if max_env else 384.0
+    except ValueError:
+        max_mb = 384.0
+    if max_mb > 0.0 and est_mb > max_mb:
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    reg_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_REG", "").strip()
+    try:
+        reg = float(reg_env) if reg_env else 1.0e-10
+    except ValueError:
+        reg = 1.0e-10
+    pinv_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_PINV_RCOND", "").strip()
+    try:
+        pinv_rcond = float(pinv_env) if pinv_env else 1.0e-12
+    except ValueError:
+        pinv_rcond = 1.0e-12
+
+    cache_key = _transport_precond_cache_key(op, f"fp_tzfft_{complex_dtype}_{float(reg):.3e}")
+    cached = _TRANSPORT_FP_TZFFT_PRECOND_CACHE.get(cache_key)
+    if cached is None:
+        cl = op.fblock.collisionless
+        fp = op.fblock.fp
+        assert cl is not None
+        assert fp is not None
+
+        ddtheta0 = np.asarray(cl.ddtheta[:, 0], dtype=np.complex128)
+        ddzeta0 = np.asarray(cl.ddzeta[:, 0], dtype=np.complex128)
+        eig_theta = np.fft.fft(ddtheta0)  # (T,)
+        eig_zeta = np.fft.fft(ddzeta0)  # (Z,)
+
+        factor = np.asarray(_fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat), dtype=np.float64)
+        wsum = float(np.sum(factor))
+        if wsum == 0.0:
+            wsum = 1.0
+
+        b_hat = np.asarray(op.b_hat, dtype=np.float64)
+        b_sup_theta = np.asarray(op.b_hat_sup_theta, dtype=np.float64)
+        b_sup_zeta = np.asarray(op.b_hat_sup_zeta, dtype=np.float64)
+        db_dtheta = np.asarray(op.db_hat_dtheta, dtype=np.float64)
+        db_dzeta = np.asarray(op.db_hat_dzeta, dtype=np.float64)
+
+        v_theta = float(np.sum(factor * (b_sup_theta / b_hat)) / wsum)
+        v_zeta = float(np.sum(factor * (b_sup_zeta / b_hat)) / wsum)
+        mirror_geom = b_sup_theta * db_dtheta + b_sup_zeta * db_dzeta
+        mirror_base = float(np.sum(factor * (mirror_geom / (2.0 * (b_hat**2)))) / wsum)
+
+        sqrt_t_over_m = np.sqrt(np.asarray(op.t_hat, dtype=np.float64) / np.asarray(op.m_hat, dtype=np.float64))
+        v_theta_s = sqrt_t_over_m * v_theta
+        v_zeta_s = sqrt_t_over_m * v_zeta
+        mirror_factor_s = -sqrt_t_over_m * mirror_base
+        d_symbol = (
+            v_theta_s[:, None, None] * eig_theta[None, :, None]
+            + v_zeta_s[:, None, None] * eig_zeta[None, None, :]
+        )  # (S,T,Z)
+
+        exb_symbol = np.zeros((n_theta, n_zeta), dtype=np.complex128)
+        if op.fblock.exb_theta is not None or op.fblock.exb_zeta is not None:
+            if op.fblock.exb_theta is not None:
+                exb_theta = op.fblock.exb_theta
+                if getattr(exb_theta, "use_dkes_exb_drift", False):
+                    denom = float(np.asarray(exb_theta.fsab_hat2, dtype=np.float64).reshape(()))
+                    coef = np.asarray(exb_theta.d_hat * exb_theta.b_hat_sub_zeta, dtype=np.float64) / denom
+                else:
+                    coef = np.asarray(exb_theta.d_hat * exb_theta.b_hat_sub_zeta, dtype=np.float64) / (
+                        np.asarray(exb_theta.b_hat, dtype=np.float64) ** 2
+                    )
+                coef_avg = float(np.sum(factor * coef) / wsum)
+                exb_factor = (
+                    float(np.asarray(exb_theta.alpha, dtype=np.float64).reshape(()))
+                    * float(np.asarray(exb_theta.delta, dtype=np.float64).reshape(()))
+                    * 0.5
+                    * float(np.asarray(exb_theta.dphi_hat_dpsi_hat, dtype=np.float64).reshape(()))
+                )
+                exb_symbol += (exb_factor * coef_avg * eig_theta)[:, None]
+            if op.fblock.exb_zeta is not None:
+                exb_zeta = op.fblock.exb_zeta
+                if getattr(exb_zeta, "use_dkes_exb_drift", False):
+                    denom = float(np.asarray(exb_zeta.fsab_hat2, dtype=np.float64).reshape(()))
+                    coef = np.asarray(exb_zeta.d_hat * exb_zeta.b_hat_sub_theta, dtype=np.float64) / denom
+                else:
+                    coef = np.asarray(exb_zeta.d_hat * exb_zeta.b_hat_sub_theta, dtype=np.float64) / (
+                        np.asarray(exb_zeta.b_hat, dtype=np.float64) ** 2
+                    )
+                coef_avg = float(np.sum(factor * coef) / wsum)
+                exb_factor = (
+                    -float(np.asarray(exb_zeta.alpha, dtype=np.float64).reshape(()))
+                    * float(np.asarray(exb_zeta.delta, dtype=np.float64).reshape(()))
+                    * 0.5
+                    * float(np.asarray(exb_zeta.dphi_hat_dpsi_hat, dtype=np.float64).reshape(()))
+                )
+                exb_symbol += (exb_factor * coef_avg * eig_zeta)[None, :]
+
+        mat_fp = np.asarray(fp.mat, dtype=np.float64)  # (S,S,L,X,X)
+        identity_shift = float(op.fblock.identity_shift)
+        pas_diag = None
+        if op.fblock.pas is not None:
+            pas = op.fblock.pas
+            l_arr = np.arange(n_l, dtype=np.float64)
+            factor_l = 0.5 * (l_arr * (l_arr + 1.0) + 2.0 * float(pas.krook))
+            pas_diag = float(pas.nu_n) * np.asarray(pas.nu_d_hat, dtype=np.float64)[:, :, None] * factor_l[None, None, :]
+
+        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        active = np.arange(n_l, dtype=np.int32)[None, :] < nxi_for_x[:, None]  # (X,L)
+        x_arr = np.asarray(cl.x, dtype=np.float64)
+        l_arr = np.arange(n_l, dtype=np.float64)
+        coef_plus = x_arr[:, None] * (l_arr[None, :] + 1.0) / (2.0 * l_arr[None, :] + 3.0)
+        coef_minus = np.where(l_arr[None, :] > 0, x_arr[:, None] * l_arr[None, :] / (2.0 * l_arr[None, :] - 1.0), 0.0)
+        coef_mirror_plus = x_arr[:, None] * (l_arr[None, :] + 1.0) * (l_arr[None, :] + 2.0) / (
+            2.0 * l_arr[None, :] + 3.0
+        )
+        coef_mirror_minus = np.where(
+            l_arr[None, :] > 1,
+            -x_arr[:, None] * l_arr[None, :] * (l_arr[None, :] - 1.0) / (2.0 * l_arr[None, :] - 1.0),
+            0.0,
+        )
+
+        base_blocks: list[np.ndarray] = []
+        for il in range(n_l):
+            a_l = np.array(mat_fp[:, :, il, :, :], dtype=np.float64, copy=True)
+            a_l = a_l.transpose(0, 2, 1, 3).reshape((n_block, n_block))
+            diag_add = np.full((n_block,), identity_shift + float(reg), dtype=np.float64)
+            if pas_diag is not None:
+                diag_add += pas_diag[:, :, il].reshape((n_block,))
+            a_l[np.arange(n_block), np.arange(n_block)] += diag_add
+            inactive_x = np.where(~active[:, il])[0]
+            for ix in inactive_x:
+                for s in range(n_species):
+                    p = int(s * n_x + int(ix))
+                    a_l[p, :] = 0.0
+                    a_l[:, p] = 0.0
+                    a_l[p, p] = 1.0
+            base_blocks.append(a_l)
+
+        inv_mode = np.zeros((n_theta, n_zeta, n_mode, n_mode), dtype=np.complex128)
+        for kt in range(n_theta):
+            for kz in range(n_zeta):
+                a = np.zeros((n_mode, n_mode), dtype=np.complex128)
+                for il, a_l in enumerate(base_blocks):
+                    r0 = int(il * n_block)
+                    r1 = r0 + n_block
+                    a[r0:r1, r0:r1] = a_l.astype(np.complex128)
+                    if exb_symbol[kt, kz] != 0.0:
+                        for s in range(n_species):
+                            for ix in range(n_x):
+                                if active[ix, il]:
+                                    p = r0 + int(s * n_x + ix)
+                                    a[p, p] += exb_symbol[kt, kz]
+                for il in range(n_l):
+                    for s in range(n_species):
+                        symbol = d_symbol[s, kt, kz]
+                        mirror_symbol = mirror_factor_s[s]
+                        for ix in range(n_x):
+                            p = int(il * n_block + s * n_x + ix)
+                            if il + 1 < n_l and active[ix, il] and active[ix, il + 1]:
+                                q = int((il + 1) * n_block + s * n_x + ix)
+                                a[p, q] += coef_plus[ix, il] * symbol + coef_mirror_plus[ix, il] * mirror_symbol
+                            if il - 1 >= 0 and active[ix, il] and active[ix, il - 1]:
+                                q = int((il - 1) * n_block + s * n_x + ix)
+                                a[p, q] += coef_minus[ix, il] * symbol + coef_mirror_minus[ix, il] * mirror_symbol
+                try:
+                    inv = np.linalg.inv(a)
+                except np.linalg.LinAlgError:
+                    inv = np.linalg.pinv(a, rcond=pinv_rcond)
+                if not np.all(np.isfinite(inv)):
+                    inv = np.linalg.pinv(a, rcond=pinv_rcond)
+                inv_mode[kt, kz, :, :] = inv
+
+        cached = _TransportFpTzFftPrecondCache(
+            inv_mode=jnp.asarray(inv_mode, dtype=complex_dtype),
+            n_block=int(n_block),
+        )
+        _TRANSPORT_FP_TZFFT_PRECOND_CACHE[cache_key] = cached
+
+    inv_mode = cached.inv_mode
+    n_block = int(cached.n_block)
+
+    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        f = r_full[: op.f_size].reshape(op.fblock.f_shape)  # (S,X,L,T,Z)
+        f_hat = jnp.fft.fftn(f.astype(complex_dtype), axes=(-2, -1))
+        rhs_modes = jnp.transpose(f_hat, (3, 4, 2, 0, 1)).reshape((n_theta, n_zeta, n_l * n_block))
+        sol_modes = jnp.einsum("tzij,tzj->tzi", inv_mode, rhs_modes)
+        sol = sol_modes.reshape((n_theta, n_zeta, n_l, n_species, n_x))
+        sol_f = jnp.transpose(sol, (3, 4, 2, 0, 1))  # (S,X,L,T,Z)
+        z_f = jnp.fft.ifftn(sol_f, axes=(-2, -1)).real.astype(jnp.float64)
+        tail = r_full[op.f_size :]
+        z_full = jnp.concatenate([z_f.reshape((-1,)), tail], axis=0)
         return jnp.asarray(z_full, dtype=jnp.float64)
 
     if reduce_full is None or expand_reduced is None:
@@ -19172,6 +19423,7 @@ def solve_v3_transport_matrix_linear_gmres(
         sparse_jax_cache_key=_transport_precond_cache_key,
         apply_operator_cached=apply_v3_full_system_operator_cached,
         precond_dtype=_precond_dtype,
+        fp_tzfft_builder=_build_rhsmode23_fp_tzfft_preconditioner,
     )
     tzfft_backend_allowed = _transport_tzfft_backend_allowed() or _transport_tzfft_accelerator_auto_allowed(op0)
     if transport_precond_kind is not None and int(rhs_mode) in {2, 3}:
@@ -19213,6 +19465,17 @@ def solve_v3_transport_matrix_linear_gmres(
 
     strong_preconditioner_full = None
     strong_preconditioner_reduced = None
+
+    transport_sparse_drop_tol_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DROP_TOL", "").strip()
+    transport_sparse_drop_rel_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DROP_REL", "").strip()
+    try:
+        transport_sparse_drop_tol = float(transport_sparse_drop_tol_env) if transport_sparse_drop_tol_env else 0.0
+    except ValueError:
+        transport_sparse_drop_tol = 0.0
+    try:
+        transport_sparse_drop_rel = float(transport_sparse_drop_rel_env) if transport_sparse_drop_rel_env else 0.0
+    except ValueError:
+        transport_sparse_drop_rel = 0.0
 
     def _get_strong_preconditioner(use_reduced: bool) -> Callable[[jnp.ndarray], jnp.ndarray] | None:
         nonlocal strong_preconditioner_full, strong_preconditioner_reduced
@@ -19259,7 +19522,7 @@ def solve_v3_transport_matrix_linear_gmres(
         maxiter_val: int | None,
         precondition_side_val: str,
     ) -> GMRESSolveResult:
-        def _solve_with_factor_dtype(factor_dtype_use: np.dtype) -> tuple[np.ndarray, float]:
+        def _solve_with_factor_dtype(factor_dtype_use: np.dtype) -> tuple[np.ndarray, float, object]:
             if _transport_sparse_direct_use_explicit_helper(size=int(n)):
                 block_cols_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_BLOCK_COLS", "").strip()
                 dense_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_DENSE_MAX_MB", "").strip()
@@ -19340,7 +19603,7 @@ def solve_v3_transport_matrix_linear_gmres(
                 factor_dtype=factor_dtype_use,
                 refine_steps=_host_sparse_direct_refine_steps("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_REFINE", default=2),
             )
-            return x_local, float(residual_local)
+            return x_local, float(residual_local), ilu
 
         factor_dtype = _transport_sparse_factor_dtype(size=int(n), use_implicit=False)
         if emit is not None:
@@ -19349,8 +19612,19 @@ def solve_v3_transport_matrix_linear_gmres(
                 "solve_v3_transport_matrix_linear_gmres: sparse LU factor_dtype="
                 f"{np.dtype(factor_dtype).name}",
             )
-        x_np, residual_norm = _solve_with_factor_dtype(factor_dtype)
         target_true = max(float(atol_val), float(tol_val) * float(jnp.linalg.norm(b_vec)))
+        x_np, residual_norm, ilu_for_polish = _solve_with_factor_dtype(factor_dtype)
+
+        def _true_residual_norm(x_arr: np.ndarray) -> float:
+            ax = matvec_fn(jnp.asarray(x_arr, dtype=dtype))
+            residual = np.asarray(ax - b_vec, dtype=np.float64).reshape((-1,))
+            return float(np.linalg.norm(residual))
+
+        true_residual_norm = _true_residual_norm(x_np)
+        if np.isfinite(true_residual_norm) and (
+            (not np.isfinite(float(residual_norm))) or float(true_residual_norm) > float(residual_norm)
+        ):
+            residual_norm = float(true_residual_norm)
         if factor_dtype == np.dtype(np.float32) and residual_norm > target_true:
             polish_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_POLISH", "").strip().lower()
             if polish_env not in {"0", "false", "no", "off"}:
@@ -19374,7 +19648,7 @@ def solve_v3_transport_matrix_linear_gmres(
                     matvec_fn=matvec_fn,
                     rhs_vec=b_vec,
                     x0_np=x_np,
-                    ilu=ilu,
+                    ilu=ilu_for_polish,
                     factor_dtype=factor_dtype,
                     tol=tol_val,
                     atol=atol_val,
@@ -19385,6 +19659,9 @@ def solve_v3_transport_matrix_linear_gmres(
                 if np.isfinite(residual_norm_polish) and residual_norm_polish < residual_norm:
                     x_np = x_polish
                     residual_norm = residual_norm_polish
+                    true_residual_norm = _true_residual_norm(x_np)
+                    if np.isfinite(true_residual_norm):
+                        residual_norm = float(true_residual_norm)
         if _transport_sparse_direct_needs_float64_retry(
             factor_dtype=factor_dtype,
             residual_norm=float(residual_norm),
@@ -19396,7 +19673,7 @@ def solve_v3_transport_matrix_linear_gmres(
                     "solve_v3_transport_matrix_linear_gmres: retrying sparse LU with float64 factors "
                     f"(residual={float(residual_norm):.6e}, target={float(target_true):.6e})",
                 )
-            x64_np, residual64 = _solve_with_factor_dtype(np.dtype(np.float64))
+            x64_np, residual64, _ilu64 = _solve_with_factor_dtype(np.dtype(np.float64))
             if np.isfinite(residual64) and (
                 not np.isfinite(float(residual_norm)) or float(residual64) < float(residual_norm)
             ):

@@ -184,11 +184,40 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
   --max-transport-relative-residual 1e-6 \
   --scan-only
 
-# The current office dual-GPU pilot for that point is residual-clean in ~262 s,
-# compared with ~345 s on one GPU and ~569 s on the older implicit path. The
-# W7-X high-nu FP pilot currently finishes in ~407 s on two office GPUs but
-# fails the relative-residual gate; new runs now fail fast on those residual
-# thresholds so stale or unconverged outputs are not reused for figures.
+# The current office dual-GPU LHD pilot for that point is residual-clean in
+# ~262 s, compared with ~345 s on one GPU and ~569 s on the older implicit path.
+# For the first W7-X FP high-nu point, use the bounded one-worker sparse-LU lane
+# below: it closes all three RHS residual gates in ~33.8 min on one office GPU.
+
+# W7-X FP high-nu residual-clean pilot, intentionally one worker to limit sparse
+# LU memory pressure:
+CUDA_VISIBLE_DEVICES=0 \
+SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32 \
+python examples/publication_figures/generate_sfincs_paper_figs.py \
+  --case w7x \
+  --collision-operators 0 \
+  --nuprime-min 17.78332923601508 \
+  --nuprime-max 17.78332923601508 \
+  --n-points 1 \
+  --transport-workers 1 \
+  --transport-parallel-backend gpu \
+  --transport-sparse-direct-max 40000 \
+  --transport-maxiter 800 \
+  --require-residuals \
+  --max-transport-residual 1e-6 \
+  --max-transport-relative-residual 1e-6 \
+  --scan-only
+
+# To compare candidate preconditioners before widening W7-X high-nu scans,
+# isolate single-RHS behavior:
+CUDA_VISIBLE_DEVICES=0 \
+python examples/performance/benchmark_w7x_high_nu_preconditioners.py \
+  --preconditioners auto,fp_tzfft,xmg \
+  --which-rhs 2 \
+  --sparse-direct-max 40000 \
+  --sparse-factor-dtype float32 \
+  --maxiter 800 \
+  --timeout-s 900
 
 # One-node multi-GPU sharded solve (experimental for very large single-RHS cases)
 CUDA_VISIBLE_DEVICES=0,1 \
