@@ -19,6 +19,7 @@ Examples:
 - `generate_er_trajectory_sweep.py`
 - `generate_w7x_ambipolar_validation.py`
 - `generate_autodiff_sensitivity_validation.py`
+- `generate_w7x_high_nu_performance.py`
 
 Pinned fixed-case runs on the refactor branch:
 
@@ -165,14 +166,24 @@ The launcher forces the explicit executable solve path for scans
 (`SFINCS_JAX_IMPLICIT_SOLVE=0`) so high-collisionality transport can use sparse-LU
 first attempts/rescues when Krylov residuals stall. The checked-in high-`nu'`
 run plan uses a bounded sparse-direct cap and strict absolute/relative residual
-gates: LHD FP is accepted only with clean residuals, while the current W7-X FP
-high-`nu'` pilot finishes in about 407 s on two office GPUs but fails with
-relative residuals near 0.8-1.0, so it remains an open preconditioner lane
-rather than a completed figure source. Those residual thresholds are also wired
-as fail-fast aborts for new runs. Current W7-X single-RHS probes did not close
-the lane: `xmg` kept the same RHS2 relative residual, `theta_schwarz` timed out,
-and a float64 sparse-LU probe for the 35,063 active-DOF system timed out after
-CSR materialization.
+gates. LHD FP is accepted only with clean residuals. W7-X FP high-`nu'` now has
+a residual-clean sparse-LU route with float32 host factors, exact matrix-free
+residual verification, block-basis sparse-helper materialization, and
+within-solve factor reuse across transport RHS solves. The first full-resolution
+W7-X point now takes about 582 s on one office GPU, down from about 2028 s
+before factor reuse, with the same transport matrix and residual diagnostics.
+Those residual thresholds are also wired as fail-fast aborts for new runs.
+
+Generate the W7-X high-`nu'` performance figure from the checked summary:
+
+```bash
+python examples/publication_figures/generate_w7x_high_nu_performance.py
+```
+
+Pinned outputs:
+- `examples/publication_figures/artifacts/sfincs_jax_w7x_high_nu_performance_summary.json`
+- `docs/_static/figures/paper/sfincs_jax_w7x_high_nu_performance.png`
+- `docs/_static/figures/paper/sfincs_jax_w7x_high_nu_performance.pdf`
 
 Autodiff and sensitivity validation:
 

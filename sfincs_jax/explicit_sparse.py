@@ -338,17 +338,19 @@ def _matvec_to_dense(
 ) -> np.ndarray:
     n = int(n)
     block_cols = max(1, int(block_cols))
-    eye = np.eye(n, dtype=np.dtype(dtype))
-    blocks: list[np.ndarray] = []
+    dtype_np = np.dtype(dtype)
+    dense = np.empty((n, n), dtype=dtype_np)
     for start in range(0, n, block_cols):
-        cols = eye[:, start : start + block_cols]
+        width = min(block_cols, n - start)
+        cols = np.zeros((n, width), dtype=dtype_np)
+        cols[np.arange(start, start + width), np.arange(width)] = 1
         if matmat is not None:
             out = _host_array(matmat(cols), dtype=dtype)
         else:
             out_cols = [_host_array(matvec(cols[:, j]), dtype=dtype) for j in range(cols.shape[1])]
             out = np.column_stack(out_cols)
-        blocks.append(out)
-    return np.concatenate(blocks, axis=1)
+        dense[:, start : start + width] = out
+    return dense
 
 
 def build_operator_from_matvec(

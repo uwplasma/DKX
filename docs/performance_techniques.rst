@@ -582,6 +582,49 @@ preconditioners while staying differentiable. Controls mirror the RHSMode=1
 ``sparse_jax`` options (``SFINCS_JAX_TRANSPORT_SPARSE_JAX_*`` and
 ``SFINCS_JAX_TRANSPORT_SPARSE_DROP_*``).
 
+**Explicit sparse-helper rescue for hard high-nu transport.**
+
+The full W7-X FP high-``nu'`` point is an example where the matrix-free Krylov
+routes can stall even with useful preconditioners. The production executable
+path can therefore opt into a bounded host sparse-LU rescue:
+
+.. math::
+
+   A X = B,\qquad B = [b_1,\ b_2,\ b_3],
+
+where the transport operator :math:`A` is unchanged across the three
+``whichRHS`` drives. ``sfincs_jax`` now exploits that structure in two ways:
+
+- the explicit sparse helper assembles column blocks from local basis matrices
+  instead of materializing a full identity matrix,
+- the assembled CSR operator and sparse-LU factorization are cached inside the
+  transport solve and reused for the later RHS solves when the operator
+  signature is unchanged.
+
+This keeps the exact matrix-free operator as the final residual gate: the host
+sparse residual is never trusted by itself for accepting a hard transport solve.
+The route is non-differentiable and intended for the CLI/executable path, not
+for end-to-end autodiff workflows.
+
+Implementation:
+
+- block-basis materialization and factorization helpers:
+  ``sfincs_jax.explicit_sparse.build_operator_from_matvec`` and
+  ``factorize_host_sparse_operator``;
+- RHSMode=2/3 sparse-direct reuse:
+  ``sfincs_jax.v3_driver.solve_v3_transport_matrix_linear_gmres``.
+
+Controls:
+
+- ``SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX`` enables the bounded sparse-direct
+  first attempt/rescue when the active system size is below the cap;
+- ``SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE`` selects host factor precision
+  (``float32`` is the measured W7-X high-``nu'`` route);
+- ``SFINCS_JAX_TRANSPORT_SPARSE_HELPER_BLOCK_COLS`` tunes sparse-helper
+  materialization batch width;
+- ``SFINCS_JAX_TRANSPORT_SPARSE_HELPER_DENSE_MAX_MB`` and
+  ``SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CSR_MAX_MB`` control storage selection.
+
 **Implementation.**
 
 - ``_build_rhsmode23_sxblock_preconditioner`` in ``sfincs_jax.v3_driver``.

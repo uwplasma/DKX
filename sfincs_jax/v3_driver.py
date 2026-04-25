@@ -19509,6 +19509,10 @@ def solve_v3_transport_matrix_linear_gmres(
             )
         return strong_preconditioner_full
 
+    # RHSMode=2/3 transport reuses the same active operator for multiple drives,
+    # so keep sparse-helper factors scoped to this solve and reuse them across RHS.
+    transport_sparse_direct_factor_cache: dict[tuple[object, ...], tuple[object, object, str, str]] = {}
+
     def _transport_sparse_direct_solve(
         *,
         matvec_fn,
@@ -19547,34 +19551,66 @@ def solve_v3_transport_matrix_linear_gmres(
                         copy=True,
                     )
 
-                operator_bundle = build_operator_from_matvec(
-                    _matvec_host,
-                    n=int(n),
-                    dtype=factor_dtype_use,
-                    backend=jax.default_backend(),
-                    block_cols=max(1, int(block_cols)),
-                    dense_max_mb=float(dense_max_mb),
-                    csr_max_mb=float(csr_max_mb),
-                    prefer_sparse_on_gpu=True,
-                    force_sparse=(jax.default_backend() != "cpu"),
-                    drop_tol=0.0,
-                    allow_operator_only=False,
+                def _matmat_host(cols_np: np.ndarray) -> np.ndarray:
+                    cols = jnp.asarray(cols_np, dtype=dtype)
+                    out = jax.vmap(matvec_fn, in_axes=1, out_axes=1)(cols)
+                    return np.asarray(out, dtype=factor_dtype_use, copy=True)
+
+                force_sparse = bool(jax.default_backend() != "cpu")
+                factor_cache_key = (
+                    *_sparse_factor_cache_key(cache_key, factor_dtype_use),
+                    "explicit_helper",
+                    str(jax.default_backend()),
+                    int(max(1, int(block_cols))),
+                    float(dense_max_mb),
+                    float(csr_max_mb),
+                    int(force_sparse),
                 )
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_transport_matrix_linear_gmres: explicit sparse helper "
-                        f"storage={operator_bundle.metadata.storage_kind} "
-                        f"reason={operator_bundle.metadata.reason}",
+                cached_factor = transport_sparse_direct_factor_cache.get(factor_cache_key)
+                if cached_factor is not None:
+                    a_csr_full, ilu, storage_kind, reason = cached_factor
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: reusing explicit sparse helper "
+                            f"storage={storage_kind} reason={reason}",
+                        )
+                else:
+                    operator_bundle = build_operator_from_matvec(
+                        _matvec_host,
+                        n=int(n),
+                        dtype=factor_dtype_use,
+                        backend=jax.default_backend(),
+                        block_cols=max(1, int(block_cols)),
+                        dense_max_mb=float(dense_max_mb),
+                        csr_max_mb=float(csr_max_mb),
+                        prefer_sparse_on_gpu=True,
+                        force_sparse=force_sparse,
+                        drop_tol=0.0,
+                        matmat=_matmat_host,
+                        allow_operator_only=False,
                     )
-                factor_bundle = factorize_host_sparse_operator(
-                    operator_bundle,
-                    kind="lu",
-                    drop_tol=0.0,
-                    fill_factor=1.0,
-                )
-                a_csr_full = factor_bundle.operator.matrix
-                ilu = factor_bundle.factor
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: explicit sparse helper "
+                            f"storage={operator_bundle.metadata.storage_kind} "
+                            f"reason={operator_bundle.metadata.reason}",
+                        )
+                    factor_bundle = factorize_host_sparse_operator(
+                        operator_bundle,
+                        kind="lu",
+                        drop_tol=0.0,
+                        fill_factor=1.0,
+                    )
+                    a_csr_full = factor_bundle.operator.matrix
+                    ilu = factor_bundle.factor
+                    transport_sparse_direct_factor_cache[factor_cache_key] = (
+                        a_csr_full,
+                        ilu,
+                        str(operator_bundle.metadata.storage_kind),
+                        str(operator_bundle.metadata.reason),
+                    )
             else:
                 cache_key_use = _sparse_factor_cache_key(cache_key, factor_dtype_use)
                 a_csr_full, _a_csr_drop, ilu, _a_dense, _l_dense, _u_dense, _l_unit = _build_sparse_ilu_from_matvec(

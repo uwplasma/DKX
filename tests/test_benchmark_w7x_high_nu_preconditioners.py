@@ -64,3 +64,37 @@ def test_dry_run_writes_bounded_candidate_summary(tmp_path: Path, capsys) -> Non
     assert payload["commands"][1]["environment"]["SFINCS_JAX_TRANSPORT_PRECOND"] == "fp_tzfft"
     assert payload["commands"][1]["environment"]["SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE"] == "float32"
     assert "fp_tzfft" in capsys.readouterr().out
+
+
+def test_reduced_forced_sparse_helper_reuses_factor(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", "1")
+    summary = tmp_path / "summary.json"
+
+    rc = bench.main(
+        [
+            "--work-dir",
+            str(tmp_path),
+            "--summary",
+            str(summary),
+            "--preconditioners",
+            "auto",
+            "--which-rhs",
+            "1,2",
+            "--reduced-resolution",
+            "--sparse-direct-max",
+            "30000",
+            "--maxiter",
+            "80",
+            "--restart",
+            "40",
+            "--timeout-s",
+            "120",
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(summary.read_text())
+    result = payload["results"][0]
+    assert result["status"] == "ok"
+    assert max(float(value) for value in result["relative_residuals_by_rhs"].values()) < 1.0e-10
+    assert any("reusing explicit sparse helper" in message for message in result["last_messages"])
