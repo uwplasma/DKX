@@ -60,6 +60,40 @@ def test_cmd_write_output_forces_explicit_mode(monkeypatch, tmp_path: Path) -> N
     assert captured["differentiable"] is False
 
 
+def test_cmd_write_output_accepts_extension_selected_formats(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    args = Namespace(
+        input=str(tmp_path / "input.namelist"),
+        out=str(tmp_path / "sfincsOutput.nc"),
+        equilibrium_file=None,
+        wout_path=None,
+        fortran_layout=True,
+        overwrite=True,
+        compute_transport_matrix=False,
+        compute_solution=False,
+        geometry_only=True,
+        quiet=True,
+        verbose=0,
+    )
+    assert cli._cmd_write_output(args) == 0
+    assert Path(captured["output_path"]).suffix == ".nc"
+
+
+def test_default_plot_output_path_uses_pdf() -> None:
+    assert cli._default_plot_output_path(Path("sfincsOutput.h5")).name == "sfincsOutput_summary.pdf"
+
+
 def test_cmd_solve_v3_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
@@ -290,7 +324,7 @@ def test_normalize_default_argv_maps_plot_shortcut() -> None:
 
 def test_default_plot_output_path_handles_sfincsoutput_suffix() -> None:
     path = cli._default_plot_output_path(Path("sfincsOutput.h5"))
-    assert path.name == "sfincsOutput_summary.png"
+    assert path.name == "sfincsOutput_summary.pdf"
 
 
 def test_apply_parallel_runtime_settings_sets_transport_and_sharding(monkeypatch) -> None:

@@ -46,7 +46,9 @@ pip install .
 ```
 
 After installing from a source checkout, you can run the CLI immediately on the
-bundled tiny example:
+bundled tiny example. The suffix of `--out` selects the output format:
+`.h5`/`.hdf5` for the Fortran-compatible HDF5 file, `.nc`/`.netcdf` for NetCDF4,
+and `.npz` for a fast NumPy archive.
 
 ```bash
 cd sfincs_jax
@@ -58,7 +60,32 @@ sfincs_jax --plot sfincsOutput.h5
 ```
 
 This is the fast installation smoke test. It writes `sfincsOutput.h5` and then
-writes a compact PNG summary next to it as `sfincsOutput_summary.png`.
+writes a multi-page PDF diagnostics panel next to it as
+`sfincsOutput_summary.pdf`. The same command works for NetCDF and NPZ:
+
+```bash
+sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.nc --geometry-only
+sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.npz --geometry-only
+sfincs_jax --plot sfincsOutput.nc
+```
+
+## Physics in One Page
+
+`sfincs_jax` solves the radially local, steady, linearized drift-kinetic
+equation for the non-adiabatic distribution-function perturbation
+`f_s1` on a flux surface. In normalized form the solved kinetic balance is
+
+```text
+(parallel streaming + mirror force + E x B drift + magnetic drift
+ + energy/pitch-angle drifts - linearized collisions) f_s1 = thermodynamic drives.
+```
+
+The unknown distribution can be coupled to the flux-surface electrostatic
+potential variation `Phi1(theta,zeta)` through quasineutrality when requested.
+The output fluxes, flows, transport matrices, and diagnostics are moments of
+this solved `f_s1`. The full equations, normalizations, switches, and source-code
+mapping are documented in `docs/system_equations.rst`, `docs/physics_models.rst`,
+and `docs/method.rst`.
 
 ## Quick Start (CLI)
 
@@ -83,6 +110,11 @@ Plot an existing output file:
 sfincs_jax --plot /path/to/sfincsOutput.h5
 ```
 
+By default this writes `/path/to/sfincsOutput_summary.pdf`, a multi-page panel
+with geometry, radial profiles, particle/heat/momentum fluxes, NTV, moments, and
+transport-matrix diagnostics when those datasets are present. Use
+`sfincs_jax plot-output --input-h5 ... --out custom.pdf` to choose a filename.
+
 Override the equilibrium file at the CLI without changing `input.namelist`:
 
 ```bash
@@ -97,7 +129,7 @@ The bare `sfincs_jax /path/to/input.namelist` form accepts the same
 
 ## Quick Start (Python)
 
-Read a namelist, run `sfincs_jax`, write `sfincsOutput.h5`, and inspect results directly in memory:
+Read a namelist, run `sfincs_jax`, write an output file, and inspect results directly in memory:
 
 ```python
 from pathlib import Path
@@ -115,6 +147,10 @@ print("Wrote:", out_path)
 print("Available datasets:", len(results))
 print("Example key:", "particleFlux_vm_psiHat" in results)
 ```
+
+Set `output_path=Path("sfincsOutput.nc")` for NetCDF4 or
+`output_path=Path("sfincsOutput.npz")` for a fast NumPy archive. The calculation
+is identical; only the writer changes.
 
 If you need to override the equilibrium file without editing the namelist, pass
 ``equilibrium_file=...`` or the VMEC-friendly alias ``wout_path=...``:
@@ -153,6 +189,7 @@ Repository examples that map directly onto common first tasks:
 - write a tiny tokamak output: `python examples/getting_started/write_sfincs_output_tokamak.py`
 - write a tiny VMEC output with `wout_path`: `python examples/getting_started/write_sfincs_output_vmec.py`
 - plot an output file: `python examples/getting_started/plot_sfincs_output.py`
+- write HDF5/NetCDF/NPZ and plot a PDF panel: `python examples/getting_started/write_and_plot_multiple_formats.py`
 - run autodiff examples: `python examples/autodiff/autodiff_gradient_nu_n_residual.py`
 - run the optional VMEC/Boozer differentiable geometry handoff: `python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --wout /path/to/wout.nc`
 - benchmark CPU/GPU parallel solves: `python examples/performance/benchmark_sharded_solve_scaling.py --backend cpu --devices 1 2 --inner-warmup-solves 1 --sample-timeout-s 300 ...`

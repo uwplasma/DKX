@@ -11,6 +11,7 @@ Suggested order:
 5. `write_sfincs_output_tokamak.py` — run the supported analytic tokamak `geometryScheme=1` path.
 6. `write_sfincs_output_vmec.py` — run the supported VMEC `geometryScheme=5` path with `wout_path`.
 7. `plot_sfincs_output.py` — read an output file and generate a quick summary figure.
+8. `write_and_plot_multiple_formats.py` — write `.h5`, `.nc`, and `.npz` outputs and build a PDF diagnostics panel.
 
 Run any script from the repo root, e.g.:
 
@@ -24,4 +25,5 @@ Common follow-ups:
 python examples/getting_started/write_sfincs_output_tokamak.py
 python examples/getting_started/write_sfincs_output_vmec.py
 python examples/getting_started/plot_sfincs_output.py
+python examples/getting_started/write_and_plot_multiple_formats.py
 ```
