@@ -35,7 +35,7 @@ def test_phi1_output_writes_quasineutrality_option_without_adiabatic(tmp_path: P
     assert int(np.asarray(out["includePhi1"]).reshape(())) == 1
 
 
-def test_monoenergetic_transport_write_output_exports_delta_f_and_full_f(tmp_path: Path) -> None:
+def test_monoenergetic_transport_write_output_exports_delta_f_and_full_f(tmp_path: Path, monkeypatch) -> None:
     here = Path(__file__).parent
     src = here / "ref" / "monoenergetic_PAS_tiny_scheme11.input.namelist"
     text = src.read_text(encoding="utf-8")
@@ -45,6 +45,7 @@ def test_monoenergetic_transport_write_output_exports_delta_f_and_full_f(tmp_pat
     input_path.write_text(text, encoding="utf-8")
 
     out_path = tmp_path / "monoenergetic_export.sfincsOutput.h5"
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_LOW_MEMORY", "1")
     write_sfincs_jax_output_h5(
         input_namelist=input_path,
         output_path=out_path,

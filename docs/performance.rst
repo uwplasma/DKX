@@ -18,8 +18,8 @@ Current release snapshot
 
 The current ``main`` branch release artifacts are:
 
-- CPU: ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix``
-- GPU: ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem``
+- CPU: ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
+- GPU: ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``
 
 These report:
 
@@ -38,8 +38,9 @@ The same reports are summarized by the checked-in publication benchmark artifact
 - generator:
   ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
 
-That artifact records median JAX/Fortran wall-clock ratios of about ``0.039x`` on CPU
-and ``0.059x`` on GPU for the frozen suite. It also records the high-ratio tail
+That artifact records median JAX/Fortran wall-clock ratios of about ``0.035x`` on CPU
+and ``0.058x`` on GPU for the frozen suite, with median maximum-RSS ratios of about
+``4.92x`` on CPU and ``9.20x`` on GPU. It also records the high-ratio tail
 explicitly, since a few tiny Fortran reference runs make wall-clock ratios look large
 even when the absolute JAX runtime remains only seconds.
 
@@ -85,7 +86,7 @@ Recent current-tip PAS full-trajectory fix:
 
 Recent current-tip GPU tokamak PAS+Er fix:
 
-- ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now uses a bounded one-GPU analytic-tokamak PAS+Er route that avoids the expensive ``xblock_tz`` setup and tightens the GMRES tolerance to ``1e-8``. The focused clean-remote ``office`` GPU probe completed parity-clean in ``3.249 s`` with about ``922 MB`` RSS, down from the previous release-table entry of ``18.199 s`` and ``1014.5 MB``. The older ``xblock_tz`` route remains available as an explicit opt-in with ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``.
+- ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now uses a bounded one-GPU analytic-tokamak PAS+Er route that avoids the expensive ``xblock_tz`` setup and tightens the GMRES tolerance to ``1e-8``. The focused clean-remote ``office`` GPU probe completed parity-clean in ``3.249 s`` with about ``922 MB`` RSS, down from the previous release-table entry of ``18.199 s`` and ``1014.5 MB``. Medium bounded tokamak PAS+Er cases remain in the structured ``xblock_tz`` active-size window because that route avoids slow sparse fallback on the two-species GPU case.
 
 Recent current-tip geometry4 PAS memory fix:
 

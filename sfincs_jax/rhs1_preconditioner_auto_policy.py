@@ -581,9 +581,9 @@ def rhs1_pas_tokamak_gpu_xblock_preferred(
 ) -> bool:
     """Return whether GPU tokamak PAS+Er should opt into ``xblock_tz``.
 
-    The default GPU route is a lower-runtime unpreconditioned GMRES path with a
-    tightened solve tolerance. Keep this helper as an explicit escape hatch for
-    users who want the older, heavier ``xblock_tz`` branch on bounded cases.
+    Very small one-GPU tokamak PAS+Er cases are fastest with the tightened
+    unpreconditioned route because setup dominates. Medium cases need the
+    structured xblock_tz preconditioner to avoid expensive sparse-LU fallbacks.
     """
     if not rhs1_pas_tokamak_gpu_theta_allowed(
         has_pas=has_pas,
@@ -599,7 +599,10 @@ def rhs1_pas_tokamak_gpu_xblock_preferred(
         return False
     if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
         return False
-    prefer_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", 0)
+    prefer_min = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MIN", 1000)
+    prefer_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", 8000)
+    if int(active_size) < max(1, int(prefer_min)):
+        return False
     if int(prefer_max) <= 0:
         return False
     if int(active_size) > int(prefer_max):

@@ -3955,6 +3955,7 @@ def write_sfincs_jax_output_h5(
                     differentiable=differentiable,
                     emit=emit,
                     input_namelist=input_namelist,
+                    force_store_state=True if export_cfg is not None else None,
                 )
             finally:
                 if stream_transport_h5:

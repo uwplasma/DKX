@@ -159,6 +159,7 @@ def test_pas_tokamak_gpu_policy_handles_invalid_env_bounds(monkeypatch) -> None:
         has_collisionless=True,
     )
 
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MIN", "1000")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "bad")
     assert not v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
         has_pas=True,
@@ -181,7 +182,7 @@ def test_pas_tokamak_gpu_policy_handles_invalid_env_bounds(monkeypatch) -> None:
         has_fp=False,
         backend="gpu",
         tokamak_like=True,
-        active_size=500,
+        active_size=1500,
         er_abs=1.0e-2,
         schur_er_min=1.0e-12,
         has_magdrift=False,

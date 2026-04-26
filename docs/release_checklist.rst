@@ -16,8 +16,8 @@ On the current ``main`` branch, `sfincs_jax` can claim:
 
 The authoritative release-facing artifacts for this state are:
 
-- ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix``
-- ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem``
+- ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
+- ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``
 
 What should still be stated carefully:
 
@@ -67,13 +67,14 @@ Release-facing full suite run (vendored upstream inputs):
    python scripts/run_scaled_example_suite.py \
      --examples-root examples/sfincs_examples \
      --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
-     --fortran-exe /Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs \
-     --out-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+     --reference-results-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+     --out-root tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106 \
      --scale-factor 1.0 \
      --runtime-target-basis fortran \
      --fortran-min-runtime-s 0.0 \
      --runtime-adjustment-iters 0 \
-     --runtime-baseline-report tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json
+     --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+     --jax-profile-marks on
 
 Each suite run now writes:
 
@@ -92,12 +93,12 @@ Manual audit commands:
 .. code-block:: bash
 
    python scripts/audit_suite_output_keys.py \
-     --suite-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+     --suite-root tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106 \
      --fail-on-missing
 
    python scripts/audit_suite_runtime_drift.py \
-     --baseline-report tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json \
-     --candidate-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+     --baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+     --candidate-report tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/suite_report.json \
      --threshold-ratio 1.25 \
      --min-baseline-runtime-s 1.0
 

@@ -1,7 +1,7 @@
-"""SFINCS (v3) port to JAX.
+"""Differentiable neoclassical transport solvers and SFINCS-style outputs in JAX.
 
-This repository is Fortran-reference-first: we start by matching the Fortran v3
-numerics and outputs for selected examples, then expand coverage over time.
+The public CLI and Python APIs are maintained as standalone research tools while
+retaining release-gated comparisons against SFINCS Fortran v3 for trust building.
 """
 
 from __future__ import annotations
@@ -163,4 +163,4 @@ __all__ = [
     "initialize_distributed_runtime_from_env",
 ]
 
-__version__ = "1.0.5"
+__version__ = "1.0.6"

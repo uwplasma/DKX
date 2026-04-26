@@ -3,42 +3,42 @@
     {
       "centered_finite_difference_solve_count_model": 2,
       "implicit_solve_count_model": 2,
-      "measured_single_gradient_runtime_s": 4.781511667009909,
-      "measured_single_objective_runtime_s": 1.5938372223366362,
+      "measured_single_gradient_runtime_s": 5.3859148749907035,
+      "measured_single_objective_runtime_s": 1.7953049583302345,
       "n_parameters": 1,
-      "projected_finite_difference_runtime_s": 3.1876744446732723
+      "projected_finite_difference_runtime_s": 3.590609916660469
     },
     {
       "centered_finite_difference_solve_count_model": 6,
       "implicit_solve_count_model": 2,
-      "measured_single_gradient_runtime_s": 4.781511667009909,
-      "measured_single_objective_runtime_s": 1.5938372223366362,
+      "measured_single_gradient_runtime_s": 5.3859148749907035,
+      "measured_single_objective_runtime_s": 1.7953049583302345,
       "n_parameters": 3,
-      "projected_finite_difference_runtime_s": 9.563023334019817
+      "projected_finite_difference_runtime_s": 10.771829749981407
     },
     {
       "centered_finite_difference_solve_count_model": 20,
       "implicit_solve_count_model": 2,
-      "measured_single_gradient_runtime_s": 4.781511667009909,
-      "measured_single_objective_runtime_s": 1.5938372223366362,
+      "measured_single_gradient_runtime_s": 5.3859148749907035,
+      "measured_single_objective_runtime_s": 1.7953049583302345,
       "n_parameters": 10,
-      "projected_finite_difference_runtime_s": 31.876744446732722
+      "projected_finite_difference_runtime_s": 35.90609916660469
     },
     {
       "centered_finite_difference_solve_count_model": 60,
       "implicit_solve_count_model": 2,
-      "measured_single_gradient_runtime_s": 4.781511667009909,
-      "measured_single_objective_runtime_s": 1.5938372223366362,
+      "measured_single_gradient_runtime_s": 5.3859148749907035,
+      "measured_single_objective_runtime_s": 1.7953049583302345,
       "n_parameters": 30,
-      "projected_finite_difference_runtime_s": 95.63023334019817
+      "projected_finite_difference_runtime_s": 107.71829749981407
     },
     {
       "centered_finite_difference_solve_count_model": 200,
       "implicit_solve_count_model": 2,
-      "measured_single_gradient_runtime_s": 4.781511667009909,
-      "measured_single_objective_runtime_s": 1.5938372223366362,
+      "measured_single_gradient_runtime_s": 5.3859148749907035,
+      "measured_single_objective_runtime_s": 1.7953049583302345,
       "n_parameters": 100,
-      "projected_finite_difference_runtime_s": 318.7674444673272
+      "projected_finite_difference_runtime_s": 359.0609916660469
     }
   ],
   "finite_difference_sweep": [
@@ -92,7 +92,7 @@
       -0.18148733662570746
     ],
     "gradient_relative_error": 1.895064628198389e-10,
-    "gradient_runtime_s": 0.9663129579857923,
+    "gradient_runtime_s": 1.0084657499974128,
     "harmonic_labels": [
       "(m=0,n=1)",
       "(m=1,n=1)",
@@ -2164,7 +2164,7 @@
       "autodiff_gradient": -1.7619863922089865,
       "finite_difference_eps": 1e-06,
       "finite_difference_gradient": -1.76198639068037,
-      "gradient_runtime_s": 1.0900545839976985,
+      "gradient_runtime_s": 1.108185749995755,
       "kind": "well_conditioned_custom_linear_solve",
       "name": "dense_4x4_gmres",
       "objective": 1.0957315379496275,
@@ -2180,7 +2180,7 @@
       "autodiff_gradient": -1.7619863922089785,
       "finite_difference_eps": 1e-06,
       "finite_difference_gradient": -1.7619863922346823,
-      "gradient_runtime_s": 0.1655146249977406,
+      "gradient_runtime_s": 0.17169887499767356,
       "kind": "well_conditioned_custom_linear_solve",
       "name": "dense_4x4_bicgstab",
       "objective": 1.0957315379496233,
@@ -2196,7 +2196,7 @@
       "autodiff_gradient": -0.0019052172736084398,
       "finite_difference_eps": 1e-05,
       "finite_difference_gradient": -0.0019053107159998802,
-      "gradient_runtime_s": 4.781511667009909,
+      "gradient_runtime_s": 5.3859148749907035,
       "input": "tests/ref/pas_1species_PAS_noEr_tiny_scheme5.input.namelist",
       "kind": "sfincs_full_system_custom_linear_solve",
       "name": "sfincs_full_system_shift_gmres",
