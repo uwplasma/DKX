@@ -101,8 +101,8 @@ Current scope limits
 
 - The release-facing parity claim is the current full example-suite audit:
 
-  - ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix``
-  - ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem``
+  - ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
+  - ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``
 
   The older reduced-suite artifacts remain useful for debugging, fixture history, and faster local
   triage, but they are no longer the primary release status.
@@ -143,10 +143,10 @@ Release-facing parity status (source of truth)
 
 The release-facing parity inventory is the full current example-suite audit:
 
-- ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json``
-- ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem/suite_report.json``
-- ``tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_output_key_coverage_summary.json``
-- ``tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem/suite_output_key_coverage_summary.json``
+- ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/suite_report.json``
+- ``tests/scaled_example_suite_release_gpu_2026-04-25_v106/suite_report.json``
+- ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/suite_output_key_coverage_summary.json``
+- ``tests/scaled_example_suite_release_gpu_2026-04-25_v106/suite_output_key_coverage_summary.json``
 
 Use these artifacts for README and release claims. The reduced upstream parity inventory remains
 useful for faster debugging and historical comparison:
@@ -163,20 +163,21 @@ Regenerate the full release-facing suite:
    python scripts/run_scaled_example_suite.py \
      --examples-root examples/sfincs_examples \
      --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
-     --fortran-exe /Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs \
-     --out-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+     --reference-results-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+     --out-root tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106 \
      --scale-factor 1.0 \
      --runtime-target-basis fortran \
      --fortran-min-runtime-s 0.0 \
      --runtime-adjustment-iters 0 \
-     --runtime-baseline-report tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json
+     --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+     --jax-profile-marks on
 
 After a suite refresh, verify the structural output coverage explicitly:
 
 .. code-block:: bash
 
    python scripts/audit_suite_output_keys.py \
-     --suite-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+     --suite-root tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106 \
      --fail-on-missing
 
 When refreshing a frozen CPU lane, compare runtime against the previously promoted lane:
@@ -184,8 +185,8 @@ When refreshing a frozen CPU lane, compare runtime against the previously promot
 .. code-block:: bash
 
    python scripts/audit_suite_runtime_drift.py \
-     --baseline-report tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json \
-     --candidate-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+     --baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+     --candidate-report tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/suite_report.json \
      --threshold-ratio 1.25 \
      --min-baseline-runtime-s 1.0
 
