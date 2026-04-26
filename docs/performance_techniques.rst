@@ -905,8 +905,8 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_DKES_XBLOCK_TZ_SMALL_MAX`` (DKES PAS only: cap on dense xblock_tz base; default matches ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX``)
 - ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_DKES_CPU_PAS_TZ_ACTIVE_MAX`` and ``SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_DKES_GPU_PAS_TZ_ACTIVE_MAX`` (PAS DKES only: prefer the structured ``pas_tz`` angular block above this backend-specific angular-block size and below this active-DOF cap; defaults ``950`` and ``15000``)
 - ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX`` (CPU full-trajectory PAS only: prefer ``pas_tz`` over Schur for bounded geometryScheme=11 cases; defaults ``19``, ``950``, and ``15000``)
-- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL`` (bounded one-GPU tokamak PAS+Er only: default tight-GMRES tolerance ``1e-8``; ``0`` disables the tightening; legacy ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted)
-- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX`` (bounded one-GPU tokamak PAS+Er only: opt-in cap for the older ``xblock_tz`` branch; default ``0`` disables it)
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL`` (bounded one-GPU tokamak PAS+Er only: default tight-GMRES tolerance ``1e-8`` for cases below the ``xblock_tz`` active-size window; ``0`` disables the tightening; legacy ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` is accepted)
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MIN`` / ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX`` (bounded one-GPU tokamak PAS+Er only: default ``1000`` / ``8000`` active-DOF window for the structured ``xblock_tz`` branch)
 - ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ`` and
   ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_*`` (geometryScheme=4 PAS no-Er
   memory policy: prefer top-level ``pas_tz`` over Schur; default on for the

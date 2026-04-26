@@ -493,20 +493,19 @@ def test_pas_tokamak_gpu_xblock_preferred_only_for_small_tokamak_blocks(monkeypa
         max_l=14,
         xblock_tz_limit=1200,
     )
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "12000")
     assert v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(
         has_pas=True,
         has_fp=False,
         backend="gpu",
         tokamak_like=True,
-        active_size=245,
+        active_size=2650,
         er_abs=1.0e-2,
         schur_er_min=1.0e-12,
         has_magdrift=False,
         has_collisionless=True,
-        n_theta=10,
+        n_theta=15,
         n_zeta=1,
-        max_l=14,
+        max_l=31,
         xblock_tz_limit=1200,
     )
     assert not v3_driver._rhs1_pas_tokamak_gpu_xblock_preferred(

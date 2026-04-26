@@ -6550,3 +6550,48 @@ Current state:
 - `fp_tzfft`, `xmg`, and Schwarz remain candidate preconditioners; they are not
   promoted to W7-X defaults because they still do not close the full point
   without sparse-direct rescue.
+
+### 20.23 v1.0.6 release-candidate parity, performance, and artifact refresh
+
+Scope:
+
+- Regenerate the release-facing CPU/GPU example-suite comparisons, README table,
+  documentation references, and publication plots before tagging the next
+  release.
+
+Implemented changes:
+
+- Fixed a RHSMode=2/3 output regression by retaining solved state vectors only
+  when needed: export-f requests now force state retention so `delta_f` and
+  `full_f` are written, while non-export transport diagnostics keep the default
+  state-retention policy.
+- Restored the fast one-GPU medium tokamak PAS+Er route by making bounded
+  GPU `xblock_tz` auto-promotion active for the default `1000..8000` active-DOF
+  window. Tiny one-species cases still use tight unpreconditioned GMRES.
+- Updated README/docs generator defaults and publication benchmark defaults to
+  the current release roots:
+  `tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106` and
+  `tests/scaled_example_suite_release_gpu_2026-04-25_v106`.
+
+Validation:
+
+- CPU profiled release suite: `39/39 parity_ok`, strict mismatches `0`, output
+  key coverage `missing_total=0`, runtime drift flags `0`, JAX RSS captured for
+  all 39 cases.
+- GPU profiled release suite on `office` with one visible GPU: `39/39
+  parity_ok`, strict mismatches `0`, output key coverage `missing_total=0`,
+  runtime drift flags `0`, JAX RSS captured for all 39 cases.
+- Focused regression tests passed for export-f low-memory transport output,
+  transport-matrix write-output, and GPU tokamak PAS auto-policy.
+
+Publication artifacts:
+
+- Regenerated `sfincs_jax_fortran_suite_benchmark_summary` from the profiled
+  release reports.
+- Regenerated the W7-X high-nu, autodiff sensitivity, Simakov-Helander,
+  high-collisionality trend, and validation-dashboard figures.
+
+Current release state:
+
+- Ready for final local CI-equivalent tests, docs build, package build, commit,
+  push, CI verification, tag `v1.0.6`, and GitHub/PyPI release.

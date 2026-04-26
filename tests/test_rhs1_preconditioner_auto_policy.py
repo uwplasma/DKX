@@ -605,16 +605,15 @@ def test_tokamak_pas_gpu_and_cpu_xblock_policies(monkeypatch) -> None:
         xblock_tz_limit=1200,
         **common,
     )
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", "12000")
+    medium_case = {**common, "active_size": 2650}
     assert rhs1_pas_tokamak_gpu_xblock_preferred(
         backend="gpu",
-        n_theta=10,
+        n_theta=15,
         n_zeta=1,
-        max_l=14,
+        max_l=31,
         xblock_tz_limit=1200,
-        **common,
+        **medium_case,
     )
-    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", raising=False)
     assert not rhs1_pas_tokamak_gpu_xblock_preferred(
         backend="cpu",
         n_theta=10,
