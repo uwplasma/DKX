@@ -324,16 +324,17 @@ Regenerate this block from the current `main` working tree with:
 python scripts/run_scaled_example_suite.py \
   --examples-root examples/sfincs_examples \
   --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
-  --fortran-exe /Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs \
-  --out-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+  --reference-results-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
+  --out-root tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106 \
   --scale-factor 1.0 \
   --runtime-target-basis fortran \
   --fortran-min-runtime-s 0.0 \
   --runtime-adjustment-iters 0 \
-  --runtime-baseline-report tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json
+  --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+  --jax-profile-marks on
 python scripts/generate_readme_fast_branch_audit.py \
-  --out-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
-  --gpu-out-root tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem
+  --out-root tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106 \
+  --gpu-out-root tests/scaled_example_suite_release_gpu_2026-04-25_v106
 ```
 
 The benchmark policy on `main` is:
@@ -349,13 +350,8 @@ keeps the GPU lane tied to a deterministic reference, and makes the additional e
 of the same artifact set as the standard suite.
 
 <!-- BEGIN FAST_BRANCH_AUDIT -->
-Current `main` CPU audit comes from `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix`.
-Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_recheck_gpu_frozen_2026-04-23_postruntimefix_mem`.
-The `HSX_PASCollisions_DKESTrajectories` CPU/GPU row,
-`HSX_PASCollisions_fullTrajectories` CPU row, and
-`tokamak_1species_PASCollisions_withEr_fullTrajectories` GPU row, and
-`geometryScheme4_2species_PAS_noEr` CPU/GPU row include the latest focused
-current-tip PAS reruns after the guarded PAS auto-selection updates.
+Current `main` CPU audit comes from `tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106`.
+Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_release_gpu_2026-04-25_v106`.
 
 - Recorded cases: `39/39`
 - Practical status counts: `parity_ok=39`
@@ -364,7 +360,7 @@ current-tip PAS reruns after the guarded PAS auto-selection updates.
 - GPU strict status counts: `parity_ok=39`
 - CPU output-key coverage: `missing_total=0, extra_total=70, audited_cases=39, skipped_cases=0`
 - GPU output-key coverage: `missing_total=0, extra_total=70, audited_cases=39, skipped_cases=0`
-- CPU runtime drift watchlist vs `tests/scaled_example_suite_fast_cpu_full_v7_refresh/suite_report.json`: none
+- CPU runtime drift watchlist vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`: none
 - GPU runtime drift watchlist vs `tests/scaled_example_suite_fast_gpu_full_v11_refresh/suite_report.json`: none
 - Resolution policy: `reference_first_runtime_window, scale_factor=1.0, runtime_basis=fortran, fortran_min=0.0, fortran_max=None, adjust_iters=0`
 - Remaining cases: none
@@ -378,45 +374,59 @@ Current mismatches:
 Full per-case runtime / memory table:
 | Case | Fortran CPU(s) | JAX CPU(s) | CPU x | JAX GPU(s) | GPU x | Fortran MB | JAX CPU MB | CPU MB x | JAX GPU MB | GPU MB x | CPU mismatch | GPU mismatch | CPU print | GPU print | CPU status | GPU status |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |
-| `HSX_FPCollisions_DKESTrajectories` | 29.664 | 3.280 | 0.11x | 5.099 | 0.17x | 103.0 | 510.3 | 4.95x | 919.8 | 8.93x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `HSX_FPCollisions_fullTrajectories` | 88.504 | 3.439 | 0.04x | 5.201 | 0.06x | 100.8 | 525.7 | 5.21x | 923.3 | 9.16x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `HSX_PASCollisions_DKESTrajectories` | 0.994 | 3.940 | 3.96x | 7.627 | 7.67x | 112.0 | 1019.2 | 9.10x | 1174.9 | 10.49x | 0/123 (strict 0/123) | 0/123 (strict 0/123) | 7/7 | 7/7 | parity_ok | parity_ok |
-| `HSX_PASCollisions_fullTrajectories` | 2.510 | 4.027 | 1.60x | 9.082 | 3.62x | 179.2 | 1384.1 | 7.72x | 2042.1 | 11.40x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `additional_examples` | 120.074 | 1.883 | 0.02x | 2.684 | 0.02x | 102.1 | 442.4 | 4.33x | 885.4 | 8.67x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `filteredW7XNetCDF_2species_magneticDrifts_noEr` | 89.052 | 2.198 | 0.02x | 3.034 | 0.03x | 103.2 | 501.3 | 4.86x | 899.3 | 8.71x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `filteredW7XNetCDF_2species_magneticDrifts_withEr` | 95.440 | 2.264 | 0.02x | 3.085 | 0.03x | 96.2 | 536.3 | 5.58x | 904.8 | 9.41x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `filteredW7XNetCDF_2species_noEr` | 128.508 | 1.930 | 0.02x | 2.886 | 0.02x | 100.3 | 471.2 | 4.70x | 893.5 | 8.91x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_1species_PAS_withEr_DKESTrajectories` | 1.365 | 2.967 | 2.17x | 4.750 | 3.48x | 127.3 | 1064.0 | 8.36x | 1254.4 | 9.86x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_PAS_noEr` | 0.953 | 1.962 | 2.06x | 4.774 | 5.01x | 162.7 | 1728.0 | 10.62x | 1817.0 | 11.17x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_noEr` | 139.240 | 1.932 | 0.01x | 2.830 | 0.02x | 92.2 | 483.2 | 5.24x | 912.7 | 9.89x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_noEr_withPhi1InDKE` | 293.275 | 2.256 | 0.01x | 3.339 | 0.01x | 100.6 | 506.0 | 5.03x | 943.0 | 9.37x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_noEr_withQN` | 146.734 | 1.985 | 0.01x | 3.134 | 0.02x | 95.1 | 482.3 | 5.07x | 931.0 | 9.79x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_withEr_fullTrajectories` | 58.053 | 2.032 | 0.04x | 3.084 | 0.05x | 113.4 | 498.4 | 4.40x | 908.4 | 8.01x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_withEr_fullTrajectories_withQN` | 211.358 | 2.195 | 0.01x | 3.436 | 0.02x | 98.8 | 512.4 | 5.18x | 932.6 | 9.44x | 0/251 (strict 0/251) | 0/251 (strict 0/251) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme5_3species_loRes` | 98.976 | 2.101 | 0.02x | 3.792 | 0.04x | 129.6 | 569.4 | 4.39x | 911.0 | 7.03x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `inductiveE_noEr` | 166.614 | 2.147 | 0.01x | 3.036 | 0.02x | 99.2 | 477.5 | 4.81x | 913.8 | 9.21x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme1` | 0.795 | 2.046 | 2.57x | 14.571 | 18.33x | 110.2 | 710.5 | 6.45x | 996.7 | 9.04x | 0/203 (strict 0/203) | 0/203 (strict 0/203) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme11` | 0.861 | 3.116 | 3.62x | 5.758 | 6.69x | 118.7 | 1201.2 | 10.12x | 1003.6 | 8.46x | 0/210 (strict 0/210) | 0/210 (strict 0/210) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme5_ASCII` | 1.052 | 1.518 | 1.44x | 4.296 | 4.08x | 142.1 | 506.5 | 3.56x | 989.0 | 6.96x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme5_netCDF` | 1.029 | 2.242 | 2.18x | 4.196 | 4.08x | 131.4 | 603.2 | 4.59x | 988.3 | 7.52x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `quick_2species_FPCollisions_noEr` | 166.945 | 2.097 | 0.01x | 2.784 | 0.02x | 97.1 | 478.7 | 4.93x | 913.3 | 9.40x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories` | 76.666 | 2.164 | 0.03x | 3.137 | 0.04x | 106.7 | 492.9 | 4.62x | 917.2 | 8.59x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` | 93.439 | 2.278 | 0.02x | 3.185 | 0.03x | 94.0 | 513.8 | 5.47x | 922.2 | 9.82x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` | 1.104 | 3.068 | 2.78x | 6.458 | 5.85x | 130.7 | 1477.5 | 11.30x | 1586.9 | 12.14x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` | 1.706 | 3.794 | 2.22x | 7.619 | 4.47x | 144.6 | 2298.6 | 15.90x | 2097.0 | 14.50x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr` | 160.856 | 1.774 | 0.01x | 2.380 | 0.01x | 93.2 | 380.8 | 4.09x | 859.5 | 9.22x | 0/188 (strict 0/188) | 0/188 (strict 0/188) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` | 259.575 | 2.422 | 0.01x | 3.340 | 0.01x | 89.6 | 474.3 | 5.29x | 933.1 | 10.42x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr_withQN` | 237.879 | 1.989 | 0.01x | 3.038 | 0.01x | 102.6 | 436.8 | 4.26x | 920.1 | 8.97x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_withEr_DKESTrajectories` | 155.955 | 1.987 | 0.01x | 2.683 | 0.02x | 103.1 | 442.7 | 4.29x | 907.2 | 8.80x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_withEr_fullTrajectories` | 154.953 | 2.099 | 0.01x | 3.038 | 0.02x | 101.1 | 459.1 | 4.54x | 911.8 | 9.02x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr` | 0.309 | 2.658 | 8.60x | 4.899 | 15.86x | 114.2 | 612.9 | 5.36x | 985.8 | 8.63x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr_Nx1` | 0.017 | 2.432 | 143.08x | 3.393 | 199.58x | 100.9 | 520.3 | 5.16x | 928.5 | 9.20x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr_withQN` | 0.888 | 2.316 | 2.61x | 3.439 | 3.87x | 120.9 | 526.1 | 4.35x | 987.1 | 8.17x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 0.017 | 3.410 | 200.59x | 3.249 | 191.12x | 102.0 | 628.3 | 6.16x | 922.3 | 9.04x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_noEr` | 0.331 | 4.004 | 12.10x | 4.649 | 14.04x | 123.6 | 2088.6 | 16.90x | 1148.7 | 9.29x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 1.330 | 3.611 | 2.72x | 7.722 | 5.81x | 121.8 | 1601.9 | 13.15x | 1245.1 | 10.22x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `transportMatrix_geometryScheme11` | 0.025 | 1.806 | 72.23x | 3.289 | 131.57x | 102.6 | 440.9 | 4.30x | 919.1 | 8.96x | 0/194 (strict 0/194) | 0/194 (strict 0/194) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `transportMatrix_geometryScheme2` | 0.031 | 1.880 | 60.64x | 3.389 | 109.31x | 100.5 | 436.8 | 4.35x | 918.1 | 9.14x | 0/194 (strict 0/194) | 0/194 (strict 0/194) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `HSX_FPCollisions_DKESTrajectories` | 29.664 | 3.060 | 0.10x | 5.152 | 0.17x | 103.0 | 496.9 | 4.82x | 919.3 | 8.92x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `HSX_FPCollisions_fullTrajectories` | 88.504 | 3.054 | 0.03x | 5.152 | 0.06x | 100.8 | 506.8 | 5.03x | 924.7 | 9.17x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `HSX_PASCollisions_DKESTrajectories` | 0.994 | 3.951 | 3.97x | 6.508 | 6.55x | 112.0 | 1146.3 | 10.23x | 1183.5 | 10.56x | 0/123 (strict 0/123) | 0/123 (strict 0/123) | 7/7 | 7/7 | parity_ok | parity_ok |
+| `HSX_PASCollisions_fullTrajectories` | 2.510 | 3.724 | 1.48x | 9.684 | 3.86x | 179.2 | 1441.6 | 8.04x | 2058.6 | 11.49x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `additional_examples` | 120.074 | 1.733 | 0.01x | 2.682 | 0.02x | 102.1 | 429.2 | 4.20x | 884.3 | 8.66x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `filteredW7XNetCDF_2species_magneticDrifts_noEr` | 89.052 | 2.069 | 0.02x | 3.035 | 0.03x | 103.2 | 481.3 | 4.66x | 898.4 | 8.70x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `filteredW7XNetCDF_2species_magneticDrifts_withEr` | 95.440 | 2.011 | 0.02x | 3.188 | 0.03x | 96.2 | 512.0 | 5.32x | 904.6 | 9.40x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `filteredW7XNetCDF_2species_noEr` | 128.508 | 1.550 | 0.01x | 2.785 | 0.02x | 100.3 | 457.0 | 4.56x | 892.7 | 8.90x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `geometryScheme4_1species_PAS_withEr_DKESTrajectories` | 1.365 | 2.209 | 1.62x | 4.851 | 3.55x | 127.3 | 1080.1 | 8.49x | 1255.6 | 9.86x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `geometryScheme4_2species_PAS_noEr` | 0.953 | 2.622 | 2.75x | 5.807 | 6.09x | 162.7 | 1808.8 | 11.12x | 1816.8 | 11.17x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `geometryScheme4_2species_noEr` | 139.240 | 1.733 | 0.01x | 2.885 | 0.02x | 92.2 | 468.0 | 5.07x | 913.3 | 9.90x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `geometryScheme4_2species_noEr_withPhi1InDKE` | 293.275 | 1.936 | 0.01x | 3.491 | 0.01x | 100.6 | 480.9 | 4.78x | 942.1 | 9.36x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `geometryScheme4_2species_noEr_withQN` | 146.734 | 1.769 | 0.01x | 3.136 | 0.02x | 95.1 | 468.1 | 4.92x | 930.2 | 9.79x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `geometryScheme4_2species_withEr_fullTrajectories` | 58.053 | 1.710 | 0.03x | 2.832 | 0.05x | 113.4 | 475.5 | 4.19x | 907.7 | 8.01x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `geometryScheme4_2species_withEr_fullTrajectories_withQN` | 211.358 | 1.889 | 0.01x | 3.287 | 0.02x | 98.8 | 486.4 | 4.92x | 932.5 | 9.44x | 0/251 (strict 0/251) | 0/251 (strict 0/251) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `geometryScheme5_3species_loRes` | 98.976 | 1.615 | 0.02x | 3.942 | 0.04x | 129.6 | 540.3 | 4.17x | 911.1 | 7.03x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `inductiveE_noEr` | 166.614 | 1.644 | 0.01x | 3.037 | 0.02x | 99.2 | 468.4 | 4.72x | 912.5 | 9.20x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `monoenergetic_geometryScheme1` | 0.795 | 1.924 | 2.42x | 12.959 | 16.30x | 110.2 | 704.0 | 6.39x | 995.1 | 9.03x | 0/203 (strict 0/203) | 0/203 (strict 0/203) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `monoenergetic_geometryScheme11` | 0.861 | 2.853 | 3.31x | 5.705 | 6.63x | 118.7 | 1205.2 | 10.16x | 1003.1 | 8.45x | 0/210 (strict 0/210) | 0/210 (strict 0/210) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `monoenergetic_geometryScheme5_ASCII` | 1.052 | 1.678 | 1.59x | 4.347 | 4.13x | 142.1 | 497.0 | 3.50x | 989.4 | 6.96x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `monoenergetic_geometryScheme5_netCDF` | 1.029 | 1.884 | 1.83x | 4.446 | 4.32x | 131.4 | 533.7 | 4.06x | 988.5 | 7.52x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `quick_2species_FPCollisions_noEr` | 166.945 | 1.531 | 0.01x | 2.836 | 0.02x | 97.1 | 459.3 | 4.73x | 913.2 | 9.40x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories` | 76.666 | 1.653 | 0.02x | 3.081 | 0.04x | 106.7 | 479.6 | 4.49x | 915.8 | 8.58x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` | 93.439 | 1.767 | 0.02x | 3.286 | 0.04x | 94.0 | 491.9 | 5.24x | 920.3 | 9.80x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` | 1.104 | 2.658 | 2.41x | 6.606 | 5.98x | 130.7 | 1458.0 | 11.16x | 1587.7 | 12.15x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` | 1.706 | 2.768 | 1.62x | 7.363 | 4.32x | 144.6 | 1482.2 | 10.25x | 2097.7 | 14.51x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_noEr` | 160.856 | 1.395 | 0.01x | 2.530 | 0.02x | 93.2 | 372.9 | 4.00x | 860.4 | 9.23x | 0/188 (strict 0/188) | 0/188 (strict 0/188) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` | 259.575 | 1.783 | 0.01x | 3.442 | 0.01x | 89.6 | 450.1 | 5.02x | 932.9 | 10.41x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_noEr_withQN` | 237.879 | 1.508 | 0.01x | 2.886 | 0.01x | 102.6 | 421.5 | 4.11x | 918.4 | 8.95x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_withEr_DKESTrajectories` | 155.955 | 1.510 | 0.01x | 2.937 | 0.02x | 103.1 | 431.4 | 4.18x | 905.7 | 8.79x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_withEr_fullTrajectories` | 154.953 | 1.623 | 0.01x | 3.036 | 0.02x | 101.1 | 437.6 | 4.33x | 911.1 | 9.01x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_noEr` | 0.309 | 2.098 | 6.79x | 4.846 | 15.68x | 114.2 | 579.0 | 5.07x | 984.9 | 8.62x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_noEr_Nx1` | 0.017 | 1.843 | 108.41x | 3.484 | 204.96x | 100.9 | 507.6 | 5.03x | 929.4 | 9.21x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_noEr_withQN` | 0.888 | 1.977 | 2.23x | 3.388 | 3.82x | 120.9 | 533.7 | 4.42x | 987.8 | 8.17x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 0.017 | 2.770 | 162.92x | 3.792 | 223.03x | 102.0 | 609.1 | 5.97x | 923.3 | 9.05x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_2species_PASCollisions_noEr` | 0.331 | 2.436 | 7.36x | 4.698 | 14.19x | 123.6 | 863.5 | 6.99x | 1148.7 | 9.29x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 1.330 | 3.247 | 2.44x | 7.315 | 5.50x | 121.8 | 1607.5 | 13.19x | 1246.0 | 10.23x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `transportMatrix_geometryScheme11` | 0.025 | 1.582 | 63.28x | 3.191 | 127.62x | 102.6 | 438.8 | 4.28x | 925.9 | 9.02x | 0/194 (strict 0/194) | 0/194 (strict 0/194) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `transportMatrix_geometryScheme2` | 0.031 | 1.576 | 50.85x | 3.188 | 102.83x | 100.5 | 436.4 | 4.34x | 924.7 | 9.20x | 0/194 (strict 0/194) | 0/194 (strict 0/194) | 9/9 | 9/9 | parity_ok | parity_ok |
+
+Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
+- `monoenergetic_geometryScheme5_ASCII`: 3.5s -> 1.7s (delta=1.8s)
+- `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.4s (delta=1.6s)
+- `HSX_PASCollisions_fullTrajectories`: 5.3s -> 3.7s (delta=1.6s)
+- `HSX_PASCollisions_DKESTrajectories`: 5.5s -> 4.0s (delta=1.5s)
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: 3.8s -> 2.8s (delta=1.0s)
+
+Largest CPU memory improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
+- `monoenergetic_geometryScheme5_ASCII`: 3066.4 MB -> 497.0 MB (delta=2569.4 MB)
+- `tokamak_2species_PASCollisions_noEr`: 2088.6 MB -> 863.5 MB (delta=1225.1 MB)
+- `HSX_PASCollisions_DKESTrajectories`: 2053.6 MB -> 1146.3 MB (delta=907.3 MB)
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: 2298.6 MB -> 1482.2 MB (delta=816.4 MB)
+- `monoenergetic_geometryScheme5_netCDF`: 1162.7 MB -> 533.7 MB (delta=629.0 MB)
 <!-- END FAST_BRANCH_AUDIT -->
 
 ## Documentation

@@ -805,10 +805,11 @@ performance without changing the input file:
   one-GPU tokamak PAS+Er runs that use the tight unpreconditioned GMRES route
   (default: ``1e-8``; set ``0``/``false`` to disable). The legacy
   ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL`` name is still accepted.
-- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``: opt-in active-size
-  cap for the older GPU ``xblock_tz`` branch on bounded tokamak PAS+Er cases
-  (default: ``0``, disabled). Set this to a positive active-DOF cap only when a
-  local benchmark shows ``xblock_tz`` is preferable for that GPU/case.
+- ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MIN`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX``: active-size window
+  for bounded one-GPU tokamak PAS+Er auto-promotion to ``xblock_tz`` (defaults:
+  ``1000`` / ``8000``). Smaller cases use tight unpreconditioned GMRES because
+  setup dominates; medium cases use ``xblock_tz`` to avoid slow sparse fallback.
 - ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ``: enable the bounded
   geometryScheme=4 PAS no-Er memory policy that selects top-level ``pas_tz``
   instead of Schur (default: auto/on; set ``0``/``false`` to restore Schur).
