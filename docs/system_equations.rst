@@ -1,5 +1,20 @@
-System of equations
-===================
+Drift-kinetic equation and system of equations
+==============================================
+
+`sfincs_jax` starts from the radially local, steady drift-kinetic equation on one
+flux surface. The unknown is the non-adiabatic part of the species distribution,
+``f_s1``; outputs such as particle flux, heat flux, parallel flow, bootstrap-current
+proxies, NTV, and transport-matrix coefficients are velocity-space and flux-surface
+moments of this solved perturbation.
+
+The continuous equation is treated by expanding pitch-angle dependence in a
+Legendre representation, discretizing speed on the ``x`` grid, discretizing
+``theta``/``zeta`` on a periodic flux-surface grid, and applying finite-difference
+or spectral-style periodic stencils to the streaming, drift, and mirror terms. The
+collision block is either the pitch-angle-scattering model or the full linearized
+Fokker-Planck/Rosenbluth operator, depending on ``collisionOperator``. Only after
+this discretization does the problem become the block linear/nonlinear algebraic
+system described below.
 
 In its most general supported configuration, `sfincs_jax` solves a coupled system consisting of:
 
