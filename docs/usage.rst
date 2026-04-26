@@ -130,8 +130,13 @@ The repository ships a tiny runnable input for quick installation checks:
 
 The first command is the fast installation smoke test. It writes
 ``sfincsOutput.h5`` in the current working directory without a full solve. The
-second writes ``sfincsOutput_summary.png`` next to it unless ``--out`` is given
-explicitly.
+second writes ``sfincsOutput_summary.pdf`` next to it unless ``--out`` is given
+explicitly. Change only the output suffix to write NetCDF4 or NPZ instead:
+
+.. code-block:: bash
+
+   sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.nc --geometry-only
+   sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.npz --geometry-only
 
 Solving a supported v3 linear run (matrix-free)
 ------------------------------------------------------------
@@ -232,8 +237,9 @@ Relevant CLI flags:
   multi-host JAX distributed initialization from the CLI.
 - ``--shard-pad`` / ``--no-shard-pad``: control neutral padding when the sharded
   dimension is not divisible by the visible device count.
-- ``--plot /path/to/sfincsOutput.h5``: top-level shortcut for writing a compact
-  PNG summary from an existing output file.
+- ``--plot /path/to/sfincsOutput.h5``: top-level shortcut for writing a PDF
+  diagnostics panel from an existing output file. HDF5, NetCDF4, and NPZ outputs
+  are supported.
 
 For actual scaling measurements, prefer the benchmark scripts in
 ``examples/performance`` over ad hoc shell timing. They handle warmup, backend
@@ -857,8 +863,8 @@ performance without changing the input file:
   - Default: enabled automatically for RHSMode=1 multispecies cases.
   - ``0``/``false``: disable (use faster vectorized accumulation).
 
-Writing `sfincsOutput.h5` with `sfincs_jax`
---------------------------------------------------
+Writing output files with `sfincs_jax`
+--------------------------------------
 
 .. code-block:: bash
 
@@ -876,6 +882,12 @@ Writing `sfincsOutput.h5` with `sfincs_jax`
 .. code-block:: bash
 
    sfincs_jax write-output --input /path/to/input.namelist --out sfincsOutput.h5
+   sfincs_jax write-output --input /path/to/input.namelist --out sfincsOutput.nc
+   sfincs_jax write-output --input /path/to/input.namelist --out sfincsOutput.npz
+
+The suffix selects the writer: ``.h5``/``.hdf5`` for Fortran-compatible HDF5,
+``.nc``/``.netcdf`` for NetCDF4, and ``.npz`` for a fast uncompressed NumPy
+archive. The solve and diagnostics are identical across these output formats.
 
 .. code-block:: bash
 
@@ -900,6 +912,18 @@ Writing `sfincsOutput.h5` with `sfincs_jax`
    write_sfincs_jax_output_h5(
        input_namelist=Path("input.namelist"),
        output_path=Path("sfincsOutput.h5"),
+   )
+
+.. code-block:: python
+
+   write_sfincs_jax_output_h5(
+       input_namelist=Path("input.namelist"),
+       output_path=Path("sfincsOutput.nc"),
+   )
+
+   write_sfincs_jax_output_h5(
+       input_namelist=Path("input.namelist"),
+       output_path=Path("sfincsOutput.npz"),
    )
 
 .. code-block:: python
@@ -942,8 +966,8 @@ Inspect results immediately (without reading H5 back from disk):
    print(out_path)
    print(results["Ntheta"])
 
-When an equilibrium override is used, the embedded ``input.namelist`` dataset in
-``sfincsOutput.h5`` is patched to reflect the effective file path so downstream
+When an equilibrium override is used, the embedded ``input.namelist`` dataset or
+variable in the output file is patched to reflect the effective file path so downstream
 diagnostics and bug reports see the actual run configuration.
 
 Silence stdout (useful for batch runs):
