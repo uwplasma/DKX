@@ -102,6 +102,18 @@ tests are ``tests/test_generate_high_collisionality_trend_proxy.py`` and
 benchmark figure is protected by
 ``tests/test_generate_fortran_suite_benchmark_summary.py``.
 
+Output-normalization gates
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The output layer also has physics-aware tests that avoid a full solve. In
+``tests/test_output_coordinate_physics_gates.py``, a frozen multi-species output
+fixture is checked for the radial-coordinate chain rules used when plotting
+neoclassical particle, heat, and momentum fluxes versus ``psiHat``, ``psiN``,
+``rHat``, and ``rN``. The same file checks density and temperature-gradient
+conversion consistency. These gates are cheap enough for CI and catch a common
+class of manuscript-facing mistakes: a plot can look reasonable while using an
+inconsistent radial normalization.
+
 Full suite and release checks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

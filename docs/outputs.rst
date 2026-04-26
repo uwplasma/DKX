@@ -1,9 +1,17 @@
-Outputs (sfincsOutput.h5)
-=========================
+Outputs (HDF5, NetCDF4, and NPZ)
+================================
 
-`sfincs_jax` writes results to an HDF5 file named ``sfincsOutput.h5``. The file layout
-is designed to remain compatible with the established SFINCS-style postprocessing
-ecosystem while also serving as the native public results format of `sfincs_jax`.
+`sfincs_jax` writes results to the format selected by the output filename:
+
+- ``.h5`` / ``.hdf5``: Fortran-compatible HDF5, the parity and regression-test default.
+- ``.nc`` / ``.netcdf``: NetCDF4, useful for xarray, climate/space-physics tooling,
+  and long-lived metadata-aware archives.
+- ``.npz``: fast uncompressed NumPy archive, useful for lightweight Python workflows
+  and rapid local sweeps.
+
+The HDF5 layout is designed to remain compatible with the established SFINCS-style
+postprocessing ecosystem while also serving as the native public results format of
+`sfincs_jax`.
 
 Writing output with `sfincs_jax`
 --------------------------------
@@ -14,6 +22,8 @@ CLI
 .. code-block:: bash
 
    sfincs_jax write-output --input input.namelist --out sfincsOutput.h5
+   sfincs_jax write-output --input input.namelist --out sfincsOutput.nc
+   sfincs_jax write-output --input input.namelist --out sfincsOutput.npz
 
 .. code-block:: bash
 
@@ -22,7 +32,7 @@ CLI
      --out sfincsOutput.h5 \
      --wout-path /path/to/wout.nc
 
-For a compact summary figure from an existing output file:
+For a publication-style PDF diagnostics panel from an existing output file:
 
 .. code-block:: bash
 
@@ -30,10 +40,16 @@ For a compact summary figure from an existing output file:
 
 .. code-block:: bash
 
-   sfincs_jax plot-output --input-h5 sfincsOutput.h5 --out sfincsOutput_summary.png
+   sfincs_jax plot-output --input-h5 sfincsOutput.h5 --out sfincsOutput_summary.pdf
 
 Use ``--equilibrium-file`` for a generic Boozer or VMEC override, or ``--wout-path``
 as a compatibility alias for VMEC-centered workflows.
+
+To time writer/readback overhead independently from JAX compile and solve cost:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_output_formats.py --repeats 5
 
 For transport-matrix runs (``RHSMode=2`` or ``RHSMode=3``), the Fortran code loops over
 multiple right-hand sides (``whichRHS``) and assembles a ``transportMatrix`` in the output.
@@ -46,8 +62,10 @@ To replicate that end-to-end behavior in `sfincs_jax`, enable:
 In this mode, `sfincs_jax` also writes the RHSMode>1 diagnostics used by upstream scan plotting scripts:
 ``FSABFlow``, ``particleFlux_vm_psiHat``, and ``heatFlux_vm_psiHat``.
 
-The default output uses a Fortran-compatible array layout. This is useful both for
-existing postprocessing tools and for external validation with ``sfincs_jax compare-h5``.
+The default HDF5 output uses a Fortran-compatible array layout. This is useful both
+for existing postprocessing tools and for external validation with
+``sfincs_jax compare-h5``. NetCDF and NPZ use the same array layout policy so
+Python-level values match HDF5 readback.
 
 Python
 ^^^^^^
@@ -60,6 +78,19 @@ Python
    write_sfincs_jax_output_h5(
        input_namelist=Path("input.namelist"),
        output_path=Path("sfincsOutput.h5"),
+   )
+
+.. code-block:: python
+
+   # The suffix chooses the writer; the solve and diagnostics are unchanged.
+   write_sfincs_jax_output_h5(
+       input_namelist=Path("input.namelist"),
+       output_path=Path("sfincsOutput.nc"),
+   )
+
+   write_sfincs_jax_output_h5(
+       input_namelist=Path("input.namelist"),
+       output_path=Path("sfincsOutput.npz"),
    )
 
 .. code-block:: python
@@ -81,8 +112,9 @@ Python
    print(results["Ntheta"])
 
 When an equilibrium override is supplied, ``sfincs_jax`` updates the embedded
-``input.namelist`` dataset in ``sfincsOutput.h5`` to match the effective run
-configuration.
+``input.namelist`` dataset/variable in the output file to match the effective run
+configuration. Use ``sfincs_jax.io.read_sfincs_output_file(...)`` to load HDF5,
+NetCDF, or NPZ outputs with the same dictionary interface.
 
 Current coverage
 ----------------
@@ -124,13 +156,14 @@ There is also a multi-species regression against the established reference outpu
 Plotting output files
 ---------------------
 
-The CLI supports direct plotting from any existing ``sfincsOutput.h5``:
+The CLI supports direct plotting from any existing ``sfincsOutput.h5``,
+``sfincsOutput.nc``, or ``sfincsOutput.npz``:
 
 .. code-block:: bash
 
    sfincs_jax --plot sfincsOutput.h5
 
-By default this writes ``<input>_summary.png`` next to the HDF5 file. Use
+By default this writes ``<input>_summary.pdf`` next to the output file. Use
 ``plot-output --out`` to choose a different filename.
 
 For a minimal end-to-end plotting example from the repository, run:
@@ -139,12 +172,17 @@ For a minimal end-to-end plotting example from the repository, run:
 
    python examples/getting_started/plot_sfincs_output.py
 
-The script and the CLI both call the same plotting helper and write a compact
-PNG summary showing representative radial diagnostics and the geometry field
-``BHat(theta, zeta)``. The figure includes:
+The script and the CLI both call the same plotting helper. PDF output writes a
+multi-page panel following the diagnostics most often used in SFINCS and
+neoclassical-transport papers:
 
 - ``FSABFlow_vs_x``
+- ``particleFlux_vm_psiHat`` and ``particleFlux_vm_psiHat_vs_x``
 - ``heatFlux_vm_psiHat_vs_x``
+- ``momentumFlux_vm_psiHat``
+- ``NTV`` and ``NTVBeforeSurfaceIntegral``
+- ``densityPerturbation``, ``pressurePerturbation``, ``flow`` and ``jHat``
+- ``transportMatrix`` when present
 - ``BHat(theta, zeta)``
 
 .. note::

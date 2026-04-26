@@ -1,4 +1,4 @@
-"""Plot a few diagnostics from ``sfincsOutput.h5``."""
+"""Plot diagnostics from ``sfincsOutput.h5``/``.nc``/``.npz``."""
 
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ def main(argv: list[str] | None = None) -> int:
         "--input-h5",
         type=Path,
         default=repo_root / "tests" / "ref" / "output_scheme4_2species_quick.sfincsOutput.h5",
-        help="Path to sfincsOutput.h5 to visualize.",
+        help="Path to a sfincs_jax output file to visualize.",
     )
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(__file__).with_suffix("").parent / "output" / "sfincsOutput_summary.png",
-        help="Output PNG path.",
+        default=Path(__file__).with_suffix("").parent / "output" / "sfincsOutput_summary.pdf",
+        help="Output PDF/figure path.",
     )
     args = parser.parse_args(argv)
     out_path = plot_sfincs_output_summary(input_h5=args.input_h5, output_png=args.out)

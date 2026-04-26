@@ -12,7 +12,9 @@ from sfincs_jax.io import (
     _export_f_config,
     _legendre_matrix,
     read_sfincs_h5,
+    read_sfincs_output_file,
     write_sfincs_h5,
+    write_sfincs_output_file,
 )
 from sfincs_jax.namelist import Namelist
 
@@ -32,12 +34,36 @@ def test_write_sfincs_h5_roundtrip_and_overwrite_guard(tmp_path: Path) -> None:
     write_sfincs_h5(path=out, data=data, fortran_layout=False)
     loaded = read_sfincs_h5(out)
 
+    assert np.asarray(loaded["scalar"]).shape == ()
     np.testing.assert_allclose(loaded["scalar"], data["scalar"])
     np.testing.assert_allclose(loaded["vector"], data["vector"])
     np.testing.assert_allclose(loaded["matrix"], data["matrix"])
 
     with pytest.raises(FileExistsError):
         write_sfincs_h5(path=out, data=data, overwrite=False)
+
+
+@pytest.mark.parametrize("suffix", [".npz", ".nc"])
+def test_write_sfincs_output_file_roundtrips_npz_and_netcdf(tmp_path: Path, suffix: str) -> None:
+    out = tmp_path / f"mini{suffix}"
+    data = {
+        "scalar": np.asarray(3.0),
+        "vector": np.asarray([1.0, 2.0, 3.0]),
+        "matrix with spaces": np.asarray([[1.0, 2.0], [3.0, 4.0]]),
+        "input.namelist": "example = true",
+    }
+
+    write_sfincs_output_file(path=out, data=data, fortran_layout=False)
+    loaded = read_sfincs_output_file(out)
+
+    assert np.asarray(loaded["scalar"]).shape == ()
+    np.testing.assert_allclose(loaded["scalar"], data["scalar"])
+    np.testing.assert_allclose(loaded["vector"], data["vector"])
+    np.testing.assert_allclose(loaded["matrix with spaces"], data["matrix with spaces"])
+    assert str(loaded["input.namelist"]) == "example = true"
+
+    with pytest.raises(FileExistsError):
+        write_sfincs_output_file(path=out, data=data, fortran_layout=False, overwrite=False)
 
 
 def test_write_sfincs_h5_fortran_layout_reverses_axes_for_python_readback(tmp_path: Path) -> None:

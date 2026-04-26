@@ -12,7 +12,12 @@ from __future__ import annotations
 import os
 import tempfile
 
+# Suppress low-value XLA/PjRt C++ warning chatter by default. Users can still
+# override this before importing sfincs_jax if they need backend debug logs.
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
 _distributed_runtime_initialized = False
+
 
 def initialize_distributed_runtime_from_env() -> bool:
     """Best-effort JAX multi-host bootstrap from SFINCS_JAX_* env vars.
@@ -163,4 +168,4 @@ __all__ = [
     "initialize_distributed_runtime_from_env",
 ]
 
-__version__ = "1.0.6"
+__version__ = "1.0.7"
