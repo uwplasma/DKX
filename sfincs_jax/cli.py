@@ -300,13 +300,15 @@ def _cmd_run_fortran(args: argparse.Namespace) -> int:
 
 def _cmd_write_output(args: argparse.Namespace) -> int:
     t0 = _now()
-    from .io import write_sfincs_jax_output_h5  # noqa: PLC0415
+    from .io import _output_file_format, write_sfincs_jax_output_h5  # noqa: PLC0415
 
     nml = _nml_with_cli_equilibrium_override(read_sfincs_input(Path(args.input)), args)
     rhs_mode = int(nml.group("general").get("RHSMODE", 1))
+    output_format = _output_file_format(Path(args.out))
     _emit("################################################################", level=0, args=args)
     _emit(" sfincs_jax write-output", level=0, args=args)
     _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
+    _emit(f" output={Path(args.out).resolve()} format={output_format}", level=0, args=args)
     _emit_namelist_summary(nml=nml, args=args)
     _emit_runtime_info(args=args)
     _emit_parallel_runtime_info(args=args)
@@ -329,6 +331,7 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
         emit=lambda level, msg: _emit(msg, level=level, args=args),
         verbose=not bool(getattr(args, "quiet", False)),
     )
+    _emit(f" wrote output -> {out_path}", level=0, args=args)
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
 
@@ -393,7 +396,7 @@ def _default_plot_output_path(input_h5: Path) -> Path:
     stem = input_h5.stem
     if stem.endswith(".sfincsOutput"):
         stem = stem[: -len(".sfincsOutput")]
-    return input_h5.with_name(f"{stem}_summary.png")
+    return input_h5.with_name(f"{stem}_summary.pdf")
 
 
 def _cmd_plot_output(args: argparse.Namespace) -> int:
@@ -789,6 +792,7 @@ def _merge_global_cli_args(argv: list[str], args: argparse.Namespace) -> argpars
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the sfincs_jax command-line interface."""
     argv = list(sys.argv[1:]) if argv is None else list(argv)
     argv = _normalize_default_argv(argv)
     _maybe_reexec_for_early_runtime(argv)
@@ -869,11 +873,18 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--workdir", default=None, help="Directory to run in (default: temp dir)")
     p_run.set_defaults(func=_cmd_run_fortran)
 
-    p_out = sub.add_parser("write-output", help="Write a SFINCS-style sfincsOutput.h5 using sfincs_jax.")
+    p_out = sub.add_parser(
+        "write-output",
+        help="Write a SFINCS output file; the --out suffix selects HDF5, NetCDF4, or NPZ.",
+    )
     _add_common_cli_args(p_out)
     _add_parallel_cli_args(p_out)
     p_out.add_argument("--input", required=True, help="Path to input.namelist")
-    p_out.add_argument("--out", default="sfincsOutput.h5", help="Where to write sfincsOutput.h5")
+    p_out.add_argument(
+        "--out",
+        default="sfincsOutput.h5",
+        help="Output path. Suffix selects format: .h5/.hdf5, .nc/.netcdf, or .npz.",
+    )
     p_out.add_argument(
         "--no-fortran-layout",
         dest="fortran_layout",
@@ -936,14 +947,14 @@ def main(argv: list[str] | None = None) -> int:
     p_dump.add_argument("--keys-only", action="store_true", help="Only print dataset names")
     p_dump.set_defaults(func=_cmd_dump_h5)
 
-    p_plot = sub.add_parser("plot-output", help="Write a compact PNG summary from sfincsOutput.h5.")
+    p_plot = sub.add_parser("plot-output", help="Write a diagnostics PDF/figure panel from a SFINCS output file.")
     _add_common_cli_args(p_plot)
     _add_parallel_cli_args(p_plot)
-    p_plot.add_argument("--input-h5", required=True, help="Path to sfincsOutput.h5")
+    p_plot.add_argument("--input-h5", required=True, help="Path to sfincsOutput.h5/.nc/.npz")
     p_plot.add_argument(
         "--out",
         default=None,
-        help="Where to write the PNG summary (default: <input>_summary.png next to the HDF5 file).",
+        help="Where to write the diagnostics panel (default: <input>_summary.pdf next to the output file).",
     )
     p_plot.set_defaults(func=_cmd_plot_output)
 

@@ -24,8 +24,9 @@ cd sfincs_jax
 pip install -e ".[dev]"
 ```
 
-The standard install already includes `matplotlib`, so plotting examples and
-`sfincs_jax --plot` work without extra plotting dependencies.
+The standard install already includes `matplotlib` and `netCDF4`, so plotting
+examples, `sfincs_jax --plot`, and `--out sfincsOutput.nc` work without extra
+dependencies.
 
 For optimization examples that use `optax`:
 
@@ -45,9 +46,10 @@ Common entry points:
 
 - Write `sfincsOutput.h5` via Python: `examples/getting_started/write_sfincs_output_python.py`
 - Write `sfincsOutput.h5` via CLI: `examples/getting_started/write_sfincs_output_cli.py`
+- Write `.h5`, `.nc`, and `.npz`, then build a PDF diagnostics panel: `examples/getting_started/write_and_plot_multiple_formats.py`
 - Analytic tokamak example (`geometryScheme=1`): `examples/getting_started/write_sfincs_output_tokamak.py`
 - VMEC example (`geometryScheme=5`, `wout_path` override): `examples/getting_started/write_sfincs_output_vmec.py`
-- Plot `sfincsOutput.h5`: `examples/getting_started/plot_sfincs_output.py`
+- Plot `.h5`, `.nc`, or `.npz` output: `examples/getting_started/plot_sfincs_output.py`
 - Output parity vs Fortran fixture: `examples/parity/output_parity_vs_fortran_fixture.py`
 - Transport matrices (RHSMode 2/3): `examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py`
 - Transport matrices with Krylov recycling: `examples/transport/transport_matrix_recycle_demo.py`
@@ -56,6 +58,7 @@ Common entry points:
 - CPU sharding benchmark: `examples/performance/benchmark_sharded_solve_scaling.py --backend cpu --devices 1 2 4 8`
 - Transport-worker benchmark: `examples/performance/benchmark_transport_parallel_scaling.py --workers 1 2 4`
 - Two-GPU throughput benchmark: `examples/performance/benchmark_multi_gpu_case_throughput.py`
+- Output writer/readback benchmark: `examples/performance/benchmark_output_formats.py --repeats 5`
 
 ### Scaled upstream example sweep
 

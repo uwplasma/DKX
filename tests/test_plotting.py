@@ -15,6 +15,16 @@ def test_plot_sfincs_output_summary_writes_png(tmp_path: Path) -> None:
     assert output_png.exists()
 
 
+def test_plot_sfincs_output_summary_writes_pdf_panel(tmp_path: Path) -> None:
+    repo = Path(__file__).resolve().parents[1]
+    input_h5 = repo / "tests" / "ref" / "output_scheme4_2species_quick.sfincsOutput.h5"
+    output_pdf = tmp_path / "summary.pdf"
+    out_path = plot_sfincs_output_summary(input_h5=input_h5, output_png=output_pdf)
+    assert out_path == output_pdf.resolve()
+    assert output_pdf.exists()
+    assert output_pdf.stat().st_size > 1000
+
+
 def test_plot_sfincs_output_summary_accepts_geometry_only_output(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
     input_namelist = repo / "examples" / "getting_started" / "input.namelist"

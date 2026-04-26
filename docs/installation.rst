@@ -25,8 +25,9 @@ Documentation tooling
 Additional example-only packages
 --------------------------------
 
-The core install now includes ``matplotlib``, so plotting examples and
-``sfincs_jax --plot`` work without any extra plotting dependency group.
+The core install now includes ``matplotlib`` and ``netCDF4``, so plotting examples,
+``sfincs_jax --plot``, and ``--out sfincsOutput.nc`` work without any extra plotting
+or file-format dependency group.
 
 Some optimization examples use ``optax`` directly. Install it explicitly when
 you want those examples:
