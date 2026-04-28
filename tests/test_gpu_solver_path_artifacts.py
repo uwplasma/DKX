@@ -65,3 +65,14 @@ def test_bounded_gpu_pas_geometry11_defaults_to_pas_tz() -> None:
     # The tokamak PAS+Er probe timed out on the alternative paths, so its safe
     # bounded default remains Schur.
     assert audits["tokamak_2species_PASCollisions_withEr_fullTrajectories"]["last_preconditioner"] == "schur"
+
+
+def test_bounded_gpu_monoenergetic_geometry1_uses_dense_transport_gate() -> None:
+    report_rows = json.loads((_GPU_SUITE_ROOT / "suite_report.json").read_text())
+    reports = {str(row["case"]): row for row in report_rows}
+    row = reports["monoenergetic_geometryScheme1"]
+
+    assert row["n_mismatch_common"] == 0
+    assert row["strict_n_mismatch_common"] == 0
+    assert float(row["jax_logged_elapsed_s"]) < 4.0
+    assert float(row["jax_max_rss_mb"]) < 1100.0
