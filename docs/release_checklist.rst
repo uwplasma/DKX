@@ -17,7 +17,7 @@ On the current ``main`` branch, `sfincs_jax` can claim:
 The authoritative release-facing artifacts for this state are:
 
 - ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
-- ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``
+- ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28``
 
 What should still be stated carefully:
 

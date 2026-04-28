@@ -673,8 +673,12 @@ performance without changing the input file:
 - ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF``: for small full FP systems (``collisionOperator=0``),
   `sfincs_jax` now **defaults to a direct dense solve** instead of Krylov to match
   Fortran and avoid expensive fallback paths. This cutoff controls the active-size
-  threshold for that default (default: same as
-  ``SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF``).
+  threshold for that default (default: ``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF,
+  5000)``; set ``0`` to disable the initial dense path).
+- ``SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN``: minimum active size for the
+  default accelerator dense shortcut in full-FP RHSMode=1 cases (default: ``1000``).
+  This keeps tiny GPU fixtures on the lower-overhead matrix-free path while allowing
+  moderate GPU FP systems to skip expensive Krylov/preconditioner setup.
 - ``SFINCS_JAX_RHSMODE1_DENSE_FP_MAX``: override the RHSMode=1 dense fallback ceiling for
   full Fokker–Planck (``collisionOperator=0``) cases (default: ``5000``).
 - ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX``: override the RHSMode=1 dense fallback ceiling for
