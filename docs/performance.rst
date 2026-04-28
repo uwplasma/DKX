@@ -82,6 +82,11 @@ Fresh bounded GPU solver-path validation:
   SFINCS-paper geometry11 PAS row moved from about ``7.72 s`` / ``2098 MB`` to
   ``6.41 s`` / ``1609 MB``. Tokamak PAS+Er remains on Schur because forced
   ``xblock_tz``, unpreconditioned, and ``pas_hybrid`` probes all timed out.
+- The corrected RHSMode=3 variant benchmark now forces transport solves, not just
+  output-field generation. With that harness fix, bounded dense GPU transport is
+  enabled for the monoenergetic geometryScheme=1 row: the release artifact moved
+  from about ``13.04 s`` / ``996 MB`` to ``3.54 s`` / ``981 MB`` with zero
+  practical or strict mismatches.
 
 Recent current-tip PAS-DKES fix:
 

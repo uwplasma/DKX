@@ -481,6 +481,16 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_TRANSPORT_FORCE_DENSE``: force dense transport solves (debugging only; quadratic cost).
 
+- ``SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO``: bounded accelerator auto-enable
+  for dense RHSMode=3 monoenergetic transport solves that were measured faster
+  than the Krylov/sparse-rescue path (default: auto/on; set ``0``/``false`` to
+  disable).
+
+- ``SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_MAX`` /
+  ``SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_GEOMETRIES``: active-size and
+  geometry guards for that accelerator dense transport gate (defaults: ``2500``
+  and ``1``).
+
 - ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK``: allow dense transport fallback for small ill-conditioned
   cases (disabled by default). When enabled, set ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK_MAX`` to
   bound the system size.
