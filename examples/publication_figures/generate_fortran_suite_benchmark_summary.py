@@ -37,7 +37,7 @@ DEFAULT_CPU_REPORT = (
 DEFAULT_GPU_REPORT = (
     _REPO_ROOT
     / "tests"
-    / "scaled_example_suite_release_gpu_2026-04-25_v106"
+    / "scaled_example_suite_gpu_bounded_default_2026-04-28"
     / "suite_report.json"
 )
 DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifacts"

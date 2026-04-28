@@ -10,7 +10,7 @@ On the current ``main`` branch, the release-facing comparison is the full vendor
 example-suite audit:
 
 - CPU: ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
-- GPU: ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``
+- GPU: ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28``
 
 Those artifacts currently report:
 
@@ -32,7 +32,7 @@ The frozen reports also generate a publication-facing benchmark dashboard:
 
    Release benchmark summary generated from the profiled CPU/GPU suite reports. The
    current artifacts have median JAX/Fortran wall-clock ratios of about ``0.035x`` on
-   CPU and ``0.058x`` on GPU for the audited suite, while median maximum-RSS ratios are
+   CPU and ``0.059x`` on GPU for the audited suite, while median maximum-RSS ratios are
    about ``4.92x`` on CPU and ``9.20x`` on GPU because JAX/XLA keeps compiled kernels
    and device buffers resident. The top runtime and memory cases are recorded in
    ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``.

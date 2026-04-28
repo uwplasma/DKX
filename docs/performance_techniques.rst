@@ -801,7 +801,13 @@ For **small FP systems**, ``sfincs_jax`` now defaults to a direct dense solve
 instead of running GMRES first. This avoids JIT/Krylov overhead in cases where a
 direct solve is both faster and more robust for parity. The FP threshold is
 ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF`` (default:
-``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF, 2500)``).
+``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF, 5000)``). Setting this
+environment variable to ``0`` disables the initial dense shortcut on tight-memory
+hosts. On GPU/accelerator backends, the default dense shortcut also requires
+``active_size >= SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN`` (default:
+``1000``), because the validated GPU sweep showed tiny FP systems are faster on
+the existing matrix-free path while moderate FP systems avoid an expensive
+Krylov/preconditioner ladder.
 
 For **small PAS systems** (``constraintScheme=2``), dense solves are enabled up to
 ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX`` (default: ``2500``) to preserve parity, but

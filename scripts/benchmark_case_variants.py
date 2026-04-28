@@ -53,13 +53,92 @@ def _tail_text(value: str | bytes | None, limit: int) -> str:
 
 
 def _last_rhs1_preconditioner(stdout: str) -> str | None:
+    preconditioners = _rhs1_preconditioners(stdout)
+    return preconditioners[-1] if preconditioners else None
+
+
+def _rhs1_preconditioners(stdout: str) -> list[str]:
     marker = "building RHSMode=1 preconditioner="
-    for line in reversed(str(stdout).splitlines()):
+    values: list[str] = []
+    for line in str(stdout).splitlines():
         if marker not in line:
             continue
         value = line.split(marker, 1)[1].strip()
-        return value.split()[0] if value else None
-    return None
+        if value:
+            values.append(value.split()[0])
+    return values
+
+
+def _parse_profile_events(stdout: str) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    for line in str(stdout).splitlines():
+        if "profiling:" not in line:
+            continue
+        head, tail = line.split("profiling:", 1)
+        del head
+        parts = tail.strip().split()
+        if not parts:
+            continue
+        event_name = parts[0]
+        fields: dict[str, str] = {}
+        for part in parts[1:]:
+            if "=" not in part:
+                continue
+            key, value = part.split("=", 1)
+            fields[key.strip()] = value.strip()
+        total_raw = fields.get("total_s")
+        delta_raw = fields.get("delta_s", fields.get("dt_s"))
+        rss_raw = fields.get("rss_mb", "na")
+        if total_raw is None or delta_raw is None:
+            continue
+        event: dict[str, object] = {
+            "event": event_name,
+            "total_s": float(total_raw.replace("D", "E").replace("d", "e")),
+            "delta_s": float(delta_raw.replace("D", "E").replace("d", "e")),
+            "rss_mb": None if rss_raw.lower() == "na" else float(rss_raw.replace("D", "E").replace("d", "e")),
+        }
+        events.append(event)
+    return events
+
+
+def _profile_stage_durations(events: list[dict[str, object]]) -> dict[str, float]:
+    starts: dict[str, float] = {}
+    durations: dict[str, float] = {}
+    for event in events:
+        name = str(event["event"])
+        total_s = float(event["total_s"])
+        if name.endswith("_start"):
+            starts[name[: -len("_start")]] = total_s
+        elif name.endswith("_done"):
+            base = name[: -len("_done")]
+            start = starts.pop(base, None)
+            if start is not None:
+                durations[base] = round(durations.get(base, 0.0) + max(0.0, total_s - start), 6)
+    return durations
+
+
+def _solver_path_summary(stdout: str) -> dict[str, object]:
+    events = _parse_profile_events(stdout)
+    text = str(stdout)
+    return {
+        "preconditioners": _rhs1_preconditioners(text),
+        "profile_stage_durations_s": _profile_stage_durations(events),
+        "profile_peak_rss_mb": max(
+            (float(event["rss_mb"]) for event in events if event["rss_mb"] is not None),
+            default=None,
+        ),
+        "profile_events": events,
+        "used_dense_auto": "FP RHSMode=1 small system -> using dense solve" in text,
+        "used_dense_fallback": "rhs1_dense_fallback" in text,
+        "used_sparse_fallback": "rhs1_sparse_precond" in text or "host sparse LU direct fallback" in text,
+    }
+
+
+def _resource_maxrss_mb(raw_value: int, *, platform: str = sys.platform) -> float:
+    """Convert ``resource.ru_maxrss`` to MB on Linux and macOS."""
+    if str(platform).startswith("darwin"):
+        return float(raw_value) / (1024.0 * 1024.0)
+    return float(raw_value) / 1024.0
 
 
 def main() -> int:
@@ -80,6 +159,11 @@ def main() -> int:
         action="store_true",
         help="Use the differentiable implicit path. Default mirrors the CLI fast path.",
     )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Enable sfincs_jax profiling marks and include solver-stage timings/RSS in the JSON rows.",
+    )
     args = parser.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -95,7 +179,7 @@ def main() -> int:
         variants = [("default", {})] + variants
 
     child = r"""
-import json, os, resource, time
+import json, os, resource, sys, time
 from pathlib import Path
 from sfincs_jax.io import write_sfincs_jax_output_h5
 
@@ -104,7 +188,9 @@ out = Path(os.environ["CASE_OUTPUT"])
 t0 = time.perf_counter()
 write_sfincs_jax_output_h5(input_namelist=case, output_path=out, compute_solution=True)
 elapsed = time.perf_counter() - t0
-print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_kb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}))
+raw_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+rss_mb = raw_rss / (1024.0 * 1024.0) if sys.platform.startswith("darwin") else raw_rss / 1024.0
+print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_raw": raw_rss, "ru_maxrss_mb": rss_mb}))
 """
     differentiable_arg = "True" if args.differentiable else "False"
     child = child.replace(
@@ -123,6 +209,8 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_kb": resource.
             "SFINCS_JAX_IMPLICIT_SOLVE": "1" if args.differentiable else "0",
         }
     )
+    if args.profile:
+        base_env["SFINCS_JAX_PROFILE"] = "1"
 
     rows: list[dict[str, object]] = []
     with tempfile.TemporaryDirectory(prefix=f"{case_dir.name}_bench_") as td:
@@ -174,16 +262,27 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_kb": resource.
             result = json.loads(marker[len("@@RESULT@@") :])
             out_path = tmp / f"{name}.h5"
             outputs[name] = out_path
+            combined_log = f"{proc.stdout}\n{proc.stderr}"
             row.update(
                 {
                     "status": "ok",
                     "elapsed_s": round(float(result["elapsed_s"]), 3),
-                    "ru_maxrss_kb": int(result["ru_maxrss_kb"]),
-                    "rhs1_preconditioner": _last_rhs1_preconditioner(proc.stdout),
-                    "used_adaptive_pas_smoother": "adaptive PAS smoother" in proc.stdout,
-                    "used_pas_tokamak_theta": "preconditioner=pas_tokamak_theta" in proc.stdout,
-                    "used_lgmres": "solve method forced by env -> lgmres" in proc.stdout,
-                    "used_explicit_sparse_helper": "explicit sparse helper" in proc.stdout,
+                    "ru_maxrss_raw": int(result.get("ru_maxrss_raw", 0)),
+                    "ru_maxrss_mb": round(
+                        float(
+                            result.get(
+                                "ru_maxrss_mb",
+                                _resource_maxrss_mb(int(result.get("ru_maxrss_kb", 0))),
+                            )
+                        ),
+                        3,
+                    ),
+                    "rhs1_preconditioner": _last_rhs1_preconditioner(combined_log),
+                    "solver_path": _solver_path_summary(combined_log),
+                    "used_adaptive_pas_smoother": "adaptive PAS smoother" in combined_log,
+                    "used_pas_tokamak_theta": "preconditioner=pas_tokamak_theta" in combined_log,
+                    "used_lgmres": "solve method forced by env -> lgmres" in combined_log,
+                    "used_explicit_sparse_helper": "explicit sparse helper" in combined_log,
                 }
             )
             if have_reference:

@@ -41,6 +41,27 @@ def test_last_rhs1_preconditioner_parses_final_solver_line() -> None:
     assert module._last_rhs1_preconditioner("no preconditioner line") is None
 
 
+def test_solver_path_summary_parses_profile_marks_and_memory_units() -> None:
+    module = _load_benchmark_module()
+
+    stdout = "\n".join(
+        [
+            "profiling: rhs1_sparse_precond_build_start total_s=1.0 delta_s=0.2 rss_mb=500.0",
+            "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=theta_line (active-DOF)",
+            "profiling: rhs1_sparse_precond_build_done total_s=2.5 delta_s=1.5 rss_mb=900.0",
+            "host sparse LU direct fallback on backend=cpu",
+        ]
+    )
+    summary = module._solver_path_summary(stdout)
+
+    assert summary["preconditioners"] == ["theta_line"]
+    assert summary["profile_stage_durations_s"]["rhs1_sparse_precond_build"] == 1.5
+    assert summary["profile_peak_rss_mb"] == 900.0
+    assert summary["used_sparse_fallback"]
+    assert module._resource_maxrss_mb(1024 * 1024, platform="darwin") == 1.0
+    assert module._resource_maxrss_mb(1024, platform="linux") == 1.0
+
+
 def test_benchmark_case_variants_smoke(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
     source = repo / "tests" / "reduced_inputs" / "tokamak_1species_PASCollisions_noEr_Nx1.input.namelist"

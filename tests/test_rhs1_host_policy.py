@@ -7,6 +7,8 @@ import numpy as np
 from sfincs_jax.rhs1_host_policy import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,
+    rhs1_dense_auto_fp_accelerator_min,
+    rhs1_dense_auto_fp_cutoff,
     rhs1_dense_backend_allowed,
     rhs1_dense_fallback_max,
     rhs1_dense_krylov_allowed,
@@ -114,6 +116,37 @@ def test_rhs1_dense_fallback_max_respects_fp_pas_and_env_overrides(monkeypatch) 
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", "0")
     assert rhs1_dense_fallback_max(_op(has_fp=False, has_pas=True, constraint_scheme=2)) == 0
+
+
+def test_rhs1_dense_auto_fp_cutoff_matches_fallback_budget(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", raising=False)
+
+    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=5000) == 5000
+    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=3200) == 3200
+    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=9000) == 5000
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "2628")
+    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=5000) == 2628
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "0")
+    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=5000) == 0
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "not-an-int")
+    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=5000) == 5000
+
+
+def test_rhs1_dense_auto_fp_accelerator_min_is_tunable(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", raising=False)
+    assert rhs1_dense_auto_fp_accelerator_min() == 1000
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", "2400")
+    assert rhs1_dense_auto_fp_accelerator_min() == 2400
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", "-1")
+    assert rhs1_dense_auto_fp_accelerator_min() == 0
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", "bad")
+    assert rhs1_dense_auto_fp_accelerator_min() == 1000
 
 
 def test_rhs1_host_sparse_direct_and_pc_rescue_policy(monkeypatch) -> None:
