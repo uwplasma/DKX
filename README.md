@@ -428,7 +428,7 @@ Full per-case runtime / memory table:
 | `geometryScheme4_2species_withEr_fullTrajectories_withQN` | 211.358 | 1.889 | 0.01x | 3.087 | 0.01x | 98.8 | 486.4 | 4.92x | 932.7 | 9.44x | 0/251 (strict 0/251) | 0/251 (strict 0/251) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `geometryScheme5_3species_loRes` | 98.976 | 1.615 | 0.02x | 3.691 | 0.04x | 129.6 | 540.3 | 4.17x | 911.6 | 7.04x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `inductiveE_noEr` | 166.614 | 1.644 | 0.01x | 2.785 | 0.02x | 99.2 | 468.4 | 4.72x | 913.7 | 9.21x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme1` | 0.795 | 1.924 | 2.42x | 12.909 | 16.24x | 110.2 | 704.0 | 6.39x | 996.6 | 9.04x | 0/203 (strict 0/203) | 0/203 (strict 0/203) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `monoenergetic_geometryScheme1` | 0.795 | 1.924 | 2.42x | 3.541 | 4.45x | 110.2 | 704.0 | 6.39x | 981.0 | 8.90x | 0/203 (strict 0/203) | 0/203 (strict 0/203) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `monoenergetic_geometryScheme11` | 0.861 | 2.853 | 3.31x | 5.606 | 6.51x | 118.7 | 1205.2 | 10.16x | 1003.7 | 8.46x | 0/210 (strict 0/210) | 0/210 (strict 0/210) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `monoenergetic_geometryScheme5_ASCII` | 1.052 | 1.678 | 1.59x | 4.296 | 4.08x | 142.1 | 497.0 | 3.50x | 990.0 | 6.97x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `monoenergetic_geometryScheme5_netCDF` | 1.029 | 1.884 | 1.83x | 4.141 | 4.02x | 131.4 | 533.7 | 4.06x | 987.8 | 7.52x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
