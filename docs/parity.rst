@@ -102,7 +102,7 @@ Current scope limits
 - The release-facing parity claim is the current full example-suite audit:
 
   - ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
-  - ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``
+  - ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28``
 
   The older reduced-suite artifacts remain useful for debugging, fixture history, and faster local
   triage, but they are no longer the primary release status.
@@ -144,9 +144,9 @@ Release-facing parity status (source of truth)
 The release-facing parity inventory is the full current example-suite audit:
 
 - ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/suite_report.json``
-- ``tests/scaled_example_suite_release_gpu_2026-04-25_v106/suite_report.json``
+- ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28/suite_report.json``
 - ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/suite_output_key_coverage_summary.json``
-- ``tests/scaled_example_suite_release_gpu_2026-04-25_v106/suite_output_key_coverage_summary.json``
+- ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28/suite_output_key_coverage_summary.json``
 
 Use these artifacts for README and release claims. The reduced upstream parity inventory remains
 useful for faster debugging and historical comparison:
