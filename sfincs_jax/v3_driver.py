@@ -12923,6 +12923,7 @@ def solve_v3_full_system_linear_gmres(
         strong_preconditioner_reduced = None
         bicgstab_preconditioner_reduced = None
         pas_precond_force_collision = False
+        dense_matrix_cache: np.ndarray | None = None
         host_dense_shortcut = _rhsmode1_host_dense_shortcut_allowed(
             op=op,
             active_size=int(active_size),
@@ -14663,7 +14664,6 @@ def solve_v3_full_system_linear_gmres(
                 f"(est_mem={sparse_jax_est_mb:.1f} MB > max_mb={sparse_jax_max_mb:.1f})",
             )
 
-        dense_matrix_cache: np.ndarray | None = None
         host_sparse_direct_used = False
         precond_sparse_xblock_current = None
         explicit_fp_xblock_seed_used = False

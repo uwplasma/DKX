@@ -19,7 +19,7 @@ Current release snapshot
 The current ``main`` branch release artifacts are:
 
 - CPU: ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
-- GPU: ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``
+- GPU: ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28``
 
 These report:
 
@@ -39,7 +39,7 @@ The same reports are summarized by the checked-in publication benchmark artifact
   ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
 
 That artifact records median JAX/Fortran wall-clock ratios of about ``0.035x`` on CPU
-and ``0.058x`` on GPU for the frozen suite, with median maximum-RSS ratios of about
+and ``0.059x`` on GPU for the frozen suite, with median maximum-RSS ratios of about
 ``4.92x`` on CPU and ``9.20x`` on GPU. It also records the high-ratio tail
 explicitly, since a few tiny Fortran reference runs make wall-clock ratios look large
 even when the absolute JAX runtime remains only seconds.
@@ -58,8 +58,8 @@ reruns are:
 
 - CPU runtime: ``HSX_PASCollisions_fullTrajectories`` at ``4.027 s``
 - CPU memory: ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` at ``2298.6 MB``
-- GPU runtime: ``monoenergetic_geometryScheme1`` at ``14.571 s``
-- GPU memory: ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` at ``2097.0 MB``
+- GPU runtime: ``monoenergetic_geometryScheme1`` at ``12.909 s``
+- GPU memory: ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` at ``2097.6 MB``
 
 In other words, all examples run on CPU and GPU, but a handful of cases remain the clear optimization targets.
 
@@ -68,6 +68,13 @@ Recent current-tip GPU fixes that are now reflected in the release artifacts:
 - ``geometryScheme5_3species_loRes`` now takes the bounded host-dense shortcut on the small GPU full-FP branch and completed parity-clean in about ``3.99 s``, down from the older ``144.597 s`` artifact.
 - ``monoenergetic_geometryScheme5_ASCII`` now takes the bounded accelerator ``tzfft`` iterative path before any host sparse rescue on GPU and completed parity-clean in about ``3.94 s``.
 - ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` now skips an unnecessary sparse-ILU tail after a converged GPU ``schur`` accept and completed parity-clean in about ``7.42 s``.
+
+Fresh bounded GPU solver-path validation:
+
+- The ``2026-04-28`` one-GPU ``office`` pass rejected blanket accelerator dense auto-selection: it remained parity-clean, but regressed ``16`` tiny GPU suite cases and is therefore not the default.
+- The accepted policy enables accelerator dense auto-selection only for moderate full-FP RHSMode=1 systems above ``SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN``. The full 39-case GPU suite stayed ``39/39 parity_ok``, strict-clean, output-key complete, and runtime-drift clean against ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``.
+- The focused full-FP ``Ntheta=13, Nxi=40`` GPU repro now defaults to dense automatically at about ``2.794 s`` and ``1.04 GB`` RSS, compared with about ``9.539 s`` and ``2.14 GB`` for the forced Krylov path, with zero Fortran mismatches.
+- The focused ``Ntheta=13, Nxi=20`` repro also stays parity-clean and avoids the pathological forced-Krylov rescue path, which took about ``137.411 s`` on the same GPU.
 
 Recent current-tip PAS-DKES fix:
 
@@ -362,10 +369,13 @@ Solver defaults (Phi1 + sharding)
 - **Small FP dense defaults (RHSMode=1)**: for modest system sizes, `sfincs_jax`
   defaults to a direct dense solve for full Fokker–Planck systems to avoid expensive
   Krylov + fallback paths while matching v3 parity. The FP cutoff is
-  ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF`` (default: same as
-  ``SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF``). PAS uses Krylov by default to
-  preserve parity and can be forced into dense fallback by setting
-  ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX`` explicitly.
+  ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF`` (default:
+  ``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF, 5000)``). On accelerators, the
+  same shortcut is only automatic above
+  ``SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN`` (default: ``1000``), since the
+  current GPU suite shows tiny FP systems are faster on the lower-overhead
+  matrix-free path. PAS uses Krylov by default to preserve parity and can be
+  forced into dense fallback by setting ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX`` explicitly.
 - **Large FP stage-2 polish (RHSMode=1)**: for large full-FP systems, stage-2 GMRES
   polish remains enabled by default with a larger elapsed-time budget, so difficult
   high-resolution cases can converge without external reference overlays.

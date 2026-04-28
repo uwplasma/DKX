@@ -129,6 +129,36 @@ def rhs1_dense_fallback_max(op: Any) -> int:
     return max(base_max, dense_fp_max)
 
 
+def rhs1_dense_auto_fp_cutoff(*, dense_active_cutoff: int) -> int:
+    """Resolve the initial dense-solve cutoff for full-FP RHSMode=1 systems.
+
+    This is the pre-Krylov auto-selection threshold used by the CLI/output
+    writer. It intentionally matches the default full-FP dense fallback budget
+    (5000 active unknowns) so moderate FP systems do not first run through the
+    expensive Krylov/strong/sparse rescue ladder. Users may still disable the
+    initial dense path with ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF=0`` or lower it
+    for memory-constrained hosts.
+    """
+    raw = str(os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "")).strip()
+    if raw:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            pass
+    return min(max(0, int(dense_active_cutoff)), 5000)
+
+
+def rhs1_dense_auto_fp_accelerator_min() -> int:
+    """Minimum active size for default accelerator dense auto-selection.
+
+    Tiny GPU full-FP systems are usually faster on the existing matrix-free path
+    because dense assembly/solver setup dominates. Moderate systems can avoid the
+    expensive Krylov/preconditioner ladder, so enable accelerator dense auto only
+    above this floor unless the user explicitly overrides the solve method.
+    """
+    return max(0, _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", 1000))
+
+
 def rhs1_dense_krylov_allowed() -> bool:
     """Return whether dense Krylov fallback is enabled."""
     env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV")
@@ -232,6 +262,8 @@ __all__ = [
     "host_sparse_direct_refine_steps",
     "host_sparse_factor_dtype",
     "rhs1_dense_backend_allowed",
+    "rhs1_dense_auto_fp_cutoff",
+    "rhs1_dense_auto_fp_accelerator_min",
     "rhs1_dense_fallback_max",
     "rhs1_dense_krylov_allowed",
     "rhs1_explicit_sparse_host_direct_allowed",

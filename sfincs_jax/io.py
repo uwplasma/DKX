@@ -31,6 +31,11 @@ from .input_compat import (
 )
 from .namelist import Namelist, read_sfincs_input
 from .paths import resolve_existing_path
+from .rhs1_host_policy import (
+    rhs1_dense_auto_fp_accelerator_min,
+    rhs1_dense_auto_fp_cutoff,
+    rhs1_dense_backend_allowed,
+)
 from .solver_progress import format_duration, runtime_scale_hint
 from .vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 from .v3 import V3Grids, geometry_from_namelist, grids_from_namelist
@@ -2879,10 +2884,23 @@ def write_sfincs_jax_output_h5(
             dense_pas_cutoff = 2500
         dense_fp_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "").strip()
         try:
-            # Same motivation as PAS: avoid large transient dense allocations.
-            dense_fp_cutoff = int(dense_fp_env) if dense_fp_env else min(int(dense_active_cutoff), 2500)
+            # Full-FP moderate systems are often faster and lower-RSS with a direct
+            # dense solve than with the Krylov/strong/sparse rescue ladder. Keep the
+            # default synchronized with the dense fallback policy, while still
+            # allowing users to lower or disable this path for tight-memory hosts.
+            dense_fp_cutoff = (
+                max(0, int(dense_fp_env))
+                if dense_fp_env
+                else rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
+            )
         except ValueError:
-            dense_fp_cutoff = min(int(dense_active_cutoff), 2500)
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: invalid SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF; "
+                    "using default dense FP cutoff",
+                )
+            dense_fp_cutoff = rhs1_dense_auto_fp_cutoff(dense_active_cutoff=int(dense_active_cutoff))
         phys_params = nml.group("physicsParameters")
         use_dkes_val = (
             phys_params.get("useDKESExBDrift", None)
@@ -2905,11 +2923,12 @@ def write_sfincs_jax_output_h5(
         force_krylov = force_krylov_env in {"1", "true", "yes", "on"}
         dense_auto_ok = True
         dense_auto_backend = "unknown"
+        dense_auto_accelerator_fp_window = False
         try:
             import jax
 
             dense_auto_backend = jax.default_backend()
-            dense_auto_ok = dense_auto_backend == "cpu"
+            dense_auto_ok = rhs1_dense_backend_allowed(backend=dense_auto_backend)
         except Exception:  # noqa: BLE001
             dense_auto_ok = True
         solve_method = _select_rhsmode1_linear_solve_method(
@@ -2917,20 +2936,36 @@ def write_sfincs_jax_output_h5(
             env_override=solve_method_env,
             emit=emit,
         )
+        dense_accel_disabled = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR", "").strip().lower() in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }
+        if (
+            (not dense_auto_ok)
+            and (not dense_accel_disabled)
+            and dense_auto_backend not in {"cpu", "unknown"}
+            and op0.fblock.fp is not None
+            and (not include_phi1)
+            and int(active_total_size) >= int(rhs1_dense_auto_fp_accelerator_min())
+            and int(active_total_size) <= int(dense_fp_cutoff)
+        ):
+            dense_auto_accelerator_fp_window = True
         solve_method_forced = bool(solve_method_env) and solve_method == solve_method_env
         if (not solve_method_forced) and (
             op0.fblock.fp is not None
             and (not include_phi1)
             and active_total_size <= dense_fp_cutoff
             and (not force_krylov)
-            and dense_auto_ok
+            and (dense_auto_ok or dense_auto_accelerator_fp_window)
         ):
             solve_method = "dense"
             if emit is not None:
-                emit(
-                    1,
-                    "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> using dense solve",
-                )
+                msg = "write_sfincs_jax_output_h5: FP RHSMode=1 small system -> using dense solve"
+                if dense_auto_accelerator_fp_window:
+                    msg += f" on backend={dense_auto_backend}"
+                emit(1, msg)
         elif (
             op0.fblock.fp is not None
             and (not include_phi1)

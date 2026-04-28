@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-04-23 (America/Chicago)
+Last updated: 2026-04-28 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -42,6 +42,24 @@ Immediate priorities:
 - Eliminate remaining solver branch fragility while preserving differentiability,
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
+
+Current active lane (2026-04-27):
+- [x] Audit RHSMode=1 solver-path selection after the reported full-collision Nxi cliff.
+- [x] Keep CPU full-FP moderate systems on the direct dense path when it is faster and lower-memory than Krylov/strong/sparse rescue.
+- [x] Profile solver-stage transitions with `SFINCS_JAX_PROFILE=1` and keep benchmark rows recording preconditioners, dense/sparse fallback use, stage timings, and RSS.
+- [x] Rerun focused Nxi=20/Nxi=40 full-FP repros, compare against Fortran v3 outputs, then refresh bounded example-suite parity/performance reports.
+- Result: focused Ntheta=13/Nxi=40 full-FP default changed from the Krylov/strong/sparse rescue path (`37.54 s`, about `3.25 GB` profiled RSS) to the direct dense path (`1.28 s`, about `0.53 GB` profiled RSS) with `0` mismatches against Fortran v3.
+- Result: `tests/scaled_example_suite_solver_path_audit_2026-04-27` completed `39/39` `parity_ok`, strict `0` mismatches, missing Fortran output keys `0`, and runtime drift flags `0` against the frozen CPU release baseline.
+
+Current active lane (2026-04-28):
+- [x] Validate the solver-path fix on GPU using an isolated `office` scratch checkout rather than the dirty stale remote repo.
+- [x] Fix the accelerator host-dense shortcut closure bug in `sfincs_jax/v3_driver.py` so the host-dense probe no longer fails before measuring parity/runtime.
+- [x] Validate blanket accelerator dense auto-selection as parity-clean but reject it as a default because it regressed `16` tiny GPU suite cases.
+- [x] Land bounded accelerator dense auto-selection for full-FP RHSMode=1 systems with `SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN=1000`.
+- [x] Complete the bounded-default GPU suite at `tests/scaled_example_suite_gpu_bounded_default_2026-04-28`: `39/39 parity_ok`, strict `0` mismatches, missing Fortran output keys `0`, and runtime drift flags `0`.
+- Result: focused GPU `Ntheta=13,Nxi=40` full-FP default now uses dense automatically (`2.794 s`, about `1.04 GB`) instead of the forced Krylov path (`9.539 s`, about `2.14 GB`), with `0` Fortran mismatches.
+- Result: focused GPU `Ntheta=13,Nxi=20` default also uses dense and avoids the pathological forced-Krylov rescue (`137.411 s`), with `0` Fortran mismatches.
+- Next best steps: rerun local tests/docs, regenerate the publication benchmark dashboard from the bounded GPU report, then decide whether the remaining GPU top offenders justify another solver-policy change or should stay in the optimization backlog.
 
 Execution style:
 - Always profile first, change second, validate third.
@@ -117,11 +135,11 @@ Core requirement right now:
 
 ---
 
-## 5) Current State Snapshot (as of 2026-03-27)
+## 5) Current State Snapshot (as of 2026-04-28)
 
 ### 5.1 Recent validated status
-- Full fast explicit CPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_cpu_full_v7_refresh` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
-- Full frozen-reference GPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_fast_gpu_full_v11_refresh` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
+- Full frozen-reference CPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, and no `max_attempts`.
+- Full bounded-default GPU example-suite audit is complete at `/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_gpu_bounded_default_2026-04-28` with `39/39` `parity_ok`, `39/39` strict parity, no `jax_error`, no `max_attempts`, no missing Fortran output keys, and no runtime drift flags against the previous GPU release root.
 - `additional_examples` is included in both final lanes and is `parity_ok` on CPU and GPU.
 - README and docs now reflect the completed CPU and GPU artifact roots on `main` instead of intermediate branch-era sweeps.
 - `write_sfincs_jax_output_h5(..., return_results=True)` now returns in-memory result dictionary for immediate inspection.
@@ -143,10 +161,9 @@ Core requirement right now:
   - `lineax` has been gated and is not admitted yet: on a small real SFINCS operator it matched the current residual and ran faster locally (`~0.54s` vs `~3.29s`), but on a generic nonsymmetric test matrix its default GMRES configuration stagnated, so it is still a bounded differentiable/reference-path candidate rather than a production CLI dependency.
 
 ### 5.2 Known pain points that still matter
-- The pinned full-suite CPU root still records a stale pre-optimization `tokamak_1species_PASCollisions_withEr_fullTrajectories` artifact (`37.747s` JAX CPU vs `0.017s` Fortran), but current-tip frozen-case reruns on the same input are now down to about `3.56s` with parity preserved. A full-suite refresh is still needed before README tables can claim that CPU improvement.
-- Runtime ratio is still high for the heavier PAS / geometry-rich CPU cases, especially HSX / geometry4 PAS branches in the `3.5-4.9s` range on current targeted reruns.
-- GPU wall time is now robust and parity-clean in the refreshed `v11` root plus focused current-tip rows. The remaining runtime offenders are `monoenergetic_geometryScheme1` (`14.571s`), `HSX_PASCollisions_fullTrajectories` (`9.082s`), `tokamak_2species_PASCollisions_withEr_fullTrajectories` (`7.722s`), and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (`6.458s`).
-- Memory ratio remains high on select PAS/FP cases. After the geometry5 monoenergetic low-memory default, the current worst CPU RSS offender is `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2298.6 MB`), while current worst GPU RSS offenders are `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2097.0 MB`) and `HSX_PASCollisions_fullTrajectories` (`2042.1 MB`).
+- Runtime ratio is still high for heavier PAS / geometry-rich CPU cases, especially HSX / geometry4 PAS branches in the `3.5-4.9s` range on current targeted reruns.
+- GPU wall time is robust and parity-clean in the bounded-default `2026-04-28` root. The remaining runtime offenders are `monoenergetic_geometryScheme1` (`12.909s`), `HSX_PASCollisions_fullTrajectories` (`10.539s`), `tokamak_2species_PASCollisions_withEr_fullTrajectories` (`7.777s`), and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`7.716s`).
+- Memory ratio remains high on select PAS/FP cases. After the geometry5 monoenergetic low-memory default, the current worst CPU RSS offender is `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2298.6 MB`), while current worst GPU RSS offenders are `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (`2097.6 MB`) and `HSX_PASCollisions_fullTrajectories` (`2042.4 MB`).
 - Parallel strong-scaling beyond a few cores is not yet consistently strong for single-RHS large solves.
 
 ### 5.3 Product posture
@@ -6571,7 +6588,7 @@ Implemented changes:
 - Updated README/docs generator defaults and publication benchmark defaults to
   the current release roots:
   `tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106` and
-  `tests/scaled_example_suite_release_gpu_2026-04-25_v106`.
+  `tests/scaled_example_suite_gpu_bounded_default_2026-04-28`.
 
 Validation:
 

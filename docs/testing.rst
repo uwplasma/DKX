@@ -420,6 +420,9 @@ to subprocess wall time only for older artifacts that do not record it. The suit
 subprocesses also pin ``SFINCS_JAX_PRECOMPILE=0`` unless explicitly overridden, and
 they leave ``JAX_COMPILATION_CACHE_DIR`` unset unless ``--jax-cache-dir`` is requested,
 so runtime drift is not polluted by eager precompile or persistent-cache write cost.
+When a run changes solver branches unexpectedly, summarize the emitted profiling
+marks and preconditioner ladder with ``scripts/summarize_solver_paths.py``; this
+is the lightweight audit used to close the full-FP dense/Krylov GPU policy issue.
 
 Research reproducibility
 ------------------------

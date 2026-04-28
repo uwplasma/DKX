@@ -1,0 +1,43 @@
+# Solver Path Audit
+
+| Case | Dense auto | Default Krylov | Fallback | Last preconditioner | Peak RSS MB | Slowest profiled stage |
+| --- | ---: | ---: | --- | --- | ---: | --- |
+| HSX_FPCollisions_DKESTrajectories | False | False | - | - | 918.3 | rhs1_solve=0.786s |
+| HSX_FPCollisions_fullTrajectories | False | False | - | - | 923.7 | rhs1_solve=0.824s |
+| HSX_PASCollisions_DKESTrajectories | False | True | - | pas_tz | 1184.1 | rhs1_solve=2.165s |
+| HSX_PASCollisions_fullTrajectories | False | True | - | schur | 2042.4 | rhs1_solve=5.930s |
+| additional_examples | False | False | - | - | 885.1 | rhs1_solve=0.611s |
+| filteredW7XNetCDF_2species_magneticDrifts_noEr | False | False | - | - | 898.0 | rhs1_solve=0.858s |
+| filteredW7XNetCDF_2species_magneticDrifts_withEr | False | False | - | - | 904.7 | rhs1_solve=1.070s |
+| filteredW7XNetCDF_2species_noEr | False | False | - | - | 892.9 | rhs1_solve=0.629s |
+| geometryScheme4_1species_PAS_withEr_DKESTrajectories | False | True | - | pas_tz | 1264.3 | rhs1_solve=2.027s |
+| geometryScheme4_2species_PAS_noEr | False | True | - | pas_tz | 1816.7 | rhs1_solve=3.158s |
+| geometryScheme4_2species_noEr | False | False | - | - | 913.8 | rhs1_solve=0.658s |
+| geometryScheme4_2species_noEr_withPhi1InDKE | False | True | - | - | 942.8 | rhs1_diagnostics=0.840s |
+| geometryScheme4_2species_noEr_withQN | False | True | - | - | 930.5 | rhs1_diagnostics=0.910s |
+| geometryScheme4_2species_withEr_fullTrajectories | False | False | - | - | 907.9 | rhs1_solve=0.884s |
+| geometryScheme4_2species_withEr_fullTrajectories_withQN | False | True | - | - | 932.7 | rhs1_diagnostics=0.794s |
+| geometryScheme5_3species_loRes | False | False | - | - | 911.6 | rhs1_solve=1.543s |
+| inductiveE_noEr | False | False | - | - | 913.7 | rhs1_solve=0.618s |
+| monoenergetic_geometryScheme1 | False | False | - | - | 996.6 | transport_solve=10.828s |
+| monoenergetic_geometryScheme11 | False | False | - | - | 1003.7 | transport_solve=2.113s |
+| monoenergetic_geometryScheme5_ASCII | False | False | - | - | 990.0 | transport_solve=2.203s |
+| monoenergetic_geometryScheme5_netCDF | False | False | - | - | 987.8 | transport_solve=2.028s |
+| quick_2species_FPCollisions_noEr | False | False | - | - | 912.9 | rhs1_solve=0.662s |
+| sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories | False | False | - | - | 915.8 | rhs1_solve=0.743s |
+| sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories | False | False | - | - | 920.2 | rhs1_solve=0.826s |
+| sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories | False | True | - | pas_tz | 1587.2 | rhs1_solve=3.124s |
+| sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories | False | True | - | schur | 2097.6 | rhs1_solve=4.979s |
+| tokamak_1species_FPCollisions_noEr | False | False | - | - | 860.4 | rhs1_diagnostics=0.534s |
+| tokamak_1species_FPCollisions_noEr_withPhi1InDKE | False | True | - | - | 932.1 | rhs1_solve=0.981s |
+| tokamak_1species_FPCollisions_noEr_withQN | False | True | - | - | 919.4 | rhs1_diagnostics=0.955s |
+| tokamak_1species_FPCollisions_withEr_DKESTrajectories | False | False | - | - | 906.2 | rhs1_solve=0.682s |
+| tokamak_1species_FPCollisions_withEr_fullTrajectories | False | False | - | - | 911.4 | rhs1_solve=0.832s |
+| tokamak_1species_PASCollisions_noEr | False | True | - | pas_tokamak_theta | 987.0 | rhs1_solve=2.613s |
+| tokamak_1species_PASCollisions_noEr_Nx1 | False | False | - | xblock_tz | 929.8 | rhs1_solve=1.192s |
+| tokamak_1species_PASCollisions_noEr_withQN | False | True | - | - | 988.6 | rhs1_diagnostics=0.783s |
+| tokamak_1species_PASCollisions_withEr_fullTrajectories | False | False | - | - | 923.7 | rhs1_solve=1.595s |
+| tokamak_2species_PASCollisions_noEr | False | True | - | schur | 1148.3 | rhs1_solve=1.882s |
+| tokamak_2species_PASCollisions_withEr_fullTrajectories | False | True | - | schur | 1245.5 | rhs1_solve=5.319s |
+| transportMatrix_geometryScheme11 | False | False | - | - | 926.1 | transport_solve=1.052s |
+| transportMatrix_geometryScheme2 | False | False | - | - | 924.5 | transport_solve=1.026s |
