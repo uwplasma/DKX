@@ -43,3 +43,25 @@ def test_bounded_gpu_suite_artifact_remains_release_clean() -> None:
     assert {row["status"] for row in strict_rows} == {"parity_ok"}
     assert drift["flagged_cases"] == 0
     assert key_coverage["missing_total"] == 0
+
+
+def test_bounded_gpu_pas_geometry11_defaults_to_pas_tz() -> None:
+    audit_rows = json.loads((_GPU_SUITE_ROOT / "solver_path_audit.json").read_text())
+    report_rows = json.loads((_GPU_SUITE_ROOT / "suite_report.json").read_text())
+    audits = {str(row["case"]): row for row in audit_rows}
+    reports = {str(row["case"]): row for row in report_rows}
+
+    expected_pas_tz = {
+        "HSX_PASCollisions_fullTrajectories": (9.0, 1700.0),
+        "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories": (7.0, 1700.0),
+    }
+    for case, (max_logged_s, max_rss_mb) in expected_pas_tz.items():
+        assert audits[case]["last_preconditioner"] == "pas_tz"
+        assert reports[case]["n_mismatch_common"] == 0
+        assert reports[case]["strict_n_mismatch_common"] == 0
+        assert float(reports[case]["jax_logged_elapsed_s"]) < max_logged_s
+        assert float(reports[case]["jax_max_rss_mb"]) < max_rss_mb
+
+    # The tokamak PAS+Er probe timed out on the alternative paths, so its safe
+    # bounded default remains Schur.
+    assert audits["tokamak_2species_PASCollisions_withEr_fullTrajectories"]["last_preconditioner"] == "schur"

@@ -5,7 +5,7 @@
 | HSX_FPCollisions_DKESTrajectories | False | False | - | - | 918.3 | rhs1_solve=0.786s |
 | HSX_FPCollisions_fullTrajectories | False | False | - | - | 923.7 | rhs1_solve=0.824s |
 | HSX_PASCollisions_DKESTrajectories | False | True | - | pas_tz | 1184.1 | rhs1_solve=2.165s |
-| HSX_PASCollisions_fullTrajectories | False | True | - | schur | 2042.4 | rhs1_solve=5.930s |
+| HSX_PASCollisions_fullTrajectories | False | True | - | pas_tz | 1577.4 | rhs1_solve=3.744s |
 | additional_examples | False | False | - | - | 885.1 | rhs1_solve=0.611s |
 | filteredW7XNetCDF_2species_magneticDrifts_noEr | False | False | - | - | 898.0 | rhs1_solve=0.858s |
 | filteredW7XNetCDF_2species_magneticDrifts_withEr | False | False | - | - | 904.7 | rhs1_solve=1.070s |
@@ -27,7 +27,7 @@
 | sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories | False | False | - | - | 915.8 | rhs1_solve=0.743s |
 | sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories | False | False | - | - | 920.2 | rhs1_solve=0.826s |
 | sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories | False | True | - | pas_tz | 1587.2 | rhs1_solve=3.124s |
-| sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories | False | True | - | schur | 2097.6 | rhs1_solve=4.979s |
+| sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories | False | True | - | pas_tz | 1608.5 | rhs1_solve=3.813s |
 | tokamak_1species_FPCollisions_noEr | False | False | - | - | 860.4 | rhs1_diagnostics=0.534s |
 | tokamak_1species_FPCollisions_noEr_withPhi1InDKE | False | True | - | - | 932.1 | rhs1_solve=0.981s |
 | tokamak_1species_FPCollisions_noEr_withQN | False | True | - | - | 919.4 | rhs1_diagnostics=0.955s |
