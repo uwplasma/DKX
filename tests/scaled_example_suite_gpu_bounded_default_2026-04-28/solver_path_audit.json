@@ -67,17 +67,17 @@
     "dense_fallback": false,
     "sparse_fallback": false,
     "preconditioners": [
-      "schur"
+      "pas_tz"
     ],
-    "last_preconditioner": "schur",
+    "last_preconditioner": "pas_tz",
     "ksp_iterations": [],
-    "profile_peak_rss_mb": 2042.4,
+    "profile_peak_rss_mb": 1577.4,
     "profile_stage_durations_s": {
-      "rhs1_precond_build": 2.556,
-      "rhs1_krylov_solve": 2.41,
-      "rhs1_solve": 5.93,
-      "rhs1_diagnostics": 0.444,
-      "write_h5": 0.02
+      "rhs1_precond_build": 1.036,
+      "rhs1_krylov_solve": 1.464,
+      "rhs1_solve": 3.744,
+      "rhs1_diagnostics": 0.551,
+      "write_h5": 0.018
     },
     "profile_events_n": 15
   },
@@ -490,17 +490,17 @@
     "dense_fallback": false,
     "sparse_fallback": false,
     "preconditioners": [
-      "schur"
+      "pas_tz"
     ],
-    "last_preconditioner": "schur",
+    "last_preconditioner": "pas_tz",
     "ksp_iterations": [],
-    "profile_peak_rss_mb": 2097.6,
+    "profile_peak_rss_mb": 1608.5,
     "profile_stage_durations_s": {
-      "rhs1_precond_build": 1.61,
-      "rhs1_krylov_solve": 2.322,
-      "rhs1_solve": 4.979,
-      "rhs1_diagnostics": 0.506,
-      "write_h5": 0.019
+      "rhs1_precond_build": 1.147,
+      "rhs1_krylov_solve": 1.533,
+      "rhs1_solve": 3.813,
+      "rhs1_diagnostics": 0.493,
+      "write_h5": 0.018
     },
     "profile_events_n": 15
   },

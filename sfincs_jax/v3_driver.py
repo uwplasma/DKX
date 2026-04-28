@@ -72,7 +72,7 @@ from .rhs1_preconditioner_auto_policy import (
     rhs1_pas_dkes_pas_tz_preferred as _rhs1_pas_dkes_pas_tz_preferred,
     rhs1_pas_dkes_xblock_allowed as _rhs1_pas_dkes_xblock_allowed,
     rhs1_pas_family_refinement_kind as _rhs1_pas_family_refinement_kind,
-    rhs1_pas_full_cpu_pas_tz_preferred as _rhs1_pas_full_cpu_pas_tz_preferred,
+    rhs1_pas_full_pas_tz_preferred as _rhs1_pas_full_pas_tz_preferred,
     rhs1_pas_tokamak_cpu_xblock_preferred as _rhs1_pas_tokamak_cpu_xblock_preferred,
     rhs1_pas_tokamak_gpu_theta_allowed as _rhs1_pas_tokamak_gpu_theta_allowed,
     rhs1_pas_tokamak_gpu_tight_tol as _rhs1_pas_tokamak_gpu_tight_tol,
@@ -11778,7 +11778,7 @@ def solve_v3_full_system_linear_gmres(
     if (
         rhs1_precond_env in {"", "auto", "default"}
         and rhs1_precond_kind == "schur"
-        and _rhs1_pas_full_cpu_pas_tz_preferred(
+        and _rhs1_pas_full_pas_tz_preferred(
             has_pas=op.fblock.pas is not None,
             has_fp=op.fblock.fp is not None,
             use_dkes=bool(use_dkes),
@@ -11795,7 +11795,7 @@ def solve_v3_full_system_linear_gmres(
         if emit is not None:
             emit(
                 1,
-                "solve_v3_full_system_linear_gmres: CPU full-trajectory PAS "
+                "solve_v3_full_system_linear_gmres: full-trajectory PAS "
                 "auto -> pas_tz preconditioner",
             )
     if _rhs1_geometry4_pas_memory_pas_tz_preferred(

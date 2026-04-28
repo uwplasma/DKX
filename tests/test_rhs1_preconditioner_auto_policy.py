@@ -13,6 +13,7 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     rhs1_pas_dkes_pas_tz_preferred,
     rhs1_pas_dkes_xblock_allowed,
     rhs1_pas_family_refinement_kind,
+    rhs1_pas_full_pas_tz_preferred,
     rhs1_pas_full_cpu_pas_tz_preferred,
     rhs1_pas_tokamak_cpu_xblock_preferred,
     rhs1_pas_tokamak_gpu_theta_allowed,
@@ -546,6 +547,36 @@ def test_full_cpu_pas_tz_policy_env_bounds(monkeypatch) -> None:
     assert not rhs1_pas_full_cpu_pas_tz_preferred(**kwargs, active_size=7000)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", "950")
     assert rhs1_pas_full_cpu_pas_tz_preferred(**kwargs, active_size=6000)
+
+
+def test_full_gpu_pas_tz_policy_targets_bounded_geometry11_gpu_cases(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_NZETA_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_ACTIVE_MAX", raising=False)
+
+    common = dict(
+        has_pas=True,
+        has_fp=False,
+        use_dkes=False,
+        backend="gpu",
+        geom_scheme=11,
+        n_theta=6,
+        n_zeta=19,
+        max_l=20,
+        active_size=4526,
+        pas_tz_applicable=True,
+    )
+    assert rhs1_pas_full_pas_tz_preferred(**common)
+    assert not rhs1_pas_full_pas_tz_preferred(**{**common, "geom_scheme": 1})
+    assert not rhs1_pas_full_pas_tz_preferred(**{**common, "n_zeta": 23})
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_ACTIVE_MAX", "4000")
+    assert not rhs1_pas_full_pas_tz_preferred(**common)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_ACTIVE_MAX", "15000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ", "0")
+    assert not rhs1_pas_full_pas_tz_preferred(**common)
 
 
 def test_geometry4_pas_memory_pas_tz_policy(monkeypatch) -> None:

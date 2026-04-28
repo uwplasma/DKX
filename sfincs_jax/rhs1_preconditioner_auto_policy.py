@@ -462,8 +462,8 @@ def rhs1_pas_full_cpu_pas_tz_preferred(
 
     This targets bounded geometryScheme=11 full-trajectory PAS cases where
     ``pas_tz`` is faster and much lower-memory than the default Schur block on
-    CPU.  The GPU path remains unchanged unless a future measured gate proves the
-    same improvement there.
+    CPU.  The backend-general wrapper below adds the corresponding bounded GPU
+    gate using separate environment controls.
     """
     if not has_pas or has_fp or use_dkes:
         return False
@@ -478,6 +478,65 @@ def rhs1_pas_full_cpu_pas_tz_preferred(
     max_zeta = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX", 19)
     min_block = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", 950)
     max_active = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX", 15000)
+    block_size = int(max_l) * int(n_theta) * int(n_zeta)
+    return (
+        int(n_zeta) <= max(1, int(max_zeta))
+        and block_size >= max(1, int(min_block))
+        and int(active_size) <= max(1, int(max_active))
+    )
+
+
+def rhs1_pas_full_pas_tz_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    use_dkes: bool,
+    backend: str,
+    geom_scheme: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    active_size: int,
+    pas_tz_applicable: bool,
+) -> bool:
+    """Return whether bounded full-trajectory PAS should prefer ``pas_tz``.
+
+    CPU behavior is delegated to the existing CPU policy. GPU behavior is
+    admitted only for the measured geometryScheme=11 full-trajectory PAS lane
+    where ``pas_tz`` lowers RSS and wall time relative to Schur while preserving
+    parity. The bounds deliberately mirror the CPU lane and can be tightened or
+    disabled with backend-specific environment variables.
+    """
+    backend_key = str(backend).strip().lower()
+    if backend_key == "cpu":
+        return rhs1_pas_full_cpu_pas_tz_preferred(
+            has_pas=has_pas,
+            has_fp=has_fp,
+            use_dkes=use_dkes,
+            backend=backend,
+            geom_scheme=geom_scheme,
+            n_theta=n_theta,
+            n_zeta=n_zeta,
+            max_l=max_l,
+            active_size=active_size,
+            pas_tz_applicable=pas_tz_applicable,
+        )
+    if backend_key not in {"gpu", "cuda"}:
+        return False
+    mode = _env_token("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ")
+    if mode in _FALSE_VALUES:
+        return False
+    if not has_pas or has_fp or use_dkes:
+        return False
+    if not pas_tz_applicable:
+        return False
+    if int(geom_scheme) != 11:
+        return False
+    if int(n_theta) <= 1 or int(n_zeta) <= 1:
+        return False
+    max_zeta = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_NZETA_MAX", 19)
+    min_block = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_MIN", 950)
+    max_active = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_ACTIVE_MAX", 15000)
     block_size = int(max_l) * int(n_theta) * int(n_zeta)
     return (
         int(n_zeta) <= max(1, int(max_zeta))
@@ -743,6 +802,7 @@ __all__ = [
     "rhs1_pas_dkes_cpu_pas_tz_preferred",
     "rhs1_pas_dkes_pas_tz_preferred",
     "rhs1_pas_dkes_xblock_allowed",
+    "rhs1_pas_full_pas_tz_preferred",
     "rhs1_pas_full_cpu_pas_tz_preferred",
     "rhs1_pas_weak_auto_override_kind",
     "rhs1_pas_tokamak_cpu_xblock_preferred",

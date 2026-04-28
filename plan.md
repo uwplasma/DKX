@@ -6612,3 +6612,58 @@ Current release state:
 
 - Ready for final local CI-equivalent tests, docs build, package build, commit,
   push, CI verification, tag `v1.0.6`, and GitHub/PyPI release.
+
+### 20.24 Bounded one-GPU geometryScheme=11 PAS solver-path correction
+
+Scope:
+
+- Close the collaborator-reported GPU solver-path over-selection risk for the
+  remaining geometry-rich PAS examples by profiling default, `pas_tz`,
+  `pas_hybrid`, `xblock_tz`, and unpreconditioned routes on `office`.
+
+Implemented changes:
+
+- Added `rhs1_pas_full_pas_tz_preferred`, preserving the existing CPU policy and
+  promoting only bounded one-GPU full-trajectory PAS geometryScheme=11 cases to
+  the structured `pas_tz` preconditioner.
+- Kept tokamak PAS+Er on Schur: forced `xblock_tz`, `pas_hybrid`, and
+  unpreconditioned probes all timed out for the checked tokamak two-species
+  PAS+Er example.
+- Added artifact-backed tests that require the two measured geometryScheme=11
+  full-trajectory PAS cases to stay on `pas_tz`, remain mismatch-free, and keep
+  bounded GPU runtime/RSS under the measured release thresholds.
+- Updated README/docs benchmark tables, solver-path audit artifacts, and the
+  publication benchmark summary figure from the refreshed 39-case GPU root.
+
+Validation:
+
+- Focused policy tests passed locally before the artifact refresh:
+  `pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_gpu_solver_path_artifacts.py`
+  (`22 passed`).
+- Remote one-GPU suite refresh reran only
+  `HSX_PASCollisions_fullTrajectories` and
+  `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`
+  into `tests/scaled_example_suite_gpu_bounded_default_2026-04-28`.
+- The refreshed 39-case GPU artifact remains `39/39 parity_ok`, strict
+  `39/39 parity_ok`, missing Fortran output keys `0`, and runtime drift flags
+  `0` against `tests/scaled_example_suite_release_gpu_2026-04-25_v106`.
+
+Runtime/memory delta:
+
+- `HSX_PASCollisions_fullTrajectories`: `10.539 s` / `2042.4 MB` -> `8.469 s`
+  / `1577.4 MB`, practical and strict mismatches `0`.
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`:
+  `7.716 s` / `2097.6 MB` -> `6.413 s` / `1608.5 MB`, practical and strict
+  mismatches `0`.
+- Solver-path audit now reports `pas_tz` for both corrected geometryScheme=11
+  full-trajectory PAS cases and keeps Schur for the tokamak PAS+Er row.
+
+Next steps:
+
+1. Run focused local tests, Sphinx with warnings-as-errors, and `git diff --check`.
+2. Commit the bounded GPU PAS policy, refreshed artifacts, docs, and regression
+   tests.
+3. If more performance time is available, target `geometryScheme4_2species_PAS_noEr`
+   and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`,
+   which are now the top remaining PAS memory-ratio rows in the release GPU
+   artifact.
