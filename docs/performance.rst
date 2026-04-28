@@ -75,6 +75,13 @@ Fresh bounded GPU solver-path validation:
 - The accepted policy enables accelerator dense auto-selection only for moderate full-FP RHSMode=1 systems above ``SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN``. The full 39-case GPU suite stayed ``39/39 parity_ok``, strict-clean, output-key complete, and runtime-drift clean against ``tests/scaled_example_suite_release_gpu_2026-04-25_v106``.
 - The focused full-FP ``Ntheta=13, Nxi=40`` GPU repro now defaults to dense automatically at about ``2.794 s`` and ``1.04 GB`` RSS, compared with about ``9.539 s`` and ``2.14 GB`` for the forced Krylov path, with zero Fortran mismatches.
 - The focused ``Ntheta=13, Nxi=20`` repro also stays parity-clean and avoids the pathological forced-Krylov rescue path, which took about ``137.411 s`` on the same GPU.
+- A follow-up bounded offender pass promoted geometryScheme=11 full-trajectory
+  PAS runs to top-level ``pas_tz`` on one GPU. In the 39-case artifact,
+  ``HSX_PASCollisions_fullTrajectories`` stayed parity-clean while moving from
+  about ``10.54 s`` / ``2042 MB`` to ``8.47 s`` / ``1577 MB``, and the
+  SFINCS-paper geometry11 PAS row moved from about ``7.72 s`` / ``2098 MB`` to
+  ``6.41 s`` / ``1609 MB``. Tokamak PAS+Er remains on Schur because forced
+  ``xblock_tz``, unpreconditioned, and ``pas_hybrid`` probes all timed out.
 
 Recent current-tip PAS-DKES fix:
 

@@ -820,6 +820,13 @@ performance without changing the input file:
   for bounded one-GPU tokamak PAS+Er auto-promotion to ``xblock_tz`` (defaults:
   ``1000`` / ``8000``). Smaller cases use tight unpreconditioned GMRES because
   setup dominates; medium cases use ``xblock_tz`` to avoid slow sparse fallback.
+- ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ``: enable the bounded one-GPU
+  geometryScheme=11 full-trajectory PAS promotion to top-level ``pas_tz`` (default:
+  auto/on; set ``0``/``false`` to restore Schur).
+- ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_NZETA_MAX`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_MIN`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_ACTIVE_MAX``: guards for that GPU
+  full-trajectory PAS promotion (defaults: ``19``, ``950``, ``15000``).
 - ``SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ``: enable the bounded
   geometryScheme=4 PAS no-Er memory policy that selects top-level ``pas_tz``
   instead of Schur (default: auto/on; set ``0``/``false`` to restore Schur).
