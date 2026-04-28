@@ -1287,6 +1287,13 @@ Controls:
   fallbacks when the dense matrix would exceed this memory budget. If float64
   exceeds the limit but float32 does not, the fallback switches to float32 with
   one refinement step.
+- ``SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO`` plus
+  ``SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_MAX`` /
+  ``SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_GEOMETRIES`` (defaults on,
+  ``2500`` and ``1``). This admits dense GPU transport only for the measured
+  bounded RHSMode=3 monoenergetic geometryScheme=1 lane, avoiding the much slower
+  Krylov/sparse-rescue path while preserving the explicit opt-out
+  ``SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR=0``.
 - ``SFINCS_JAX_TRANSPORT_DENSE_PRECOND_MAX_MB`` (default: ``min(32, dense_max_mb)``).
   Disables dense LU preconditioners when they would exceed the memory budget.
 - ``SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY`` (default: auto). Set ``0`` to

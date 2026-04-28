@@ -341,11 +341,11 @@
     "preconditioners": [],
     "last_preconditioner": null,
     "ksp_iterations": [],
-    "profile_peak_rss_mb": 996.6,
+    "profile_peak_rss_mb": 981.0,
     "profile_stage_durations_s": {
-      "transport_solve": 10.828,
-      "transport_diagnostics": 0.409,
-      "write_h5": 0.02
+      "transport_solve": 1.211,
+      "transport_diagnostics": 0.468,
+      "write_h5": 0.021
     },
     "profile_events_n": 9
   },

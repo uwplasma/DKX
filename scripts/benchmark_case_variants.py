@@ -11,6 +11,17 @@ import time
 from pathlib import Path
 
 from sfincs_jax.compare import compare_sfincs_outputs
+from sfincs_jax.namelist import read_sfincs_input
+
+
+def _rhs_mode_from_input(path: Path) -> int:
+    """Return the input RHSMode, defaulting to the SFINCS v3 full-system mode."""
+    try:
+        nml = read_sfincs_input(path)
+        general = nml.group("general")
+        return int(general.get("RHSMODE", general.get("rhsMode", 1)) or 1)
+    except Exception:  # noqa: BLE001
+        return 1
 
 
 def _parse_variant(spec: str) -> tuple[str, dict[str, str]]:
@@ -171,6 +182,8 @@ def main() -> int:
     case_input = case_dir / "input.namelist"
     if not case_input.exists():
         raise FileNotFoundError(f"Missing {case_input}")
+    rhs_mode = _rhs_mode_from_input(case_input)
+    compute_transport_matrix = int(rhs_mode) in {2, 3}
     reference = case_dir / "fortran_run" / "sfincsOutput.h5"
     have_reference = reference.exists()
 
@@ -186,19 +199,18 @@ from sfincs_jax.io import write_sfincs_jax_output_h5
 case = Path(os.environ["CASE_INPUT"])
 out = Path(os.environ["CASE_OUTPUT"])
 t0 = time.perf_counter()
-write_sfincs_jax_output_h5(input_namelist=case, output_path=out, compute_solution=True)
+write_sfincs_jax_output_h5(
+    input_namelist=case,
+    output_path=out,
+    compute_solution=True,
+    compute_transport_matrix=bool(int(os.environ["COMPUTE_TRANSPORT_MATRIX"])),
+    differentiable=bool(int(os.environ["DIFFERENTIABLE"])),
+)
 elapsed = time.perf_counter() - t0
 raw_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 rss_mb = raw_rss / (1024.0 * 1024.0) if sys.platform.startswith("darwin") else raw_rss / 1024.0
 print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_raw": raw_rss, "ru_maxrss_mb": rss_mb}))
 """
-    differentiable_arg = "True" if args.differentiable else "False"
-    child = child.replace(
-        'write_sfincs_jax_output_h5(input_namelist=case, output_path=out, compute_solution=True)',
-        'write_sfincs_jax_output_h5(input_namelist=case, output_path=out, compute_solution=True, differentiable='
-        + differentiable_arg
-        + ')',
-    )
 
     base_env = os.environ.copy()
     base_env.update(
@@ -221,6 +233,8 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_raw": raw_rss,
             env.update(extra_env)
             env["CASE_INPUT"] = str(case_input)
             env["CASE_OUTPUT"] = str(tmp / f"{name}.h5")
+            env["COMPUTE_TRANSPORT_MATRIX"] = "1" if compute_transport_matrix else "0"
+            env["DIFFERENTIABLE"] = "1" if args.differentiable else "0"
             print(f"## running {name}", flush=True)
             t0 = time.perf_counter()
             try:

@@ -637,22 +637,6 @@
       "highest_jax_runtime_cases": [
         {
           "blocker_type": "none",
-          "case": "monoenergetic_geometryScheme1",
-          "fortran_max_rss_mb": 110.21875,
-          "fortran_runtime_s": 0.7950000000128057,
-          "jax_logged_elapsed_s": 12.046,
-          "jax_max_rss_mb": 996.6,
-          "jax_runtime_s": 12.909261736087501,
-          "logged_runtime_ratio": 15.152201257617566,
-          "memory_ratio": 9.04201871278707,
-          "practical_mismatches": 0,
-          "runtime_ratio": 16.238065076578064,
-          "sort_field": "jax_runtime_s",
-          "status": "parity_ok",
-          "strict_mismatches": 0
-        },
-        {
-          "blocker_type": "none",
           "case": "HSX_PASCollisions_fullTrajectories",
           "fortran_max_rss_mb": 179.203125,
           "fortran_runtime_s": 2.5100000000093132,
@@ -711,6 +695,22 @@
           "memory_ratio": 11.125472819626067,
           "practical_mismatches": 0,
           "runtime_ratio": 3.759097096705076,
+          "sort_field": "jax_runtime_s",
+          "status": "parity_ok",
+          "strict_mismatches": 0
+        },
+        {
+          "blocker_type": "none",
+          "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories",
+          "fortran_max_rss_mb": 130.703125,
+          "fortran_runtime_s": 1.1039999999920838,
+          "jax_logged_elapsed_s": 4.846,
+          "jax_max_rss_mb": 1587.2,
+          "jax_runtime_s": 5.7570660980418324,
+          "logged_runtime_ratio": 4.389492753654664,
+          "memory_ratio": 12.143550508069337,
+          "practical_mismatches": 0,
+          "runtime_ratio": 5.214733784495574,
           "sort_field": "jax_runtime_s",
           "status": "parity_ok",
           "strict_mismatches": 0
@@ -803,7 +803,7 @@
       "logged_runtime_ratio_summary": {
         "count": 39,
         "max": 177.88235301913687,
-        "mean": 15.421183619612313,
+        "mean": 15.120748205974191,
         "median": 0.05076606707042278,
         "min": 0.008851760293240309
       },
@@ -811,7 +811,7 @@
       "memory_ratio_summary": {
         "count": 39,
         "max": 12.143550508069337,
-        "mean": 9.210864854727228,
+        "mean": 9.20723570814373,
         "median": 9.161134356113436,
         "min": 6.96723114141192
       },
@@ -821,7 +821,7 @@
       "runtime_ratio_summary": {
         "count": 39,
         "max": 223.17645940027975,
-        "mean": 19.65836959373799,
+        "mean": 19.356229415155337,
         "median": 0.05928462616394579,
         "min": 0.011387176881717191
       },
@@ -892,16 +892,16 @@
         },
         {
           "blocker_type": "none",
-          "case": "monoenergetic_geometryScheme1",
-          "fortran_max_rss_mb": 110.21875,
-          "fortran_runtime_s": 0.7950000000128057,
-          "jax_logged_elapsed_s": 12.046,
-          "jax_max_rss_mb": 996.6,
-          "jax_runtime_s": 12.909261736087501,
-          "logged_runtime_ratio": 15.152201257617566,
-          "memory_ratio": 9.04201871278707,
+          "case": "tokamak_1species_PASCollisions_noEr",
+          "fortran_max_rss_mb": 114.25,
+          "fortran_runtime_s": 0.3089999999792781,
+          "jax_logged_elapsed_s": 4.103,
+          "jax_max_rss_mb": 987.0,
+          "jax_runtime_s": 4.951476512011141,
+          "logged_runtime_ratio": 13.27831715299402,
+          "memory_ratio": 8.638949671772428,
           "practical_mismatches": 0,
-          "runtime_ratio": 16.238065076578064,
+          "runtime_ratio": 16.024195832825868,
           "sort_field": "runtime_ratio",
           "status": "parity_ok",
           "strict_mismatches": 0
