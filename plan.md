@@ -6718,10 +6718,46 @@ Runtime/memory delta:
   `2.089 s` internal elapsed for the same frozen case; suite wall time is higher
   because it includes the full release runner and comparison overhead.
 
+Follow-up:
+
+1. Focused tests, docs, `git diff --check`, and full local pytest passed before
+   committing this correction.
+2. The remaining true GPU memory-ratio targets were profiled in section 20.26.
+
+### 20.26 Remaining GPU PAS memory-ratio probe results
+
+Scope:
+
+- Check whether the next two apparent GPU memory-ratio offenders have safe
+  branch-selection improvements after the dense monoenergetic transport fix.
+
+Measured probes on `office`:
+
+- `geometryScheme4_2species_PAS_noEr`
+  - default: `pas_tz`, `4.372 s`, `1815 MB`, Fortran mismatches `0`.
+  - forced `pas_tz`: `4.953 s`, `1799 MB`, Fortran mismatches `0`.
+  - forced `schur`: `5.764 s`, `2508 MB`, Fortran mismatches `0`.
+  - forced `xblock_tz`: `31.768 s`, `2731 MB`, Fortran mismatches `0`.
+  - no preconditioner: timed out at `120 s`.
+- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`
+  - default: `pas_tz`, `5.403 s`, `1587 MB`, Fortran mismatches `0`.
+  - forced `pas_tz`: `5.312 s`, `1586 MB`, Fortran mismatches `0`.
+  - forced `schur`: `22.058 s`, `2137 MB`, Fortran mismatches `0`.
+  - forced `xblock_tz`: `17.346 s`, `2125 MB`, Fortran mismatches `0`.
+  - no preconditioner: timed out at `120 s`.
+
+Decision:
+
+- No new solver-policy promotion from this lane. The current defaults are already
+  the best measured routes among the tested bounded alternatives.
+- The remaining memory ratio is not a branch-selection bug; it is likely from
+  RHSMode=1 Krylov/device work arrays and diagnostic-state retention. Treat it
+  as a future allocator/lifetime optimization lane rather than a release blocker.
+
 Next steps:
 
-1. Run focused tests, docs, and `git diff --check`, then commit this second GPU
-   performance correction.
-2. Continue profiling the remaining true GPU memory-ratio targets:
-   `geometryScheme4_2species_PAS_noEr` and
-   `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`.
+1. Push the four local commits and let CI validate the full matrix.
+2. If CI is clean, tag the next patch release from `main`.
+3. If more GPU optimization time is available before release, target internal
+   work-array lifetimes in RHSMode=1 PAS Krylov/diagnostics rather than trying
+   more preconditioner branch switches for these two cases.
