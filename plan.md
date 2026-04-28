@@ -6667,3 +6667,61 @@ Next steps:
    and `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`,
    which are now the top remaining PAS memory-ratio rows in the release GPU
    artifact.
+
+### 20.25 RHSMode=3 GPU benchmark-harness correction and dense monoenergetic gate
+
+Scope:
+
+- Reassess the apparent `monoenergetic_geometryScheme1` GPU runtime offender
+  after the geometryScheme=11 PAS correction.
+
+Findings:
+
+- The suite artifact was a real slow path, but the ad-hoc
+  `scripts/benchmark_case_variants.py` probe was not valid for RHSMode=2/3: it
+  set `compute_solution=True` without `compute_transport_matrix=True`, so
+  transport examples could report geometry/output-only runtimes.
+- After fixing the benchmark harness, the monoenergetic geometryScheme=1 variants
+  showed the default Krylov/sparse-rescue transport path at about `16.67 s`
+  internal elapsed, while dense GPU transport with the default dense-fallback
+  policy was about `2.09 s` internal elapsed and remained Fortran-clean.
+
+Implemented changes:
+
+- `benchmark_case_variants.py` now parses `RHSMode` and forces
+  `compute_transport_matrix=True` for RHSMode=2/3 benchmarks.
+- Added a bounded `transport_dense_accelerator_auto_allowed` policy for
+  accelerator RHSMode=3 monoenergetic transport, defaulting only to
+  geometryScheme=1 and `total_size <= 2500`.
+- The broad opt-out `SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR=0` still
+  disables this path; additional guards are exposed via
+  `SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO`,
+  `SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_MAX`, and
+  `SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_GEOMETRIES`.
+- Added unit coverage for RHSMode-aware benchmark variants and the bounded dense
+  accelerator transport policy.
+
+Validation:
+
+- Focused local tests passed:
+  `pytest -q tests/test_transport_sparse_direct.py tests/test_benchmark_case_variants.py tests/test_v3_driver_policy_helpers.py`
+  (`58 passed`).
+- Remote one-GPU suite refresh reran `monoenergetic_geometryScheme1` into the
+  release GPU artifact and stayed practical/strict parity-clean with no runtime
+  drift flags and no missing output keys in the 39-case root.
+
+Runtime/memory delta:
+
+- `monoenergetic_geometryScheme1`: `13.039 s` / `995.9 MB` -> `3.541 s` /
+  `981.0 MB`, practical and strict mismatches `0`.
+- The corrected benchmark harness measured dense-auto GPU transport at
+  `2.089 s` internal elapsed for the same frozen case; suite wall time is higher
+  because it includes the full release runner and comparison overhead.
+
+Next steps:
+
+1. Run focused tests, docs, and `git diff --check`, then commit this second GPU
+   performance correction.
+2. Continue profiling the remaining true GPU memory-ratio targets:
+   `geometryScheme4_2species_PAS_noEr` and
+   `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories`.

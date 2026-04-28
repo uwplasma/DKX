@@ -19,7 +19,7 @@
 | geometryScheme4_2species_withEr_fullTrajectories_withQN | False | True | - | - | 932.7 | rhs1_diagnostics=0.794s |
 | geometryScheme5_3species_loRes | False | False | - | - | 911.6 | rhs1_solve=1.543s |
 | inductiveE_noEr | False | False | - | - | 913.7 | rhs1_solve=0.618s |
-| monoenergetic_geometryScheme1 | False | False | - | - | 996.6 | transport_solve=10.828s |
+| monoenergetic_geometryScheme1 | False | False | - | - | 981.0 | transport_solve=1.211s |
 | monoenergetic_geometryScheme11 | False | False | - | - | 1003.7 | transport_solve=2.113s |
 | monoenergetic_geometryScheme5_ASCII | False | False | - | - | 990.0 | transport_solve=2.203s |
 | monoenergetic_geometryScheme5_netCDF | False | False | - | - | 987.8 | transport_solve=2.028s |

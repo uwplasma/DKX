@@ -6,7 +6,6 @@
 
 ## Runtime offenders (absolute JAX time)
 
-- monoenergetic_geometryScheme1: jax=12.909s fortran=0.795s ratio=16.238 res={'NTHETA': 8, 'NZETA': 9, 'NX': 2, 'NXI': 23} status=parity_ok
 - HSX_PASCollisions_fullTrajectories: jax=8.469s fortran=2.510s ratio=3.374 res={'NTHETA': 6, 'NZETA': 15, 'NX': 3, 'NXI': 20} status=parity_ok
 - tokamak_2species_PASCollisions_withEr_fullTrajectories: jax=7.777s fortran=1.330s ratio=5.847 res={'NTHETA': 14, 'NZETA': 1, 'NX': 5, 'NXI': 31} status=parity_ok
 - HSX_PASCollisions_DKESTrajectories: jax=6.867s fortran=0.994s ratio=6.909 res={'NTHETA': 5, 'NZETA': 15, 'NX': 2, 'NXI': 20} status=parity_ok
@@ -16,6 +15,7 @@
 - monoenergetic_geometryScheme11: jax=5.606s fortran=0.861s ratio=6.511 res={'NTHETA': 8, 'NZETA': 16, 'NX': 1, 'NXI': 13} status=parity_ok
 - HSX_FPCollisions_DKESTrajectories: jax=5.298s fortran=29.664s ratio=0.179 res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4} status=parity_ok
 - HSX_FPCollisions_fullTrajectories: jax=5.247s fortran=88.504s ratio=0.059 res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4} status=parity_ok
+- tokamak_1species_PASCollisions_noEr: jax=4.951s fortran=0.309s ratio=16.024 res={'NTHETA': 21, 'NZETA': 1, 'NX': 8, 'NXI': 31} status=parity_ok
 
 ## Runtime offenders (JAX/Fortran ratio)
 
@@ -23,12 +23,12 @@
 - tokamak_1species_PASCollisions_noEr_Nx1: ratio=153.765 jax=3.443s fortran=0.017s res={'NTHETA': 21, 'NZETA': 1, 'NX': 1, 'NXI': 31} status=parity_ok
 - transportMatrix_geometryScheme11: ratio=110.080 jax=3.489s fortran=0.025s res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4} status=parity_ok
 - transportMatrix_geometryScheme2: ratio=76.129 jax=3.191s fortran=0.031s res={'NTHETA': 5, 'NZETA': 5, 'NX': 2, 'NXI': 4} status=parity_ok
-- monoenergetic_geometryScheme1: ratio=15.152 jax=12.909s fortran=0.795s res={'NTHETA': 8, 'NZETA': 9, 'NX': 2, 'NXI': 23} status=parity_ok
 - tokamak_1species_PASCollisions_noEr: ratio=13.278 jax=4.951s fortran=0.309s res={'NTHETA': 21, 'NZETA': 1, 'NX': 8, 'NXI': 31} status=parity_ok
 - tokamak_2species_PASCollisions_noEr: ratio=10.224 jax=4.250s fortran=0.331s res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39} status=parity_ok
 - HSX_PASCollisions_DKESTrajectories: ratio=6.043 jax=6.867s fortran=0.994s res={'NTHETA': 5, 'NZETA': 15, 'NX': 2, 'NXI': 20} status=parity_ok
 - monoenergetic_geometryScheme11: ratio=5.542 jax=5.606s fortran=0.861s res={'NTHETA': 8, 'NZETA': 16, 'NX': 1, 'NXI': 13} status=parity_ok
 - tokamak_2species_PASCollisions_withEr_fullTrajectories: ratio=5.162 jax=7.777s fortran=1.330s res={'NTHETA': 14, 'NZETA': 1, 'NX': 5, 'NXI': 31} status=parity_ok
+- geometryScheme4_2species_PAS_noEr: ratio=5.016 jax=5.658s fortran=0.953s res={'NTHETA': 8, 'NZETA': 11, 'NX': 4, 'NXI': 25} status=parity_ok
 
 ## Memory offenders (absolute JAX RSS)
 
@@ -41,7 +41,7 @@
 - HSX_PASCollisions_DKESTrajectories: jax=1184.1MB fortran=112.0MB ratio=10.568 res={'NTHETA': 5, 'NZETA': 15, 'NX': 2, 'NXI': 20} status=parity_ok
 - tokamak_2species_PASCollisions_noEr: jax=1148.3MB fortran=123.6MB ratio=9.291 res={'NTHETA': 19, 'NZETA': 1, 'NX': 7, 'NXI': 39} status=parity_ok
 - monoenergetic_geometryScheme11: jax=1003.7MB fortran=118.7MB ratio=8.458 res={'NTHETA': 8, 'NZETA': 16, 'NX': 1, 'NXI': 13} status=parity_ok
-- monoenergetic_geometryScheme1: jax=996.6MB fortran=110.2MB ratio=9.042 res={'NTHETA': 8, 'NZETA': 9, 'NX': 2, 'NXI': 23} status=parity_ok
+- monoenergetic_geometryScheme5_ASCII: jax=990.0MB fortran=142.1MB ratio=6.967 res={'NTHETA': 10, 'NZETA': 20, 'NX': 1, 'NXI': 16} status=parity_ok
 
 ## Memory offenders (JAX/Fortran ratio)
 

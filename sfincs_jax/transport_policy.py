@@ -16,6 +16,60 @@ def transport_dense_backend_allowed(*, backend: str) -> bool:
     return str(backend).strip().lower() == "cpu"
 
 
+def transport_dense_accelerator_auto_allowed(
+    op: Any,
+    *,
+    backend: str,
+    geometry_scheme: int,
+) -> bool:
+    """Allow bounded GPU dense transport solves for measured monoenergetic cases."""
+    backend_key = str(backend).strip().lower()
+    if backend_key == "cpu":
+        return False
+    if backend_key not in {"gpu", "cuda"}:
+        return False
+    broad_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", "").strip().lower()
+    if broad_env in {"0", "false", "no", "off"}:
+        return False
+    auto_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO", "").strip().lower()
+    if auto_env in {"0", "false", "no", "off"}:
+        return False
+    if bool(getattr(op, "include_phi1", False)):
+        return False
+    if int(getattr(op, "rhs_mode", 0) or 0) != 3:
+        return False
+    if getattr(getattr(op, "fblock", None), "fp", None) is not None:
+        return False
+    if int(getattr(op, "n_x", 0) or 0) > 2:
+        return False
+    allowed_geom_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_GEOMETRIES", "").strip()
+    allowed_geometries: set[int] = {1}
+    if allowed_geom_env:
+        parsed: set[int] = set()
+        for raw in allowed_geom_env.split(","):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                parsed.add(int(raw))
+            except ValueError:
+                continue
+        if parsed:
+            allowed_geometries = parsed
+    if int(geometry_scheme) not in allowed_geometries:
+        return False
+    max_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_MAX", "").strip()
+    try:
+        max_size = int(max_env) if max_env else 2500
+    except ValueError:
+        max_size = 2500
+    if int(getattr(op, "total_size", 0) or 0) > max(1, int(max_size)):
+        return False
+    n_theta = int(getattr(op, "n_theta", 0) or 0)
+    n_zeta = int(getattr(op, "n_zeta", 0) or 0)
+    return n_theta > 1 and n_zeta > 1 and n_theta * n_zeta >= 64
+
+
 def transport_tzfft_backend_allowed(*, backend: str) -> bool:
     env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_ALLOW_ACCELERATOR", "").strip().lower()
     if env in {"1", "true", "yes", "on"}:

@@ -28,6 +28,17 @@ def test_tail_text_normalizes_timeout_bytes() -> None:
     assert module._tail_text(None, 4) == ""
 
 
+def test_rhs_mode_from_input_controls_transport_matrix(tmp_path: Path) -> None:
+    module = _load_benchmark_module()
+    path = tmp_path / "input.namelist"
+
+    path.write_text("&general\n RHSMode = 3\n/\n")
+    assert module._rhs_mode_from_input(path) == 3
+
+    path.write_text("&general\n RHSMode = 1\n/\n")
+    assert module._rhs_mode_from_input(path) == 1
+
+
 def test_last_rhs1_preconditioner_parses_final_solver_line() -> None:
     module = _load_benchmark_module()
 

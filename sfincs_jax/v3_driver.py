@@ -152,6 +152,7 @@ from .rhs1_host_policy import (
     rhs1_sparse_operator_preconditioned_rescue_allowed as _rhs1_sparse_operator_preconditioned_rescue_allowed_impl,
 )
 from .transport_policy import (
+    transport_dense_accelerator_auto_allowed as _transport_dense_accelerator_auto_allowed_impl,
     transport_dense_backend_allowed as _transport_dense_backend_allowed_impl,
     transport_disable_auto_recycle as _transport_disable_auto_recycle_impl,
     transport_host_gmres_accepts_preconditioned_residual as _transport_host_gmres_accepts_preconditioned_residual_impl,
@@ -511,6 +512,18 @@ def _rhsmode1_dense_backend_allowed() -> bool:
 
 def _transport_dense_backend_allowed() -> bool:
     return _transport_dense_backend_allowed_impl(backend=jax.default_backend())
+
+
+def _transport_dense_accelerator_auto_allowed(
+    op: V3FullSystemOperator,
+    *,
+    geometry_scheme: int,
+) -> bool:
+    return _transport_dense_accelerator_auto_allowed_impl(
+        op,
+        backend=jax.default_backend(),
+        geometry_scheme=int(geometry_scheme),
+    )
 
 
 def _transport_tzfft_backend_allowed() -> bool:
@@ -19042,7 +19055,16 @@ def solve_v3_transport_matrix_linear_gmres(
         dense_fallback = int(rhs_mode) == 3
         if dense_fallback and not dense_fallback_max_env:
             dense_fallback_max = 6000
-    dense_backend_allowed = _transport_dense_backend_allowed()
+    dense_accelerator_auto_allowed = _transport_dense_accelerator_auto_allowed(
+        op0,
+        geometry_scheme=int(transport_geom_scheme),
+    )
+    dense_backend_allowed = _transport_dense_backend_allowed() or dense_accelerator_auto_allowed
+    if dense_accelerator_auto_allowed and emit is not None:
+        emit(
+            1,
+            "solve_v3_transport_matrix_linear_gmres: bounded accelerator dense transport auto enabled",
+        )
     if not dense_backend_allowed:
         dense_fallback = False
         dense_retry_max = 0

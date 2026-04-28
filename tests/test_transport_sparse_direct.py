@@ -7,6 +7,7 @@ import numpy as np
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_driver import (
     _host_sparse_factor_dtype,
+    _transport_dense_accelerator_auto_allowed,
     _transport_tzfft_accelerator_auto_allowed,
     _transport_dense_backend_allowed,
     _transport_host_gmres_accepts_preconditioned_residual,
@@ -468,6 +469,35 @@ def test_transport_dense_backend_allowed_respects_env(monkeypatch) -> None:
     assert _transport_dense_backend_allowed()
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", "0")
     assert not _transport_dense_backend_allowed()
+
+
+def test_transport_dense_accelerator_auto_allowed_for_bounded_mono_case(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_GEOMETRIES", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_MAX", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    op = SimpleNamespace(
+        rhs_mode=3,
+        include_phi1=False,
+        n_x=1,
+        n_theta=9,
+        n_zeta=9,
+        total_size=1864,
+        fblock=SimpleNamespace(fp=None),
+    )
+    assert _transport_dense_accelerator_auto_allowed(op, geometry_scheme=1)
+    assert not _transport_dense_accelerator_auto_allowed(op, geometry_scheme=5)
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_GEOMETRIES", "5")
+    assert _transport_dense_accelerator_auto_allowed(op, geometry_scheme=5)
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_MAX", "1000")
+    assert not _transport_dense_accelerator_auto_allowed(op, geometry_scheme=5)
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO_MAX", "2500")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", "0")
+    assert not _transport_dense_accelerator_auto_allowed(op, geometry_scheme=5)
 
 
 def test_transport_tzfft_backend_allowed_respects_env(monkeypatch) -> None:
