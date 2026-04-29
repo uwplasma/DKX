@@ -88,6 +88,15 @@ def _fmt_runtime_ratio(row: dict[str, object]) -> str:
     return f"{float(jax) / float(fort):.2f}x"
 
 
+def _warm_or_logged_runtime(row: dict[str, object] | None) -> object | None:
+    if row is None:
+        return None
+    warm = row.get("jax_runtime_s_warm")
+    if warm is not None:
+        return warm
+    return row.get("jax_logged_elapsed_s")
+
+
 def _fmt_memory_ratio(row: dict[str, object]) -> str:
     jax = row.get("jax_max_rss_mb")
     fort = row.get("fortran_max_rss_mb")
@@ -188,8 +197,8 @@ def _format_case_table(
     gpu_rows_by_case: dict[str, dict[str, object]],
 ) -> list[str]:
     lines = [
-        "| Case | Fortran CPU(s) | JAX CPU(s) | CPU x | JAX GPU(s) | GPU x | Fortran MB | JAX CPU MB | CPU MB x | JAX GPU MB | GPU MB x | CPU mismatch | GPU mismatch | CPU print | GPU print | CPU status | GPU status |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |",
+        "| Case | Fortran CPU(s) | JAX CPU cold(s) | CPU cold x | JAX CPU warm/logged(s) | CPU warm/logged x | JAX GPU cold(s) | GPU cold x | JAX GPU warm/logged(s) | GPU warm/logged x | Fortran MB | JAX CPU MB | CPU MB x | JAX GPU MB | GPU MB x | CPU mismatch | GPU mismatch | CPU print | GPU print | CPU status | GPU status |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |",
     ]
     for case in case_order:
         cpu_row = rows_by_case.get(case)
@@ -200,6 +209,8 @@ def _format_case_table(
         fort_memory = cpu_row.get("fortran_max_rss_mb") if cpu_row else None
         cpu_runtime = cpu_row.get("jax_runtime_s") if cpu_row else None
         gpu_runtime = gpu_row.get("jax_runtime_s") if gpu_row else None
+        cpu_warm_runtime = _warm_or_logged_runtime(cpu_row)
+        gpu_warm_runtime = _warm_or_logged_runtime(gpu_row)
         cpu_memory = cpu_row.get("jax_max_rss_mb") if cpu_row else None
         gpu_memory = gpu_row.get("jax_max_rss_mb") if gpu_row else None
         lines.append(
@@ -210,8 +221,12 @@ def _format_case_table(
                     _fmt_float(fort_runtime, 3),
                     _fmt_float(cpu_runtime, 3),
                     _fmt_ratio(cpu_runtime, fort_runtime),
+                    _fmt_float(cpu_warm_runtime, 3),
+                    _fmt_ratio(cpu_warm_runtime, fort_runtime),
                     _fmt_float(gpu_runtime, 3),
                     _fmt_ratio(gpu_runtime, fort_runtime),
+                    _fmt_float(gpu_warm_runtime, 3),
+                    _fmt_ratio(gpu_warm_runtime, fort_runtime),
                     _fmt_float(fort_memory, 1),
                     _fmt_float(cpu_memory, 1),
                     _fmt_ratio(cpu_memory, fort_memory),
@@ -436,6 +451,11 @@ def main() -> int:
 
     lines.extend(
         [
+            "",
+            "Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is "
+            "`jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. "
+            "The JAX memory columns are the recorded peak-RSS values and are used for both "
+            "cold and warm memory bars in the plot.",
             "",
             "Full per-case runtime / memory table:",
             *_format_case_table(case_order, rows_by_case, gpu_rows_by_case),
