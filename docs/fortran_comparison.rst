@@ -20,7 +20,8 @@ Those artifacts currently report:
 - no ``jax_error``,
 - no ``max_attempts``.
 
-The frozen reports also generate a publication-facing benchmark dashboard:
+The frozen reports also generate a publication-facing runtime and memory
+comparison:
 
 .. code-block:: bash
 
@@ -30,11 +31,16 @@ The frozen reports also generate a publication-facing benchmark dashboard:
    :alt: sfincs_jax frozen CPU/GPU suite benchmark against SFINCS Fortran v3
    :width: 92%
 
-   Release benchmark summary generated from the profiled CPU/GPU suite reports. The
-   current artifacts have median JAX/Fortran wall-clock ratios of about ``0.035x`` on
-   CPU and ``0.059x`` on GPU for the audited suite, while median maximum-RSS ratios are
-   about ``4.92x`` on CPU and ``9.20x`` on GPU because JAX/XLA keeps compiled kernels
-   and device buffers resident. The top runtime and memory cases are recorded in
+   Release benchmark generated from the profiled CPU/GPU suite reports. Panel A
+   compares wall-clock runtime and Panel B compares peak resident memory for each
+   audited case, with separate ``sfincs_jax`` cold and warm bars for CPU and GPU.
+   Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran v3
+   runtime.
+   The current artifacts have median cold JAX/Fortran wall-clock ratios of about
+   ``0.035x`` on CPU and ``0.059x`` on GPU for the audited suite, while median
+   maximum-RSS ratios are about ``4.92x`` on CPU and ``9.20x`` on GPU because
+   JAX/XLA keeps compiled kernels and device buffers resident. The top runtime
+   and memory cases are recorded in
    ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``.
 
 Use :doc:`parity` for the scope map and comparison policy, :doc:`performance` for CPU/GPU
