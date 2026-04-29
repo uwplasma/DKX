@@ -20,7 +20,7 @@ Generate the publication validation dashboard with
 
    python examples/publication_figures/generate_validation_dashboard.py
 
-Generate the frozen CPU/GPU Fortran-suite benchmark dashboard with
+Generate the frozen CPU/GPU Fortran-suite runtime and memory comparison with
 
 .. code-block:: bash
 
@@ -54,12 +54,18 @@ Fortran v3 suite benchmark
    :alt: Frozen CPU and GPU sfincs_jax benchmark summary against SFINCS Fortran v3
    :width: 92%
 
-   CPU/GPU benchmark dashboard generated from the frozen full-suite comparison
-   reports. Panel A is the release gate: both backends retain ``39/39`` audited
-   cases with no ``jax_error`` or ``max_attempts`` failures. Panels B-D summarize
-   wall-clock runtime ratios, maximum-RSS memory ratios, and the runtime-memory
-   trade space against the Fortran v3 reference implementation. The machine-readable
-   summary is
+   Runtime and memory comparison generated from the frozen full-suite reports.
+   Panel A shows wall-clock runtime and Panel B shows peak resident memory for
+   SFINCS Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU
+   cold/warm across all 39 audited cases. Both panels use log-scaled axes so tiny
+   reference runs and larger geometry-rich cases remain visible in the same plot.
+   Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran v3
+   runtime, placing the strongest JAX wins first.
+   Cold is the first external suite command. Warm runtime uses
+   ``jax_runtime_s_warm`` when rerun timings are present and otherwise uses the
+   recorded ``jax_logged_elapsed_s`` fallback; the JSON summary records
+   ``warm_or_logged_runtime_source_counts``. The machine-readable summary,
+   including parity status and runtime/memory ratios, is
    ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``.
 
 Autodiff and sensitivity validation
