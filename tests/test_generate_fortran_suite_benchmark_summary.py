@@ -26,7 +26,9 @@ def _write_synthetic_report(path: Path, *, backend_scale: float) -> None:
                 "status": "parity_ok",
                 "blocker_type": "none",
                 "fortran_runtime_s": 10.0 + idx,
-                "jax_runtime_s": backend_scale * (1.0 + 0.1 * idx),
+                "jax_runtime_s": backend_scale * (0.7 + 0.1 * idx),
+                "jax_runtime_s_cold": backend_scale * (1.2 + 0.1 * idx),
+                "jax_runtime_s_warm": backend_scale * (0.7 + 0.1 * idx),
                 "jax_logged_elapsed_s": backend_scale * (0.8 + 0.1 * idx),
                 "fortran_max_rss_mb": 100.0 + idx,
                 "jax_max_rss_mb": backend_scale * (500.0 + idx),
@@ -74,3 +76,41 @@ def test_generate_fortran_suite_benchmark_summary_from_reports(tmp_path: Path) -
     assert payload["reports"]["gpu"]["parity_ok_cases"] == 39
     assert payload["reports"]["cpu"]["strict_mismatch_total"] == 0
     assert payload["reports"]["gpu"]["strict_mismatch_total"] == 0
+    assert payload["reports"]["cpu"]["cold_runtime_ratio_summary"]["count"] == 39
+    assert payload["reports"]["gpu"]["warm_runtime_ratio_summary"]["count"] == 39
+    assert payload["reports"]["gpu"]["warm_or_logged_runtime_ratio_summary"]["count"] == 39
+    assert payload["reports"]["gpu"]["warm_or_logged_runtime_source_counts"] == {"jax_runtime_s_warm": 39}
+
+
+def test_case_order_prioritizes_warm_jax_speedup() -> None:
+    mod = _load_module()
+
+    def row(case: str, *, fortran: float, warm: float) -> dict[str, object]:
+        return {
+            "case": case,
+            "status": "parity_ok",
+            "blocker_type": "none",
+            "fortran_runtime_s": fortran,
+            "jax_runtime_s": warm,
+            "jax_runtime_s_cold": warm * 2.0,
+            "jax_runtime_s_warm": warm,
+            "jax_logged_elapsed_s": warm,
+            "fortran_max_rss_mb": 100.0,
+            "jax_max_rss_mb": 500.0,
+            "n_mismatch_common": 0,
+            "n_mismatch_physics": 0,
+            "n_mismatch_solver": 0,
+            "strict_n_mismatch_common": 0,
+            "strict_n_mismatch_physics": 0,
+            "strict_n_mismatch_solver": 0,
+        }
+
+    metrics = mod.suite_case_metrics(
+        [
+            row("slow_jax", fortran=1.0, warm=4.0),
+            row("medium_speedup", fortran=20.0, warm=5.0),
+            row("largest_speedup", fortran=100.0, warm=10.0),
+        ]
+    )
+
+    assert mod._case_order(metrics, metrics) == ["largest_speedup", "medium_speedup", "slow_jax"]

@@ -23,12 +23,6 @@ It is designed for:
 - memory-efficient large solves,
 - end-to-end differentiable workflows.
 
-![Runtime and parity snapshot](docs/_static/figures/sfincs_vs_sfincs_jax_l11_runtime_2x2.png)
-
-The figure above shows a representative transport benchmark. The release-facing
-validation and benchmark artifacts are documented in the docs and in the audit table
-below.
-
 ## Installation
 
 Install from PyPI:
@@ -68,6 +62,21 @@ sfincs_jax write-output --input examples/getting_started/input.namelist --out sf
 sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.npz --geometry-only
 sfincs_jax --plot sfincsOutput.nc
 ```
+
+## Runtime and Memory Summary
+
+![Runtime and memory comparison against SFINCS Fortran v3](docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png)
+
+The release benchmark above compares SFINCS Fortran v3, `sfincs_jax` CPU cold,
+`sfincs_jax` CPU warm, `sfincs_jax` GPU cold, and `sfincs_jax` GPU warm for every
+audited example-suite case. The left panel shows wall-clock runtime and the right
+panel shows peak resident memory, both on log axes. Cold is the first external
+suite command. Warm runtime uses `jax_runtime_s_warm` when reports were generated
+with `--jax-repeats >= 2`; for the current frozen release reports, it falls back
+to the CLI `jax_logged_elapsed_s` field. Cases are ordered by best warm
+`sfincs_jax` speedup over the Fortran v3 runtime, so the strongest JAX wins appear
+first. Regenerate the plot with
+`python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`.
 
 ## Physics in One Page
 
