@@ -86,4 +86,5 @@ This manual is organized around the actual user and developer workflows:
    fortran_comparison
    references
    contributing
+   release_notes
    release_checklist

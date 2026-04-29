@@ -20,8 +20,8 @@ jobs:
       SFINCS_JAX_CI: "1"
       SFINCS_JAX_FAST_EXAMPLES: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Install
@@ -46,8 +46,8 @@ jobs:
       SFINCS_JAX_CI: "1"
       SFINCS_JAX_FAST_EXAMPLES: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Install
@@ -58,7 +58,7 @@ jobs:
         run: |
           python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax --cov-report=term --cov-report=xml --cov-fail-under=43
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage.xml
           use_oidc: true
@@ -74,8 +74,8 @@ jobs:
       SFINCS_JAX_CI: "1"
       SFINCS_JAX_FAST_EXAMPLES: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Install
@@ -112,8 +112,8 @@ jobs:
       SFINCS_JAX_CI: "1"
       SFINCS_JAX_FAST_EXAMPLES: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Install

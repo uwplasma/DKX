@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-04-28 (America/Chicago)
+Last updated: 2026-04-29 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -60,6 +60,14 @@ Current active lane (2026-04-28):
 - Result: focused GPU `Ntheta=13,Nxi=40` full-FP default now uses dense automatically (`2.794 s`, about `1.04 GB`) instead of the forced Krylov path (`9.539 s`, about `2.14 GB`), with `0` Fortran mismatches.
 - Result: focused GPU `Ntheta=13,Nxi=20` default also uses dense and avoids the pathological forced-Krylov rescue (`137.411 s`), with `0` Fortran mismatches.
 - Next best steps: rerun local tests/docs, regenerate the publication benchmark dashboard from the bounded GPU report, then decide whether the remaining GPU top offenders justify another solver-policy change or should stay in the optimization backlog.
+
+Current active lane (2026-04-29):
+- [x] Prepare the next minor release from clean `main` after the GPU solver-path validation pass.
+- [x] Bump package metadata from `1.0.7` to `1.1.0`.
+- [x] Add release notes that document the CPU/GPU parity state, solver-path performance changes, output/plotting capabilities, validation artifacts, and remaining research lanes.
+- [x] Refresh GitHub Actions core action versions to current major tags to avoid the Node 20 deprecation path.
+- [x] Run release validation: focused package/CLI/output tests, docs with warnings as errors, HDF5/NetCDF/NPZ CLI smoke plus plotting, package build, and full `pytest -q` (`948 passed`).
+- Next best steps: commit the release metadata, rebuild from committed `HEAD`, tag `v1.1.0`, push, and confirm CI/docs/PyPI publication.
 
 Execution style:
 - Always profile first, change second, validate third.
