@@ -94,11 +94,15 @@ Current artifacts:
    :width: 92%
 
    Cross-code release benchmark generated from frozen CPU/GPU suite reports. The
-   acceptance tests require all 39 audited cases to remain ``parity_ok`` on both
-   backends, with zero strict mismatches and no ``jax_error`` or ``max_attempts``
-   failures. Runtime and maximum-RSS ratios are recomputed from the checked-in
-   reports before plotting, and the top runtime/memory offenders are stored in the
-   JSON summary for manuscript tables and regression triage.
+   plotted bars show wall-clock runtime and peak resident memory for SFINCS
+   Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU cold/warm
+   across all 39 audited cases. Cases are ordered by best warm ``sfincs_jax``
+   speedup over the Fortran v3 runtime. The acceptance tests require all cases to remain
+   ``parity_ok`` on both backends, with zero strict mismatches and no
+   ``jax_error`` or ``max_attempts`` failures. Absolute runtime, memory, ratios,
+   top offenders, and warm timing-source counts are recomputed from the checked-in
+   reports and stored in the JSON summary for manuscript tables and regression
+   triage.
 
 SFINCS 2014 collisionality figures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

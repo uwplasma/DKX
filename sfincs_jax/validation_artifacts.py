@@ -61,6 +61,8 @@ class SuiteCaseMetric:
     blocker_type: str
     fortran_runtime_s: float | None
     jax_runtime_s: float | None
+    jax_runtime_s_cold: float | None
+    jax_runtime_s_warm: float | None
     jax_logged_elapsed_s: float | None
     fortran_max_rss_mb: float | None
     jax_max_rss_mb: float | None
@@ -78,6 +80,40 @@ class SuiteCaseMetric:
         """Return logged JAX elapsed time divided by Fortran runtime when available."""
 
         return _safe_ratio(self.jax_logged_elapsed_s, self.fortran_runtime_s)
+
+    @property
+    def cold_runtime_ratio(self) -> float | None:
+        """Return cold external JAX runtime divided by Fortran runtime when available."""
+
+        return _safe_ratio(self.jax_runtime_s_cold, self.fortran_runtime_s)
+
+    @property
+    def warm_runtime_ratio(self) -> float | None:
+        """Return warm JAX rerun runtime divided by Fortran runtime when available."""
+
+        return _safe_ratio(self.jax_runtime_s_warm, self.fortran_runtime_s)
+
+    @property
+    def warm_or_logged_runtime_s(self) -> float | None:
+        """Return warm rerun runtime, falling back to logged CLI elapsed time."""
+
+        return self.jax_runtime_s_warm if self.jax_runtime_s_warm is not None else self.jax_logged_elapsed_s
+
+    @property
+    def warm_or_logged_runtime_source(self) -> str | None:
+        """Return the source field used for the warm-runtime comparison plot."""
+
+        if self.jax_runtime_s_warm is not None:
+            return "jax_runtime_s_warm"
+        if self.jax_logged_elapsed_s is not None:
+            return "jax_logged_elapsed_s"
+        return None
+
+    @property
+    def warm_or_logged_runtime_ratio(self) -> float | None:
+        """Return warm-rerun-or-logged JAX elapsed time divided by Fortran runtime."""
+
+        return _safe_ratio(self.warm_or_logged_runtime_s, self.fortran_runtime_s)
 
     @property
     def memory_ratio(self) -> float | None:
@@ -309,6 +345,8 @@ def suite_case_metrics(rows: Sequence[Mapping[str, object]]) -> list[SuiteCaseMe
                 blocker_type=str(row.get("blocker_type", "none")),
                 fortran_runtime_s=_optional_float(row.get("fortran_runtime_s")),
                 jax_runtime_s=_optional_float(row.get("jax_runtime_s")),
+                jax_runtime_s_cold=_optional_float(row.get("jax_runtime_s_cold", row.get("jax_runtime_s"))),
+                jax_runtime_s_warm=_optional_float(row.get("jax_runtime_s_warm")),
                 jax_logged_elapsed_s=_optional_float(row.get("jax_logged_elapsed_s")),
                 fortran_max_rss_mb=_optional_float(row.get("fortran_max_rss_mb")),
                 jax_max_rss_mb=_optional_float(row.get("jax_max_rss_mb")),
@@ -346,10 +384,17 @@ def _metric_row(metric: SuiteCaseMetric, *, field: str) -> dict[str, object]:
         "blocker_type": metric.blocker_type,
         "fortran_runtime_s": metric.fortran_runtime_s,
         "jax_runtime_s": metric.jax_runtime_s,
+        "jax_runtime_s_cold": metric.jax_runtime_s_cold,
+        "jax_runtime_s_warm": metric.jax_runtime_s_warm,
         "jax_logged_elapsed_s": metric.jax_logged_elapsed_s,
+        "warm_or_logged_runtime_s": metric.warm_or_logged_runtime_s,
+        "warm_or_logged_runtime_source": metric.warm_or_logged_runtime_source,
         "fortran_max_rss_mb": metric.fortran_max_rss_mb,
         "jax_max_rss_mb": metric.jax_max_rss_mb,
         "runtime_ratio": metric.runtime_ratio,
+        "cold_runtime_ratio": metric.cold_runtime_ratio,
+        "warm_runtime_ratio": metric.warm_runtime_ratio,
+        "warm_or_logged_runtime_ratio": metric.warm_or_logged_runtime_ratio,
         "logged_runtime_ratio": metric.logged_runtime_ratio,
         "memory_ratio": metric.memory_ratio,
         "practical_mismatches": metric.practical_mismatches,
@@ -403,6 +448,14 @@ def suite_report_summary(
         "strict_mismatch_cases": int(sum(count > 0 for count in strict_totals)),
         "strict_mismatch_total": int(sum(strict_totals)),
         "runtime_ratio_summary": _ratio_summary([metric.runtime_ratio for metric in metrics]),
+        "cold_runtime_ratio_summary": _ratio_summary([metric.cold_runtime_ratio for metric in metrics]),
+        "warm_runtime_ratio_summary": _ratio_summary([metric.warm_runtime_ratio for metric in metrics]),
+        "warm_or_logged_runtime_ratio_summary": _ratio_summary(
+            [metric.warm_or_logged_runtime_ratio for metric in metrics]
+        ),
+        "warm_or_logged_runtime_source_counts": _counts(
+            [metric.warm_or_logged_runtime_source or "missing" for metric in metrics]
+        ),
         "logged_runtime_ratio_summary": _ratio_summary([metric.logged_runtime_ratio for metric in metrics]),
         "memory_ratio_summary": _ratio_summary([metric.memory_ratio for metric in metrics]),
         "fastest_jax_vs_fortran_cases": _top_metrics(metrics, key="runtime_ratio", n=n_top, reverse=False),
