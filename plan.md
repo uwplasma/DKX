@@ -67,7 +67,8 @@ Current active lane (2026-04-29):
 - [x] Add release notes that document the CPU/GPU parity state, solver-path performance changes, output/plotting capabilities, validation artifacts, and remaining research lanes.
 - [x] Refresh GitHub Actions core action versions to current major tags to avoid the Node 20 deprecation path.
 - [x] Run release validation: focused package/CLI/output tests, docs with warnings as errors, HDF5/NetCDF/NPZ CLI smoke plus plotting, package build, and full `pytest -q` (`948 passed`).
-- Next best steps: commit the release metadata, rebuild from committed `HEAD`, tag `v1.1.0`, push, and confirm CI/docs/PyPI publication.
+- [x] Rebuild the package from committed `HEAD` and verify the source distribution includes `docs/release_notes.rst` and wheel metadata reports `Version: 1.1.0`.
+- Next best steps: tag `v1.1.0`, push `main` and the tag, and confirm CI/docs/PyPI publication.
 
 Execution style:
 - Always profile first, change second, validate third.
