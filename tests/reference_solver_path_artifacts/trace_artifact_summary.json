@@ -1,0 +1,49 @@
+{
+  "cpu_full_trace": {
+    "backends": [
+      "cpu"
+    ],
+    "print_missing_signals_total": 0,
+    "report_len": 39,
+    "selected_paths": [
+      "rhsmode1_solution",
+      "transport_matrix"
+    ],
+    "statuses": [
+      "parity_ok"
+    ],
+    "strict_n_mismatch_common_sum": 0,
+    "trace_count": 39
+  },
+  "gpu_full": {
+    "backends": [
+      "gpu"
+    ],
+    "print_missing_signals_total": 0,
+    "report_len": 39,
+    "selected_paths": [
+      "rhsmode1_solution",
+      "transport_matrix"
+    ],
+    "statuses": [
+      "parity_ok"
+    ],
+    "strict_n_mismatch_common_sum": 0,
+    "trace_count": 39
+  },
+  "gpu_probe": {
+    "backends": [
+      "gpu"
+    ],
+    "print_missing_signals_total": 0,
+    "report_len": 7,
+    "selected_paths": [
+      "rhsmode1_solution"
+    ],
+    "statuses": [
+      "parity_ok"
+    ],
+    "strict_n_mismatch_common_sum": 0,
+    "trace_count": 7
+  }
+}

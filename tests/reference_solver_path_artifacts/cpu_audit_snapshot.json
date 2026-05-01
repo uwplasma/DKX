@@ -1,0 +1,209 @@
+{
+  "full_fp_cases": {
+    "inductiveE_noEr": {
+      "default_krylov": false,
+      "dense_auto": true,
+      "dense_fallback": false,
+      "profile_peak_rss_mb": 463.0,
+      "rhs1_solve_s": 0.367,
+      "sparse_fallback": false
+    },
+    "quick_2species_FPCollisions_noEr": {
+      "default_krylov": false,
+      "dense_auto": true,
+      "dense_fallback": false,
+      "profile_peak_rss_mb": 465.3,
+      "rhs1_solve_s": 0.341,
+      "sparse_fallback": false
+    },
+    "tokamak_1species_FPCollisions_noEr": {
+      "default_krylov": false,
+      "dense_auto": true,
+      "dense_fallback": false,
+      "profile_peak_rss_mb": 373.5,
+      "rhs1_solve_s": 0.208,
+      "sparse_fallback": false
+    },
+    "tokamak_1species_FPCollisions_withEr_DKESTrajectories": {
+      "default_krylov": false,
+      "dense_auto": true,
+      "dense_fallback": false,
+      "profile_peak_rss_mb": 428.8,
+      "rhs1_solve_s": 0.338,
+      "sparse_fallback": false
+    },
+    "tokamak_1species_FPCollisions_withEr_fullTrajectories": {
+      "default_krylov": false,
+      "dense_auto": true,
+      "dense_fallback": false,
+      "profile_peak_rss_mb": 434.2,
+      "rhs1_solve_s": 0.372,
+      "sparse_fallback": false
+    }
+  },
+  "pas_heavy_cases": {
+    "HSX_PASCollisions_DKESTrajectories": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "pas_tz",
+      "profile_peak_rss_mb": 1092.0,
+      "rhs1_solve_s": 1.068,
+      "sparse_fallback": false
+    },
+    "HSX_PASCollisions_fullTrajectories": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "pas_tz",
+      "profile_peak_rss_mb": 1455.7,
+      "rhs1_solve_s": 1.126,
+      "sparse_fallback": false
+    },
+    "geometryScheme4_1species_PAS_withEr_DKESTrajectories": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "pas_tz",
+      "profile_peak_rss_mb": 1007.9,
+      "rhs1_solve_s": 0.809,
+      "sparse_fallback": false
+    },
+    "geometryScheme4_2species_PAS_noEr": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "pas_tz",
+      "profile_peak_rss_mb": 1796.7,
+      "rhs1_solve_s": 1.179,
+      "sparse_fallback": false
+    },
+    "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "pas_tz",
+      "profile_peak_rss_mb": 1442.4,
+      "rhs1_solve_s": 0.968,
+      "sparse_fallback": false
+    },
+    "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "pas_tz",
+      "profile_peak_rss_mb": 1479.7,
+      "rhs1_solve_s": 1.05,
+      "sparse_fallback": false
+    },
+    "tokamak_1species_PASCollisions_noEr": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "pas_tokamak_theta",
+      "profile_peak_rss_mb": 575.7,
+      "rhs1_solve_s": 0.769,
+      "sparse_fallback": false
+    },
+    "tokamak_1species_PASCollisions_noEr_Nx1": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "xblock_tz",
+      "profile_peak_rss_mb": 507.9,
+      "rhs1_solve_s": 0.501,
+      "sparse_fallback": false
+    },
+    "tokamak_1species_PASCollisions_withEr_fullTrajectories": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "xblock_tz",
+      "profile_peak_rss_mb": 607.2,
+      "rhs1_solve_s": 1.225,
+      "sparse_fallback": false
+    },
+    "tokamak_2species_PASCollisions_noEr": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "schur",
+      "profile_peak_rss_mb": 885.6,
+      "rhs1_solve_s": 0.809,
+      "sparse_fallback": false
+    },
+    "tokamak_2species_PASCollisions_withEr_fullTrajectories": {
+      "dense_auto": false,
+      "dense_fallback": false,
+      "last_preconditioner": "schur",
+      "profile_peak_rss_mb": 1592.4,
+      "rhs1_solve_s": 1.51,
+      "sparse_fallback": false
+    }
+  },
+  "strict_report": {
+    "len": 39,
+    "pas_cases": {
+      "HSX_PASCollisions_DKESTrajectories": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "HSX_PASCollisions_fullTrajectories": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "geometryScheme4_1species_PAS_withEr_DKESTrajectories": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "geometryScheme4_2species_PAS_noEr": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "monoenergetic_geometryScheme11": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "tokamak_1species_PASCollisions_noEr": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "tokamak_1species_PASCollisions_noEr_Nx1": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "tokamak_1species_PASCollisions_noEr_withQN": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "tokamak_1species_PASCollisions_withEr_fullTrajectories": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "tokamak_2species_PASCollisions_noEr": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      },
+      "tokamak_2species_PASCollisions_withEr_fullTrajectories": {
+        "print_missing_signals": [],
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0
+      }
+    },
+    "print_missing_signals_total": 0,
+    "statuses": [
+      "parity_ok"
+    ],
+    "strict_n_mismatch_common_sum": 0
+  }
+}
