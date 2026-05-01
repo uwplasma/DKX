@@ -147,6 +147,24 @@ Current active lane (2026-05-01, SFINCS_JAX-only closure):
   preserved parity but traded memory for about `2x` slower solves, so no default
   restart-policy change is justified from this probe.
 - Validation: `pytest -q tests/test_create_production_benchmark_inputs.py tests/test_validation_manifest_schema.py tests/test_validation_artifacts.py tests/test_generate_fortran_suite_benchmark_summary.py` (`21 passed`).
+- [x] Add a checked-in guard test for the public production-resolution manifest:
+  `benchmarks/production_resolution_inputs_2026-04-30/manifest.json` must
+  remain `39` example-derived SFINCS_JAX cases, all with `source_group=examples`,
+  and must not silently reintroduce downstream-project paths.
+- Validation: `pytest -q tests/test_create_production_benchmark_inputs.py`
+  (`6 passed`).
+- Validation: GitHub `Docs` and `CI` are green on pushed commit `1c2737b`
+  (`Docs` run `25233125047`, `CI` run `25233125097`).
+- [x] Run a bounded CPU PAS/geometry11 offender sweep before changing policy.
+  For `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`,
+  current default `pas_tz` stayed strict-clean and fastest (`elapsed=2.53 s`,
+  max RSS about `1.44 GB`). Forced `schur` was strict-clean but slower and
+  higher-memory (`3.24 s`, `2.17 GB`), forced `xblock_tz` was much slower,
+  higher-memory, and mismatched flow/current diagnostics (`12.59 s`, `3.17 GB`,
+  `6` mismatches), and `pas_schur` exceeded the bounded `60 s` trial budget.
+  A smaller GMRES restart preserved parity and lowered memory (`5.36 s`,
+  `1.21 GB`), but roughly doubled runtime, so it remains an opt-in
+  memory-pressure knob rather than a default.
 - Next SFINCS_JAX-only work: attack PAS/geometry-rich runtime and memory with
   trace-backed offender probes only when a candidate beats the current structured
   path on both parity and measured cost, then refresh production-resolution
