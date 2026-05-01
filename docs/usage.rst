@@ -950,7 +950,10 @@ the core convergence fields directly: ``linearSolverMethod``,
 PETSc-compatible constrained-PAS minimum-norm runs, ``linearSolverConverged``
 can be false while ``linearSolverAccepted`` is true; that distinction is
 intentional and prevents true-residual convergence from being conflated with
-Fortran/PETSc-compatible branch acceptance.
+Fortran/PETSc-compatible branch acceptance. Sparse-PC runs additionally expose
+``linearSolverMatvecs``, setup/solve/elapsed timings, sparse-pattern build time,
+sparse preconditioner factorization time, and sparse-pattern nonzero counters in
+the same output file.
 
 The solver trace is intentionally separate from the physics output so parity
 comparisons against SFINCS Fortran v3 can continue to use byte-stable HDF5,

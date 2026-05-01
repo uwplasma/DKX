@@ -93,7 +93,11 @@ target was met. RHSMode=1 outputs include `linearSolverMethod`,
 `linearSolverResidualNorm`, `linearSolverResidualTarget`,
 `linearSolverResidualTargetRatio`, `linearSolverConverged`,
 `linearSolverAccepted`, and `linearSolverAcceptanceCriterion` in the main output
-file. The production benchmark manifest now enforces at least `25 x 31 x 11 x 17`
+file. Sparse-PC runs also write setup/solve/factorization timings and
+sparse-pattern counters such as `linearSolverMatvecs`,
+`linearSolverSetupTime`, `linearSolverSolveTime`,
+`linearSolverSparsePCFactorTime`, and `linearSolverSparsePatternNnz`.
+The production benchmark manifest now enforces at least `25 x 31 x 11 x 17`
 (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and `25 x 1 x 11 x 17` for tokamak
 cases. Earlier `17 x 21 x 5 x 12` NTX timings were lower-resolution bring-up
 checks for this solver lane, not public production baselines.
