@@ -312,5 +312,6 @@ __all__ = [
     "rhs1_host_dense_shortcut_allowed",
     "rhs1_host_sparse_direct_allowed",
     "rhs1_host_sparse_skip_dense_ratio",
+    "rhs1_constrained_pas_sparse_pc_auto_allowed",
     "rhs1_sparse_operator_preconditioned_rescue_allowed",
 ]

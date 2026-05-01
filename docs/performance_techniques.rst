@@ -387,7 +387,11 @@ minimum-norm solve with separate acceptance metadata. Use ``sparse_lsmr``
 directly only as a diagnostic probe. RHSMode=1 outputs record
 ``linearSolverConverged``, ``linearSolverAccepted``, the acceptance criterion,
 and the residual norm/target so nonconverged or branch-compatible diagnostics
-are visible in the main file, not only in the optional solver trace.
+are visible in the main file, not only in the optional solver trace. Sparse-PC
+GMRES outputs also record setup time, solve time, sparse-pattern build time,
+preconditioner factorization time, matvecs, and sparse-pattern row-density
+counters, so large-run regressions can be separated into pre-solve setup and
+Krylov iteration costs.
 The production benchmark manifest now enforces at least ``25 x 31 x 11 x 17``
 (``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 11 x 17`` for
 tokamak cases, so performance claims for this lane should be regenerated from

@@ -11334,11 +11334,13 @@ def solve_v3_full_system_linear_gmres(
             )
 
         sparse_timer = Timer()
+        pattern_start_s = sparse_timer.elapsed_s()
         if emit is not None:
             emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern")
         pattern = v3_full_system_conservative_sparsity_pattern(op)
+        pattern_build_s = sparse_timer.elapsed_s() - pattern_start_s
+        summary = summarize_v3_sparse_pattern(op, pattern)
         if emit is not None:
-            summary = summarize_v3_sparse_pattern(op, pattern)
             emit(
                 1,
                 "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
@@ -11362,6 +11364,7 @@ def solve_v3_full_system_linear_gmres(
         if emit is not None:
             shift_note = f" shift={pc_shift:.1e}" if pc_shift != 0.0 else ""
             emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres factoring RHSMode=1 preconditioner" + shift_note)
+        factor_start_s = sparse_timer.elapsed_s()
         _operator_bundle_pc, factor_bundle_pc = _build_host_sparse_direct_factor_from_matvec(
             matvec=_sparse_pc_factor_mv,
             n=int(op.total_size),
@@ -11370,6 +11373,8 @@ def solve_v3_full_system_linear_gmres(
             pattern=pattern,
             emit=emit,
         )
+        pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
+        setup_s = sparse_timer.elapsed_s()
 
         side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
         precondition_side = side_env if side_env in {"left", "right", "none"} else "left"
@@ -11429,6 +11434,7 @@ def solve_v3_full_system_linear_gmres(
                 f"precondition_side={precondition_side}",
             )
         rn_pc = float("nan")
+        solve_start_s = sparse_timer.elapsed_s()
         if pc_form in {"explicit_left", "petsc_left"}:
             x_np, residual_norm_sparse_pc, rn_pc, history = explicit_left_preconditioned_gmres_scipy(
                 matvec=_mv_true,
@@ -11452,6 +11458,7 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=pc_maxiter,
                 precondition_side=precondition_side,
             )
+        solve_s = sparse_timer.elapsed_s() - solve_start_s
         try:
             residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
                 jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
@@ -11486,6 +11493,14 @@ def solve_v3_full_system_linear_gmres(
                 "acceptance_criterion": "true_residual",
                 "iterations": int(len(history or [])),
                 "matvecs": int(mv_count),
+                "setup_s": float(setup_s),
+                "solve_s": float(solve_s),
+                "elapsed_s": float(sparse_timer.elapsed_s()),
+                "sparse_pattern_nnz": int(summary.nnz),
+                "sparse_pattern_avg_row_nnz": float(summary.avg_row_nnz),
+                "sparse_pattern_max_row_nnz": int(summary.max_row_nnz),
+                "sparse_pattern_build_s": float(pattern_build_s),
+                "sparse_pc_factor_s": float(pc_factor_s),
             },
         )
     if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:
