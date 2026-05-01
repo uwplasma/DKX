@@ -20,6 +20,13 @@ def _is_numeric_dataset(x) -> bool:
         return False
 
 
+def _assert_fortran_keys_and_solver_metadata(out: dict, ref: dict) -> None:
+    """Require Fortran-compatible fields while allowing JAX solver provenance."""
+    assert set(ref.keys()).issubset(out.keys())
+    assert "linearSolverMethod" in out
+    assert "linearSolverResidualNorm" in out
+
+
 @pytest.mark.parametrize(
     "base",
     (
@@ -45,7 +52,7 @@ def test_write_output_rhsmode1_phi1_fixtures_match_fortran_end_to_end(base: str,
     out = read_sfincs_h5(out_path)
     ref = read_sfincs_h5(ref_path)
 
-    assert set(out.keys()) == set(ref.keys())
+    _assert_fortran_keys_and_solver_metadata(out, ref)
 
     # Newton-based includePhi1 runs can differ at ~1e-9 due to floating-point and inner-solve details.
     # Keep a tight absolute tolerance consistent with other Phi1 fixture tests.

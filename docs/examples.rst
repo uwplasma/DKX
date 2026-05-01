@@ -10,6 +10,7 @@ The repository includes a structured `examples/` tree:
 - `examples/optimization/`: optimization patterns (may require extras)
 - `examples/performance/`: JIT/performance microbenchmarks
 - `examples/publication_figures/`: publication-style figure generation
+- `examples/vmec_jax_finite_beta/`: finite-beta ``vmec_jax`` to ``sfincs_jax`` radial bootstrap-current and ambipolar-``E_r`` workflow
 
 Run from the repo root:
 
@@ -31,6 +32,86 @@ Geometry-specific write-output examples:
 
    python examples/getting_started/write_sfincs_output_tokamak.py
    python examples/getting_started/write_sfincs_output_vmec.py
+
+Finite-beta VMEC-JAX to kinetic transport
+-----------------------------------------
+
+The finite-beta example is a single Python script that reads the bundled
+``input.nfp2_QA_finite_beta`` VMEC input, runs ``vmec_jax`` for a bounded number
+of fixed-boundary iterations, writes a VMEC-style ``wout`` file, and uses that
+file directly in ``sfincs_jax`` with ``geometryScheme=5``.  It then scans the
+normalized radial electric field on several flux surfaces, computes ambipolar
+radial-current roots when each scan brackets them, selects a continuous root
+branch, and writes a polished PNG/PDF panel with the radial electric-field
+profile, bootstrap-current radial profile, representative ambipolarity and flux
+scans in ``Er``, and a VMEC magnetic-field contour plot using a ``jet`` colormap.
+The radial-profile x-axis is normalized toroidal flux,
+:math:`\psi_N = r_N^2`, not the square-root radial label used in the input file.
+
+.. code-block:: bash
+
+   export SFINCS_JAX_VMEC_JAX_PATH=/path/to/vmec_jax  # optional for source checkouts
+   python examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py
+
+.. figure:: _static/figures/finite_beta_vmec_jax_sfincs_bootstrap_er.png
+   :alt: Finite-beta VMEC-JAX to sfincs_jax radial profiles, Er scans, fluxes, and magnetic-field contour.
+   :width: 100%
+
+   Finite-beta VMEC-JAX to ``sfincs_jax`` example panel.  The top row shows the
+   ambipolar radial-electric-field profile versus normalized toroidal flux, the
+   bootstrap-current profile versus normalized toroidal flux, and the sampled
+   VMEC magnetic-field-strength contour.  The bottom row shows the representative
+   ambipolarity scan, bootstrap response, and ion/electron particle fluxes versus
+   normalized ``Er`` at the selected surface.  Open markers show all bracketed
+   roots; filled markers show the selected continuous branch; dashed black markers
+   show the tighter root-bracket convergence scan at the same kinetic grid.
+
+The direct VMEC path does not require a Boozer transform: ``sfincs_jax`` consumes
+the generated ``wout`` through the same scheme-5 geometry implementation used by
+file-based VMEC runs.  ``booz_xform_jax`` remains useful for the separate
+differentiable Boozer-spectrum handoff described below.
+
+By default the radial profile uses ``r_N = 0.15, 0.30, 0.50, 0.70, 0.85`` and
+root-neighborhood ``Er = -9, -7, -5, -3, -1``.  This spans core-to-edge behavior
+while avoiding the exact magnetic axis and VMEC boundary, and it spends the
+expensive solves near the ambipolar branch instead of at far-off electric fields.
+The checked documentation figure is run at ``Ntheta=7``, ``Nzeta=7``,
+``Nxi=8``, ``NL=6``, and ``Nx=6`` with adaptive midpoint refinement of bracketed
+ambipolar roots until the local ``Er`` bracket is no wider than ``1.25``.  The
+dashed overlay in the top panels uses the same kinetic-space grid on every
+plotted surface, but refines each bracketed ambipolar root to a local ``Er``
+bracket width of ``0.625``.  The checked documentation figure passes the default
+gate, ``max |Delta Er| <= 0.1`` and ``max |Delta Jbs| <= 5e-4``; the measured
+values are ``max |Delta Er| = 2.1e-4`` and ``max |Delta Jbs| = 6.9e-7`` in the
+cached documentation run.  Use ``--quick`` for the smoke-test resolution, and
+increase ``--r-n-values``, ``--er-values``, and the resolution flags for denser
+production-quality scans.
+
+The convergence-scan helper reads the cached ``sfincsOutput.h5`` files from the
+finite-beta example and summarizes which numerical knobs move the ambipolar root
+and bootstrap current:
+
+.. code-block:: bash
+
+   python examples/vmec_jax_finite_beta/plot_convergence_scan.py
+
+.. figure:: _static/figures/finite_beta_vmec_jax_sfincs_convergence_scan.png
+   :alt: Finite-beta VMEC-JAX to sfincs_jax convergence scan over kinetic resolution, angular resolution, and Er-root bracket width.
+   :width: 100%
+
+   Convergence scan for the finite-beta example.  The top panels show that the
+   cached documentation campaign is still sensitive to kinetic-space resolution:
+   moving from ``7/6/6`` to ``8/6/6`` changes the selected ambipolar root and
+   bootstrap current, especially at the representative surfaces.  The bottom-left
+   panel shows that, once the practical ``8/6/6`` kinetic grid is fixed,
+   tightening the local ambipolar-root bracket from ``1.25`` to ``0.625`` changes
+   the full radial profile by only ``max |Delta Er| = 2.1e-4`` and
+   ``max |Delta Jbs| = 6.9e-7``.  The bottom-right panel records one-parameter
+   probes at ``r_N=0.50``: ``NL=7`` is stable, while ``Nxi=8`` and ``Nx=7`` both
+   move the root.  Combined ``Nxi=8,Nx=7`` and ``Nxi=9`` probes were too expensive
+   on a single RTX A4000 for this bounded documentation campaign, so this figure
+   is an explicit resolution audit rather than a claim of asymptotic
+   kinetic-space convergence.
 
 Plotting a generated or frozen output file:
 
