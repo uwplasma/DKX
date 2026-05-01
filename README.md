@@ -457,6 +457,15 @@ That avoids the misleading sub-second Fortran rows that came from blind global d
 keeps the GPU lane tied to a deterministic reference, and makes the additional example part
 of the same artifact set as the standard suite.
 
+Production-resolution inputs are generated separately with
+`scripts/create_production_benchmark_inputs.py`. When
+`scripts/run_scaled_example_suite.py` is pointed at one of those generated
+`inputs/` trees, it detects the sibling `manifest.json` and launches only
+`bounded_local_ok` rows by default. Use `--max-run-recommendation bounded_remote`,
+`--max-run-recommendation remote_or_cluster_only`, or
+`--max-run-recommendation all` only on explicitly budgeted remote or cluster
+lanes.
+
 <!-- BEGIN FAST_BRANCH_AUDIT -->
 Current `main` CPU audit comes from `tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106`.
 Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_gpu_bounded_default_2026-04-28`.
