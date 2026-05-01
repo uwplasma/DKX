@@ -1,0 +1,34 @@
+{
+  "tokamak_fp_ntheta13_nxi20_gpu_bounded_default.json": {
+    "default": {
+      "elapsed_s": 11.559,
+      "ru_maxrss_mb": 1040.598,
+      "status": "ok",
+      "used_dense_auto": true,
+      "used_sparse_fallback": false,
+      "vs_fortran_count": 0
+    },
+    "forced_krylov": {
+      "elapsed_s": 137.411,
+      "ru_maxrss_mb": 1333.633,
+      "status": "ok",
+      "vs_fortran_count": 0
+    }
+  },
+  "tokamak_fp_ntheta13_nxi40_gpu_bounded_default.json": {
+    "default": {
+      "elapsed_s": 2.794,
+      "ru_maxrss_mb": 1039.453,
+      "status": "ok",
+      "used_dense_auto": true,
+      "used_sparse_fallback": false,
+      "vs_fortran_count": 0
+    },
+    "forced_krylov": {
+      "elapsed_s": 9.539,
+      "ru_maxrss_mb": 2135.316,
+      "status": "ok",
+      "vs_fortran_count": 0
+    }
+  }
+}
