@@ -90,6 +90,13 @@ downstream project decks. Historical downstream inputs can still be imported
 with compatibility flags for private reproduction, but they are not part of the
 SFINCS_JAX-owned production benchmark tier.
 
+The GitHub workflow ``Production Benchmark Inputs`` is manual-only and validates
+this tier without running expensive solves. It regenerates the production input
+tree, checks that the manifest is SFINCS_JAX-owned, and can upload the generated
+input tree as an artifact for CPU/GPU/Fortran benchmark runners. Full production
+runtime and memory sweeps should still be launched on a local workstation,
+``office``, or a cluster where the requested CPU/GPU resources are explicit.
+
 Current top offenders from the release artifacts plus focused current-tip
 reruns are:
 

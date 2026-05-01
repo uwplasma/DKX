@@ -13,6 +13,10 @@ def _load_json(path: Path):
         return json.load(f)
 
 
+def _pas_variant_probe_cases() -> dict[str, dict[str, object]]:
+    return _load_json(FIXTURES / "pas_offender_variant_probe_2026-05-01.json")["cases"]
+
+
 def test_cpu_solver_path_audit_stays_parity_clean() -> None:
     report = _load_json(FIXTURES / "cpu_audit_snapshot.json")["strict_report"]
 
@@ -130,3 +134,85 @@ def test_trace_backed_full_gpu_suite_report_is_strict_clean() -> None:
     assert {"rhsmode1_solution", "transport_matrix"}.issuperset(
         set(report["selected_paths"])
     )
+
+
+def test_pas_offender_variant_probe_keeps_pas_tz_default_on_pareto_front() -> None:
+    cases = _pas_variant_probe_cases()
+
+    for case_name in (
+        "geometryScheme4_2species_PAS_noEr",
+        "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories",
+    ):
+        rows = {str(row["variant"]): row for row in cases[case_name]["variants"]}
+        default = rows["default"]
+
+        assert default["status"] == "ok"
+        assert default["rhs1_preconditioner"] == "pas_tz"
+        assert default["vs_fortran_count"] == 0
+
+        default_elapsed = float(default["elapsed_s"])
+        default_rss = float(default["ru_maxrss_mb"])
+        for variant, row in rows.items():
+            if variant == "default" or row["status"] != "ok" or row["vs_fortran_count"] != 0:
+                continue
+            elapsed = float(row["elapsed_s"])
+            rss = float(row["ru_maxrss_mb"])
+            assert not (elapsed < default_elapsed and rss <= default_rss), variant
+            assert not (elapsed <= default_elapsed and rss < default_rss), variant
+
+
+def test_pas_offender_variant_probe_rejects_geometry11_xblock_tz_mismatch() -> None:
+    cases = _pas_variant_probe_cases()
+    rows = {
+        str(row["variant"]): row
+        for row in cases["sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories"][
+            "variants"
+        ]
+    }
+
+    xblock = rows["xblock_tz"]
+    assert xblock["status"] == "ok"
+    assert xblock["rhs1_preconditioner"] == "xblock_tz"
+    assert xblock["vs_fortran_count"] == 6
+    assert "jHat" in xblock["vs_default_sample"]
+    assert "flow" in xblock["vs_default_sample"]
+
+
+def test_pas_offender_restart_variants_are_memory_knobs_not_defaults() -> None:
+    cases = _pas_variant_probe_cases()
+
+    geometry4 = {
+        str(row["variant"]): row
+        for row in cases["geometryScheme4_2species_PAS_noEr_restart_sweep"]["variants"]
+    }
+    geom4_default = geometry4["default"]
+    for variant in ("restart20", "restart30", "restart40", "restart120"):
+        row = geometry4[variant]
+        assert row["status"] == "ok"
+        assert row["vs_fortran_count"] == 0
+        assert float(row["ru_maxrss_mb"]) < float(geom4_default["ru_maxrss_mb"])
+        assert float(row["elapsed_s"]) > 2.0 * float(geom4_default["elapsed_s"])
+
+    geometry11 = {
+        str(row["variant"]): row
+        for row in cases["sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories"][
+            "variants"
+        ]
+    }
+    geom11_default = geometry11["default"]
+    restart40 = geometry11["restart40"]
+    assert restart40["status"] == "ok"
+    assert restart40["vs_fortran_count"] == 0
+    assert float(restart40["ru_maxrss_mb"]) < float(geom11_default["ru_maxrss_mb"])
+    assert float(restart40["elapsed_s"]) > 2.0 * float(geom11_default["elapsed_s"])
+
+
+def test_pas_offender_timed_out_variants_are_not_release_candidates() -> None:
+    cases = _pas_variant_probe_cases()
+
+    for case in cases.values():
+        timed_out = [row for row in case["variants"] if row["status"] == "timeout"]
+        for row in timed_out:
+            assert row["elapsed_s"] is None
+            assert row["ru_maxrss_mb"] is None
+            assert row["rhs1_preconditioner"] is None
