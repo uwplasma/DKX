@@ -125,13 +125,16 @@ The repository ships a tiny runnable input for quick installation checks:
    sfincs_jax write-output \
      --input examples/getting_started/input.namelist \
      --out sfincsOutput.h5 \
+     --solver-trace solver_trace.json \
      --geometry-only
    sfincs_jax --plot sfincsOutput.h5
 
 The first command is the fast installation smoke test. It writes
 ``sfincsOutput.h5`` in the current working directory without a full solve. The
-second writes ``sfincsOutput_summary.pdf`` next to it unless ``--out`` is given
-explicitly. Change only the output suffix to write NetCDF4 or NPZ instead:
+optional ``--solver-trace`` sidecar writes versioned backend/path/timing metadata
+without changing the parity-oriented output file. The second command writes
+``sfincsOutput_summary.pdf`` next to it unless ``--out`` is given explicitly.
+Change only the output suffix to write NetCDF4 or NPZ instead:
 
 .. code-block:: bash
 
@@ -172,10 +175,38 @@ Solving a supported v3 linear run (matrix-free)
    ``sfincs_jax`` will auto-try a Schur-complement strong preconditioner if the initial solve
    stalls, preserving the source constraints; PAS cases that already used a strong base
    preconditioner now skip that extra retry when the residual is already within a small
-   multiple of the target. For PAS tokamak-like ``N_zeta=1`` cases with
+   multiple of the target. Large non-differentiable constrained-PAS RHSMode=1
+   profile-current decks auto-select the sparse-PC GMRES host lane inside the
+   validated production size window so they do not spend minutes in a
+   matrix-free fallback that stalls at a large residual. For PAS tokamak-like ``N_zeta=1`` cases with
    constraint projection enabled, ``sfincs_jax`` upgrades to the ``xblock_tz`` preconditioner by
    default to reduce Krylov iterations. For strict PETSc-style iteration histories, use
-   ``--solve-method incremental``.
+   ``--solve-method incremental``. For non-differentiable full-system RHSMode=1
+   production runs where the sparse structure is the right representation, use
+   ``--solve-method sparse_host`` to build a conservative structural sparse
+   pattern, probe colored nonzeros, and solve with host sparse LU.
+
+.. code-block:: bash
+
+   sfincs_jax write-output \
+     --input /path/to/input.namelist \
+     --out sfincsOutput.h5 \
+     --solve-method sparse_host_safe \
+     --solver-trace solver_trace.json
+
+The sparse-host lane is intentionally explicit rather than the default
+differentiable path. It is appropriate for CLI/Python production solves that do
+not require end-to-end autodiff, but it is not a universal default. The
+``sparse_host_safe`` mode first tries host sparse LU; if that factorization
+exposes a singular/gauge-sensitive constrained-PAS system, it falls back to a
+PETSc-compatible minimum-norm branch and labels that branch explicitly. The
+diagnostic ``sparse_lsmr`` lane can probe the same minimum-norm branch directly,
+but use it for research triage only unless ``linearSolverAccepted`` is true in
+the output and the acceptance criterion is the one intended for that study. The
+production benchmark manifest now enforces at least ``25 x 31 x 11 x 17``
+(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 11 x 17`` for
+tokamak cases. Earlier ``17 x 21 x 5 x 12`` NTX timings were lower-resolution
+bring-up checks for this sparse-host lane, not public production baselines.
 
 Parallel CLI controls
 ---------------------
@@ -909,6 +940,44 @@ Writing output files with `sfincs_jax`
 The suffix selects the writer: ``.h5``/``.hdf5`` for Fortran-compatible HDF5,
 ``.nc``/``.netcdf`` for NetCDF4, and ``.npz`` for a fast uncompressed NumPy
 archive. The solve and diagnostics are identical across these output formats.
+Add ``--solver-trace solver_trace.json`` when you want a reproducible JSON
+sidecar with backend, selected solve lane, elapsed time, device count, and output
+metadata for profiling or regression reports. RHSMode=1 output files also carry
+the core convergence fields directly: ``linearSolverMethod``,
+``linearSolverResidualNorm``, ``linearSolverResidualTarget``,
+``linearSolverResidualTargetRatio``, ``linearSolverConverged``,
+``linearSolverAccepted``, and ``linearSolverAcceptanceCriterion``. In
+PETSc-compatible constrained-PAS minimum-norm runs, ``linearSolverConverged``
+can be false while ``linearSolverAccepted`` is true; that distinction is
+intentional and prevents true-residual convergence from being conflated with
+Fortran/PETSc-compatible branch acceptance.
+
+The solver trace is intentionally separate from the physics output so parity
+comparisons against SFINCS Fortran v3 can continue to use byte-stable HDF5,
+NetCDF, or NPZ payloads. The sidecar uses a versioned schema and records the
+minimum information needed to audit automatic path choices:
+
+.. code-block:: json
+
+   {
+     "schema_version": 1,
+     "backend": "gpu",
+     "rhs_mode": 1,
+     "selected_path": "rhsmode1_solution",
+     "solve_method": "auto",
+     "geometry_scheme": 4,
+     "device_count": 1,
+     "elapsed_s": 7.088,
+     "metadata": {
+       "output_format": "h5",
+       "compute_solution": true,
+       "compute_transport_matrix": false
+     }
+   }
+
+Use the trace when debugging runtime cliffs: compare ``selected_path``,
+``backend``, ``elapsed_s``, and ``device_count`` before changing solver
+environment variables or forcing a preconditioner.
 
 .. code-block:: bash
 
@@ -933,6 +1002,14 @@ archive. The solve and diagnostics are identical across these output formats.
    write_sfincs_jax_output_h5(
        input_namelist=Path("input.namelist"),
        output_path=Path("sfincsOutput.h5"),
+   )
+
+.. code-block:: python
+
+   write_sfincs_jax_output_h5(
+       input_namelist=Path("input.namelist"),
+       output_path=Path("sfincsOutput.h5"),
+       solver_trace_path=Path("solver_trace.json"),
    )
 
 .. code-block:: python
