@@ -62,6 +62,34 @@ The performance story is therefore:
 - the GPU runtime drift watchlist is clean against the previously promoted frozen GPU lane,
 - and the remaining work is to reduce runtime and memory on a small number of heavy PAS and geometry-rich cases.
 
+Production-resolution benchmark tier
+------------------------------------
+
+The release figure above is intentionally a fast, reproducible example-suite
+benchmark. Research-scale performance claims should use the separate
+production-resolution input tier:
+
+.. code-block:: bash
+
+   python scripts/create_production_benchmark_inputs.py --clean
+
+By default this writes ``benchmarks/production_resolution_inputs_2026-04-30``
+from the public SFINCS_JAX example decks only. It enforces at least
+``25 x 31 x 11 x 17`` on 3D grids and ``25 x 1 x 11 x 17`` on tokamak grids.
+Additional local decks can be added without changing the public manifest:
+
+.. code-block:: bash
+
+   python scripts/create_production_benchmark_inputs.py \
+     --external-input /path/to/input.namelist \
+     --out-root benchmarks/my_production_inputs \
+     --clean
+
+The default checked-in manifest now contains ``39`` example-derived cases and no
+downstream project decks. Historical downstream inputs can still be imported
+with compatibility flags for private reproduction, but they are not part of the
+SFINCS_JAX-owned production benchmark tier.
+
 Current top offenders from the release artifacts plus focused current-tip
 reruns are:
 
