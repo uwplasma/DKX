@@ -42,7 +42,7 @@ def _write_input(
     )
 
 
-def test_generator_enforces_research_baseline_on_examples_and_ntx(tmp_path: Path) -> None:
+def test_generator_enforces_research_baseline_on_examples_and_external_inputs(tmp_path: Path) -> None:
     examples_root = tmp_path / "examples"
     _write_input(examples_root / "tokamak_demo" / "input.namelist", ntheta=7, nzeta=1, nx=1, nxi=8)
     _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=9, nzeta=11, nx=2, nxi=10)
@@ -50,8 +50,8 @@ def test_generator_enforces_research_baseline_on_examples_and_ntx(tmp_path: Path
     source_wout = tmp_path / "source_geometry" / "wout_test.nc"
     source_wout.parent.mkdir(parents=True)
     source_wout.write_bytes(b"mock-netcdf")
-    ntx_input = tmp_path / "ntx" / "finite_beta" / "rho_0p5" / "input.namelist"
-    _write_input(ntx_input, ntheta=13, nzeta=15, nx=5, nxi=8, equilibrium_file=source_wout)
+    external_input = tmp_path / "external" / "finite_beta" / "rho_0p5" / "input.namelist"
+    _write_input(external_input, ntheta=13, nzeta=15, nx=5, nxi=8, equilibrium_file=source_wout)
 
     out_root = tmp_path / "production_inputs"
     assert (
@@ -63,8 +63,8 @@ def test_generator_enforces_research_baseline_on_examples_and_ntx(tmp_path: Path
                 str(tmp_path / "missing_input.namelist"),
                 "--out-root",
                 str(out_root),
-                "--ntx-input",
-                str(ntx_input),
+                "--external-input",
+                str(external_input),
                 "--clean",
             ]
         )
@@ -82,25 +82,25 @@ def test_generator_enforces_research_baseline_on_examples_and_ntx(tmp_path: Path
     assert cases["tokamak_demo"]["size_estimate"]["total_unknowns_estimate"] == 4677
     assert cases["tokamak_demo"]["size_estimate"]["run_recommendation"] == "bounded_local_ok"
 
-    ntx_case_name = next(name for name in cases if name.startswith("ntx_"))
-    assert cases[ntx_case_name]["benchmark_resolution"] == {"NTHETA": 25, "NZETA": 31, "NX": 11, "NXI": 17}
+    external_case_name = next(name for name in cases if name.startswith("external_"))
+    assert cases[external_case_name]["benchmark_resolution"] == {"NTHETA": 25, "NZETA": 31, "NX": 11, "NXI": 17}
     assert (
-        cases[ntx_case_name]["resolution_policy"]
+        cases[external_case_name]["resolution_policy"]
         == "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17"
     )
 
-    localized_input = out_root / cases[ntx_case_name]["input"]
+    localized_input = out_root / cases[external_case_name]["input"]
     localized_text = localized_input.read_text(encoding="utf-8")
     assert f'"{source_wout}"' not in localized_text
     assert 'equilibriumFile = "wout_test.nc"' in localized_text
     assert (localized_input.parent / "wout_test.nc").read_bytes() == b"mock-netcdf"
 
 
-def test_generator_can_preserve_ntx_resolution_for_reproduction(tmp_path: Path) -> None:
+def test_generator_can_preserve_external_resolution_for_reproduction(tmp_path: Path) -> None:
     examples_root = tmp_path / "examples"
     _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=25, nzeta=31, nx=11, nxi=17)
-    ntx_input = tmp_path / "ntx" / "finite_beta" / "rho_0p5" / "input.namelist"
-    _write_input(ntx_input, ntheta=13, nzeta=15, nx=5, nxi=8)
+    external_input = tmp_path / "external" / "finite_beta" / "rho_0p5" / "input.namelist"
+    _write_input(external_input, ntheta=13, nzeta=15, nx=5, nxi=8)
 
     out_root = tmp_path / "production_inputs"
     assert (
@@ -112,9 +112,9 @@ def test_generator_can_preserve_ntx_resolution_for_reproduction(tmp_path: Path) 
                 str(tmp_path / "missing_input.namelist"),
                 "--out-root",
                 str(out_root),
-                "--ntx-input",
-                str(ntx_input),
-                "--preserve-ntx-resolution",
+                "--external-input",
+                str(external_input),
+                "--preserve-external-resolution",
                 "--clean",
             ]
         )
@@ -123,24 +123,24 @@ def test_generator_can_preserve_ntx_resolution_for_reproduction(tmp_path: Path) 
 
     manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
     cases = {case["case"]: case for case in manifest["cases"]}
-    ntx_case_name = next(name for name in cases if name.startswith("ntx_"))
-    assert cases[ntx_case_name]["benchmark_resolution"] == {"NTHETA": 13, "NZETA": 15, "NX": 5, "NXI": 8}
-    assert cases[ntx_case_name]["resolution_policy"] == "preserve authored collaborator/NTX resolution"
+    external_case_name = next(name for name in cases if name.startswith("external_"))
+    assert cases[external_case_name]["benchmark_resolution"] == {"NTHETA": 13, "NZETA": 15, "NX": 5, "NXI": 8}
+    assert cases[external_case_name]["resolution_policy"] == "preserve authored external resolution"
 
 
-def test_generator_relabels_historic_ntx_deck_with_benchmark_resolution(tmp_path: Path) -> None:
+def test_generator_relabels_historic_external_deck_with_benchmark_resolution(tmp_path: Path) -> None:
     examples_root = tmp_path / "examples"
     _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=25, nzeta=31, nx=11, nxi=17)
-    ntx_input = (
+    external_input = (
         tmp_path
-        / "ntx"
+        / "external"
         / "outputs"
         / "sfincs_jax_rhsmode1_profile_current_profiling"
         / "cpu_17x21x12_deck"
         / "finite_beta"
         / "input.namelist"
     )
-    _write_input(ntx_input, ntheta=17, nzeta=21, nx=5, nxi=12)
+    _write_input(external_input, ntheta=17, nzeta=21, nx=5, nxi=12)
 
     out_root = tmp_path / "production_inputs"
     assert (
@@ -152,8 +152,8 @@ def test_generator_relabels_historic_ntx_deck_with_benchmark_resolution(tmp_path
                 str(tmp_path / "missing_input.namelist"),
                 "--out-root",
                 str(out_root),
-                "--ntx-input",
-                str(ntx_input),
+                "--external-input",
+                str(external_input),
                 "--clean",
             ]
         )

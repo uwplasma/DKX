@@ -21,7 +21,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT_ROOT = REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-04-30"
 DEFAULT_EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
 DEFAULT_ADDITIONAL_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
-DEFAULT_NTX_INPUTS = (
+# Archived downstream NTX decks can still be imported explicitly for local
+# reproduction, but the production benchmark tier is SFINCS_JAX-owned by
+# default and should not depend on another repository.
+DEFAULT_ARCHIVED_NTX_INPUTS = (
     Path(
         "/Users/rogeriojorge/local/NTX/examples/outputs/"
         "owned_finite_beta_sfincs_jax_profile_current_audit/"
@@ -120,6 +123,21 @@ def _replace_or_append_resolution(text: str, updates: dict[str, int]) -> str:
     return updated.rstrip() + block
 
 
+def _normalize_generated_text(text: str) -> str:
+    """Return deterministic text for checked-in benchmark input artifacts."""
+    return "\n".join(line.rstrip() for line in str(text).splitlines()).rstrip() + "\n"
+
+
+def _normalize_text_file_if_possible(path: Path) -> None:
+    if path.suffix.lower() in {".h5", ".hdf5", ".nc", ".npz", ".npy"}:
+        return
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return
+    path.write_text(_normalize_generated_text(text), encoding="utf-8")
+
+
 def _safe_case_name(prefix: str, input_path: Path) -> str:
     parts = [part for part in input_path.resolve().parts if part not in {"", "/"}]
     tail = "_".join(parts[-6:-1])
@@ -159,6 +177,7 @@ def _copy_parent_files(src_input: Path, dst_dir: Path) -> None:
             if item.resolve() == target.resolve():
                 continue
             shutil.copy2(item, target)
+            _normalize_text_file_if_possible(target)
 
 
 def _copy_referenced_absolute_files(text: str, dst_dir: Path) -> None:
@@ -171,6 +190,7 @@ def _copy_referenced_absolute_files(text: str, dst_dir: Path) -> None:
         if path.resolve() == target.resolve():
             continue
         shutil.copy2(path, target)
+        _normalize_text_file_if_possible(target)
 
 
 def _localize_copied_absolute_paths(text: str, dst_dir: Path) -> str:
@@ -293,7 +313,7 @@ def _resolution_policy_text(
     min_tokamak: dict[str, int],
 ) -> str:
     if not enforce_minimum:
-        return "preserve authored collaborator/NTX resolution"
+        return "preserve authored external resolution"
     min_3d_text = (
         f"{int(min_3d['NTHETA'])}x{int(min_3d['NZETA'])}x"
         f"{int(min_3d['NX'])}x{int(min_3d['NXI'])}"
@@ -352,7 +372,7 @@ def _build_entry(
     _copy_referenced_absolute_files(text, dst_dir)
     dst_input = dst_dir / "input.namelist"
     text = _localize_copied_absolute_paths(text, dst_dir)
-    dst_input.write_text(_replace_or_append_resolution(text, benchmark), encoding="utf-8")
+    dst_input.write_text(_normalize_generated_text(_replace_or_append_resolution(text, benchmark)), encoding="utf-8")
     size_estimate = _estimate_case_size(text, benchmark)
     return {
         "case": case,
@@ -377,19 +397,57 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--examples-root", type=Path, default=DEFAULT_EXAMPLES_ROOT)
     parser.add_argument("--additional-input", type=Path, default=DEFAULT_ADDITIONAL_INPUT)
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
-    parser.add_argument("--include-ntx-defaults", action="store_true")
-    parser.add_argument("--ntx-input", type=Path, action="append", default=[])
     parser.add_argument(
-        "--enforce-minimum-on-ntx",
+        "--external-input",
+        type=Path,
+        action="append",
+        default=[],
+        help="Additional production-resolution input deck to copy into the manifest.",
+    )
+    parser.add_argument(
+        "--include-archived-ntx-defaults",
+        action="store_true",
+        help=(
+            "Compatibility/debug option: also import archived downstream NTX decks "
+            "when they exist locally. Not used by the default SFINCS_JAX benchmark tier."
+        ),
+    )
+    parser.add_argument(
+        "--include-ntx-defaults",
+        dest="include_archived_ntx_defaults",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--ntx-input",
+        dest="external_input",
+        type=Path,
+        action="append",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--enforce-minimum-on-external",
         action="store_true",
         default=True,
-        help="Also lift NTX/collaborator inputs to the production minimum instead of preserving authored grids.",
+        help="Also lift external inputs to the production minimum instead of preserving authored grids.",
+    )
+    parser.add_argument(
+        "--enforce-minimum-on-ntx",
+        dest="enforce_minimum_on_external",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--preserve-external-resolution",
+        dest="enforce_minimum_on_external",
+        action="store_false",
+        help="Compatibility/debug mode: keep authored external grids instead of lifting them to the production minimum.",
     )
     parser.add_argument(
         "--preserve-ntx-resolution",
-        dest="enforce_minimum_on_ntx",
+        dest="enforce_minimum_on_external",
         action="store_false",
-        help="Compatibility/debug mode: keep authored NTX/collaborator grids instead of lifting them to the production minimum.",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--min-3d-ntheta", type=int, default=DEFAULT_3D_MINIMUM["NTHETA"])
     parser.add_argument("--min-3d-nzeta", type=int, default=DEFAULT_3D_MINIMUM["NZETA"])
@@ -432,19 +490,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         if entry is not None:
             entries.append(entry)
-    ntx_inputs = list(args.ntx_input)
-    if args.include_ntx_defaults:
-        ntx_inputs.extend(path for path in DEFAULT_NTX_INPUTS if path.exists())
-    for src_input in ntx_inputs:
-        case = _safe_case_name("ntx", Path(src_input))
+    external_inputs = list(args.external_input or [])
+    if args.include_archived_ntx_defaults:
+        external_inputs.extend(path for path in DEFAULT_ARCHIVED_NTX_INPUTS if path.exists())
+    for src_input in external_inputs:
+        case = _safe_case_name("external", Path(src_input))
         entry = _build_entry(
             case=case,
             src_input=Path(src_input),
             dst_root=out_root,
-            source_group="ntx",
+            source_group="external",
             min_3d=min_3d,
             min_tokamak=min_tokamak,
-            enforce_minimum=bool(args.enforce_minimum_on_ntx),
+            enforce_minimum=bool(args.enforce_minimum_on_external),
         )
         if entry is not None:
             entries.append(entry)

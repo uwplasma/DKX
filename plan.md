@@ -128,15 +128,31 @@ Current active lane (2026-05-01, SFINCS_JAX-only closure):
 - Validation: `pytest -q tests/test_validation_manifest_schema.py tests/test_validation_artifacts.py tests/test_generate_validation_dashboard.py tests/test_generate_fortran_suite_benchmark_summary.py tests/test_generate_high_collisionality_trend_proxy.py tests/test_generate_simakov_helander_limit_audit.py tests/test_generate_simakov_helander_high_nu_run_plan.py tests/test_generate_w7x_high_nu_performance.py tests/test_collisionality_artifact.py tests/test_er_trajectory_sweep_artifact.py` (`37 passed`).
 - Validation: `pytest -q tests/test_rhs1_host_policy.py tests/test_v3_sparse_pattern.py tests/test_solver_path_artifacts.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py` (`47 passed`).
 - Validation: `sphinx-build -W -b html docs docs/_build/html` passed after archiving the NTX handoff page outside the main docs toctree.
+- Validation: GitHub `Docs` and `CI` are green on pushed commit `030cd2e`
+  (`Docs` run `25232426852`, `CI` run `25232426840`).
 - [x] Keep the remaining SFINCS_JAX optimization lanes explicit rather than
   pretending they are release blockers: PAS/geometry-rich runtime and memory,
   production-resolution benchmark scheduling, experimental single-case
   multi-device sharding, and long-term coverage/refactor work.
+- [x] Convert the production-resolution input generator to SFINCS_JAX-owned
+  defaults. Public extension now uses `--external-input`; old NTX flags remain
+  hidden compatibility aliases only, and the regenerated default production
+  manifest contains `39` example-derived cases with no downstream NTX decks.
+- [x] Run a bounded CPU PAS/geometry4 offender sweep before changing policy.
+  For `geometryScheme4_2species_PAS_noEr`, current default `pas_tz` stayed
+  strict-clean and fastest (`elapsed=2.47 s`, profiled RSS about `1.83 GB`).
+  Forced `xblock_tz` was slower/higher-memory (`14.21 s`, `3.11 GB`), forced
+  `schur` was slower/higher-memory (`3.52 s`, `2.10 GB`), and `pas_schur` plus
+  `theta_zeta` exceeded the bounded `45 s` trial budget. A GMRES-restart sweep
+  preserved parity but traded memory for about `2x` slower solves, so no default
+  restart-policy change is justified from this probe.
+- Validation: `pytest -q tests/test_create_production_benchmark_inputs.py tests/test_validation_manifest_schema.py tests/test_validation_artifacts.py tests/test_generate_fortran_suite_benchmark_summary.py` (`21 passed`).
 - Next SFINCS_JAX-only work: attack PAS/geometry-rich runtime and memory with
-  trace-backed offender probes, then refresh production-resolution benchmark
-  reports through guarded manual/nightly runners. Do not reopen NTX/NEOPAX
-  profile-current parity as a SFINCS_JAX blocker unless downstream collaborators
-  hand back a specific reproducible SFINCS_JAX defect.
+  trace-backed offender probes only when a candidate beats the current structured
+  path on both parity and measured cost, then refresh production-resolution
+  benchmark reports through guarded manual/nightly runners. Do not reopen
+  NTX/NEOPAX profile-current parity as a SFINCS_JAX blocker unless downstream
+  collaborators hand back a specific reproducible SFINCS_JAX defect.
 
 Archived finite-beta RHSMode=1 solver-policy lane (2026-05-01):
 - [x] Read the NTX finite-beta RHSMode=1 profile-current handoff at `/Users/rogeriojorge/local/NTX/docs/sfincs-jax-rhsmode1-profile-current-handoff.md`.
