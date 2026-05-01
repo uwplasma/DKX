@@ -22,10 +22,14 @@ _write_suite_audits = _MODULE._write_suite_audits
 _write_suite_outputs = _MODULE._write_suite_outputs
 _iter_inputs = _MODULE._iter_inputs
 _load_reference_case_metrics = _MODULE._load_reference_case_metrics
+_auto_production_manifest_path = _MODULE._auto_production_manifest_path
+_filter_inputs_by_production_recommendation = _MODULE._filter_inputs_by_production_recommendation
+_load_production_manifest_cases = _MODULE._load_production_manifest_cases
+_run_recommendation_allowed = _MODULE._run_recommendation_allowed
 
-from run_reduced_upstream_suite import CaseResult
-from run_reduced_upstream_suite import _classify_blocker
-from run_reduced_upstream_suite import _runtime_metric_for_basis
+from run_reduced_upstream_suite import CaseResult  # noqa: E402
+from run_reduced_upstream_suite import _classify_blocker  # noqa: E402
+from run_reduced_upstream_suite import _runtime_metric_for_basis  # noqa: E402
 
 
 def test_stage_reference_fortran_artifacts_uses_last_success(tmp_path: Path) -> None:
@@ -216,6 +220,155 @@ def test_iter_inputs_ignores_staged_artifact_directories(tmp_path: Path) -> None
     inputs = _iter_inputs(tmp_path)
 
     assert inputs == [tmp_path / "real_case" / "input.namelist"]
+
+
+def test_auto_production_manifest_path_detects_generated_inputs_root(tmp_path: Path) -> None:
+    inputs_root = tmp_path / "production" / "inputs"
+    inputs_root.mkdir(parents=True)
+    manifest = inputs_root.parent / "manifest.json"
+    manifest.write_text('{"cases": []}', encoding="utf-8")
+
+    assert _auto_production_manifest_path(inputs_root, None) == manifest
+    explicit = tmp_path / "explicit.json"
+    assert _auto_production_manifest_path(inputs_root, explicit) == explicit
+    assert _auto_production_manifest_path(tmp_path / "examples", None) is None
+
+
+def test_run_recommendation_order_keeps_local_runs_bounded() -> None:
+    assert _run_recommendation_allowed("bounded_local_ok", "bounded_local_ok")
+    assert not _run_recommendation_allowed("bounded_remote", "bounded_local_ok")
+    assert _run_recommendation_allowed("bounded_remote", "bounded_remote")
+    assert not _run_recommendation_allowed("remote_or_cluster_only", "bounded_remote")
+    assert _run_recommendation_allowed("remote_or_cluster_only", "remote_or_cluster_only")
+    assert _run_recommendation_allowed("remote_or_cluster_only", "all")
+    assert not _run_recommendation_allowed(None, "bounded_local_ok")
+
+
+def test_production_manifest_filter_skips_remote_only_cases(tmp_path: Path) -> None:
+    prod_root = tmp_path / "production"
+    local_input = prod_root / "inputs" / "local_case" / "input.namelist"
+    remote_input = prod_root / "inputs" / "remote_case" / "input.namelist"
+    local_input.parent.mkdir(parents=True)
+    remote_input.parent.mkdir(parents=True)
+    local_input.write_text("&general\n/\n", encoding="utf-8")
+    remote_input.write_text("&general\n/\n", encoding="utf-8")
+    manifest = prod_root / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "case": "local_case",
+                        "input": "inputs/local_case/input.namelist",
+                        "size_estimate": {"run_recommendation": "bounded_local_ok"},
+                    },
+                    {
+                        "case": "remote_case",
+                        "input": "inputs/remote_case/input.namelist",
+                        "size_estimate": {"run_recommendation": "remote_or_cluster_only"},
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    _resolved_manifest, cases_by_input = _load_production_manifest_cases(manifest)
+    case_names = {local_input: "local_case", remote_input: "remote_case"}
+
+    kept, skipped = _filter_inputs_by_production_recommendation(
+        inputs=[local_input, remote_input],
+        case_names=case_names,
+        manifest_cases_by_input=cases_by_input,
+        max_run_recommendation="bounded_local_ok",
+    )
+
+    assert kept == [local_input]
+    assert skipped == [
+        {
+            "case": "remote_case",
+            "input": str(remote_input),
+            "run_recommendation": "remote_or_cluster_only",
+            "max_run_recommendation": "bounded_local_ok",
+            "reason": "production_run_recommendation_guard",
+        }
+    ]
+
+
+def test_main_auto_manifest_guard_records_skipped_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    prod_root = tmp_path / "production"
+    inputs_root = prod_root / "inputs"
+    local_input = inputs_root / "local_case" / "input.namelist"
+    remote_input = inputs_root / "remote_case" / "input.namelist"
+    for path in (local_input, remote_input):
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "&resolutionParameters\n"
+            "  NTHETA = 3\n"
+            "  NZETA = 1\n"
+            "  NX = 1\n"
+            "  NXI = 3\n"
+            "/\n",
+            encoding="utf-8",
+        )
+    (prod_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "case": "local_case",
+                        "input": "inputs/local_case/input.namelist",
+                        "size_estimate": {"run_recommendation": "bounded_local_ok"},
+                    },
+                    {
+                        "case": "remote_case",
+                        "input": "inputs/remote_case/input.namelist",
+                        "size_estimate": {"run_recommendation": "remote_or_cluster_only"},
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    ref_root = tmp_path / "reference"
+    ref_root.mkdir()
+    out_root = tmp_path / "out"
+    ran_cases: list[str] = []
+
+    def fake_run_prepared_case(**kwargs):
+        ran_cases.append(kwargs["case_name"])
+        return _case_result(kwargs["case_name"])
+
+    monkeypatch.setattr(_MODULE, "_run_prepared_case", fake_run_prepared_case)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_scaled_example_suite.py",
+            "--examples-root",
+            str(inputs_root),
+            "--reference-results-root",
+            str(ref_root),
+            "--out-root",
+            str(out_root),
+            "--pattern",
+            "_case",
+            "--fortran-min-runtime-s",
+            "0",
+            "--runtime-adjustment-iters",
+            "0",
+            "--max-attempts",
+            "1",
+            "--reset-report",
+        ],
+    )
+
+    assert _MODULE.main() == 0
+
+    run_manifest = json.loads((out_root / "run_manifest.json").read_text(encoding="utf-8"))
+    assert ran_cases == ["local_case"]
+    assert run_manifest["production_manifest"] == str((prod_root / "manifest.json").resolve())
+    assert run_manifest["max_run_recommendation"] == "bounded_local_ok"
+    assert [item["case"] for item in run_manifest["skipped_by_recommendation"]] == ["remote_case"]
 
 
 def test_load_reference_case_metrics_reads_suite_report(tmp_path: Path) -> None:
