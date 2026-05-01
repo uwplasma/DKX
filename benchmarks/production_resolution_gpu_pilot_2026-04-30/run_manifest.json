@@ -1,0 +1,141 @@
+{
+  "resolution_policy": "reference_first_runtime_window",
+  "scale_factor": 1.0,
+  "timeout_s": 900.0,
+  "fortran_min_runtime_s": 0.0,
+  "fortran_max_runtime_s": null,
+  "runtime_adjustment_iters": 0,
+  "runtime_target_basis": "fortran",
+  "rtol": 0.0005,
+  "atol": 1e-09,
+  "max_attempts": 1,
+  "jax_repeats": 1,
+  "jax_profile_marks": "off",
+  "jobs": 1,
+  "resolution_reference_root": null,
+  "reference_results_root": "production_resolution_cpu_pilot_2026-04-30",
+  "runtime_baseline_report": null,
+  "runtime_drift_threshold_ratio": 1.25,
+  "runtime_drift_min_baseline_runtime_s": 1.0,
+  "fortran_exe": null,
+  "environment": {
+    "python_executable": "/usr/bin/python3",
+    "platform": "Linux-6.17.9-76061709-generic-x86_64-with-glibc2.35",
+    "hostname": "pop-os",
+    "jax_version": "0.6.2",
+    "jax_backend": "gpu",
+    "jax_devices": [
+      "gpu:NVIDIA RTX A4000"
+    ]
+  },
+  "cases": [
+    {
+      "case": "ntx_grid_35_43_48_finite_beta_qa_pressure_current_rho_0p142857_nuPrime_0p01_EStar_0",
+      "source_input": "production_resolution_inputs_2026-04-30/inputs/ntx_grid_35_43_48_finite_beta_qa_pressure_current_rho_0p142857_nuPrime_0p01_EStar_0/input.namelist",
+      "source_input_abs": "/tmp/sfincs_jax_prod_bench/production_resolution_inputs_2026-04-30/inputs/ntx_grid_35_43_48_finite_beta_qa_pressure_current_rho_0p142857_nuPrime_0p01_EStar_0/input.namelist",
+      "reference_input": "production_resolution_inputs_2026-04-30/inputs/ntx_grid_35_43_48_finite_beta_qa_pressure_current_rho_0p142857_nuPrime_0p01_EStar_0/input.namelist",
+      "reference_input_abs": "/tmp/sfincs_jax_prod_bench/production_resolution_inputs_2026-04-30/inputs/ntx_grid_35_43_48_finite_beta_qa_pressure_current_rho_0p142857_nuPrime_0p01_EStar_0/input.namelist",
+      "source_resolution": {
+        "NTHETA": 35,
+        "NZETA": 43,
+        "NX": 1,
+        "NXI": 48
+      },
+      "reference_resolution": {
+        "NTHETA": 35,
+        "NZETA": 43,
+        "NX": 1,
+        "NXI": 48
+      },
+      "scaled_seed_resolution": {
+        "NTHETA": 35,
+        "NZETA": 43,
+        "NX": 2,
+        "NXI": 48
+      },
+      "estimated_active_size": 144480,
+      "scale_factor": 1.0
+    },
+    {
+      "case": "ntx_outputs_owned_finite_beta_sfincs_jax_profile_current_audit_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565",
+      "source_input": "production_resolution_inputs_2026-04-30/inputs/ntx_outputs_owned_finite_beta_sfincs_jax_profile_current_audit_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "source_input_abs": "/tmp/sfincs_jax_prod_bench/production_resolution_inputs_2026-04-30/inputs/ntx_outputs_owned_finite_beta_sfincs_jax_profile_current_audit_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "reference_input": "production_resolution_inputs_2026-04-30/inputs/ntx_outputs_owned_finite_beta_sfincs_jax_profile_current_audit_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "reference_input_abs": "/tmp/sfincs_jax_prod_bench/production_resolution_inputs_2026-04-30/inputs/ntx_outputs_owned_finite_beta_sfincs_jax_profile_current_audit_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "source_resolution": {
+        "NTHETA": 13,
+        "NZETA": 15,
+        "NX": 5,
+        "NXI": 8
+      },
+      "reference_resolution": {
+        "NTHETA": 13,
+        "NZETA": 15,
+        "NX": 5,
+        "NXI": 8
+      },
+      "scaled_seed_resolution": {
+        "NTHETA": 13,
+        "NZETA": 15,
+        "NX": 5,
+        "NXI": 8
+      },
+      "estimated_active_size": 15600,
+      "scale_factor": 1.0
+    },
+    {
+      "case": "ntx_sfincs_jax_rhsmode1_profile_current_profiling_cpu_17x21x12_deck_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565",
+      "source_input": "production_resolution_inputs_2026-04-30/inputs/ntx_sfincs_jax_rhsmode1_profile_current_profiling_cpu_17x21x12_deck_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "source_input_abs": "/tmp/sfincs_jax_prod_bench/production_resolution_inputs_2026-04-30/inputs/ntx_sfincs_jax_rhsmode1_profile_current_profiling_cpu_17x21x12_deck_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "reference_input": "production_resolution_inputs_2026-04-30/inputs/ntx_sfincs_jax_rhsmode1_profile_current_profiling_cpu_17x21x12_deck_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "reference_input_abs": "/tmp/sfincs_jax_prod_bench/production_resolution_inputs_2026-04-30/inputs/ntx_sfincs_jax_rhsmode1_profile_current_profiling_cpu_17x21x12_deck_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "source_resolution": {
+        "NTHETA": 17,
+        "NZETA": 21,
+        "NX": 5,
+        "NXI": 12
+      },
+      "reference_resolution": {
+        "NTHETA": 17,
+        "NZETA": 21,
+        "NX": 5,
+        "NXI": 12
+      },
+      "scaled_seed_resolution": {
+        "NTHETA": 17,
+        "NZETA": 21,
+        "NX": 5,
+        "NXI": 12
+      },
+      "estimated_active_size": 42840,
+      "scale_factor": 1.0
+    },
+    {
+      "case": "tokamak_1species_PASCollisions_noEr_Nx1",
+      "source_input": "production_resolution_inputs_2026-04-30/inputs/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist",
+      "source_input_abs": "/tmp/sfincs_jax_prod_bench/production_resolution_inputs_2026-04-30/inputs/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist",
+      "reference_input": "production_resolution_inputs_2026-04-30/inputs/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist",
+      "reference_input_abs": "/tmp/sfincs_jax_prod_bench/production_resolution_inputs_2026-04-30/inputs/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist",
+      "source_resolution": {
+        "NTHETA": 21,
+        "NZETA": 1,
+        "NX": 1,
+        "NXI": 31
+      },
+      "reference_resolution": {
+        "NTHETA": 21,
+        "NZETA": 1,
+        "NX": 1,
+        "NXI": 31
+      },
+      "scaled_seed_resolution": {
+        "NTHETA": 21,
+        "NZETA": 1,
+        "NX": 2,
+        "NXI": 31
+      },
+      "estimated_active_size": 1302,
+      "scale_factor": 1.0
+    }
+  ]
+}

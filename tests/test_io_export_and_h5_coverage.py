@@ -7,10 +7,14 @@ import numpy as np
 import pytest
 
 from sfincs_jax.io import (
+    _add_rhsmode1_solver_diagnostics,
     _apply_export_f_maps,
     _as_1d_float,
     _export_f_config,
     _legendre_matrix,
+    _raise_for_nonconverged_rhsmode1_output,
+    _rhsmode1_result_residual_and_target,
+    _should_fail_nonconverged_rhsmode1_output,
     read_sfincs_h5,
     read_sfincs_output_file,
     write_sfincs_h5,
@@ -41,6 +45,95 @@ def test_write_sfincs_h5_roundtrip_and_overwrite_guard(tmp_path: Path) -> None:
 
     with pytest.raises(FileExistsError):
         write_sfincs_h5(path=out, data=data, overwrite=False)
+
+
+def test_nonconverged_rhsmode1_production_output_gate(monkeypatch) -> None:
+    result = SimpleNamespace(
+        residual_norm=np.asarray(1.0e-2),
+        rhs=np.asarray([2.0, 0.0], dtype=np.float64),
+    )
+    residual_norm, residual_target = _rhsmode1_result_residual_and_target(result, solver_tol=1.0e-7)
+
+    assert residual_norm == 1.0e-2
+    assert residual_target == 2.0e-7
+    assert _should_fail_nonconverged_rhsmode1_output(
+        active_total_size=100_000,
+        residual_norm=residual_norm,
+        residual_target=residual_target,
+    )
+    assert not _should_fail_nonconverged_rhsmode1_output(
+        active_total_size=100_000,
+        residual_norm=residual_norm,
+        residual_target=residual_target,
+        accepted_converged=True,
+    )
+    with pytest.raises(RuntimeError, match="Refusing to write nonconverged RHSMode=1"):
+        _raise_for_nonconverged_rhsmode1_output(
+            active_total_size=100_000,
+            residual_norm=residual_norm,
+            residual_target=residual_target,
+            solve_method="incremental",
+        )
+
+    assert not _should_fail_nonconverged_rhsmode1_output(
+        active_total_size=100,
+        residual_norm=residual_norm,
+        residual_target=residual_target,
+    )
+    monkeypatch.setenv("SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT", "1")
+    assert not _should_fail_nonconverged_rhsmode1_output(
+        active_total_size=100_000,
+        residual_norm=residual_norm,
+        residual_target=residual_target,
+    )
+
+
+def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
+    data: dict[str, object] = {}
+
+    _add_rhsmode1_solver_diagnostics(
+        data,
+        residual_norm=2.0e-8,
+        residual_target=1.0e-7,
+        solve_method="sparse_host",
+        solver_metadata={"accepted_converged": True, "acceptance_criterion": "true_residual"},
+    )
+
+    assert data["linearSolverMethod"] == "sparse_host"
+    assert float(np.asarray(data["linearSolverResidualNorm"])) == 2.0e-8
+    assert float(np.asarray(data["linearSolverResidualTarget"])) == 1.0e-7
+    assert int(np.asarray(data["linearSolverConverged"])) == 1
+    assert int(np.asarray(data["linearSolverAccepted"])) == 1
+    assert data["linearSolverAcceptanceCriterion"] == "true_residual"
+    assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(0.2)
+
+
+def test_rhsmode1_solver_diagnostics_label_petsc_compatible_acceptance() -> None:
+    data: dict[str, object] = {}
+
+    _add_rhsmode1_solver_diagnostics(
+        data,
+        residual_norm=1.0e-2,
+        residual_target=1.0e-9,
+        solve_method="petsc_compat",
+        solver_metadata={
+            "accepted_converged": True,
+            "acceptance_criterion": "petsc_compatible_minimum_norm",
+            "least_squares_converged": True,
+            "reported_residual_norm": 4.0e-8,
+            "iterations": 25,
+            "info_code": 1,
+        },
+    )
+
+    assert int(np.asarray(data["linearSolverConverged"])) == -1
+    assert int(np.asarray(data["linearSolverTrueResidualConverged"])) == -1
+    assert int(np.asarray(data["linearSolverAccepted"])) == 1
+    assert int(np.asarray(data["linearSolverLeastSquaresConverged"])) == 1
+    assert data["linearSolverAcceptanceCriterion"] == "petsc_compatible_minimum_norm"
+    assert float(np.asarray(data["linearSolverReportedResidualNorm"])) == 4.0e-8
+    assert int(np.asarray(data["linearSolverIterations"])) == 25
+    assert int(np.asarray(data["linearSolverInfoCode"])) == 1
 
 
 @pytest.mark.parametrize("suffix", [".npz", ".nc"])

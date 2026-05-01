@@ -8,6 +8,23 @@ from sfincs_jax.compare import compare_sfincs_outputs
 from sfincs_jax.io import write_sfincs_jax_output_h5
 
 
+_SOLVER_METADATA_KEYS = (
+    "elapsed time (s)",
+    "linearSolverMethod",
+    "linearSolverResidualNorm",
+    "linearSolverResidualTarget",
+    "linearSolverResidualTargetRatio",
+    "linearSolverConverged",
+    "linearSolverTrueResidualConverged",
+    "linearSolverAccepted",
+    "linearSolverAcceptanceCriterion",
+    "linearSolverReportedResidualNorm",
+    "linearSolverIterations",
+    "linearSolverInfoCode",
+    "linearSolverLeastSquaresConverged",
+)
+
+
 def test_state_recycle_preserves_solution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Recycling states should not change the converged solution."""
     here = Path(__file__).parent
@@ -27,5 +44,11 @@ def test_state_recycle_preserves_solution(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.delenv("SFINCS_JAX_STATE_OUT", raising=False)
     write_sfincs_jax_output_h5(input_namelist=input_path, output_path=out2, compute_solution=True)
 
-    results = compare_sfincs_outputs(a_path=out1, b_path=out2, rtol=1e-12, atol=1e-12)
+    results = compare_sfincs_outputs(
+        a_path=out1,
+        b_path=out2,
+        ignore_keys=_SOLVER_METADATA_KEYS,
+        rtol=1e-12,
+        atol=1e-12,
+    )
     assert all(result.ok for result in results)

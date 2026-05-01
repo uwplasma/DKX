@@ -12,9 +12,13 @@ drift-kinetic calculations in stellarator and tokamak geometry. It combines
 high-fidelity kinetic models, CPU/GPU execution, modern matrix-free numerics,
 parallel workflows, and optional differentiable solve paths in one codebase.
 
-On the current `main` branch, the full audited example suite runs cleanly on CPU and GPU.
-The default CLI path is tuned for robust production solves and practical throughput,
-while the Python API can opt into differentiable solve paths when gradients matter.
+On the current `main` branch, the audited reduced example suite runs cleanly on
+CPU and GPU. A separate production-resolution benchmark tier is now being used
+for public runtime/memory claims and collaborator workloads; those larger
+finite-beta/profile-current cases are tracked separately from the fast smoke
+suite. The default CLI path is tuned for robust explicit solves and practical
+throughput, while the Python API can opt into differentiable solve paths when
+gradients matter.
 
 It is designed for:
 
@@ -49,19 +53,50 @@ cd sfincs_jax
 sfincs_jax write-output \
   --input examples/getting_started/input.namelist \
   --out sfincsOutput.h5 \
+  --solver-trace solver_trace.json \
   --geometry-only
 sfincs_jax --plot sfincsOutput.h5
 ```
 
 This is the fast installation smoke test. It writes `sfincsOutput.h5` and then
 writes a multi-page PDF diagnostics panel next to it as
-`sfincsOutput_summary.pdf`. The same command works for NetCDF and NPZ:
+`sfincsOutput_summary.pdf`. The optional `--solver-trace` sidecar records the
+backend, selected solve lane, timing, and output metadata without changing the
+parity-oriented output file. The same command works for NetCDF and NPZ:
 
 ```bash
 sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.nc --geometry-only
 sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.npz --geometry-only
 sfincs_jax --plot sfincsOutput.nc
 ```
+
+For larger non-differentiable RHSMode=1 production runs, the CLI can leave the
+matrix-free Krylov path and use structural sparse host solves. Large
+constrained-PAS profile-current decks now auto-select sparse-PC GMRES when the
+problem size is in the validated production window; explicit sparse-host LU is
+also available:
+
+```bash
+sfincs_jax write-output \
+  --input /path/to/input.namelist \
+  --out sfincsOutput.h5 \
+  --solve-method sparse_host_safe \
+  --solver-trace solver_trace.json
+```
+
+This path keeps the full SFINCS system, builds a conservative sparse pattern,
+probes only colored structural nonzeros, and first tries host sparse LU. The
+`sparse_host_safe` mode falls back only for constrained PAS systems where sparse
+LU exposes a singular/gauge-sensitive branch; that fallback is labeled as
+PETSc-compatible minimum-norm output instead of pretending the true residual
+target was met. RHSMode=1 outputs include `linearSolverMethod`,
+`linearSolverResidualNorm`, `linearSolverResidualTarget`,
+`linearSolverResidualTargetRatio`, `linearSolverConverged`,
+`linearSolverAccepted`, and `linearSolverAcceptanceCriterion` in the main output
+file. The production benchmark manifest now enforces at least `25 x 31 x 11 x 17`
+(`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and `25 x 1 x 11 x 17` for tokamak
+cases. Earlier `17 x 21 x 5 x 12` NTX timings were lower-resolution bring-up
+checks for this solver lane, not public production baselines.
 
 ## Runtime and Memory Summary
 
@@ -77,6 +112,15 @@ to the CLI `jax_logged_elapsed_s` field. Cases are ordered by best warm
 `sfincs_jax` speedup over the Fortran v3 runtime, so the strongest JAX wins appear
 first. Regenerate the plot with
 `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`.
+
+Scope note: this figure is the reduced audited example-suite benchmark, intended
+for regression tracking and quick CPU/GPU smoke validation. Production
+performance claims should use the higher-resolution benchmark tier in
+`benchmarks/production_resolution_inputs_2026-04-30`, which enforces
+`25 x 31 x 11 x 17` 3D grids and `25 x 1 x 11 x 17` tokamak grids, including
+collaborator/NTX workloads. That production tier is intentionally separated
+because it has already exposed larger finite-beta/profile-current and RHSMode=3
+transport solver blockers that are not visible in the reduced suite.
 
 ## Physics in One Page
 
@@ -188,6 +232,13 @@ write_sfincs_jax_output_h5(
 write_sfincs_jax_output_h5(
     input_namelist=input_namelist,
     output_path=Path("sfincsOutput.h5"),
+    solve_method="sparse_host",
+    differentiable=False,
+)
+
+write_sfincs_jax_output_h5(
+    input_namelist=input_namelist,
+    output_path=Path("sfincsOutput.h5"),
     differentiable=True,
 )
 ```
@@ -197,6 +248,8 @@ Repository examples that map directly onto common first tasks:
 - run the bundled tiny CLI example: `sfincs_jax examples/getting_started/input.namelist`
 - write a tiny tokamak output: `python examples/getting_started/write_sfincs_output_tokamak.py`
 - write a tiny VMEC output with `wout_path`: `python examples/getting_started/write_sfincs_output_vmec.py`
+- run a finite-beta `vmec_jax` equilibrium into convergence-gated `sfincs_jax` radial profiles of ambipolar `E_r` and bootstrap current: `python examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py`
+- plot the finite-beta kinetic/angular/root-bracket convergence scan from cached outputs: `python examples/vmec_jax_finite_beta/plot_convergence_scan.py`
 - plot an output file: `python examples/getting_started/plot_sfincs_output.py`
 - write HDF5/NetCDF/NPZ and plot a PDF panel: `python examples/getting_started/write_and_plot_multiple_formats.py`
 - run autodiff examples: `python examples/autodiff/autodiff_gradient_nu_n_residual.py`

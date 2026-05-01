@@ -1,0 +1,12 @@
+{
+  "cases": 9,
+  "audited_cases": 9,
+  "skipped_cases": 0,
+  "missing_total": 0,
+  "extra_total": 70,
+  "cases_with_missing": [],
+  "cases_with_extra": [
+    "HSX_PASCollisions_DKESTrajectories"
+  ],
+  "cases_skipped": []
+}

@@ -1,0 +1,255 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+import sys
+
+
+_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "create_production_benchmark_inputs.py"
+sys.path.insert(0, str(_SCRIPT_PATH.parent))
+_SPEC = importlib.util.spec_from_file_location("create_production_benchmark_inputs", _SCRIPT_PATH)
+assert _SPEC is not None and _SPEC.loader is not None
+bench_inputs = importlib.util.module_from_spec(_SPEC)
+sys.modules[_SPEC.name] = bench_inputs
+_SPEC.loader.exec_module(bench_inputs)
+
+
+def _write_input(
+    path: Path,
+    *,
+    ntheta: int,
+    nzeta: int,
+    nx: int,
+    nxi: int,
+    equilibrium_file: Path | None = None,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    geometry = ""
+    if equilibrium_file is not None:
+        geometry = f'\n&geometryParameters\n  equilibriumFile = "{equilibrium_file}"\n/\n'
+    path.write_text(
+        (
+            "&resolutionParameters\n"
+            f"  NTHETA = {ntheta}\n"
+            f"  NZETA = {nzeta}\n"
+            f"  NX = {nx}\n"
+            f"  NXI = {nxi}\n"
+            "/\n"
+            f"{geometry}"
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_generator_enforces_research_baseline_on_examples_and_ntx(tmp_path: Path) -> None:
+    examples_root = tmp_path / "examples"
+    _write_input(examples_root / "tokamak_demo" / "input.namelist", ntheta=7, nzeta=1, nx=1, nxi=8)
+    _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=9, nzeta=11, nx=2, nxi=10)
+
+    source_wout = tmp_path / "source_geometry" / "wout_test.nc"
+    source_wout.parent.mkdir(parents=True)
+    source_wout.write_bytes(b"mock-netcdf")
+    ntx_input = tmp_path / "ntx" / "finite_beta" / "rho_0p5" / "input.namelist"
+    _write_input(ntx_input, ntheta=13, nzeta=15, nx=5, nxi=8, equilibrium_file=source_wout)
+
+    out_root = tmp_path / "production_inputs"
+    assert (
+        bench_inputs.main(
+            [
+                "--examples-root",
+                str(examples_root),
+                "--additional-input",
+                str(tmp_path / "missing_input.namelist"),
+                "--out-root",
+                str(out_root),
+                "--ntx-input",
+                str(ntx_input),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    cases = {case["case"]: case for case in manifest["cases"]}
+
+    assert manifest["minimum_3d_resolution"] == {"NTHETA": 25, "NZETA": 31, "NX": 11, "NXI": 17}
+    assert manifest["minimum_tokamak_resolution"] == {"NTHETA": 25, "NX": 11, "NXI": 17}
+
+    assert cases["tokamak_demo"]["benchmark_resolution"] == {"NTHETA": 25, "NZETA": 1, "NX": 11, "NXI": 17}
+    assert cases["stellarator_demo"]["benchmark_resolution"] == {"NTHETA": 25, "NZETA": 31, "NX": 11, "NXI": 17}
+    assert cases["tokamak_demo"]["size_estimate"]["total_unknowns_estimate"] == 4677
+    assert cases["tokamak_demo"]["size_estimate"]["run_recommendation"] == "bounded_local_ok"
+
+    ntx_case_name = next(name for name in cases if name.startswith("ntx_"))
+    assert cases[ntx_case_name]["benchmark_resolution"] == {"NTHETA": 25, "NZETA": 31, "NX": 11, "NXI": 17}
+    assert (
+        cases[ntx_case_name]["resolution_policy"]
+        == "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17"
+    )
+
+    localized_input = out_root / cases[ntx_case_name]["input"]
+    localized_text = localized_input.read_text(encoding="utf-8")
+    assert f'"{source_wout}"' not in localized_text
+    assert 'equilibriumFile = "wout_test.nc"' in localized_text
+    assert (localized_input.parent / "wout_test.nc").read_bytes() == b"mock-netcdf"
+
+
+def test_generator_can_preserve_ntx_resolution_for_reproduction(tmp_path: Path) -> None:
+    examples_root = tmp_path / "examples"
+    _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=25, nzeta=31, nx=11, nxi=17)
+    ntx_input = tmp_path / "ntx" / "finite_beta" / "rho_0p5" / "input.namelist"
+    _write_input(ntx_input, ntheta=13, nzeta=15, nx=5, nxi=8)
+
+    out_root = tmp_path / "production_inputs"
+    assert (
+        bench_inputs.main(
+            [
+                "--examples-root",
+                str(examples_root),
+                "--additional-input",
+                str(tmp_path / "missing_input.namelist"),
+                "--out-root",
+                str(out_root),
+                "--ntx-input",
+                str(ntx_input),
+                "--preserve-ntx-resolution",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    cases = {case["case"]: case for case in manifest["cases"]}
+    ntx_case_name = next(name for name in cases if name.startswith("ntx_"))
+    assert cases[ntx_case_name]["benchmark_resolution"] == {"NTHETA": 13, "NZETA": 15, "NX": 5, "NXI": 8}
+    assert cases[ntx_case_name]["resolution_policy"] == "preserve authored collaborator/NTX resolution"
+
+
+def test_generator_relabels_historic_ntx_deck_with_benchmark_resolution(tmp_path: Path) -> None:
+    examples_root = tmp_path / "examples"
+    _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=25, nzeta=31, nx=11, nxi=17)
+    ntx_input = (
+        tmp_path
+        / "ntx"
+        / "outputs"
+        / "sfincs_jax_rhsmode1_profile_current_profiling"
+        / "cpu_17x21x12_deck"
+        / "finite_beta"
+        / "input.namelist"
+    )
+    _write_input(ntx_input, ntheta=17, nzeta=21, nx=5, nxi=12)
+
+    out_root = tmp_path / "production_inputs"
+    assert (
+        bench_inputs.main(
+            [
+                "--examples-root",
+                str(examples_root),
+                "--additional-input",
+                str(tmp_path / "missing_input.namelist"),
+                "--out-root",
+                str(out_root),
+                "--ntx-input",
+                str(ntx_input),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    cases = {case["case"]: case for case in manifest["cases"]}
+    assert any("cpu_25x31x11x17_deck" in name for name in cases)
+    assert not any("cpu_17x21x12_deck" in name for name in cases)
+
+
+def test_generator_estimates_large_pas_xdot_case_as_remote_only(tmp_path: Path) -> None:
+    examples_root = tmp_path / "examples"
+    input_path = examples_root / "stellarator_xdot" / "input.namelist"
+    _write_input(input_path, ntheta=17, nzeta=21, nx=5, nxi=12)
+    with input_path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            "\n&speciesParameters\n"
+            "  Zs = 1.0 -1.0\n"
+            "/\n"
+            "\n&physicsParameters\n"
+            "  collisionOperator = 1\n"
+            "  includeXDotTerm = .true.\n"
+            "  dPhiHatdrN = 1.0\n"
+            "/\n"
+        )
+
+    out_root = tmp_path / "production_inputs"
+    assert (
+        bench_inputs.main(
+            [
+                "--examples-root",
+                str(examples_root),
+                "--additional-input",
+                str(tmp_path / "missing_input.namelist"),
+                "--out-root",
+                str(out_root),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    case = manifest["cases"][0]
+    size = case["size_estimate"]
+
+    assert case["benchmark_resolution"] == {"NTHETA": 25, "NZETA": 31, "NX": 11, "NXI": 17}
+    assert size["species_count"] == 2
+    assert size["collision_operator"] == 1
+    assert size["include_xdot_requested"] is True
+    assert size["include_xdot"] is True
+    assert size["include_xdot_effective"] is True
+    assert size["total_unknowns_estimate"] == 289872
+    assert size["dense_matrix_nbytes_estimate"] > 600_000_000_000
+    assert size["conservative_csr_nbytes_estimate"] > 8_000_000_000
+    assert size["run_recommendation"] == "remote_or_cluster_only"
+
+
+def test_generator_does_not_overestimate_zero_er_xdot_case(tmp_path: Path) -> None:
+    examples_root = tmp_path / "examples"
+    input_path = examples_root / "stellarator_zero_er_xdot" / "input.namelist"
+    _write_input(input_path, ntheta=17, nzeta=21, nx=5, nxi=12)
+    with input_path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            "\n&speciesParameters\n"
+            "  Zs = 1.0 -1.0\n"
+            "/\n"
+            "\n&physicsParameters\n"
+            "  collisionOperator = 1\n"
+            "  includeXDotTerm = .true.\n"
+            "  dPhiHatdrN = 0.0\n"
+            "/\n"
+        )
+
+    out_root = tmp_path / "production_inputs"
+    assert (
+        bench_inputs.main(
+            [
+                "--examples-root",
+                str(examples_root),
+                "--additional-input",
+                str(tmp_path / "missing_input.namelist"),
+                "--out-root",
+                str(out_root),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    size = manifest["cases"][0]["size_estimate"]
+
+    assert size["include_xdot_requested"] is True
+    assert size["include_xdot"] is False
+    assert size["include_xdot_effective"] is False
+    assert size["conservative_csr_nbytes_estimate"] < 2_000_000_000

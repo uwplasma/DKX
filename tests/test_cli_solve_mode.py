@@ -20,7 +20,7 @@ from sfincs_jax.io import (
 class _FakeNamelist:
     def __init__(self, rhs_mode: int = 1) -> None:
         self._groups = {
-            "general": {"RHSMODE": rhs_mode, "RHSMODE": rhs_mode},
+            "general": {"RHSMODE": rhs_mode},
             "geometryParameters": {},
             "physicsParameters": {},
             "resolutionParameters": {},
@@ -53,11 +53,13 @@ def test_cmd_write_output_forces_explicit_mode(monkeypatch, tmp_path: Path) -> N
         compute_transport_matrix=False,
         compute_solution=False,
         geometry_only=False,
+        solver_trace=str(tmp_path / "solver_trace.json"),
         quiet=True,
         verbose=0,
     )
     assert cli._cmd_write_output(args) == 0
     assert captured["differentiable"] is False
+    assert captured["solver_trace_path"] == Path(tmp_path / "solver_trace.json")
 
 
 def test_cmd_write_output_accepts_extension_selected_formats(monkeypatch, tmp_path: Path) -> None:
@@ -204,6 +206,45 @@ def test_rhsmode1_solve_method_env_accepts_lgmres() -> None:
 
     assert method == "lgmres"
     assert any("solve method forced by env -> lgmres" in msg for msg in msgs)
+
+
+def test_rhsmode1_solve_method_env_accepts_sparse_host() -> None:
+    msgs: list[str] = []
+
+    method = _select_rhsmode1_linear_solve_method(
+        default_method="incremental",
+        env_override="sparse_host",
+        emit=lambda _lvl, msg: msgs.append(str(msg)),
+    )
+
+    assert method == "sparse_host"
+    assert any("solve method forced by env -> sparse_host" in msg for msg in msgs)
+
+
+def test_rhsmode1_solve_method_env_accepts_sparse_pc_gmres() -> None:
+    msgs: list[str] = []
+
+    method = _select_rhsmode1_linear_solve_method(
+        default_method="incremental",
+        env_override="sparse_pc_gmres",
+        emit=lambda _lvl, msg: msgs.append(str(msg)),
+    )
+
+    assert method == "sparse_pc_gmres"
+    assert any("solve method forced by env -> sparse_pc_gmres" in msg for msg in msgs)
+
+
+def test_rhsmode1_solve_method_env_accepts_sparse_lsmr() -> None:
+    msgs: list[str] = []
+
+    method = _select_rhsmode1_linear_solve_method(
+        default_method="incremental",
+        env_override="sparse_lsmr",
+        emit=lambda _lvl, msg: msgs.append(str(msg)),
+    )
+
+    assert method == "sparse_lsmr"
+    assert any("solve method forced by env -> sparse_lsmr" in msg for msg in msgs)
 
 
 def test_rhsmode1_solve_method_env_ignores_unknown_override() -> None:
@@ -579,6 +620,211 @@ def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> Non
 
     assert rc == 0
     assert captured["output_path"] == Path(tmp_path / "sfincsOutput.h5")
+
+
+def test_main_write_output_forwards_solver_trace_sidecar(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    trace_path = tmp_path / "solver_trace.json"
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--solver-trace",
+            str(trace_path),
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["solver_trace_path"] == trace_path
+
+
+def test_main_write_output_forwards_sparse_host_solve_method(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--solve-method",
+            "sparse_host",
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["solve_method"] == "sparse_host"
+
+
+def test_main_write_output_forwards_sparse_pc_gmres_solve_method(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--solve-method",
+            "sparse_pc_gmres",
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["solve_method"] == "sparse_pc_gmres"
+
+
+def test_main_write_output_forwards_sparse_lsmr_solve_method(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--solve-method",
+            "sparse_lsmr",
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["solve_method"] == "sparse_lsmr"
+
+
+def test_main_write_output_forwards_sparse_host_safe_solve_method(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--solve-method",
+            "sparse_host_safe",
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["solve_method"] == "sparse_host_safe"
+
+
+def test_main_write_output_forwards_petsc_compat_solve_method(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--solve-method",
+            "petsc_compat",
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["solve_method"] == "petsc_compat"
+
+
+def test_main_write_output_reports_runtime_errors_without_traceback(monkeypatch, tmp_path: Path, capsys) -> None:
+    def _fake_write_output_h5(**_kwargs):
+        raise RuntimeError("host sparse factorization failed")
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--quiet",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "sfincs_jax write-output failed: host sparse factorization failed" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_main_preserves_shard_axis_before_subcommand(monkeypatch, tmp_path: Path) -> None:

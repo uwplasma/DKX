@@ -187,6 +187,29 @@ adapter remain outside the differentiable graph.  Full VMEC-boundary-to-kinetic
 transport optimization is still a larger research workflow, but the public handoff
 now has a fast, tested gradient gate.
 
+A separate finite-beta end-to-end user example uses the direct VMEC ``wout`` lane:
+
+.. code-block:: bash
+
+   python examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py
+
+That script runs the bundled ``input.nfp2_QA_finite_beta`` deck with ``vmec_jax``,
+writes a self-contained ``wout_nfp2_QA_finite_beta_vmec_jax.nc`` file, evaluates
+scheme-5 geometry in ``sfincs_jax``, scans normalized ``Er`` on multiple radial
+surfaces, and plots core-to-edge profiles of ambipolar ``Er`` and bootstrap
+current versus normalized toroidal flux :math:`\psi_N = r_N^2`.  The same panel
+also includes representative ``Er`` scans, particle fluxes, and a ``jet``
+contour plot of the sampled VMEC magnetic-field strength.  The checked example
+uses ``Ntheta=7``, ``Nzeta=7``, ``Nxi=8``, ``NL=6``, and ``Nx=6`` for the radial
+profile and overlays a tighter ambipolar-root scan that refines every plotted
+surface from a local ``Er`` bracket width of ``1.25`` to ``0.625``.  The
+companion convergence-scan figure in :doc:`examples` records the remaining
+numerical sensitivity: same-grid root-bracket refinement is tight at ``8/6/6``,
+but higher combined ``Nxi``/``Nx`` refinement remains a performance-limited
+research lane.  A Boozer transform is not needed for this direct VMEC workflow
+because the kinetic solve uses the VMEC geometry coefficients from the generated
+``wout`` file.
+
 Boozer ``.bc`` workflow
 -----------------------
 

@@ -318,19 +318,27 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
     compute_solution = (not geometry_only) and (bool(getattr(args, "compute_solution", False)) or rhs_mode == 1)
     compute_transport_matrix = (not geometry_only) and (bool(args.compute_transport_matrix) or rhs_mode in (2, 3))
 
-    out_path = write_sfincs_jax_output_h5(
-        input_namelist=Path(args.input),
-        output_path=Path(args.out),
-        equilibrium_file=getattr(args, "equilibrium_file", None),
-        wout_path=getattr(args, "wout_path", None),
-        fortran_layout=bool(args.fortran_layout),
-        overwrite=bool(args.overwrite),
-        compute_transport_matrix=bool(compute_transport_matrix),
-        compute_solution=bool(compute_solution),
-        differentiable=False,
-        emit=lambda level, msg: _emit(msg, level=level, args=args),
-        verbose=not bool(getattr(args, "quiet", False)),
-    )
+    try:
+        out_path = write_sfincs_jax_output_h5(
+            input_namelist=Path(args.input),
+            output_path=Path(args.out),
+            equilibrium_file=getattr(args, "equilibrium_file", None),
+            wout_path=getattr(args, "wout_path", None),
+            fortran_layout=bool(args.fortran_layout),
+            overwrite=bool(args.overwrite),
+            compute_transport_matrix=bool(compute_transport_matrix),
+            compute_solution=bool(compute_solution),
+            differentiable=False,
+            solver_trace_path=Path(args.solver_trace) if getattr(args, "solver_trace", None) else None,
+            solve_method=str(getattr(args, "solve_method", "auto")),
+            emit=lambda level, msg: _emit(msg, level=level, args=args),
+            verbose=not bool(getattr(args, "quiet", False)),
+        )
+    except RuntimeError as exc:
+        if os.environ.get("SFINCS_JAX_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
+            raise
+        print(f"sfincs_jax write-output failed: {exc}", file=sys.stderr, flush=True)
+        return 2
     _emit(f" wrote output -> {out_path}", level=0, args=args)
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
@@ -813,7 +821,11 @@ def main(argv: list[str] | None = None) -> int:
     p_solve.add_argument(
         "--solve-method",
         default="auto",
-        help="Linear solver mode (auto|bicgstab|batched|incremental|dense)",
+        help=(
+            "Linear solver mode "
+            "(auto|bicgstab|batched|incremental|dense|sparse_host|sparse_host_safe|"
+            "sparse_pc_gmres|sparse_lsmr|petsc_compat)"
+        ),
     )
     p_solve.add_argument(
         "--which-rhs",
@@ -913,6 +925,20 @@ def main(argv: list[str] | None = None) -> int:
         "--geometry-only",
         action="store_true",
         help="Only write geometry/grid outputs (skip RHSMode=1 solve and RHSMode=2/3 transport-matrix loop).",
+    )
+    p_out.add_argument(
+        "--solver-trace",
+        default=None,
+        help="Optional JSON sidecar path for solver/backend/timing metadata.",
+    )
+    p_out.add_argument(
+        "--solve-method",
+        default="auto",
+        help=(
+            "RHSMode=1 linear solver mode for output generation "
+            "(auto|incremental|dense|sparse_host|sparse_host_safe|sparse_pc_gmres|"
+            "sparse_lsmr|petsc_compat)."
+        ),
     )
     _add_equilibrium_override_args(p_out)
     p_out.set_defaults(func=_cmd_write_output)

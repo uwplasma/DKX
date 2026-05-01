@@ -1,0 +1,1689 @@
+{
+  "case_count": 44,
+  "cases": [
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_FPCollisions_noEr",
+      "input": "inputs/tokamak_1species_FPCollisions_noEr/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 8525,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 872141604,
+        "conservative_sparse_nnz_estimate": 72675625,
+        "constraint_scheme": 0,
+        "dense_matrix_nbytes_estimate": 581405000,
+        "extra_unknowns_estimate": 0,
+        "f_unknowns_estimate": 8525,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 1,
+        "total_unknowns_estimate": 8525
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
+      "input": "inputs/tokamak_1species_FPCollisions_noEr_withPhi1InDKE/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 8525,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 872142312,
+        "conservative_sparse_nnz_estimate": 72675675,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 585093632,
+        "extra_unknowns_estimate": 2,
+        "f_unknowns_estimate": 8525,
+        "include_phi1": true,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 25,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 1,
+        "total_unknowns_estimate": 8552
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_noEr_withPhi1InDKE/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_FPCollisions_noEr_withQN",
+      "input": "inputs/tokamak_1species_FPCollisions_noEr_withQN/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 8525,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 872142312,
+        "conservative_sparse_nnz_estimate": 72675675,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 585093632,
+        "extra_unknowns_estimate": 2,
+        "f_unknowns_estimate": 8525,
+        "include_phi1": true,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 25,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 1,
+        "total_unknowns_estimate": 8552
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_noEr_withQN/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+      "input": "inputs/tokamak_1species_FPCollisions_withEr_DKESTrajectories/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 8525,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 872142212,
+        "conservative_sparse_nnz_estimate": 72675675,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 581677832,
+        "extra_unknowns_estimate": 2,
+        "f_unknowns_estimate": 8525,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 1,
+        "total_unknowns_estimate": 8527
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_withEr_DKESTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+      "input": "inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 8525,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 872142212,
+        "conservative_sparse_nnz_estimate": 72675675,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 581677832,
+        "extra_unknowns_estimate": 2,
+        "f_unknowns_estimate": 8525,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 1,
+        "total_unknowns_estimate": 8527
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_PASCollisions_noEr",
+      "input": "inputs/tokamak_1species_PASCollisions_noEr/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 8525,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 12329948,
+        "conservative_sparse_nnz_estimate": 1024650,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 582906368,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 8525,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 1,
+        "total_unknowns_estimate": 8536
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_PASCollisions_noEr_Nx1",
+      "input": "inputs/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 1,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 8525,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 12329948,
+        "conservative_sparse_nnz_estimate": 1024650,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 582906368,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 8525,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 1,
+        "total_unknowns_estimate": 8536
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_PASCollisions_noEr_withQN",
+      "input": "inputs/tokamak_1species_PASCollisions_noEr_withQN/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 8525,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 12330048,
+        "conservative_sparse_nnz_estimate": 1024650,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 586325768,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 8525,
+        "include_phi1": true,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 25,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 1,
+        "total_unknowns_estimate": 8561
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_noEr_withQN/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_PASCollisions_withEr_fullTrajectories",
+      "input": "inputs/tokamak_1species_PASCollisions_withEr_fullTrajectories/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 8525,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 135254948,
+        "conservative_sparse_nnz_estimate": 11268400,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 582906368,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 8525,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 1,
+        "total_unknowns_estimate": 8536
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_withEr_fullTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 40,
+        "NZETA": 1
+      },
+      "case": "tokamak_2species_PASCollisions_noEr",
+      "input": "inputs/tokamak_2species_PASCollisions_noEr/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 40,
+        "NZETA": 1
+      },
+      "phase_points": 11000,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 32104680,
+        "conservative_sparse_nnz_estimate": 2668049,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 3879747872,
+        "extra_unknowns_estimate": 22,
+        "f_unknowns_estimate": 22000,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 2,
+        "total_unknowns_estimate": 22022
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_2species_PASCollisions_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 40,
+        "NZETA": 1
+      },
+      "case": "tokamak_2species_PASCollisions_withEr_fullTrajectories",
+      "input": "inputs/tokamak_2species_PASCollisions_withEr_fullTrajectories/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 40,
+        "NZETA": 1
+      },
+      "phase_points": 11000,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 352204680,
+        "conservative_sparse_nnz_estimate": 29343049,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 3879747872,
+        "extra_unknowns_estimate": 22,
+        "f_unknowns_estimate": 22000,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_local_ok",
+        "species_count": 2,
+        "total_unknowns_estimate": 22022
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_2species_PASCollisions_withEr_fullTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 17,
+        "NZETA": 31
+      },
+      "case": "inductiveE_noEr",
+      "input": "inputs/inductiveE_noEr/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 5,
+        "NX": 5,
+        "NXI": 8,
+        "NZETA": 7
+      },
+      "phase_points": 144925,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 71547770620,
+        "conservative_sparse_nnz_estimate": 5962217600,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 672122730528,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 289850,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 289854
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/inductiveE_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 17,
+        "NZETA": 31
+      },
+      "case": "quick_2species_FPCollisions_noEr",
+      "input": "inputs/quick_2species_FPCollisions_noEr/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 5,
+        "NX": 5,
+        "NXI": 8,
+        "NZETA": 7
+      },
+      "phase_points": 144925,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 71547770620,
+        "conservative_sparse_nnz_estimate": 5962217600,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 672122730528,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 289850,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 289854
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 17,
+        "NZETA": 31
+      },
+      "case": "transportMatrix_geometryScheme2",
+      "input": "inputs/transportMatrix_geometryScheme2/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 15,
+        "NX": 8,
+        "NXI": 16,
+        "NZETA": 13
+      },
+      "phase_points": 144925,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 17887241812,
+        "conservative_sparse_nnz_estimate": 1490555175,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 168030682632,
+        "extra_unknowns_estimate": 2,
+        "f_unknowns_estimate": 144925,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 144927
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/transportMatrix_geometryScheme2/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 18,
+        "NZETA": 31
+      },
+      "case": "geometryScheme5_3species_loRes",
+      "input": "inputs/geometryScheme5_3species_loRes/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 9,
+        "NX": 4,
+        "NXI": 18,
+        "NZETA": 17
+      },
+      "phase_points": 153450,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 180477511228,
+        "conservative_sparse_nnz_estimate": 15039639150,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 1695421173888,
+        "extra_unknowns_estimate": 6,
+        "f_unknowns_estimate": 460350,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 3,
+        "total_unknowns_estimate": 460356
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme5_3species_loRes/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "case": "monoenergetic_geometryScheme11",
+      "input": "inputs/monoenergetic_geometryScheme11/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 17,
+        "NX": 1,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "phase_points": 204600,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 642341748,
+        "conservative_sparse_nnz_estimate": 53460275,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 334925290568,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 204600,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_remote",
+        "species_count": 1,
+        "total_unknowns_estimate": 204611
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/monoenergetic_geometryScheme11/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "case": "monoenergetic_geometryScheme5_ASCII",
+      "input": "inputs/monoenergetic_geometryScheme5_ASCII/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 17,
+        "NX": 1,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "phase_points": 204600,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 642341748,
+        "conservative_sparse_nnz_estimate": 53460275,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 334925290568,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 204600,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_remote",
+        "species_count": 1,
+        "total_unknowns_estimate": 204611
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/monoenergetic_geometryScheme5_ASCII/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "case": "monoenergetic_geometryScheme5_netCDF",
+      "input": "inputs/monoenergetic_geometryScheme5_netCDF/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 17,
+        "NX": 1,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "phase_points": 204600,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 642341748,
+        "conservative_sparse_nnz_estimate": 53460275,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 334925290568,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 204600,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_remote",
+        "species_count": 1,
+        "total_unknowns_estimate": 204611
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/monoenergetic_geometryScheme5_netCDF/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "case": "transportMatrix_geometryScheme11",
+      "input": "inputs/transportMatrix_geometryScheme11/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 6,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "phase_points": 204600,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 35650341012,
+        "conservative_sparse_nnz_estimate": 2970793550,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 334895827232,
+        "extra_unknowns_estimate": 2,
+        "f_unknowns_estimate": 204600,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 204602
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/transportMatrix_geometryScheme11/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 48,
+        "NZETA": 31
+      },
+      "case": "geometryScheme4_1species_PAS_withEr_DKESTrajectories",
+      "input": "inputs/geometryScheme4_1species_PAS_withEr_DKESTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 48,
+        "NZETA": 23
+      },
+      "phase_points": 409200,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 1318340148,
+        "conservative_sparse_nnz_estimate": 109725275,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 1339629140168,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 409200,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 409211
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_1species_PAS_withEr_DKESTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 48,
+        "NZETA": 31
+      },
+      "case": "geometryScheme4_2species_PAS_noEr",
+      "input": "inputs/geometryScheme4_2species_PAS_noEr/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 48,
+        "NZETA": 23
+      },
+      "phase_points": 409200,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 2636680292,
+        "conservative_sparse_nnz_estimate": 219450550,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 5358516560672,
+        "extra_unknowns_estimate": 22,
+        "f_unknowns_estimate": 818400,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 818422
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 48,
+        "NZETA": 31
+      },
+      "case": "geometryScheme4_2species_noEr",
+      "input": "inputs/geometryScheme4_2species_noEr/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 48,
+        "NZETA": 19
+      },
+      "phase_points": 409200,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 570395374820,
+        "conservative_sparse_nnz_estimate": 47532675100,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 5358280857728,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 818400,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 818404
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 48,
+        "NZETA": 31
+      },
+      "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
+      "input": "inputs/geometryScheme4_2species_noEr_withPhi1InDKE/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 48,
+        "NZETA": 19
+      },
+      "phase_points": 409200,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 570395377920,
+        "conservative_sparse_nnz_estimate": 47532675100,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 5368433872328,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 818400,
+        "include_phi1": true,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 775,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 819179
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_noEr_withPhi1InDKE/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 48,
+        "NZETA": 31
+      },
+      "case": "geometryScheme4_2species_noEr_withQN",
+      "input": "inputs/geometryScheme4_2species_noEr_withQN/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 48,
+        "NZETA": 19
+      },
+      "phase_points": 409200,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 570395377920,
+        "conservative_sparse_nnz_estimate": 47532675100,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 5368433872328,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 818400,
+        "include_phi1": true,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 775,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 819179
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_noEr_withQN/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 48,
+        "NZETA": 31
+      },
+      "case": "geometryScheme4_2species_withEr_fullTrajectories",
+      "input": "inputs/geometryScheme4_2species_withEr_fullTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 48,
+        "NZETA": 19
+      },
+      "phase_points": 409200,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 570395374820,
+        "conservative_sparse_nnz_estimate": 47532675100,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 5358280857728,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 818400,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 818404
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_withEr_fullTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 48,
+        "NZETA": 31
+      },
+      "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
+      "input": "inputs/geometryScheme4_2species_withEr_fullTrajectories_withQN/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 48,
+        "NZETA": 19
+      },
+      "phase_points": 409200,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 570395377920,
+        "conservative_sparse_nnz_estimate": 47532675100,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 5368433872328,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 818400,
+        "include_phi1": true,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 775,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 819179
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_withEr_fullTrajectories_withQN/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 70,
+        "NZETA": 33
+      },
+      "case": "filteredW7XNetCDF_2species_noEr",
+      "input": "inputs/filteredW7XNetCDF_2species_noEr/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 70,
+        "NZETA": 33
+      },
+      "phase_points": 635250,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 1338299001620,
+        "conservative_sparse_nnz_estimate": 111524493300,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 12913443312128,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 1270500,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 1270504
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/filteredW7XNetCDF_2species_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 27,
+        "NX": 11,
+        "NXI": 70,
+        "NZETA": 31
+      },
+      "case": "monoenergetic_geometryScheme1",
+      "input": "inputs/monoenergetic_geometryScheme1/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 27,
+        "NX": 1,
+        "NXI": 70,
+        "NZETA": 29
+      },
+      "phase_points": 644490,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 2169058764,
+        "conservative_sparse_nnz_estimate": 180540063,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 3323052312008,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 644490,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 644501
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/monoenergetic_geometryScheme1/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories",
+      "input": "inputs/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 19,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "phase_points": 973500,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 2559767698820,
+        "conservative_sparse_nnz_estimate": 213313325900,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 30326596608128,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 1947000,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 1947004
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories",
+      "input": "inputs/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 19,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "phase_points": 973500,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 2559767698820,
+        "conservative_sparse_nnz_estimate": 213313325900,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 30326596608128,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 1947000,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 1947004
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories",
+      "input": "inputs/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 19,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "phase_points": 973500,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 9510316292,
+        "conservative_sparse_nnz_estimate": 791877350,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 30327157347872,
+        "extra_unknowns_estimate": 22,
+        "f_unknowns_estimate": 1947000,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 1947022
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories",
+      "input": "inputs/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 19,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "phase_points": 973500,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 104531704292,
+        "conservative_sparse_nnz_estimate": 8710326350,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 30327157347872,
+        "extra_unknowns_estimate": 22,
+        "f_unknowns_estimate": 1947000,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 1947022
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "case": "additional_examples",
+      "input": "inputs/additional_examples/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 25,
+        "NX": 8,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "phase_points": 1402500,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 1388480640612,
+        "conservative_sparse_nnz_estimate": 115706252550,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 15736094880032,
+        "extra_unknowns_estimate": 2,
+        "f_unknowns_estimate": 1402500,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 1402502
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/additional_examples/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 100,
+        "NZETA": 55
+      },
+      "case": "filteredW7XNetCDF_2species_magneticDrifts_noEr",
+      "input": "inputs/filteredW7XNetCDF_2species_magneticDrifts_noEr/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 23,
+        "NX": 6,
+        "NXI": 100,
+        "NZETA": 55
+      },
+      "phase_points": 1512500,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 6308952166020,
+        "conservative_sparse_nnz_estimate": 525745005500,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 73205193600128,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 3025000,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 3025004
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/filteredW7XNetCDF_2species_magneticDrifts_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 100,
+        "NZETA": 55
+      },
+      "case": "filteredW7XNetCDF_2species_magneticDrifts_withEr",
+      "input": "inputs/filteredW7XNetCDF_2species_magneticDrifts_withEr/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 23,
+        "NX": 6,
+        "NXI": 100,
+        "NZETA": 55
+      },
+      "phase_points": 1512500,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 6308952166020,
+        "conservative_sparse_nnz_estimate": 525745005500,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 73205193600128,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 3025000,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 3025004
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/filteredW7XNetCDF_2species_magneticDrifts_withEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "case": "HSX_FPCollisions_DKESTrajectories",
+      "input": "inputs/HSX_FPCollisions_DKESTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 11,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "phase_points": 4712125,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 51529047257020,
+        "conservative_sparse_nnz_estimate": 4294084130000,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 710532507652128,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 9424250,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 9424254
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_FPCollisions_DKESTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "case": "HSX_FPCollisions_fullTrajectories",
+      "input": "inputs/HSX_FPCollisions_fullTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 11,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "phase_points": 4712125,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 0,
+        "conservative_csr_nbytes_estimate": 51529047257020,
+        "conservative_sparse_nnz_estimate": 4294084130000,
+        "constraint_scheme": 1,
+        "dense_matrix_nbytes_estimate": 710532507652128,
+        "extra_unknowns_estimate": 4,
+        "f_unknowns_estimate": 9424250,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 9424254
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_FPCollisions_fullTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "case": "HSX_PASCollisions_DKESTrajectories",
+      "input": "inputs/HSX_PASCollisions_DKESTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 11,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "phase_points": 4712125,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 78003695092,
+        "conservative_sparse_nnz_estimate": 6497166500,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 710535221839872,
+        "extra_unknowns_estimate": 22,
+        "f_unknowns_estimate": 9424250,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 9424272
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "case": "HSX_PASCollisions_fullTrajectories",
+      "input": "inputs/HSX_PASCollisions_fullTrajectories/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 11,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "phase_points": 4712125,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 857656085092,
+        "conservative_sparse_nnz_estimate": 71468199000,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 710535221839872,
+        "extra_unknowns_estimate": 22,
+        "f_unknowns_estimate": 9424250,
+        "include_phi1": false,
+        "include_xdot": true,
+        "include_xdot_effective": true,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 9424272
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_PASCollisions_fullTrajectories/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 17,
+        "NZETA": 31
+      },
+      "case": "ntx_outputs_owned_finite_beta_sfincs_jax_profile_current_audit_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565",
+      "input": "inputs/ntx_outputs_owned_finite_beta_sfincs_jax_profile_current_audit_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 8,
+        "NZETA": 15
+      },
+      "phase_points": 144925,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 890351092,
+        "conservative_sparse_nnz_estimate": 74099300,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 672206211072,
+        "extra_unknowns_estimate": 22,
+        "f_unknowns_estimate": 289850,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 289872
+      },
+      "source_group": "ntx",
+      "source_input": "/Users/rogeriojorge/local/NTX/examples/outputs/owned_finite_beta_sfincs_jax_profile_current_audit/finite_beta_qa_pressure_current/rho_0p142857/nu_n_0p00831565/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 17,
+        "NZETA": 31
+      },
+      "case": "ntx_owned_finite_beta_sfincs_jax_inputs_finite_beta_nfp3_qh_stage1_rho_0p5_nuPrime_0p01_EStar_0",
+      "input": "inputs/ntx_owned_finite_beta_sfincs_jax_inputs_finite_beta_nfp3_qh_stage1_rho_0p5_nuPrime_0p01_EStar_0/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 9,
+        "NX": 1,
+        "NXI": 8,
+        "NZETA": 11
+      },
+      "phase_points": 144925,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 445175548,
+        "conservative_sparse_nnz_estimate": 37049650,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 168051552768,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 144925,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "bounded_remote",
+        "species_count": 1,
+        "total_unknowns_estimate": 144936
+      },
+      "source_group": "ntx",
+      "source_input": "/Users/rogeriojorge/local/NTX/examples/outputs/owned_finite_beta_sfincs_jax_inputs/finite_beta_nfp3_qh_stage1/rho_0p5/nuPrime_0p01/EStar_0/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 17,
+        "NZETA": 31
+      },
+      "case": "ntx_sfincs_jax_rhsmode1_profile_current_profiling_cpu_25x31x11x17_deck_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565",
+      "input": "inputs/ntx_sfincs_jax_rhsmode1_profile_current_profiling_cpu_25x31x11x17_deck_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 17,
+        "NX": 5,
+        "NXI": 12,
+        "NZETA": 21
+      },
+      "phase_points": 144925,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 890351092,
+        "conservative_sparse_nnz_estimate": 74099300,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 672206211072,
+        "extra_unknowns_estimate": 22,
+        "f_unknowns_estimate": 289850,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 289872
+      },
+      "source_group": "ntx",
+      "source_input": "/Users/rogeriojorge/local/NTX/examples/outputs/sfincs_jax_rhsmode1_profile_current_profiling/cpu_17x21x12_deck/finite_beta_qa_pressure_current/rho_0p142857/nu_n_0p00831565/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 25,
+        "NX": 11,
+        "NXI": 32,
+        "NZETA": 31
+      },
+      "case": "ntx_owned_finite_beta_sfincs_jax_inputs_finite_beta_qa_pressure_current_rho_0p5_nuPrime_0p01_EStar_0",
+      "input": "inputs/ntx_owned_finite_beta_sfincs_jax_inputs_finite_beta_qa_pressure_current_rho_0p5_nuPrime_0p01_EStar_0/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 25,
+        "NX": 1,
+        "NXI": 32,
+        "NZETA": 31
+      },
+      "phase_points": 272800,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 867674548,
+        "conservative_sparse_nnz_estimate": 72215275,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 595406733768,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 272800,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 272811
+      },
+      "source_group": "ntx",
+      "source_input": "/Users/rogeriojorge/local/NTX/examples/outputs/owned_finite_beta_sfincs_jax_inputs/finite_beta_qa_pressure_current/rho_0p5/nuPrime_0p01/EStar_0/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 35,
+        "NX": 11,
+        "NXI": 48,
+        "NZETA": 43
+      },
+      "case": "ntx_grid_35_43_48_finite_beta_qa_pressure_current_rho_0p142857_nuPrime_0p01_EStar_0",
+      "input": "inputs/ntx_grid_35_43_48_finite_beta_qa_pressure_current_rho_0p142857_nuPrime_0p01_EStar_0/input.namelist",
+      "kind": "3d",
+      "original_resolution": {
+        "NTHETA": 35,
+        "NX": 1,
+        "NXI": 48,
+        "NZETA": 43
+      },
+      "phase_points": 794640,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x31x11x17 and tokamak >= 25x1x11x17",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 3582833148,
+        "conservative_sparse_nnz_estimate": 298304545,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 5051761694408,
+        "extra_unknowns_estimate": 11,
+        "f_unknowns_estimate": 794640,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": false,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 794651
+      },
+      "source_group": "ntx",
+      "source_input": "/Users/rogeriojorge/local/NTX/examples/outputs/owned_finite_beta_sfincs_jax_inputs_production_probe/grid_35_43_48/finite_beta_qa_pressure_current/rho_0p142857/nuPrime_0p01/EStar_0/input.namelist"
+    }
+  ],
+  "minimum_3d_resolution": {
+    "NTHETA": 25,
+    "NX": 11,
+    "NXI": 17,
+    "NZETA": 31
+  },
+  "minimum_tokamak_resolution": {
+    "NTHETA": 25,
+    "NX": 11,
+    "NXI": 17
+  },
+  "schema_version": 1
+}

@@ -21,6 +21,7 @@ from sfincs_jax.io import localize_equilibrium_file_in_place
 from run_reduced_upstream_suite import (
     CaseResult,
     REPO_ROOT,
+    _executable_metadata,
     _estimate_active_size_from_namelist,
     _iter_inputs,
     _load_existing_results,
@@ -440,6 +441,28 @@ def _stage_reference_fortran_artifacts(
     return True, effective_input
 
 
+def _load_reference_case_metrics(reference_results_root: Path | None, case_name: str) -> dict[str, object]:
+    """Load measured Fortran metadata from a staged reference suite report."""
+    if reference_results_root is None:
+        return {}
+    for report_name in ("suite_report.json", "suite_report_strict.json"):
+        report_path = reference_results_root / report_name
+        if not report_path.exists():
+            continue
+        try:
+            rows = json.loads(report_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(rows, dict):
+            rows = rows.get("cases", [])
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if isinstance(row, dict) and row.get("case") == case_name:
+                return row
+    return {}
+
+
 def _run_prepared_case(
     *,
     case_name: str,
@@ -481,7 +504,7 @@ def _run_prepared_case(
             else os.pathsep.join((str(equilibria_search_dir), prev_equilibria_dirs))
         )
     try:
-        return _run_case(
+        result = _run_case(
             case_name=case_name,
             case_input=effective_case_input,
             reference_input=reference_input,
@@ -502,6 +525,13 @@ def _run_prepared_case(
             jax_cache_dir=jax_cache_dir,
             jax_profile_mode=jax_profile_mode,
         )
+        if staged_reference:
+            reference_metrics = _load_reference_case_metrics(reference_results_root, case_name)
+            for attr in ("fortran_runtime_s", "fortran_max_rss_mb"):
+                value = reference_metrics.get(attr)
+                if value is not None:
+                    setattr(result, attr, float(value))
+        return result
     finally:
         if prev_equilibria_dirs:
             os.environ["SFINCS_JAX_EQUILIBRIA_DIRS"] = prev_equilibria_dirs
@@ -799,6 +829,7 @@ def main() -> int:
         "runtime_drift_threshold_ratio": float(args.runtime_drift_threshold_ratio),
         "runtime_drift_min_baseline_runtime_s": float(args.runtime_drift_min_baseline_runtime_s),
         "fortran_exe": _repo_rel(fortran_exe) if fortran_exe is not None else None,
+        "fortran_executable": _executable_metadata(fortran_exe),
         "environment": _gather_jax_env(),
         "cases": manifest_cases,
     }

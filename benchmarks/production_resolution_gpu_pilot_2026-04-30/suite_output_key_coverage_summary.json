@@ -1,0 +1,27 @@
+{
+  "cases": 4,
+  "audited_cases": 0,
+  "skipped_cases": 4,
+  "missing_total": 0,
+  "extra_total": 0,
+  "cases_with_missing": [],
+  "cases_with_extra": [],
+  "cases_skipped": [
+    {
+      "case": "ntx_grid_35_43_48_finite_beta_qa_pressure_current_rho_0p142857_nuPrime_0p01_EStar_0",
+      "reason": "missing_h5_path"
+    },
+    {
+      "case": "ntx_outputs_owned_finite_beta_sfincs_jax_profile_current_audit_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565",
+      "reason": "missing_h5_file"
+    },
+    {
+      "case": "ntx_sfincs_jax_rhsmode1_profile_current_profiling_cpu_17x21x12_deck_finite_beta_qa_pressure_current_rho_0p142857_nu_n_0p00831565",
+      "reason": "missing_h5_file"
+    },
+    {
+      "case": "tokamak_1species_PASCollisions_noEr_Nx1",
+      "reason": "missing_h5_file"
+    }
+  ]
+}

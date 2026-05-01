@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 from dataclasses import asdict, dataclass
+import hashlib
 import json
 import os
 import re
@@ -27,6 +28,60 @@ def _repo_rel(path: Path | None) -> str | None:
         return str(path.resolve().relative_to(REPO_ROOT))
     except Exception:  # noqa: BLE001
         return str(path)
+
+
+def _executable_metadata(exe: Path | None) -> dict[str, object]:
+    """Return reproducibility metadata for an external executable."""
+    if exe is None:
+        return {"path": None, "exists": False}
+    exe_path = Path(exe)
+    resolved = exe_path.resolve() if exe_path.exists() else exe_path
+    info: dict[str, object] = {
+        "path": str(resolved),
+        "exists": exe_path.exists(),
+    }
+    if exe_path.exists() and exe_path.is_file():
+        digest = hashlib.sha256()
+        with exe_path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                digest.update(chunk)
+        info["sha256"] = digest.hexdigest()
+        try:
+            info["size_bytes"] = int(exe_path.stat().st_size)
+        except OSError:
+            pass
+
+    parent = resolved.parent if resolved.exists() else exe_path.parent
+    for candidate in (parent, *parent.parents):
+        if (candidate / ".git").exists():
+            info["git_root"] = str(candidate)
+            try:
+                info["git_commit"] = subprocess.check_output(
+                    ["git", "-C", str(candidate), "rev-parse", "HEAD"],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                ).strip()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                info["git_branch"] = subprocess.check_output(
+                    ["git", "-C", str(candidate), "branch", "--show-current"],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                ).strip()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                status = subprocess.check_output(
+                    ["git", "-C", str(candidate), "status", "--short"],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                )
+                info["git_dirty"] = bool(status.strip())
+            except Exception:  # noqa: BLE001
+                pass
+            break
+    return info
 
 def _ensure_jax_compilation_cache() -> None:
     disable_env = os.environ.get("SFINCS_JAX_DISABLE_COMPILATION_CACHE", "").strip().lower()
@@ -534,6 +589,38 @@ def _parse_fortran_runtime_from_log(path: Path) -> float | None:
     return total if total > 0.0 else None
 
 
+_FORTRAN_RESIDUAL_PATTERN = re.compile(r"Residual function norm:\s*([-+0-9.eEdD]+)")
+
+
+def _parse_fortran_final_residual_norm_from_log(path: Path) -> float | None:
+    """Return the last SNES residual norm printed by a v3 run."""
+    if not path.exists():
+        return None
+    residual = None
+    for match in _FORTRAN_RESIDUAL_PATTERN.finditer(path.read_text(encoding="utf-8", errors="replace")):
+        try:
+            residual = float(match.group(1).replace("D", "E").replace("d", "e"))
+        except ValueError:
+            continue
+    return residual
+
+
+def _solver_tolerance_from_namelist(path: Path) -> float | None:
+    try:
+        nml = read_sfincs_input(path)
+    except Exception:  # noqa: BLE001
+        return None
+    for group_name in ("resolutionParameters", "otherNumericalParameters"):
+        group = nml.group(group_name)
+        for key in ("solverTolerance", "solvertolerance"):
+            if key in group:
+                try:
+                    return float(group[key])
+                except (TypeError, ValueError):
+                    return None
+    return None
+
+
 _TIME_RSS_PATTERNS: tuple[tuple[re.Pattern[str], float], ...] = (
     (re.compile(r"maximum resident set size\s*\(kbytes\)\s*:\s*(\d+)", flags=re.IGNORECASE), 1.0 / 1024.0),
     (re.compile(r"maximum resident set size\s*\(bytes\)\s*:\s*(\d+)", flags=re.IGNORECASE), 1.0 / (1024.0 * 1024.0)),
@@ -545,14 +632,14 @@ def _parse_max_rss_mb_from_time_log(path: Path) -> float | None:
     if not path.exists():
         return None
     text = path.read_text(encoding="utf-8", errors="replace")
+    rss_vals: list[float] = []
     for pattern, scale in _TIME_RSS_PATTERNS:
-        match = pattern.search(text)
-        if match:
+        for match in pattern.finditer(text):
             try:
-                return float(match.group(1)) * scale
+                rss_vals.append(float(match.group(1)) * scale)
             except ValueError:
                 continue
-    return None
+    return max(rss_vals) if rss_vals else None
 
 
 def _parse_jax_max_rss_from_log(path: Path) -> float | None:
@@ -597,6 +684,27 @@ def _parse_elapsed_s_from_log(path: Path) -> float | None:
     return elapsed
 
 
+def _parse_solver_trace_elapsed_s(path: Path) -> float | None:
+    """Return elapsed time from a solver-trace JSON sidecar if available."""
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        elapsed = data.get("elapsed_s")
+        return None if elapsed is None else float(elapsed)
+    except Exception:
+        return None
+
+
+def _time_command_prefix() -> list[str]:
+    """Return a portable `/usr/bin/time` prefix for subprocess RSS accounting."""
+    if not Path("/usr/bin/time").exists():
+        return []
+    if sys.platform == "darwin":
+        return ["/usr/bin/time", "-l"]
+    return ["/usr/bin/time", "-v"]
+
+
 def _path_from_obj(obj: object | None) -> Path | None:
     if obj is None:
         return None
@@ -638,7 +746,7 @@ def _run_jax_cli(
     cache_dir: Path | None = None,
     profile_mode: str = "off",
  ) -> tuple[float, float | None, float | None, float | None]:
-    cmd = [
+    base_cmd = [
         sys.executable,
         "-m",
         "sfincs_jax",
@@ -650,9 +758,9 @@ def _run_jax_cli(
         str(output_path),
     ]
     if compute_solution:
-        cmd.append("--compute-solution")
+        base_cmd.append("--compute-solution")
     if compute_transport_matrix:
-        cmd.append("--compute-transport-matrix")
+        base_cmd.append("--compute-transport-matrix")
     env = dict(os.environ)
     if cache_dir is not None:
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -674,42 +782,59 @@ def _run_jax_cli(
         "1" if profile_mode_norm in {"full", "device", "device_mem"} else "0",
     )
     run_times: list[float] = []
+    trace_elapsed_s: list[float] = []
     repeat_count = max(1, int(repeats))
     for idx in range(repeat_count):
+        trace_path = output_path.with_name(f"{output_path.stem}.solver_trace.repeat{idx + 1}.json")
+        cmd = [*_time_command_prefix(), *base_cmd, "--solver-trace", str(trace_path)]
         t0 = time.perf_counter()
         mode = "w" if idx == 0 else "a"
-        with log_path.open(mode, encoding="utf-8") as log:
-            if idx > 0:
+        if idx > 0:
+            with log_path.open(mode, encoding="utf-8") as log:
                 log.write(f"\n--- sfincs_jax repeat {idx + 1}/{repeat_count} ---\n")
-            try:
-                subprocess.run(
-                    cmd,
-                    cwd=str(REPO_ROOT),
-                    check=True,
-                    timeout=timeout_s,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    env=env,
-                )
-            except subprocess.TimeoutExpired:
+            mode = "a"
+        try:
+            returncode = _run_logged_subprocess(
+                cmd=cmd,
+                cwd=REPO_ROOT,
+                env=env,
+                log_path=log_path,
+                timeout_s=timeout_s,
+                mode=mode,
+            )
+        except subprocess.TimeoutExpired:
+            with log_path.open("a", encoding="utf-8") as log:
                 log.write(f"\n[sfincs_jax subprocess timed out after {float(timeout_s):.1f}s]\n")
-                raise
-            except subprocess.CalledProcessError as exc:
-                log.write(f"\n[sfincs_jax subprocess failed rc={int(exc.returncode)}]\n")
-                raise
-            except Exception as exc:  # noqa: BLE001
+            raise
+        except Exception as exc:  # noqa: BLE001
+            with log_path.open("a", encoding="utf-8") as log:
                 log.write(f"\n[sfincs_jax subprocess raised {type(exc).__name__}: {exc}]\n")
-                raise
+            raise
+        if returncode != 0:
+            with log_path.open("a", encoding="utf-8") as log:
+                log.write(f"\n[sfincs_jax subprocess failed rc={int(returncode)}]\n")
+            raise subprocess.CalledProcessError(returncode=int(returncode), cmd=cmd)
         if not output_path.exists():
             tail = _tail(log_path, n=40)
             raise RuntimeError(f"JAX run returned success but did not create output: {output_path}\n{tail}")
+        trace_elapsed = _parse_solver_trace_elapsed_s(trace_path)
+        if trace_elapsed is not None:
+            trace_elapsed_s.append(float(trace_elapsed))
         run_times.append(time.perf_counter() - t0)
     cold = float(run_times[0])
     warm = None
     if len(run_times) > 1:
         warm = float(np.mean(np.asarray(run_times[1:], dtype=np.float64)))
-    rss_mb = _parse_jax_max_rss_from_log(log_path)
-    logged_elapsed_s = _parse_elapsed_s_from_log(log_path)
+    rss_candidates = [
+        value
+        for value in (
+            _parse_jax_max_rss_from_log(log_path),
+            _parse_max_rss_mb_from_time_log(log_path),
+        )
+        if value is not None
+    ]
+    rss_mb = max(rss_candidates) if rss_candidates else None
+    logged_elapsed_s = trace_elapsed_s[-1] if trace_elapsed_s else _parse_elapsed_s_from_log(log_path)
     return cold, warm, rss_mb, logged_elapsed_s
 
 
@@ -1018,13 +1143,7 @@ def _run_fortran_direct(
     *, input_path: Path, exe: Path, timeout_s: float, log_path: Path
 ) -> tuple[float, Path, int, float | None]:
     cmd = [str(exe.resolve())]
-    time_prefix: list[str] = []
-    if Path("/usr/bin/time").exists():
-        if sys.platform == "darwin":
-            time_prefix = ["/usr/bin/time", "-l"]
-        else:
-            time_prefix = ["/usr/bin/time", "-v"]
-    cmd = [*time_prefix, *cmd]
+    cmd = [*_time_command_prefix(), *cmd]
     _canonicalize_fortran_v3_input_in_place(input_path)
     t0 = time.perf_counter()
     env = dict(os.environ)
@@ -1344,6 +1463,8 @@ def _classify_blocker(*, status: str, note: str, mismatch_keys: list[str], jax_l
 
     if status in {"fortran_timeout", "jax_timeout", "max_attempts"}:
         return "solver branch mismatch"
+    if "reference-solve quality suspect" in text:
+        return "reference solver quality"
     if status.startswith("fortran_"):
         return "unsupported physics/path"
     if status in {"parity_mismatch", "compare_error"}:
@@ -1866,6 +1987,19 @@ def _run_case(
                     f"sample={','.join(mismatch_keys[:4])} "
                     f"buckets=solver:{len(mismatch_solver_keys)} physics:{len(mismatch_physics_keys)}"
                 )
+                if fortran_log_path is not None:
+                    final_fortran_residual = _parse_fortran_final_residual_norm_from_log(fortran_log_path)
+                    solver_tol_ref = _solver_tolerance_from_namelist(fortran_dir / "input.namelist")
+                    if (
+                        final_fortran_residual is not None
+                        and solver_tol_ref is not None
+                        and float(final_fortran_residual) > max(1.0e-8, 10.0 * float(solver_tol_ref))
+                    ):
+                        note = (
+                            f"{note} Fortran final residual={float(final_fortran_residual):.3e} "
+                            f"exceeds solverTolerance={float(solver_tol_ref):.1e}; "
+                            "reference-solve quality suspect."
+                        )
             if strict_n_common > 0:
                 note = f"{note} strict={strict_n_bad}/{strict_n_common}"
         except Exception as exc:  # noqa: BLE001
@@ -2216,6 +2350,26 @@ def main() -> int:
         inputs = [p for i, p in enumerate(inputs) if i % stride_val == idx]
         if not inputs:
             raise SystemExit("No input.namelist files matched after case-index filtering.")
+    manifest = {
+        "suite": "reduced_upstream",
+        "examples_root": _repo_rel(examples_root),
+        "out_root": _repo_rel(out_root),
+        "timeout_s": float(args.timeout_s),
+        "rtol": float(args.rtol),
+        "atol": float(args.atol),
+        "max_attempts": int(args.max_attempts),
+        "jax_repeats": int(args.jax_repeats),
+        "jax_profile_marks": str(args.jax_profile_marks),
+        "jobs": int(args.jobs),
+        "fortran_exe": _repo_rel(fortran_exe),
+        "fortran_executable": _executable_metadata(fortran_exe),
+        "cases": [
+            {"case": path.parent.name, "input": _repo_rel(path)}
+            for path in inputs
+        ],
+    }
+    out_root.mkdir(parents=True, exist_ok=True)
+    (out_root / "run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     report_json = out_root / "suite_report.json"
     merged_results: dict[str, CaseResult] = {} if args.reset_report else _load_existing_results(report_json)
     current_run_results: list[CaseResult] = []

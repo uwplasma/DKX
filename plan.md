@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-04-29 (America/Chicago)
+Last updated: 2026-05-01 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -69,6 +69,82 @@ Current active lane (2026-04-29):
 - [x] Run release validation: focused package/CLI/output tests, docs with warnings as errors, HDF5/NetCDF/NPZ CLI smoke plus plotting, package build, and full `pytest -q` (`948 passed`).
 - [x] Rebuild the package from committed `HEAD` and verify the source distribution includes `docs/release_notes.rst` and wheel metadata reports `Version: 1.1.0`.
 - Next best steps: tag `v1.1.0`, push `main` and the tag, and confirm CI/docs/PyPI publication.
+
+Current active lane (2026-04-30):
+- [x] Reassess the collaborator-reported solver-path cliff as a general solver-policy risk rather than an isolated Nxi case.
+- [x] Reinspect local SFINCS Fortran v3 solver architecture: PETSc/SNES/KSP, sparse preallocation, explicit preconditioner matrices, MUMPS/SuperLU_DIST/PETSc LU, GMRES restart `2000`, residual monitors, and preconditioner reuse.
+- [x] Re-anchor the plan in SFINCS, PETSc, MONKES, KNOSOS, NEO, and JAX/Lineax/JAX sparse documentation.
+- [x] Add `sfincs_jax/solver_selection_policy.py`, a reusable measured-candidate gate for future automatic solver-path promotions.
+- [x] Add `tests/test_solver_selection_policy.py` to guard against the exact failure class: a residual-bad, slower, higher-memory fallback cannot be auto-promoted over a clean fast path.
+- [x] Add `sfincs_jax/solver_trace.py`, a stable solver-trace schema with JSON and HDF5 round trips for CLI/Python/benchmark metadata.
+- [x] Add `tests/test_solver_trace.py` so future output files can be validated against a versioned trace schema.
+- [x] Add opt-in solver-trace metadata support for HDF5, NetCDF, and NPZ output files without changing default parity outputs.
+- [x] Add `tests/test_solver_trace_output_formats.py` to validate trace persistence across all supported output formats.
+- [x] Wire the measured-candidate gate into the first RHSMode=1 PAS weak-auto promotion point while preserving unmeasured historical defaults.
+- [x] Add direct tests showing measured PAS auto-promotion rejects a residual-bad, slower, higher-memory candidate and accepts a clean runtime win.
+- [x] Add artifact-backed tests over the 2026-04-27 CPU solver-path audit and 2026-04-28 GPU Nxi=20/40 full-FP focused reports.
+- [x] Add optional measured acceptance gates to `rhs1_handoff.py`, the shared acceptance helper used by RHSMode=1 retry/rescue branches.
+- [x] Add handoff tests showing clean incumbent paths reject slower/higher-memory candidates, while failed incumbents can still accept slower correctness rescues.
+- [x] Pass real elapsed-time and RSS metrics from reduced/full RHSMode=1 stage2 and strong-preconditioner retry call sites into the measured gates.
+- [x] Pass real elapsed-time and RSS metrics from reduced/full RHSMode=1 dense and sparse retry call sites into the measured gates.
+- [x] Add `solver_trace_path=` and CLI `--solver-trace` JSON sidecar support so real runs can emit stable solver traces without changing parity output files.
+- [x] Document `--solver-trace` in the README quick start and CLI usage docs.
+- [x] Update `scripts/run_reduced_upstream_suite.py` so JAX CLI repeats write solver-trace sidecars and prefer sidecar elapsed time over free-form log parsing when available.
+- [x] Add PAS-heavy path-switching artifact tests so HSX/geometry4/geometry11 stay on `pas_tz`, tokamak PAS stays on its structured `pas_tokamak_theta`/`xblock_tz`/`schur` routes, and all covered PAS artifacts remain strict parity-clean.
+- Validation: `pytest -q tests/test_rhs1_handoff.py tests/test_solver_path_artifacts.py tests/test_solver_selection_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py tests/test_solver_progress.py tests/test_policy_module_docstrings.py` (`60 passed`).
+- Validation: `pytest -q tests/test_full_system_operator_jit.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_v3_driver_strong_fallback_coverage.py tests/test_v3_driver_policy_helpers.py` (`26 passed`).
+- Validation: `pytest -q tests/test_cli_solve_mode.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py` (`45 passed`).
+- Validation: real CLI sidecar smoke on `examples/getting_started/input.namelist` with `--geometry-only --solver-trace` wrote `schema_version=1`, `backend=cpu`, `rhs_mode=1`, `selected_path=geometry_only`, and `output_format=h5` in about `0.18 s`.
+- Validation: `pytest -q tests/test_runtime_window_attempts.py tests/test_cli_solve_mode.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py` (`51 passed`).
+- Validation: `pytest -q tests/test_rhs1_handoff.py tests/test_solver_path_artifacts.py tests/test_solver_selection_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py tests/test_solver_progress.py tests/test_policy_module_docstrings.py tests/test_cli_solve_mode.py tests/test_full_system_operator_jit.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_v3_driver_strong_fallback_coverage.py tests/test_v3_driver_policy_helpers.py tests/test_runtime_window_attempts.py` (`123 passed`).
+- Validation: `git diff --check` is clean.
+- Validation: focused CPU RHSMode=1 cliff/PAS probe metadata at `tests/solver_policy_trace_gate_cpu_probe_2026-04-30` records `9/9` `parity_ok`, strict mismatches `0`, print parity gaps `0`, missing output keys `0`, with `9` solver-trace sidecars.
+- Validation: full bounded CPU suite metadata at `tests/solver_policy_trace_gate_cpu_full_2026-04-30` records `39/39` `parity_ok`, strict mismatches `0`, print parity gaps `0`, missing output keys `0`, with `39` solver-trace sidecars. Worst CPU wall-clock rows remain PAS/geometry-rich and are bounded: HSX PAS DKES `4.845 s`, HSX PAS full `4.527 s`, tokamak 2-species PAS+Er `4.234 s`, geometryScheme4 PAS `3.721 s`, geometry11 PAS full `3.732 s`.
+- Validation: focused one-GPU `office` probe metadata from an RTX A4000 at `tests/solver_policy_trace_gate_gpu_probe_2026-04-30` records `7/7` `parity_ok`, strict mismatches `0`, print parity gaps `0`, missing output keys `0`, with trace-backed elapsed times. Worst focused GPU wall-clock rows were HSX PAS full `13.053 s`, geometry11 PAS full `11.745 s`, geometryScheme4 PAS `8.566 s`, HSX PAS DKES `7.615 s`, and tokamak PAS+Er `6.459 s`; no `jax_error` or `max_attempts` occurred.
+- Validation: added lightweight report-backed tests for the new trace-backed CPU and GPU artifacts, then reran the local solver-policy gate: `pytest -q tests/test_rhs1_handoff.py tests/test_solver_path_artifacts.py tests/test_solver_selection_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py tests/test_solver_progress.py tests/test_policy_module_docstrings.py tests/test_cli_solve_mode.py tests/test_full_system_operator_jit.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_v3_driver_strong_fallback_coverage.py tests/test_v3_driver_policy_helpers.py tests/test_runtime_window_attempts.py` (`125 passed`).
+- [x] Fix RHSMode=1 handoff acceptance for nonfinite incumbent residuals: a finite candidate rescue is now eligible for acceptance instead of being blocked by a strict `candidate < current` comparison against `NaN`.
+- Validation: final local solver-policy gate after the nonfinite-residual regression test: `pytest -q tests/test_rhs1_handoff.py tests/test_solver_path_artifacts.py tests/test_solver_selection_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py tests/test_solver_progress.py tests/test_policy_module_docstrings.py tests/test_cli_solve_mode.py tests/test_full_system_operator_jit.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_v3_driver_strong_fallback_coverage.py tests/test_v3_driver_policy_helpers.py tests/test_runtime_window_attempts.py` (`126 passed`).
+- Validation: full one-GPU `office` refresh metadata at `tests/solver_policy_trace_gate_gpu_full_2026-04-30` records `39/39` `parity_ok`, strict mismatches `0`, print parity gaps `0`, missing output keys `0`, with `39` solver-trace sidecars. Worst one-GPU wall-clock rows are geometry11 PAS full `24.321 s`, geometry11 PAS DKES `22.803 s`, HSX PAS full `19.303 s`, tokamak 2-species PAS+Er `14.314 s`, and geometryScheme4 PAS `10.288 s`; no `jax_error` or `max_attempts` occurred.
+- Validation: final local solver-policy gate after adding the full GPU report-backed test: `pytest -q tests/test_rhs1_handoff.py tests/test_solver_path_artifacts.py tests/test_solver_selection_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py tests/test_solver_progress.py tests/test_policy_module_docstrings.py tests/test_cli_solve_mode.py tests/test_full_system_operator_jit.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_v3_driver_strong_fallback_coverage.py tests/test_v3_driver_policy_helpers.py tests/test_runtime_window_attempts.py` (`127 passed`).
+- [x] Fix benchmark RSS accounting for future reports: JAX subprocesses are now wrapped with the same portable `/usr/bin/time` prefix as the Fortran path, and the suite harness falls back to time-reported maximum RSS when profiling logs are off.
+- Validation: `pytest -q tests/test_runtime_window_attempts.py tests/test_solver_path_artifacts.py tests/test_rhs1_handoff.py tests/test_solver_selection_policy.py tests/test_rhs1_preconditioner_auto_policy.py` (`51 passed`); `python -m py_compile scripts/run_reduced_upstream_suite.py scripts/run_scaled_example_suite.py`; `git diff --check`.
+- Validation: final local solver-policy gate after RSS-accounting changes: `pytest -q tests/test_rhs1_handoff.py tests/test_solver_path_artifacts.py tests/test_solver_selection_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py tests/test_solver_progress.py tests/test_policy_module_docstrings.py tests/test_cli_solve_mode.py tests/test_full_system_operator_jit.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_v3_driver_strong_fallback_coverage.py tests/test_v3_driver_policy_helpers.py tests/test_runtime_window_attempts.py` (`128 passed`).
+- Next best steps: close this lane by updating release-facing README/docs benchmark text if needed, then commit the coherent solver-policy/test/artifact changes. The remaining performance work is optimization, not correctness: GPU PAS/geometry11 wall time is still the top offender, but it is now strict-clean and trace-backed.
+
+Current active lane (2026-05-01):
+- [x] Read the NTX finite-beta RHSMode=1 profile-current handoff at `/Users/rogeriojorge/local/NTX/docs/sfincs-jax-rhsmode1-profile-current-handoff.md`.
+- [x] Confirmed the collaborator's `3e38894` refresh is in the NTX repository, while `uwplasma/sfincs_jax` `origin/main` remains at `0107be7`; the clean SFINCS-JAX checkout is a detached worktree at that commit, and the active development work remains in `/Users/rogeriojorge/local/tests/sfincs_jax`.
+- [x] Keep the NTX state honest: RHSMode=3 finite-beta coefficient parity is closed under the `1e-1` gate, but RHSMode=1 profile-current parity is still open for the `17 x 21 x 12, Nx=5` production point because the reported residual remains about `1.88e-2` against a target near `1.09e-9`.
+- [x] Patch `scripts/profile_write_output_trace.py` so a successful output solve is no longer reported as failed just because JAX/XPlane/Perfetto or device-memory profiling finalization fails afterward.
+- [x] Add timeout-safe atomic JSON phase logs with `--phase-log` (default: `<trace-dir>/profile_write_output_trace_phases.json`) covering input preparation, warmups, JAX trace context, output solve/write, `block_until_ready`, and optional device-memory snapshotting.
+- [x] Add `--strict-profiler` for CI/debug lanes that should still fail when profiler finalization fails after a valid output file has been written.
+- [x] Add `--no-jax-trace` for long production audits that need phase logs and Fortran-like solver output without XPlane/Perfetto overhead.
+- [x] Add a phase-log heartbeat (`--phase-log-interval-s`) so long solves refresh elapsed time while the active phase is still running.
+- [x] Add wrapper-level `--solver-trace` forwarding so profiling/audit runs can persist solver/backend/residual sidecars from `write_sfincs_jax_output_h5`.
+- [x] Add regression coverage for normal trace runs, profiler-finalization failure, strict-profiler failure, and device-memory snapshot failure.
+- Validation: `pytest -q tests/test_profile_write_output_trace.py` (`5 passed`); `python -m py_compile scripts/profile_write_output_trace.py tests/test_profile_write_output_trace.py`; `ruff check scripts/profile_write_output_trace.py tests/test_profile_write_output_trace.py`.
+- Validation: real finite-beta RHSMode=1 smoke trace on the NTX owned QA profile-current deck (`Ntheta=13`, `Nzeta=15`, `Nxi=8`, `Nx=5`, `rho=1/7`) completed locally through the updated wrapper. Output `FSABjHatOverRootFSAB2=-0.44600080476476256`, `NIterations=1`, residual `1.127263e-13`, solve+diagnostics about `3.0 s`, traced wrapper about `7.3 s`, and phase log status `completed`.
+- Validation: same deck through `--no-jax-trace` completed with phase log `jax_trace=false`, output `FSABjHatOverRootFSAB2=-0.44600080476476256`, and wrapper elapsed about `2.1 s`, confirming the low-overhead production-audit lane works.
+- Validation: the same low-overhead wrapper was run on the NTX `17 x 21 x 12, Nx=5` production profile-current deck with `--no-jax-trace` and `SFINCS_JAX_PROFILE=1`. The run completed in about `500.2 s` wall time, with wrapper phase-log status `completed`, `write_output_solve=499.0 s`, max RSS about `1.32 GB` on the local macOS `/usr/bin/time` path, and HDF5 output at `/tmp/sfincs_jax_rhs1_profile_prod_17x21x12/sfincsOutput.h5`.
+- The production audit reproduced the collaborator's numerical blocker while removing the profiler/output ambiguity: `FSABjHat=-1.2773637952477914`, `FSABjHatOverRootFSAB2=-1.29105723879398`, `NIterations=1`, and the solver stdout still reported `residual_norm=1.880588e-02` versus target `1.088e-09`.
+- Phase/stage timing shows the bottleneck is the RHSMode=1 Krylov/PAS solve, not geometry setup, diagnostics, or HDF5: grids/output-field setup stayed below `0.3 s`, Schur preconditioner build was about `0.5 s`, the first Krylov solve was about `313 s`, and the PAS-lite fallback returned the same `1.88e-2` residual floor.
+- Validation: explicit CLI `--solve-method sparse_host --solver-trace` on the same `17 x 21 x 12, Nx=5` NTX deck completed in `8.66 s` wall time with peak RSS about `1.57 GB`, solver-trace `converged=true`, `residual_norm=1.0036e-16`, `FSABjHat=-1.2981550371186084`, and `FSABjHatOverRootFSAB2=-1.31207136`. This confirms the structured sparse-host lane solves the algebraic system quickly and accurately on the bring-up deck where the default matrix-free Krylov/PAS branch stalls.
+- Validation: re-run after adding output-visible solver metadata completed the same NTX sparse-host deck in `8.35 s`; the HDF5 now contains `linearSolverMethod=sparse_host`, `linearSolverResidualNorm=1.0036e-16`, `linearSolverResidualTarget=1.0875e-09`, `linearSolverResidualTargetRatio=9.23e-08`, and `linearSolverConverged=+1`.
+- Public-case sparse-host probe: `tokamak_1species_PASCollisions_noEr_Nx1` and `quick_2species_FPCollisions_noEr` both expose the expected limitation of direct sparse LU on singular/near-singular constrained systems. `sparse_host`/`sparse_pc_gmres` now fail with an actionable host-sparse factorization message instead of a raw SuperLU-only traceback; `sparse_lsmr` remains fast but writes `converged=false` for these probes, so it stays diagnostic rather than a parity/backend default.
+- Code/docs follow-up: RHSMode=1 outputs now persist convergence metadata in the main HDF5/NetCDF/NPZ payload, CLI `write-output` reports runtime errors without a Python traceback unless `SFINCS_JAX_DEBUG=1`, and README/docs now state that sparse-host auto-promotion requires a pinned physical gauge/nullspace branch.
+- Fix pass: added explicit `solve_method="sparse_host_safe"` plus PETSc-compatible constrained-PAS minimum-norm branch labeling. The safe mode first tries sparse-host LU. If LU fails due to a singular/gauge-sensitive constrained-PAS operator, it falls back to `petsc_compat`/LSMR and records `linearSolverAccepted`, `linearSolverAcceptanceCriterion`, `linearSolverLeastSquaresConverged`, `linearSolverReportedResidualNorm`, and iteration/info-code fields in the main output and solver trace metadata.
+- Validation: `sparse_host_safe` on the NTX `17 x 21 x 12, Nx=5` deck took the sparse-host path, wrote `linearSolverConverged=+1`, `linearSolverAccepted=+1`, criterion `true_residual`, residual `1.0036e-16`, and `FSABjHat=-1.2981550371186084`.
+- Validation: `sparse_host_safe` on `tokamak_1species_PASCollisions_noEr_Nx1` exposed singular sparse LU, fell back to the PETSc-compatible minimum-norm constrained-PAS path, and wrote `linearSolverConverged=-1`, `linearSolverAccepted=+1`, criterion `petsc_compatible_minimum_norm`, residual `4.8147e-08` against target `2.6301e-10`, `linearSolverLeastSquaresConverged=+1`, and `FSABjHat=-1.5216961e-05`.
+- Validation: `sparse_host_safe` on `quick_2species_FPCollisions_noEr` correctly refused to apply the PAS-specific fallback and returned the actionable host sparse factorization error, preserving the boundary between constrained-PAS branch compatibility and full-FP parity.
+- Fix pass: added a narrow default policy for large non-differentiable RHSMode=1 constrained-PAS profile-current decks. In the validated size window (`SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC_MIN=30000`, `MAX=300000` by default), `solve_method=auto` now routes to `sparse_pc_gmres` instead of the matrix-free fallback that stalled at `O(1e-2)` residual.
+- Validation: default CLI on the NTX `17 x 21 x 12, Nx=5` deck now auto-selects sparse-PC GMRES, completes in `6.98 s` wall time with peak RSS about `1.58 GB`, writes `linearSolverConverged=+1`, `linearSolverAccepted=+1`, residual `9.19e-16` against target `1.09e-09`, and `FSABjHat=-1.2981550371185984`. This replaces the previous default `~500-660 s` stalled matrix-free branch.
+- Validation: explicit `sparse_pc_gmres` on the production-resolution NTX `25 x 31 x 17, Nx=11` deck completes locally in `120.90 s` wall time with peak RSS about `9.25 GB`, writes `linearSolverConverged=+1`, `linearSolverAccepted=+1`, residual `4.31e-14` against target `2.09e-09`, and `FSABjHat=-5.0338680158175295`.
+- Validation: explicit `petsc_compat` on the same `25 x 31 x 17, Nx=11` deck is fast (`20.43 s`, peak RSS about `2.22 GB`) but does not converge (`2.07e-02` against `2.09e-09`, `istop=7`), and the production output gate correctly refuses to write diagnostics.
+- Validation: an ILU-only sparse-PC trial (`SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND=ilu`, fill `5`, drop `1e-5`) fails factorization on the `17 x 21 x 12, Nx=5` deck, so exact sparse LU remains the reliable sparse-PC preconditioner for this lane.
+- Operator audit: Fortran v3 MATLAB matrix dumps on the clean `13 x 15 x 8, Nx=5` deck show JAX operator parity with the dumped PETSc matrix action to `3.19e-16` 2-norm on the Fortran state; the clean Fortran current is `FSABjHat=-0.4403656975`, matching the JAX branch (`-0.4412703508`). The older `+0.006` artifact is not a reliable parity anchor for this deck.
+- Operator audit: Fortran v3 MATLAB matrix dumps on the `17 x 21 x 12, Nx=5` deck also show JAX operator parity with the dumped PETSc matrix action to `9.83e-17` 2-norm on the Fortran state. The remaining current spread is solver/nullspace-branch dependent: the local PETSc built-in sparse-direct Fortran build gives `FSABjHat=-1.2981550382` and matches JAX sparse-PC (`-1.2981550371`), while the MUMPS/SuperLU_DIST build can stop on a preconditioned KSP residual with true residual `O(1e-2)` and a different current branch. This is a Fortran-reference branch-selection issue, not a missing JAX operator term.
+- Engineering status: solve/profile-finalization robustness, phase logging, production-audit observability, and the large constrained-PAS default solver-runtime cliff are closed for this lane. The RHSMode=1 finite-beta profile-current publication-parity claim remains open because the converged JAX sparse-PC branch matches the exact PETSc-matrix branch but still differs from some MUMPS/SuperLU_DIST Fortran artifacts and Redl/NTX+NEOPAX current observables. The remaining work is a reference-branch/normalization/nullspace audit rather than a stalled-solver issue.
+- Next best steps: compare the converged sparse-PC branch against clean Fortran v3 builds, Redl, and NTX+NEOPAX across the RHSMode=1 radial/profile ladder, then pin which branch is the physically defensible publication reference. Keep full-FP and differentiable/GPU-native lanes unchanged until separately validated.
 
 Execution style:
 - Always profile first, change second, validate third.
@@ -6770,3 +6846,773 @@ Next steps:
 3. If more GPU optimization time is available before release, target internal
    work-array lifetimes in RHSMode=1 PAS Krylov/diagnostics rather than trying
    more preconditioner branch switches for these two cases.
+
+## 21) Research-grade solver policy, performance, and validation plan
+
+Status date: 2026-04-30.
+
+Goal:
+
+- Make `sfincs_jax` a research-grade neoclassical transport code that is fast,
+  accurate, parity-clean with SFINCS Fortran v3 for supported examples, robust
+  for unseen inputs/geometries, efficient on CPU and GPU, and easy to use from
+  the CLI or Python.
+- Keep JAX-native differentiable paths for autodiff, sensitivity analysis,
+  inverse design, uncertainty quantification, and stellarator optimization.
+- Permit faster non-differentiable production paths when autodiff is not needed,
+  especially from the CLI and large Python batch workflows.
+
+### 21.1 Problem statement
+
+The collaborator-reported full-collision `Nxi=20` versus `Nxi=40` behavior is a
+general class of risk, not a one-off bug. Any automatic solver policy based only
+on grid-size thresholds, geometry labels, backend names, or memory estimates can
+select a path that is:
+
+- slower than the incumbent path,
+- higher-memory than the incumbent path,
+- numerically weaker, even when it was intended as a stronger fallback,
+- parity-clean for one benchmark but fragile for neighboring resolutions,
+- acceptable on CPU but bad on GPU after JIT/transfer/setup costs,
+- good cold but poor warm, or good warm but too expensive cold for normal CLI use.
+
+The risk is highest for:
+
+- RHSMode=1 full-FP and PAS solves,
+- `constraintScheme=1/2` source/constraint systems,
+- finite-beta and profile-current workflows,
+- VMEC/Boozer/geometryScheme 4/5/11 cases,
+- multi-species cases,
+- near-zero or resonant radial-electric-field cases,
+- high `Nxi`, `Ntheta`, `Nzeta`, `Nx`, or high angular block size,
+- GPU paths where setup, host/device transfers, and XLA compilation dominate.
+
+### 21.2 Fortran v3 baseline lessons
+
+Local source anchor:
+
+- `/Users/rogeriojorge/local/sfincs/fortran/version3/solver.F90`
+- `/Users/rogeriojorge/local/sfincs/fortran/version3/evaluateJacobian.F90`
+- `/Users/rogeriojorge/local/sfincs/fortran/version3/populateMatrix.F90`
+- `/Users/rogeriojorge/local/sfincs/fortran/version3/preallocateMatrix.F90`
+- `/Users/rogeriojorge/local/sfincs/fortran/version3/sparsify.F90`
+- `/Users/rogeriojorge/local/sfincs/fortran/version3/validateInput.F90`
+
+Key lessons to port into `sfincs_jax`:
+
+- SFINCS v3 relies on PETSc/SNES/KSP instead of a large in-code fallback ladder.
+- Iterative v3 runs use GMRES with large restart (`2000`) and PETSc residual
+  monitors.
+- Direct v3 runs use PETSc `KSPPREONLY` + `PCLU`.
+- Parallel direct solves use MUMPS or SuperLU_DIST when available.
+- Serial sparse LU uses explicit ordering and pivot safeguards.
+- Preconditioner matrices are assembled separately from true Jacobians.
+- Preconditioners are reused when allowed.
+- Sparse matrices are preallocated with predicted row nonzeros to avoid runtime
+  allocation churn.
+- User-visible PETSc options can override solver behavior without changing code.
+- MUMPS memory failures are handled by retrying with larger work-array expansion,
+  not by silently switching to a weak unrelated preconditioner.
+
+SFINCS v3 therefore avoids many path cliffs by using mature sparse-solver
+infrastructure, explicit controls, and visible residual diagnostics. `sfincs_jax`
+should preserve JAX advantages, but its auto policy must become similarly
+auditable and measured.
+
+### 21.3 Literature and code anchors
+
+Primary SFINCS and physics:
+
+- SFINCS repository: https://github.com/landreman/sfincs
+- SFINCS 2014 paper: Landreman, Smith, Mollen, Helander, Phys. Plasmas 21,
+  042503 (2014), https://arxiv.org/abs/1312.6058
+- Velocity-space discretization and FP collisions: Landreman and Ernst, JCP 243,
+  130-150 (2013), https://arxiv.org/abs/1210.5289
+- W7-X impurities/high-collisionality comparison: Mollen et al., Phys. Plasmas
+  22, 112508 (2015), https://arxiv.org/abs/1504.04810
+- MONKES spectral/block-sparse monoenergetic solver:
+  https://arxiv.org/abs/2312.12248
+- KNOSOS orbit-averaged fast low-collisionality solver:
+  https://arxiv.org/abs/1908.11615
+- NEO benchmarked full-FP drift-kinetic solver documentation:
+  https://gacode.io/neo.html
+
+Solver infrastructure:
+
+- PETSc GMRES: https://petsc.org/release/manualpages/KSP/KSPGMRES/
+- PETSc preconditioner reuse:
+  https://petsc.org/main/manualpages/KSP/KSPSetReusePreconditioner/
+- PETSc sparse preallocation:
+  https://petsc.org/release/manualpages/Mat/MatMPIAIJSetPreallocation/
+- PETSc MUMPS:
+  https://petsc.org/main/manualpages/Mat/MATSOLVERMUMPS/
+- PETSc SuperLU_DIST:
+  https://petsc.org/release/manualpages/Mat/MATSOLVERSUPERLU_DIST/
+
+JAX ecosystem:
+
+- JAX sparse reference implementation:
+  https://docs.jax.dev/en/latest/jax.experimental.sparse.html
+- Lineax solver/operator abstraction:
+  https://docs.kidger.site/lineax/api/solvers/
+- Lineax matrix-free operators:
+  https://docs.kidger.site/lineax/api/operators/
+- JAXopt linear solvers and implicit differentiation:
+  https://jaxopt.github.io/stable/linear_system_solvers.html
+- Equinox filtered transforms and sharding utilities:
+  https://docs.kidger.site/equinox/api/transformations/
+
+Interpretation for `sfincs_jax`:
+
+- PETSc-like sparse infrastructure is the right model for fast non-autodiff CPU
+  production solves.
+- JAX-native matrix-free paths remain the right model for differentiability and
+  accelerator workflows.
+- JAX experimental sparse should not be treated as a performance-critical sparse
+  backend without direct benchmarks.
+- Lineax may help structure JAX-native operators and autodiff rules, but it is
+  not a replacement for PETSc/MUMPS/SuperLU_DIST robustness.
+- MONKES and KNOSOS motivate block sparsity, spectral/operator structure, and
+  orbit-averaged or monoenergetic fast lanes where the physical model permits
+  them.
+
+### 21.4 Non-negotiable solver-selection rules
+
+Every new default solver/preconditioner promotion must satisfy all of the
+following before becoming automatic:
+
+- It is finite: no `nan`, `inf`, XLA resource failure, SciPy factor failure, or
+  invalid factor-probe amplification.
+- It is accurate: true residual satisfies the active target, not only a
+  preconditioned residual.
+- It is parity-clean: supported SFINCS Fortran v3 outputs match within the
+  established practical and strict tolerances for the relevant validation cases.
+- It is measured: setup time, Krylov/direct solve time, total wall time, peak
+  RSS/device memory, selected path, and residual history are recorded.
+- It improves something material: when the incumbent path is already clean, the
+  new path must reduce runtime or memory enough to exceed the acceptance margin.
+- It is local-neighborhood robust: the change must pass at least one neighboring
+  resolution or geometry-feature variant, not just the single case that motivated
+  it.
+- It is backend-aware: CPU, GPU cold, and GPU warm behavior are judged
+  separately.
+- It is reversible by user control: CLI/Python/env options must expose the old
+  path for debugging and reproducibility.
+
+Implemented first step:
+
+- `sfincs_jax/solver_selection_policy.py` defines reusable measured-candidate
+  metrics and gates.
+- `tests/test_solver_selection_policy.py` verifies that residual-bad,
+  slower/higher-memory fallbacks cannot be auto-promoted over clean fast paths.
+
+### 21.5 Architecture plan
+
+Lane A: Observability and solver traces.
+
+- Add a stable solver-trace schema emitted to CLI logs and output metadata.
+- Include input signature, backend, device count, cold/warm status, active DOFs,
+  matrix/constraint sizes, collision model, geometry scheme, chosen path,
+  rejected candidates, residual target, residual history, setup time, solve
+  time, total time, peak memory, output parity status when available, and
+  fallbacks triggered.
+- Write traces to HDF5 and JSON so benchmark scripts, docs, and tests consume
+  the same source of truth.
+- Add timeout-safe partial traces so killed large runs still explain where time
+  was spent.
+
+Lane B: Measured candidate gates.
+
+- Route all future automatic strong-fallback decisions through
+  `solver_selection_policy`.
+- Before switching from a clean incumbent to a new path, require a cheap probe or
+  artifact-backed benchmark showing residual, runtime, and memory improvement.
+- Reject any candidate whose probe worsens the residual or whose factor probe is
+  non-finite or amplifies beyond the configured bound.
+- Cache validated decisions by geometry/profile/operator signature, not only by
+  raw grid size.
+- Treat `pas_lite`, `pas_hybrid`, `pas_tz`, `pas_schur`, `xblock_tz`,
+  `collision`, `xmg`, dense, sparse LU, and LGMRES as candidates in a measured
+  portfolio rather than as hard-coded fallback order.
+
+Lane C: PETSc-like non-differentiable production backend.
+
+- Add an explicit host sparse backend for CLI/Python runs that do not need
+  autodiff.
+- Assemble CSR/CSC/COO sparse operators and preconditioner matrices matching the
+  active SFINCS v3 operator semantics.
+- Use SciPy sparse direct/iterative methods by default when petsc4py is not
+  installed.
+- Add optional petsc4py support for PETSc KSP/PC, MUMPS, SuperLU_DIST, monitors,
+  and command-line-like options.
+- Keep this path opt-in first, then promote only after parity/performance
+  validation.
+- Make the backend explicit in outputs so users know whether the run was
+  differentiable.
+
+Lane D: JAX-native differentiable backend.
+
+- Keep the current matrix-free JAX path as the default for autodiff workflows.
+- Use dense/direct JAX paths only for measured small/medium systems where they
+  beat Krylov on runtime and memory.
+- Use matrix-free GMRES/BiCGStab/LGMRES-like methods with preconditioners that
+  are JIT-compatible and avoid host callbacks.
+- Add custom-linear-solve or Lineax experiments only behind benchmarks proving
+  lower runtime, lower memory, cleaner autodiff, or less code complexity.
+- Prefer block/batched preconditioner kernels that map well to GPU:
+  block-Jacobi, theta/zeta line blocks, x-blocks, PAS angular blocks, and
+  Schwarz/domain decomposition where proven.
+
+Lane E: GPU performance model.
+
+- Separate cold runtime, warm runtime, setup time, kernel time, host/device
+  transfer time, output-write time, and JIT compilation time.
+- Keep persistent JAX compilation cache enabled for examples and documented CLI
+  workflows.
+- Avoid GPU fallback paths that build large host-side blocks and then transfer
+  repeatedly.
+- Use one-GPU-per-case and transport-worker parallelism as the documented
+  production scaling lane until single-case multi-GPU is faster.
+- Keep single-case multi-GPU as experimental until it shows strong scaling on
+  a large enough benchmark.
+
+Lane F: CPU performance model.
+
+- Use dense/direct paths for genuinely small systems.
+- Use host sparse direct or sparse-preconditioned Krylov for medium/large
+  non-autodiff systems.
+- Use JAX-native CPU paths for differentiable workflows and small research
+  experiments.
+- Support multi-core batch/transport workers, and add MPI/petsc4py options only
+  after the single-process sparse path is correct and documented.
+
+Lane G: Output, plotting, and reproducibility.
+
+- Every solve writes enough metadata to reproduce the path:
+  solver backend, preconditioner, tolerances, environment overrides, active
+  grid, geometry source, package version, git commit if available, and timing.
+- NetCDF/HDF5/NPZ outputs must carry the same physics arrays and solver trace
+  where format permits.
+- Plotting scripts should be generated from output files, not from hidden local
+  benchmark state.
+
+### 21.6 Testing and validation battery
+
+Fast CI target: 5-10 minutes on normal GitHub runners.
+
+Fast CI must include:
+
+- Unit tests for solver-policy helpers, env parsing, preconditioner dispatch,
+  geometry loading, output writing, plotting, CLI argument parsing, and Python
+  API entry points.
+- Numerical micro-tests for matrix-free versus explicit small operators.
+- Linear-solver tests using known ill-conditioned nonsymmetric matrices, where
+  residual and convergence history are checked.
+- Candidate-gate tests that reject runtime/memory/residual regressions.
+- HDF5/NetCDF/NPZ output schema tests.
+- CLI tests for a fast example that creates output and plots.
+- Documentation build with warnings as errors.
+- Coverage reporting with the target path to 95 percent meaningful package
+  coverage.
+
+Physics-gate tests:
+
+- Collision-operator conservation: particle, momentum, and energy invariants for
+  full-FP pieces where the discrete model should preserve them.
+- Maxwellian/nullspace checks for collision pieces.
+- Onsager symmetry checks for transport matrices in the appropriate `Er=0`
+  and force-normalization regimes.
+- Pitch-angle-scattering limits and monoenergetic overlap checks against
+  DKES/MONKES-like coefficients where the model assumptions match.
+- High-collisionality Simakov-Helander/Mollen-style analytic trends for W7-X or
+  LHD impurity/transport coefficients.
+- Ambipolarity root checks: radial electric field roots should be finite,
+  sign-consistent, and stable under small resolution changes.
+- Bootstrap-current consistency checks: radial profile smoothness, sign
+  stability, and finite-beta VMEC workflow regression tests.
+- Geometry invariance/sanity checks: VMEC, Miller, Boozer/ASCII/netCDF geometry
+  loading must produce finite B, Jacobians, drift terms, and quadrature weights.
+- Autodiff checks: gradients of selected scalar outputs against finite
+  differences for small differentiable cases.
+
+Regression suite:
+
+- Full 39-case CPU example-suite parity against frozen SFINCS Fortran v3
+  references before every release.
+- Full 39-case GPU suite on `office` before every release or GPU solver-policy
+  promotion.
+- Focused Nxi cliff regression: neighboring full-FP `Nxi=20/40` or equivalent
+  small/medium cases must stay on measured fast paths and remain parity-clean.
+- NTX RHSMode=1 profile-current finite-beta small case must remain CPU/GPU
+  consistent.
+- Optional heavy NTX and W7-X high-nu cases run as nightly/manual tests, not
+  regular CI.
+- Runtime and memory guard tests based on stored benchmark artifacts for top
+  offenders.
+
+Performance gates:
+
+- A solver-policy change is blocked if it introduces a runtime drift flag on
+  any focused artifact-backed case unless the new route is intentionally slower
+  for correctness and documented.
+- A GPU promotion must report cold and warm timings.
+- A memory-motivated promotion must prove lower peak memory, not just a lower
+  estimate.
+- Benchmark scripts must record subprocess wall time and in-code solver elapsed
+  separately.
+
+### 21.7 Implementation order
+
+P0: Final plan and first guardrail.
+
+- [x] Write this plan in `plan.md`.
+- [x] Add measured solver-candidate acceptance module.
+- [x] Add tests for residual/runtime/memory/pathological-fallback rejection.
+- [x] Add stable solver-trace schema with JSON/HDF5 round-trip tests.
+- [x] Add opt-in trace persistence for HDF5, NetCDF, and NPZ output files.
+- [x] Run focused tests (`48 passed` across solver-selection, trace, output-format, IO, policy, and progress tests).
+
+P1: Wire measured gates into existing RHSMode=1 policy.
+
+- [x] Wire the first measured gate into `rhs1_pas_weak_auto_override_kind`,
+  preserving default historical behavior when measured metrics are unavailable.
+- [x] Add optional measured gates to `rhs1_accept_candidate`, the shared
+  accepted-candidate handoff used by RHSMode=1 retry/rescue branches.
+- [x] Pass real elapsed-time/RSS metrics through reduced/full stage2 and
+  strong-preconditioner retry handoffs.
+- [x] Pass real elapsed-time/RSS metrics through reduced/full dense and sparse
+  retry handoffs.
+- Replace remaining direct ad hoc auto-promotion checks in `v3_driver.py` with
+  calls into `solver_selection_policy` at the strong-fallback and dense/sparse
+  promotion points.
+- Preserve existing default behavior unless a candidate is provably rejected by
+  the new correctness gate.
+- [x] Add unit tests for the first dispatch point using small fake metrics.
+- [x] Add unit tests for measured handoff acceptance/rejection using small fake
+  metrics.
+- Add unit tests for the remaining concrete `v3_driver.py` dispatch points once
+  real metrics are passed into the handoff.
+- [x] Add artifact-backed regression tests for the CPU solver-path audit and GPU
+  neighboring `Nxi=20/40` full-FP cliff reports.
+- [x] Add PAS-heavy path-switching artifact tests where available.
+
+P2: Stable solver trace.
+
+- [x] Add a `SolverTrace` dataclass and JSON/HDF5 serialization helpers.
+- [x] Add opt-in HDF5/NetCDF/NPZ output persistence for solver traces.
+- [x] Add tests that supported output formats can record backend/path/timing
+  metadata without changing default parity payloads.
+- [x] Emit JSON sidecar traces from CLI and Python `write-output` runs via
+  `--solver-trace` / `solver_trace_path=`.
+- [x] Update the reduced/scaled suite runner to read trace elapsed time from
+  solver-trace sidecars when available.
+- Extend trace ingestion to any remaining benchmark/summary scripts that still
+  only parse free-form logs.
+
+P3: Host sparse production backend.
+
+- Start with a non-autodiff, opt-in CPU sparse backend using SciPy CSR and
+  sparse direct/GMRES/LGMRES.
+- Match SFINCS v3 active DOF ordering and constraints.
+- Validate on tiny and small reference cases against existing dense/JAX paths.
+- Add optional petsc4py integration plan after the SciPy backend is correct.
+- Promote only for measured CPU cases where it beats JAX dense/Krylov or avoids
+  a known memory cliff.
+
+P4: GPU policy hardening.
+
+- Add cold/warm trace separation.
+- Gate accelerator dense and PAS paths through measured-candidate rules.
+- Add focused GPU tests/artifact checks for geometry4/5/11, HSX, W7-X, and
+  tokamak PAS/FP cases.
+- Keep broad GPU route changes off by default until the full GPU suite is
+  parity-clean and performance-clean.
+
+P5: Physics validation expansion.
+
+- Add the physics gates listed above in fast miniature form for CI.
+- Keep wider literature-reproduction scans as manual/nightly artifacts with
+  publication-ready plots.
+- Document which validations are CI gates, release gates, and paper-grade
+  optional campaigns.
+
+P6: Documentation and user workflow.
+
+- Update README and docs with clear solver backend choices:
+  autodiff-safe JAX, fast non-autodiff dense/sparse, CPU/GPU behavior, and
+  diagnostic outputs.
+- Document how to force paths for reproducibility and how to read solver traces.
+- Add examples for Python and CLI workflows, including plotting outputs and
+  profiling a slow case.
+
+### 21.8 Ship criteria for the solver-policy lane
+
+This lane is closed only when:
+
+- The full CPU example suite remains `39/39` parity-clean with no missing output
+  keys.
+- The full GPU example suite remains `39/39` parity-clean with no `jax_error` or
+  `max_attempts`.
+- The Nxi/full-FP cliff regression is impossible under default auto selection:
+  any slow fallback must be justified by residual/parity improvement.
+- Runtime and memory summary plots/tables are regenerated from trace-backed
+  artifacts.
+- Documentation explains backend differences, autodiff restrictions, and solver
+  diagnostics.
+- CI includes fast but meaningful physics/numerics/regression tests and keeps
+  wall time bounded.
+
+### 21.9 Immediate next actions
+
+1. Run focused CPU tests, then the bounded full CPU suite if the dispatch wiring
+   changes behavior. Done on 2026-04-30 with `39/39` strict-clean CPU parity.
+2. Run focused GPU validation on `office` before any accelerator default is
+   changed. Done on 2026-04-30 with `7/7` strict-clean focused one-GPU parity.
+3. Optional release polish: run the full 39-case GPU refresh only if benchmark
+   figures need fresh all-case GPU timings from the measured-gate branch. Done
+   on 2026-04-30 with `39/39` strict-clean one-GPU parity.
+
+## 22) Production-resolution benchmark tier and production blockers (2026-04-30)
+
+The reduced 39-case parity suite is still useful as a fast smoke/regression
+gate, but it is not representative enough for public production runtime/memory
+claims or solver-policy design. A direct audit showed that the existing public
+CPU/GPU comparison artifacts contain `0/39` non-axisymmetric cases at
+`Ntheta >= 21`, `Nzeta >= 21`, `Nxi >= 15`, and only `2/39` axisymmetric
+tokamak cases at the corresponding `21 x 1 x 15` threshold. Nominal examples
+are better, but still sparse: only `3/38` non-axisymmetric checked-in examples
+meet `21 x 21 x 15`.
+
+New artifact:
+
+- `benchmarks/production_resolution_inputs_2026-04-30/manifest.json`
+  defines the current 44-case production benchmark tier.
+- Checked-in public examples are lifted to `3D >= 25 x 31 x 11 x 17`
+  (`Ntheta x Nzeta x Nx x Nxi`) and tokamak `>= 25 x 1 x 11 x 17` while
+  preserving any higher nominal resolution.
+- NTX/collaborator decks are lifted to the same production floor by default so
+  public benchmark claims are not based on the older low-resolution bring-up
+  grids. Use `--preserve-ntx-resolution` only for reproducing authored
+  collaborator grids during debugging.
+- The regenerated manifest has `44` cases, zero resolution-floor violations,
+  and relabels historic deck-name tokens such as `cpu_17x21x12_deck` to the
+  actual staged benchmark resolution, e.g. `cpu_25x31x11x17_deck`.
+- Absolute VMEC/Boozer paths are copied into each staged case and localized so
+  the same benchmark tree can run on `office` GPUs and other remote hosts.
+
+Harness fixes landed with this lane:
+
+- JAX benchmark subprocesses now use the same process-group runner as Fortran
+  jobs. A timeout kills the full process group, including the actual
+  `sfincs_jax` child behind `/usr/bin/time`, so failed production cases no
+  longer leave orphan CPU/GPU jobs.
+- `scripts/run_scaled_example_suite.py` now preserves measured
+  `suite_report.json` Fortran wall-time and RSS metadata when reusing staged
+  reference artifacts. This avoids mixing JAX wall time with Fortran internal
+  "Time to solve" log entries in GPU reports.
+- Regression tests cover production-input generation, absolute-path
+  localization, staged-reference metadata reuse, and timeout process cleanup.
+
+Historical CPU pilot artifact from the lower-resolution bring-up tier:
+
+- `benchmarks/production_resolution_cpu_pilot_2026-04-30`
+- Pattern: `tokamak_1species_PASCollisions_noEr_Nx1`,
+  `tokamak_1species_FPCollisions_noEr`, and three NTX/collaborator finite-beta
+  decks.
+- Result: `1/5` strict-clean, `2/5` strict mismatches, `2/5` max-attempts.
+- Clean case: `tokamak_1species_PASCollisions_noEr_Nx1` at
+  `21 x 1 x 1 x 31`: Fortran wall `75.226 s`, JAX CPU wall `2.685 s`, RSS
+  `99.7 MB` vs `484.2 MB`, strict mismatches `0/212`.
+- NTX low-resolution RHSMode=1 profile-current deck
+  `13 x 15 x 5 x 8`: Fortran wall `76.454 s`, JAX CPU wall `5.915 s`, RSS
+  `238.8 MB` vs `3726.0 MB`, strict mismatches `30/193`. Mismatches are
+  concentrated in flow/current/density/pressure perturbation outputs including
+  `FSABFlow`, `FSABjHat`, `FSADensityPerturbation`, and related moment arrays.
+- NTX RHSMode=1 profile-current deck `17 x 21 x 5 x 12`: Fortran wall
+  `79.076 s`, JAX CPU timed out at `600 s`. The JAX path built a
+  `42850 x 42850` system, selected Krylov/Schur, then fell back to `pas_lite`
+  with residual about `1.88e-02`, far above the target.
+- NTX RHSMode=3 transport matrix `35 x 43 x 1 x 48`: Fortran wall `90.750 s`,
+  JAX CPU wall `2.370 s`, RSS `1719.4 MB` vs `616.6 MB`, but strict mismatches
+  `33/193`.
+- Lifted `tokamak_1species_FPCollisions_noEr` exposed a local Fortran v3
+  reference instability: PETSc reached residuals near `3e-09`, then crashed
+  with signal 11 before writing a usable comparison output. This row needs a
+  cleaner Fortran reference policy before it can be used as a production claim.
+
+Historical one-GPU pilot artifact from the lower-resolution bring-up tier:
+
+- `benchmarks/production_resolution_gpu_pilot_2026-04-30`
+- Run on `office` with `CUDA_VISIBLE_DEVICES=0` and
+  `XLA_PYTHON_CLIENT_PREALLOCATE=false`. The machine was not idle; unrelated
+  GPU-heavy jobs were active, so timing is diagnostic rather than
+  publication-quality.
+- Result: `1/4` strict-clean, `2/4` strict mismatches, `1/4` max-attempts.
+- Clean case: `tokamak_1species_PASCollisions_noEr_Nx1`: JAX GPU wall
+  `4.897 s`, RSS `1014.5 MB`, strict mismatches `0/212`.
+- NTX low-resolution RHSMode=1 profile-current deck: JAX GPU wall `43.052 s`,
+  RSS `2909.3 MB`, strict mismatches `30/193`.
+- NTX RHSMode=1 profile-current deck `17 x 21 x 5 x 12`: JAX GPU wall
+  `605.619 s`, RSS `5506.5 MB`, strict mismatches `34/193`. The log records
+  `pas_lite` fallback with residual `1.840e-02`.
+- NTX RHSMode=3 transport matrix `35 x 43 x 1 x 48`: JAX GPU timed out. The
+  log shows dense and distributed GPU transport paths disabled, active-DOF mode
+  disabled, collision and strong preconditioner residuals still above target,
+  and a long polish solve.
+
+Production conclusions:
+
+- Current reduced-suite parity is real for reduced examples, but not sufficient
+  for research-grade production claims.
+- Production finite-beta VMEC/profile-current and RHSMode=3 transport decks are
+  the current correctness/performance blockers.
+- The top issue is not geometry setup or HDF5 output; it is solver formulation,
+  preconditioning, residual acceptance, and finite-beta/profile-current
+  normalization parity for larger active systems.
+- Public README/docs benchmark plots should either be explicitly labeled as
+  reduced-suite smoke/parity benchmarks or withheld until this production tier
+  has clean CPU/GPU rows.
+- Previous `17 x 21 x 5 x 12` sparse-host timing evidence is useful for solver
+  bring-up only. New public production-runtime and memory claims must be rerun
+  from the regenerated `25 x 31 x 11 x 17` / `25 x 1 x 11 x 17` manifest.
+
+Next required engineering steps:
+
+1. Add a production benchmark lane that is manual/nightly, not CI-fast, with
+   the 44-case manifest and a smaller "pilot blocker" subset for development.
+2. Fix NTX finite-beta/profile-current parity first. Compare Fortran and JAX
+   operator terms, source vectors, constraints, profile-gradient normalization,
+   radial-coordinate conversions, and moment diagnostics for the
+   `13 x 15 x 5 x 8` deck before optimizing runtime.
+3. Fix the RHSMode=1 PAS/Schur/`pas_lite` fallback policy. A fallback with
+   residual `O(1e-2)` must be a hard failure, not an accepted output path for
+   production runs.
+4. Add a CPU sparse/PETSc-like production backend or equivalent structured
+   preconditioner for large explicit CLI solves. The Fortran v3 architecture
+   remains faster on these production-sized cases because it uses sparse
+   PETSc/KSP/preconditioner machinery rather than large JAX dense/matrix-free
+   fallback paths.
+5. Fix RHSMode=3 GPU transport for large VMEC decks: active-DOF transport,
+   stronger sparse/structured preconditioning, and residual-gated polish must
+   work on GPU or be routed to a faster CPU/PETSc-style backend when autodiff is
+   not requested.
+6. Re-run the full 44-case production tier on CPU and on an idle GPU after the
+   blocker fixes. Only then regenerate public performance figures/tables.
+
+### 22.1 NTX RHSMode=1 operator/solver audit update
+
+Status: in progress on 2026-04-30.
+
+Fresh focused evidence:
+
+- The small public full-FP `Nxi=20`/`Nxi=40` cliff no longer reproduces on
+  current `main`: both neighboring cases stay on the dense path, finish in a few
+  seconds locally, and have residuals below the solver target.
+- The lower-resolution collaborator/NTX finite-beta RHSMode=1
+  PAS/profile-current deck at `17 x 21 x 5 x 12` (`42850` unknowns) was the
+  initial sparse-host bring-up blocker. The production manifest now stages this
+  lane at `25 x 31 x 11 x 17`, so the old deck is no longer sufficient for
+  public production claims.
+- A Fortran v3 run of the same deck with the local
+  `/Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs` executable
+  finished in about `13.6 s` and about `626 MB` peak RSS using sparse PETSc/KSP
+  behavior. The printed diagnostics include
+  `FSABjHat=-1.2981550382181504`.
+- A Fortran MATLAB-matrix dump audit showed that the JAX operator is not the
+  mismatch source: applying the JAX operator to the Fortran state differs from
+  the dumped Fortran sparse matrix by norm `4.39e-16`, and the true JAX residual
+  on the Fortran state matches the Fortran residual (`5.7549e-7`).
+- Direct SciPy `spsolve` of the dumped Fortran sparse matrix solved the same
+  linear system in about `4.4 s` with residual `7.6e-16`.
+- Current JAX default Krylov/rescue behavior remains too slow on this deck: a
+  bounded default probe spent about `41.6 s` in the first synchronized Krylov
+  cycle and then fell into a slow rescue ladder with residual still far above
+  target.
+- Light PAS preconditioner probes (`pas_lite`, `pas_hybrid`, `xmg`) are fast but
+  wrong on this deck, producing residuals from `1e9` to `1e18`; they must never
+  be auto-promoted without a true-residual gate.
+- The current column-by-column explicit sparse helper can produce the correct
+  answer when forced onto the full, non-projected matrix and when PAS-Schur
+  rescue is disabled: residual `7.4e-17`, `FSABjHat=-1.2981550371186046`.
+  However it takes about `61 s` and peaks near `11 GB`, so it is a debugging /
+  rescue proof-of-correctness path, not a production backend.
+- The resource peak-RSS path is now wired into solver traces so transient sparse
+  factorization memory peaks are not hidden by post-factorization RSS samples.
+- A bounded one-GPU Perfetto/XPlane profiling pass on `office` for the NTX
+  `13 x 15 x 5 x 8` profile-current deck is accurate but cold/warm dominated:
+  cold traced solve `9.67 s`, warm traced solve `2.23 s`, residual
+  `2.53e-13`, `FSABjHat=-0.44127035079410998`. Trace artifacts were written at
+  `/home/rjorge/sfincs_jax_gpu_profile_runs/ntx_13x15x8_gpu_trace*/trace`.
+  TensorFlow profiler hooks were unavailable on `office`, but JAX still emitted
+  Perfetto and XPlane traces.
+- The profiling helper now respects `--wout-path` / `--equilibrium-file` before
+  trying to localize the namelist equilibrium path, so remote profiling no
+  longer fails when the input carries an absolute path from another workstation.
+- The Fortran/JAX operator audit utility now has an opt-in `--solve-sparse`
+  check that solves the dumped PETSc sparse matrix with SciPy and records
+  residual/time. This is the reference harness for the planned sparse-host
+  production backend.
+- Structural sparse-host infrastructure now has a tested first slice:
+  `explicit_sparse.build_operator_from_pattern()` materializes CSR matrices by
+  coloring a conservative sparsity pattern and probing one seed vector per
+  color, avoiding dense identity/operator materialization. The helper is covered
+  by diagonal, tridiagonal, over-approximated-pattern, and budget-fallback tests.
+- `v3_sparse_pattern.v3_full_system_conservative_sparsity_pattern()` now builds
+  a conservative full-system pattern covering fixed theta/zeta stencils,
+  dense same-geometry velocity/species blocks for FP, Phi1/quasineutrality
+  couplings, and constraint rows/columns. Tests verify that it covers frozen
+  Fortran PETSc matrices for PAS, FP, and Phi1 tiny systems, and that the
+  colored probe reconstructs the PAS tiny matrix-free operator to Fortran
+  tolerances.
+- The pattern probe is wired only behind
+  `SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_PATTERN=1` in the full-system host
+  sparse direct path. Defaults are unchanged until NTX/prod-scale parity,
+  runtime, and memory evidence justify promotion.
+- The first production-scale structural sparse-host probes are successful. On
+  the NTX finite-beta `13 x 15 x 5 x 8` PAS/profile-current deck, direct
+  pattern build/probe/LU/solve took about `0.41 + 1.79 + 0.35 + 0.006 s`, with
+  residual `1.5e-16` and peak RSS about `587 MB`. On the collaborator blocker
+  `17 x 21 x 5 x 12` deck (`42850` unknowns), direct
+  pattern/probe/LU/solve took about `1.17 + 3.10 + 3.95 + 0.026 s`, with
+  residual `9.3e-16`, peak RSS about `1.50 GB`, and
+  `FSABjHat=-1.2981550371185984`, matching the Fortran v3 reference
+  `-1.2981550382181504` to about `1.1e-9`.
+- `solve_method="sparse_host"` is now a public, explicit, non-differentiable
+  full-system RHSMode=1 path for Python and CLI. A checked CLI
+  `write-output --solve-method sparse_host --solver-trace ...` run on the
+  `17 x 21 x 5 x 12` NTX deck wrote the full output in `8.65 s`, residual
+  `7.6e-17`, peak RSS about `1.54 GB`, and the same `FSABjHat` parity. Solver
+  traces now expose a top-level `converged` flag in addition to residual and
+  target. This is a development regression datum only; it must be superseded by
+  the `25 x 31 x 11 x 17` benchmark rerun before any public production claim.
+
+Engineering conclusion:
+
+- The high-ROI fix is not another threshold-only preconditioner flip. The
+  production CPU/CLI lane needs a structural sparse assembly backend matching the
+  Fortran/PETSc sparsity pattern, followed by SciPy/PETSc sparse direct or
+  sparse-preconditioned Krylov solves. The current matrix-free JAX operator is
+  accurate but inefficient for large non-autodiff RHSMode=1 production runs when
+  sparse structure is recoverable.
+
+Next concrete steps:
+
+1. Run the public `solve_method="sparse_host"` path on additional PAS and FP
+   geometry-rich examples, including at least one W7-X/HSX case, and compare
+   parity/runtime/RSS with the current default path and Fortran v3.
+2. Add a conservative policy gate that can suggest or auto-select
+   `sparse_host` for non-differentiable CPU RHSMode=1 production runs only when
+   the structural pattern is supported and the system is outside the small dense
+   range. Keep differentiable and GPU-native paths unchanged.
+3. Split directly assembled deterministic blocks from colored probing if wider
+   examples show probe color count or pattern over-approximation becoming the
+   next bottleneck.
+4. Add tests that fail if any RHSMode=1 production output is written with a
+   residual far above target unless the user explicitly opts into a diagnostic
+   nonconverged output mode.
+5. Re-run a bounded pilot subset from the regenerated `25 x 31 x 11 x 17`
+   production manifest before any full suite run. Start with the staged NTX
+   sparse-host deck and one tokamak/one 3D public example, record residual,
+   wall time, peak RSS, and `solver_trace.json`.
+6. Re-run the full production benchmark manifest after the sparse-host lane is
+   exercised on the broader suite, then refresh public performance language and
+   plots.
+
+### 22.2 Research-resolution production baseline update
+
+Status: completed for input generation on 2026-04-30; benchmark reruns pending.
+
+- `scripts/create_production_benchmark_inputs.py` now enforces the production
+  floor requested for research-appropriate grids: `3D >= 25 x 31 x 11 x 17`
+  and tokamak `>= 25 x 1 x 11 x 17`.
+- The generator now includes `Nx` in the floor, applies the floor to
+  NTX/collaborator decks by default, and keeps
+  `--preserve-ntx-resolution` as an explicit reproduction/debug escape hatch.
+- Each manifest entry now includes a preflight `size_estimate` block with
+  species count, inferred collision/constraint switches, full-system unknown
+  count, dense matrix bytes, conservative sparse-pattern nnz/CSR bytes, and a
+  `bounded_local_ok` / `bounded_remote` / `remote_or_cluster_only` run
+  recommendation.
+- The manifest was regenerated with `--include-ntx-defaults --clean`. It
+  contains `44` cases, has zero resolution-floor violations, and no staged case
+  names still contain the stale `cpu_17x21x12_deck` label. The current preflight
+  recommendations are `11` bounded-local cases, `4` bounded-remote cases, and
+  `29` remote-or-cluster-only cases.
+- Focused tests verify example lifting, NTX lifting, NTX preservation mode, and
+  historic deck relabeling, plus the large PAS+XDot sizing gate.
+- A bounded sizing pass shows why the new baseline must be scheduled rather than
+  run blindly on the local laptop. The staged NTX profile-current deck at
+  `25 x 31 x 11 x 17` has about `289,872` full-system unknowns; a dense matrix
+  would be about `672 GB`, and the current conservative sparse-pattern estimate
+  is about `9.8 GB` before LU fill. Higher-resolution HSX/FP examples in the
+  same manifest are much larger, so full production reruns need explicit
+  timeout/RSS guards and should be routed to `office` or cluster hardware.
+
+Next benchmark actions:
+
+1. Wire the manifest `size_estimate.run_recommendation` into the production
+   benchmark runner so unsafe rows are skipped or routed instead of launched as
+   unbounded local solves.
+2. Run the staged NTX `sparse_host` deck only on `office` or larger hardware
+   with explicit timeout/RSS guards; do not launch it as an unbounded local
+   solve.
+3. Promote the resulting runtime/RSS/residual row into the production report
+   only if it is converged and parity-clean against Fortran v3.
+
+### 22.3 Production NTX solve launch and constrained-PAS nullspace finding
+
+Status: bounded production solve achieved on `office` on 2026-04-30; physical
+Fortran-v3 branch selection remains an open research/implementation lane.
+
+- The staged NTX finite-beta profile-current deck at `25 x 31 x 11 x 17`
+  now runs through an explicit non-differentiable sparse-host production path.
+  `--solve-method sparse_pc_gmres` materializes the conservative sparse pattern
+  on the host, factors the RHSMode=1 preconditioner, and runs GMRES on the true
+  matrix-free Jacobian. On `office` GPU0 it completed in `277.0 s` wall time
+  with peak RSS `11.43 GB` and true residual `4.80e-14` versus target
+  `2.09e-09`.
+- That exact sparse branch is algebraically converged but not the small-current
+  Fortran-v3 KSP branch for this singular/near-singular constrained-PAS system:
+  it gives `FSABjHat=-5.033868`, matching the direct sparse-LU branch, whereas
+  the two Fortran v3 reference runs give branch-sensitive small-current values
+  `FSABjHat=-0.00444045` (plain run) and `FSABjHat=-0.0270762` (binary-dump
+  run).
+- A low-memory `--solve-method sparse_lsmr` diagnostic path was added. It
+  materializes the true CSR operator without LU factorization and ran the same
+  deck in about `60.5 s` with peak RSS `1.96 GB`, but it did not solve the
+  algebraic system (`residual=2.07e-02` versus target `2.09e-09`). With the
+  diagnostic nonconverged-output override, it gave a small-current branch
+  `FSABjHat=-0.0422348`, useful for nullspace triage but not acceptable as a
+  production-converged solve.
+- The Fortran v3 audit shows why this case is subtle: PETSc GMRES reports KSP
+  convergence by preconditioned residual, but the nonlinear residual norm remains
+  about `2.093e-02` after the solve. The dumped Fortran Jacobian, preconditioner,
+  and residual-f1 matrices are identical for this deck, so exact LU in Python
+  chooses a different nullspace/gauge branch from PETSc/MUMPS GMRES.
+- Sparse factor controls are now exposed for targeted experiments:
+  `SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND`, `SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC`,
+  `SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH`,
+  `SFINCS_JAX_EXPLICIT_SPARSE_ILU_FILL_FACTOR`,
+  `SFINCS_JAX_EXPLICIT_SPARSE_ILU_DROP_TOL`, and the preconditioner-only
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT`. ILU is currently exactly singular on
+  this deck, and a shifted exact preconditioner still returns the exact-LU
+  branch.
+- A production safety gate now refuses to write large RHSMode=1 diagnostics
+  when the reported residual misses the requested target, unless
+  `SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1` is set explicitly for diagnostic
+  branch triage.
+
+Next concrete steps:
+
+1. Implement a constrained-PAS gauge/nullspace selector that is independent of
+   sparse solver pivoting. Candidate gates are minimum-flow/minimum-moment
+   constraints, explicit source/gauge rows, or a PETSc/MUMPS-backed optional
+   host solve when `petsc4py` is available.
+2. Add a small frozen regression fixture that reproduces this nullspace branch
+   sensitivity at affordable size, then assert that exact LU, minimum-norm, and
+   PETSc-compatible branches are explicitly labeled rather than silently mixed.
+3. Keep `sparse_pc_gmres` available as the bounded algebraic production solve,
+   but do not promote this NTX constrained-PAS result as parity-clean until the
+   physical gauge branch is pinned.
+4. Keep `sparse_lsmr` as a diagnostic/research tool only unless a future
+   residual definition and physics gate are agreed for singular PAS systems.

@@ -32,6 +32,20 @@ CLI
      --out sfincsOutput.h5 \
      --wout-path /path/to/wout.nc
 
+For RHSMode=1 solves, the output includes solver-convergence metadata in the
+main file:
+
+- ``linearSolverMethod`` records the selected solve lane.
+- ``linearSolverResidualNorm`` and ``linearSolverResidualTarget`` record the
+  true residual norm and requested target used by the output safety gate.
+- ``linearSolverResidualTargetRatio`` is residual divided by target.
+- ``linearSolverConverged`` is a Fortran-style logical flag, ``+1`` when the
+  residual target was met and ``-1`` otherwise.
+- ``linearSolverAccepted`` and ``linearSolverAcceptanceCriterion`` record the
+  branch acceptance actually used by the writer. In constrained-PAS
+  PETSc-compatible minimum-norm runs, true-residual convergence can be false
+  while the branch is still accepted and labeled explicitly.
+
 For a publication-style PDF diagnostics panel from an existing output file:
 
 .. code-block:: bash

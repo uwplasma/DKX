@@ -772,7 +772,26 @@ For full XLA/kernel traces, prefer the dedicated write-output trace helper:
 
 Use ``--warmup 0`` to include compile/lowering time in the trace, or ``--warmup 1``
 to focus on steady-state kernels. Add ``--device-memory-profile /tmp/sfincs_memory.pb``
-for a one-shot device-memory snapshot instead of per-mark polling.
+for a one-shot device-memory snapshot instead of per-mark polling. For RHSMode=1
+profile-current or distribution-function diagnostics, add ``--compute-solution``;
+otherwise the helper only writes geometry/output fields and ``NIterations`` remains
+zero.
+
+The trace helper writes a timeout-safe JSON phase log at
+``<trace-dir>/profile_write_output_trace_phases.json`` by default, or at the
+path passed with ``--phase-log``. The sidecar records input preparation, warmup,
+the JAX profiler context, the actual output solve/write phase, ``block_until_ready``,
+and optional device-memory snapshotting. If the output solve finishes but JAX/XPlane/
+Perfetto finalization fails, the helper returns solve success by default and records
+``status="solve_completed_profile_incomplete"`` in the phase log. Use
+``--strict-profiler`` when a profiling lane should fail CI if trace finalization
+or device-memory snapshotting fails after a valid output file has already been written.
+Use ``--no-jax-trace`` for long production audits that need the phase log and
+Fortran-like solver output but should avoid XPlane/Perfetto overhead entirely.
+The phase log is refreshed while a long solve is running; tune that heartbeat with
+``--phase-log-interval-s``. Add ``--solver-trace path/to/solver_trace.json`` when
+the run should also persist the solver/backend/residual metadata sidecar produced
+by the output writer.
 
 
 Memory footprint and compilation-time optimization (literature-backed)
