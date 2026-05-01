@@ -165,6 +165,24 @@ Current active lane (2026-05-01, SFINCS_JAX-only closure):
   A smaller GMRES restart preserved parity and lowered memory (`5.36 s`,
   `1.21 GB`), but roughly doubled runtime, so it remains an opt-in
   memory-pressure knob rather than a default.
+- [x] Check in a compact PAS-offender variant probe artifact at
+  `tests/reference_solver_path_artifacts/pas_offender_variant_probe_2026-05-01.json`
+  and guard it with tests. The guard records that current `pas_tz` remains on
+  the Pareto front for geometry4/geometry11, that geometry11 `xblock_tz`
+  mismatches current/flow diagnostics, and that smaller GMRES restart settings
+  are memory-pressure knobs rather than default candidates.
+- [x] Add a manual-only GitHub workflow, `Production Benchmark Inputs`, that
+  regenerates and validates the SFINCS_JAX-owned production-resolution input
+  manifest without running expensive solves. It can upload the generated input
+  tree as an artifact for local, `office`, or cluster CPU/GPU/Fortran benchmark
+  runners.
+- Validation: `pytest -q tests/test_solver_path_artifacts.py tests/test_benchmark_case_variants.py`
+  (`17 passed`).
+- Validation: `pytest -q tests/test_create_production_benchmark_inputs.py tests/test_solver_path_artifacts.py tests/test_benchmark_case_variants.py`
+  (`23 passed`); `python scripts/create_production_benchmark_inputs.py --out-root /tmp/sfincs_jax_production_resolution_inputs_check --clean`
+  regenerated `39` SFINCS_JAX-owned production inputs and the scope check
+  confirmed no downstream-project paths; `sphinx-build -W -b html docs docs/_build/html`
+  passed.
 - Next SFINCS_JAX-only work: attack PAS/geometry-rich runtime and memory with
   trace-backed offender probes only when a candidate beats the current structured
   path on both parity and measured cost, then refresh production-resolution
