@@ -97,6 +97,25 @@ input tree as an artifact for CPU/GPU/Fortran benchmark runners. Full production
 runtime and memory sweeps should still be launched on a local workstation,
 ``office``, or a cluster where the requested CPU/GPU resources are explicit.
 
+The scaled-suite runner also understands these manifest recommendations. When
+``--examples-root`` points at a generated ``inputs/`` directory, the sibling
+``manifest.json`` is detected automatically and only
+``bounded_local_ok`` rows are launched by default:
+
+.. code-block:: bash
+
+   python scripts/run_scaled_example_suite.py \
+     --examples-root benchmarks/production_resolution_inputs_2026-04-30/inputs \
+     --fortran-exe /path/to/sfincs/fortran/version3/sfincs \
+     --out-root benchmarks/production_resolution_cpu_local
+
+Raise the guard only on an explicitly budgeted remote or cluster lane:
+``--max-run-recommendation bounded_remote``,
+``--max-run-recommendation remote_or_cluster_only``, or
+``--max-run-recommendation all``. This prevents accidentally launching
+remote-only HSX/W7-X production solves on a laptop while still keeping the full
+manifest available for scheduled benchmark campaigns.
+
 Current top offenders from the release artifacts plus focused current-tip
 reruns are:
 

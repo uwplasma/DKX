@@ -7381,17 +7381,17 @@ meet `21 x 21 x 15`.
 New artifact:
 
 - `benchmarks/production_resolution_inputs_2026-04-30/manifest.json`
-  defines the current 44-case production benchmark tier.
+  defines the current SFINCS_JAX-owned 39-case production benchmark tier.
 - Checked-in public examples are lifted to `3D >= 25 x 31 x 11 x 17`
   (`Ntheta x Nzeta x Nx x Nxi`) and tokamak `>= 25 x 1 x 11 x 17` while
   preserving any higher nominal resolution.
-- NTX/collaborator decks are lifted to the same production floor by default so
-  public benchmark claims are not based on the older low-resolution bring-up
-  grids. Use `--preserve-ntx-resolution` only for reproducing authored
-  collaborator grids during debugging.
-- The regenerated manifest has `44` cases, zero resolution-floor violations,
-  and relabels historic deck-name tokens such as `cpu_17x21x12_deck` to the
-  actual staged benchmark resolution, e.g. `cpu_25x31x11x17_deck`.
+- Downstream/collaborator decks are no longer part of the active public
+  production manifest. They can still be imported with explicit
+  `--external-input` arguments for private reproduction, but they are not
+  release blockers for SFINCS_JAX.
+- The regenerated public manifest has `39` cases, zero resolution-floor
+  violations, and preflight recommendations of `11` `bounded_local_ok`,
+  `3` `bounded_remote`, and `25` `remote_or_cluster_only` cases.
 - Absolute VMEC/Boozer paths are copied into each staged case and localized so
   the same benchmark tree can run on `office` GPUs and other remote hosts.
 
@@ -7459,11 +7459,11 @@ Production conclusions:
 
 - Current reduced-suite parity is real for reduced examples, but not sufficient
   for research-grade production claims.
-- Production finite-beta VMEC/profile-current and RHSMode=3 transport decks are
-  the current correctness/performance blockers.
+- For SFINCS_JAX-owned public claims, the current production blockers are the
+  large public 3D/PAS/FP rows in the generated 39-case manifest, not downstream
+  profile-current handoff decks.
 - The top issue is not geometry setup or HDF5 output; it is solver formulation,
-  preconditioning, residual acceptance, and finite-beta/profile-current
-  normalization parity for larger active systems.
+  preconditioning, residual acceptance, and large-active-system runtime/RSS.
 - Public README/docs benchmark plots should either be explicitly labeled as
   reduced-suite smoke/parity benchmarks or withheld until this production tier
   has clean CPU/GPU rows.
@@ -7473,16 +7473,18 @@ Production conclusions:
 
 Next required engineering steps:
 
-1. Add a production benchmark lane that is manual/nightly, not CI-fast, with
-   the 44-case manifest and a smaller "pilot blocker" subset for development.
-2. Fix NTX finite-beta/profile-current parity first. Compare Fortran and JAX
-   operator terms, source vectors, constraints, profile-gradient normalization,
-   radial-coordinate conversions, and moment diagnostics for the
-   `13 x 15 x 5 x 8` deck before optimizing runtime.
-3. Fix the RHSMode=1 PAS/Schur/`pas_lite` fallback policy. A fallback with
+1. Completed: add a manual, not CI-fast, production input lane for the 39-case
+   public manifest and guard the benchmark runner with
+   `size_estimate.run_recommendation` so local runs do not launch remote-only
+   rows accidentally.
+2. Re-run the 39-case production tier in stages: `bounded_local_ok` locally,
+   `bounded_remote` on `office`, and `remote_or_cluster_only` on explicitly
+   budgeted remote/cluster hardware.
+3. Fix the RHSMode=1 PAS/Schur/`pas_lite` fallback policy where it affects
+   public production rows. A fallback with
    residual `O(1e-2)` must be a hard failure, not an accepted output path for
    production runs.
-4. Add a CPU sparse/PETSc-like production backend or equivalent structured
+4. Keep strengthening the CPU sparse/PETSc-like production backend or equivalent structured
    preconditioner for large explicit CLI solves. The Fortran v3 architecture
    remains faster on these production-sized cases because it uses sparse
    PETSc/KSP/preconditioner machinery rather than large JAX dense/matrix-free
@@ -7491,7 +7493,7 @@ Next required engineering steps:
    stronger sparse/structured preconditioning, and residual-gated polish must
    work on GPU or be routed to a faster CPU/PETSc-style backend when autodiff is
    not requested.
-6. Re-run the full 44-case production tier on CPU and on an idle GPU after the
+6. Re-run the full 39-case production tier on CPU and on an idle GPU after the
    blocker fixes. Only then regenerate public performance figures/tables.
 
 ### 22.1 NTX RHSMode=1 operator/solver audit update
@@ -7620,44 +7622,54 @@ Status: completed for input generation on 2026-04-30; benchmark reruns pending.
 - `scripts/create_production_benchmark_inputs.py` now enforces the production
   floor requested for research-appropriate grids: `3D >= 25 x 31 x 11 x 17`
   and tokamak `>= 25 x 1 x 11 x 17`.
-- The generator now includes `Nx` in the floor, applies the floor to
-  NTX/collaborator decks by default, and keeps
-  `--preserve-ntx-resolution` as an explicit reproduction/debug escape hatch.
+- The generator now includes `Nx` in the floor and keeps downstream or
+  collaborator decks behind explicit `--external-input` arguments. Public
+  SFINCS_JAX benchmark manifests are example-only.
 - Each manifest entry now includes a preflight `size_estimate` block with
   species count, inferred collision/constraint switches, full-system unknown
   count, dense matrix bytes, conservative sparse-pattern nnz/CSR bytes, and a
   `bounded_local_ok` / `bounded_remote` / `remote_or_cluster_only` run
   recommendation.
-- The manifest was regenerated with `--include-ntx-defaults --clean`. It
-  contains `44` cases, has zero resolution-floor violations, and no staged case
-  names still contain the stale `cpu_17x21x12_deck` label. The current preflight
-  recommendations are `11` bounded-local cases, `4` bounded-remote cases, and
-  `29` remote-or-cluster-only cases.
-- Focused tests verify example lifting, NTX lifting, NTX preservation mode, and
-  historic deck relabeling, plus the large PAS+XDot sizing gate.
+- The manifest was regenerated with `--clean`. It contains `39` SFINCS_JAX-owned
+  cases, has zero resolution-floor violations, and no staged case names still
+  contain stale downstream deck labels. The current preflight recommendations
+  are `11` bounded-local cases, `3` bounded-remote cases, and
+  `25` remote-or-cluster-only cases.
+- Focused tests verify example lifting, downstream exclusion from the checked-in
+  manifest, explicit external-input handling, historic deck relabeling when
+  requested, and the large PAS+XDot sizing gate.
 - A bounded sizing pass shows why the new baseline must be scheduled rather than
-  run blindly on the local laptop. The staged NTX profile-current deck at
-  `25 x 31 x 11 x 17` has about `289,872` full-system unknowns; a dense matrix
-  would be about `672 GB`, and the current conservative sparse-pattern estimate
-  is about `9.8 GB` before LU fill. Higher-resolution HSX/FP examples in the
-  same manifest are much larger, so full production reruns need explicit
-  timeout/RSS guards and should be routed to `office` or cluster hardware.
+  run blindly on the local laptop. Several higher-resolution HSX/FP and W7-X
+  examples in the public manifest are remote-or-cluster-only by the preflight
+  estimate, so full production reruns need explicit timeout/RSS guards and
+  should be routed to `office` or cluster hardware.
 
 Next benchmark actions:
 
-1. Wire the manifest `size_estimate.run_recommendation` into the production
-   benchmark runner so unsafe rows are skipped or routed instead of launched as
-   unbounded local solves.
-2. Run the staged NTX `sparse_host` deck only on `office` or larger hardware
-   with explicit timeout/RSS guards; do not launch it as an unbounded local
-   solve.
-3. Promote the resulting runtime/RSS/residual row into the production report
-   only if it is converged and parity-clean against Fortran v3.
+1. Completed on 2026-05-01: wired manifest `size_estimate.run_recommendation`
+   into `scripts/run_scaled_example_suite.py`. Generated production `inputs/`
+   trees auto-detect their sibling `manifest.json`, default to launching only
+   `bounded_local_ok` rows, and require an explicit `--max-run-recommendation`
+   opt-in for `bounded_remote`, `remote_or_cluster_only`, or `all` rows.
+2. Run the `bounded_local_ok` public production subset locally with explicit
+   timeout/RSS guards, then run the `bounded_remote` and
+   `remote_or_cluster_only` subsets on `office` or cluster hardware.
+3. Promote runtime/RSS/residual rows into the production report only if they are
+   converged and parity-clean against Fortran v3.
 
-### 22.3 Production NTX solve launch and constrained-PAS nullspace finding
+Validation:
 
-Status: bounded production solve achieved on `office` on 2026-04-30; physical
-Fortran-v3 branch selection remains an open research/implementation lane.
+- `pytest -q tests/test_scaled_example_suite_reference.py tests/test_create_production_benchmark_inputs.py`
+  passed with `23 passed` after adding the production-run recommendation guard.
+- The guard is intentionally a runner-level safety feature, not a solver-policy
+  change: ordinary example-suite runs without a production manifest are
+  unchanged.
+
+### 22.3 Historical downstream solve launch and constrained-PAS nullspace finding
+
+Status: archived as downstream context on 2026-05-01. The bounded solve evidence
+below remains useful for sparse-host design, but it is no longer an active
+SFINCS_JAX release blocker or handoff lane.
 
 - The staged NTX finite-beta profile-current deck at `25 x 31 x 11 x 17`
   now runs through an explicit non-differentiable sparse-host production path.
