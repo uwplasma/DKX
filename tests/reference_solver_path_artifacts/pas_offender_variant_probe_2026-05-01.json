@@ -1,0 +1,198 @@
+{
+  "generated_at": "2026-05-01",
+  "description": "Bounded CPU variant probes for PAS/geometry-rich offenders. These are negative performance gates: available alternative preconditioners must not become defaults unless they beat the current structured path on parity, runtime, and memory.",
+  "command_family": "python scripts/benchmark_case_variants.py --profile --timeout-s <budget> --case-dir <case>",
+  "cases": {
+    "geometryScheme4_2species_PAS_noEr": {
+      "case_dir": "tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/geometryScheme4_2species_PAS_noEr",
+      "timeout_s": 45,
+      "variants": [
+        {
+          "variant": "default",
+          "status": "ok",
+          "elapsed_s": 2.472,
+          "ru_maxrss_mb": 1742.016,
+          "rhs1_preconditioner": "pas_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 0,
+          "vs_default_sample": []
+        },
+        {
+          "variant": "xblock_tz",
+          "status": "ok",
+          "elapsed_s": 14.21,
+          "ru_maxrss_mb": 2970.156,
+          "rhs1_preconditioner": "xblock_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 1,
+          "vs_default_sample": ["linearSolverResidualTargetRatio"]
+        },
+        {
+          "variant": "schur",
+          "status": "ok",
+          "elapsed_s": 3.524,
+          "ru_maxrss_mb": 2007.109,
+          "rhs1_preconditioner": "schur",
+          "vs_fortran_count": 0,
+          "vs_default_count": 4,
+          "vs_default_sample": [
+            "linearSolverAccepted",
+            "linearSolverConverged",
+            "linearSolverResidualTargetRatio",
+            "linearSolverTrueResidualConverged"
+          ]
+        },
+        {
+          "variant": "pas_schur",
+          "status": "timeout",
+          "elapsed_s": null,
+          "ru_maxrss_mb": null,
+          "rhs1_preconditioner": null,
+          "vs_fortran_count": null,
+          "vs_default_count": null,
+          "vs_default_sample": []
+        },
+        {
+          "variant": "theta_zeta",
+          "status": "timeout",
+          "elapsed_s": null,
+          "ru_maxrss_mb": null,
+          "rhs1_preconditioner": null,
+          "vs_fortran_count": null,
+          "vs_default_count": null,
+          "vs_default_sample": []
+        }
+      ]
+    },
+    "geometryScheme4_2species_PAS_noEr_restart_sweep": {
+      "case_dir": "tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/geometryScheme4_2species_PAS_noEr",
+      "timeout_s": 90,
+      "variants": [
+        {
+          "variant": "default",
+          "status": "ok",
+          "elapsed_s": 2.059,
+          "ru_maxrss_mb": 1734.672,
+          "rhs1_preconditioner": "pas_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 0,
+          "vs_default_sample": []
+        },
+        {
+          "variant": "restart40",
+          "status": "ok",
+          "elapsed_s": 4.971,
+          "ru_maxrss_mb": 1438.031,
+          "rhs1_preconditioner": "pas_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 0,
+          "vs_default_sample": []
+        },
+        {
+          "variant": "restart30",
+          "status": "ok",
+          "elapsed_s": 5.144,
+          "ru_maxrss_mb": 1448.5,
+          "rhs1_preconditioner": "pas_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 0,
+          "vs_default_sample": []
+        },
+        {
+          "variant": "restart20",
+          "status": "ok",
+          "elapsed_s": 4.671,
+          "ru_maxrss_mb": 1443.531,
+          "rhs1_preconditioner": "pas_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 0,
+          "vs_default_sample": []
+        },
+        {
+          "variant": "restart120",
+          "status": "ok",
+          "elapsed_s": 5.497,
+          "ru_maxrss_mb": 1396.109,
+          "rhs1_preconditioner": "pas_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 0,
+          "vs_default_sample": []
+        }
+      ]
+    },
+    "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories": {
+      "case_dir": "tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories",
+      "timeout_s": 60,
+      "variants": [
+        {
+          "variant": "default",
+          "status": "ok",
+          "elapsed_s": 2.53,
+          "ru_maxrss_mb": 1436.516,
+          "rhs1_preconditioner": "pas_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 0,
+          "vs_default_sample": []
+        },
+        {
+          "variant": "schur",
+          "status": "ok",
+          "elapsed_s": 3.235,
+          "ru_maxrss_mb": 2166.25,
+          "rhs1_preconditioner": "schur",
+          "vs_fortran_count": 0,
+          "vs_default_count": 1,
+          "vs_default_sample": ["linearSolverResidualTargetRatio"]
+        },
+        {
+          "variant": "pas_tz",
+          "status": "ok",
+          "elapsed_s": 2.541,
+          "ru_maxrss_mb": 1446.844,
+          "rhs1_preconditioner": "pas_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 0,
+          "vs_default_sample": []
+        },
+        {
+          "variant": "xblock_tz",
+          "status": "ok",
+          "elapsed_s": 12.589,
+          "ru_maxrss_mb": 3173.125,
+          "rhs1_preconditioner": "xblock_tz",
+          "vs_fortran_count": 6,
+          "vs_default_count": 7,
+          "vs_default_sample": [
+            "MachUsingFSAThermalSpeed",
+            "flow",
+            "jHat",
+            "linearSolverResidualTargetRatio",
+            "pressureAnisotropy",
+            "velocityUsingFSADensity",
+            "velocityUsingTotalDensity"
+          ]
+        },
+        {
+          "variant": "pas_schur",
+          "status": "timeout",
+          "elapsed_s": null,
+          "ru_maxrss_mb": null,
+          "rhs1_preconditioner": null,
+          "vs_fortran_count": null,
+          "vs_default_count": null,
+          "vs_default_sample": []
+        },
+        {
+          "variant": "restart40",
+          "status": "ok",
+          "elapsed_s": 5.364,
+          "ru_maxrss_mb": 1210.844,
+          "rhs1_preconditioner": "pas_tz",
+          "vs_fortran_count": 0,
+          "vs_default_count": 0,
+          "vs_default_sample": []
+        }
+      ]
+    }
+  }
+}
