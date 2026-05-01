@@ -15,6 +15,9 @@ sys.modules[_SPEC.name] = bench_inputs
 _SPEC.loader.exec_module(bench_inputs)
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 def _write_input(
     path: Path,
     *,
@@ -40,6 +43,17 @@ def _write_input(
         ),
         encoding="utf-8",
     )
+
+
+def test_checked_in_production_manifest_is_sfincs_jax_only() -> None:
+    manifest_path = REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-04-30" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    cases = manifest["cases"]
+
+    assert manifest["case_count"] == 39
+    assert {case["source_group"] for case in cases} == {"examples"}
+    assert not any("ntx" in str(case["case"]).lower() for case in cases)
+    assert not any("ntx" in str(case["source_input"]).lower() for case in cases)
 
 
 def test_generator_enforces_research_baseline_on_examples_and_external_inputs(tmp_path: Path) -> None:
