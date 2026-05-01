@@ -9,6 +9,7 @@ The examples are organized by **topic** (rather than “difficulty”), so you c
 - `examples/optimization/`: optimization with Optax/JAX-native tooling
 - `examples/performance/`: JIT + performance microbenchmarks
 - `examples/publication_figures/`: publication-ready figure generation
+- `examples/vmec_jax_finite_beta/`: finite-beta `vmec_jax` -> `sfincs_jax` radial bootstrap-current and ambipolar-`E_r` workflow
 
 Also included:
 
@@ -34,6 +35,13 @@ For optimization examples that use `optax`:
 pip install optax
 ```
 
+The finite-beta VMEC-JAX example requires an importable `vmec_jax` installation.
+If you have a source checkout, point the example at it with:
+
+```bash
+export SFINCS_JAX_VMEC_JAX_PATH=/path/to/vmec_jax
+```
+
 ### Running
 
 Each example is a standalone script:
@@ -49,6 +57,8 @@ Common entry points:
 - Write `.h5`, `.nc`, and `.npz`, then build a PDF diagnostics panel: `examples/getting_started/write_and_plot_multiple_formats.py`
 - Analytic tokamak example (`geometryScheme=1`): `examples/getting_started/write_sfincs_output_tokamak.py`
 - VMEC example (`geometryScheme=5`, `wout_path` override): `examples/getting_started/write_sfincs_output_vmec.py`
+- Finite-beta VMEC-JAX to convergence-gated SFINCS radial Er and bootstrap-current profiles: `examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py`
+- Finite-beta kinetic/angular/root-bracket convergence scan from cached outputs: `examples/vmec_jax_finite_beta/plot_convergence_scan.py`
 - Plot `.h5`, `.nc`, or `.npz` output: `examples/getting_started/plot_sfincs_output.py`
 - Output parity vs Fortran fixture: `examples/parity/output_parity_vs_fortran_fixture.py`
 - Transport matrices (RHSMode 2/3): `examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py`

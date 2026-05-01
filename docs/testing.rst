@@ -423,6 +423,10 @@ so runtime drift is not polluted by eager precompile or persistent-cache write c
 When a run changes solver branches unexpectedly, summarize the emitted profiling
 marks and preconditioner ladder with ``scripts/summarize_solver_paths.py``; this
 is the lightweight audit used to close the full-FP dense/Krylov GPU policy issue.
+For long RHSMode=1 profiling runs, keep the trace helper's phase log in the artifact
+bundle. Its default ``profile_write_output_trace_phases.json`` sidecar makes it
+clear whether a nonzero wrapper status came from the solve itself or from profiler
+finalization after a valid output file was already written.
 
 Research reproducibility
 ------------------------
