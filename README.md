@@ -14,7 +14,7 @@ parallel workflows, and optional differentiable solve paths in one codebase.
 
 On the current `main` branch, the audited reduced example suite runs cleanly on
 CPU and GPU. A separate production-resolution benchmark tier is now being used
-for public runtime/memory claims and collaborator workloads; those larger
+for public runtime/memory claims and research-scale workloads; those larger
 finite-beta/profile-current cases are tracked separately from the fast smoke
 suite. The default CLI path is tuned for robust explicit solves and practical
 throughput, while the Python API can opt into differentiable solve paths when
@@ -99,8 +99,9 @@ sparse-pattern counters such as `linearSolverMatvecs`,
 `linearSolverSparsePCFactorTime`, and `linearSolverSparsePatternNnz`.
 The production benchmark manifest now enforces at least `25 x 31 x 11 x 17`
 (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and `25 x 1 x 11 x 17` for tokamak
-cases. Earlier `17 x 21 x 5 x 12` NTX timings were lower-resolution bring-up
-checks for this solver lane, not public production baselines.
+cases. Earlier `17 x 21 x 5 x 12` finite-beta/profile-current timings were
+lower-resolution bring-up checks for this solver lane, not public production
+baselines.
 
 ## Runtime and Memory Summary
 
@@ -122,7 +123,8 @@ for regression tracking and quick CPU/GPU smoke validation. Production
 performance claims should use the higher-resolution benchmark tier in
 `benchmarks/production_resolution_inputs_2026-04-30`, which enforces
 `25 x 31 x 11 x 17` 3D grids and `25 x 1 x 11 x 17` tokamak grids, including
-collaborator/NTX workloads. That production tier is intentionally separated
+collaborator and production-resolution workloads. That production tier is
+intentionally separated
 because it has already exposed larger finite-beta/profile-current and RHSMode=3
 transport solver blockers that are not visible in the reduced suite.
 

@@ -376,8 +376,8 @@ Fortran tolerances.
 This path is non-differentiable and should be used for CLI/Python production
 runs, not for gradient tracing. Large constrained-PAS RHSMode=1 profile-current
 decks now auto-select the sparse-PC GMRES host lane in the validated production
-window because that branch converges the true residual on the NTX finite-beta
-bring-up deck in seconds rather than minutes. Host sparse LU remains explicit
+window because that branch converges the true residual on the finite-beta
+profile-current bring-up deck in seconds rather than minutes. Host sparse LU remains explicit
 because it is only correct when the constrained RHSMode=1 system has a pinned
 gauge/nullspace branch compatible with that factorization. For production
 experiments that need an explicit full-system sparse solve, prefer
@@ -402,9 +402,9 @@ available via:
 
    sfincs_jax write-output --input input.namelist --out sfincsOutput.h5 --solve-method sparse_host_safe
 
-The historical NTX finite-beta ``17 x 21 x 5 x 12`` PAS/profile-current deck
-remains useful as a solver bring-up regression for sparse-host correctness, but
-it is no longer used as a public production baseline.
+The historical finite-beta ``17 x 21 x 5 x 12`` PAS/profile-current deck remains
+useful as a solver bring-up regression for sparse-host correctness, but it is no
+longer used as a public production baseline.
 
 Frozen-case variant benchmarking
 --------------------------------

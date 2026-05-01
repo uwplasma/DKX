@@ -111,7 +111,34 @@ Current active lane (2026-04-30):
 - Validation: final local solver-policy gate after RSS-accounting changes: `pytest -q tests/test_rhs1_handoff.py tests/test_solver_path_artifacts.py tests/test_solver_selection_policy.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py tests/test_solver_progress.py tests/test_policy_module_docstrings.py tests/test_cli_solve_mode.py tests/test_full_system_operator_jit.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_v3_driver_strong_fallback_coverage.py tests/test_v3_driver_policy_helpers.py tests/test_runtime_window_attempts.py` (`128 passed`).
 - Next best steps: close this lane by updating release-facing README/docs benchmark text if needed, then commit the coherent solver-policy/test/artifact changes. The remaining performance work is optimization, not correctness: GPU PAS/geometry11 wall time is still the top offender, but it is now strict-clean and trace-backed.
 
-Current active lane (2026-05-01):
+Current active lane (2026-05-01, SFINCS_JAX-only closure):
+- [x] Stop treating the NTX/NEOPAX profile-current ladder as an active
+  SFINCS_JAX handoff lane. Local NTX is clean on `main` at `8701c03`
+  (`Add CPU sharding guidance for NEOPAX exports`), so downstream NTX work is
+  proceeding in that repository.
+- [x] Keep the finite-beta sparse-PC solver-policy work as SFINCS_JAX production
+  infrastructure, but archive the NTX-specific handoff page outside the main
+  documentation toctree.
+- [x] Keep release-blocking validation scoped to SFINCS_JAX artifacts:
+  current GitHub `CI` and `Docs` are green on `f608f67`, and the validation
+  manifest already admits only `implemented` or `deferred_post_release` lanes.
+- [x] Re-run the SFINCS_JAX validation-manifest, publication-artifact,
+  benchmark-summary, docs, and focused solver-policy gates after the archival
+  wording update.
+- Validation: `pytest -q tests/test_validation_manifest_schema.py tests/test_validation_artifacts.py tests/test_generate_validation_dashboard.py tests/test_generate_fortran_suite_benchmark_summary.py tests/test_generate_high_collisionality_trend_proxy.py tests/test_generate_simakov_helander_limit_audit.py tests/test_generate_simakov_helander_high_nu_run_plan.py tests/test_generate_w7x_high_nu_performance.py tests/test_collisionality_artifact.py tests/test_er_trajectory_sweep_artifact.py` (`37 passed`).
+- Validation: `pytest -q tests/test_rhs1_host_policy.py tests/test_v3_sparse_pattern.py tests/test_solver_path_artifacts.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py tests/test_io_export_and_h5_coverage.py` (`47 passed`).
+- Validation: `sphinx-build -W -b html docs docs/_build/html` passed after archiving the NTX handoff page outside the main docs toctree.
+- [x] Keep the remaining SFINCS_JAX optimization lanes explicit rather than
+  pretending they are release blockers: PAS/geometry-rich runtime and memory,
+  production-resolution benchmark scheduling, experimental single-case
+  multi-device sharding, and long-term coverage/refactor work.
+- Next SFINCS_JAX-only work: attack PAS/geometry-rich runtime and memory with
+  trace-backed offender probes, then refresh production-resolution benchmark
+  reports through guarded manual/nightly runners. Do not reopen NTX/NEOPAX
+  profile-current parity as a SFINCS_JAX blocker unless downstream collaborators
+  hand back a specific reproducible SFINCS_JAX defect.
+
+Archived finite-beta RHSMode=1 solver-policy lane (2026-05-01):
 - [x] Read the NTX finite-beta RHSMode=1 profile-current handoff at `/Users/rogeriojorge/local/NTX/docs/sfincs-jax-rhsmode1-profile-current-handoff.md`.
 - [x] Confirmed the collaborator's `3e38894` refresh is in the NTX repository, while `uwplasma/sfincs_jax` `origin/main` remains at `0107be7`; the clean SFINCS-JAX checkout is a detached worktree at that commit, and the active development work remains in `/Users/rogeriojorge/local/tests/sfincs_jax`.
 - [x] Keep the NTX state honest: RHSMode=3 finite-beta coefficient parity is closed under the `1e-1` gate, but RHSMode=1 profile-current parity is still open for the `17 x 21 x 12, Nx=5` production point because the reported residual remains about `1.88e-2` against a target near `1.09e-9`.
@@ -150,8 +177,17 @@ Current active lane (2026-05-01):
 - Validation: broader local metadata/trace gate: `pytest -q tests/test_rhs1_host_policy.py tests/test_v3_sparse_pattern.py tests/test_io_export_and_h5_coverage.py tests/test_solver_trace.py tests/test_solver_trace_output_formats.py` (`39 passed`).
 - Validation: release-facing docs still build with warnings as errors: `sphinx-build -W -b html docs docs/_build/html`.
 - Validation: full local test suite after the metadata/docs pass: `pytest -q` (`1037 passed in 524.05s`).
-- Engineering status: solve/profile-finalization robustness, phase logging, production-audit observability, and the large constrained-PAS default solver-runtime cliff are closed for this lane. The RHSMode=1 finite-beta profile-current publication-parity claim remains open because the converged JAX sparse-PC branch matches the exact PETSc-matrix branch but still differs from some MUMPS/SuperLU_DIST Fortran artifacts and Redl/NTX+NEOPAX current observables. The remaining work is a reference-branch/normalization/nullspace audit rather than a stalled-solver issue.
-- Next best steps: compare the converged sparse-PC branch against clean Fortran v3 builds, Redl, and NTX+NEOPAX across the RHSMode=1 radial/profile ladder, then pin which branch is the physically defensible publication reference. Keep full-FP and differentiable/GPU-native lanes unchanged until separately validated.
+- Archived engineering status: solve/profile-finalization robustness, phase
+  logging, production-audit observability, and the large constrained-PAS
+  default solver-runtime cliff are closed for SFINCS_JAX. The downstream
+  finite-beta profile-current publication-parity ladder is now owned by the NTX
+  workflow and is not an active SFINCS_JAX release blocker.
+- SFINCS_JAX next best steps after archiving the NTX handoff: keep the
+  validation manifest free of open release lanes, keep CPU/GPU example-suite
+  parity green, refresh production-resolution benchmark reports only through
+  guarded/manual runners, and continue targeted optimization of PAS/geometry-rich
+  runtime and memory without changing full-FP or differentiable/GPU-native
+  defaults unless separately validated.
 
 Execution style:
 - Always profile first, change second, validate third.
