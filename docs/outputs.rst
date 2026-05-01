@@ -45,6 +45,17 @@ main file:
   branch acceptance actually used by the writer. In constrained-PAS
   PETSc-compatible minimum-norm runs, true-residual convergence can be false
   while the branch is still accepted and labeled explicitly.
+- ``linearSolverIterations`` and ``linearSolverMatvecs`` record iteration work
+  when the selected solver exposes those counters.
+- ``linearSolverSetupTime``, ``linearSolverSolveTime``, and
+  ``linearSolverElapsedTime`` split host sparse-PC setup from Krylov iteration
+  time for large production solves.
+- ``linearSolverSparsePatternBuildTime`` and
+  ``linearSolverSparsePCFactorTime`` isolate sparse-pattern construction and
+  preconditioner factorization cost for sparse-PC GMRES.
+- ``linearSolverSparsePatternNnz``, ``linearSolverSparsePatternAvgRowNnz``, and
+  ``linearSolverSparsePatternMaxRowNnz`` record the structural sparse pattern
+  used by the explicit host sparse-PC lane.
 
 For a publication-style PDF diagnostics panel from an existing output file:
 

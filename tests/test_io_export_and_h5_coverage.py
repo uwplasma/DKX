@@ -96,7 +96,20 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
         residual_norm=2.0e-8,
         residual_target=1.0e-7,
         solve_method="sparse_host",
-        solver_metadata={"accepted_converged": True, "acceptance_criterion": "true_residual"},
+        solver_metadata={
+            "accepted_converged": True,
+            "acceptance_criterion": "true_residual",
+            "iterations": 7,
+            "matvecs": 11,
+            "setup_s": 0.25,
+            "solve_s": 0.75,
+            "elapsed_s": 1.0,
+            "sparse_pattern_nnz": 1234,
+            "sparse_pattern_avg_row_nnz": 5.5,
+            "sparse_pattern_max_row_nnz": 9,
+            "sparse_pattern_build_s": 0.1,
+            "sparse_pc_factor_s": 0.15,
+        },
     )
 
     assert data["linearSolverMethod"] == "sparse_host"
@@ -105,6 +118,16 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverConverged"])) == 1
     assert int(np.asarray(data["linearSolverAccepted"])) == 1
     assert data["linearSolverAcceptanceCriterion"] == "true_residual"
+    assert int(np.asarray(data["linearSolverIterations"])) == 7
+    assert int(np.asarray(data["linearSolverMatvecs"])) == 11
+    assert float(np.asarray(data["linearSolverSetupTime"])) == pytest.approx(0.25)
+    assert float(np.asarray(data["linearSolverSolveTime"])) == pytest.approx(0.75)
+    assert float(np.asarray(data["linearSolverElapsedTime"])) == pytest.approx(1.0)
+    assert int(np.asarray(data["linearSolverSparsePatternNnz"])) == 1234
+    assert float(np.asarray(data["linearSolverSparsePatternAvgRowNnz"])) == pytest.approx(5.5)
+    assert int(np.asarray(data["linearSolverSparsePatternMaxRowNnz"])) == 9
+    assert float(np.asarray(data["linearSolverSparsePatternBuildTime"])) == pytest.approx(0.1)
+    assert float(np.asarray(data["linearSolverSparsePCFactorTime"])) == pytest.approx(0.15)
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(0.2)
 
 

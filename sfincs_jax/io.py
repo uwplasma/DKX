@@ -236,11 +236,35 @@ def _add_rhsmode1_solver_diagnostics(
         )
     if "iterations" in solver_metadata:
         data["linearSolverIterations"] = np.asarray(int(solver_metadata["iterations"]), dtype=np.int32)
+    if "matvecs" in solver_metadata:
+        data["linearSolverMatvecs"] = np.asarray(int(solver_metadata["matvecs"]), dtype=np.int32)
     if "info_code" in solver_metadata:
         data["linearSolverInfoCode"] = np.asarray(int(solver_metadata["info_code"]), dtype=np.int32)
     if "least_squares_converged" in solver_metadata:
         data["linearSolverLeastSquaresConverged"] = _fortran_logical(
             bool(solver_metadata["least_squares_converged"])
+        )
+    time_fields = {
+        "setup_s": "linearSolverSetupTime",
+        "solve_s": "linearSolverSolveTime",
+        "elapsed_s": "linearSolverElapsedTime",
+        "sparse_pattern_build_s": "linearSolverSparsePatternBuildTime",
+        "sparse_pc_factor_s": "linearSolverSparsePCFactorTime",
+    }
+    for metadata_key, output_key in time_fields.items():
+        if metadata_key in solver_metadata:
+            data[output_key] = np.asarray(float(solver_metadata[metadata_key]), dtype=np.float64)
+    int_fields = {
+        "sparse_pattern_nnz": "linearSolverSparsePatternNnz",
+        "sparse_pattern_max_row_nnz": "linearSolverSparsePatternMaxRowNnz",
+    }
+    for metadata_key, output_key in int_fields.items():
+        if metadata_key in solver_metadata:
+            data[output_key] = np.asarray(int(solver_metadata[metadata_key]), dtype=np.int64)
+    if "sparse_pattern_avg_row_nnz" in solver_metadata:
+        data["linearSolverSparsePatternAvgRowNnz"] = np.asarray(
+            float(solver_metadata["sparse_pattern_avg_row_nnz"]),
+            dtype=np.float64,
         )
     if float(residual_target) > 0.0:
         data["linearSolverResidualTargetRatio"] = np.asarray(
@@ -4921,6 +4945,17 @@ def write_sfincs_jax_output_h5(
             )
             if rss_vals:
                 peak_rss_mb = max(rss_vals)
+        trace_solver_metadata = _solver_metadata_dict(result) if result is not None else {}
+        trace_setup_s = (
+            float(trace_solver_metadata["setup_s"])
+            if "setup_s" in trace_solver_metadata
+            else None
+        )
+        trace_solve_s = (
+            float(trace_solver_metadata["solve_s"])
+            if "solve_s" in trace_solver_metadata
+            else None
+        )
         trace = SolverTrace(
             backend=backend,
             rhs_mode=int(rhs_mode),
@@ -4935,6 +4970,8 @@ def write_sfincs_jax_output_h5(
             residual_target=trace_residual_target,
             converged=trace_converged,
             elapsed_s=float(time.perf_counter() - run_t0),
+            setup_s=trace_setup_s,
+            solve_s=trace_solve_s,
             peak_rss_mb=peak_rss_mb,
             metadata=trace_metadata,
         )

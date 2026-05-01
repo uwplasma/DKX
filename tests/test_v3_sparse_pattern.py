@@ -123,6 +123,13 @@ def test_sparse_pc_gmres_solve_method_solves_tiny_rhs1_system(monkeypatch) -> No
 
     assert result.x.shape == (result.op.total_size,)
     assert float(result.residual_norm) < 1.0e-10
+    assert result.metadata is not None
+    assert result.metadata["solver_kind"] == "sparse_pc_gmres"
+    assert result.metadata["setup_s"] >= 0.0
+    assert result.metadata["solve_s"] >= 0.0
+    assert result.metadata["elapsed_s"] >= result.metadata["setup_s"]
+    assert result.metadata["sparse_pattern_nnz"] > 0
+    assert result.metadata["sparse_pattern_max_row_nnz"] > 0
     assert any("sparse_pc_gmres complete" in msg for msg in messages)
 
 
@@ -201,3 +208,6 @@ def test_write_output_preserves_sparse_pc_gmres_solve_method(monkeypatch, tmp_pa
     trace = json.loads(trace_path.read_text())
     assert trace["solve_method"] == "sparse_pc_gmres"
     assert trace["converged"] is True
+    assert trace["setup_s"] is not None
+    assert trace["solve_s"] is not None
+    assert trace["metadata"]["solver_metadata"]["sparse_pattern_nnz"] > 0

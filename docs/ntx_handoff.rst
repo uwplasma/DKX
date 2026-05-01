@@ -67,6 +67,11 @@ What Is Closed
   ``linearSolverMethod``, ``linearSolverResidualNorm``,
   ``linearSolverResidualTarget``, ``linearSolverConverged``, and
   ``linearSolverAccepted``.
+- Sparse-PC outputs and solver-trace sidecars now also expose setup time, solve
+  time, total elapsed time, matvec count, sparse-pattern nonzeros, sparse-pattern
+  row-density counters, sparse-pattern build time, and sparse preconditioner
+  factorization time.  This makes NTX profile-current handoffs auditable without
+  reopening a full Perfetto/XPlane trace.
 - The default large constrained-PAS RHSMode=1 CPU policy no longer chooses the
   slow residual-stalling path in the validated NTX size window.
 - The sparse-PC path converges the same algebraic system to true residuals near
