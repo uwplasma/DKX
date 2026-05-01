@@ -1,5 +1,13 @@
-NTX RHSMode=1 Handoff
-======================
+:orphan:
+
+Archived NTX RHSMode=1 Handoff
+==============================
+
+This page is archived for provenance. The active SFINCS-JAX release plan no
+longer treats the NTX/NEOPAX profile-current ladder as a SFINCS-JAX blocking
+lane; downstream NTX collaborators are continuing that workflow in the NTX
+repository. The solver-policy and output-observability changes recorded here
+remain useful for SFINCS-JAX production finite-beta/profile-current runs.
 
 This page records the SFINCS-JAX state that should be used by the NTX
 finite-beta profile-current lane after the RHSMode=1 solver-policy audit.
