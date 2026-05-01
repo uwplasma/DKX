@@ -1,0 +1,73 @@
+name: Production Benchmark Inputs
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifact:
+        description: Upload the generated production input tree as a workflow artifact.
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  manifest:
+    runs-on: ubuntu-22.04
+    env:
+      JAX_ENABLE_X64: "True"
+      SFINCS_JAX_CI: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Validate checked-in manifest guards
+        run: |
+          python -m pytest -q tests/test_create_production_benchmark_inputs.py
+      - name: Regenerate production-resolution input manifest
+        run: |
+          python scripts/create_production_benchmark_inputs.py \
+            --out-root "$RUNNER_TEMP/production_resolution_inputs" \
+            --clean
+      - name: Validate generated manifest scope
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "production_resolution_inputs"
+          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          cases = manifest["cases"]
+
+          assert manifest["case_count"] == 39
+          assert manifest["minimum_3d_resolution"] == {
+              "NTHETA": 25,
+              "NZETA": 31,
+              "NX": 11,
+              "NXI": 17,
+          }
+          assert manifest["minimum_tokamak_resolution"] == {
+              "NTHETA": 25,
+              "NX": 11,
+              "NXI": 17,
+          }
+          assert {case["source_group"] for case in cases} == {"examples"}
+          assert not any("ntx" in str(case["case"]).lower() for case in cases)
+          assert not any("ntx" in str(case["source_input"]).lower() for case in cases)
+          assert all(case["size_estimate"]["run_recommendation"] for case in cases)
+          print(f"validated {len(cases)} production-resolution SFINCS_JAX inputs")
+          PY
+      - name: Upload generated inputs
+        if: ${{ inputs.upload_artifact == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-resolution-inputs
+          path: ${{ runner.temp }}/production_resolution_inputs
+          retention-days: 14

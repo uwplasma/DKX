@@ -124,9 +124,12 @@ performance claims should use the higher-resolution benchmark tier in
 `benchmarks/production_resolution_inputs_2026-04-30`, which enforces
 `25 x 31 x 11 x 17` 3D grids and `25 x 1 x 11 x 17` tokamak grids, including
 public examples and optional user-supplied production-resolution workloads. That
-production tier is intentionally separated
-because it has already exposed larger finite-beta/profile-current and RHSMode=3
-transport solver blockers that are not visible in the reduced suite.
+production tier is intentionally separated because it has already exposed larger
+finite-beta/profile-current and RHSMode=3 transport solver blockers that are not
+visible in the reduced suite. The manual GitHub workflow `Production Benchmark
+Inputs` validates and uploads the production input tree without running expensive
+solves; full CPU/GPU/Fortran runtime and memory sweeps should be launched on
+local, `office`, or cluster hardware with explicit resource budgets.
 
 ## Physics in One Page
 
