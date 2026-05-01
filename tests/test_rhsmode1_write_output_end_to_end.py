@@ -20,6 +20,13 @@ def _is_numeric_dataset(x) -> bool:
         return False
 
 
+def _assert_fortran_keys_and_solver_metadata(out: dict, ref: dict) -> None:
+    """Require all Fortran fixture fields while allowing JAX-only solver metadata."""
+    assert set(ref.keys()).issubset(out.keys())
+    assert "linearSolverMethod" in out
+    assert "linearSolverResidualNorm" in out
+
+
 @pytest.mark.parametrize(
     "base",
     (
@@ -44,7 +51,7 @@ def test_write_output_rhsmode1_solution_fields_match_fortran_fixture(base: str, 
 
     out = read_sfincs_h5(out_path)
     ref = read_sfincs_h5(ref_path)
-    assert set(out.keys()) == set(ref.keys())
+    _assert_fortran_keys_and_solver_metadata(out, ref)
 
     # Full-file numeric parity (excluding embedded input text).
     # uHat involves long FFTs/reductions and is compared with a slightly looser atol.

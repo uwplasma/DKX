@@ -8,6 +8,8 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     rhs1_fp_dkes_env_preconditioner_kind,
     rhs1_geometry4_pas_memory_pas_tz_preferred,
     rhs1_large_fp_near_zero_er_override_kind,
+    rhs1_measured_auto_promotion_allowed,
+    rhs1_measured_auto_promotion_gate,
     rhs1_pas_auto_large_base_kind,
     rhs1_pas_dkes_cpu_pas_tz_preferred,
     rhs1_pas_dkes_pas_tz_preferred,
@@ -22,6 +24,7 @@ from sfincs_jax.rhs1_preconditioner_auto_policy import (
     rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed,
 )
+from sfincs_jax.solver_selection_policy import SolverCandidateMetrics
 
 
 def test_canonical_rhs1_preconditioner_kind_preserves_driver_aliases() -> None:
@@ -123,6 +126,89 @@ def test_pas_weak_auto_override_promotes_default_weak_kinds(monkeypatch) -> None
         )
         == "pas_lite"
     )
+
+
+def test_pas_weak_auto_override_rejects_measured_regression(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_SMALL_MAX", raising=False)
+
+    baseline = SolverCandidateMetrics(
+        name="collision",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+        setup_s=0.2,
+        solve_s=0.8,
+        peak_rss_mb=400.0,
+    )
+    candidate = SolverCandidateMetrics(
+        name="xblock_tz",
+        residual_norm=1.0e-8,
+        target=1.0e-9,
+        setup_s=2.0,
+        solve_s=7.0,
+        peak_rss_mb=900.0,
+    )
+
+    assert (
+        rhs1_pas_weak_auto_override_kind(
+            rhs1_precond_env="",
+            rhs_mode=1,
+            include_phi1=False,
+            has_pas=True,
+            current_kind="collision",
+            active_size=500,
+            n_theta=8,
+            n_zeta=3,
+            max_l=10,
+            candidate_metrics=candidate,
+            baseline_metrics=baseline,
+        )
+        == "collision"
+    )
+
+
+def test_measured_auto_promotion_gate_accepts_clean_runtime_win() -> None:
+    baseline = SolverCandidateMetrics(
+        name="collision",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+        setup_s=1.0,
+        solve_s=3.0,
+        peak_rss_mb=800.0,
+    )
+    candidate = SolverCandidateMetrics(
+        name="xblock_tz",
+        residual_norm=2.0e-12,
+        target=1.0e-9,
+        setup_s=0.5,
+        solve_s=1.0,
+        peak_rss_mb=760.0,
+    )
+
+    gate = rhs1_measured_auto_promotion_gate(
+        current_kind="collision",
+        candidate_kind="xblock_tz",
+        candidate_metrics=candidate,
+        baseline_metrics=baseline,
+    )
+
+    assert gate.accepted
+    assert rhs1_measured_auto_promotion_allowed(
+        current_kind="collision",
+        candidate_kind="xblock_tz",
+        candidate_metrics=candidate,
+        baseline_metrics=baseline,
+    )
+
+
+def test_measured_auto_promotion_preserves_unmeasured_historical_policy() -> None:
+    gate = rhs1_measured_auto_promotion_gate(
+        current_kind="collision",
+        candidate_kind="xblock_tz",
+    )
+
+    assert gate.accepted
+    assert gate.reasons == ("unmeasured_historical_policy",)
 
 
 def test_pas_family_refinement_preserves_specialized_routing(monkeypatch) -> None:

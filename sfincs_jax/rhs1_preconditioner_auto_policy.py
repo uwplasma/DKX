@@ -9,6 +9,13 @@ from __future__ import annotations
 
 import os
 
+from .solver_selection_policy import (
+    SolverAcceptanceCriteria,
+    SolverCandidateGate,
+    SolverCandidateMetrics,
+    solver_candidate_gate,
+)
+
 
 PAS_AUTO_STRONG_BASE_KINDS = frozenset(
     {
@@ -184,6 +191,29 @@ def canonical_rhs1_preconditioner_kind(raw: str | None) -> str | None:
     return _RHS1_PRECONDITIONER_KIND_ALIASES.get(key)
 
 
+def rhs1_measured_auto_promotion_gate(
+    *,
+    current_kind: str | None,
+    candidate_kind: str | None,
+    candidate_metrics: SolverCandidateMetrics | None = None,
+    baseline_metrics: SolverCandidateMetrics | None = None,
+    criteria: SolverAcceptanceCriteria | None = None,
+) -> SolverCandidateGate:
+    """Gate an automatic RHSMode=1 preconditioner promotion with measured data.
+
+    Existing heuristic policy calls pass no metrics, so they remain unchanged.
+    Once a dispatch point has residual/runtime/memory data for a candidate, this
+    helper enforces the common rule: do not promote a new automatic path over a
+    clean incumbent unless the candidate is residual-clean and provides a real
+    measured runtime or memory win.
+    """
+    if candidate_kind == current_kind:
+        return SolverCandidateGate(accepted=True, reasons=("same_kind",))
+    if candidate_metrics is None:
+        return SolverCandidateGate(accepted=True, reasons=("unmeasured_historical_policy",))
+    return solver_candidate_gate(candidate_metrics, baseline=baseline_metrics, criteria=criteria)
+
+
 def rhs1_pas_auto_large_base_kind(*, active_size: int) -> str:
     """Keep large auto-selected PAS solves in the PAS-native preconditioner family."""
     pas_lite_min = _env_int("SFINCS_JAX_PAS_LITE_MIN", 20000)
@@ -203,6 +233,9 @@ def rhs1_pas_weak_auto_override_kind(
     n_theta: int,
     n_zeta: int,
     max_l: int,
+    candidate_metrics: SolverCandidateMetrics | None = None,
+    baseline_metrics: SolverCandidateMetrics | None = None,
+    criteria: SolverAcceptanceCriteria | None = None,
 ) -> str | None:
     """Promote weak default PAS preconditioners to PAS-aware defaults.
 
@@ -224,8 +257,35 @@ def rhs1_pas_weak_auto_override_kind(
         and int(xblock_tz_max) > 0
         and int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_max)
     ):
-        return "xblock_tz"
-    return rhs1_pas_auto_large_base_kind(active_size=int(active_size))
+        candidate_kind = "xblock_tz"
+    else:
+        candidate_kind = rhs1_pas_auto_large_base_kind(active_size=int(active_size))
+    gate = rhs1_measured_auto_promotion_gate(
+        current_kind=current_kind,
+        candidate_kind=candidate_kind,
+        candidate_metrics=candidate_metrics,
+        baseline_metrics=baseline_metrics,
+        criteria=criteria,
+    )
+    return candidate_kind if gate.accepted else current_kind
+
+
+def rhs1_measured_auto_promotion_allowed(
+    *,
+    current_kind: str | None,
+    candidate_kind: str | None,
+    candidate_metrics: SolverCandidateMetrics | None = None,
+    baseline_metrics: SolverCandidateMetrics | None = None,
+    criteria: SolverAcceptanceCriteria | None = None,
+) -> bool:
+    """Return whether measured data allow an RHSMode=1 automatic promotion."""
+    return rhs1_measured_auto_promotion_gate(
+        current_kind=current_kind,
+        candidate_kind=candidate_kind,
+        candidate_metrics=candidate_metrics,
+        baseline_metrics=baseline_metrics,
+        criteria=criteria,
+    ).accepted
 
 
 def rhs1_pas_family_refinement_kind(
@@ -792,6 +852,8 @@ __all__ = [
     "PAS_WEAK_AUTO_OVERRIDE_KINDS",
     "canonical_rhs1_preconditioner_kind",
     "pas_auto_skip_strong_retry",
+    "rhs1_measured_auto_promotion_allowed",
+    "rhs1_measured_auto_promotion_gate",
     "rhs1_fp_dkes_default_kind",
     "rhs1_fp_dkes_env_preconditioner_kind",
     "rhs1_geometry4_pas_memory_pas_tz_preferred",

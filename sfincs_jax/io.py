@@ -7,10 +7,10 @@ import os
 import re
 import shutil
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Callable, Dict, Optional, Sequence
 
 import h5py
 import numpy as np
@@ -32,10 +32,12 @@ from .input_compat import (
 from .namelist import Namelist, read_sfincs_input
 from .paths import resolve_existing_path
 from .rhs1_host_policy import (
+    rhs1_constrained_pas_sparse_pc_auto_allowed,
     rhs1_dense_auto_fp_accelerator_min,
     rhs1_dense_auto_fp_cutoff,
     rhs1_dense_backend_allowed,
 )
+from .solver_trace import SolverTrace, write_solver_trace_h5, write_solver_trace_json
 from .solver_progress import format_duration, runtime_scale_hint
 from .vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 from .v3 import V3Grids, geometry_from_namelist, grids_from_namelist
@@ -82,6 +84,171 @@ _OUTPUT_CACHE_FIELDS = (
 )
 
 
+def _rhs1_active_size_for_trace(op: Any) -> int | None:
+    """Return the reduced RHSMode=1 active size used by matrix-free solves."""
+    try:
+        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int64)
+        active_f = int(op.n_species) * int(np.sum(nxi_for_x)) * int(op.n_theta) * int(op.n_zeta)
+        phi1_size = int(getattr(op, "phi1_size", 0))
+        extra_size = int(getattr(op, "extra_size", 0))
+        if (
+            int(getattr(op, "rhs_mode", 1)) == 1
+            and not bool(getattr(op, "include_phi1", False))
+            and int(getattr(op, "constraint_scheme", 0)) == 2
+            and getattr(op.fblock, "pas", None) is not None
+            and phi1_size == 0
+        ):
+            min_env = os.environ.get("SFINCS_JAX_PAS_PROJECT_MIN", "").strip()
+            try:
+                project_min = int(min_env) if min_env else 2000
+            except ValueError:
+                project_min = 2000
+            if int(getattr(op, "total_size", active_f)) >= max(0, project_min):
+                return active_f
+        return active_f + phi1_size + extra_size
+    except Exception:
+        return None
+
+
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    """Parse a permissive boolean environment variable."""
+    value = os.environ.get(name, "").strip().lower()
+    if not value:
+        return bool(default)
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def _rhsmode1_result_residual_and_target(result: Any, *, solver_tol: float) -> tuple[float | None, float | None]:
+    """Extract the true residual norm and target used to decide output safety."""
+    residual_norm = None
+    if hasattr(result, "residual_norm"):
+        try:
+            residual_norm = float(np.asarray(getattr(result, "residual_norm")))
+        except Exception:
+            residual_norm = None
+
+    residual_target = None
+    rhs_vec = getattr(result, "rhs", None)
+    if rhs_vec is not None:
+        try:
+            residual_target = max(0.0, float(solver_tol) * float(np.linalg.norm(np.asarray(rhs_vec))))
+        except Exception:
+            residual_target = None
+    return residual_norm, residual_target
+
+
+def _should_fail_nonconverged_rhsmode1_output(
+    *,
+    active_total_size: int,
+    residual_norm: float | None,
+    residual_target: float | None,
+    accepted_converged: bool | None = None,
+) -> bool:
+    """Return True when a large RHSMode=1 output should be blocked.
+
+    Reduced tests and intentionally diagnostic runs can still inspect partial
+    solves, but production-sized outputs must not silently write diagnostics
+    from a Krylov state that missed the requested tolerance by many orders.
+    """
+    if _env_flag("SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT", default=False):
+        return False
+    if accepted_converged is True:
+        return False
+    min_env = os.environ.get("SFINCS_JAX_NONCONVERGED_FAIL_MIN_SIZE", "").strip()
+    try:
+        min_size = int(min_env) if min_env else 80_000
+    except ValueError:
+        min_size = 80_000
+    if int(active_total_size) < max(0, min_size):
+        return False
+    if residual_norm is None or residual_target is None:
+        return False
+    return (not np.isfinite(float(residual_norm))) or float(residual_norm) > float(residual_target)
+
+
+def _raise_for_nonconverged_rhsmode1_output(
+    *,
+    active_total_size: int,
+    residual_norm: float | None,
+    residual_target: float | None,
+    solve_method: str,
+    accepted_converged: bool | None = None,
+    acceptance_criterion: str | None = None,
+) -> None:
+    """Raise a clear production-output error for nonconverged RHSMode=1 solves."""
+    if not _should_fail_nonconverged_rhsmode1_output(
+        active_total_size=active_total_size,
+        residual_norm=residual_norm,
+        residual_target=residual_target,
+        accepted_converged=accepted_converged,
+    ):
+        return
+    raise RuntimeError(
+        "Refusing to write nonconverged RHSMode=1 diagnostics for a production-sized solve: "
+        f"active_size={int(active_total_size)} residual_norm={float(residual_norm):.6e} "
+        f"target={float(residual_target):.6e} solve_method={solve_method!s}. "
+        f"accepted_converged={accepted_converged!s} criterion={acceptance_criterion!s}. "
+        "Use a converged solver path such as --solve-method sparse_pc_gmres, lower the resolution, "
+        "or set SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1 only for debugging partial states."
+    )
+
+
+def _solver_metadata_dict(result: Any) -> dict[str, Any]:
+    """Return Python-only solver metadata attached by explicit host solve paths."""
+    metadata = getattr(result, "metadata", None)
+    if isinstance(metadata, dict):
+        return dict(metadata)
+    return {}
+
+
+def _add_rhsmode1_solver_diagnostics(
+    data: dict[str, Any],
+    *,
+    residual_norm: float | None,
+    residual_target: float | None,
+    solve_method: str,
+    solver_metadata: dict[str, Any] | None = None,
+) -> None:
+    """Persist RHSMode=1 convergence metadata in the main output file."""
+    solver_metadata = dict(solver_metadata or {})
+    data["linearSolverMethod"] = str(solve_method)
+    if residual_norm is not None:
+        data["linearSolverResidualNorm"] = np.asarray(float(residual_norm), dtype=np.float64)
+    if residual_target is not None:
+        data["linearSolverResidualTarget"] = np.asarray(float(residual_target), dtype=np.float64)
+    if residual_norm is None or residual_target is None:
+        return
+    converged = bool(np.isfinite(float(residual_norm)) and float(residual_norm) <= float(residual_target))
+    data["linearSolverConverged"] = _fortran_logical(converged)
+    data["linearSolverTrueResidualConverged"] = _fortran_logical(converged)
+    accepted = bool(solver_metadata.get("accepted_converged", converged))
+    data["linearSolverAccepted"] = _fortran_logical(accepted)
+    criterion = str(solver_metadata.get("acceptance_criterion", "true_residual" if converged else "not_converged"))
+    data["linearSolverAcceptanceCriterion"] = criterion
+    if "reported_residual_norm" in solver_metadata:
+        data["linearSolverReportedResidualNorm"] = np.asarray(
+            float(solver_metadata["reported_residual_norm"]),
+            dtype=np.float64,
+        )
+    if "iterations" in solver_metadata:
+        data["linearSolverIterations"] = np.asarray(int(solver_metadata["iterations"]), dtype=np.int32)
+    if "info_code" in solver_metadata:
+        data["linearSolverInfoCode"] = np.asarray(int(solver_metadata["info_code"]), dtype=np.int32)
+    if "least_squares_converged" in solver_metadata:
+        data["linearSolverLeastSquaresConverged"] = _fortran_logical(
+            bool(solver_metadata["least_squares_converged"])
+        )
+    if float(residual_target) > 0.0:
+        data["linearSolverResidualTargetRatio"] = np.asarray(
+            float(residual_norm) / float(residual_target),
+            dtype=np.float64,
+        )
+
+
 def _should_precompile_v3_full_system(*, env_value: str) -> bool:
     """Return whether eager v3 precompile should run before a solve.
 
@@ -111,6 +278,27 @@ def _select_rhsmode1_linear_solve_method(
         "batched",
         "lgmres",
         "lgmres_scipy",
+        "sparse_host",
+        "sparse_host_safe",
+        "safe_sparse_host",
+        "sparse_host_or_petsc_compat",
+        "host_sparse",
+        "sparse_host_lu",
+        "sparse_pc_gmres",
+        "sparse_host_gmres",
+        "sparse_host_pc",
+        "host_sparse_pc_gmres",
+        "petsc_host",
+        "petsc_host_gmres",
+        "sparse_lsmr",
+        "sparse_host_lsmr",
+        "sparse_lsqr",
+        "sparse_host_lsqr",
+        "minimum_norm",
+        "sparse_minimum_norm",
+        "petsc_compat",
+        "sparse_petsc_compat",
+        "petsc_minimum_norm",
     }
     method = str(default_method).strip().lower()
     override = str(env_override).strip().lower()
@@ -350,10 +538,6 @@ def _save_output_cache(cache_key: tuple[object, ...], payload: dict[str, np.ndar
         np.savez_compressed(path, **data)
     except Exception:
         return
-    map_zeta: np.ndarray
-    map_x: np.ndarray
-    map_xi: np.ndarray
-
 
 def _decode_if_bytes(x: Any) -> Any:
     if isinstance(x, (bytes, np.bytes_)):
@@ -460,6 +644,7 @@ def write_sfincs_h5(
     data: Dict[str, Any],
     fortran_layout: bool = True,
     overwrite: bool = True,
+    solver_trace: SolverTrace | None = None,
 ) -> None:
     """Write a minimal SFINCS-style HDF5 file (flat datasets at root)."""
     path = path.resolve()
@@ -477,6 +662,8 @@ def write_sfincs_h5(
             if isinstance(vv, np.ndarray) and vv.ndim > 0 and vv.dtype.kind != "O":
                 vv = np.ascontiguousarray(vv)
             f.create_dataset(k, data=vv)
+        if solver_trace is not None:
+            write_solver_trace_h5(f, solver_trace)
 
 
 def _output_file_format(path: Path) -> str:
@@ -516,6 +703,7 @@ def write_sfincs_netcdf(
     data: Dict[str, Any],
     fortran_layout: bool = True,
     overwrite: bool = True,
+    solver_trace: SolverTrace | None = None,
 ) -> None:
     """Write SFINCS datasets to an uncompressed NetCDF4 file.
 
@@ -537,6 +725,8 @@ def write_sfincs_netcdf(
     original_names: dict[str, str] = {}
     with Dataset(path, "w", format="NETCDF4") as ds:
         ds.setncattr("sfincs_jax_format", "netcdf")
+        if solver_trace is not None:
+            ds.setncattr("sfincs_jax_solver_trace_json", solver_trace.to_json())
         for key, value in data.items():
             if value is None:
                 continue
@@ -582,6 +772,7 @@ def write_sfincs_npz(
     data: Dict[str, Any],
     fortran_layout: bool = True,
     overwrite: bool = True,
+    solver_trace: SolverTrace | None = None,
 ) -> None:
     """Write SFINCS datasets to a fast, uncompressed ``.npz`` archive."""
     path = path.resolve()
@@ -599,6 +790,8 @@ def write_sfincs_npz(
         if arr.ndim > 0 and arr.dtype.kind != "O":
             arr = np.ascontiguousarray(arr)
         payload[str(key)] = arr
+    if solver_trace is not None:
+        payload["sfincs_jax_solver_trace_json"] = np.asarray(solver_trace.to_json())
     np.savez(path, **payload)
 
 
@@ -608,6 +801,7 @@ def write_sfincs_output_file(
     data: Dict[str, Any],
     fortran_layout: bool = True,
     overwrite: bool = True,
+    solver_trace: SolverTrace | None = None,
 ) -> None:
     """Write SFINCS output using the format selected by ``path``.
 
@@ -617,11 +811,29 @@ def write_sfincs_output_file(
     """
     fmt = _output_file_format(path)
     if fmt == "h5":
-        write_sfincs_h5(path=path, data=data, fortran_layout=fortran_layout, overwrite=overwrite)
+        write_sfincs_h5(
+            path=path,
+            data=data,
+            fortran_layout=fortran_layout,
+            overwrite=overwrite,
+            solver_trace=solver_trace,
+        )
     elif fmt == "netcdf":
-        write_sfincs_netcdf(path=path, data=data, fortran_layout=fortran_layout, overwrite=overwrite)
+        write_sfincs_netcdf(
+            path=path,
+            data=data,
+            fortran_layout=fortran_layout,
+            overwrite=overwrite,
+            solver_trace=solver_trace,
+        )
     elif fmt == "npz":
-        write_sfincs_npz(path=path, data=data, fortran_layout=fortran_layout, overwrite=overwrite)
+        write_sfincs_npz(
+            path=path,
+            data=data,
+            fortran_layout=fortran_layout,
+            overwrite=overwrite,
+            solver_trace=solver_trace,
+        )
     else:  # pragma: no cover - guarded by _output_file_format.
         raise ValueError(fmt)
 
@@ -1111,8 +1323,8 @@ def _legendre_matrix(xi: np.ndarray, *, n_l: int) -> np.ndarray:
     if n_l == 1:
         return out
     out[:, 1] = xi
-    for l in range(2, n_l):
-        out[:, l] = ((2 * l - 1) * xi * out[:, l - 1] - (l - 1) * out[:, l - 2]) / float(l)
+    for ell in range(2, n_l):
+        out[:, ell] = ((2 * ell - 1) * xi * out[:, ell - 1] - (ell - 1) * out[:, ell - 2]) / float(ell)
     return out
 
 
@@ -1655,7 +1867,6 @@ def _gpsipsi_from_bc_file(
     r = ro * radial_weight + rn * (1.0 - radial_weight)
     dr_dt = dro_dt * radial_weight + drn_dt * (1.0 - radial_weight)
     dr_dz = dro_dz * radial_weight + drn_dz * (1.0 - radial_weight)
-    z = zo * radial_weight + zn * (1.0 - radial_weight)
     dz_dt = dzo_dt * radial_weight + dzn_dt * (1.0 - radial_weight)
     dz_dz = dzo_dz * radial_weight + dzn_dz * (1.0 - radial_weight)
     dz_field = dzo * radial_weight + dzn * (1.0 - radial_weight)
@@ -1879,7 +2090,6 @@ def sfincs_jax_output_dict(
     species = nml.group("speciesParameters")
     other = nml.group("otherNumericalParameters")
     resolution = nml.group("resolutionParameters")
-    export_f = nml.group("export_f")
     precond = nml.group("preconditionerOptions")
     general = nml.group("general")
 
@@ -2515,6 +2725,8 @@ def write_sfincs_jax_output_h5(
     verbose: bool = True,
     return_results: bool = False,
     differentiable: bool | None = None,
+    solver_trace_path: Path | None = None,
+    solve_method: str | None = None,
 ) -> Path | tuple[Path, dict[str, np.ndarray]]:
     """Create a SFINCS output file from ``sfincs_jax``.
 
@@ -2532,6 +2744,13 @@ def write_sfincs_jax_output_h5(
         When set, explicitly choose the differentiable implicit solve path
         (``True``) or the faster explicit path (``False``) instead of deferring
         to ``SFINCS_JAX_IMPLICIT_SOLVE``.
+    solver_trace_path
+        Optional JSON sidecar path for a versioned solver/backend/timing trace.
+        Sidecar traces intentionally do not alter parity-oriented output files.
+    solve_method
+        Optional RHSMode=1 linear solve method. ``"sparse_host"`` selects the
+        non-differentiable structural sparse-host LU path for full-system
+        production runs.
     equilibrium_file, wout_path
         Optional equilibrium-path override applied on top of the namelist.
         ``wout_path`` is a compatibility alias for VMEC-centric workflows.
@@ -2646,8 +2865,8 @@ def write_sfincs_jax_output_h5(
         emit(0, " ---- Physics parameters: ----")
         zs = np.atleast_1d(np.asarray(nml.group("speciesParameters").get("ZS", []), dtype=np.float64))
         emit(0, f" Number of particle species = {_fmt_fortran_i(int(zs.size))}")
-        emit(0, f" Delta (rho* at reference parameters)          = {_fmt_fortran_e(_get_float(phys, 'Delta', 0.0))}")
-        emit(0, f" alpha (e Phi / T at reference parameters)     = {_fmt_fortran_e(_get_float(phys, 'alpha', 0.0))}")
+        emit(0, f" Delta (rho* at reference parameters)          = {_fmt_fortran_e(_get_float(phys, 'Delta', 4.5694e-3))}")
+        emit(0, f" alpha (e Phi / T at reference parameters)     = {_fmt_fortran_e(_get_float(phys, 'alpha', 1.0))}")
         emit(0, f" nu_n (collisionality at reference parameters) = {_fmt_fortran_e(_get_float(phys, 'nu_n', 0.0))}")
         emit(0, " Nonlinear run" if bool(phys.get("INCLUDEPHI1", False)) else " Linear run")
 
@@ -2691,8 +2910,8 @@ def write_sfincs_jax_output_h5(
         emit(0, f" Nxi for each x: {''.join(f'{int(v):12d}' for v in nxi_for_x)}")
         nxi_max = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
         min_x_for_l = []
-        for l in range(1, nxi_max + 1):
-            idx = np.where(nxi_for_x >= l)[0]
+        for ell in range(1, nxi_max + 1):
+            idx = np.where(nxi_for_x >= ell)[0]
             min_x_for_l.append(int(idx[0] + 1) if idx.size else int(nx))
         if min_x_for_l:
             emit(0, f" min_x_for_L: {''.join(f'{v:12d}' for v in min_x_for_l)}")
@@ -2789,8 +3008,6 @@ def write_sfincs_jax_output_h5(
 
         from .transport_matrix import (
             f0_l0_v3_from_operator,
-            v3_rhsmode1_output_fields_vm_only,
-            v3_rhsmode1_output_fields_vm_only_batch,
             v3_rhsmode1_output_fields_vm_only_batch_jit,
             v3_rhsmode1_output_fields_vm_only_phi1_batch_jit,
             v3_rhsmode1_output_fields_vm_only_jit,
@@ -2823,7 +3040,12 @@ def write_sfincs_jax_output_h5(
         # solution branch rather than an exact dense solve.
         #
         # Therefore, default to a Krylov solver (auto → BiCGStab with GMRES fallback) unless explicitly overridden.
-        solve_method = "auto"
+        solve_method_arg_forced = solve_method is not None and str(solve_method).strip().lower() not in {
+            "",
+            "auto",
+            "default",
+        }
+        solve_method = str(solve_method or "auto")
         op0 = full_system_operator_from_namelist(nml=nml, grids=grids, geom=geom_full)
         state_in_env = os.environ.get("SFINCS_JAX_STATE_IN", "").strip()
         x0_state = None
@@ -2952,8 +3174,11 @@ def write_sfincs_jax_output_h5(
             and int(active_total_size) <= int(dense_fp_cutoff)
         ):
             dense_auto_accelerator_fp_window = True
-        solve_method_forced = bool(solve_method_env) and solve_method == solve_method_env
-        if (not solve_method_forced) and (
+        solve_method_forced = bool(solve_method_arg_forced) or (bool(solve_method_env) and solve_method == solve_method_env)
+        if solve_method_forced:
+            if emit is not None:
+                emit(1, f"write_sfincs_jax_output_h5: keeping explicit solve_method={solve_method}")
+        elif (
             op0.fblock.fp is not None
             and (not include_phi1)
             and active_total_size <= dense_fp_cutoff
@@ -3006,6 +3231,19 @@ def write_sfincs_jax_output_h5(
                         "write_sfincs_jax_output_h5: E_parallel FP case -> using BiCGStab "
                         "(GMRES fallback enabled)",
                     )
+        elif rhs1_constrained_pas_sparse_pc_auto_allowed(
+            op=op0,
+            active_size=int(active_total_size),
+            use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+            solve_method_kind=solve_method,
+        ):
+            solve_method = "sparse_pc_gmres"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: large constrained PAS RHSMode=1 "
+                    "-> using sparse-PC GMRES host solve",
+                )
         elif (
             (not include_phi1)
             and int(op0.constraint_scheme) == 2
@@ -3230,6 +3468,27 @@ def write_sfincs_jax_output_h5(
                 # Keep a single converged state by default; use SFINCS_JAX_PHI1_MIN_ITERS
                 # to force duplication when matching a specific upstream fixture.
                 xs = [result.x]
+
+        residual_norm_for_output, residual_target_for_output = _rhsmode1_result_residual_and_target(
+            result,
+            solver_tol=float(solver_tol),
+        )
+        solver_metadata_for_output = _solver_metadata_dict(result)
+        _add_rhsmode1_solver_diagnostics(
+            data,
+            residual_norm=residual_norm_for_output,
+            residual_target=residual_target_for_output,
+            solve_method=str(solve_method),
+            solver_metadata=solver_metadata_for_output,
+        )
+        _raise_for_nonconverged_rhsmode1_output(
+            active_total_size=int(active_total_size),
+            residual_norm=residual_norm_for_output,
+            residual_target=residual_target_for_output,
+            solve_method=str(solve_method),
+            accepted_converged=bool(solver_metadata_for_output.get("accepted_converged", False)),
+            acceptance_criterion=str(solver_metadata_for_output.get("acceptance_criterion", "")),
+        )
 
         state_out_env = os.environ.get("SFINCS_JAX_STATE_OUT", "").strip()
         if state_out_env:
@@ -4538,6 +4797,150 @@ def write_sfincs_jax_output_h5(
     _mark(f"write_{output_format}_start")
     write_sfincs_output_file(path=output_path, data=data, fortran_layout=fortran_layout, overwrite=overwrite)
     _mark(f"write_{output_format}_done")
+    if solver_trace_path is not None:
+        try:
+            import jax  # noqa: PLC0415
+
+            backend = str(jax.default_backend())
+            device_count = len(jax.devices())
+        except Exception:
+            backend = "unknown"
+            device_count = None
+        if bool(compute_transport_matrix):
+            selected_path = "transport_matrix"
+        elif bool(compute_solution):
+            selected_path = "rhsmode1_solution"
+        else:
+            selected_path = "geometry_only"
+        trace_op = None
+        trace_residual_norm = None
+        trace_residual_target = None
+        trace_converged = None
+        trace_metadata: dict[str, object] = {
+            "input_namelist": str(input_namelist.resolve()),
+            "output_path": str(output_path.resolve()),
+            "output_format": str(output_format),
+            "compute_solution": bool(compute_solution),
+            "compute_transport_matrix": bool(compute_transport_matrix),
+            "differentiable": None if differentiable is None else bool(differentiable),
+        }
+        if result is not None:
+            solver_metadata = _solver_metadata_dict(result)
+            if solver_metadata:
+                trace_metadata["solver_metadata"] = solver_metadata
+                if "accepted_converged" in solver_metadata:
+                    trace_metadata["accepted_converged"] = bool(solver_metadata["accepted_converged"])
+                if "acceptance_criterion" in solver_metadata:
+                    trace_metadata["acceptance_criterion"] = str(solver_metadata["acceptance_criterion"])
+            trace_op = getattr(result, "op", None)
+            if trace_op is None:
+                trace_op = getattr(result, "op0", None)
+            if hasattr(result, "residual_norm"):
+                try:
+                    trace_residual_norm = float(np.asarray(getattr(result, "residual_norm")))
+                except Exception:
+                    trace_residual_norm = None
+            rhs_vec = getattr(result, "rhs", None)
+            if rhs_vec is not None:
+                try:
+                    trace_residual_target = max(0.0, float(solver_tol) * float(np.linalg.norm(np.asarray(rhs_vec))))
+                except Exception:
+                    trace_residual_target = None
+            residuals_by_rhs = getattr(result, "residual_norms_by_rhs", None)
+            if isinstance(residuals_by_rhs, dict) and residuals_by_rhs:
+                vals = []
+                for val in residuals_by_rhs.values():
+                    try:
+                        vals.append(float(np.asarray(val)))
+                    except Exception:
+                        continue
+                if vals:
+                    trace_metadata["residual_norms_by_rhs"] = vals
+                    trace_residual_norm = max(vals)
+            rhs_norms_by_rhs = getattr(result, "rhs_norms_by_rhs", None)
+            if isinstance(rhs_norms_by_rhs, dict) and rhs_norms_by_rhs:
+                rhs_vals = []
+                for val in rhs_norms_by_rhs.values():
+                    try:
+                        rhs_vals.append(float(np.asarray(val)))
+                    except Exception:
+                        continue
+                if rhs_vals:
+                    trace_metadata["rhs_norms_by_rhs"] = rhs_vals
+                    trace_residual_target = max(0.0, float(solver_tol) * max(rhs_vals))
+            elapsed_by_rhs = getattr(result, "elapsed_time_s", None)
+            if elapsed_by_rhs is not None:
+                try:
+                    trace_metadata["elapsed_time_s_by_rhs"] = [float(v) for v in np.asarray(elapsed_by_rhs).reshape((-1,))]
+                except Exception:
+                    pass
+        if trace_residual_norm is not None and trace_residual_target is not None:
+            trace_converged = bool(float(trace_residual_norm) <= float(trace_residual_target))
+            trace_metadata["converged"] = trace_converged
+        if profiler is not None and getattr(profiler, "entries", None):
+            trace_metadata["profile_entries"] = list(getattr(profiler, "entries"))
+        trace_total_size = None
+        trace_active_size = None
+        trace_collision_operator = None
+        if trace_op is not None:
+            try:
+                trace_total_size = int(getattr(trace_op, "total_size"))
+            except Exception:
+                trace_total_size = None
+            trace_active_size = _rhs1_active_size_for_trace(trace_op)
+            if trace_active_size is None:
+                try:
+                    trace_active_size = int(getattr(trace_op, "active_size"))
+                except Exception:
+                    trace_active_size = trace_total_size
+            try:
+                trace_collision_operator = str(getattr(trace_op, "collision_operator"))
+            except Exception:
+                try:
+                    trace_collision_operator = str(nml.group("physicsParameters").get("COLLISIONOPERATOR"))
+                except Exception:
+                    trace_collision_operator = None
+        try:
+            from .profiling import _peak_rss_mb, _rss_mb  # noqa: PLC0415
+
+            peak_rss_mb = _peak_rss_mb()
+            if peak_rss_mb is None:
+                peak_rss_mb = _rss_mb()
+        except Exception:
+            peak_rss_mb = None
+        if profiler is not None and getattr(profiler, "entries", None):
+            rss_vals = [
+                float(entry["rss_mb"])
+                for entry in getattr(profiler, "entries")
+                if entry.get("rss_mb") is not None
+            ]
+            rss_vals.extend(
+                float(entry["peak_rss_mb"])
+                for entry in getattr(profiler, "entries")
+                if entry.get("peak_rss_mb") is not None
+            )
+            if rss_vals:
+                peak_rss_mb = max(rss_vals)
+        trace = SolverTrace(
+            backend=backend,
+            rhs_mode=int(rhs_mode),
+            selected_path=selected_path,
+            solve_method=str(solve_method) if "solve_method" in locals() else "auto",
+            geometry_scheme=int(geom_scheme_hint) if geom_scheme_hint is not None else None,
+            collision_operator=trace_collision_operator,
+            total_size=trace_total_size,
+            active_size=trace_active_size,
+            device_count=device_count,
+            residual_norm=trace_residual_norm,
+            residual_target=trace_residual_target,
+            converged=trace_converged,
+            elapsed_s=float(time.perf_counter() - run_t0),
+            peak_rss_mb=peak_rss_mb,
+            metadata=trace_metadata,
+        )
+        write_solver_trace_json(Path(solver_trace_path), trace)
+        if emit is not None:
+            emit(1, f" wrote solver trace -> {Path(solver_trace_path).resolve()}")
     if emit is not None:
         emit(0, f" timing: total run elapsed={format_duration(time.perf_counter() - run_t0)}")
         emit(1, f" wrote output ({output_format}) -> {output_path.resolve()}")

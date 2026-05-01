@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any
+
+from .solver_selection_policy import (
+    SolverAcceptanceCriteria,
+    SolverCandidateMetrics,
+    solver_candidate_gate,
+)
 
 
 @dataclass(frozen=True)
@@ -34,9 +41,21 @@ def rhs1_accept_candidate(
     maxiter: int | None,
     precond_side: str,
     solver_kind: str,
+    candidate_metrics: SolverCandidateMetrics | None = None,
+    baseline_metrics: SolverCandidateMetrics | None = None,
+    criteria: SolverAcceptanceCriteria | None = None,
 ) -> tuple[Any, Any, RHS1KSPHandoffState | None, bool]:
-    """Accept a candidate only if it strictly improves the residual norm."""
-    if float(candidate_result.residual_norm) < float(current_result.residual_norm):
+    """Accept a candidate if it improves residual and passes optional measured gates."""
+    current_residual = float(current_result.residual_norm)
+    candidate_residual = float(candidate_result.residual_norm)
+    residual_improved = math.isfinite(candidate_residual) and (
+        not math.isfinite(current_residual) or candidate_residual < current_residual
+    )
+    if residual_improved and candidate_metrics is not None:
+        gate = solver_candidate_gate(candidate_metrics, baseline=baseline_metrics, criteria=criteria)
+        if not gate.accepted:
+            residual_improved = False
+    if residual_improved:
         accepted_residual_vec = candidate_residual_vec if candidate_residual_vec is not None else current_residual_vec
         return (
             candidate_result,

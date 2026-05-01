@@ -7,6 +7,7 @@ import numpy as np
 from sfincs_jax.rhs1_host_policy import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,
+    rhs1_constrained_pas_sparse_pc_auto_allowed,
     rhs1_dense_auto_fp_accelerator_min,
     rhs1_dense_auto_fp_cutoff,
     rhs1_dense_backend_allowed,
@@ -175,6 +176,59 @@ def test_rhs1_host_sparse_direct_and_pc_rescue_policy(monkeypatch) -> None:
         sparse_exact_lu=True,
         host_sparse_direct_wanted=True,
         backend="cpu",
+    )
+
+
+def test_rhs1_constrained_pas_sparse_pc_auto_targets_large_nondiff_pas(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC_MAX", raising=False)
+
+    assert rhs1_constrained_pas_sparse_pc_auto_allowed(
+        op=_op(has_fp=False, has_pas=True, constraint_scheme=2),
+        active_size=42_850,
+        use_implicit=False,
+        solve_method_kind="auto",
+    )
+    assert not rhs1_constrained_pas_sparse_pc_auto_allowed(
+        op=_op(has_fp=False, has_pas=True, constraint_scheme=2),
+        active_size=15_610,
+        use_implicit=False,
+        solve_method_kind="auto",
+    )
+    assert not rhs1_constrained_pas_sparse_pc_auto_allowed(
+        op=_op(has_fp=False, has_pas=True, constraint_scheme=2),
+        active_size=42_850,
+        use_implicit=True,
+        solve_method_kind="auto",
+    )
+    assert not rhs1_constrained_pas_sparse_pc_auto_allowed(
+        op=_op(has_fp=False, has_pas=True, constraint_scheme=2),
+        active_size=42_850,
+        use_implicit=False,
+        solve_method_kind="dense",
+    )
+    assert not rhs1_constrained_pas_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, has_pas=False, constraint_scheme=2),
+        active_size=42_850,
+        use_implicit=False,
+        solve_method_kind="auto",
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC", "off")
+    assert not rhs1_constrained_pas_sparse_pc_auto_allowed(
+        op=_op(has_fp=False, has_pas=True, constraint_scheme=2),
+        active_size=42_850,
+        use_implicit=False,
+        solve_method_kind="auto",
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC", "on")
+    assert rhs1_constrained_pas_sparse_pc_auto_allowed(
+        op=_op(has_fp=False, has_pas=True, constraint_scheme=2),
+        active_size=1,
+        use_implicit=False,
+        solve_method_kind="auto",
     )
 
 

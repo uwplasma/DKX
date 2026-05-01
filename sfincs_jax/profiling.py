@@ -29,6 +29,31 @@ def _rss_mb() -> float | None:
         return None
 
 
+def _resource_maxrss_to_mb(raw_maxrss: float, platform: str | None = None) -> float:
+    """Convert ``resource.ru_maxrss`` to MB-like units.
+
+    Linux reports KiB while macOS reports bytes. The profiler historically uses
+    MB labels with psutil's decimal bytes/1e6 value; this helper keeps the same
+    practical scale while preserving the platform-specific resource semantics.
+    """
+
+    platform = sys.platform if platform is None else platform
+    if platform == "darwin":
+        return float(raw_maxrss) / (1024.0 * 1024.0)
+    return float(raw_maxrss) / 1024.0
+
+
+def _peak_rss_mb() -> float | None:
+    """Return the process high-water RSS when the OS exposes it."""
+
+    try:
+        import resource
+
+        return _resource_maxrss_to_mb(float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss))
+    except Exception:
+        return None
+
+
 def _device_mem_mb() -> float | None:
     try:
         import jax  # noqa: PLC0415
@@ -65,11 +90,13 @@ class SimpleProfiler:
     t0: float = field(default_factory=time.perf_counter)
     last: float = field(default_factory=time.perf_counter)
     rss0_mb: float | None = field(default_factory=_rss_mb)
+    peak_rss0_mb: float | None = field(default_factory=_peak_rss_mb)
     entries: list[dict[str, float | str | None]] = field(default_factory=list)
 
     def mark(self, label: str) -> None:
         now = time.perf_counter()
         rss_mb = _rss_mb()
+        peak_rss_mb = _peak_rss_mb()
         dev_mb = _device_mem_mb() if self.sample_device_mem else None
         entry = {
             "label": label,
@@ -77,17 +104,24 @@ class SimpleProfiler:
             "total_s": now - self.t0,
             "rss_mb": rss_mb,
             "drss_mb": (rss_mb - self.rss0_mb) if (rss_mb is not None and self.rss0_mb is not None) else None,
+            "peak_rss_mb": peak_rss_mb,
+            "dpeak_rss_mb": (
+                peak_rss_mb - self.peak_rss0_mb
+                if (peak_rss_mb is not None and self.peak_rss0_mb is not None)
+                else None
+            ),
             "device_mb": dev_mb,
         }
         self.entries.append(entry)
         if self.emit is not None:
             rss_txt = f"{rss_mb:.1f}" if rss_mb is not None else "na"
             drss_txt = f"{entry['drss_mb']:.1f}" if entry["drss_mb"] is not None else "na"
+            peak_txt = f"{peak_rss_mb:.1f}" if peak_rss_mb is not None else "na"
             dev_txt = f"{dev_mb:.1f}" if dev_mb is not None else "na"
             self.emit(
                 0,
                 f"profiling: {label} dt_s={entry['dt_s']:.3f} total_s={entry['total_s']:.3f} "
-                f"rss_mb={rss_txt} drss_mb={drss_txt} device_mb={dev_txt}",
+                f"rss_mb={rss_txt} drss_mb={drss_txt} peak_rss_mb={peak_txt} device_mb={dev_txt}",
             )
         self.last = now
 

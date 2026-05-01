@@ -47,7 +47,7 @@ from .solver import (
 from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
 from .structured_velocity import factor_block_tridiagonal
 from .pas_smoother import adaptive_pas_smoother
-from .explicit_sparse import build_operator_from_matvec, factorize_host_sparse_operator
+from .explicit_sparse import build_operator_from_matvec, build_operator_from_pattern, factorize_host_sparse_operator
 from .rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
@@ -138,6 +138,7 @@ from .rhs1_stage2_policy import (
     rhs1_pas_stage2_skip,
     rhs1_stage2_trigger,
 )
+from .solver_selection_policy import SolverCandidateMetrics
 from .rhs1_host_policy import (
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
     host_sparse_factor_dtype as _host_sparse_factor_dtype_impl,
@@ -268,9 +269,48 @@ from .v3_system import (
     rhs_v3_full_system_jit,
     with_transport_rhs_settings,
 )
-from .profiling import maybe_profiler
+from .v3_sparse_pattern import summarize_v3_sparse_pattern, v3_full_system_conservative_sparsity_pattern
+from .profiling import _rss_mb, maybe_profiler
 
 _HOST_SCIPY_KRYLOV_METHODS = frozenset({"lgmres", "lgmres_scipy"})
+_SPARSE_HOST_DIRECT_SOLVE_METHODS = frozenset({"sparse_host", "host_sparse", "sparse_host_lu"})
+_SPARSE_HOST_SAFE_SOLVE_METHODS = frozenset(
+    {
+        "sparse_host_safe",
+        "safe_sparse_host",
+        "sparse_host_or_petsc_compat",
+    }
+)
+_SPARSE_HOST_PC_GMRES_SOLVE_METHODS = frozenset(
+    {
+        "sparse_pc_gmres",
+        "sparse_host_gmres",
+        "sparse_host_pc",
+        "host_sparse_pc_gmres",
+        "petsc_host",
+        "petsc_host_gmres",
+    }
+)
+_SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS = frozenset(
+    {
+        "sparse_lsmr",
+        "sparse_host_lsmr",
+        "sparse_lsqr",
+        "sparse_host_lsqr",
+        "minimum_norm",
+        "sparse_minimum_norm",
+        "petsc_compat",
+        "sparse_petsc_compat",
+        "petsc_minimum_norm",
+    }
+)
+_SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS = frozenset(
+    {
+        "petsc_compat",
+        "sparse_petsc_compat",
+        "petsc_minimum_norm",
+    }
+)
 
 
 def _use_solver_jit(size_hint: int | None = None) -> bool:
@@ -725,6 +765,7 @@ def _build_host_sparse_direct_factor_from_matvec(
     n: int,
     dtype: jnp.dtype,
     factor_dtype: np.dtype,
+    pattern=None,
     emit: Callable[[int, str], None] | None = None,
 ):
     block_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS", "").strip()
@@ -747,6 +788,26 @@ def _build_host_sparse_direct_factor_from_matvec(
         drop_tol = float(drop_tol_env) if drop_tol_env else 0.0
     except ValueError:
         drop_tol = 0.0
+    factor_kind_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "").strip().lower()
+    factor_kind = "ilu" if factor_kind_env in {"ilu", "spilu"} else "lu"
+    ilu_fill_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_FILL_FACTOR", "").strip()
+    ilu_drop_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_DROP_TOL", "").strip()
+    permc_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC", "").strip().upper()
+    pivot_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH", "").strip()
+    try:
+        ilu_fill_factor = float(ilu_fill_env) if ilu_fill_env else 10.0
+    except ValueError:
+        ilu_fill_factor = 10.0
+    try:
+        ilu_drop_tol = float(ilu_drop_env) if ilu_drop_env else 1.0e-4
+    except ValueError:
+        ilu_drop_tol = 1.0e-4
+    if permc_env not in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}:
+        permc_env = "COLAMD"
+    try:
+        diag_pivot_thresh = float(pivot_env) if pivot_env else 1.0
+    except ValueError:
+        diag_pivot_thresh = 1.0
 
     def _matvec_np(x_np: np.ndarray) -> np.ndarray:
         return np.asarray(matvec(jnp.asarray(x_np, dtype=dtype)), dtype=np.float64)
@@ -756,28 +817,66 @@ def _build_host_sparse_direct_factor_from_matvec(
         out = jax.vmap(matvec, in_axes=1, out_axes=1)(cols)
         return np.asarray(out, dtype=np.float64)
 
-    operator_bundle = build_operator_from_matvec(
-        _matvec_np,
-        n=int(n),
-        dtype=np.float64,
-        backend=jax.default_backend(),
-        block_cols=int(block_cols),
-        dense_max_mb=float(dense_max_mb),
-        csr_max_mb=float(csr_max_mb),
-        prefer_sparse_on_gpu=True,
-        drop_tol=float(drop_tol),
-        matmat=_matmat_np,
-        allow_operator_only=False,
-    )
+    if pattern is None:
+        operator_bundle = build_operator_from_matvec(
+            _matvec_np,
+            n=int(n),
+            dtype=np.float64,
+            backend=jax.default_backend(),
+            block_cols=int(block_cols),
+            dense_max_mb=float(dense_max_mb),
+            csr_max_mb=float(csr_max_mb),
+            prefer_sparse_on_gpu=True,
+            drop_tol=float(drop_tol),
+            matmat=_matmat_np,
+            allow_operator_only=False,
+        )
+    else:
+        operator_bundle = build_operator_from_pattern(
+            _matvec_np,
+            pattern=pattern,
+            dtype=np.float64,
+            backend=jax.default_backend(),
+            csr_max_mb=float(csr_max_mb),
+            drop_tol=float(drop_tol),
+            allow_operator_only=False,
+        )
     if emit is not None:
         emit(
             1,
             "explicit_sparse: "
             f"storage={operator_bundle.metadata.storage_kind} "
-            f"reason={operator_bundle.metadata.reason}",
+            f"reason={operator_bundle.metadata.reason} factor_kind={factor_kind} permc={permc_env}",
         )
-    factor_bundle = factorize_host_sparse_operator(operator_bundle, kind="lu")
+    factor_bundle = factorize_host_sparse_operator(
+        operator_bundle,
+        kind=factor_kind,
+        fill_factor=float(ilu_fill_factor),
+        drop_tol=float(ilu_drop_tol),
+        permc_spec=permc_env,
+        diag_pivot_thresh=float(diag_pivot_thresh),
+    )
     return operator_bundle, factor_bundle
+
+
+def _rhsmode1_explicit_sparse_pattern_probe_enabled() -> bool:
+    env = os.environ.get("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_PATTERN", "").strip().lower()
+    return env in {"1", "true", "yes", "on", "pattern"}
+
+
+def _maybe_rhsmode1_full_sparse_pattern(op: V3FullSystemOperator, emit: Callable[[int, str], None] | None = None):
+    if not _rhsmode1_explicit_sparse_pattern_probe_enabled():
+        return None
+    pattern = v3_full_system_conservative_sparsity_pattern(op)
+    if emit is not None:
+        summary = summarize_v3_sparse_pattern(op, pattern)
+        emit(
+            1,
+            "explicit_sparse_pattern: "
+            f"shape={summary.shape} nnz={summary.nnz} "
+            f"avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
+        )
+    return pattern
 
 
 def _rhsmode1_pas_fast_accept(
@@ -5310,17 +5409,17 @@ class V3LinearSolveResult:
     op: V3FullSystemOperator
     rhs: jnp.ndarray
     gmres: GMRESSolveResult
+    metadata: dict[str, object] | None = None
 
     def tree_flatten(self):
         children = (self.op, self.rhs, self.gmres)
-        aux = None
+        aux = self.metadata
         return children, aux
 
     @classmethod
     def tree_unflatten(cls, aux, children):
-        del aux
         op, rhs, gmres_result = children
-        return cls(op=op, rhs=rhs, gmres=gmres_result)
+        return cls(op=op, rhs=rhs, gmres=gmres_result, metadata=aux)
 
     @property
     def x(self) -> jnp.ndarray:
@@ -5334,6 +5433,15 @@ class V3LinearSolveResult:
 def _gmres_result_is_finite(res: GMRESSolveResult) -> bool:
     """Return True when GMRES returned finite state and residual."""
     return bool(jnp.all(jnp.isfinite(res.x)) and jnp.isfinite(res.residual_norm))
+
+
+def _block_gmres_result_ready(res: GMRESSolveResult) -> GMRESSolveResult:
+    """Synchronize a GMRES result so timing/profiling marks include XLA work."""
+    try:
+        jax.block_until_ready((res.x, res.residual_norm))
+    except Exception:
+        pass
+    return res
 
 
 def _diag_only(m: jnp.ndarray) -> jnp.ndarray:
@@ -10658,6 +10766,30 @@ def solve_v3_full_system_linear_gmres(
     def _mark(label: str) -> None:
         if profiler is not None:
             profiler.mark(label)
+
+    def _rhs1_solver_candidate_metrics(
+        *,
+        name: str,
+        result: GMRESSolveResult,
+        target_value: float,
+        solve_s: float | None = None,
+        setup_s: float | None = None,
+    ) -> SolverCandidateMetrics:
+        """Build measured solver-policy metrics from a real RHSMode=1 retry."""
+        try:
+            residual_norm = float(result.residual_norm)
+        except Exception:
+            residual_norm = None
+        finite = residual_norm is not None and bool(np.isfinite(residual_norm))
+        return SolverCandidateMetrics(
+            name=str(name),
+            residual_norm=residual_norm,
+            target=float(target_value),
+            setup_s=setup_s,
+            solve_s=solve_s,
+            peak_rss_mb=_rss_mb(),
+            finite=finite,
+        )
     restart_env = os.environ.get("SFINCS_JAX_GMRES_RESTART", "").strip()
     if restart_env:
         try:
@@ -10774,6 +10906,17 @@ def solve_v3_full_system_linear_gmres(
         emit=emit,
         enabled=rhs1_large_progress_enabled(rhs_mode=int(op.rhs_mode), total_size=int(op.total_size)),
     )
+    solve_method_kind_requested = str(solve_method).strip().lower().replace("-", "_")
+    sparse_host_requested = solve_method_kind_requested in _SPARSE_HOST_DIRECT_SOLVE_METHODS
+    sparse_host_safe_requested = solve_method_kind_requested in _SPARSE_HOST_SAFE_SOLVE_METHODS
+    sparse_pc_gmres_requested = solve_method_kind_requested in _SPARSE_HOST_PC_GMRES_SOLVE_METHODS
+    sparse_minimum_norm_requested = solve_method_kind_requested in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS
+    sparse_host_like_requested = (
+        sparse_host_requested
+        or sparse_host_safe_requested
+        or sparse_pc_gmres_requested
+        or sparse_minimum_norm_requested
+    )
 
     recycle_k_env = os.environ.get("SFINCS_JAX_RHSMODE1_RECYCLE_K", "").strip()
     try:
@@ -10887,6 +11030,8 @@ def solve_v3_full_system_linear_gmres(
         use_active_dof_mode = has_reduced_modes and (
             int(op.rhs_mode) in {2, 3} or (int(op.rhs_mode) == 1 and (not bool(op.include_phi1)))
         )
+        if sparse_host_like_requested:
+            use_active_dof_mode = False
         # Upstream v3 always drops inactive (x,L) modes when `Nxi_for_x` truncation is
         # active. Keep this reduction on for DKES trajectories as well to match v3's
         # linear-system size/conditioning and avoid singular inactive rows.
@@ -10930,7 +11075,8 @@ def solve_v3_full_system_linear_gmres(
         )
     )
     use_pas_projection = bool(
-        pas_project_enabled
+        (not sparse_host_like_requested)
+        and pas_project_enabled
         and int(op.rhs_mode) == 1
         and (not bool(op.include_phi1))
         and int(op.constraint_scheme) == 2
@@ -11106,6 +11252,483 @@ def solve_v3_full_system_linear_gmres(
     if emit is not None:
         emit(1, f"solve_v3_full_system_linear_gmres: GMRES tol={tol} atol={atol} restart={restart} maxiter={maxiter} solve_method={solve_method}")
         emit(1, "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)")
+    solve_method_kind_explicit = str(solve_method).strip().lower().replace("-", "_")
+    if solve_method_kind_explicit in _SPARSE_HOST_SAFE_SOLVE_METHODS:
+        try:
+            direct_result = solve_v3_full_system_linear_gmres(
+                nml=nml,
+                which_rhs=which_rhs,
+                op=op,
+                x0=x0,
+                tol=tol,
+                atol=atol,
+                restart=restart,
+                maxiter=maxiter,
+                solve_method="sparse_host",
+                identity_shift=identity_shift,
+                phi1_hat_base=phi1_hat_base,
+                differentiable=differentiable,
+                emit=emit,
+                recycle_basis=recycle_basis,
+            )
+            metadata = dict(getattr(direct_result, "metadata", None) or {})
+            metadata.update(
+                {
+                    "requested_solve_method": solve_method_kind_explicit,
+                    "safe_sparse_host_fallback_used": False,
+                    "accepted_converged": bool(metadata.get("accepted_converged", True)),
+                    "acceptance_criterion": metadata.get("acceptance_criterion", "true_residual"),
+                }
+            )
+            return replace(direct_result, metadata=metadata)
+        except RuntimeError as exc:
+            if "Host sparse factorization failed" not in str(exc):
+                raise
+            if not (
+                int(op.rhs_mode) == 1
+                and int(op.constraint_scheme) == 2
+                and (not bool(op.include_phi1))
+                and op.fblock.pas is not None
+            ):
+                raise
+            if emit is not None:
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: sparse_host_safe falling back to "
+                    "PETSc-compatible minimum-norm constrained-PAS branch after sparse LU failure",
+                )
+            compat_result = solve_v3_full_system_linear_gmres(
+                nml=nml,
+                which_rhs=which_rhs,
+                op=op,
+                x0=x0,
+                tol=tol,
+                atol=atol,
+                restart=restart,
+                maxiter=maxiter,
+                solve_method="petsc_compat",
+                identity_shift=identity_shift,
+                phi1_hat_base=phi1_hat_base,
+                differentiable=differentiable,
+                emit=emit,
+                recycle_basis=recycle_basis,
+            )
+            metadata = dict(getattr(compat_result, "metadata", None) or {})
+            metadata.update(
+                {
+                    "requested_solve_method": solve_method_kind_explicit,
+                    "safe_sparse_host_fallback_used": True,
+                    "sparse_host_failure": str(exc),
+                }
+            )
+            return replace(compat_result, metadata=metadata)
+    if solve_method_kind_explicit in _SPARSE_HOST_PC_GMRES_SOLVE_METHODS:
+        if differentiable is True:
+            raise ValueError("solve_method='sparse_pc_gmres' is a non-differentiable host sparse-PC GMRES path.")
+        if int(op.rhs_mode) != 1:
+            raise NotImplementedError("solve_method='sparse_pc_gmres' is currently implemented for RHSMode=1 only.")
+        if use_active_dof_mode:
+            raise NotImplementedError(
+                "solve_method='sparse_pc_gmres' currently targets the full system; set SFINCS_JAX_ACTIVE_DOF=0 "
+                "or use the default matrix-free solver for active-DOF runs."
+            )
+
+        sparse_timer = Timer()
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern")
+        pattern = v3_full_system_conservative_sparsity_pattern(op)
+        if emit is not None:
+            summary = summarize_v3_sparse_pattern(op, pattern)
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
+                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
+            )
+
+        op_pc = _build_rhsmode1_preconditioner_operator_point(op)
+        pc_shift_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT", "").strip()
+        try:
+            pc_shift = float(pc_shift_env) if pc_shift_env else 0.0
+        except ValueError:
+            pc_shift = 0.0
+
+        def _sparse_pc_factor_mv(x_np: np.ndarray) -> jnp.ndarray:
+            x_jnp = jnp.asarray(x_np, dtype=rhs.dtype)
+            y_jnp = apply_v3_full_system_operator_cached(op_pc, x_jnp)
+            if pc_shift != 0.0:
+                y_jnp = y_jnp + jnp.asarray(pc_shift, dtype=rhs.dtype) * x_jnp
+            return y_jnp
+
+        if emit is not None:
+            shift_note = f" shift={pc_shift:.1e}" if pc_shift != 0.0 else ""
+            emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres factoring RHSMode=1 preconditioner" + shift_note)
+        _operator_bundle_pc, factor_bundle_pc = _build_host_sparse_direct_factor_from_matvec(
+            matvec=_sparse_pc_factor_mv,
+            n=int(op.total_size),
+            dtype=rhs.dtype,
+            factor_dtype=np.dtype(np.float64),
+            pattern=pattern,
+            emit=emit,
+        )
+
+        side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
+        precondition_side = side_env if side_env in {"left", "right", "none"} else "left"
+        pc_restart, pc_maxiter = rhs1_parse_polish_gmres_config(
+            restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
+            maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
+            default_restart=max(20, int(restart)),
+            default_maxiter=max(100, int(maxiter) if maxiter is not None else 400),
+            min_restart=2,
+            min_maxiter=1,
+        )
+        pc_form = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM", "").strip().lower()
+        if pc_form not in {"", "scipy_left", "scipy", "explicit_left", "petsc_left"}:
+            pc_form = ""
+        pc_form = pc_form or "scipy_left"
+        progress_every_env = os.environ.get("SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY", "").strip()
+        try:
+            progress_every = int(progress_every_env) if progress_every_env else 25
+        except ValueError:
+            progress_every = 25
+        progress_every = max(0, int(progress_every))
+        mv_count = 0
+
+        def _mv_true(v: jnp.ndarray) -> jnp.ndarray:
+            nonlocal mv_count
+            mv_count += 1
+            if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres "
+                    f"matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
+                )
+            return apply_v3_full_system_operator_cached(op, jnp.asarray(v, dtype=rhs.dtype))
+
+        def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
+            v_np = np.asarray(v, dtype=np.float64).reshape((-1,))
+            y_np = factor_bundle_pc.solve(v_np)
+            return jnp.asarray(y_np, dtype=jnp.float64)
+
+        x0_full = None
+        if x0 is not None:
+            x0_arr = jnp.asarray(x0, dtype=jnp.float64)
+            if x0_arr.shape == rhs.shape:
+                x0_full = x0_arr
+            elif emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres ignoring incompatible x0 "
+                    f"shape={tuple(x0_arr.shape)} expected={tuple(rhs.shape)}",
+                )
+
+        if emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres solve start "
+                f"form={pc_form} restart={int(pc_restart)} maxiter={int(pc_maxiter)} "
+                f"precondition_side={precondition_side}",
+            )
+        rn_pc = float("nan")
+        if pc_form in {"explicit_left", "petsc_left"}:
+            x_np, residual_norm_sparse_pc, rn_pc, history = explicit_left_preconditioned_gmres_scipy(
+                matvec=_mv_true,
+                b=rhs,
+                preconditioner=_precond_sparse,
+                x0=x0_full,
+                tol=tol,
+                atol=atol,
+                restart=pc_restart,
+                maxiter=pc_maxiter,
+            )
+        else:
+            x_np, residual_norm_sparse_pc, history = gmres_solve_with_history_scipy(
+                matvec=_mv_true,
+                b=rhs,
+                preconditioner=_precond_sparse if precondition_side != "none" else None,
+                x0=x0_full,
+                tol=tol,
+                atol=atol,
+                restart=pc_restart,
+                maxiter=pc_maxiter,
+                precondition_side=precondition_side,
+            )
+        try:
+            residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
+                jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
+                dtype=np.float64,
+            )
+            residual_norm_sparse_pc = float(np.linalg.norm(residual_true))
+        except Exception:
+            residual_norm_sparse_pc = float(residual_norm_sparse_pc)
+        if emit is not None:
+            target = max(float(atol), float(tol) * float(rhs_norm))
+            pc_suffix = f" preconditioned_residual={float(rn_pc):.6e}" if np.isfinite(rn_pc) else ""
+            if history:
+                pc_suffix = f"{pc_suffix} ksp_residual={float(history[-1]):.6e}"
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres complete "
+                f"elapsed_s={sparse_timer.elapsed_s():.3f} iters={len(history or [])} "
+                f"matvecs={int(mv_count)} residual={float(residual_norm_sparse_pc):.6e} "
+                f"target={float(target):.6e}{pc_suffix}",
+            )
+        return V3LinearSolveResult(
+            op=op,
+            rhs=rhs,
+            gmres=GMRESSolveResult(
+                x=jnp.asarray(x_np, dtype=jnp.float64),
+                residual_norm=jnp.asarray(residual_norm_sparse_pc, dtype=jnp.float64),
+            ),
+            metadata={
+                "solver_kind": "sparse_pc_gmres",
+                "residual_kind": "true_residual",
+                "accepted_converged": bool(float(residual_norm_sparse_pc) <= max(float(atol), float(tol) * float(rhs_norm))),
+                "acceptance_criterion": "true_residual",
+                "iterations": int(len(history or [])),
+                "matvecs": int(mv_count),
+            },
+        )
+    if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:
+        if differentiable is True:
+            raise ValueError("solve_method='sparse_lsmr' is a non-differentiable host sparse minimum-norm path.")
+        if int(op.rhs_mode) != 1:
+            raise NotImplementedError("solve_method='sparse_lsmr' is currently implemented for RHSMode=1 only.")
+        if use_active_dof_mode:
+            raise NotImplementedError(
+                "solve_method='sparse_lsmr' currently targets the full system; set SFINCS_JAX_ACTIVE_DOF=0 "
+                "or use the default matrix-free solver for active-DOF runs."
+            )
+        sparse_timer = Timer()
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: sparse_lsmr building conservative pattern")
+        pattern = v3_full_system_conservative_sparsity_pattern(op)
+        if emit is not None:
+            summary = summarize_v3_sparse_pattern(op, pattern)
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_lsmr pattern "
+                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
+            )
+
+        def _sparse_min_norm_mv(x_np: np.ndarray) -> jnp.ndarray:
+            return apply_v3_full_system_operator_cached(op, jnp.asarray(x_np, dtype=rhs.dtype))
+
+        csr_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "").strip()
+        drop_tol_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "").strip()
+        try:
+            csr_max_mb = float(csr_max_env) if csr_max_env else 512.0
+        except ValueError:
+            csr_max_mb = 512.0
+        try:
+            drop_tol = float(drop_tol_env) if drop_tol_env else 0.0
+        except ValueError:
+            drop_tol = 0.0
+
+        def _matvec_np(x_np: np.ndarray) -> np.ndarray:
+            return np.asarray(_sparse_min_norm_mv(np.asarray(x_np, dtype=np.float64)), dtype=np.float64)
+
+        operator_bundle = build_operator_from_pattern(
+            _matvec_np,
+            pattern=pattern,
+            dtype=np.float64,
+            backend=jax.default_backend(),
+            csr_max_mb=float(csr_max_mb),
+            drop_tol=float(drop_tol),
+            allow_operator_only=False,
+        )
+        if emit is not None:
+            emit(
+                1,
+                "explicit_sparse: "
+                f"storage={operator_bundle.metadata.storage_kind} "
+                f"reason={operator_bundle.metadata.reason}",
+            )
+        matrix = operator_bundle.matrix
+        if matrix is None:
+            raise RuntimeError("sparse_lsmr requires a materialized sparse matrix.")
+
+        import scipy.sparse.linalg as _spla  # noqa: PLC0415
+
+        lsmr_atol_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_ATOL", "").strip()
+        lsmr_btol_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_BTOL", "").strip()
+        lsmr_conlim_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_CONLIM", "").strip()
+        lsmr_damp_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_DAMP", "").strip()
+        lsmr_maxiter_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_MAXITER", "").strip()
+        try:
+            lsmr_atol = float(lsmr_atol_env) if lsmr_atol_env else float(tol)
+        except ValueError:
+            lsmr_atol = float(tol)
+        try:
+            lsmr_btol = float(lsmr_btol_env) if lsmr_btol_env else float(tol)
+        except ValueError:
+            lsmr_btol = float(tol)
+        try:
+            lsmr_conlim = float(lsmr_conlim_env) if lsmr_conlim_env else 1.0e8
+        except ValueError:
+            lsmr_conlim = 1.0e8
+        try:
+            lsmr_damp = float(lsmr_damp_env) if lsmr_damp_env else 0.0
+        except ValueError:
+            lsmr_damp = 0.0
+        try:
+            lsmr_maxiter = int(lsmr_maxiter_env) if lsmr_maxiter_env else max(1000, int(maxiter or 400))
+        except ValueError:
+            lsmr_maxiter = max(1000, int(maxiter or 400))
+        lsmr_maxiter = max(1, int(lsmr_maxiter))
+        rhs_np = np.asarray(rhs, dtype=np.float64).reshape((-1,))
+        use_lsqr = solve_method_kind_explicit in {"sparse_lsqr", "sparse_host_lsqr"}
+        if emit is not None:
+            solver_name = "lsqr" if use_lsqr else "lsmr"
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: sparse_lsmr solve start "
+                f"solver={solver_name} atol={lsmr_atol:.1e} btol={lsmr_btol:.1e} "
+                f"damp={lsmr_damp:.1e} conlim={lsmr_conlim:.1e} maxiter={int(lsmr_maxiter)}",
+            )
+        if use_lsqr:
+            ls_result = _spla.lsqr(
+                matrix,
+                rhs_np,
+                damp=float(lsmr_damp),
+                atol=float(lsmr_atol),
+                btol=float(lsmr_btol),
+                conlim=float(lsmr_conlim),
+                iter_lim=int(lsmr_maxiter),
+                show=bool(emit is not None and os.environ.get("SFINCS_JAX_SPARSE_LSMR_SHOW", "").strip().lower() in {"1", "true", "yes", "on"}),
+            )
+            x_np = np.asarray(ls_result[0], dtype=np.float64)
+            istop = int(ls_result[1])
+            iters = int(ls_result[2])
+            solver_reported_residual = float(ls_result[3])
+        else:
+            ls_result = _spla.lsmr(
+                matrix,
+                rhs_np,
+                damp=float(lsmr_damp),
+                atol=float(lsmr_atol),
+                btol=float(lsmr_btol),
+                conlim=float(lsmr_conlim),
+                maxiter=int(lsmr_maxiter),
+                show=bool(emit is not None and os.environ.get("SFINCS_JAX_SPARSE_LSMR_SHOW", "").strip().lower() in {"1", "true", "yes", "on"}),
+            )
+            x_np = np.asarray(ls_result[0], dtype=np.float64)
+            istop = int(ls_result[1])
+            iters = int(ls_result[2])
+            solver_reported_residual = float(ls_result[3])
+        residual_true = rhs_np - np.asarray(matrix @ x_np, dtype=np.float64)
+        residual_norm_sparse_lsmr = float(np.linalg.norm(residual_true))
+        target = max(float(atol), float(tol) * float(rhs_norm))
+        true_residual_converged = bool(float(residual_norm_sparse_lsmr) <= float(target))
+        compatibility_converged = bool(int(istop) in {1, 2})
+        petsc_compat_requested = solve_method_kind_explicit in _SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS
+        accepted_converged = bool(true_residual_converged or (petsc_compat_requested and compatibility_converged))
+        acceptance_criterion = (
+            "true_residual"
+            if true_residual_converged
+            else "petsc_compatible_minimum_norm"
+            if petsc_compat_requested and compatibility_converged
+            else "not_converged"
+        )
+        if emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: sparse_lsmr complete "
+                f"elapsed_s={sparse_timer.elapsed_s():.3f} iters={iters} istop={istop} "
+                f"reported_residual={solver_reported_residual:.6e} "
+                f"residual={residual_norm_sparse_lsmr:.6e} target={float(target):.6e} "
+                f"accepted={accepted_converged} criterion={acceptance_criterion}",
+            )
+        return V3LinearSolveResult(
+            op=op,
+            rhs=rhs,
+            gmres=GMRESSolveResult(
+                x=jnp.asarray(x_np, dtype=jnp.float64),
+                residual_norm=jnp.asarray(residual_norm_sparse_lsmr, dtype=jnp.float64),
+            ),
+            metadata={
+                "solver_kind": "sparse_lsmr",
+                "residual_kind": "least_squares_true_residual",
+                "reported_residual_norm": float(solver_reported_residual),
+                "iterations": int(iters),
+                "info_code": int(istop),
+                "least_squares_converged": bool(compatibility_converged),
+                "true_residual_converged": bool(true_residual_converged),
+                "accepted_converged": bool(accepted_converged),
+                "acceptance_criterion": str(acceptance_criterion),
+                "petsc_compat_requested": bool(petsc_compat_requested),
+            },
+        )
+    if solve_method_kind_explicit in _SPARSE_HOST_DIRECT_SOLVE_METHODS:
+        if differentiable is True:
+            raise ValueError("solve_method='sparse_host' is a non-differentiable host sparse LU path.")
+        if int(op.rhs_mode) != 1:
+            raise NotImplementedError("solve_method='sparse_host' is currently implemented for RHSMode=1 only.")
+        if use_active_dof_mode:
+            raise NotImplementedError(
+                "solve_method='sparse_host' currently targets the full system; set SFINCS_JAX_ACTIVE_DOF=0 "
+                "or use the default matrix-free solver for active-DOF runs."
+            )
+        sparse_timer = Timer()
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: sparse_host building conservative pattern")
+        pattern = v3_full_system_conservative_sparsity_pattern(op)
+        if emit is not None:
+            summary = summarize_v3_sparse_pattern(op, pattern)
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_host pattern "
+                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
+            )
+
+        def _sparse_host_mv(x_np: np.ndarray) -> jnp.ndarray:
+            return apply_v3_full_system_operator(op, jnp.asarray(x_np, dtype=rhs.dtype))
+
+        operator_bundle, factor_bundle = _build_host_sparse_direct_factor_from_matvec(
+            matvec=_sparse_host_mv,
+            n=int(op.total_size),
+            dtype=rhs.dtype,
+            factor_dtype=np.dtype(np.float64),
+            pattern=pattern,
+            emit=emit,
+        )
+        x_np, residual_norm_sparse = _host_direct_solve_with_refinement(
+            factor_solve=factor_bundle.solve,
+            operator_matrix=operator_bundle.matrix,
+            rhs_vec=rhs,
+            factor_dtype=np.dtype(np.float64),
+            refine_steps=_host_sparse_direct_refine_steps(
+                "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                default=2,
+            ),
+        )
+        try:
+            residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
+                jax.device_get(_sparse_host_mv(x_np)),
+                dtype=np.float64,
+            )
+            residual_norm_sparse = float(np.linalg.norm(residual_true))
+        except Exception:
+            residual_norm_sparse = float(residual_norm_sparse)
+        if emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: sparse_host complete "
+                f"elapsed_s={sparse_timer.elapsed_s():.3f} residual={float(residual_norm_sparse):.6e}",
+            )
+        return V3LinearSolveResult(
+            op=op,
+            rhs=rhs,
+            gmres=GMRESSolveResult(
+                x=jnp.asarray(x_np, dtype=jnp.float64),
+                residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
+            ),
+            metadata={
+                "solver_kind": "sparse_host",
+                "residual_kind": "true_residual",
+                "accepted_converged": bool(float(residual_norm_sparse) <= max(float(atol), float(tol) * float(rhs_norm))),
+                "acceptance_criterion": "true_residual",
+            },
+        )
     rhs1_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_PRECONDITIONER", "").strip().lower()
     rhs1_precond_env_user = rhs1_precond_env
     rhs1_bicgstab_env = os.environ.get("SFINCS_JAX_RHSMODE1_BICGSTAB_PRECOND", "").strip().lower()
@@ -13631,6 +14254,7 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val="incremental",
                 precond_side="none",
             )
+            res_reduced = _block_gmres_result_ready(res_reduced)
             _mark("rhs1_krylov_solve_done")
             ksp_matvec = mv_pc
             ksp_b = rhs_pc
@@ -13709,6 +14333,7 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val=solve_method,
                     precond_side=gmres_precond_side,
                 )
+                res_reduced = _block_gmres_result_ready(res_reduced)
                 _mark("rhs1_krylov_solve_done")
                 ksp_matvec = mv_reduced
                 ksp_b = rhs_reduced
@@ -13731,6 +14356,7 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val=solve_method,
                 precond_side=gmres_precond_side,
             )
+            res_reduced = _block_gmres_result_ready(res_reduced)
             ksp_matvec = mv_reduced
             ksp_b = rhs_reduced
             ksp_precond = None
@@ -13919,6 +14545,7 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val="incremental",
                 precond_side=gmres_precond_side,
             )
+            res_reduced = _block_gmres_result_ready(res_reduced)
             ksp_matvec = mv_reduced
             ksp_b = rhs_reduced
             ksp_precond = preconditioner_reduced
@@ -13984,6 +14611,7 @@ def solve_v3_full_system_linear_gmres(
                     f"(residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e}) "
                     f"restart={stage2_restart} maxiter={stage2_maxiter} method={stage2_method}",
                 )
+            stage2_timer = Timer()
             res2 = _solve_linear(
                 matvec_fn=mv_reduced,
                 b_vec=rhs_reduced,
@@ -13996,6 +14624,8 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val=stage2_method,
                 precond_side=gmres_precond_side,
             )
+            res2 = _block_gmres_result_ready(res2)
+            stage2_elapsed_s = stage2_timer.elapsed_s()
             res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
                 current_result=res_reduced,
                 candidate_result=res2,
@@ -14009,6 +14639,17 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=stage2_maxiter,
                 precond_side=gmres_precond_side,
                 solver_kind=_solver_kind(stage2_method)[0],
+                candidate_metrics=_rhs1_solver_candidate_metrics(
+                    name=f"stage2_reduced:{stage2_method}",
+                    result=res2,
+                    target_value=target_reduced,
+                    solve_s=stage2_elapsed_s,
+                ),
+                baseline_metrics=_rhs1_solver_candidate_metrics(
+                    name="current_reduced",
+                    result=res_reduced,
+                    target_value=target_reduced,
+                ),
             )
             _apply_rhs1_handoff(handoff_state)
         pas_fast_accept = _rhsmode1_pas_fast_accept(
@@ -14518,6 +15159,7 @@ def solve_v3_full_system_linear_gmres(
                 strong_maxiter = int(strong_maxiter_env) if strong_maxiter_env else max(800, int(maxiter or 400) * 2)
             except ValueError:
                 strong_maxiter = max(800, int(maxiter or 400) * 2)
+            strong_timer = Timer()
             res_strong = _solve_linear(
                 matvec_fn=mv_reduced,
                 b_vec=rhs_reduced,
@@ -14530,6 +15172,8 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val="incremental",
                 precond_side=gmres_precond_side,
             )
+            res_strong = _block_gmres_result_ready(res_strong)
+            strong_elapsed_s = strong_timer.elapsed_s()
             res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
                 current_result=res_reduced,
                 candidate_result=res_strong,
@@ -14543,6 +15187,17 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=strong_maxiter,
                 precond_side=gmres_precond_side,
                 solver_kind=_solver_kind("incremental")[0],
+                candidate_metrics=_rhs1_solver_candidate_metrics(
+                    name="strong_reduced",
+                    result=res_strong,
+                    target_value=target_reduced,
+                    solve_s=strong_elapsed_s,
+                ),
+                baseline_metrics=_rhs1_solver_candidate_metrics(
+                    name="current_reduced",
+                    result=res_reduced,
+                    target_value=target_reduced,
+                ),
             )
             _apply_rhs1_handoff(handoff_state)
 
@@ -15042,6 +15697,7 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: sparse JAX Jacobi fallback "
                             f"(sweeps={int(sparse_jax_sweeps)} omega={float(sparse_jax_omega):.2f})",
                         )
+                    sparse_retry_timer = Timer()
                     res_sparse = _solve_linear(
                         matvec_fn=mv_reduced,
                         b_vec=rhs_reduced,
@@ -15054,6 +15710,7 @@ def solve_v3_full_system_linear_gmres(
                         solve_method_val="incremental",
                         precond_side=gmres_precond_side,
                     )
+                    sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
                     if res_sparse is not None:
                         res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
                             current_result=res_reduced,
@@ -15068,6 +15725,17 @@ def solve_v3_full_system_linear_gmres(
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
                             solver_kind=_solver_kind("incremental")[0],
+                            candidate_metrics=_rhs1_solver_candidate_metrics(
+                                name="sparse_jax_reduced",
+                                result=res_sparse,
+                                target_value=target_reduced,
+                                solve_s=sparse_retry_elapsed_s,
+                            ),
+                            baseline_metrics=_rhs1_solver_candidate_metrics(
+                                name="current_reduced",
+                                result=res_reduced,
+                                target_value=target_reduced,
+                            ),
                         )
                         _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
@@ -15151,6 +15819,7 @@ def solve_v3_full_system_linear_gmres(
                     dense_matrix_cache = a_dense_cache
                     _mark("rhs1_sparse_precond_build_done")
                     host_sparse_direct = host_sparse_direct_wanted
+                    sparse_retry_timer = Timer()
 
                     if host_sparse_direct and ilu is not None:
                         host_sparse_direct_used = True
@@ -15345,6 +16014,7 @@ def solve_v3_full_system_linear_gmres(
                             residual_norm=jnp.asarray(rn_sparse, dtype=jnp.float64),
                         )
                     if res_sparse is not None:
+                        sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
                         res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
                             current_result=res_reduced,
                             candidate_result=res_sparse,
@@ -15358,6 +16028,17 @@ def solve_v3_full_system_linear_gmres(
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
                             solver_kind=_solver_kind("incremental")[0],
+                            candidate_metrics=_rhs1_solver_candidate_metrics(
+                                name="sparse_reduced",
+                                result=res_sparse,
+                                target_value=target_reduced,
+                                solve_s=sparse_retry_elapsed_s,
+                            ),
+                            baseline_metrics=_rhs1_solver_candidate_metrics(
+                                name="current_reduced",
+                                result=res_reduced,
+                                target_value=target_reduced,
+                            ),
                         )
                         _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
@@ -15465,6 +16146,7 @@ def solve_v3_full_system_linear_gmres(
                     f"(size={active_size} residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e})",
                 )
             try:
+                dense_retry_timer = Timer()
                 host_dense_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "").strip().lower()
                 backend = jax.default_backend()
                 if host_dense_env in {"0", "false", "no", "off"}:
@@ -15623,8 +16305,33 @@ def solve_v3_full_system_linear_gmres(
                         precondition_side="none" if use_row_scaled else gmres_precond_side,
                         row_scaled=use_row_scaled,
                     )
-                if float(res_dense.residual_norm) < float(res_reduced.residual_norm):
-                    res_reduced = res_dense
+                dense_retry_elapsed_s = dense_retry_timer.elapsed_s()
+                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                    current_result=res_reduced,
+                    candidate_result=res_dense,
+                    current_residual_vec=residual_vec,
+                    candidate_residual_vec=None,
+                    matvec_fn=mv_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=None,
+                    x0_vec=res_dense.x,
+                    restart=restart,
+                    maxiter=maxiter,
+                    precond_side="none",
+                    solver_kind="dense",
+                    candidate_metrics=_rhs1_solver_candidate_metrics(
+                        name="dense_reduced",
+                        result=res_dense,
+                        target_value=target_reduced,
+                        solve_s=dense_retry_elapsed_s,
+                    ),
+                    baseline_metrics=_rhs1_solver_candidate_metrics(
+                        name="current_reduced",
+                        result=res_reduced,
+                        target_value=target_reduced,
+                    ),
+                )
+                _apply_rhs1_handoff(handoff_state)
             except Exception as exc:  # noqa: BLE001
                 if emit is not None:
                     emit(1, f"solve_v3_full_system_linear_gmres: dense fallback failed ({type(exc).__name__}: {exc})")
@@ -16611,6 +17318,11 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val=solve_method,
                     precond_side=gmres_precond_side,
                 )
+                result = _block_gmres_result_ready(result)
+                try:
+                    jax.block_until_ready(residual_vec)
+                except Exception:
+                    pass
                 _mark("rhs1_krylov_solve_done")
                 ksp_matvec = mv
                 ksp_b = rhs
@@ -16634,6 +17346,11 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val=solve_method,
                     precond_side=gmres_precond_side,
                 )
+                result = _block_gmres_result_ready(result)
+                try:
+                    jax.block_until_ready(residual_vec)
+                except Exception:
+                    pass
                 _mark("rhs1_krylov_solve_retry_done")
                 ksp_matvec = mv
                 ksp_b = rhs
@@ -16738,6 +17455,7 @@ def solve_v3_full_system_linear_gmres(
                     f"(residual={float(result.residual_norm):.3e} > target={target:.3e}) "
                     f"restart={stage2_restart} maxiter={stage2_maxiter} method={stage2_method}",
                 )
+            stage2_timer = Timer()
             res2, residual_vec2 = _solve_linear_with_residual(
                 matvec_fn=mv,
                 b_vec=rhs,
@@ -16750,6 +17468,7 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val=stage2_method,
                 precond_side=gmres_precond_side,
             )
+            stage2_elapsed_s = stage2_timer.elapsed_s()
             result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
                 current_result=result,
                 candidate_result=res2,
@@ -16763,6 +17482,17 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=stage2_maxiter,
                 precond_side=gmres_precond_side,
                 solver_kind=_solver_kind(stage2_method)[0],
+                candidate_metrics=_rhs1_solver_candidate_metrics(
+                    name=f"stage2_full:{stage2_method}",
+                    result=res2,
+                    target_value=target,
+                    solve_s=stage2_elapsed_s,
+                ),
+                baseline_metrics=_rhs1_solver_candidate_metrics(
+                    name="current_full",
+                    result=result,
+                    target_value=target,
+                ),
             )
             _apply_rhs1_handoff(handoff_state)
         # Krylov solvers with left preconditioning report the preconditioned residual
@@ -17048,6 +17778,7 @@ def solve_v3_full_system_linear_gmres(
                 strong_maxiter = int(strong_maxiter_env) if strong_maxiter_env else max(800, int(maxiter or 400) * 2)
             except ValueError:
                 strong_maxiter = max(800, int(maxiter or 400) * 2)
+            strong_timer = Timer()
             res_strong, residual_vec_strong = _solve_linear_with_residual(
                 matvec_fn=mv,
                 b_vec=rhs,
@@ -17060,6 +17791,7 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val="incremental",
                 precond_side=gmres_precond_side,
             )
+            strong_elapsed_s = strong_timer.elapsed_s()
             result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
                 current_result=result,
                 candidate_result=res_strong,
@@ -17073,6 +17805,17 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=strong_maxiter,
                 precond_side=gmres_precond_side,
                 solver_kind=_solver_kind("incremental")[0],
+                candidate_metrics=_rhs1_solver_candidate_metrics(
+                    name="strong_full",
+                    result=res_strong,
+                    target_value=target,
+                    solve_s=strong_elapsed_s,
+                ),
+                baseline_metrics=_rhs1_solver_candidate_metrics(
+                    name="current_full",
+                    result=result,
+                    target_value=target,
+                ),
             )
             _apply_rhs1_handoff(handoff_state)
         if (
@@ -17270,6 +18013,7 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: sparse JAX Jacobi fallback "
                             f"(sweeps={int(sparse_jax_sweeps)} omega={float(sparse_jax_omega):.2f})",
                         )
+                    sparse_retry_timer = Timer()
                     res_sparse, residual_vec_sparse = _solve_linear_with_residual(
                         matvec_fn=mv,
                         b_vec=rhs,
@@ -17282,6 +18026,7 @@ def solve_v3_full_system_linear_gmres(
                         solve_method_val="incremental",
                         precond_side=gmres_precond_side,
                     )
+                    sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
                     result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
                         current_result=result,
                         candidate_result=res_sparse,
@@ -17295,6 +18040,17 @@ def solve_v3_full_system_linear_gmres(
                         maxiter=maxiter,
                         precond_side=gmres_precond_side,
                         solver_kind=_solver_kind("incremental")[0],
+                        candidate_metrics=_rhs1_solver_candidate_metrics(
+                            name="sparse_jax_full",
+                            result=res_sparse,
+                            target_value=target,
+                            solve_s=sparse_retry_elapsed_s,
+                        ),
+                        baseline_metrics=_rhs1_solver_candidate_metrics(
+                            name="current_full",
+                            result=result,
+                            target_value=target,
+                        ),
                     )
                     _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
@@ -17371,11 +18127,13 @@ def solve_v3_full_system_linear_gmres(
                         use_implicit=bool(use_implicit),
                         active_size=int(op.total_size),
                     ):
+                        explicit_sparse_pattern = _maybe_rhsmode1_full_sparse_pattern(op, emit=emit)
                         explicit_sparse_operator, explicit_sparse_factor = _build_host_sparse_direct_factor_from_matvec(
                             matvec=sparse_factor_matvec,
                             n=int(op.total_size),
                             dtype=rhs.dtype,
                             factor_dtype=factor_dtype,
+                            pattern=explicit_sparse_pattern,
                             emit=emit,
                         )
                         a_csr_full = explicit_sparse_operator.matrix
@@ -17406,6 +18164,7 @@ def solve_v3_full_system_linear_gmres(
                     dense_matrix_cache = a_dense_cache
                     _mark("rhs1_sparse_precond_build_done")
                     host_sparse_direct = host_sparse_direct_wanted
+                    sparse_retry_timer = Timer()
 
                     if host_sparse_direct and ilu is not None:
                         if sparse_operator_preconditioned_rescue:
@@ -17636,6 +18395,7 @@ def solve_v3_full_system_linear_gmres(
                         )
                         residual_vec_sparse = rhs - _mv_sparse(res_sparse.x)
                     if res_sparse is not None:
+                        sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
                         result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
                             current_result=result,
                             candidate_result=res_sparse,
@@ -17649,6 +18409,17 @@ def solve_v3_full_system_linear_gmres(
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
                             solver_kind=_solver_kind("incremental")[0],
+                            candidate_metrics=_rhs1_solver_candidate_metrics(
+                                name="sparse_full",
+                                result=res_sparse,
+                                target_value=target,
+                                solve_s=sparse_retry_elapsed_s,
+                            ),
+                            baseline_metrics=_rhs1_solver_candidate_metrics(
+                                name="current_full",
+                                result=result,
+                                target_value=target,
+                            ),
                         )
                         _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
@@ -17724,6 +18495,7 @@ def solve_v3_full_system_linear_gmres(
                     f"(size={int(op.total_size)} residual={float(residual_norm_check):.3e} > target={target:.3e})",
                 )
             try:
+                dense_retry_timer = Timer()
                 use_row_scaled = int(op.constraint_scheme) == 0
                 if dense_backend_allowed:
                     dense_method = "dense_row_scaled" if use_row_scaled else "dense"
@@ -17765,9 +18537,33 @@ def solve_v3_full_system_linear_gmres(
                         precondition_side="none",
                         row_scaled=use_row_scaled,
                     )
-                if float(res_dense.residual_norm) < float(result.residual_norm):
-                    result = res_dense
-                    residual_vec = residual_vec_dense
+                dense_retry_elapsed_s = dense_retry_timer.elapsed_s()
+                result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                    current_result=result,
+                    candidate_result=res_dense,
+                    current_residual_vec=residual_vec,
+                    candidate_residual_vec=residual_vec_dense,
+                    matvec_fn=mv,
+                    b_vec=rhs,
+                    precond_fn=None,
+                    x0_vec=res_dense.x,
+                    restart=restart,
+                    maxiter=maxiter,
+                    precond_side="none",
+                    solver_kind="dense",
+                    candidate_metrics=_rhs1_solver_candidate_metrics(
+                        name="dense_full",
+                        result=res_dense,
+                        target_value=target,
+                        solve_s=dense_retry_elapsed_s,
+                    ),
+                    baseline_metrics=_rhs1_solver_candidate_metrics(
+                        name="current_full",
+                        result=result,
+                        target_value=target,
+                    ),
+                )
+                _apply_rhs1_handoff(handoff_state)
             except Exception as exc:  # noqa: BLE001
                 if emit is not None:
                     emit(1, f"solve_v3_full_system_linear_gmres: dense fallback failed ({type(exc).__name__}: {exc})")

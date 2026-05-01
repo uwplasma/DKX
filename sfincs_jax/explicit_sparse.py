@@ -237,7 +237,8 @@ def _operator_from_matrix(matrix: np.ndarray | sp.spmatrix) -> LinearOperator:
     def _matvec(x):
         return np.asarray(matrix @ np.asarray(x))
 
-    return LinearOperator((n_rows, n_cols), matvec=_matvec, dtype=np.asarray(matrix).dtype)
+    dtype = matrix.dtype if sp.issparse(matrix) else np.asarray(matrix).dtype
+    return LinearOperator((n_rows, n_cols), matvec=_matvec, dtype=dtype)
 
 
 def _normalize_dense_input(a, *, dtype=None) -> np.ndarray:
@@ -403,6 +404,151 @@ def build_operator_from_matvec(
     )
 
 
+def _normalize_pattern(pattern, *, shape: tuple[int, int] | None = None) -> sp.csr_matrix:
+    if sp.issparse(pattern):
+        pattern_csr = pattern.tocsr(copy=True)
+    else:
+        pattern_csr = sp.csr_matrix(np.asarray(pattern))
+    if shape is not None and tuple(pattern_csr.shape) != tuple(shape):
+        raise ValueError(f"pattern shape {pattern_csr.shape} does not match expected shape {shape}")
+    if pattern_csr.ndim != 2:
+        raise ValueError(f"expected a 2D sparsity pattern, got shape {pattern_csr.shape}")
+    pattern_csr.sum_duplicates()
+    if pattern_csr.nnz:
+        pattern_csr.data = np.ones_like(pattern_csr.data, dtype=bool)
+    pattern_csr = pattern_csr.astype(bool)
+    pattern_csr.eliminate_zeros()
+    return pattern_csr
+
+
+def color_pattern_columns(pattern) -> list[list[int]]:
+    """Greedily group columns whose declared row supports do not overlap.
+
+    A single matvec with ones in all columns of a color recovers every value in
+    that color when their row supports are disjoint. This is the sparse analogue
+    of column-by-column probing, but it avoids materializing a dense identity or
+    dense operator before converting to CSR.
+    """
+
+    pattern_csc = _normalize_pattern(pattern).tocsc()
+    color_rows: list[set[int]] = []
+    color_cols: list[list[int]] = []
+    for col in range(pattern_csc.shape[1]):
+        start, end = pattern_csc.indptr[col], pattern_csc.indptr[col + 1]
+        rows = set(int(row) for row in pattern_csc.indices[start:end])
+        if not rows:
+            continue
+        for color_index, used_rows in enumerate(color_rows):
+            if rows.isdisjoint(used_rows):
+                used_rows.update(rows)
+                color_cols[color_index].append(col)
+                break
+        else:
+            color_rows.append(set(rows))
+            color_cols.append([col])
+    return color_cols
+
+
+def build_operator_from_pattern(
+    matvec: Callable[[np.ndarray], np.ndarray],
+    *,
+    pattern,
+    dtype=np.float64,
+    backend: str | None = None,
+    csr_max_mb: float = 512.0,
+    drop_tol: float = 0.0,
+    allow_operator_only: bool = False,
+    max_colors: int | None = None,
+) -> SparseOperatorBundle:
+    """Materialize a sparse operator by probing a known sparsity pattern.
+
+    The pattern must be a conservative structural superset of all nonzeros. Each
+    color is evaluated with one combined seed vector; entries are then unpacked
+    using the declared row supports. If the pattern misses a true nonzero, that
+    value cannot be recovered, so callers should validate this path against the
+    matrix-free operator before using it as a production backend.
+    """
+
+    dtype_np = np.dtype(dtype)
+    pattern_csr = _normalize_pattern(pattern)
+    n_rows, n_cols = pattern_csr.shape
+    backend_norm = _backend_name(backend)
+    dense_nbytes = estimate_dense_nbytes((n_rows, n_cols), dtype_np)
+    csr_nbytes_estimate = estimate_csr_nbytes((n_rows, n_cols), int(pattern_csr.nnz), data_dtype=dtype_np)
+    csr_cap = int(max(0.0, float(csr_max_mb)) * 1e6)
+    if allow_operator_only and (csr_cap <= 0 or csr_nbytes_estimate > csr_cap):
+        decision = SparseDecision(
+            storage_kind="linear_operator",
+            reason="pattern CSR estimate would exceed budget; keep operator-only fallback",
+            backend=backend_norm,
+            shape=(n_rows, n_cols),
+            dense_nbytes=dense_nbytes,
+            csr_nbytes_estimate=csr_nbytes_estimate,
+            nnz_estimate=int(pattern_csr.nnz),
+            drop_tol=float(drop_tol),
+        )
+
+        def _op_matvec(x):
+            return np.asarray(matvec(np.asarray(x, dtype=dtype_np)))
+
+        operator = LinearOperator((n_rows, n_cols), matvec=_op_matvec, dtype=dtype_np)
+        return SparseOperatorBundle(matrix=None, operator=operator, metadata=decision)
+
+    colors = color_pattern_columns(pattern_csr)
+    if max_colors is not None and len(colors) > int(max_colors):
+        raise ValueError(f"pattern probing would require {len(colors)} colors, exceeding max_colors={max_colors}")
+
+    pattern_csc = pattern_csr.tocsc()
+    data_parts: list[np.ndarray] = []
+    row_parts: list[np.ndarray] = []
+    col_parts: list[np.ndarray] = []
+    for cols in colors:
+        seed = np.zeros(n_cols, dtype=dtype_np)
+        seed[np.asarray(cols, dtype=np.intp)] = 1
+        out = _host_array(matvec(seed), dtype=dtype_np)
+        if out.shape != (n_rows,):
+            raise ValueError(f"matvec returned shape {out.shape}; expected {(n_rows,)}")
+        for col in cols:
+            start, end = pattern_csc.indptr[col], pattern_csc.indptr[col + 1]
+            rows = pattern_csc.indices[start:end]
+            values = np.asarray(out[rows], dtype=dtype_np)
+            if float(drop_tol) > 0.0:
+                keep = np.abs(values) > float(drop_tol)
+            else:
+                keep = values != 0
+            if not np.any(keep):
+                continue
+            rows_kept = np.asarray(rows[keep], dtype=np.int32)
+            values_kept = np.asarray(values[keep], dtype=dtype_np)
+            row_parts.append(rows_kept)
+            col_parts.append(np.full(rows_kept.shape, int(col), dtype=np.int32))
+            data_parts.append(values_kept)
+
+    if data_parts:
+        data = np.concatenate(data_parts)
+        row_indices = np.concatenate(row_parts)
+        col_indices = np.concatenate(col_parts)
+    else:
+        data = np.asarray([], dtype=dtype_np)
+        row_indices = np.asarray([], dtype=np.int32)
+        col_indices = np.asarray([], dtype=np.int32)
+    matrix = sp.coo_matrix((data, (row_indices, col_indices)), shape=(n_rows, n_cols), dtype=dtype_np).tocsr()
+    matrix.sum_duplicates()
+    matrix.eliminate_zeros()
+    decision = SparseDecision(
+        storage_kind="csr",
+        reason=f"pattern-probed sparse materialization ({len(colors)} colors for {n_cols} columns)",
+        backend=backend_norm,
+        shape=(n_rows, n_cols),
+        dense_nbytes=dense_nbytes,
+        csr_nbytes_estimate=estimate_csr_nbytes((n_rows, n_cols), int(matrix.nnz), data_dtype=dtype_np),
+        nnz_estimate=int(matrix.nnz),
+        block_cols=len(colors),
+        drop_tol=float(drop_tol),
+    )
+    return SparseOperatorBundle(matrix=matrix, operator=_operator_from_matrix(matrix), metadata=decision)
+
+
 def factorize_host_sparse_operator(
     operator: SparseOperatorBundle | np.ndarray | sp.spmatrix,
     *,
@@ -443,10 +589,18 @@ def factorize_host_sparse_operator(
         matrix = sp.csr_matrix(np.asarray(matrix))
 
     csc = matrix.tocsc()
-    if kind == "lu":
-        factor = splu(csc, permc_spec=permc_spec, diag_pivot_thresh=diag_pivot_thresh)
-    elif kind == "ilu":
-        factor = spilu(csc, fill_factor=fill_factor, drop_tol=drop_tol, permc_spec=permc_spec)
-    else:  # pragma: no cover - defensive
-        raise ValueError(f"unknown factorization kind: {kind}")
+    try:
+        if kind == "lu":
+            factor = splu(csc, permc_spec=permc_spec, diag_pivot_thresh=diag_pivot_thresh)
+        elif kind == "ilu":
+            factor = spilu(csc, fill_factor=fill_factor, drop_tol=drop_tol, permc_spec=permc_spec)
+        else:  # pragma: no cover - defensive
+            raise ValueError(f"unknown factorization kind: {kind}")
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "Host sparse factorization failed. The assembled RHSMode=1 operator may be singular, "
+            "ill-conditioned, or missing a pinned gauge/nullspace constraint for this solver branch. "
+            "Use the default solver for parity runs, try solve_method='sparse_lsmr' only for diagnostic "
+            "minimum-norm probes, or adjust SFINCS_JAX_EXPLICIT_SPARSE_* factorization controls."
+        ) from exc
     return SparseFactorBundle(factor=factor, operator=SparseOperatorBundle(matrix=matrix, operator=_operator_from_matrix(matrix), metadata=metadata), metadata=metadata, kind=kind)

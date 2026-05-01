@@ -21,6 +21,7 @@ _run_prepared_case = _MODULE._run_prepared_case
 _write_suite_audits = _MODULE._write_suite_audits
 _write_suite_outputs = _MODULE._write_suite_outputs
 _iter_inputs = _MODULE._iter_inputs
+_load_reference_case_metrics = _MODULE._load_reference_case_metrics
 
 from run_reduced_upstream_suite import CaseResult
 from run_reduced_upstream_suite import _classify_blocker
@@ -217,6 +218,25 @@ def test_iter_inputs_ignores_staged_artifact_directories(tmp_path: Path) -> None
     assert inputs == [tmp_path / "real_case" / "input.namelist"]
 
 
+def test_load_reference_case_metrics_reads_suite_report(tmp_path: Path) -> None:
+    ref_root = tmp_path / "reference"
+    ref_root.mkdir()
+    (ref_root / "suite_report.json").write_text(
+        json.dumps(
+            [
+                {"case": "other", "fortran_runtime_s": 1.0},
+                {"case": "target", "fortran_runtime_s": 76.5, "fortran_max_rss_mb": 238.25},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    metrics = _load_reference_case_metrics(ref_root, "target")
+
+    assert metrics["fortran_runtime_s"] == pytest.approx(76.5)
+    assert metrics["fortran_max_rss_mb"] == pytest.approx(238.25)
+
+
 def _case_result(case: str, *, status: str = "parity_ok", strict_mismatches: int = 0) -> CaseResult:
     return CaseResult(
         case=case,
@@ -389,6 +409,59 @@ def test_run_prepared_case_passes_reference_input(tmp_path: Path, monkeypatch: p
     assert seen["target_runtime_max_iters"] == 2
     assert seen["target_runtime_basis"] == "fortran"
     assert seen["jax_profile_mode"] == "off"
+
+
+def test_run_prepared_case_preserves_staged_reference_wall_metrics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case_name = "ntx_case"
+    ref_root = tmp_path / "reference"
+    ref_case = ref_root / case_name / "fortran_run"
+    ref_case.mkdir(parents=True)
+    (ref_case / "sfincsOutput.h5").write_text("fortran-h5", encoding="utf-8")
+    (ref_case / "sfincs.log").write_text("Done. Time to solve: 1.31 seconds\n", encoding="utf-8")
+    (ref_case / "input.namelist").write_text("&general\n/\n", encoding="utf-8")
+    (ref_root / "suite_report.json").write_text(
+        json.dumps([{"case": case_name, "fortran_runtime_s": 76.45, "fortran_max_rss_mb": 238.75}]),
+        encoding="utf-8",
+    )
+
+    def fake_run_case(**kwargs):
+        result = _case_result(case_name)
+        result.fortran_runtime_s = 1.31
+        result.fortran_max_rss_mb = 99.0
+        return result
+
+    monkeypatch.setattr(_MODULE, "_run_case", fake_run_case)
+
+    case_input = tmp_path / "input.namelist"
+    case_input.write_text("&general\n/\n", encoding="utf-8")
+
+    result = _run_prepared_case(
+        case_name=case_name,
+        case_input=case_input,
+        reference_input=case_input,
+        case_out_dir=tmp_path / "out",
+        fortran_exe=None,
+        timeout_s=10.0,
+        rtol=5e-4,
+        atol=1e-9,
+        max_attempts=1,
+        target_runtime_s=None,
+        target_runtime_max_s=None,
+        target_runtime_max_iters=0,
+        target_runtime_basis="fortran",
+        reuse_fortran=False,
+        collect_iterations=True,
+        jax_repeats=1,
+        jax_cache_dir=None,
+        jax_profile_mode="off",
+        equilibria_search_dir=case_input.parent,
+        reference_results_root=ref_root,
+    )
+
+    assert result.fortran_runtime_s == pytest.approx(76.45)
+    assert result.fortran_max_rss_mb == pytest.approx(238.75)
 
 
 def test_runtime_metric_for_basis_uses_fortran_only_when_requested() -> None:

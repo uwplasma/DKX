@@ -343,13 +343,64 @@ time rebuilding a Krylov basis on hard nonsymmetric systems.
   failing at runtime.
 
 This makes the new method safe as a CLI performance option: it can accelerate
-explicit host solves without contaminating the differentiable reference route.
-Frozen-case offender probes on ``main`` still support keeping this as an explicit
-tuning knob rather than an automatic default. On the current pinned heavy cases,
-``lgmres`` preserves parity but is not yet a general win: it is only marginally
-different on the tokamak PAS+Er offender and is slower on the current frozen
-geometry4 and geometry5 full-system examples. The method is therefore kept
-available, but opt-in.
+hard host-only Krylov runs without changing differentiable workflows or
+contaminating the differentiable reference route. Frozen-case offender probes on
+``main`` still support keeping this as an explicit tuning knob rather than an
+automatic default. On the current pinned heavy cases, ``lgmres`` preserves
+parity but is not yet a general win: it is only marginally different on the
+tokamak PAS+Er offender and is slower on the current frozen geometry4 and
+geometry5 full-system examples. The method is therefore kept available, but
+opt-in.
+
+Structural sparse-host RHSMode=1 path
+-------------------------------------
+
+For large full-system RHSMode=1 production solves, ``solve_method="sparse_host"``
+uses the same matrix-free physics operator but materializes only a conservative
+structural sparse pattern:
+
+1. Build a full-system sparsity superset from the v3 layout, theta/zeta
+   derivative stencils, dense same-geometry FP velocity/species blocks,
+   Phi1/quasineutrality couplings, and constraint rows.
+2. Color columns with disjoint row supports.
+3. Probe one combined seed vector per color and unpack only declared nonzeros.
+4. Drop structural zeros, factor the resulting CSR matrix with host sparse LU,
+   and apply iterative refinement against the true sparse operator.
+
+The implementation lives in ``sfincs_jax.v3_sparse_pattern`` and
+``sfincs_jax.explicit_sparse.build_operator_from_pattern``. Tests verify that the
+conservative pattern covers frozen Fortran PETSc matrices for PAS, FP, and Phi1
+tiny systems, and that colored probing reconstructs the PAS tiny matrix to
+Fortran tolerances.
+
+This path is non-differentiable and should be used for CLI/Python production
+runs, not for gradient tracing. Large constrained-PAS RHSMode=1 profile-current
+decks now auto-select the sparse-PC GMRES host lane in the validated production
+window because that branch converges the true residual on the NTX finite-beta
+bring-up deck in seconds rather than minutes. Host sparse LU remains explicit
+because it is only correct when the constrained RHSMode=1 system has a pinned
+gauge/nullspace branch compatible with that factorization. For production
+experiments that need an explicit full-system sparse solve, prefer
+``solve_method="sparse_host_safe"``: it tries sparse LU first, and if sparse LU
+detects a singular constrained-PAS branch it falls back to a PETSc-compatible
+minimum-norm solve with separate acceptance metadata. Use ``sparse_lsmr``
+directly only as a diagnostic probe. RHSMode=1 outputs record
+``linearSolverConverged``, ``linearSolverAccepted``, the acceptance criterion,
+and the residual norm/target so nonconverged or branch-compatible diagnostics
+are visible in the main file, not only in the optional solver trace.
+The production benchmark manifest now enforces at least ``25 x 31 x 11 x 17``
+(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 11 x 17`` for
+tokamak cases, so performance claims for this lane should be regenerated from
+that manifest rather than from earlier lower-resolution bring-up probes. It is
+available via:
+
+.. code-block:: bash
+
+   sfincs_jax write-output --input input.namelist --out sfincsOutput.h5 --solve-method sparse_host_safe
+
+The historical NTX finite-beta ``17 x 21 x 5 x 12`` PAS/profile-current deck
+remains useful as a solver bring-up regression for sparse-host correctness, but
+it is no longer used as a public production baseline.
 
 Frozen-case variant benchmarking
 --------------------------------

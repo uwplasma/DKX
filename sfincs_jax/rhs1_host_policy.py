@@ -207,6 +207,47 @@ def rhs1_sparse_operator_preconditioned_rescue_allowed(
     return True
 
 
+def rhs1_constrained_pas_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+) -> bool:
+    """Return whether large constrained-PAS RHSMode=1 should start sparse-PC GMRES.
+
+    The matrix-free PAS path is robust for small examples, but production-sized
+    finite-beta profile-current decks can spend many minutes in Krylov fallback
+    and still stall at a large true residual.  The host sparse-PC branch builds
+    the same explicit operator sparsity used for diagnostics, factors the
+    RHSMode=1 preconditioner, and then polishes the true residual with GMRES.
+
+    Keep this as a narrow non-differentiable policy: it is a CLI/production
+    solve path, not the JAX-native autodiff route.
+    """
+    env = _env_bool("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC")
+    if env is False:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 2:
+        return False
+    if op.fblock.fp is not None or op.fblock.pas is None:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC_MIN", 30_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC_MAX", 300_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
 def host_sparse_factor_dtype(
     *,
     size: int,

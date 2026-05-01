@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import jax.numpy as jnp
+import pytest
 import scipy.sparse as sp
 
 from sfincs_jax.explicit_sparse import (
@@ -9,7 +10,9 @@ from sfincs_jax.explicit_sparse import (
     build_operator_from_blocks,
     build_operator_from_dense,
     build_operator_from_matvec,
+    build_operator_from_pattern,
     choose_storage_kind,
+    color_pattern_columns,
     estimate_csr_nbytes,
     estimate_dense_nbytes,
     factorize_host_sparse_operator,
@@ -153,6 +156,96 @@ def test_build_operator_from_matvec_uses_block_basis_without_full_eye() -> None:
     np.testing.assert_allclose(bundle.matrix.toarray(), a)
 
 
+def test_color_pattern_columns_groups_disjoint_row_supports() -> None:
+    pattern = sp.eye(5, format="csr")
+    colors = color_pattern_columns(pattern)
+    assert colors == [[0, 1, 2, 3, 4]]
+
+    tridiagonal_pattern = sp.diags([np.ones(4), np.ones(5), np.ones(4)], offsets=[-1, 0, 1], format="csr")
+    tridiagonal_colors = color_pattern_columns(tridiagonal_pattern)
+    assert len(tridiagonal_colors) < tridiagonal_pattern.shape[1]
+    for cols in tridiagonal_colors:
+        rows_seen: set[int] = set()
+        for col in cols:
+            rows = set(tridiagonal_pattern.tocsc().indices[tridiagonal_pattern.tocsc().indptr[col] : tridiagonal_pattern.tocsc().indptr[col + 1]])
+            assert rows_seen.isdisjoint(rows)
+            rows_seen.update(rows)
+
+
+def test_build_operator_from_pattern_uses_one_probe_for_diagonal_pattern() -> None:
+    a = np.diag([2.0, 3.0, 5.0, 7.0])
+    calls: list[np.ndarray] = []
+
+    def mv(x):
+        x_np = np.asarray(x)
+        calls.append(x_np.copy())
+        return a @ x_np
+
+    bundle = build_operator_from_pattern(mv, pattern=sp.eye(4, format="csr"), backend="cpu")
+
+    assert sp.isspmatrix_csr(bundle.matrix)
+    assert len(calls) == 1
+    np.testing.assert_allclose(calls[0], np.ones(4))
+    np.testing.assert_allclose(bundle.matrix.toarray(), a)
+    assert bundle.metadata.storage_kind == "csr"
+    assert bundle.metadata.block_cols == 1
+    assert "pattern-probed" in bundle.metadata.reason
+
+
+def test_build_operator_from_pattern_recovers_tridiagonal_with_coloring() -> None:
+    a = sp.diags(
+        [np.array([-1.0, -2.0, -3.0, -4.0]), np.array([4.0, 5.0, 6.0, 7.0, 8.0]), np.array([1.0, 2.0, 3.0, 4.0])],
+        offsets=[-1, 0, 1],
+        format="csr",
+    ).toarray()
+    pattern = sp.csr_matrix(a != 0)
+    calls: list[np.ndarray] = []
+
+    def mv(x):
+        x_np = np.asarray(x)
+        calls.append(x_np.copy())
+        return a @ x_np
+
+    bundle = build_operator_from_pattern(mv, pattern=pattern, backend="gpu")
+
+    assert len(calls) == bundle.metadata.block_cols
+    assert len(calls) < a.shape[1]
+    np.testing.assert_allclose(bundle.matrix.toarray(), a)
+    np.testing.assert_allclose(bundle.matvec(np.arange(1.0, 6.0)), a @ np.arange(1.0, 6.0))
+
+
+def test_build_operator_from_pattern_drops_overapproximated_structural_zeros() -> None:
+    a = np.diag([2.0, 3.0, 5.0])
+    pattern = sp.csr_matrix(np.ones((3, 3), dtype=bool))
+
+    def mv(x):
+        return a @ np.asarray(x)
+
+    bundle = build_operator_from_pattern(mv, pattern=pattern, backend="cpu")
+
+    assert bundle.matrix.nnz == 3
+    np.testing.assert_allclose(bundle.matrix.toarray(), a)
+
+
+def test_build_operator_from_pattern_can_fall_back_to_operator_only_when_budgeted() -> None:
+    a = np.eye(3)
+
+    def mv(x):
+        return a @ np.asarray(x)
+
+    bundle = build_operator_from_pattern(
+        mv,
+        pattern=sp.eye(3, format="csr"),
+        backend="cpu",
+        csr_max_mb=0.0,
+        allow_operator_only=True,
+    )
+
+    assert bundle.matrix is None
+    assert bundle.metadata.storage_kind == "linear_operator"
+    np.testing.assert_allclose(bundle.matvec(np.array([1.0, 2.0, 3.0])), np.array([1.0, 2.0, 3.0]))
+
+
 def test_factorize_host_sparse_operator_solves_exactly() -> None:
     dense = np.array([[4.0, 1.0], [2.0, 3.0]])
     bundle = build_operator_from_dense(dense, backend="cpu", force_sparse=True)
@@ -169,3 +262,10 @@ def test_factorize_host_sparse_operator_accepts_raw_sparse_matrix() -> None:
     factor = factorize_host_sparse_operator(matrix, kind="lu")
     rhs = jnp.asarray([6.0, 10.0], dtype=jnp.float64)
     np.testing.assert_allclose(factor.solve(rhs), np.array([2.0, 2.0]))
+
+
+def test_factorize_host_sparse_operator_reports_singular_branch_actionably() -> None:
+    matrix = sp.csr_matrix([[1.0, 0.0], [0.0, 0.0]])
+
+    with pytest.raises(RuntimeError, match="Host sparse factorization failed"):
+        factorize_host_sparse_operator(matrix, kind="lu")
