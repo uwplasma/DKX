@@ -450,6 +450,10 @@ def _write_h5(path: Path, keys: dict[str, float]) -> None:
 
 def test_write_suite_outputs_writes_incremental_reports(tmp_path: Path) -> None:
     rows = [_case_result("b_case"), _case_result("a_case", strict_mismatches=1)]
+    rows[0].jax_runtime_s = 20.0
+    rows[0].jax_logged_elapsed_s = 1.7
+    rows[1].blocker_type = "reference solver quality"
+    rows[1].message = "Fortran final residual exceeds solverTolerance*rhs_norm."
 
     _write_suite_outputs(rows, tmp_path)
 
@@ -470,7 +474,12 @@ def test_write_suite_outputs_writes_incremental_reports(tmp_path: Path) -> None:
     assert strict_rows[0]["status"] == "parity_mismatch"
     assert strict_rows[0]["jax_logged_elapsed_s"] == 1.7
     assert strict_rows[0]["n_mismatch_common"] == 1
-    assert "Scaled Example Suite Summary" in summary.read_text(encoding="utf-8")
+    summary_text = summary.read_text(encoding="utf-8")
+    assert "Scaled Example Suite Summary" in summary_text
+    assert "b_case: jax=1.700s" in summary_text
+    assert "## Reference-quality rows" in summary_text
+    assert "a_case: strict=1/10" in summary_text
+    assert "solverTolerance*rhs_norm" in summary_text
 
 
 def test_write_suite_audits_emits_key_coverage_and_runtime_drift(tmp_path: Path) -> None:

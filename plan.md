@@ -7789,3 +7789,17 @@ Validation after the reference-quality classifier:
   about `1.68 s` logged JAX solve time / `1.28 GB` RSS, kept strict mismatches
   localized to flow/current diagnostics (`15/212`), and reported blocker
   `reference solver quality` with the scaled Fortran residual note.
+
+Follow-up reporting cleanup on 2026-05-02:
+
+- The scaled-suite summary now prints runtime offenders using
+  `jax_logged_elapsed_s` when available, matching the metric already used for
+  offender sorting. This avoids mixing solver-time ranking with subprocess
+  wall-time ratios in production reports.
+- The summary now emits a dedicated `Reference-quality rows` section, so
+  branch-sensitive rows caused by loose Fortran references remain visible
+  without being presented as ordinary SFINCS_JAX solver failures.
+- Focused rerun for `tokamak_2species_PASCollisions_noEr` reports
+  `jax=2.104 s`, `fortran=75.315 s`, blocker `reference solver quality`, and
+  strict mismatches confined to the same flow/current diagnostic family
+  (`15/212`).

@@ -205,6 +205,11 @@ def _write_lane_summary(rows: list[CaseResult], out_path: Path) -> None:
         reverse=True,
     )[:10]
     mismatch_rows = [row for row in rows if row.n_mismatch_common > 0 or row.strict_n_mismatch_common > 0]
+    reference_quality_rows = [
+        row
+        for row in mismatch_rows
+        if str(row.blocker_type).strip().lower() == "reference solver quality"
+    ]
     print_gap_rows = [row for row in rows if row.print_parity_total > 0 and row.print_parity_signals < row.print_parity_total]
     failure_rows = [row for row in rows if row.status not in {"parity_ok", "parity_mismatch"}]
 
@@ -224,15 +229,17 @@ def _write_lane_summary(rows: list[CaseResult], out_path: Path) -> None:
 
     lines.append("## Runtime offenders (absolute JAX time)\n\n")
     for row in offenders_runtime:
+        jax_perf = _jax_perf_runtime(row)
         lines.append(
-            f"- {row.case}: jax={_fmt(row.jax_runtime_s)}s fortran={_fmt(row.fortran_runtime_s)}s "
-            f"ratio={_fmt((float(row.jax_runtime_s) / float(row.fortran_runtime_s)) if row.fortran_runtime_s not in (None, 0.0) else None)} "
+            f"- {row.case}: jax={_fmt(jax_perf)}s fortran={_fmt(row.fortran_runtime_s)}s "
+            f"ratio={_fmt((float(jax_perf) / float(row.fortran_runtime_s)) if jax_perf is not None and row.fortran_runtime_s not in (None, 0.0) else None)} "
             f"res={row.final_resolution} status={row.status}\n"
         )
     lines.append("\n## Runtime offenders (JAX/Fortran ratio)\n\n")
     for row, ratio in offenders_runtime_ratio:
+        jax_perf = _jax_perf_runtime(row)
         lines.append(
-            f"- {row.case}: ratio={_fmt(ratio)} jax={_fmt(row.jax_runtime_s)}s fortran={_fmt(row.fortran_runtime_s)}s "
+            f"- {row.case}: ratio={_fmt(ratio)} jax={_fmt(jax_perf)}s fortran={_fmt(row.fortran_runtime_s)}s "
             f"res={row.final_resolution} status={row.status}\n"
         )
     lines.append("\n## Memory offenders (absolute JAX RSS)\n\n")
@@ -261,7 +268,18 @@ def _write_lane_summary(rows: list[CaseResult], out_path: Path) -> None:
                 f"- {row.case}: practical={row.n_mismatch_common}/{row.n_common_keys} "
                 f"strict={row.strict_n_mismatch_common}/{row.strict_n_common_keys} "
                 f"solver={row.n_mismatch_solver} physics={row.n_mismatch_physics} "
+                f"blocker={row.blocker_type or '-'} "
                 f"sample={','.join(row.mismatch_keys_sample[:4]) or '-'}\n"
+            )
+    else:
+        lines.append("- None\n")
+    lines.append("\n## Reference-quality rows\n\n")
+    if reference_quality_rows:
+        for row in sorted(reference_quality_rows, key=lambda item: item.case):
+            lines.append(
+                f"- {row.case}: strict={row.strict_n_mismatch_common}/{row.strict_n_common_keys} "
+                f"sample={','.join(row.strict_mismatch_keys_sample[:4]) or '-'} "
+                f"note={row.message}\n"
             )
     else:
         lines.append("- None\n")
