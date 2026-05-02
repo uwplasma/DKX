@@ -290,6 +290,15 @@ iterative strategy but keeps the operator matrix-free:
 - **Preconditioning** follows a block structure: collision-diagonal approximations,
   constraint-aware Schur complements, and (for PAS) strong diagonal F-block preconditioners.
 
+For large non-differentiable RHSMode=1 constrained-PAS profile-current solves,
+``solve_method=auto`` may route to the host sparse-preconditioned GMRES branch.
+That branch factors an explicit sparse preconditioner but still polishes the
+true matrix-free residual.  Branch-sensitive diagnostics are labeled with
+``sfincs_jax.constrained_pas_branch``: exact true-residual branches,
+PETSc-compatible minimum-norm diagnostics, and weak preconditioned-residual
+references are kept distinct so current/flow parity is not claimed across
+different nullspace gauges.
+
 The implementations live in:
 
 - `sfincs_jax/solver.py` (Krylov wrappers and history tracking),
