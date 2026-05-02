@@ -95,9 +95,9 @@ def _ensure_jax_compilation_cache() -> None:
 
 _ensure_jax_compilation_cache()
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.io import localize_equilibrium_file_in_place
-from sfincs_jax.namelist import _strip_fortran_comments, read_sfincs_input
+from sfincs_jax.compare import compare_sfincs_outputs  # noqa: E402
+from sfincs_jax.io import localize_equilibrium_file_in_place  # noqa: E402
+from sfincs_jax.namelist import _strip_fortran_comments, read_sfincs_input  # noqa: E402
 
 RES_KEYS: tuple[str, ...] = ("NTHETA", "NZETA", "NX", "NXI")
 MIN_RES: dict[str, int] = {"NTHETA": 5, "NZETA": 1, "NX": 1, "NXI": 4}
@@ -590,6 +590,7 @@ def _parse_fortran_runtime_from_log(path: Path) -> float | None:
 
 
 _FORTRAN_RESIDUAL_PATTERN = re.compile(r"Residual function norm:\s*([-+0-9.eEdD]+)")
+_JAX_RHS_NORM_PATTERN = re.compile(r"\brhs_norm=([-+0-9.eEdD]+)")
 
 
 def _parse_fortran_final_residual_norm_from_log(path: Path) -> float | None:
@@ -605,6 +606,23 @@ def _parse_fortran_final_residual_norm_from_log(path: Path) -> float | None:
     return residual
 
 
+def _parse_jax_rhs_norm_from_log(path: Path) -> float | None:
+    """Return a representative RHS norm printed by a SFINCS_JAX RHSMode=1 solve."""
+    if not path.exists():
+        return None
+    values: list[float] = []
+    for match in _JAX_RHS_NORM_PATTERN.finditer(path.read_text(encoding="utf-8", errors="replace")):
+        try:
+            val = float(match.group(1).replace("D", "E").replace("d", "e"))
+        except ValueError:
+            continue
+        if np.isfinite(val) and val > 0.0:
+            values.append(float(val))
+    if not values:
+        return None
+    return float(max(values))
+
+
 def _solver_tolerance_from_namelist(path: Path) -> float | None:
     try:
         nml = read_sfincs_input(path)
@@ -612,12 +630,51 @@ def _solver_tolerance_from_namelist(path: Path) -> float | None:
         return None
     for group_name in ("resolutionParameters", "otherNumericalParameters"):
         group = nml.group(group_name)
-        for key in ("solverTolerance", "solvertolerance"):
-            if key in group:
+        for key, value in group.items():
+            if str(key).lower() == "solvertolerance":
                 try:
-                    return float(group[key])
+                    return float(value)
                 except (TypeError, ValueError):
                     return None
+    return None
+
+
+def _reference_solve_quality_note(
+    *,
+    final_fortran_residual: float | None,
+    solver_tolerance: float | None,
+    jax_rhs_norm: float | None,
+) -> str | None:
+    """Return a warning when the Fortran reference residual is loose for the RHS scale.
+
+    SFINCS v3 prints an absolute final SNES residual. For small RHS vectors, comparing
+    that value directly against ``solverTolerance`` is too permissive and can make a
+    low-quality reference look like a SFINCS_JAX parity failure. When the JAX log has
+    the RHS norm, use ``solverTolerance * ||rhs||`` as the target scale.
+    """
+    if final_fortran_residual is None or solver_tolerance is None:
+        return None
+    residual = float(final_fortran_residual)
+    tolerance = float(solver_tolerance)
+    if not (np.isfinite(residual) and np.isfinite(tolerance) and tolerance > 0.0):
+        return None
+
+    if jax_rhs_norm is not None and np.isfinite(float(jax_rhs_norm)) and float(jax_rhs_norm) > 0.0:
+        target = tolerance * float(jax_rhs_norm)
+        threshold = max(1.0e-12, 10.0 * target)
+        if residual > threshold:
+            return (
+                f"Fortran final residual={residual:.3e} exceeds 10x estimated target="
+                f"{target:.3e} (solverTolerance*rhs_norm); reference-solve quality suspect."
+            )
+        return None
+
+    threshold = max(1.0e-8, 10.0 * tolerance)
+    if residual > threshold:
+        return (
+            f"Fortran final residual={residual:.3e} exceeds solverTolerance={tolerance:.1e}; "
+            "reference-solve quality suspect."
+        )
     return None
 
 
@@ -1410,7 +1467,7 @@ def _compute_print_parity(*, fortran_log: Path, jax_log: Path) -> tuple[int, int
     matched = 0
     relevant = 0
     missing: list[str] = []
-    for signal, (fortran_pat, jax_pat) in PRINT_SIGNALS.items():
+    for signal_name, (fortran_pat, jax_pat) in PRINT_SIGNALS.items():
         seen_fortran = bool(re.search(fortran_pat.lower(), fortran_text, flags=re.IGNORECASE | re.MULTILINE))
         seen_jax = bool(re.search(jax_pat.lower(), jax_text, flags=re.IGNORECASE | re.MULTILINE))
         if seen_fortran:
@@ -1418,7 +1475,7 @@ def _compute_print_parity(*, fortran_log: Path, jax_log: Path) -> tuple[int, int
             if seen_jax:
                 matched += 1
             else:
-                missing.append(signal)
+                missing.append(signal_name)
     return matched, relevant, missing
 
 
@@ -1990,16 +2047,14 @@ def _run_case(
                 if fortran_log_path is not None:
                     final_fortran_residual = _parse_fortran_final_residual_norm_from_log(fortran_log_path)
                     solver_tol_ref = _solver_tolerance_from_namelist(fortran_dir / "input.namelist")
-                    if (
-                        final_fortran_residual is not None
-                        and solver_tol_ref is not None
-                        and float(final_fortran_residual) > max(1.0e-8, 10.0 * float(solver_tol_ref))
-                    ):
-                        note = (
-                            f"{note} Fortran final residual={float(final_fortran_residual):.3e} "
-                            f"exceeds solverTolerance={float(solver_tol_ref):.1e}; "
-                            "reference-solve quality suspect."
-                        )
+                    jax_rhs_norm = _parse_jax_rhs_norm_from_log(jax_log_path) if jax_log_path is not None else None
+                    quality_note = _reference_solve_quality_note(
+                        final_fortran_residual=final_fortran_residual,
+                        solver_tolerance=solver_tol_ref,
+                        jax_rhs_norm=jax_rhs_norm,
+                    )
+                    if quality_note is not None:
+                        note = f"{note} {quality_note}"
             if strict_n_common > 0:
                 note = f"{note} strict={strict_n_bad}/{strict_n_common}"
         except Exception as exc:  # noqa: BLE001
