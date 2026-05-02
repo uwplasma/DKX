@@ -69,3 +69,29 @@ def test_write_output_rhsmode1_phi1_fixtures_match_fortran_end_to_end(base: str,
             rtol=0.0,
             atol=atol,
         )
+
+
+def test_write_output_default_qn_phi1_path_regression(tmp_path: Path) -> None:
+    """QN-only default quasineutrality should use physics parameters without crashing."""
+    src = Path(__file__).parent / "ref" / "include_phi1_linear_subset_tiny.input.namelist"
+    text = src.read_text()
+    text = text.replace("  quasineutralityOption = 2\n", "")
+    text = text.replace("Nzeta = 5", "Nzeta = 1")
+    text = text.replace("Nxi = 6", "Nxi = 4")
+    text = text.replace("Nx = 4", "Nx = 2")
+
+    input_path = tmp_path / "default_qn_phi1.input.namelist"
+    input_path.write_text(text)
+    out_path = tmp_path / "default_qn_phi1.sfincsOutput_jax.h5"
+
+    write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=out_path,
+        compute_solution=True,
+        verbose=False,
+    )
+
+    out = read_sfincs_h5(out_path)
+    assert int(np.asarray(out["NIterations"]).ravel()[-1]) >= 1
+    assert float(np.asarray(out["linearSolverResidualNorm"]).item()) < 1.0e-12
+    np.testing.assert_allclose(np.asarray(out["FSABFlow"], dtype=np.float64), 0.0, atol=1e-12)

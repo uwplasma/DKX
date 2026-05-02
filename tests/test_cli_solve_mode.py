@@ -12,6 +12,7 @@ from sfincs_jax.input_compat import effective_equilibrium_file
 from sfincs_jax.io import (
     _select_rhsmode1_linear_solve_method,
     _select_phi1_newton_linear_solve_method,
+    _select_phi1_use_frozen_linearization,
     read_sfincs_h5,
     write_sfincs_jax_output_h5,
 )
@@ -294,6 +295,47 @@ def test_phi1_newton_fast_explicit_prefers_sparse_direct_on_large_cpu() -> None:
 
     assert method == "sparse_direct"
     assert any("host sparse-direct Newton step" in msg for msg in msgs)
+
+
+def test_phi1_newton_fast_explicit_prefers_sparse_direct_on_moderate_cpu() -> None:
+    method = _select_phi1_newton_linear_solve_method(
+        active_total_size=5703,
+        dense_cutoff=5000,
+        default_method="incremental",
+        fast_explicit=True,
+        dense_auto_ok=True,
+        dense_auto_backend="cpu",
+        env_override="",
+        emit=None,
+    )
+
+    assert method == "sparse_direct"
+
+
+def test_phi1_frozen_linearization_policy_keeps_sparse_direct_full_newton() -> None:
+    assert not _select_phi1_use_frozen_linearization(
+        fast_explicit=True,
+        solve_method="sparse_direct",
+        env_value="",
+    )
+    assert _select_phi1_use_frozen_linearization(
+        fast_explicit=True,
+        solve_method="incremental",
+        env_value="",
+    )
+
+
+def test_phi1_frozen_linearization_policy_respects_env_overrides() -> None:
+    assert _select_phi1_use_frozen_linearization(
+        fast_explicit=True,
+        solve_method="sparse_direct",
+        env_value="1",
+    )
+    assert not _select_phi1_use_frozen_linearization(
+        fast_explicit=True,
+        solve_method="incremental",
+        env_value="0",
+    )
 
 
 def test_apply_runtime_env_defaults_disables_preallocation_by_default(monkeypatch) -> None:

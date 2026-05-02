@@ -358,9 +358,9 @@ def _select_phi1_newton_linear_solve_method(
     if fast_explicit:
         sparse_direct_min_env = os.environ.get("SFINCS_JAX_PHI1_FAST_SPARSE_DIRECT_MIN", "").strip()
         try:
-            sparse_direct_min = int(sparse_direct_min_env) if sparse_direct_min_env else 20000
+            sparse_direct_min = int(sparse_direct_min_env) if sparse_direct_min_env else 5000
         except ValueError:
-            sparse_direct_min = 20000
+            sparse_direct_min = 5000
         if (
             int(active_total_size) > int(dense_cutoff)
             and str(dense_auto_backend).strip().lower() == "cpu"
@@ -399,6 +399,30 @@ def _select_phi1_newton_linear_solve_method(
     if env_override in {"dense", "incremental", "batched", "sparse_direct"}:
         method = env_override
     return method
+
+
+def _select_phi1_use_frozen_linearization(
+    *,
+    fast_explicit: bool,
+    solve_method: str,
+    env_value: str,
+) -> bool:
+    """Return whether the Phi1 Newton solve may use the fast frozen Jacobian path.
+
+    Sparse-direct Newton is the production CPU path for moderate explicit Phi1
+    systems. It is fast enough to use the true Newton linearization and avoids the
+    residual stall observed when the frozen shortcut is applied above the small
+    fixture regime.
+    """
+
+    env_frozen = str(env_value).strip().lower()
+    if env_frozen in {"1", "true", "yes", "on"}:
+        return True
+    if env_frozen in {"0", "false", "no", "off"}:
+        return False
+    if str(solve_method).strip().lower() == "sparse_direct":
+        return False
+    return bool(fast_explicit)
 
 
 def _align_phi1_history_for_output(
@@ -3319,7 +3343,7 @@ def write_sfincs_jax_output_h5(
                 emit(0, "write_sfincs_jax_output_h5: includePhi1=true -> Newton–Krylov solve with history")
             fast_explicit_phi1 = bool(differentiable is False)
             nk_solve_method = "incremental" if (fast_explicit_phi1 or int(op0.total_size) <= 5000) else "batched"
-            include_phi1_in_collisions = bool(phys.get("INCLUDEPHI1INCOLLISIONOPERATOR", False))
+            include_phi1_in_collisions = bool(phys_params.get("INCLUDEPHI1INCOLLISIONOPERATOR", False))
             dense_cutoff_env = os.environ.get("SFINCS_JAX_PHI1_NK_DENSE_CUTOFF", "").strip()
             try:
                 dense_cutoff = int(dense_cutoff_env) if dense_cutoff_env else 5000
@@ -3336,14 +3360,14 @@ def write_sfincs_jax_output_h5(
                 env_override=env_nk_method,
                 emit=emit,
             )
-            # Default to full Newton updates for includePhi1 runs. Allow explicit
-            # frozen-linearization overrides via environment variables.
-            use_frozen_linearization = fast_explicit_phi1
-            env_frozen = os.environ.get("SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION", "").strip().lower()
-            if env_frozen in {"1", "true", "yes", "on"}:
-                use_frozen_linearization = True
-            elif env_frozen in {"0", "false", "no", "off"}:
-                use_frozen_linearization = False
+            # Default to full Newton updates for sparse-direct production Phi1
+            # runs. Keep the older frozen shortcut for small explicit fixtures
+            # unless explicitly overridden.
+            use_frozen_linearization = _select_phi1_use_frozen_linearization(
+                fast_explicit=bool(fast_explicit_phi1),
+                solve_method=str(nk_solve_method),
+                env_value=os.environ.get("SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION", ""),
+            )
             # Use a slightly looser relative threshold than PETSc defaults for
             # QN-only runs, but keep PETSc-like rtol when Phi1 enters the kinetic equation.
             if use_frozen_linearization:
