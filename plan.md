@@ -7803,3 +7803,16 @@ Follow-up reporting cleanup on 2026-05-02:
   `jax=2.104 s`, `fortran=75.315 s`, blocker `reference solver quality`, and
   strict mismatches confined to the same flow/current diagnostic family
   (`15/212`).
+
+Follow-up constrained-PAS guard on 2026-05-02:
+
+- Added `sfincs_jax/constrained_pas_branch.py`, a small diagnostic helper for
+  classifying RHSMode=1 constrained-PAS branch spread across exact true-residual,
+  PETSc-compatible minimum-norm, and preconditioned-residual reference branches.
+- Added a compact artifact-backed regression at
+  `tests/reference_solver_path_artifacts/constrained_pas_branch_probe_2026-05-02.json`.
+  The fixture records the finite-beta profile-current branch sensitivity without
+  storing large matrices or downstream-project paths.
+- Added tests that require the converged sparse-PC branch to remain the selected
+  true-residual reference, while weak preconditioned-residual branches are
+  labeled as reference-quality blockers rather than promoted as parity anchors.
