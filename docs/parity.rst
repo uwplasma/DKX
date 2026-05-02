@@ -109,6 +109,13 @@ Current scope limits
 - The unconstrained ``constraintScheme=0`` branch is rank-deficient, so different solvers can select different nullspace
   components. For comparisons, sfincs_jax treats a small set of density/pressure-like outputs as gauge-dependent and
   skips them when ``constraintScheme=0`` (see ``sfincs_jax/compare.py``).
+- Constrained PAS systems can also be branch-sensitive in current/flow
+  diagnostics if a reference stops on a preconditioned residual while the true
+  residual is still large.  These rows are treated as reference-quality blockers,
+  not generic solver failures.  The compact regression fixture
+  ``tests/reference_solver_path_artifacts/constrained_pas_branch_probe_2026-05-02.json``
+  guards that exact true-residual, PETSc-compatible minimum-norm, and weak
+  preconditioned-residual branches remain explicitly labeled.
 - The default CLI and ``write-output`` path use an explicit performance-oriented solve strategy.
   End-to-end differentiable solves remain available from Python via the implicit/differentiable path when requested.
 - Full Phi1 coupling end-to-end (nonlinear residual assembly + collision operator contributions) is still being expanded beyond the currently parity-tested subset.

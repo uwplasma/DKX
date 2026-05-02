@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "description": "Compact constrained-PAS nullspace branch audit. Values summarize the 2026-05-01 finite-beta RHSMode=1 operator/solver audit without storing large matrices or downstream project paths.",
+  "cases": {
+    "finite_beta_profile_current_25x31x17_nx11": {
+      "observable_name": "FSABjHat",
+      "notes": "JAX sparse-PC GMRES and exact sparse-LU select the algebraically converged large-current branch. Fortran v3 preconditioned-residual branches can stop with O(1e-2) true residual and small-current diagnostics, so they are reference-quality blockers rather than parity anchors.",
+      "records": [
+        {
+          "label": "jax_sparse_pc_gmres",
+          "observable": -5.0338680158175295,
+          "residual_norm": 4.31e-14,
+          "residual_target": 2.09e-09,
+          "criterion": "true_residual",
+          "accepted": true
+        },
+        {
+          "label": "jax_petsc_compat_minimum_norm",
+          "observable": -0.0422348,
+          "residual_norm": 2.07e-02,
+          "residual_target": 2.09e-09,
+          "criterion": "petsc_compatible_minimum_norm_diagnostic",
+          "accepted": true
+        },
+        {
+          "label": "fortran_v3_preconditioned_branch_plain",
+          "observable": -0.00444045,
+          "residual_norm": 2.093e-02,
+          "residual_target": 2.09e-09,
+          "criterion": "preconditioned_residual",
+          "accepted": true
+        },
+        {
+          "label": "fortran_v3_preconditioned_branch_binary_dump",
+          "observable": -0.0270762,
+          "residual_norm": 2.093e-02,
+          "residual_target": 2.09e-09,
+          "criterion": "preconditioned_residual",
+          "accepted": true
+        }
+      ]
+    }
+  }
+}
