@@ -7723,3 +7723,53 @@ Next concrete steps:
    physical gauge branch is pinned.
 4. Keep `sparse_lsmr` as a diagnostic/research tool only unless a future
    residual definition and physics gate are agreed for singular PAS systems.
+
+### 22.4 Production-resolution Phi1/QN solver-policy closure
+
+Status: closed on 2026-05-01 for the bounded local production rows.
+
+- The bounded local production subset exposed three false Phi1/QN failures:
+  `tokamak_1species_FPCollisions_noEr_withPhi1InDKE`,
+  `tokamak_1species_FPCollisions_noEr_withQN`, and
+  `tokamak_1species_PASCollisions_noEr_withQN`. The old default selected the
+  frozen explicit Newton shortcut above the small-fixture regime, stalled the
+  nonlinear residual, and wrote branch-mismatched flow/current diagnostics.
+- The production default now promotes moderate CPU explicit Phi1/QN systems to
+  host sparse-direct Newton steps at `active_total_size >= 5000` when dense mode
+  would otherwise be skipped, and sparse-direct uses the true Newton
+  linearization unless `SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION=1` is set
+  explicitly.
+- A QN-only typo in the nonlinear Phi1 path was fixed:
+  `includePhi1InCollisionOperator` is read from `phys_params`, not from an
+  undefined `phys` local.
+- Focused default reruns against the existing MUMPS/SuperLU Fortran references
+  are strict-clean:
+  `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` converged to
+  `1.63e-14` and wrote in about `4.8 s`; `tokamak_1species_FPCollisions_noEr_withQN`
+  converged to `3.45e-16` and wrote in about `3.1 s`;
+  `tokamak_1species_PASCollisions_noEr_withQN` converged to `6.70e-10` and
+  wrote in about `2.0 s`.
+- Harness validation:
+  `python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-04-30/inputs --reference-results-root /tmp/sfincs_jax_prod_bounded_local_2026_05_01_cd0118f --out-root /tmp/sfincs_jax_phi1_qn_default_suite_check --timeout-s 120 --max-attempts 1 --fortran-min-runtime-s 0 --runtime-adjustment-iters 0 --jax-profile-marks off --max-run-recommendation bounded_local_ok --pattern 'tokamak_1species_.*(withQN|withPhi1InDKE)' --reset-report`
+  completed `3/3 parity_ok`, strict mismatches `0/274` for every row, and
+  missing Fortran output keys `0`.
+- Unit/regression validation:
+  `pytest -q tests/test_cli_solve_mode.py tests/test_io_output_policy_coverage.py tests/test_rhsmode1_phi1_write_output_end_to_end.py`
+  passed with `57 passed`, and `ruff check sfincs_jax/io.py tests/test_cli_solve_mode.py tests/test_rhsmode1_phi1_write_output_end_to_end.py`
+  passed.
+
+Remaining bounded-local notes:
+
+1. `tokamak_2species_PASCollisions_noEr` still shows strict flow/current
+   differences of order `1e-5` against the specific MUMPS/SuperLU Fortran HDF5
+   reference, while exported `delta_f`/`full_f` slices agree to about `1e-11`.
+   Exact JAX residual is `3.03e-17`, so this is a constrained-PAS branch and
+   diagnostic sensitivity, not a failed solve. PETSc-compatible/minimum-norm
+   sparse probes select a different physical branch and are not acceptable
+   defaults.
+2. `tokamak_1species_FPCollisions_noEr` was a Fortran-reference process-status
+   issue in the bounded local production run: the MUMPS/SuperLU Fortran binary
+   solved, printed diagnostics, and wrote a readable HDF5 file, then aborted
+   during PETSc teardown. Reusing that HDF5 reference with the same Nxi=31 input
+   gives `parity_ok`, strict mismatches `0/187`, and print parity `8/8`; the
+   JAX run converged to residual `1.71e-13` in about `16.7 s`.
