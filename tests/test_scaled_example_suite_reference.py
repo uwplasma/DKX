@@ -29,7 +29,10 @@ _run_recommendation_allowed = _MODULE._run_recommendation_allowed
 
 from run_reduced_upstream_suite import CaseResult  # noqa: E402
 from run_reduced_upstream_suite import _classify_blocker  # noqa: E402
+from run_reduced_upstream_suite import _parse_jax_rhs_norm_from_log  # noqa: E402
+from run_reduced_upstream_suite import _reference_solve_quality_note  # noqa: E402
 from run_reduced_upstream_suite import _runtime_metric_for_basis  # noqa: E402
+from run_reduced_upstream_suite import _solver_tolerance_from_namelist  # noqa: E402
 
 
 def test_stage_reference_fortran_artifacts_uses_last_success(tmp_path: Path) -> None:
@@ -515,6 +518,47 @@ def test_classify_blocker_treats_cuda_dense_custom_calls_as_solver_branch(tmp_pa
         )
         == "solver branch mismatch"
     )
+
+
+def test_reference_solve_quality_uses_rhs_scaled_target(tmp_path: Path) -> None:
+    log_path = tmp_path / "sfincs_jax.log"
+    log_path.write_text(
+        "solve_v3_full_system_linear_gmres: rhs_norm=6.811377e-04\n"
+        "solve_v3_full_system_linear_gmres: residual_norm=3.031074e-17\n",
+        encoding="utf-8",
+    )
+
+    rhs_norm = _parse_jax_rhs_norm_from_log(log_path)
+    note = _reference_solve_quality_note(
+        final_fortran_residual=1.1769038e-08,
+        solver_tolerance=1.0e-6,
+        jax_rhs_norm=rhs_norm,
+    )
+
+    assert rhs_norm == pytest.approx(6.811377e-04)
+    assert note is not None
+    assert "solverTolerance*rhs_norm" in note
+    assert "reference-solve quality suspect" in note
+
+
+def test_reference_solve_quality_does_not_warn_for_rhs_scaled_converged_reference() -> None:
+    note = _reference_solve_quality_note(
+        final_fortran_residual=1.0e-10,
+        solver_tolerance=1.0e-6,
+        jax_rhs_norm=6.8e-4,
+    )
+
+    assert note is None
+
+
+def test_solver_tolerance_parser_accepts_fortran_uppercase_keys(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        "&resolutionParameters\n  SOLVERTOLERANCE = 1.0d-6\n/\n",
+        encoding="utf-8",
+    )
+
+    assert _solver_tolerance_from_namelist(input_path) == pytest.approx(1.0e-6)
 
 
 def test_run_prepared_case_passes_reference_input(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

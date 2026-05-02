@@ -7766,10 +7766,26 @@ Remaining bounded-local notes:
    Exact JAX residual is `3.03e-17`, so this is a constrained-PAS branch and
    diagnostic sensitivity, not a failed solve. PETSc-compatible/minimum-norm
    sparse probes select a different physical branch and are not acceptable
-   defaults.
+   defaults. Follow-up dense JAX probing selected the same JAX flow/current
+   branch as the default, while the Fortran log records final residual
+   `1.177e-08` against an estimated `solverTolerance*rhs_norm` target
+   `6.811e-10`. The benchmark harness now parses RHS-scaled residual targets
+   and classifies this row as `reference solver quality` instead of a generic
+   SFINCS_JAX solver branch mismatch.
 2. `tokamak_1species_FPCollisions_noEr` was a Fortran-reference process-status
    issue in the bounded local production run: the MUMPS/SuperLU Fortran binary
    solved, printed diagnostics, and wrote a readable HDF5 file, then aborted
    during PETSc teardown. Reusing that HDF5 reference with the same Nxi=31 input
    gives `parity_ok`, strict mismatches `0/187`, and print parity `8/8`; the
    JAX run converged to residual `1.71e-13` in about `16.7 s`.
+
+Validation after the reference-quality classifier:
+
+- `pytest -q tests/test_scaled_example_suite_reference.py` passed with
+  `20 passed`.
+- `ruff check scripts/run_reduced_upstream_suite.py tests/test_scaled_example_suite_reference.py`
+  passed.
+- Focused harness rerun for `tokamak_2species_PASCollisions_noEr` completed in
+  about `1.68 s` logged JAX solve time / `1.28 GB` RSS, kept strict mismatches
+  localized to flow/current diagnostics (`15/212`), and reported blocker
+  `reference solver quality` with the scaled Fortran residual note.
