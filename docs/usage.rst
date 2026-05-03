@@ -175,7 +175,9 @@ Solving a supported v3 linear run (matrix-free)
    ``sfincs_jax`` will auto-try a Schur-complement strong preconditioner if the initial solve
    stalls, preserving the source constraints; PAS cases that already used a strong base
    preconditioner now skip that extra retry when the residual is already within a small
-   multiple of the target. Large non-differentiable constrained-PAS RHSMode=1
+   multiple of the target. CPU 3D full-FP RHSMode=1 cases in the audited size
+   window can auto-select sparse-PC GMRES when it beats dense FP on both runtime
+   and memory, while large non-differentiable constrained-PAS RHSMode=1
    profile-current decks auto-select the sparse-PC GMRES host lane inside the
    validated production size window so they do not spend minutes in a
    matrix-free fallback that stalls at a large residual. For PAS tokamak-like ``N_zeta=1`` cases with
@@ -316,6 +318,15 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX``: force GMRES for RHSMode=1 when the total
   system size is below this threshold (default: ``600``). Set to ``0`` to disable.
+
+- ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``: enable or disable the CPU-only
+  3D full-FP sparse-PC GMRES auto lane. The default is ``auto``. Set to ``0`` to
+  force the older dense/Krylov policy, or ``1`` to remove the lower active-size
+  floor while keeping the other safety checks.
+
+- ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN`` /
+  ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``: active-DOF bounds for the audited
+  CPU 3D full-FP sparse-PC GMRES auto lane. Defaults are ``300`` and ``20000``.
 
 - ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` (GMRES only): optional RHSMode=1 preconditioning.
 
