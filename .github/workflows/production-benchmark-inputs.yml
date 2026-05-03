@@ -48,16 +48,17 @@ jobs:
 
           assert manifest["case_count"] == 39
           assert manifest["minimum_3d_resolution"] == {
-              "NTHETA": 25,
-              "NZETA": 31,
-              "NX": 11,
-              "NXI": 17,
+              "NTHETA": 35,
+              "NZETA": 43,
+              "NX": 17,
+              "NXI": 48,
           }
           assert manifest["minimum_tokamak_resolution"] == {
-              "NTHETA": 25,
-              "NX": 11,
-              "NXI": 17,
+              "NTHETA": 42,
+              "NX": 16,
+              "NXI": 62,
           }
+          assert manifest["target_fortran_min_runtime_s"] == 10.0
           assert {case["source_group"] for case in cases} == {"examples"}
           assert not any("ntx" in str(case["case"]).lower() for case in cases)
           assert not any("ntx" in str(case["source_input"]).lower() for case in cases)
