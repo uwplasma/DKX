@@ -209,11 +209,12 @@ PETSc-compatible minimum-norm branch and labels that branch explicitly. The
 diagnostic ``sparse_lsmr`` lane can probe the same minimum-norm branch directly,
 but use it for research triage only unless ``linearSolverAccepted`` is true in
 the output and the acceptance criterion is the one intended for that study. The
-production benchmark manifest now enforces at least ``25 x 31 x 11 x 17``
-(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 11 x 17`` for
-tokamak cases. Earlier ``17 x 21 x 5 x 12`` finite-beta/profile-current timings
-were lower-resolution bring-up checks for this sparse-host lane, not public
-production baselines.
+production benchmark manifest now enforces at least ``35 x 43 x 17 x 48``
+(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``42 x 1 x 16 x 62`` for
+tokamak cases, with a ``10 s`` minimum SFINCS Fortran v3 timing target for
+public production rows. Earlier ``17 x 21 x 5 x 12`` finite-beta/profile-current
+timings were lower-resolution bring-up checks for this sparse-host lane, not
+public production baselines.
 
 Parallel CLI controls
 ---------------------

@@ -7466,16 +7466,17 @@ New artifact:
 
 - `benchmarks/production_resolution_inputs_2026-04-30/manifest.json`
   defines the current SFINCS_JAX-owned 39-case production benchmark tier.
-- Checked-in public examples are lifted to `3D >= 25 x 31 x 11 x 17`
-  (`Ntheta x Nzeta x Nx x Nxi`) and tokamak `>= 25 x 1 x 11 x 17` while
-  preserving any higher nominal resolution.
+- Checked-in public examples are lifted to `3D >= 35 x 43 x 17 x 48`
+  (`Ntheta x Nzeta x Nx x Nxi`) and tokamak `>= 42 x 1 x 16 x 62` while
+  preserving any higher nominal resolution. Public production timing rows target
+  SFINCS Fortran v3 runtimes of at least `10 s`.
 - Downstream/collaborator decks are no longer part of the active public
   production manifest. They can still be imported with explicit
   `--external-input` arguments for private reproduction, but they are not
   release blockers for SFINCS_JAX.
 - The regenerated public manifest has `39` cases, zero resolution-floor
-  violations, and preflight recommendations of `11` `bounded_local_ok`,
-  `3` `bounded_remote`, and `25` `remote_or_cluster_only` cases.
+  violations, and preflight recommendations of `5` `bounded_local_ok`,
+  `1` `bounded_remote`, and `33` `remote_or_cluster_only` cases.
 - Absolute VMEC/Boozer paths are copied into each staged case and localized so
   the same benchmark tree can run on `office` GPUs and other remote hosts.
 
@@ -7553,7 +7554,7 @@ Production conclusions:
   has clean CPU/GPU rows.
 - Previous `17 x 21 x 5 x 12` sparse-host timing evidence is useful for solver
   bring-up only. New public production-runtime and memory claims must be rerun
-  from the regenerated `25 x 31 x 11 x 17` / `25 x 1 x 11 x 17` manifest.
+  from the regenerated `35 x 43 x 17 x 48` / `42 x 1 x 16 x 62` manifest.
 
 Next required engineering steps:
 
@@ -7591,9 +7592,9 @@ Fresh focused evidence:
   seconds locally, and have residuals below the solver target.
 - The lower-resolution collaborator/NTX finite-beta RHSMode=1
   PAS/profile-current deck at `17 x 21 x 5 x 12` (`42850` unknowns) was the
-  initial sparse-host bring-up blocker. The production manifest now stages this
-  lane at `25 x 31 x 11 x 17`, so the old deck is no longer sufficient for
-  public production claims.
+  initial sparse-host bring-up blocker. The active public production manifest is
+  now larger (`35 x 43 x 17 x 48` for 3D and `42 x 1 x 16 x 62` for tokamak
+  rows), so the old deck is no longer sufficient for public production claims.
 - A Fortran v3 run of the same deck with the local
   `/Users/rogeriojorge/local/tests/sfincs/fortran/version3/sfincs` executable
   finished in about `13.6 s` and about `626 MB` peak RSS using sparse PETSc/KSP
@@ -7665,7 +7666,8 @@ Fresh focused evidence:
   `7.6e-17`, peak RSS about `1.54 GB`, and the same `FSABjHat` parity. Solver
   traces now expose a top-level `converged` flag in addition to residual and
   target. This is a development regression datum only; it must be superseded by
-  the `25 x 31 x 11 x 17` benchmark rerun before any public production claim.
+  the larger active production-manifest rerun before any public production
+  claim.
 
 Engineering conclusion:
 
@@ -7691,7 +7693,7 @@ Next concrete steps:
 4. Add tests that fail if any RHSMode=1 production output is written with a
    residual far above target unless the user explicitly opts into a diagnostic
    nonconverged output mode.
-5. Re-run a bounded pilot subset from the regenerated `25 x 31 x 11 x 17`
+5. Re-run a bounded pilot subset from the regenerated `35 x 43 x 17 x 48`
    production manifest before any full suite run. Start with the staged NTX
    sparse-host deck and one tokamak/one 3D public example, record residual,
    wall time, peak RSS, and `solver_trace.json`.
@@ -7701,11 +7703,15 @@ Next concrete steps:
 
 ### 22.2 Research-resolution production baseline update
 
-Status: completed for input generation on 2026-04-30; benchmark reruns pending.
+Status: refreshed for larger input generation on 2026-05-03; benchmark reruns pending.
 
 - `scripts/create_production_benchmark_inputs.py` now enforces the production
-  floor requested for research-appropriate grids: `3D >= 25 x 31 x 11 x 17`
-  and tokamak `>= 25 x 1 x 11 x 17`.
+  floor requested for research-appropriate grids: `3D >= 35 x 43 x 17 x 48`
+  and tokamak `>= 42 x 1 x 16 x 62`.
+- The manifest records `target_fortran_min_runtime_s = 10.0`. Promotion into
+  public timing plots requires the measured SFINCS Fortran v3 row to satisfy
+  that runtime floor, so the reduced-suite smoke artifacts cannot be mistaken
+  for production performance claims.
 - The generator now includes `Nx` in the floor and keeps downstream or
   collaborator decks behind explicit `--external-input` arguments. Public
   SFINCS_JAX benchmark manifests are example-only.
@@ -7717,8 +7723,8 @@ Status: completed for input generation on 2026-04-30; benchmark reruns pending.
 - The manifest was regenerated with `--clean`. It contains `39` SFINCS_JAX-owned
   cases, has zero resolution-floor violations, and no staged case names still
   contain stale downstream deck labels. The current preflight recommendations
-  are `11` bounded-local cases, `3` bounded-remote cases, and
-  `25` remote-or-cluster-only cases.
+  are `5` bounded-local cases, `1` bounded-remote case, and
+  `33` remote-or-cluster-only cases.
 - Focused tests verify example lifting, downstream exclusion from the checked-in
   manifest, explicit external-input handling, historic deck relabeling when
   requested, and the large PAS+XDot sizing gate.

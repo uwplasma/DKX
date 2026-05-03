@@ -53,8 +53,9 @@ DEFAULT_ARCHIVED_NTX_INPUTS = (
 )
 
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
-DEFAULT_3D_MINIMUM = {"NTHETA": 25, "NZETA": 31, "NX": 11, "NXI": 17}
-DEFAULT_TOKAMAK_MINIMUM = {"NTHETA": 25, "NX": 11, "NXI": 17}
+DEFAULT_3D_MINIMUM = {"NTHETA": 35, "NZETA": 43, "NX": 17, "NXI": 48}
+DEFAULT_TOKAMAK_MINIMUM = {"NTHETA": 42, "NX": 16, "NXI": 62}
+DEFAULT_TARGET_FORTRAN_MIN_RUNTIME_S = 10.0
 
 
 def _read_resolution(text: str) -> dict[str, int]:
@@ -311,6 +312,7 @@ def _resolution_policy_text(
     enforce_minimum: bool,
     min_3d: dict[str, int],
     min_tokamak: dict[str, int],
+    target_fortran_min_runtime_s: float,
 ) -> str:
     if not enforce_minimum:
         return "preserve authored external resolution"
@@ -322,7 +324,11 @@ def _resolution_policy_text(
         f"{int(min_tokamak['NTHETA'])}x1x"
         f"{int(min_tokamak['NX'])}x{int(min_tokamak['NXI'])}"
     )
-    return f"preserve nominal grid, but enforce 3D >= {min_3d_text} and tokamak >= {min_tokamak_text}"
+    return (
+        f"preserve nominal grid, but enforce 3D >= {min_3d_text} "
+        f"and tokamak >= {min_tokamak_text}; production timing rows target "
+        f"Fortran v3 >= {float(target_fortran_min_runtime_s):g} s"
+    )
 
 
 def _case_name_with_benchmark_resolution(case: str, resolution: dict[str, int]) -> str:
@@ -352,6 +358,7 @@ def _build_entry(
     min_3d: dict[str, int],
     min_tokamak: dict[str, int],
     enforce_minimum: bool,
+    target_fortran_min_runtime_s: float,
 ) -> dict[str, object] | None:
     src_input = Path(src_input).resolve()
     if not src_input.exists():
@@ -388,6 +395,7 @@ def _build_entry(
             enforce_minimum=enforce_minimum,
             min_3d=min_3d,
             min_tokamak=min_tokamak,
+            target_fortran_min_runtime_s=float(target_fortran_min_runtime_s),
         ),
     }
 
@@ -456,6 +464,16 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-tokamak-ntheta", type=int, default=DEFAULT_TOKAMAK_MINIMUM["NTHETA"])
     parser.add_argument("--min-tokamak-nx", type=int, default=DEFAULT_TOKAMAK_MINIMUM["NX"])
     parser.add_argument("--min-tokamak-nxi", type=int, default=DEFAULT_TOKAMAK_MINIMUM["NXI"])
+    parser.add_argument(
+        "--target-fortran-min-runtime-s",
+        type=float,
+        default=DEFAULT_TARGET_FORTRAN_MIN_RUNTIME_S,
+        help=(
+            "Documented Fortran v3 lower runtime target for production benchmark rows. "
+            "The fixed resolution floor is chosen to make public timing cases nontrivial; "
+            "benchmark runners should still report the measured per-case runtime."
+        ),
+    )
     parser.add_argument("--clean", action="store_true")
     return parser
 
@@ -477,6 +495,7 @@ def main(argv: list[str] | None = None) -> int:
         "NX": int(args.min_tokamak_nx),
         "NXI": int(args.min_tokamak_nxi),
     }
+    target_fortran_min_runtime_s = float(args.target_fortran_min_runtime_s)
     entries: list[dict[str, object]] = []
     for case, src_input in _iter_example_inputs(Path(args.examples_root), Path(args.additional_input)):
         entry = _build_entry(
@@ -487,6 +506,7 @@ def main(argv: list[str] | None = None) -> int:
             min_3d=min_3d,
             min_tokamak=min_tokamak,
             enforce_minimum=True,
+            target_fortran_min_runtime_s=target_fortran_min_runtime_s,
         )
         if entry is not None:
             entries.append(entry)
@@ -503,6 +523,7 @@ def main(argv: list[str] | None = None) -> int:
             min_3d=min_3d,
             min_tokamak=min_tokamak,
             enforce_minimum=bool(args.enforce_minimum_on_external),
+            target_fortran_min_runtime_s=target_fortran_min_runtime_s,
         )
         if entry is not None:
             entries.append(entry)
@@ -511,6 +532,13 @@ def main(argv: list[str] | None = None) -> int:
         "schema_version": 1,
         "minimum_3d_resolution": min_3d,
         "minimum_tokamak_resolution": min_tokamak,
+        "target_fortran_min_runtime_s": target_fortran_min_runtime_s,
+        "resolution_policy": _resolution_policy_text(
+            enforce_minimum=True,
+            min_3d=min_3d,
+            min_tokamak=min_tokamak,
+            target_fortran_min_runtime_s=target_fortran_min_runtime_s,
+        ),
         "case_count": len(entries),
         "cases": entries,
     }
