@@ -36,6 +36,7 @@ from .rhs1_host_policy import (
     rhs1_dense_auto_fp_accelerator_min,
     rhs1_dense_auto_fp_cutoff,
     rhs1_dense_backend_allowed,
+    rhs1_fp_3d_sparse_pc_auto_allowed,
 )
 from .solver_trace import SolverTrace, write_solver_trace_h5, write_solver_trace_json
 from .solver_progress import format_duration, runtime_scale_hint
@@ -3188,6 +3189,15 @@ def write_sfincs_jax_output_h5(
             use_dkes = use_dkes_val.strip().lower() in {"t", "true", "1", "yes", ".true."}
         else:
             use_dkes = bool(use_dkes_val) if use_dkes_val is not None else False
+        epar_val = (
+            phys_params.get("EPARALLELHAT", phys_params.get("EParallelHat", None))
+            if phys_params is not None
+            else None
+        )
+        try:
+            epar_abs = abs(float(epar_val)) if epar_val is not None else 0.0
+        except (TypeError, ValueError):
+            epar_abs = 0.0
         solve_method_env = os.environ.get("SFINCS_JAX_RHSMODE1_SOLVE_METHOD", "").strip().lower()
         force_krylov_env = os.environ.get("SFINCS_JAX_RHSMODE1_FORCE_KRYLOV", "").strip().lower()
         force_krylov = force_krylov_env in {"1", "true", "yes", "on"}
@@ -3226,6 +3236,24 @@ def write_sfincs_jax_output_h5(
         if solve_method_forced:
             if emit is not None:
                 emit(1, f"write_sfincs_jax_output_h5: keeping explicit solve_method={solve_method}")
+        elif (
+            (not force_krylov)
+            and rhs1_fp_3d_sparse_pc_auto_allowed(
+                op=op0,
+                active_size=int(active_total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind=solve_method,
+                backend=str(dense_auto_backend),
+                eparallel_abs=float(epar_abs),
+            )
+        ):
+            solve_method = "sparse_pc_gmres"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: 3D full-FP RHSMode=1 "
+                    "-> using sparse-PC GMRES host solve",
+                )
         elif (
             op0.fblock.fp is not None
             and (not include_phi1)
@@ -3266,11 +3294,6 @@ def write_sfincs_jax_output_h5(
                     f"backend={dense_auto_backend}; falling through to Krylov policy",
                 )
         elif op0.fblock.fp is not None and (not include_phi1):
-            epar_val = phys_params.get("EPARALLELHAT", phys_params.get("EParallelHat", None))
-            try:
-                epar_abs = abs(float(epar_val)) if epar_val is not None else 0.0
-            except (TypeError, ValueError):
-                epar_abs = 0.0
             if epar_abs > 0.0:
                 solve_method = "bicgstab"
                 if emit is not None:

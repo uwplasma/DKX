@@ -243,7 +243,14 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/solver_progress.py``:
   user-facing duration formatting, coarse runtime hints, one-shot large RHSMode=1
   progress messages, and transport whichRHS ETA text. This module is intentionally
-  solver-neutral: it improves observability without affecting numerical decisions.
+  lightweight so CLI progress can stay informative without importing heavy solver
+  dependencies. It is solver-neutral: it improves observability without affecting
+  numerical decisions.
+- ``sfincs_jax/rhs1_host_policy.py``:
+  tested admission gates for RHSMode=1 host dense, sparse-host, constrained-PAS
+  sparse-PC, and CPU 3D full-FP sparse-PC auto lanes. These helpers keep solver
+  path promotion rules explicit and unit-testable without assembling a kinetic
+  operator.
 
 ``sfincs_jax/solver.py`` and ``sfincs_jax/implicit_solve.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

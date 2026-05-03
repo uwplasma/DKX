@@ -374,13 +374,19 @@ tiny systems, and that colored probing reconstructs the PAS tiny matrix to
 Fortran tolerances.
 
 This path is non-differentiable and should be used for CLI/Python production
-runs, not for gradient tracing. Large constrained-PAS RHSMode=1 profile-current
-decks now auto-select the sparse-PC GMRES host lane in the validated production
-window because that branch converges the true residual on the finite-beta
-profile-current bring-up deck in seconds rather than minutes. Host sparse LU remains explicit
-because it is only correct when the constrained RHSMode=1 system has a pinned
-gauge/nullspace branch compatible with that factorization. For production
-experiments that need an explicit full-system sparse solve, prefer
+runs, not for gradient tracing. CPU 3D full-FP RHSMode=1 systems now have a
+narrow sparse-PC GMRES auto lane in the audited size window: HSX FP full,
+HSX FP DKES, and geometryScheme11 FP full probes all stayed Fortran-clean while
+using less RSS and less wall time than the dense FP shortcut. The gate excludes
+PAS, ``N_zeta=1`` tokamak systems, Phi1/QN, E_parallel, accelerator backends,
+implicit/differentiable solves, and explicit user-selected solve methods. Large
+constrained-PAS RHSMode=1 profile-current decks also auto-select the sparse-PC
+GMRES host lane in the validated production window because that branch
+converges the true residual on the finite-beta profile-current bring-up deck in
+seconds rather than minutes. Host sparse LU remains explicit because it is only
+correct when the constrained RHSMode=1 system has a pinned gauge/nullspace
+branch compatible with that factorization. For production experiments that need
+an explicit full-system sparse solve, prefer
 ``solve_method="sparse_host_safe"``: it tries sparse LU first, and if sparse LU
 detects a singular constrained-PAS branch it falls back to a PETSc-compatible
 minimum-norm solve with separate acceptance metadata. Use ``sparse_lsmr``
@@ -392,6 +398,10 @@ GMRES outputs also record setup time, solve time, sparse-pattern build time,
 preconditioner factorization time, matvecs, and sparse-pattern row-density
 counters, so large-run regressions can be separated into pre-solve setup and
 Krylov iteration costs.
+Controls for the CPU 3D full-FP auto lane are
+``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``,
+``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN``, and
+``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``.
 The production benchmark manifest now enforces at least ``25 x 31 x 11 x 17``
 (``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 11 x 17`` for
 tokamak cases, so performance claims for this lane should be regenerated from

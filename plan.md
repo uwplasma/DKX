@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-01 (America/Chicago)
+Last updated: 2026-05-02 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -189,6 +189,37 @@ Current active lane (2026-05-01, SFINCS_JAX-only closure):
   benchmark reports through guarded manual/nightly runners. Do not reopen
   NTX/NEOPAX profile-current parity as a SFINCS_JAX blocker unless downstream
   collaborators hand back a specific reproducible SFINCS_JAX defect.
+
+Current active lane (2026-05-02, trace-backed full-FP sparse-PC default):
+- [x] Probe structural sparse-host candidates on additional public RHSMode=1
+  geometry-rich cases before changing policy.
+- [x] Reject sparse-host auto-promotion for PAS after the HSX PAS full-trajectory
+  probe: default `pas_tz` stayed Fortran-clean, while `sparse_host` and
+  `sparse_pc_gmres` failed sparse factorization and `sparse_host_safe` changed
+  flow/current diagnostics. This keeps PAS on the current structured
+  preconditioner routes unless a future candidate is parity-clean and cheaper.
+- [x] Promote only the measured CPU 3D full-FP window to sparse-PC GMRES. The
+  gate is CPU-only, non-differentiable, `RHSMode=1`, `constraintScheme=1`,
+  full-FP, `N_zeta > 1`, no Phi1/QN, no `EParallelHat`, no explicit user solve
+  method, and active size within
+  `SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN/MAX` (`300` to `20000` by default).
+- [x] Check in the compact probe artifact
+  `tests/reference_solver_path_artifacts/fp3d_sparse_pc_probe_2026-05-02.json`
+  and guard it with tests requiring sparse-PC to be faster, lower-memory, and
+  Fortran-clean on the measured FP cases, while explicitly rejecting the PAS
+  sparse-host branches.
+- Validation: focused public-case reruns after the default policy changed
+  `HSX_FPCollisions_fullTrajectories` to `1.967 s` / `375.7 MB`,
+  `HSX_FPCollisions_DKESTrajectories` to `1.871 s` / `368.8 MB`, and
+  `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories`
+  to `0.819 s` / `367.0 MB`, each with `0` Fortran mismatches. The tokamak FP
+  control kept the dense auto lane, preserving the `N_zeta=1` exclusion.
+- Next SFINCS_JAX-only work: refresh production-resolution CPU/GPU benchmark
+  reports through the guarded manual/nightly runners and keep attacking only
+  trace-backed offenders where a candidate beats the incumbent on parity,
+  runtime, and memory. Remaining PAS improvements should focus on structured
+  preconditioner memory/lifetime reductions rather than sparse-host branch
+  promotion.
 
 Archived finite-beta RHSMode=1 solver-policy lane (2026-05-01):
 - [x] Read the NTX finite-beta RHSMode=1 profile-current handoff at `/Users/rogeriojorge/local/NTX/docs/sfincs-jax-rhsmode1-profile-current-handoff.md`.
