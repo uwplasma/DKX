@@ -102,11 +102,12 @@ file. Sparse-PC runs also write setup/solve/factorization timings and
 sparse-pattern counters such as `linearSolverMatvecs`,
 `linearSolverSetupTime`, `linearSolverSolveTime`,
 `linearSolverSparsePCFactorTime`, and `linearSolverSparsePatternNnz`.
-The production benchmark manifest now enforces at least `25 x 31 x 11 x 17`
-(`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and `25 x 1 x 11 x 17` for tokamak
-cases. Earlier `17 x 21 x 5 x 12` finite-beta/profile-current timings were
-lower-resolution bring-up checks for this solver lane, not public production
-baselines.
+The production benchmark manifest now enforces large research-scale floors:
+`35 x 43 x 17 x 48` (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and
+`42 x 1 x 16 x 62` for tokamak cases. Public production timing rows target
+SFINCS Fortran v3 runtimes of at least `10 s`; earlier `17 x 21 x 5 x 12`
+finite-beta/profile-current timings were lower-resolution bring-up checks for
+this solver lane, not public production baselines.
 
 ## Runtime and Memory Summary
 
@@ -127,14 +128,16 @@ Scope note: this figure is the reduced audited example-suite benchmark, intended
 for regression tracking and quick CPU/GPU smoke validation. Production
 performance claims should use the higher-resolution benchmark tier in
 `benchmarks/production_resolution_inputs_2026-04-30`, which enforces
-`25 x 31 x 11 x 17` 3D grids and `25 x 1 x 11 x 17` tokamak grids, including
-public examples and optional user-supplied production-resolution workloads. That
-production tier is intentionally separated because it has already exposed larger
-finite-beta/profile-current and RHSMode=3 transport solver blockers that are not
-visible in the reduced suite. The manual GitHub workflow `Production Benchmark
-Inputs` validates and uploads the production input tree without running expensive
-solves; full CPU/GPU/Fortran runtime and memory sweeps should be launched on
-local, `office`, or cluster hardware with explicit resource budgets.
+`35 x 43 x 17 x 48` 3D grids and `42 x 1 x 16 x 62` tokamak grids, including
+public examples and optional user-supplied production-resolution workloads. The
+manifest records a `10 s` minimum Fortran v3 runtime target for public timing
+rows. That production tier is intentionally separated because it has already
+exposed larger finite-beta/profile-current and RHSMode=3 transport solver
+blockers that are not visible in the reduced suite. The manual GitHub workflow
+`Production Benchmark Inputs` validates and uploads the production input tree
+without running expensive solves; full CPU/GPU/Fortran runtime and memory sweeps
+should be launched on local, `office`, or cluster hardware with explicit
+resource budgets.
 
 ## Physics in One Page
 
