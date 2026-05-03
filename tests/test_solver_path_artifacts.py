@@ -17,6 +17,10 @@ def _pas_variant_probe_cases() -> dict[str, dict[str, object]]:
     return _load_json(FIXTURES / "pas_offender_variant_probe_2026-05-01.json")["cases"]
 
 
+def _fp3d_sparse_pc_probe() -> dict[str, object]:
+    return _load_json(FIXTURES / "fp3d_sparse_pc_probe_2026-05-02.json")
+
+
 def test_cpu_solver_path_audit_stays_parity_clean() -> None:
     report = _load_json(FIXTURES / "cpu_audit_snapshot.json")["strict_report"]
 
@@ -216,3 +220,32 @@ def test_pas_offender_timed_out_variants_are_not_release_candidates() -> None:
             assert row["elapsed_s"] is None
             assert row["ru_maxrss_mb"] is None
             assert row["rhs1_preconditioner"] is None
+
+
+def test_fp3d_sparse_pc_probe_beats_dense_default_without_parity_loss() -> None:
+    probe = _fp3d_sparse_pc_probe()
+
+    for case_name, rows in probe["fp_cases"].items():
+        default = rows["default"]
+        sparse_pc = rows["sparse_pc_gmres"]
+
+        assert default["status"] == "ok", case_name
+        assert sparse_pc["status"] == "ok", case_name
+        assert sparse_pc["vs_fortran_count"] == 0, case_name
+        assert float(sparse_pc["elapsed_s"]) < float(default["elapsed_s"]), case_name
+        assert float(sparse_pc["ru_maxrss_mb"]) < float(default["ru_maxrss_mb"]), case_name
+        assert set(sparse_pc.get("vs_default_sample", [])) <= {"linearSolverResidualTargetRatio"}
+
+
+def test_fp3d_sparse_pc_probe_does_not_promote_pas_sparse_host() -> None:
+    probe = _fp3d_sparse_pc_probe()
+    rows = probe["pas_cases"]["HSX_PASCollisions_fullTrajectories"]
+
+    assert rows["default"]["status"] == "ok"
+    assert rows["default"]["rhs1_preconditioner"] == "pas_tz"
+    assert rows["default"]["vs_fortran_count"] == 0
+    assert rows["sparse_host"]["status"] == "error"
+    assert rows["sparse_pc_gmres"]["status"] == "error"
+    assert rows["sparse_host_safe"]["status"] == "ok"
+    assert rows["sparse_host_safe"]["vs_fortran_count"] > 0
+    assert "FSABjHat" in rows["sparse_host_safe"]["vs_fortran_sample"]
