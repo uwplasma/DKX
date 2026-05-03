@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-02 (America/Chicago)
+Last updated: 2026-05-03 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -220,6 +220,59 @@ Current active lane (2026-05-02, trace-backed full-FP sparse-PC default):
   runtime, and memory. Remaining PAS improvements should focus on structured
   preconditioner memory/lifetime reductions rather than sparse-host branch
   promotion.
+
+Current active lane (2026-05-03, production-resolution tokamak Er dense default):
+- [x] Reconstruct the interrupted production-resolution bounded local run on
+  `main` at `ff15535`. The guard launched `11` bounded tokamak cases and skipped
+  `29` remote/cluster-only cases. The bounded suite had `9` strict
+  `parity_ok` rows, `1` Fortran-reference divergence, and `1` known
+  Fortran-reference-quality mismatch; missing output-key coverage stayed `0`.
+- [x] Fix the suite classification so Fortran v3 `SNES_DIVERGED_*` logs with no
+  converged reference state are reported as `fortran_diverged` /
+  `reference solver quality` instead of a misleading `max_attempts`. A manual
+  JAX check of `tokamak_1species_PASCollisions_noEr_withQN` still completed
+  with `NIterations=1`, residual `7.16e-10`, and `FSABjHat=1.48146e-2`.
+- [x] Probe the two real bounded CPU runtime offenders before changing default
+  policy. `tokamak_1species_FPCollisions_withEr_DKESTrajectories` was spending
+  about `130.379 s` in the Krylov/strong/sparse-rescue ladder; forced dense LU
+  was parity-clean in `4.825 s`. `tokamak_1species_PASCollisions_withEr_fullTrajectories`
+  was spending about `95.302 s`; forced dense LU was parity-clean in `4.386 s`.
+  Sparse-host variants failed or timed out and were not promoted.
+- [x] Confirm the same general gate also covers
+  `tokamak_1species_FPCollisions_withEr_fullTrajectories`: the default is now
+  dense, Fortran-clean, `4.601 s` in the variant probe and `3.843 s` through the
+  suite harness, down from the prior `17.955 s` suite row.
+- [x] Promote only the measured bounded CPU tokamak-Er window to dense LU:
+  `RHSMode=1`, no Phi1, `N_zeta=1`, nonzero `Er` or potential-gradient drive,
+  Er/DKES trajectory terms enabled, no explicit user solve method, active size
+  in `SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MIN/MAX` (`5000` to `6500` by
+  default), and dense-matrix bytes below
+  `SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX_BYTES` (`350000000` by default).
+  The gate is CPU-only because the measured win is a CPU LU/runtime tradeoff,
+  not a GPU memory win.
+- [x] Validate the new default on the same production-resolution inputs:
+  FP DKES+Er default is now dense, Fortran-clean, `2.148 s`; PAS full-Er default
+  is now dense, Fortran-clean, `2.812 s`; the no-Er PAS control stays on
+  `pas_tokamak_theta`, Fortran-clean, `1.775 s` and about `667 MB`.
+- [x] Check in the compact artifact
+  `tests/reference_solver_path_artifacts/production_tokamak_er_dense_probe_2026-05-03.json`
+  and guard it with tests requiring the Er dense path to be parity-clean and
+  over `10x` faster while explicitly recording the higher transient RSS and the
+  no-Er control.
+- Validation: `pytest -q tests/test_rhs1_host_policy.py tests/test_solver_path_artifacts.py tests/test_scaled_example_suite_reference.py`
+  (`51 passed`); `ruff check sfincs_jax/rhs1_host_policy.py sfincs_jax/io.py scripts/benchmark_case_variants.py scripts/run_reduced_upstream_suite.py tests/test_rhs1_host_policy.py tests/test_solver_path_artifacts.py tests/test_scaled_example_suite_reference.py`.
+- Validation: harness-level production rerun for
+  `tokamak_1species_FPCollisions_withEr_DKESTrajectories`,
+  `tokamak_1species_FPCollisions_withEr_fullTrajectories`,
+  `tokamak_1species_PASCollisions_withEr_fullTrajectories`, and
+  `tokamak_1species_PASCollisions_noEr` recorded `4/4 parity_ok`, strict
+  `0` mismatches, missing output keys `0`, and JAX CLI times `3.53 s`,
+  `3.84 s`, `3.53 s`, and `2.89 s`, respectively.
+- Validation: `pytest -q` (`1067 passed in 8:47`) and
+  `sphinx-build -W -b html docs docs/_build/html`.
+- Next SFINCS_JAX-only work after this commit: keep optimization concentrated in
+  true remote/cluster-only production cases and GPU/PAS/geometry-rich memory,
+  not these bounded tokamak-Er runtime cliffs.
 
 Archived finite-beta RHSMode=1 solver-policy lane (2026-05-01):
 - [x] Read the NTX finite-beta RHSMode=1 profile-current handoff at `/Users/rogeriojorge/local/NTX/docs/sfincs-jax-rhsmode1-profile-current-handoff.md`.

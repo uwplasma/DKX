@@ -139,7 +139,10 @@ def _solver_path_summary(stdout: str) -> dict[str, object]:
             default=None,
         ),
         "profile_events": events,
-        "used_dense_auto": "FP RHSMode=1 small system -> using dense solve" in text,
+        "used_dense_auto": (
+            "FP RHSMode=1 small system -> using dense solve" in text
+            or "bounded tokamak Er RHSMode=1 -> using dense CPU solve" in text
+        ),
         "used_dense_fallback": "rhs1_dense_fallback" in text,
         "used_sparse_fallback": "rhs1_sparse_precond" in text or "host sparse LU direct fallback" in text,
     }
