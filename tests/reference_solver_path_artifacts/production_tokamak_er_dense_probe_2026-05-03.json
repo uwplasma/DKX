@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "created": "2026-05-03",
+  "purpose": "Production-resolution bounded CPU tokamak Er RHSMode=1 solver-policy probe.",
+  "baseline_commit": "ff15535",
+  "environment": {
+    "host": "local macOS",
+    "backend": "cpu",
+    "JAX_ENABLE_X64": "True",
+    "input_root": "/tmp/sfincs_jax_prod_bounded_local_ff15535_2026_05_03"
+  },
+  "production_bounded_suite": {
+    "launched": 11,
+    "skipped_by_guard": 29,
+    "before_fortran_divergence_reclassification": {
+      "status_counts": {
+        "parity_ok": 9,
+        "max_attempts": 1,
+        "parity_mismatch": 1
+      },
+      "blocker_counts": {
+        "none": 9,
+        "solver branch mismatch": 1,
+        "reference solver quality": 1
+      },
+      "output_key_coverage_missing_total": 0
+    },
+    "after_fortran_divergence_reclassification": {
+      "status_counts": {
+        "parity_ok": 9,
+        "fortran_diverged": 1,
+        "parity_mismatch": 1,
+        "max_attempts": 0,
+        "jax_error": 0
+      },
+      "blocker_counts": {
+        "none": 9,
+        "reference solver quality": 2
+      },
+      "output_key_coverage_missing_total": 0
+    }
+  },
+  "fortran_divergence_reclassification_probe": {
+    "case": "tokamak_1species_PASCollisions_noEr_withQN",
+    "status": "fortran_diverged",
+    "blocker_type": "reference solver quality",
+    "fortran_elapsed_s": 0.7220808749552816,
+    "jax_was_not_run_by_suite": true,
+    "manual_jax_check": {
+      "status": "ok",
+      "elapsed_s": 2.8373788750031963,
+      "peak_rss_mb": 600.21875,
+      "NIterations": 1,
+      "linearSolverResidualNorm": 7.159604091634043e-10,
+      "FSABjHat": 0.014814626597989438
+    }
+  },
+  "cases": {
+    "tokamak_1species_FPCollisions_withEr_DKESTrajectories": {
+      "active_size": 5677,
+      "er_abs": 30.0,
+      "default_before": {
+        "status": "ok",
+        "elapsed_s": 130.379,
+        "ru_maxrss_mb": 2602.25,
+        "profile_peak_rss_mb": 2728.7,
+        "rhs1_preconditioner": "xblock_tz",
+        "used_dense_auto": false,
+        "used_sparse_fallback": true,
+        "vs_fortran_count": 0
+      },
+      "dense_probe": {
+        "status": "ok",
+        "elapsed_s": 4.825,
+        "ru_maxrss_mb": 5683.75,
+        "profile_peak_rss_mb": 5062.2,
+        "rhs1_preconditioner": null,
+        "used_dense_auto": false,
+        "used_sparse_fallback": false,
+        "vs_fortran_count": 0,
+        "vs_default_sample": [
+          "linearSolverResidualTargetRatio"
+        ]
+      },
+      "default_after": {
+        "status": "ok",
+        "elapsed_s": 2.148,
+        "ru_maxrss_mb": 6278.359,
+        "profile_peak_rss_mb": 6583.3,
+        "rhs1_preconditioner": null,
+        "used_dense_auto": true,
+        "used_sparse_fallback": false,
+        "vs_fortran_count": 0
+      },
+      "rejected_variants": {
+        "sparse_host": {
+          "status": "error",
+          "reason": "Host sparse factorization failed"
+        },
+        "sparse_pc_gmres": {
+          "status": "error",
+          "reason": "Host sparse factorization failed"
+        },
+        "bicgstab": {
+          "status": "ok",
+          "elapsed_s": 170.593,
+          "ru_maxrss_mb": 3176.172,
+          "used_sparse_fallback": true,
+          "vs_fortran_count": 0
+        }
+      }
+    },
+    "tokamak_1species_FPCollisions_withEr_fullTrajectories": {
+      "active_size": 5677,
+      "er_abs": 30.0,
+      "default_before": {
+        "status": "ok",
+        "elapsed_s": 17.95536841696594,
+        "ru_maxrss_mb": 7909.3125,
+        "rhs1_preconditioner": "xblock_tz",
+        "used_dense_auto": false,
+        "used_sparse_fallback": false,
+        "vs_fortran_count": 0
+      },
+      "default_after": {
+        "status": "ok",
+        "elapsed_s": 4.601,
+        "ru_maxrss_mb": 7691.453,
+        "profile_peak_rss_mb": 5193.8,
+        "rhs1_preconditioner": null,
+        "used_dense_auto": true,
+        "used_sparse_fallback": false,
+        "vs_fortran_count": 0
+      },
+      "harness_after": {
+        "status": "parity_ok",
+        "strict_n_mismatch_common": 0,
+        "fortran_runtime_s": 2.460088625084609,
+        "jax_runtime_s": 3.843408750020899,
+        "jax_max_rss_mb": 7652.140625,
+        "output_key_missing_total": 0
+      }
+    },
+    "tokamak_1species_PASCollisions_withEr_fullTrajectories": {
+      "active_size": 5686,
+      "er_abs": 30.0,
+      "default_before": {
+        "status": "ok",
+        "elapsed_s": 95.302,
+        "ru_maxrss_mb": 2958.344,
+        "profile_peak_rss_mb": 3102.0,
+        "rhs1_preconditioner": "pas_schur",
+        "used_dense_auto": false,
+        "used_sparse_fallback": true,
+        "vs_fortran_count": 0
+      },
+      "dense_probe": {
+        "status": "ok",
+        "elapsed_s": 4.386,
+        "ru_maxrss_mb": 7116.188,
+        "profile_peak_rss_mb": 7008.6,
+        "rhs1_preconditioner": null,
+        "used_dense_auto": false,
+        "used_sparse_fallback": false,
+        "vs_fortran_count": 0,
+        "vs_default_sample": [
+          "linearSolverResidualTargetRatio"
+        ]
+      },
+      "default_after": {
+        "status": "ok",
+        "elapsed_s": 2.812,
+        "ru_maxrss_mb": 7389.0,
+        "profile_peak_rss_mb": 6508.9,
+        "rhs1_preconditioner": null,
+        "used_dense_auto": true,
+        "used_sparse_fallback": false,
+        "vs_fortran_count": 0
+      },
+      "rejected_variants": {
+        "xblock_tz": {
+          "status": "timeout",
+          "timeout_s": 180
+        },
+        "pas_tz": {
+          "status": "ok",
+          "elapsed_s": 88.698,
+          "ru_maxrss_mb": 3025.391,
+          "used_sparse_fallback": true,
+          "vs_fortran_count": 0
+        },
+        "sparse_host_safe": {
+          "status": "error",
+          "reason": "BLAS cblas_dgemv invalid value"
+        }
+      }
+    },
+    "tokamak_1species_PASCollisions_noEr": {
+      "active_size": 5686,
+      "er_abs": 0.0,
+      "default_after_control": {
+        "status": "ok",
+        "elapsed_s": 1.775,
+        "ru_maxrss_mb": 666.984,
+        "profile_peak_rss_mb": 699.4,
+        "rhs1_preconditioner": "pas_tokamak_theta",
+        "used_dense_auto": false,
+        "used_sparse_fallback": false,
+        "vs_fortran_count": 0
+      }
+    }
+  },
+  "policy": {
+    "default_enabled": true,
+    "cpu_only": true,
+    "requires_rhs_mode": 1,
+    "requires_no_phi1": true,
+    "requires_tokamak_n_zeta": 1,
+    "requires_nonzero_er_or_phi_gradient": true,
+    "requires_er_term_or_dkes_drift_enabled": true,
+    "active_size_min_default": 5000,
+    "active_size_max_default": 6500,
+    "dense_matrix_bytes_max_default": 350000000,
+    "user_disable_env": "SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE=0"
+  }
+}
