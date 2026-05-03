@@ -20,6 +20,7 @@ from sfincs_jax.rhs1_host_policy import (
     rhs1_host_sparse_direct_allowed,
     rhs1_host_sparse_skip_dense_ratio,
     rhs1_sparse_operator_preconditioned_rescue_allowed,
+    rhs1_tokamak_er_dense_auto_allowed,
 )
 
 
@@ -308,6 +309,148 @@ def test_rhs1_fp_3d_sparse_pc_auto_targets_measured_cpu_fp_window(monkeypatch) -
         use_implicit=False,
         solve_method_kind="auto",
         backend="cpu",
+    )
+
+
+def test_rhs1_tokamak_er_dense_auto_targets_bounded_cpu_window(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX_BYTES", raising=False)
+
+    fp_tokamak = _op(has_fp=True, constraint_scheme=1)
+    fp_tokamak.n_zeta = 1
+    pas_tokamak = _op(has_fp=False, has_pas=True, constraint_scheme=2)
+    pas_tokamak.n_zeta = 1
+
+    assert rhs1_tokamak_er_dense_auto_allowed(
+        op=fp_tokamak,
+        active_size=5677,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        use_dkes=True,
+        er_abs=30.0,
+        include_xdot=False,
+        include_electric_field_xi=False,
+    )
+    assert rhs1_tokamak_er_dense_auto_allowed(
+        op=pas_tokamak,
+        active_size=5686,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="cpu",
+        use_dkes=False,
+        er_abs=30.0,
+        include_xdot=True,
+        include_electric_field_xi=True,
+    )
+    assert not rhs1_tokamak_er_dense_auto_allowed(
+        op=pas_tokamak,
+        active_size=5686,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="gpu",
+        use_dkes=False,
+        er_abs=30.0,
+        include_xdot=True,
+        include_electric_field_xi=True,
+    )
+    assert not rhs1_tokamak_er_dense_auto_allowed(
+        op=pas_tokamak,
+        active_size=5686,
+        use_implicit=True,
+        solve_method_kind="auto",
+        backend="cpu",
+        use_dkes=False,
+        er_abs=30.0,
+        include_xdot=True,
+        include_electric_field_xi=True,
+    )
+    assert not rhs1_tokamak_er_dense_auto_allowed(
+        op=pas_tokamak,
+        active_size=5686,
+        use_implicit=False,
+        solve_method_kind="dense",
+        backend="cpu",
+        use_dkes=False,
+        er_abs=30.0,
+        include_xdot=True,
+        include_electric_field_xi=True,
+    )
+    assert not rhs1_tokamak_er_dense_auto_allowed(
+        op=pas_tokamak,
+        active_size=5686,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        use_dkes=False,
+        er_abs=0.0,
+        include_xdot=True,
+        include_electric_field_xi=True,
+    )
+    three_d = _op(has_fp=True, constraint_scheme=1)
+    three_d.n_zeta = 5
+    assert not rhs1_tokamak_er_dense_auto_allowed(
+        op=three_d,
+        active_size=5677,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        use_dkes=True,
+        er_abs=30.0,
+        include_xdot=False,
+        include_electric_field_xi=False,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE", "off")
+    assert not rhs1_tokamak_er_dense_auto_allowed(
+        op=fp_tokamak,
+        active_size=5677,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        use_dkes=True,
+        er_abs=30.0,
+        include_xdot=False,
+        include_electric_field_xi=False,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE", "on")
+    assert rhs1_tokamak_er_dense_auto_allowed(
+        op=fp_tokamak,
+        active_size=1,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        use_dkes=True,
+        er_abs=30.0,
+        include_xdot=False,
+        include_electric_field_xi=False,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX", "5000")
+    assert not rhs1_tokamak_er_dense_auto_allowed(
+        op=fp_tokamak,
+        active_size=5677,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        use_dkes=True,
+        er_abs=30.0,
+        include_xdot=False,
+        include_electric_field_xi=False,
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX", "6500")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX_BYTES", "1")
+    assert not rhs1_tokamak_er_dense_auto_allowed(
+        op=fp_tokamak,
+        active_size=5677,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        use_dkes=True,
+        er_abs=30.0,
+        include_xdot=False,
+        include_electric_field_xi=False,
     )
 
 

@@ -177,8 +177,12 @@ Solving a supported v3 linear run (matrix-free)
    preconditioner now skip that extra retry when the residual is already within a small
    multiple of the target. CPU 3D full-FP RHSMode=1 cases in the audited size
    window can auto-select sparse-PC GMRES when it beats dense FP on both runtime
-   and memory, while large non-differentiable constrained-PAS RHSMode=1
-   profile-current decks auto-select the sparse-PC GMRES host lane inside the
+   and memory. Bounded CPU tokamak electric-field RHSMode=1 cases can auto-select
+   dense LU inside the measured active-size and dense-byte caps when it avoids
+   the slow Krylov/strong/sparse-rescue ladder; this is a runtime path with
+   higher transient memory, not a GPU default. Large non-differentiable
+   constrained-PAS RHSMode=1 profile-current decks auto-select the sparse-PC GMRES
+   host lane inside the
    validated production size window so they do not spend minutes in a
    matrix-free fallback that stalls at a large residual. For PAS tokamak-like ``N_zeta=1`` cases with
    constraint projection enabled, ``sfincs_jax`` upgrades to the ``xblock_tz`` preconditioner by
@@ -732,6 +736,16 @@ performance without changing the input file:
   default accelerator dense shortcut in full-FP RHSMode=1 cases (default: ``1000``).
   This keeps tiny GPU fixtures on the lower-overhead matrix-free path while allowing
   moderate GPU FP systems to skip expensive Krylov/preconditioner setup.
+- ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE``: enable or disable the CPU-only
+  bounded dense-LU default for tokamak electric-field RHSMode=1 cases (default:
+  auto-enabled; set ``0`` to disable). The gate requires ``N_zeta=1``, no Phi1,
+  a nonzero ``Er`` or potential-gradient drive, and an Er/DKES trajectory term.
+- ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MIN`` /
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX``: active-size window for that
+  tokamak-Er dense default (defaults: ``5000`` and ``6500``).
+- ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX_BYTES``: dense-matrix byte cap for
+  the tokamak-Er dense default (default: ``350000000``). Lower this on
+  memory-constrained hosts.
 - ``SFINCS_JAX_RHSMODE1_DENSE_FP_MAX``: override the RHSMode=1 dense fallback ceiling for
   full Fokker–Planck (``collisionOperator=0``) cases (default: ``5000``).
 - ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX``: override the RHSMode=1 dense fallback ceiling for

@@ -71,11 +71,15 @@ sfincs_jax --plot sfincsOutput.nc
 ```
 
 For larger non-differentiable RHSMode=1 production runs, the CLI can leave the
-matrix-free Krylov path and use structural sparse host solves. Audited CPU
-3D full-FP systems now auto-select sparse-PC GMRES inside a measured size
-window when it is faster and lower-memory than dense FP; large constrained-PAS
-profile-current decks also auto-select sparse-PC GMRES when the problem size is
-in the validated production window. Explicit sparse-host LU remains available:
+matrix-free Krylov path when a measured policy is safer or faster. Audited CPU
+3D full-FP systems auto-select sparse-PC GMRES inside a measured size window
+when it is faster and lower-memory than dense FP. Bounded CPU tokamak
+electric-field systems auto-select dense LU only in the validated active-size
+window where it avoids the slow Krylov/strong/sparse-rescue ladder; this is a
+runtime win with a higher transient memory footprint, so it is CPU-only and
+size-capped. Large constrained-PAS profile-current decks also auto-select
+sparse-PC GMRES when the problem size is in the validated production window.
+Explicit sparse-host LU remains available:
 
 ```bash
 sfincs_jax write-output \

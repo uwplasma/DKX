@@ -294,6 +294,60 @@ def rhs1_fp_3d_sparse_pc_auto_allowed(
     return int(active_size) >= max(0, int(min_size))
 
 
+def rhs1_tokamak_er_dense_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    use_dkes: bool,
+    er_abs: float,
+    include_xdot: bool,
+    include_electric_field_xi: bool,
+) -> bool:
+    """Return whether bounded tokamak electric-field RHSMode=1 may use dense LU.
+
+    Production-resolution tokamak Er probes show that the matrix-free
+    Krylov/strong/sparse-rescue ladder can spend O(100 s) on systems just above
+    the generic dense cutoff, while dense LU solves the same algebraic problem in
+    a few seconds with Fortran-clean diagnostics. Keep this CPU-only and
+    size-bounded because dense LU has a larger transient RSS footprint.
+    """
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE")
+    if env is False:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    if op.fblock.fp is None and op.fblock.pas is None:
+        return False
+    has_er_drive = abs(float(er_abs)) > 0.0 and (
+        bool(use_dkes) or bool(include_xdot) or bool(include_electric_field_xi)
+    )
+    if not has_er_drive:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MIN", 5000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX", 6500)
+    max_dense_bytes = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX_BYTES", 350_000_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    dense_bytes = int(active_size) * int(active_size) * 8
+    if int(max_dense_bytes) > 0 and dense_bytes > int(max_dense_bytes):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
 def host_sparse_factor_dtype(
     *,
     size: int,
@@ -360,5 +414,6 @@ __all__ = [
     "rhs1_host_sparse_skip_dense_ratio",
     "rhs1_constrained_pas_sparse_pc_auto_allowed",
     "rhs1_fp_3d_sparse_pc_auto_allowed",
+    "rhs1_tokamak_er_dense_auto_allowed",
     "rhs1_sparse_operator_preconditioned_rescue_allowed",
 ]

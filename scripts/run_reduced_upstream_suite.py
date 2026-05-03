@@ -1518,6 +1518,13 @@ def _classify_blocker(*, status: str, note: str, mismatch_keys: list[str], jax_l
         text_parts.append(_tail(jax_log, n=80))
     text = "\n".join(text_parts).lower()
 
+    if (
+        "fortran diverged" in text
+        or "snes_diverged" in text
+        or "snes did not converge" in text
+        or "snesconvergedreason" in text
+    ):
+        return "reference solver quality"
     if status in {"fortran_timeout", "jax_timeout", "max_attempts"}:
         return "solver branch mismatch"
     if "reference-solve quality suspect" in text:
@@ -2183,11 +2190,18 @@ def _run_case(
 
     else:
         status = "max_attempts"
+        last_failure_note = str(note)
         fallback = last_success if target_runtime_s is not None else (last_success or disk_last_success)
         if note:
             note = f"Reached max attempts while reducing resolution. Last failure: {note}"
         else:
             note = "Reached max attempts while reducing resolution."
+        if (
+            "fortran diverged" in last_failure_note.lower()
+            or "snes" in last_failure_note.lower()
+            or "did not converge" in last_failure_note.lower()
+        ):
+            status = "fortran_diverged"
         if fallback is not None:
             _hydrate_last_success_metrics(fallback)
             if target_runtime_s is not None:

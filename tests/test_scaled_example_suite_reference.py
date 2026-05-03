@@ -28,11 +28,13 @@ _load_production_manifest_cases = _MODULE._load_production_manifest_cases
 _run_recommendation_allowed = _MODULE._run_recommendation_allowed
 
 from run_reduced_upstream_suite import CaseResult  # noqa: E402
+from run_reduced_upstream_suite import _run_case  # noqa: E402
 from run_reduced_upstream_suite import _classify_blocker  # noqa: E402
 from run_reduced_upstream_suite import _parse_jax_rhs_norm_from_log  # noqa: E402
 from run_reduced_upstream_suite import _reference_solve_quality_note  # noqa: E402
 from run_reduced_upstream_suite import _runtime_metric_for_basis  # noqa: E402
 from run_reduced_upstream_suite import _solver_tolerance_from_namelist  # noqa: E402
+import run_reduced_upstream_suite as reduced_suite  # noqa: E402
 
 
 def test_stage_reference_fortran_artifacts_uses_last_success(tmp_path: Path) -> None:
@@ -527,6 +529,94 @@ def test_classify_blocker_treats_cuda_dense_custom_calls_as_solver_branch(tmp_pa
         )
         == "solver branch mismatch"
     )
+
+
+def test_classify_blocker_treats_fortran_snes_divergence_as_reference_quality() -> None:
+    assert (
+        _classify_blocker(
+            status="max_attempts",
+            note="Reached max attempts while reducing resolution. Last failure: Fortran diverged in SNES.",
+            mismatch_keys=[],
+            jax_log=None,
+        )
+        == "reference solver quality"
+    )
+    assert (
+        _classify_blocker(
+            status="fortran_diverged",
+            note="SNESConvergedReason = -6; SNES_DIVERGED_LINE_SEARCH",
+            mismatch_keys=[],
+            jax_log=None,
+        )
+        == "reference solver quality"
+    )
+
+
+def test_run_case_reports_fortran_snes_divergence_without_max_attempts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        "&general\n"
+        "  RHSMode = 1\n"
+        "/\n"
+        "&resolutionParameters\n"
+        "  NTHETA = 25\n"
+        "  NZETA = 1\n"
+        "  NX = 11\n"
+        "  NXI = 31\n"
+        "/\n"
+        "&physicsParameters\n"
+        "  collisionOperator = 1\n"
+        "  includePhi1 = .true.\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    def fake_run_fortran_direct(*, input_path, exe, timeout_s, log_path):  # noqa: ANN001
+        out_h5 = log_path.parent / "sfincsOutput.h5"
+        with h5py.File(out_h5, "w") as h5:
+            h5["NIterations"] = 0
+        log_path.write_text(
+            "Nonlinear iteration (SNES) did not converge :( SNESConvergedReason = -6\n"
+            "SNES_DIVERGED_LINE_SEARCH: The line search failed\n",
+            encoding="utf-8",
+        )
+        return 0.64, out_h5, 0, 181.0
+
+    def fail_if_jax_runs(**kwargs):  # noqa: ANN003
+        raise AssertionError("JAX should not run when the Fortran reference has no converged state")
+
+    monkeypatch.setattr(reduced_suite, "_run_fortran_direct", fake_run_fortran_direct)
+    monkeypatch.setattr(reduced_suite, "_run_jax_cli", fail_if_jax_runs)
+
+    result = _run_case(
+        case_name="tokamak_pas_qn",
+        case_input=input_path,
+        reference_input=input_path,
+        case_out_dir=tmp_path / "out",
+        fortran_exe=tmp_path / "fake_sfincs",
+        timeout_s=10.0,
+        rtol=5e-4,
+        atol=1e-9,
+        max_attempts=1,
+        target_runtime_s=None,
+        target_runtime_max_s=None,
+        target_runtime_max_iters=0,
+        target_runtime_basis="fortran",
+        use_seed_resolution=True,
+        reuse_fortran=False,
+        collect_iterations=True,
+        jax_repeats=1,
+        jax_cache_dir=None,
+        jax_profile_mode="off",
+    )
+
+    assert result.status == "fortran_diverged"
+    assert result.blocker_type == "reference solver quality"
+    assert result.attempts == 1
+    assert result.reductions == 1
+    assert result.jax_h5 is None
 
 
 def test_reference_solve_quality_uses_rhs_scaled_target(tmp_path: Path) -> None:

@@ -168,7 +168,22 @@ Recent current-tip PAS full-trajectory fix:
 
 Recent current-tip GPU tokamak PAS+Er fix:
 
-- ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now uses a bounded one-GPU analytic-tokamak PAS+Er route that avoids the expensive ``xblock_tz`` setup and tightens the GMRES tolerance to ``1e-8``. The focused clean-remote ``office`` GPU probe completed parity-clean in ``3.249 s`` with about ``922 MB`` RSS, down from the previous release-table entry of ``18.199 s`` and ``1014.5 MB``. Medium bounded tokamak PAS+Er cases remain in the structured ``xblock_tz`` active-size window because that route avoids slow sparse fallback on the two-species GPU case.
+- ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now uses a bounded one-GPU analytic-tokamak PAS+Er route that avoids the expensive ``xblock_tz`` setup and tightens the GMRES tolerance to ``1e-8``. The focused clean-remote ``office`` GPU probe completed parity-clean in ``3.249 s`` with about ``922 MB`` RSS, down from the previous release-table entry of ``18.199 s`` and ``1014.5 MB``. On GPU, medium bounded tokamak PAS+Er cases remain in the structured ``xblock_tz`` active-size window because that route avoids slow sparse fallback on the two-species GPU case.
+
+Recent production-resolution CPU tokamak Er fix:
+
+- ``tokamak_1species_FPCollisions_withEr_DKESTrajectories``,
+  ``tokamak_1species_FPCollisions_withEr_fullTrajectories``, and
+  ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now use a bounded
+  CPU dense LU default when ``Er`` is nonzero and the active system size is in
+  the measured ``5000`` to ``6500`` window. On the local production-resolution
+  tier, the FP DKES+Er row dropped from ``130.379 s`` to ``2.148 s``, the FP
+  full-trajectory Er row dropped from ``17.955 s`` to ``4.601 s``, and the PAS
+  full-trajectory Er row dropped from ``95.302 s`` to ``2.812 s``, all with
+  ``0`` Fortran mismatches. The tradeoff is higher transient RSS during dense
+  LU, so the policy is CPU-only, byte-capped, and disabled by
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE=0``. The no-Er PAS control stayed on
+  ``pas_tokamak_theta`` at ``1.775 s`` and about ``667 MB``.
 
 Recent current-tip geometry4 PAS memory fix:
 
@@ -451,6 +466,17 @@ Solver defaults (Phi1 + sharding)
   current GPU suite shows tiny FP systems are faster on the lower-overhead
   matrix-free path. PAS uses Krylov by default to preserve parity and can be
   forced into dense fallback by setting ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX`` explicitly.
+- **Bounded tokamak electric-field dense default (RHSMode=1)**: production-resolution
+  CPU tokamak Er cases just above the generic dense cutoff can spend tens of seconds
+  in the Krylov/strong/sparse-rescue ladder even though dense LU is parity-clean.
+  The measured default gate is CPU-only, non-differentiable, ``RHSMode=1``, no
+  Phi1, ``N_zeta = 1``, nonzero ``Er``/potential-gradient drive, and active size
+  between ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MIN`` and
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX`` (defaults ``5000`` and ``6500``).
+  The dense matrix must also fit below
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX_BYTES`` (default ``350000000``).
+  Disable this policy with ``SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE=0`` on
+  memory-constrained hosts.
 - **Large FP stage-2 polish (RHSMode=1)**: for large full-FP systems, stage-2 GMRES
   polish remains enabled by default with a larger elapsed-time budget, so difficult
   high-resolution cases can converge without external reference overlays.
