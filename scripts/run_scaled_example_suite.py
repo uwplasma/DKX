@@ -69,9 +69,11 @@ def _auto_production_manifest_path(examples_root: Path, explicit_manifest: Path 
     return None
 
 
-def _load_production_manifest_cases(manifest_path: Path | None) -> tuple[Path | None, dict[Path, dict[str, object]]]:
+def _load_production_manifest_cases(
+    manifest_path: Path | None,
+) -> tuple[Path | None, dict[Path, dict[str, object]], dict[str, object]]:
     if manifest_path is None:
-        return None, {}
+        return None, {}, {}
     resolved_manifest = manifest_path.resolve()
     if not resolved_manifest.exists():
         raise FileNotFoundError(f"production manifest does not exist: {resolved_manifest}")
@@ -85,7 +87,7 @@ def _load_production_manifest_cases(manifest_path: Path | None) -> tuple[Path | 
         if not rel_input:
             continue
         by_input[(manifest_root / str(rel_input)).resolve()] = case
-    return resolved_manifest, by_input
+    return resolved_manifest, by_input, payload
 
 
 def _run_recommendation_allowed(recommendation: str | None, max_recommendation: str) -> bool:
@@ -727,11 +729,12 @@ def main() -> int:
     parser.add_argument(
         "--fortran-min-runtime-s",
         type=float,
-        default=1.0,
+        default=None,
         help=(
             "Minimum per-case benchmark runtime target. If the selected runtime basis falls below "
             "this after downscaling, the runner will try to scale back up, capped at the original "
-            "reference resolution."
+            "reference resolution. Defaults to the production manifest target when a generated "
+            "production input tree is used, otherwise 1.0 s."
         ),
     )
     parser.add_argument(
@@ -851,7 +854,16 @@ def main() -> int:
         raise SystemExit(f"Fortran executable does not exist: {fortran_exe}")
     out_root.mkdir(parents=True, exist_ok=True)
     production_manifest_path = _auto_production_manifest_path(examples_root, args.production_manifest)
-    production_manifest_path, production_manifest_cases_by_input = _load_production_manifest_cases(production_manifest_path)
+    (
+        production_manifest_path,
+        production_manifest_cases_by_input,
+        production_manifest_payload,
+    ) = _load_production_manifest_cases(production_manifest_path)
+    if args.fortran_min_runtime_s is None:
+        manifest_runtime_target = production_manifest_payload.get("target_fortran_min_runtime_s")
+        args.fortran_min_runtime_s = (
+            float(manifest_runtime_target) if manifest_runtime_target is not None else 1.0
+        )
 
     inputs = _iter_inputs(examples_root)
     extra_inputs: list[Path] = []

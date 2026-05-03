@@ -261,6 +261,7 @@ def test_production_manifest_filter_skips_remote_only_cases(tmp_path: Path) -> N
     manifest.write_text(
         json.dumps(
             {
+                "target_fortran_min_runtime_s": 10.0,
                 "cases": [
                     {
                         "case": "local_case",
@@ -277,7 +278,8 @@ def test_production_manifest_filter_skips_remote_only_cases(tmp_path: Path) -> N
         ),
         encoding="utf-8",
     )
-    _resolved_manifest, cases_by_input = _load_production_manifest_cases(manifest)
+    _resolved_manifest, cases_by_input, manifest_payload = _load_production_manifest_cases(manifest)
+    assert manifest_payload["cases"][0]["case"] == "local_case"
     case_names = {local_input: "local_case", remote_input: "remote_case"}
 
     kept, skipped = _filter_inputs_by_production_recommendation(
@@ -318,6 +320,7 @@ def test_main_auto_manifest_guard_records_skipped_cases(tmp_path: Path, monkeypa
     (prod_root / "manifest.json").write_text(
         json.dumps(
             {
+                "target_fortran_min_runtime_s": 10.0,
                 "cases": [
                     {
                         "case": "local_case",
@@ -338,9 +341,11 @@ def test_main_auto_manifest_guard_records_skipped_cases(tmp_path: Path, monkeypa
     ref_root.mkdir()
     out_root = tmp_path / "out"
     ran_cases: list[str] = []
+    target_runtime_s_values: list[float | None] = []
 
     def fake_run_prepared_case(**kwargs):
         ran_cases.append(kwargs["case_name"])
+        target_runtime_s_values.append(kwargs["target_runtime_s"])
         return _case_result(kwargs["case_name"])
 
     monkeypatch.setattr(_MODULE, "_run_prepared_case", fake_run_prepared_case)
@@ -357,8 +362,6 @@ def test_main_auto_manifest_guard_records_skipped_cases(tmp_path: Path, monkeypa
             str(out_root),
             "--pattern",
             "_case",
-            "--fortran-min-runtime-s",
-            "0",
             "--runtime-adjustment-iters",
             "0",
             "--max-attempts",
@@ -371,6 +374,8 @@ def test_main_auto_manifest_guard_records_skipped_cases(tmp_path: Path, monkeypa
 
     run_manifest = json.loads((out_root / "run_manifest.json").read_text(encoding="utf-8"))
     assert ran_cases == ["local_case"]
+    assert target_runtime_s_values == [10.0]
+    assert run_manifest["fortran_min_runtime_s"] == 10.0
     assert run_manifest["production_manifest"] == str((prod_root / "manifest.json").resolve())
     assert run_manifest["max_run_recommendation"] == "bounded_local_ok"
     assert [item["case"] for item in run_manifest["skipped_by_recommendation"]] == ["remote_case"]
