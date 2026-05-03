@@ -248,6 +248,52 @@ def rhs1_constrained_pas_sparse_pc_auto_allowed(
     return int(active_size) >= max(0, int(min_size))
 
 
+def rhs1_fp_3d_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    eparallel_abs: float = 0.0,
+) -> bool:
+    """Return whether 3D full-FP RHSMode=1 should start sparse-PC GMRES.
+
+    Bounded HSX and geometryScheme11 FP probes show that the host sparse-PC
+    branch can beat the dense FP shortcut on both runtime and memory while
+    preserving Fortran parity.  Keep the promotion narrow and CPU-only: PAS,
+    Phi1/QN, tokamak ``Nzeta=1``, E_parallel, differentiable, and explicit
+    user-selected solve methods stay on their existing paths.
+    """
+    env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC")
+    if env is False:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 1:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) <= 1:
+        return False
+    if abs(float(eparallel_abs)) > 0.0:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN", 300)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX", 20000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
 def host_sparse_factor_dtype(
     *,
     size: int,
@@ -313,5 +359,6 @@ __all__ = [
     "rhs1_host_sparse_direct_allowed",
     "rhs1_host_sparse_skip_dense_ratio",
     "rhs1_constrained_pas_sparse_pc_auto_allowed",
+    "rhs1_fp_3d_sparse_pc_auto_allowed",
     "rhs1_sparse_operator_preconditioned_rescue_allowed",
 ]

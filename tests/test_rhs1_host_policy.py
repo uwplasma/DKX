@@ -13,6 +13,7 @@ from sfincs_jax.rhs1_host_policy import (
     rhs1_dense_backend_allowed,
     rhs1_dense_fallback_max,
     rhs1_dense_krylov_allowed,
+    rhs1_fp_3d_sparse_pc_auto_allowed,
     rhs1_explicit_sparse_host_direct_allowed,
     rhs1_host_dense_fallback_allowed,
     rhs1_host_dense_shortcut_allowed,
@@ -27,6 +28,7 @@ def _op(*, has_fp: bool = True, has_pas: bool = False, rhs_mode: int = 1, includ
         rhs_mode=rhs_mode,
         include_phi1=include_phi1,
         constraint_scheme=constraint_scheme,
+        n_zeta=5,
         fblock=SimpleNamespace(fp=object() if has_fp else None, pas=object() if has_pas else None),
     )
 
@@ -229,6 +231,83 @@ def test_rhs1_constrained_pas_sparse_pc_auto_targets_large_nondiff_pas(monkeypat
         active_size=1,
         use_implicit=False,
         solve_method_kind="auto",
+    )
+
+
+def test_rhs1_fp_3d_sparse_pc_auto_targets_measured_cpu_fp_window(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX", raising=False)
+
+    assert rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        active_size=404,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        active_size=404,
+        use_implicit=True,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        active_size=404,
+        use_implicit=False,
+        solve_method_kind="dense",
+        backend="cpu",
+    )
+    assert not rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        active_size=404,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="gpu",
+    )
+    tokamak = _op(has_fp=True, constraint_scheme=1)
+    tokamak.n_zeta = 1
+    assert not rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=tokamak,
+        active_size=404,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=False, has_pas=True, constraint_scheme=1),
+        active_size=404,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        active_size=404,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        eparallel_abs=1.0e-4,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC", "off")
+    assert not rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        active_size=6516,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC", "on")
+    assert rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        active_size=1,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
     )
 
 
