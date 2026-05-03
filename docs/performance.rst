@@ -75,7 +75,9 @@ production-resolution input tier:
 
 By default this writes ``benchmarks/production_resolution_inputs_2026-04-30``
 from the public SFINCS_JAX example decks only. It enforces at least
-``25 x 31 x 11 x 17`` on 3D grids and ``25 x 1 x 11 x 17`` on tokamak grids.
+``35 x 43 x 17 x 48`` on 3D grids and ``42 x 1 x 16 x 62`` on tokamak grids,
+and the manifest records a ``10 s`` minimum SFINCS Fortran v3 runtime target
+for public production timing rows.
 Additional local decks can be added without changing the public manifest:
 
 .. code-block:: bash
@@ -107,6 +109,8 @@ The scaled-suite runner also understands these manifest recommendations. When
    python scripts/run_scaled_example_suite.py \
      --examples-root benchmarks/production_resolution_inputs_2026-04-30/inputs \
      --fortran-exe /path/to/sfincs/fortran/version3/sfincs \
+     --fortran-min-runtime-s 10.0 \
+     --runtime-adjustment-iters 0 \
      --out-root benchmarks/production_resolution_cpu_local
 
 Raise the guard only on an explicitly budgeted remote or cluster lane:
