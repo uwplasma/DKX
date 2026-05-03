@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "description": "Bounded public 3D FP/PAS sparse-host probe used to guard RHSMode=1 sparse-PC auto-selection. Runtimes are local cold subprocess measurements with SFINCS_JAX_PROFILE=1 and Fortran-reference output comparisons where available.",
+  "fp_cases": {
+    "HSX_FPCollisions_fullTrajectories": {
+      "default": {
+        "status": "ok",
+        "elapsed_s": 2.33,
+        "ru_maxrss_mb": 483.797,
+        "vs_fortran_count": 0
+      },
+      "sparse_pc_gmres": {
+        "status": "ok",
+        "elapsed_s": 2.097,
+        "ru_maxrss_mb": 389.812,
+        "vs_fortran_count": 0,
+        "vs_default_sample": [
+          "linearSolverResidualTargetRatio"
+        ]
+      },
+      "sparse_host": {
+        "status": "ok",
+        "elapsed_s": 6.495,
+        "ru_maxrss_mb": 528.719,
+        "vs_fortran_count": 0
+      }
+    },
+    "HSX_FPCollisions_DKESTrajectories": {
+      "default": {
+        "status": "ok",
+        "elapsed_s": 2.293,
+        "ru_maxrss_mb": 477.406,
+        "vs_fortran_count": 0
+      },
+      "sparse_pc_gmres": {
+        "status": "ok",
+        "elapsed_s": 2.041,
+        "ru_maxrss_mb": 377.422,
+        "vs_fortran_count": 0,
+        "vs_default_sample": [
+          "linearSolverResidualTargetRatio"
+        ]
+      },
+      "sparse_host": {
+        "status": "ok",
+        "elapsed_s": 4.361,
+        "ru_maxrss_mb": 441.906,
+        "vs_fortran_count": 0
+      }
+    },
+    "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories": {
+      "default": {
+        "status": "ok",
+        "elapsed_s": 1.162,
+        "ru_maxrss_mb": 472.453,
+        "vs_fortran_count": 0
+      },
+      "sparse_pc_gmres": {
+        "status": "ok",
+        "elapsed_s": 0.997,
+        "ru_maxrss_mb": 368.547,
+        "vs_fortran_count": 0,
+        "vs_default_sample": [
+          "linearSolverResidualTargetRatio"
+        ]
+      },
+      "sparse_host": {
+        "status": "ok",
+        "elapsed_s": 4.449,
+        "ru_maxrss_mb": 462.516,
+        "vs_fortran_count": 0
+      }
+    }
+  },
+  "pas_cases": {
+    "HSX_PASCollisions_fullTrajectories": {
+      "default": {
+        "status": "ok",
+        "elapsed_s": 3.18,
+        "ru_maxrss_mb": 1271.844,
+        "rhs1_preconditioner": "pas_tz",
+        "vs_fortran_count": 0
+      },
+      "sparse_host": {
+        "status": "error",
+        "failure_class": "host_sparse_factorization_failed"
+      },
+      "sparse_pc_gmres": {
+        "status": "error",
+        "failure_class": "host_sparse_factorization_failed"
+      },
+      "sparse_host_safe": {
+        "status": "ok",
+        "elapsed_s": 6.956,
+        "ru_maxrss_mb": 804.203,
+        "vs_fortran_count": 40,
+        "vs_fortran_sample": [
+          "FSABFlow",
+          "FSABFlow_vs_x",
+          "FSABVelocityUsingFSADensity",
+          "FSABVelocityUsingFSADensityOverB0",
+          "FSABVelocityUsingFSADensityOverRootFSAB2",
+          "FSABjHat",
+          "FSABjHatOverB0",
+          "FSABjHatOverRootFSAB2"
+        ]
+      }
+    }
+  }
+}
