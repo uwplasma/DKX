@@ -24,6 +24,7 @@ def test_case_table_reports_cold_and_warm_logged_runtimes() -> None:
         "jax_runtime_s_warm": 2.0,
         "jax_logged_elapsed_s": 2.5,
         "jax_max_rss_mb": 150.0,
+        "jax_incremental_max_rss_mb": 60.0,
         "status": "parity_ok",
         "n_mismatch_common": 0,
         "n_common_keys": 12,
@@ -40,6 +41,7 @@ def test_case_table_reports_cold_and_warm_logged_runtimes() -> None:
         "jax_runtime_s_warm": None,
         "jax_logged_elapsed_s": 1.5,
         "jax_max_rss_mb": 200.0,
+        "jax_incremental_max_rss_mb": 75.0,
         "status": "parity_ok",
         "n_mismatch_common": 0,
         "n_common_keys": 12,
@@ -59,10 +61,13 @@ def test_case_table_reports_cold_and_warm_logged_runtimes() -> None:
     assert "JAX CPU warm/logged(s)" in table[0]
     assert "JAX GPU cold(s)" in table[0]
     assert "JAX GPU warm/logged(s)" in table[0]
+    assert "JAX CPU active MB" in table[0]
+    assert "JAX GPU active MB" in table[0]
     assert table[2].startswith(
         "| `case_a` | 10.000 | 3.000 | 0.30x | 2.000 | 0.20x | "
         "4.000 | 0.40x | 1.500 | 0.15x |"
     )
+    assert " | 100.0 | 60.0 | 0.60x | 75.0 | 0.75x | " in table[2]
 
 
 def test_public_comparison_cases_filter_short_fortran_reference_runs() -> None:
