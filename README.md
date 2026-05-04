@@ -114,26 +114,24 @@ this solver lane, not public production baselines.
 ![Runtime and memory comparison against SFINCS Fortran v3](docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png)
 
 The release benchmark above compares SFINCS Fortran v3, `sfincs_jax` CPU cold,
-`sfincs_jax` CPU warm, `sfincs_jax` GPU cold, and `sfincs_jax` GPU warm for every
-audited example-suite case. The left panel shows wall-clock runtime and the right
-panel shows peak resident memory, both on log axes. Cold is the first external
-suite command. Warm runtime uses `jax_runtime_s_warm` when reports were generated
-with `--jax-repeats >= 2`; for the current frozen release reports, it falls back
-to the CLI `jax_logged_elapsed_s` field. Cases are ordered by best warm
-`sfincs_jax` speedup over the Fortran v3 runtime, so the strongest JAX wins appear
-first. Regenerate the plot with
+`sfincs_jax` CPU warm, `sfincs_jax` GPU cold, and `sfincs_jax` GPU warm only for
+production-scale rows whose Fortran v3 reference runtime is at least `10 s`.
+The left panel shows wall-clock runtime and the right panel shows peak resident
+memory, both on log axes. Cold is the first external suite command. Warm runtime
+uses `jax_runtime_s_warm` when reports were generated with `--jax-repeats >= 2`;
+for the current frozen release reports, it falls back to the CLI
+`jax_logged_elapsed_s` field. Cases are ordered by best warm `sfincs_jax` speedup
+over the Fortran v3 runtime, so the strongest JAX wins appear first. Regenerate
+the plot with
 `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`.
 
-Scope note: this figure is the reduced audited example-suite benchmark, intended
-for regression tracking and quick CPU/GPU smoke validation. Production
-performance claims should use the higher-resolution benchmark tier in
-`benchmarks/production_resolution_inputs_2026-04-30`, which enforces
-`35 x 43 x 17 x 48` 3D grids and `42 x 1 x 16 x 62` tokamak grids, including
-public examples and optional user-supplied production-resolution workloads. The
-manifest records a `10 s` minimum Fortran v3 runtime target for public timing
-rows. That production tier is intentionally separated because it has already
-exposed larger finite-beta/profile-current and RHSMode=3 transport solver
-blockers that are not visible in the reduced suite. The manual GitHub workflow
+Scope note: the full 39-case frozen suite remains the parity and CI smoke audit,
+but sub-`10 s` Fortran rows are not shown as public performance comparisons. They
+must either be rerun from the higher-resolution benchmark tier in
+`benchmarks/production_resolution_inputs_2026-04-30` or remain CI/regression
+checks only. The production tier enforces `35 x 43 x 17 x 48` 3D grids and
+`42 x 1 x 16 x 62` tokamak grids, including public examples and optional
+user-supplied production-resolution workloads. The manual GitHub workflow
 `Production Benchmark Inputs` validates and uploads the production input tree
 without running expensive solves; full CPU/GPU/Fortran runtime and memory sweeps
 should be launched on local, `office`, or cluster hardware with explicit
@@ -497,20 +495,17 @@ Current mismatches:
 - GPU practical/strict mismatches: none
 
 Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns are the recorded peak-RSS values and are used for both cold and warm memory bars in the plot.
+README-facing runtime/memory rows are restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_PASCollisions_noEr` (0.309s), `tokamak_1species_PASCollisions_noEr_Nx1` (0.017s), `tokamak_1species_PASCollisions_noEr_withQN` (0.888s), `tokamak_1species_PASCollisions_withEr_fullTrajectories` (0.017s), `tokamak_2species_PASCollisions_noEr` (0.331s), `tokamak_2species_PASCollisions_withEr_fullTrajectories` (1.330s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
 
 Full per-case runtime / memory table:
 | Case | Fortran CPU(s) | JAX CPU cold(s) | CPU cold x | JAX CPU warm/logged(s) | CPU warm/logged x | JAX GPU cold(s) | GPU cold x | JAX GPU warm/logged(s) | GPU warm/logged x | Fortran MB | JAX CPU MB | CPU MB x | JAX GPU MB | GPU MB x | CPU mismatch | GPU mismatch | CPU print | GPU print | CPU status | GPU status |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |
 | `HSX_FPCollisions_DKESTrajectories` | 29.664 | 3.060 | 0.10x | 2.438 | 0.08x | 5.298 | 0.18x | 4.514 | 0.15x | 103.0 | 496.9 | 4.82x | 918.3 | 8.91x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `HSX_FPCollisions_fullTrajectories` | 88.504 | 3.054 | 0.03x | 2.414 | 0.03x | 5.247 | 0.06x | 4.493 | 0.05x | 100.8 | 506.8 | 5.03x | 923.7 | 9.16x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `HSX_PASCollisions_DKESTrajectories` | 0.994 | 3.951 | 3.97x | 3.253 | 3.27x | 6.867 | 6.91x | 6.007 | 6.04x | 112.0 | 1146.3 | 10.23x | 1184.1 | 10.57x | 0/123 (strict 0/123) | 0/123 (strict 0/123) | 7/7 | 7/7 | parity_ok | parity_ok |
-| `HSX_PASCollisions_fullTrajectories` | 2.510 | 3.724 | 1.48x | 3.071 | 1.22x | 8.469 | 3.37x | 7.574 | 3.02x | 179.2 | 1441.6 | 8.04x | 1577.4 | 8.80x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `additional_examples` | 120.074 | 1.733 | 0.01x | 1.063 | 0.01x | 2.633 | 0.02x | 1.898 | 0.02x | 102.1 | 429.2 | 4.20x | 885.1 | 8.67x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `filteredW7XNetCDF_2species_magneticDrifts_noEr` | 89.052 | 2.069 | 0.02x | 1.417 | 0.02x | 2.834 | 0.03x | 2.115 | 0.02x | 103.2 | 481.3 | 4.66x | 898.0 | 8.70x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `filteredW7XNetCDF_2species_magneticDrifts_withEr` | 95.440 | 2.011 | 0.02x | 1.372 | 0.01x | 3.339 | 0.03x | 2.590 | 0.03x | 96.2 | 512.0 | 5.32x | 904.7 | 9.41x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `filteredW7XNetCDF_2species_noEr` | 128.508 | 1.550 | 0.01x | 0.978 | 0.01x | 2.734 | 0.02x | 1.964 | 0.02x | 100.3 | 457.0 | 4.56x | 892.9 | 8.90x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_1species_PAS_withEr_DKESTrajectories` | 1.365 | 2.209 | 1.62x | 1.588 | 1.16x | 4.399 | 3.22x | 3.604 | 2.64x | 127.3 | 1080.1 | 8.49x | 1264.3 | 9.93x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `geometryScheme4_2species_PAS_noEr` | 0.953 | 2.622 | 2.75x | 1.954 | 2.05x | 5.658 | 5.94x | 4.780 | 5.02x | 162.7 | 1808.8 | 11.12x | 1816.7 | 11.17x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `geometryScheme4_2species_noEr` | 139.240 | 1.733 | 0.01x | 1.112 | 0.01x | 2.888 | 0.02x | 2.105 | 0.02x | 92.2 | 468.0 | 5.07x | 913.8 | 9.91x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `geometryScheme4_2species_noEr_withPhi1InDKE` | 293.275 | 1.936 | 0.01x | 1.353 | 0.00x | 3.340 | 0.01x | 2.596 | 0.01x | 100.6 | 480.9 | 4.78x | 942.8 | 9.37x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `geometryScheme4_2species_noEr_withQN` | 146.734 | 1.769 | 0.01x | 1.140 | 0.01x | 3.132 | 0.02x | 2.402 | 0.02x | 95.1 | 468.1 | 4.92x | 930.5 | 9.79x | 0/265 (strict 0/265) | 0/265 (strict 0/265) | 9/9 | 9/9 | parity_ok | parity_ok |
@@ -518,42 +513,28 @@ Full per-case runtime / memory table:
 | `geometryScheme4_2species_withEr_fullTrajectories_withQN` | 211.358 | 1.889 | 0.01x | 1.310 | 0.01x | 3.087 | 0.01x | 2.314 | 0.01x | 98.8 | 486.4 | 4.92x | 932.7 | 9.44x | 0/251 (strict 0/251) | 0/251 (strict 0/251) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `geometryScheme5_3species_loRes` | 98.976 | 1.615 | 0.02x | 1.074 | 0.01x | 3.691 | 0.04x | 2.908 | 0.03x | 129.6 | 540.3 | 4.17x | 911.6 | 7.04x | 0/193 (strict 0/193) | 0/193 (strict 0/193) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `inductiveE_noEr` | 166.614 | 1.644 | 0.01x | 1.039 | 0.01x | 2.785 | 0.02x | 1.992 | 0.01x | 99.2 | 468.4 | 4.72x | 913.7 | 9.21x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme1` | 0.795 | 1.924 | 2.42x | 1.291 | 1.62x | 3.541 | 4.45x | 2.731 | 3.44x | 110.2 | 704.0 | 6.39x | 981.0 | 8.90x | 0/203 (strict 0/203) | 0/203 (strict 0/203) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme11` | 0.861 | 2.853 | 3.31x | 2.211 | 2.57x | 5.606 | 6.51x | 4.772 | 5.54x | 118.7 | 1205.2 | 10.16x | 1003.7 | 8.46x | 0/210 (strict 0/210) | 0/210 (strict 0/210) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme5_ASCII` | 1.052 | 1.678 | 1.59x | 1.075 | 1.02x | 4.296 | 4.08x | 3.453 | 3.28x | 142.1 | 497.0 | 3.50x | 990.0 | 6.97x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `monoenergetic_geometryScheme5_netCDF` | 1.029 | 1.884 | 1.83x | 1.256 | 1.22x | 4.141 | 4.02x | 3.307 | 3.21x | 131.4 | 533.7 | 4.06x | 987.8 | 7.52x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `quick_2species_FPCollisions_noEr` | 166.945 | 1.531 | 0.01x | 0.983 | 0.01x | 2.938 | 0.02x | 2.200 | 0.01x | 97.1 | 459.3 | 4.73x | 912.9 | 9.40x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories` | 76.666 | 1.653 | 0.02x | 1.110 | 0.01x | 3.188 | 0.04x | 2.391 | 0.03x | 106.7 | 479.6 | 4.49x | 915.8 | 8.58x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` | 93.439 | 1.767 | 0.02x | 1.177 | 0.01x | 3.138 | 0.03x | 2.363 | 0.03x | 94.0 | 491.9 | 5.24x | 920.2 | 9.79x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` | 1.104 | 2.658 | 2.41x | 2.011 | 1.82x | 5.757 | 5.21x | 4.846 | 4.39x | 130.7 | 1458.0 | 11.16x | 1587.2 | 12.14x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` | 1.706 | 2.768 | 1.62x | 2.115 | 1.24x | 6.413 | 3.76x | 5.519 | 3.24x | 144.6 | 1482.2 | 10.25x | 1608.5 | 11.13x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_FPCollisions_noEr` | 160.856 | 1.395 | 0.01x | 0.841 | 0.01x | 2.534 | 0.02x | 1.794 | 0.01x | 93.2 | 372.9 | 4.00x | 860.4 | 9.23x | 0/188 (strict 0/188) | 0/188 (strict 0/188) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` | 259.575 | 1.783 | 0.01x | 1.217 | 0.00x | 3.592 | 0.01x | 2.783 | 0.01x | 89.6 | 450.1 | 5.02x | 932.1 | 10.41x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_FPCollisions_noEr_withQN` | 237.879 | 1.508 | 0.01x | 0.975 | 0.00x | 3.185 | 0.01x | 2.363 | 0.01x | 102.6 | 421.5 | 4.11x | 919.4 | 8.96x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_FPCollisions_withEr_DKESTrajectories` | 155.955 | 1.510 | 0.01x | 0.970 | 0.01x | 2.886 | 0.02x | 2.107 | 0.01x | 103.1 | 431.4 | 4.18x | 906.2 | 8.79x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_FPCollisions_withEr_fullTrajectories` | 154.953 | 1.623 | 0.01x | 1.077 | 0.01x | 3.038 | 0.02x | 2.261 | 0.01x | 101.1 | 437.6 | 4.33x | 911.4 | 9.02x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr` | 0.309 | 2.098 | 6.79x | 1.520 | 4.92x | 4.951 | 16.02x | 4.103 | 13.28x | 114.2 | 579.0 | 5.07x | 987.0 | 8.64x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr_Nx1` | 0.017 | 1.843 | 108.41x | 1.249 | 73.47x | 3.443 | 202.56x | 2.614 | 153.76x | 100.9 | 507.6 | 5.03x | 929.8 | 9.21x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr_withQN` | 0.888 | 1.977 | 2.23x | 1.324 | 1.49x | 3.339 | 3.76x | 2.511 | 2.83x | 120.9 | 533.7 | 4.42x | 988.6 | 8.18x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 0.017 | 2.770 | 162.92x | 2.125 | 125.00x | 3.794 | 223.18x | 3.024 | 177.88x | 102.0 | 609.1 | 5.97x | 923.7 | 9.05x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_noEr` | 0.331 | 2.436 | 7.36x | 1.745 | 5.27x | 4.250 | 12.84x | 3.384 | 10.22x | 123.6 | 863.5 | 6.99x | 1148.3 | 9.29x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 1.330 | 3.247 | 2.44x | 2.538 | 1.91x | 7.777 | 5.85x | 6.866 | 5.16x | 121.8 | 1607.5 | 13.19x | 1245.5 | 10.22x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `transportMatrix_geometryScheme11` | 0.025 | 1.582 | 63.28x | 1.059 | 42.36x | 3.489 | 139.57x | 2.752 | 110.08x | 102.6 | 438.8 | 4.28x | 926.1 | 9.02x | 0/194 (strict 0/194) | 0/194 (strict 0/194) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `transportMatrix_geometryScheme2` | 0.031 | 1.576 | 50.85x | 0.996 | 32.13x | 3.191 | 102.93x | 2.360 | 76.13x | 100.5 | 436.4 | 4.34x | 924.5 | 9.20x | 0/194 (strict 0/194) | 0/194 (strict 0/194) | 9/9 | 9/9 | parity_ok | parity_ok |
 
 Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
-- `monoenergetic_geometryScheme5_ASCII`: 3.5s -> 1.7s (delta=1.8s)
-- `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.4s (delta=1.6s)
-- `HSX_PASCollisions_fullTrajectories`: 5.3s -> 3.7s (delta=1.6s)
-- `HSX_PASCollisions_DKESTrajectories`: 5.5s -> 4.0s (delta=1.5s)
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: 3.8s -> 2.8s (delta=1.0s)
+- `tokamak_1species_FPCollisions_noEr_withPhi1InDKE`: 2.4s -> 1.8s (delta=0.6s)
+- `quick_2species_FPCollisions_noEr`: 2.1s -> 1.5s (delta=0.6s)
+- `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories`: 2.3s -> 1.8s (delta=0.5s)
+- `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories`: 2.2s -> 1.7s (delta=0.5s)
+- `inductiveE_noEr`: 2.1s -> 1.6s (delta=0.5s)
 
 Largest CPU memory improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
-- `monoenergetic_geometryScheme5_ASCII`: 3066.4 MB -> 497.0 MB (delta=2569.4 MB)
-- `tokamak_2species_PASCollisions_noEr`: 2088.6 MB -> 863.5 MB (delta=1225.1 MB)
-- `HSX_PASCollisions_DKESTrajectories`: 2053.6 MB -> 1146.3 MB (delta=907.3 MB)
-- `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`: 2298.6 MB -> 1482.2 MB (delta=816.4 MB)
-- `monoenergetic_geometryScheme5_netCDF`: 1162.7 MB -> 533.7 MB (delta=629.0 MB)
+- `geometryScheme5_3species_loRes`: 569.4 MB -> 540.3 MB (delta=29.1 MB)
+- `geometryScheme4_2species_withEr_fullTrajectories_withQN`: 512.4 MB -> 486.4 MB (delta=26.0 MB)
+- `geometryScheme4_2species_noEr_withPhi1InDKE`: 506.0 MB -> 480.9 MB (delta=25.1 MB)
+- `filteredW7XNetCDF_2species_magneticDrifts_withEr`: 536.3 MB -> 512.0 MB (delta=24.3 MB)
+- `tokamak_1species_FPCollisions_noEr_withPhi1InDKE`: 474.3 MB -> 450.1 MB (delta=24.2 MB)
 <!-- END FAST_BRANCH_AUDIT -->
 
 ## Documentation

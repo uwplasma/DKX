@@ -7906,3 +7906,16 @@ Follow-up constrained-PAS guard on 2026-05-02:
 - Added tests that require the converged sparse-PC branch to remain the selected
   true-residual reference, while weak preconditioned-residual branches are
   labeled as reference-quality blockers rather than promoted as parity anchors.
+
+README/public benchmark cleanup on 2026-05-03:
+
+- The full 39-case frozen CPU/GPU suite remains the parity and CI smoke audit,
+  but README-facing runtime and memory comparisons now filter to rows whose
+  SFINCS Fortran v3 reference runtime is at least `10 s`.
+- The runtime/memory summary figure, machine-readable JSON, and README table now
+  report only the 21 production-scale rows. The 18 shorter PAS, monoenergetic,
+  and transport rows are recorded explicitly as excluded CI parity/smoke checks
+  until they are rerun at production-comparison resolution.
+- The production-resolution input manifest remains the route for future public
+  comparison reruns, with 3D/tokamak resolution floors and the same `10 s`
+  Fortran v3 runtime target.

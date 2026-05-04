@@ -357,6 +357,46 @@ def suite_case_metrics(rows: Sequence[Mapping[str, object]]) -> list[SuiteCaseMe
     return sorted(metrics, key=lambda item: item.case)
 
 
+def filter_suite_metrics_by_fortran_runtime(
+    cpu_metrics: Sequence[SuiteCaseMetric],
+    gpu_metrics: Sequence[SuiteCaseMetric],
+    *,
+    min_fortran_runtime_s: float | None,
+) -> tuple[list[SuiteCaseMetric], list[SuiteCaseMetric], list[dict[str, object]]]:
+    """Filter CPU/GPU benchmark rows to cases with a sufficiently large reference run.
+
+    Very small Fortran runs are useful as CI parity checks, but they are poor public
+    performance comparisons because filesystem, process-launch, and JIT amortization
+    dominate the wall clock. The reference runtime is taken from the CPU report when
+    present, falling back to the GPU report only for GPU-only cases.
+    """
+
+    cpu_by_case = {metric.case: metric for metric in cpu_metrics}
+    gpu_by_case = {metric.case: metric for metric in gpu_metrics}
+    if min_fortran_runtime_s is None:
+        return sorted(cpu_metrics, key=lambda item: item.case), sorted(gpu_metrics, key=lambda item: item.case), []
+
+    threshold = float(min_fortran_runtime_s)
+    included_cases: set[str] = set()
+    excluded_cases: list[dict[str, object]] = []
+    for case in sorted(set(cpu_by_case) | set(gpu_by_case)):
+        reference_metric = cpu_by_case.get(case) or gpu_by_case.get(case)
+        runtime = reference_metric.fortran_runtime_s if reference_metric is not None else None
+        if runtime is not None and np.isfinite(float(runtime)) and float(runtime) >= threshold:
+            included_cases.add(case)
+        else:
+            excluded_cases.append(
+                {
+                    "case": case,
+                    "fortran_runtime_s": None if runtime is None else float(runtime),
+                }
+            )
+
+    filtered_cpu = sorted((metric for metric in cpu_metrics if metric.case in included_cases), key=lambda item: item.case)
+    filtered_gpu = sorted((metric for metric in gpu_metrics if metric.case in included_cases), key=lambda item: item.case)
+    return filtered_cpu, filtered_gpu, excluded_cases
+
+
 def _counts(values: Sequence[str]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for value in values:
@@ -1025,11 +1065,25 @@ def build_fortran_suite_benchmark_summary(
     *,
     cpu_report: Path,
     gpu_report: Path,
+    min_fortran_runtime_s: float | None = None,
 ) -> dict[str, object]:
     """Build a CPU/GPU suite benchmark summary against the Fortran v3 reference."""
 
     cpu_report = Path(cpu_report)
     gpu_report = Path(gpu_report)
+    raw_cpu_rows = load_suite_report(cpu_report)
+    raw_gpu_rows = load_suite_report(gpu_report)
+    raw_cpu_metrics = suite_case_metrics(raw_cpu_rows)
+    raw_gpu_metrics = suite_case_metrics(raw_gpu_rows)
+    cpu_metrics, gpu_metrics, excluded_cases = filter_suite_metrics_by_fortran_runtime(
+        raw_cpu_metrics,
+        raw_gpu_metrics,
+        min_fortran_runtime_s=min_fortran_runtime_s,
+    )
+    cpu_reported_cases = {metric.case for metric in cpu_metrics}
+    gpu_reported_cases = {metric.case for metric in gpu_metrics}
+    cpu_rows = [row for row in raw_cpu_rows if str(row.get("case", "")) in cpu_reported_cases]
+    gpu_rows = [row for row in raw_gpu_rows if str(row.get("case", "")) in gpu_reported_cases]
     return {
         "metadata": {
             "schema_version": 1,
@@ -1043,15 +1097,26 @@ def build_fortran_suite_benchmark_summary(
                 "cpu": str(cpu_report),
                 "gpu": str(gpu_report),
             },
+            "source_case_counts": {
+                "cpu": int(len(raw_cpu_metrics)),
+                "gpu": int(len(raw_gpu_metrics)),
+            },
+            "reported_case_counts": {
+                "cpu": int(len(cpu_metrics)),
+                "gpu": int(len(gpu_metrics)),
+            },
+            "min_fortran_runtime_s": None if min_fortran_runtime_s is None else float(min_fortran_runtime_s),
+            "excluded_low_fortran_runtime_cases": excluded_cases,
             "notes": [
                 "Ratios use the audited wall-clock and maximum-RSS fields stored in the frozen suite reports.",
-                "The summary is a release gate: all audited CPU/GPU cases must remain parity_ok with no strict mismatches.",
+                "The summary is a release gate: all audited CPU/GPU cases must remain parity_ok with no strict mismatches before filtering.",
+                "README-facing performance plots filter out very short Fortran reference runs so public runtime claims are based on production-scale rows.",
                 "The artifacts compare sfincs_jax against the Fortran v3 reference implementation on the vendored example suite.",
             ],
         },
         "reports": {
-            "cpu": suite_report_summary(load_suite_report(cpu_report), label="CPU"),
-            "gpu": suite_report_summary(load_suite_report(gpu_report), label="GPU"),
+            "cpu": suite_report_summary(cpu_rows, label="CPU"),
+            "gpu": suite_report_summary(gpu_rows, label="GPU"),
         },
     }
 

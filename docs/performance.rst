@@ -38,20 +38,22 @@ The same reports are summarized by the checked-in publication benchmark artifact
 - generator:
   ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
 
-That artifact records median JAX/Fortran wall-clock ratios of about ``0.035x`` on CPU
-and ``0.059x`` on GPU for the frozen suite, with median maximum-RSS ratios of about
-``4.92x`` on CPU and ``9.20x`` on GPU. It also records the high-ratio tail
-explicitly, since a few tiny Fortran reference runs make wall-clock ratios look large
-even when the absolute JAX runtime remains only seconds.
+That artifact records median cold JAX/Fortran wall-clock ratios of about
+``0.012x`` on CPU and ``0.021x`` on GPU for the plotted production-scale subset,
+with median maximum-RSS ratios of about ``4.73x`` on CPU and ``9.16x`` on GPU.
+The full 39-case suite remains the parity audit, but sub-``10 s`` Fortran rows
+are excluded from the public runtime/memory plot because process launch,
+filesystem overhead, and JIT amortization dominate those measurements.
 The figure itself emphasizes absolute measurements: runtime bars are on the left,
-peak-memory bars are on the right, and every audited example-suite case is shown
-for SFINCS Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU
-cold/warm. Cases are ordered by best warm ``sfincs_jax`` speedup over the
-Fortran v3 runtime. Cold is the first external suite command. Warm runtime uses
+peak-memory bars are on the right, and each plotted production-scale case is
+shown for SFINCS Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU
+cold/warm. Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran
+v3 runtime. Cold is the first external suite command. Warm runtime uses
 ``jax_runtime_s_warm`` when rerun timings are present. The current frozen reports
 were collected with one external command per case, so the warm bars use the
 recorded ``jax_logged_elapsed_s`` field as a warm-path fallback; the summary JSON
-stores ``warm_or_logged_runtime_source_counts`` to make that provenance explicit.
+stores ``warm_or_logged_runtime_source_counts`` and the excluded short-reference
+rows to make that provenance explicit.
 
 The performance story is therefore:
 
