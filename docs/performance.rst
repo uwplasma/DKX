@@ -40,12 +40,16 @@ The same reports are summarized by the checked-in publication benchmark artifact
 
 That artifact records median cold JAX/Fortran wall-clock ratios of about
 ``0.012x`` on CPU and ``0.021x`` on GPU for the plotted production-scale subset,
-with median maximum-RSS ratios of about ``4.73x`` on CPU and ``9.16x`` on GPU.
+with median active-memory ratios of about ``2.79x`` on CPU and ``3.61x`` on GPU.
+The full process maximum-RSS ratios remain in the JSON reports for audit and are
+about ``4.72x`` on CPU and ``9.16x`` on GPU; the public plot subtracts fixed
+Python/JAX/XLA runtime baseline memory using profiler ``dpeak_rss_mb``/``drss_mb``
+deltas.
 The full 39-case suite remains the parity audit, but sub-``10 s`` Fortran rows
 are excluded from the public runtime/memory plot because process launch,
 filesystem overhead, and JIT amortization dominate those measurements.
 The figure itself emphasizes absolute measurements: runtime bars are on the left,
-peak-memory bars are on the right, and each plotted production-scale case is
+active-memory bars are on the right, and each plotted production-scale case is
 shown for SFINCS Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU
 cold/warm. Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran
 v3 runtime. Cold is the first external suite command. Warm runtime uses
