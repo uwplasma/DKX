@@ -59,9 +59,12 @@ Fortran v3 suite benchmark
    :width: 92%
 
    Runtime and memory comparison generated from the frozen full-suite reports.
-   Panel A shows wall-clock runtime and Panel B shows peak resident memory for
+   Panel A shows wall-clock runtime and Panel B shows active solver memory for
    SFINCS Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU
    cold/warm across the production-scale subset. Both panels use log-scaled axes.
+   Fortran memory is process maximum RSS; JAX memory uses profiler RSS deltas
+   over the fixed Python/JAX/XLA baseline, with full process RSS retained in the
+   JSON audit fields.
    Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran v3
    runtime, placing the strongest JAX wins first.
    Cold is the first external suite command. Warm runtime uses

@@ -220,20 +220,20 @@ def _plot_grouped_bar_panel(
             values_by_label["SFINCS Fortran v3"].append(
                 _value_or_nan(reference_metric.fortran_max_rss_mb if reference_metric else None)
             )
-            # The frozen suite records peak RSS per external command. If future
-            # reports add separate warm-run RSS fields, this is the only place
-            # that needs to split the cold/warm memory bars.
+            # JAX reports keep full process RSS for audit, but the public plot
+            # uses profiler-derived active solver memory when it is available so
+            # fixed Python/JAX/XLA runtime overhead does not dominate every bar.
             values_by_label["sfincs_jax CPU cold"].append(
-                _value_or_nan(cpu_metric.jax_max_rss_mb if cpu_metric else None)
+                _value_or_nan(cpu_metric.active_jax_memory_mb if cpu_metric else None)
             )
             values_by_label["sfincs_jax CPU warm"].append(
-                _value_or_nan(cpu_metric.jax_max_rss_mb if cpu_metric else None)
+                _value_or_nan(cpu_metric.active_jax_memory_mb if cpu_metric else None)
             )
             values_by_label["sfincs_jax GPU cold"].append(
-                _value_or_nan(gpu_metric.jax_max_rss_mb if gpu_metric else None)
+                _value_or_nan(gpu_metric.active_jax_memory_mb if gpu_metric else None)
             )
             values_by_label["sfincs_jax GPU warm"].append(
-                _value_or_nan(gpu_metric.jax_max_rss_mb if gpu_metric else None)
+                _value_or_nan(gpu_metric.active_jax_memory_mb if gpu_metric else None)
             )
         else:  # pragma: no cover - caller bug
             raise ValueError(f"Unknown quantity: {quantity}")
@@ -309,8 +309,8 @@ def plot_benchmark_summary(
         cpu_by_case=cpu_by_case,
         gpu_by_case=gpu_by_case,
         quantity="memory",
-        title="B. Peak memory",
-        xlabel="maximum RSS, MB (log scale)",
+        title="B. Active solver memory",
+        xlabel="MB (Fortran max RSS; JAX active RSS delta, log scale)",
         show_ylabels=False,
     )
     axes[0].invert_yaxis()
@@ -332,7 +332,7 @@ def plot_benchmark_summary(
         "Cold = first external suite command. Warm runtime = jax_runtime_s_warm when present, otherwise CLI "
         "jax_logged_elapsed_s.\n"
         f"Excluded low-reference-runtime CI/smoke rows: {len(excluded_cases)}. "
-        "Warm memory uses the recorded peak-RSS field unless a future report provides separate warm RSS.",
+        "JAX memory bars use profiler active RSS deltas; full process RSS remains in the JSON/README audit fields.",
         ha="center",
         va="bottom",
         fontsize=8.0,

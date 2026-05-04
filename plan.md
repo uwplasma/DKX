@@ -7919,3 +7919,18 @@ README/public benchmark cleanup on 2026-05-03:
 - The production-resolution input manifest remains the route for future public
   comparison reruns, with 3D/tokamak resolution floors and the same `10 s`
   Fortran v3 runtime target.
+
+Active-memory reporting cleanup on 2026-05-03:
+
+- Kept full external-process peak RSS in the frozen suite JSON as
+  `jax_max_rss_mb`, but changed the public plot and README table to use
+  profiler-derived active JAX memory (`jax_incremental_max_rss_mb`) when
+  available. This subtracts the fixed Python/JAX/XLA runtime baseline and avoids
+  presenting constant backend overhead as per-case solver memory.
+- Backfilled the GPU frozen suite report from the matching `office` profiler logs
+  without committing the large trace files. Production-scale medians are now:
+  CPU process RSS `468.4 MB` vs active `279.7 MB`, GPU process RSS `913.7 MB`
+  vs active `364.2 MB`, with the full process values still auditably preserved.
+- Regenerated the README/public benchmark plot and summary JSON, and updated the
+  docs so every page labels the memory panel as active solver memory rather than
+  raw JAX process RSS.

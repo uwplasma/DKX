@@ -117,11 +117,13 @@ class SimpleProfiler:
             rss_txt = f"{rss_mb:.1f}" if rss_mb is not None else "na"
             drss_txt = f"{entry['drss_mb']:.1f}" if entry["drss_mb"] is not None else "na"
             peak_txt = f"{peak_rss_mb:.1f}" if peak_rss_mb is not None else "na"
+            dpeak_txt = f"{entry['dpeak_rss_mb']:.1f}" if entry["dpeak_rss_mb"] is not None else "na"
             dev_txt = f"{dev_mb:.1f}" if dev_mb is not None else "na"
             self.emit(
                 0,
                 f"profiling: {label} dt_s={entry['dt_s']:.3f} total_s={entry['total_s']:.3f} "
-                f"rss_mb={rss_txt} drss_mb={drss_txt} peak_rss_mb={peak_txt} device_mb={dev_txt}",
+                f"rss_mb={rss_txt} drss_mb={drss_txt} "
+                f"peak_rss_mb={peak_txt} dpeak_rss_mb={dpeak_txt} device_mb={dev_txt}",
             )
         self.last = now
 

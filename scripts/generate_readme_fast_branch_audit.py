@@ -99,11 +99,20 @@ def _warm_or_logged_runtime(row: dict[str, object] | None) -> object | None:
 
 
 def _fmt_memory_ratio(row: dict[str, object]) -> str:
-    jax = row.get("jax_max_rss_mb")
+    jax = _jax_public_memory(row)
     fort = row.get("fortran_max_rss_mb")
     if jax is None or fort in (None, 0):
         return "-"
     return f"{float(jax) / float(fort):.2f}x"
+
+
+def _jax_public_memory(row: dict[str, object] | None) -> object | None:
+    if row is None:
+        return None
+    active = row.get("jax_incremental_max_rss_mb")
+    if active is not None:
+        return active
+    return row.get("jax_max_rss_mb")
 
 
 def _fmt_ratio(jax: object | None, fort: object | None) -> str:
@@ -239,7 +248,7 @@ def _format_case_table(
     gpu_rows_by_case: dict[str, dict[str, object]],
 ) -> list[str]:
     lines = [
-        "| Case | Fortran CPU(s) | JAX CPU cold(s) | CPU cold x | JAX CPU warm/logged(s) | CPU warm/logged x | JAX GPU cold(s) | GPU cold x | JAX GPU warm/logged(s) | GPU warm/logged x | Fortran MB | JAX CPU MB | CPU MB x | JAX GPU MB | GPU MB x | CPU mismatch | GPU mismatch | CPU print | GPU print | CPU status | GPU status |",
+        "| Case | Fortran CPU(s) | JAX CPU cold(s) | CPU cold x | JAX CPU warm/logged(s) | CPU warm/logged x | JAX GPU cold(s) | GPU cold x | JAX GPU warm/logged(s) | GPU warm/logged x | Fortran MB | JAX CPU active MB | CPU MB x | JAX GPU active MB | GPU MB x | CPU mismatch | GPU mismatch | CPU print | GPU print | CPU status | GPU status |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |",
     ]
     for case in case_order:
@@ -254,8 +263,8 @@ def _format_case_table(
         gpu_runtime = gpu_row.get("jax_runtime_s") if gpu_row else None
         cpu_warm_runtime = _warm_or_logged_runtime(cpu_row)
         gpu_warm_runtime = _warm_or_logged_runtime(gpu_row)
-        cpu_memory = cpu_row.get("jax_max_rss_mb") if cpu_row else None
-        gpu_memory = gpu_row.get("jax_max_rss_mb") if gpu_row else None
+        cpu_memory = _jax_public_memory(cpu_row)
+        gpu_memory = _jax_public_memory(gpu_row)
         lines.append(
             "| "
             + " | ".join(
@@ -295,8 +304,14 @@ def _format_improvement(
     metric_key: str,
     digits: int = 1,
 ) -> str:
-    current = float(current_row[metric_key])
-    baseline = float(baseline_row[metric_key])
+    if metric_key == "jax_incremental_max_rss_mb":
+        current_value = _jax_public_memory(current_row)
+        baseline_value = _jax_public_memory(baseline_row)
+    else:
+        current_value = current_row[metric_key]
+        baseline_value = baseline_row[metric_key]
+    current = float(current_value)
+    baseline = float(baseline_value)
     delta = baseline - current
     unit = "s" if metric_key == "jax_runtime_s" else " MB"
     return (
@@ -512,8 +527,9 @@ def main() -> int:
             "",
             "Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is "
             "`jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. "
-            "The JAX memory columns are the recorded peak-RSS values and are used for both "
-            "cold and warm memory bars in the plot.",
+            "The JAX memory columns match the plot and use profiler active RSS deltas "
+            "(`jax_incremental_max_rss_mb`) when present; full process peak RSS remains "
+            "available as `jax_max_rss_mb` in the frozen JSON reports.",
             (
                 f"README-facing runtime/memory rows are restricted to cases where the "
                 f"SFINCS Fortran v3 reference runtime is at least `{float(args.min_fortran_runtime_s):g} s`. "
@@ -538,7 +554,7 @@ def main() -> int:
         lines.extend(
             [
                 "",
-                f"Largest CPU memory improvements vs `{_repo_rel(baseline_report)}`:",
+                f"Largest CPU process peak-RSS improvements vs `{_repo_rel(baseline_report)}`:",
                 *improvements_memory,
             ]
         )

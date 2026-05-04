@@ -94,10 +94,12 @@ Current artifacts:
    :width: 92%
 
    Cross-code release benchmark generated from frozen CPU/GPU suite reports. The
-   plotted bars show wall-clock runtime and peak resident memory for SFINCS
+   plotted bars show wall-clock runtime and active solver memory for SFINCS
    Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU cold/warm
    across the production-scale rows whose Fortran v3 reference runtime is at
-   least ``10 s``. Cases are ordered by best warm ``sfincs_jax`` speedup over the
+   least ``10 s``. JAX active memory subtracts the fixed Python/JAX/XLA runtime
+   baseline using profiler RSS deltas while preserving full process RSS in the
+   JSON audit fields. Cases are ordered by best warm ``sfincs_jax`` speedup over the
    Fortran v3 runtime. The acceptance tests require all 39 audited cases to remain
    ``parity_ok`` on both backends, with zero strict mismatches and no
    ``jax_error`` or ``max_attempts`` failures. Absolute runtime, memory, ratios,
