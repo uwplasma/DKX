@@ -47,6 +47,9 @@ def _synthetic_suite_rows(n: int = 39) -> list[dict[str, object]]:
                 "jax_logged_elapsed_s": 0.8 + 0.1 * idx,
                 "fortran_max_rss_mb": 100.0 + idx,
                 "jax_max_rss_mb": 500.0 + idx,
+                "jax_incremental_max_rss_mb": 200.0 + idx,
+                "jax_rss_baseline_mb": 300.0,
+                "jax_memory_metric_source": "drss_mb",
                 "n_mismatch_common": 0,
                 "n_mismatch_physics": 0,
                 "n_mismatch_solver": 0,
@@ -212,8 +215,11 @@ def test_fortran_suite_report_summary_closes_cpu_gpu_release_gate_on_synthetic_r
     assert payload["strict_mismatch_cases"] == 0
     assert payload["runtime_ratio_summary"]["count"] == 39
     assert payload["memory_ratio_summary"]["count"] == 39
+    assert payload["active_memory_ratio_summary"]["count"] == 39
     assert all(metric.runtime_ratio is not None and metric.runtime_ratio > 0.0 for metric in metrics)
     assert all(metric.memory_ratio is not None and metric.memory_ratio > 0.0 for metric in metrics)
+    assert all(metric.active_memory_ratio is not None and metric.active_memory_ratio > 0.0 for metric in metrics)
+    assert payload["highest_active_jax_memory_cases"][0]["active_jax_memory_mb"] == 238.0
 
 
 def test_fortran_suite_benchmark_summary_can_filter_short_reference_runs(tmp_path: Path) -> None:
