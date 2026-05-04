@@ -27,6 +27,7 @@ import numpy as np
 from sfincs_jax.validation_artifacts import (
     SuiteCaseMetric,
     build_fortran_suite_benchmark_summary,
+    filter_suite_metrics_by_fortran_runtime,
     load_suite_report,
     suite_case_metrics,
 )
@@ -44,6 +45,7 @@ DEFAULT_GPU_REPORT = (
 DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifacts"
 DEFAULT_OUT_DIR = _REPO_ROOT / "docs" / "_static" / "figures" / "paper"
 DEFAULT_STEM = "sfincs_jax_fortran_suite_benchmark_summary"
+DEFAULT_MIN_FORTRAN_RUNTIME_S = 10.0
 
 
 def _setup_mpl() -> None:
@@ -81,12 +83,31 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_ARTIFACT_DIR / f"{DEFAULT_STEM}.json",
     )
+    parser.add_argument(
+        "--min-fortran-runtime-s",
+        type=float,
+        default=DEFAULT_MIN_FORTRAN_RUNTIME_S,
+        help=(
+            "Minimum SFINCS Fortran v3 runtime for README-facing performance rows. "
+            "Use 0 to regenerate the all-case smoke/regression comparison."
+        ),
+    )
     parser.add_argument("--stem", default=DEFAULT_STEM)
     return parser
 
 
-def write_benchmark_summary(*, cpu_report: Path, gpu_report: Path, summary_json: Path) -> dict[str, object]:
-    payload = build_fortran_suite_benchmark_summary(cpu_report=Path(cpu_report), gpu_report=Path(gpu_report))
+def write_benchmark_summary(
+    *,
+    cpu_report: Path,
+    gpu_report: Path,
+    summary_json: Path,
+    min_fortran_runtime_s: float | None = DEFAULT_MIN_FORTRAN_RUNTIME_S,
+) -> dict[str, object]:
+    payload = build_fortran_suite_benchmark_summary(
+        cpu_report=Path(cpu_report),
+        gpu_report=Path(gpu_report),
+        min_fortran_runtime_s=min_fortran_runtime_s,
+    )
     summary_json.parent.mkdir(parents=True, exist_ok=True)
     summary_json.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return payload
@@ -240,9 +261,24 @@ def _jax_warm_runtime_for_plot(metric: SuiteCaseMetric | None) -> float:
     return _value_or_nan(metric.warm_or_logged_runtime_s)
 
 
-def plot_benchmark_summary(*, cpu_report: Path, gpu_report: Path, out_dir: Path, stem: str) -> None:
-    cpu_metrics = suite_case_metrics(load_suite_report(Path(cpu_report)))
-    gpu_metrics = suite_case_metrics(load_suite_report(Path(gpu_report)))
+def plot_benchmark_summary(
+    *,
+    cpu_report: Path,
+    gpu_report: Path,
+    out_dir: Path,
+    stem: str,
+    min_fortran_runtime_s: float | None = DEFAULT_MIN_FORTRAN_RUNTIME_S,
+) -> None:
+    cpu_metrics, gpu_metrics, excluded_cases = filter_suite_metrics_by_fortran_runtime(
+        suite_case_metrics(load_suite_report(Path(cpu_report))),
+        suite_case_metrics(load_suite_report(Path(gpu_report))),
+        min_fortran_runtime_s=min_fortran_runtime_s,
+    )
+    if not cpu_metrics and not gpu_metrics:
+        raise SystemExit(
+            "No benchmark rows remain after applying --min-fortran-runtime-s="
+            f"{min_fortran_runtime_s}. Lower the threshold or regenerate production-resolution reports."
+        )
     cpu_by_case = _metric_by_case(cpu_metrics)
     gpu_by_case = _metric_by_case(gpu_metrics)
     cases = _case_order(cpu_metrics, gpu_metrics)
@@ -281,8 +317,12 @@ def plot_benchmark_summary(*, cpu_report: Path, gpu_report: Path, out_dir: Path,
     handles, labels = axes[0].get_legend_handles_labels()
     fig.subplots_adjust(left=0.27, right=0.985, top=0.915, bottom=0.075, wspace=0.04)
     fig.legend(handles, labels, loc="upper center", ncol=5, frameon=False, bbox_to_anchor=(0.61, 0.972))
+    if min_fortran_runtime_s is None or float(min_fortran_runtime_s) <= 0.0:
+        scope = "all audited example-suite cases"
+    else:
+        scope = f"production-scale rows; Fortran v3 >= {float(min_fortran_runtime_s):g} s"
     fig.suptitle(
-        "SFINCS Fortran v3 vs sfincs_jax cold/warm CPU/GPU: all audited example-suite cases",
+        f"SFINCS Fortran v3 vs sfincs_jax cold/warm CPU/GPU: {scope}",
         fontsize=13.0,
         y=0.998,
     )
@@ -290,7 +330,9 @@ def plot_benchmark_summary(*, cpu_report: Path, gpu_report: Path, out_dir: Path,
         0.63,
         0.027,
         "Cold = first external suite command. Warm runtime = jax_runtime_s_warm when present, otherwise CLI "
-        "jax_logged_elapsed_s.\nWarm memory uses the recorded peak-RSS field unless a future report provides separate warm RSS.",
+        "jax_logged_elapsed_s.\n"
+        f"Excluded low-reference-runtime CI/smoke rows: {len(excluded_cases)}. "
+        "Warm memory uses the recorded peak-RSS field unless a future report provides separate warm RSS.",
         ha="center",
         va="bottom",
         fontsize=8.0,
@@ -307,12 +349,14 @@ def main(argv: list[str] | None = None) -> int:
         cpu_report=Path(args.cpu_report),
         gpu_report=Path(args.gpu_report),
         summary_json=Path(args.summary_json),
+        min_fortran_runtime_s=float(args.min_fortran_runtime_s),
     )
     plot_benchmark_summary(
         cpu_report=Path(args.cpu_report),
         gpu_report=Path(args.gpu_report),
         out_dir=Path(args.out_dir),
         stem=str(args.stem),
+        min_fortran_runtime_s=float(args.min_fortran_runtime_s),
     )
     print(f"Wrote suite benchmark summary to {Path(args.summary_json)}")
     print(f"Wrote suite benchmark figures to {Path(args.out_dir) / (str(args.stem) + '.png')}")

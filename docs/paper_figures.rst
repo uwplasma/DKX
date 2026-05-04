@@ -26,6 +26,10 @@ Generate the frozen CPU/GPU Fortran-suite runtime and memory comparison with
 
    python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
+The default figure filters to production-scale rows whose Fortran v3 runtime is
+at least ``10 s``. Use ``--min-fortran-runtime-s 0`` only for all-case CI/smoke
+diagnostics, not for public performance claims.
+
 Generate the autodiff/sensitivity validation figures with
 
 .. code-block:: bash
@@ -57,15 +61,15 @@ Fortran v3 suite benchmark
    Runtime and memory comparison generated from the frozen full-suite reports.
    Panel A shows wall-clock runtime and Panel B shows peak resident memory for
    SFINCS Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU
-   cold/warm across all 39 audited cases. Both panels use log-scaled axes so tiny
-   reference runs and larger geometry-rich cases remain visible in the same plot.
+   cold/warm across the production-scale subset. Both panels use log-scaled axes.
    Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran v3
    runtime, placing the strongest JAX wins first.
    Cold is the first external suite command. Warm runtime uses
    ``jax_runtime_s_warm`` when rerun timings are present and otherwise uses the
    recorded ``jax_logged_elapsed_s`` fallback; the JSON summary records
    ``warm_or_logged_runtime_source_counts``. The machine-readable summary,
-   including parity status and runtime/memory ratios, is
+   including parity status, runtime/memory ratios, and the excluded sub-``10 s``
+   Fortran rows, is
    ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``.
 
 Autodiff and sensitivity validation
