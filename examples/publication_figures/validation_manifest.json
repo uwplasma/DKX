@@ -352,7 +352,8 @@
     "claims": [
       "The release-facing frozen CPU suite has 39/39 parity_ok cases with no strict mismatches",
       "The release-facing frozen GPU suite has 39/39 parity_ok cases with no strict mismatches",
-      "Runtime, maximum-RSS, and cold/warm bars and ratios are generated from checked-in suite reports, with top offenders and warm timing-source counts recorded in machine-readable JSON"
+      "Runtime, maximum-RSS, and cold/warm bars and ratios are generated from checked-in suite reports, with top offenders, warm timing-source counts, and excluded sub-10-second reference rows recorded in machine-readable JSON",
+      "Public runtime/memory plots filter to rows whose SFINCS Fortran v3 reference runtime is at least 10 seconds; shorter rows remain CI parity checks unless rerun at production-comparison resolution"
     ],
     "source_code": [
       "examples/publication_figures/generate_fortran_suite_benchmark_summary.py",
@@ -365,7 +366,8 @@
     "acceptance_gates": [
       "CPU and GPU frozen reports each contain all 39 audited example-suite cases",
       "Every audited case is parity_ok with zero jax_error, zero max_attempts, and zero strict mismatches",
-      "Runtime, memory, cold/warm, and ratio data are recomputed from the frozen reports before plotting, not copied into the figure by hand"
+      "Runtime, memory, cold/warm, and ratio data are recomputed from the frozen reports before plotting, not copied into the figure by hand",
+      "The README-facing benchmark summary records the 10-second Fortran runtime threshold and the excluded short-reference rows"
     ]
   },
   {
