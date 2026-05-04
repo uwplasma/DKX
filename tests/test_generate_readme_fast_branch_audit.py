@@ -63,3 +63,21 @@ def test_case_table_reports_cold_and_warm_logged_runtimes() -> None:
         "| `case_a` | 10.000 | 3.000 | 0.30x | 2.000 | 0.20x | "
         "4.000 | 0.40x | 1.500 | 0.15x |"
     )
+
+
+def test_public_comparison_cases_filter_short_fortran_reference_runs() -> None:
+    module = _load_module()
+    rows_by_case = {
+        "short_case": {"case": "short_case", "fortran_runtime_s": 0.7},
+        "production_case": {"case": "production_case", "fortran_runtime_s": 12.0},
+    }
+    included, excluded = module._public_comparison_cases(
+        ["short_case", "production_case"],
+        rows_by_case,
+        {},
+        min_fortran_runtime_s=10.0,
+    )
+
+    assert included == ["production_case"]
+    assert excluded == [{"case": "short_case", "fortran_runtime_s": 0.7}]
+    assert "`short_case` (0.700s)" in module._format_excluded_public_cases(excluded)

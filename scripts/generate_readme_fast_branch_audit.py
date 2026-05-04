@@ -14,6 +14,7 @@ DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_gpu_bounded_d
 BASELINE_REPORT = REPO_ROOT / "tests" / "scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix" / "suite_report.json"
 EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
 EXTRA_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
+DEFAULT_PUBLIC_MIN_FORTRAN_RUNTIME_S = 10.0
 
 BEGIN = "<!-- BEGIN FAST_BRANCH_AUDIT -->"
 END = "<!-- END FAST_BRANCH_AUDIT -->"
@@ -136,6 +137,47 @@ def _fmt_print_parity(row: dict[str, object] | None) -> str:
     return f"{int(row.get('print_parity_signals', 0))}/{total}"
 
 
+def _reference_fortran_runtime(
+    case: str,
+    rows_by_case: dict[str, dict[str, object]],
+    gpu_rows_by_case: dict[str, dict[str, object]],
+) -> float | None:
+    row = rows_by_case.get(case) or gpu_rows_by_case.get(case)
+    if row is None:
+        return None
+    value = row.get("fortran_runtime_s")
+    if value is None:
+        return None
+    return float(value)
+
+
+def _public_comparison_cases(
+    case_order: list[str],
+    rows_by_case: dict[str, dict[str, object]],
+    gpu_rows_by_case: dict[str, dict[str, object]],
+    *,
+    min_fortran_runtime_s: float,
+) -> tuple[list[str], list[dict[str, object]]]:
+    included: list[str] = []
+    excluded: list[dict[str, object]] = []
+    threshold = float(min_fortran_runtime_s)
+    for case in case_order:
+        runtime = _reference_fortran_runtime(case, rows_by_case, gpu_rows_by_case)
+        if runtime is not None and runtime >= threshold:
+            included.append(case)
+        else:
+            excluded.append({"case": case, "fortran_runtime_s": runtime})
+    return included, excluded
+
+
+def _format_excluded_public_cases(excluded_cases: list[dict[str, object]]) -> str:
+    if not excluded_cases:
+        return "none"
+    return ", ".join(
+        f"`{row['case']}` ({_fmt_float(row.get('fortran_runtime_s'), 3)}s)" for row in excluded_cases
+    )
+
+
 def _status_counts(rows: list[dict[str, object]], prefix: str) -> Counter[str]:
     counts: Counter[str] = Counter()
     for row in rows:
@@ -205,8 +247,9 @@ def _format_case_table(
         gpu_row = gpu_rows_by_case.get(case)
         if cpu_row is None and gpu_row is None:
             continue
-        fort_runtime = cpu_row.get("fortran_runtime_s") if cpu_row else None
-        fort_memory = cpu_row.get("fortran_max_rss_mb") if cpu_row else None
+        reference_row = cpu_row or gpu_row
+        fort_runtime = reference_row.get("fortran_runtime_s") if reference_row else None
+        fort_memory = reference_row.get("fortran_max_rss_mb") if reference_row else None
         cpu_runtime = cpu_row.get("jax_runtime_s") if cpu_row else None
         gpu_runtime = gpu_row.get("jax_runtime_s") if gpu_row else None
         cpu_warm_runtime = _warm_or_logged_runtime(cpu_row)
@@ -283,6 +326,12 @@ def main() -> int:
         default=DEFAULT_GPU_OUT_ROOT,
         help="Optional GPU suite output root containing suite_report.json.",
     )
+    parser.add_argument(
+        "--min-fortran-runtime-s",
+        type=float,
+        default=DEFAULT_PUBLIC_MIN_FORTRAN_RUNTIME_S,
+        help="Minimum Fortran v3 runtime for README-facing runtime/memory comparison rows.",
+    )
     args = parser.parse_args()
 
     out_root = Path(args.out_root)
@@ -321,6 +370,9 @@ def main() -> int:
         paired_runtime = []
         paired_memory = []
         for case, row in rows_by_case.items():
+            reference_runtime = _reference_fortran_runtime(case, rows_by_case, {})
+            if reference_runtime is None or reference_runtime < float(args.min_fortran_runtime_s):
+                continue
             base = baseline_rows.get(case)
             if not base:
                 continue
@@ -415,6 +467,12 @@ def main() -> int:
         lines.append("- Remaining cases: none")
     cpu_additional = rows_by_case.get("additional_examples")
     gpu_rows_by_case = {str(row["case"]): row for row in gpu_rows}
+    public_case_order, excluded_public_cases = _public_comparison_cases(
+        case_order,
+        rows_by_case,
+        gpu_rows_by_case,
+        min_fortran_runtime_s=float(args.min_fortran_runtime_s),
+    )
     gpu_additional = gpu_rows_by_case.get("additional_examples")
     if cpu_additional is not None and gpu_additional is not None:
         lines.append(
@@ -456,9 +514,15 @@ def main() -> int:
             "`jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. "
             "The JAX memory columns are the recorded peak-RSS values and are used for both "
             "cold and warm memory bars in the plot.",
+            (
+                f"README-facing runtime/memory rows are restricted to cases where the "
+                f"SFINCS Fortran v3 reference runtime is at least `{float(args.min_fortran_runtime_s):g} s`. "
+                f"Excluded lower-resolution CI parity/smoke rows: "
+                f"{_format_excluded_public_cases(excluded_public_cases)}."
+            ),
             "",
             "Full per-case runtime / memory table:",
-            *_format_case_table(case_order, rows_by_case, gpu_rows_by_case),
+            *_format_case_table(public_case_order, rows_by_case, gpu_rows_by_case),
         ]
     )
 

@@ -82,6 +82,49 @@ def test_generate_fortran_suite_benchmark_summary_from_reports(tmp_path: Path) -
     assert payload["reports"]["gpu"]["warm_or_logged_runtime_source_counts"] == {"jax_runtime_s_warm": 39}
 
 
+def test_generate_fortran_suite_benchmark_summary_filters_short_reference_runs(tmp_path: Path) -> None:
+    mod = _load_module()
+    out_dir = tmp_path / "figures"
+    summary_json = tmp_path / "summary.json"
+    cpu_report = tmp_path / "cpu_suite_report.json"
+    gpu_report = tmp_path / "gpu_suite_report.json"
+    _write_synthetic_report(cpu_report, backend_scale=1.0)
+    _write_synthetic_report(gpu_report, backend_scale=1.2)
+
+    rows = json.loads(cpu_report.read_text())
+    rows[0]["fortran_runtime_s"] = 0.5
+    cpu_report.write_text(json.dumps(rows, indent=2) + "\n")
+    rows = json.loads(gpu_report.read_text())
+    rows[0]["fortran_runtime_s"] = 0.5
+    gpu_report.write_text(json.dumps(rows, indent=2) + "\n")
+
+    rc = mod.main(
+        [
+            "--cpu-report",
+            str(cpu_report),
+            "--gpu-report",
+            str(gpu_report),
+            "--out-dir",
+            str(out_dir),
+            "--summary-json",
+            str(summary_json),
+            "--stem",
+            "suite_benchmark_filtered_test",
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(summary_json.read_text())
+    assert payload["metadata"]["source_case_counts"] == {"cpu": 39, "gpu": 39}
+    assert payload["metadata"]["reported_case_counts"] == {"cpu": 38, "gpu": 38}
+    assert payload["metadata"]["min_fortran_runtime_s"] == 10.0
+    assert payload["metadata"]["excluded_low_fortran_runtime_cases"] == [
+        {"case": "case_00", "fortran_runtime_s": 0.5}
+    ]
+    assert payload["reports"]["cpu"]["parity_ok_cases"] == 38
+    assert payload["reports"]["gpu"]["warm_or_logged_runtime_ratio_summary"]["count"] == 38
+
+
 def test_case_order_prioritizes_warm_jax_speedup() -> None:
     mod = _load_module()
 

@@ -9,6 +9,7 @@ import numpy as np
 from sfincs_jax.validation_artifacts import (
     appendix_b_geometry_audit_from_h5,
     autodiff_gradient_error_summary,
+    build_fortran_suite_benchmark_summary,
     load_autodiff_sensitivity_summary,
     build_high_collisionality_trend_proxy_summary,
     build_publication_validation_summary,
@@ -215,13 +216,39 @@ def test_fortran_suite_report_summary_closes_cpu_gpu_release_gate_on_synthetic_r
     assert all(metric.memory_ratio is not None and metric.memory_ratio > 0.0 for metric in metrics)
 
 
+def test_fortran_suite_benchmark_summary_can_filter_short_reference_runs(tmp_path: Path) -> None:
+    cpu_report = tmp_path / "cpu_report.json"
+    gpu_report = tmp_path / "gpu_report.json"
+    rows = _synthetic_suite_rows(n=3)
+    rows[0]["fortran_runtime_s"] = 0.2
+    cpu_report.write_text(json.dumps(rows, indent=2) + "\n")
+    gpu_report.write_text(json.dumps(rows, indent=2) + "\n")
+
+    payload = build_fortran_suite_benchmark_summary(
+        cpu_report=cpu_report,
+        gpu_report=gpu_report,
+        min_fortran_runtime_s=10.0,
+    )
+
+    assert payload["metadata"]["source_case_counts"] == {"cpu": 3, "gpu": 3}
+    assert payload["metadata"]["reported_case_counts"] == {"cpu": 2, "gpu": 2}
+    assert payload["metadata"]["excluded_low_fortran_runtime_cases"] == [
+        {"case": "case_00", "fortran_runtime_s": 0.2}
+    ]
+    assert payload["reports"]["cpu"]["total_cases"] == 2
+
+
 def test_fortran_suite_benchmark_summary_records_source_reports_and_gates() -> None:
     payload = json.loads((_artifact_dir() / "sfincs_jax_fortran_suite_benchmark_summary.json").read_text())
 
     assert payload["metadata"]["kind"] == "fortran_v3_suite_benchmark_summary"
     assert "https://github.com/landreman/sfincs" in payload["metadata"]["literature"]
-    assert payload["reports"]["cpu"]["parity_ok_cases"] == 39
-    assert payload["reports"]["gpu"]["parity_ok_cases"] == 39
+    assert payload["metadata"]["source_case_counts"] == {"cpu": 39, "gpu": 39}
+    assert payload["metadata"]["reported_case_counts"] == {"cpu": 21, "gpu": 21}
+    assert payload["metadata"]["min_fortran_runtime_s"] == 10.0
+    assert len(payload["metadata"]["excluded_low_fortran_runtime_cases"]) == 18
+    assert payload["reports"]["cpu"]["parity_ok_cases"] == 21
+    assert payload["reports"]["gpu"]["parity_ok_cases"] == 21
     assert payload["reports"]["cpu"]["strict_mismatch_total"] == 0
     assert payload["reports"]["gpu"]["strict_mismatch_total"] == 0
 
