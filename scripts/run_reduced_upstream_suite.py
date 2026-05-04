@@ -252,6 +252,9 @@ class CaseResult:
     jax_logged_elapsed_s: float | None
     fortran_max_rss_mb: float | None
     jax_max_rss_mb: float | None
+    jax_incremental_max_rss_mb: float | None
+    jax_rss_baseline_mb: float | None
+    jax_memory_metric_source: str | None
     jax_solver_iters_mean: float | None
     jax_solver_iters_min: int | None
     jax_solver_iters_max: int | None
@@ -700,20 +703,55 @@ def _parse_max_rss_mb_from_time_log(path: Path) -> float | None:
 
 
 def _parse_jax_max_rss_from_log(path: Path) -> float | None:
+    profile = _parse_jax_memory_profile_from_log(path)
+    return profile.get("jax_max_rss_mb")
+
+
+def _parse_jax_memory_profile_from_log(path: Path) -> dict[str, float | str | None]:
     if not path.exists():
-        return None
+        return {
+            "jax_max_rss_mb": None,
+            "jax_incremental_max_rss_mb": None,
+            "jax_rss_baseline_mb": None,
+            "jax_memory_metric_source": None,
+        }
     rss_vals: list[float] = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if "profiling:" not in line or "rss_mb=" not in line:
-            continue
+    drss_vals: list[float] = []
+    dpeak_vals: list[float] = []
+
+    def _append_token(line: str, key: str, values: list[float]) -> None:
+        if key not in line:
+            return
         try:
-            token = line.split("rss_mb=", 1)[1].split()[0]
+            token = line.split(key, 1)[1].split()[0]
             if token.lower() == "na":
-                continue
-            rss_vals.append(float(token))
+                return
+            values.append(float(token))
         except Exception:
+            return
+
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if "profiling:" not in line:
             continue
-    return max(rss_vals) if rss_vals else None
+        _append_token(line, "rss_mb=", rss_vals)
+        _append_token(line, "drss_mb=", drss_vals)
+        _append_token(line, "dpeak_rss_mb=", dpeak_vals)
+    rss_mb = max(rss_vals) if rss_vals else None
+    source: str | None = None
+    incremental = None
+    if dpeak_vals:
+        incremental = max(dpeak_vals)
+        source = "dpeak_rss_mb"
+    elif drss_vals:
+        incremental = max(drss_vals)
+        source = "drss_mb"
+    baseline = (rss_mb - incremental) if (rss_mb is not None and incremental is not None) else None
+    return {
+        "jax_max_rss_mb": rss_mb,
+        "jax_incremental_max_rss_mb": incremental,
+        "jax_rss_baseline_mb": baseline,
+        "jax_memory_metric_source": source,
+    }
 
 
 _ELAPSED_S_PATTERN = re.compile(r"elapsed_s\s*=\s*([-+0-9.eEdD]+)")
@@ -783,6 +821,11 @@ def _hydrate_last_success_metrics(success: dict[str, object] | None) -> dict[str
         success["jax_logged_elapsed_s"] = _parse_elapsed_s_from_log(jax_log)
     if success.get("jax_max_rss_mb") is None and jax_log is not None:
         success["jax_max_rss_mb"] = _parse_jax_max_rss_from_log(jax_log)
+    if jax_log is not None:
+        profile = _parse_jax_memory_profile_from_log(jax_log)
+        for key in ("jax_incremental_max_rss_mb", "jax_rss_baseline_mb", "jax_memory_metric_source"):
+            if success.get(key) is None and profile.get(key) is not None:
+                success[key] = profile[key]
     if success.get("fortran_runtime") is None and fortran_log is not None:
         success["fortran_runtime"] = _parse_fortran_runtime_from_log(fortran_log)
     if success.get("fortran_max_rss_mb") is None and fortran_log is not None:
@@ -1583,6 +1626,9 @@ def _load_existing_results(report_json: Path) -> dict[str, CaseResult]:
             jax_logged_elapsed_s=item.get("jax_logged_elapsed_s"),
             fortran_max_rss_mb=item.get("fortran_max_rss_mb"),
             jax_max_rss_mb=item.get("jax_max_rss_mb"),
+            jax_incremental_max_rss_mb=item.get("jax_incremental_max_rss_mb"),
+            jax_rss_baseline_mb=item.get("jax_rss_baseline_mb"),
+            jax_memory_metric_source=item.get("jax_memory_metric_source"),
             jax_solver_iters_mean=item.get("jax_solver_iters_mean"),
             jax_solver_iters_min=item.get("jax_solver_iters_min"),
             jax_solver_iters_max=item.get("jax_solver_iters_max"),
@@ -1766,6 +1812,9 @@ def _run_case(
     jax_logged_elapsed_s = None
     fortran_max_rss_mb = None
     jax_max_rss_mb = None
+    jax_incremental_max_rss_mb = None
+    jax_rss_baseline_mb = None
+    jax_memory_metric_source = None
     jax_solver_iters_mean = None
     jax_solver_iters_min = None
     jax_solver_iters_max = None
@@ -1982,6 +2031,10 @@ def _run_case(
                 cache_dir=jax_cache_dir,
                 profile_mode=jax_profile_mode,
             )
+            jax_memory_profile = _parse_jax_memory_profile_from_log(jax_log)
+            jax_incremental_max_rss_mb = jax_memory_profile.get("jax_incremental_max_rss_mb")
+            jax_rss_baseline_mb = jax_memory_profile.get("jax_rss_baseline_mb")
+            jax_memory_metric_source = jax_memory_profile.get("jax_memory_metric_source")
             jax_runtime = jax_runtime_warm if jax_runtime_warm is not None else jax_runtime_cold
             jax_h5_path = jax_h5
         except subprocess.TimeoutExpired:
@@ -2124,6 +2177,9 @@ def _run_case(
                     "jax_runtime": jax_runtime,
                     "jax_logged_elapsed_s": jax_logged_elapsed_s,
                     "jax_max_rss_mb": jax_max_rss_mb,
+                    "jax_incremental_max_rss_mb": jax_incremental_max_rss_mb,
+                    "jax_rss_baseline_mb": jax_rss_baseline_mb,
+                    "jax_memory_metric_source": jax_memory_metric_source,
                 }
             except Exception:  # noqa: BLE001
                 last_success = None
@@ -2216,6 +2272,12 @@ def _run_case(
             fortran_max_rss_mb = fallback.get("fortran_max_rss_mb", fortran_max_rss_mb)
             jax_runtime = fallback.get("jax_runtime", jax_runtime)
             jax_max_rss_mb = fallback.get("jax_max_rss_mb", jax_max_rss_mb)
+            jax_incremental_max_rss_mb = fallback.get(
+                "jax_incremental_max_rss_mb",
+                jax_incremental_max_rss_mb,
+            )
+            jax_rss_baseline_mb = fallback.get("jax_rss_baseline_mb", jax_rss_baseline_mb)
+            jax_memory_metric_source = fallback.get("jax_memory_metric_source", jax_memory_metric_source)
             n_common = int(fallback.get("n_common", n_common))
             n_bad = int(fallback.get("n_bad", n_bad))
             max_abs = fallback.get("max_abs", max_abs)
@@ -2259,6 +2321,9 @@ def _run_case(
         jax_logged_elapsed_s=jax_logged_elapsed_s,
         fortran_max_rss_mb=fortran_max_rss_mb,
         jax_max_rss_mb=jax_max_rss_mb,
+        jax_incremental_max_rss_mb=jax_incremental_max_rss_mb,
+        jax_rss_baseline_mb=jax_rss_baseline_mb,
+        jax_memory_metric_source=jax_memory_metric_source,
         jax_solver_iters_mean=jax_solver_iters_mean,
         jax_solver_iters_min=jax_solver_iters_min,
         jax_solver_iters_max=jax_solver_iters_max,
@@ -2456,6 +2521,9 @@ def main() -> int:
                 "jax_logged_elapsed_s",
                 "fortran_max_rss_mb",
                 "jax_max_rss_mb",
+                "jax_incremental_max_rss_mb",
+                "jax_rss_baseline_mb",
+                "jax_memory_metric_source",
             ):
                 if getattr(result, attr) is None and getattr(prev, attr) is not None:
                     setattr(result, attr, getattr(prev, attr))

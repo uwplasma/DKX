@@ -48,7 +48,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/HSX_FPCollisions_DKESTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/HSX_FPCollisions_DKESTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 370.1,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.1999999999999
   },
   {
     "case": "HSX_FPCollisions_fullTrajectories",
@@ -99,7 +102,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/HSX_FPCollisions_fullTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/HSX_FPCollisions_fullTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 374.9,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.8000000000001
   },
   {
     "case": "HSX_PASCollisions_DKESTrajectories",
@@ -150,7 +156,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/HSX_PASCollisions_DKESTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/HSX_PASCollisions_DKESTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 634.6,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.4999999999999
   },
   {
     "case": "HSX_PASCollisions_fullTrajectories",
@@ -201,7 +210,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/HSX_PASCollisions_fullTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/HSX_PASCollisions_fullTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 1028.4,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.0
   },
   {
     "case": "additional_examples",
@@ -252,7 +264,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/additional_examples/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/additional_examples/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 336.1,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.0
   },
   {
     "case": "filteredW7XNetCDF_2species_magneticDrifts_noEr",
@@ -303,7 +318,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/filteredW7XNetCDF_2species_magneticDrifts_noEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/filteredW7XNetCDF_2species_magneticDrifts_noEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 349.3,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.7
   },
   {
     "case": "filteredW7XNetCDF_2species_magneticDrifts_withEr",
@@ -354,7 +372,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/filteredW7XNetCDF_2species_magneticDrifts_withEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/filteredW7XNetCDF_2species_magneticDrifts_withEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 355.4,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.3000000000001
   },
   {
     "case": "filteredW7XNetCDF_2species_noEr",
@@ -405,7 +426,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/filteredW7XNetCDF_2species_noEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/filteredW7XNetCDF_2species_noEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 343.8,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.0999999999999
   },
   {
     "case": "geometryScheme4_1species_PAS_withEr_DKESTrajectories",
@@ -456,7 +480,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_1species_PAS_withEr_DKESTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_1species_PAS_withEr_DKESTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 714.6,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.6999999999999
   },
   {
     "case": "geometryScheme4_2species_PAS_noEr",
@@ -507,7 +534,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_PAS_noEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_PAS_noEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 1267.1,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.6000000000001
   },
   {
     "case": "geometryScheme4_2species_noEr",
@@ -558,7 +588,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_noEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_noEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 364.2,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.5999999999999
   },
   {
     "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
@@ -609,7 +642,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_noEr_withPhi1InDKE/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_noEr_withPhi1InDKE/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 394.0,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.8
   },
   {
     "case": "geometryScheme4_2species_noEr_withQN",
@@ -660,7 +696,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_noEr_withQN/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_noEr_withQN/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 381.2,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.3
   },
   {
     "case": "geometryScheme4_2species_withEr_fullTrajectories",
@@ -711,7 +750,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_withEr_fullTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_withEr_fullTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 359.1,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.8
   },
   {
     "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
@@ -762,7 +804,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_withEr_fullTrajectories_withQN/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme4_2species_withEr_fullTrajectories_withQN/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 384.2,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.5
   },
   {
     "case": "geometryScheme5_3species_loRes",
@@ -813,7 +858,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme5_3species_loRes/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/geometryScheme5_3species_loRes/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 363.3,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.3
   },
   {
     "case": "inductiveE_noEr",
@@ -864,7 +912,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/inductiveE_noEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/inductiveE_noEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 364.8,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.9000000000001
   },
   {
     "case": "monoenergetic_geometryScheme1",
@@ -915,7 +966,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/monoenergetic_geometryScheme1/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/monoenergetic_geometryScheme1/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 431.4,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.6
   },
   {
     "case": "monoenergetic_geometryScheme11",
@@ -966,7 +1020,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/monoenergetic_geometryScheme11/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/monoenergetic_geometryScheme11/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 454.5,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.2
   },
   {
     "case": "monoenergetic_geometryScheme5_ASCII",
@@ -1017,7 +1074,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/monoenergetic_geometryScheme5_ASCII/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/monoenergetic_geometryScheme5_ASCII/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 441.4,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.6
   },
   {
     "case": "monoenergetic_geometryScheme5_netCDF",
@@ -1068,7 +1128,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/monoenergetic_geometryScheme5_netCDF/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/monoenergetic_geometryScheme5_netCDF/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 439.4,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.4
   },
   {
     "case": "quick_2species_FPCollisions_noEr",
@@ -1119,7 +1182,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/quick_2species_FPCollisions_noEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/quick_2species_FPCollisions_noEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 363.7,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.2
   },
   {
     "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories",
@@ -1170,7 +1236,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 367.6,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.1999999999999
   },
   {
     "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories",
@@ -1221,7 +1290,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 372.2,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.0
   },
   {
     "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories",
@@ -1272,7 +1344,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 1037.9,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.3
   },
   {
     "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories",
@@ -1323,7 +1398,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 1059.5,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.0
   },
   {
     "case": "tokamak_1species_FPCollisions_noEr",
@@ -1374,7 +1452,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_noEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_noEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 311.9,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.5
   },
   {
     "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
@@ -1425,7 +1506,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_noEr_withPhi1InDKE/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_noEr_withPhi1InDKE/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 382.8,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.3
   },
   {
     "case": "tokamak_1species_FPCollisions_noEr_withQN",
@@ -1476,7 +1560,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_noEr_withQN/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_noEr_withQN/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 370.5,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.9
   },
   {
     "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
@@ -1527,7 +1614,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_withEr_DKESTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_withEr_DKESTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 357.7,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.5
   },
   {
     "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
@@ -1578,7 +1668,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_withEr_fullTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_FPCollisions_withEr_fullTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 362.9,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.5
   },
   {
     "case": "tokamak_1species_PASCollisions_noEr",
@@ -1629,7 +1722,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_PASCollisions_noEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_PASCollisions_noEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 437.3,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.7
   },
   {
     "case": "tokamak_1species_PASCollisions_noEr_Nx1",
@@ -1680,7 +1776,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_PASCollisions_noEr_Nx1/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_PASCollisions_noEr_Nx1/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 380.5,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.3
   },
   {
     "case": "tokamak_1species_PASCollisions_noEr_withQN",
@@ -1731,7 +1830,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_PASCollisions_noEr_withQN/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_PASCollisions_noEr_withQN/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 439.6,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.0
   },
   {
     "case": "tokamak_1species_PASCollisions_withEr_fullTrajectories",
@@ -1782,7 +1884,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_PASCollisions_withEr_fullTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_1species_PASCollisions_withEr_fullTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 374.7,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 549.0
   },
   {
     "case": "tokamak_2species_PASCollisions_noEr",
@@ -1833,7 +1938,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_2species_PASCollisions_noEr/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_2species_PASCollisions_noEr/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 599.4,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.9
   },
   {
     "case": "tokamak_2species_PASCollisions_withEr_fullTrajectories",
@@ -1884,7 +1992,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_2species_PASCollisions_withEr_fullTrajectories/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/tokamak_2species_PASCollisions_withEr_fullTrajectories/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 696.7,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.8
   },
   {
     "case": "transportMatrix_geometryScheme11",
@@ -1935,7 +2046,10 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/transportMatrix_geometryScheme11/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/transportMatrix_geometryScheme11/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 377.8,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.3
   },
   {
     "case": "transportMatrix_geometryScheme2",
@@ -1986,6 +2100,9 @@
     "promoted_input_path": null,
     "fortran_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/transportMatrix_geometryScheme2/fortran_run/sfincsOutput.h5",
     "jax_h5": "tests/scaled_example_suite_gpu_bounded_default_2026-04-28/transportMatrix_geometryScheme2/sfincsOutput_jax.h5",
-    "compare_mode": "strict"
+    "compare_mode": "strict",
+    "jax_incremental_max_rss_mb": 375.6,
+    "jax_memory_metric_source": "drss_mb",
+    "jax_rss_baseline_mb": 548.9
   }
 ]

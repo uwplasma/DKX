@@ -391,6 +391,28 @@ def test_run_jax_cli_uses_time_rss_when_profile_rss_is_absent(
     assert logged == pytest.approx(0.25)
 
 
+def test_parse_jax_memory_profile_prefers_peak_delta(tmp_path: Path) -> None:
+    log_path = tmp_path / "sfincs_jax.log"
+    log_path.write_text(
+        "\n".join(
+            [
+                "profiling: build dt_s=0.1 total_s=0.1 rss_mb=500.0 drss_mb=50.0 "
+                "peak_rss_mb=520.0 dpeak_rss_mb=70.0 device_mb=na",
+                "profiling: solve dt_s=0.2 total_s=0.3 rss_mb=530.0 drss_mb=80.0 "
+                "peak_rss_mb=560.0 dpeak_rss_mb=110.0 device_mb=na",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    profile = suite._parse_jax_memory_profile_from_log(log_path)
+
+    assert profile["jax_max_rss_mb"] == pytest.approx(530.0)
+    assert profile["jax_incremental_max_rss_mb"] == pytest.approx(110.0)
+    assert profile["jax_rss_baseline_mb"] == pytest.approx(420.0)
+    assert profile["jax_memory_metric_source"] == "dpeak_rss_mb"
+
+
 def test_run_jax_cli_leaves_compilation_cache_unset_when_not_requested(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

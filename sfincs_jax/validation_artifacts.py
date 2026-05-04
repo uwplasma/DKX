@@ -66,6 +66,9 @@ class SuiteCaseMetric:
     jax_logged_elapsed_s: float | None
     fortran_max_rss_mb: float | None
     jax_max_rss_mb: float | None
+    jax_incremental_max_rss_mb: float | None
+    jax_rss_baseline_mb: float | None
+    jax_memory_metric_source: str | None
     practical_mismatches: int
     strict_mismatches: int
 
@@ -120,6 +123,24 @@ class SuiteCaseMetric:
         """Return ``jax_max_rss_mb / fortran_max_rss_mb`` when both values are finite."""
 
         return _safe_ratio(self.jax_max_rss_mb, self.fortran_max_rss_mb)
+
+    @property
+    def active_jax_memory_mb(self) -> float | None:
+        """Return profiler-derived active JAX memory, falling back to process RSS.
+
+        ``jax_max_rss_mb`` remains the external-command process high-water mark.
+        The active value subtracts the fixed Python/JAX/XLA runtime baseline when
+        profiler ``dpeak_rss_mb`` or ``drss_mb`` data are available, which is the
+        fairer solver-memory metric for public per-case bars.
+        """
+
+        return self.jax_incremental_max_rss_mb if self.jax_incremental_max_rss_mb is not None else self.jax_max_rss_mb
+
+    @property
+    def active_memory_ratio(self) -> float | None:
+        """Return active JAX memory divided by Fortran process RSS."""
+
+        return _safe_ratio(self.active_jax_memory_mb, self.fortran_max_rss_mb)
 
 
 DEFAULT_PUBLICATION_ARTIFACTS: dict[str, str] = {
@@ -350,6 +371,11 @@ def suite_case_metrics(rows: Sequence[Mapping[str, object]]) -> list[SuiteCaseMe
                 jax_logged_elapsed_s=_optional_float(row.get("jax_logged_elapsed_s")),
                 fortran_max_rss_mb=_optional_float(row.get("fortran_max_rss_mb")),
                 jax_max_rss_mb=_optional_float(row.get("jax_max_rss_mb")),
+                jax_incremental_max_rss_mb=_optional_float(row.get("jax_incremental_max_rss_mb")),
+                jax_rss_baseline_mb=_optional_float(row.get("jax_rss_baseline_mb")),
+                jax_memory_metric_source=(
+                    None if row.get("jax_memory_metric_source") is None else str(row.get("jax_memory_metric_source"))
+                ),
                 practical_mismatches=_mismatch_count(row, SUITE_MISMATCH_FIELDS),
                 strict_mismatches=_mismatch_count(row, SUITE_STRICT_MISMATCH_FIELDS),
             )
@@ -431,12 +457,17 @@ def _metric_row(metric: SuiteCaseMetric, *, field: str) -> dict[str, object]:
         "warm_or_logged_runtime_source": metric.warm_or_logged_runtime_source,
         "fortran_max_rss_mb": metric.fortran_max_rss_mb,
         "jax_max_rss_mb": metric.jax_max_rss_mb,
+        "jax_incremental_max_rss_mb": metric.jax_incremental_max_rss_mb,
+        "jax_rss_baseline_mb": metric.jax_rss_baseline_mb,
+        "jax_memory_metric_source": metric.jax_memory_metric_source,
+        "active_jax_memory_mb": metric.active_jax_memory_mb,
         "runtime_ratio": metric.runtime_ratio,
         "cold_runtime_ratio": metric.cold_runtime_ratio,
         "warm_runtime_ratio": metric.warm_runtime_ratio,
         "warm_or_logged_runtime_ratio": metric.warm_or_logged_runtime_ratio,
         "logged_runtime_ratio": metric.logged_runtime_ratio,
         "memory_ratio": metric.memory_ratio,
+        "active_memory_ratio": metric.active_memory_ratio,
         "practical_mismatches": metric.practical_mismatches,
         "strict_mismatches": metric.strict_mismatches,
         "sort_field": field,
@@ -498,11 +529,24 @@ def suite_report_summary(
         ),
         "logged_runtime_ratio_summary": _ratio_summary([metric.logged_runtime_ratio for metric in metrics]),
         "memory_ratio_summary": _ratio_summary([metric.memory_ratio for metric in metrics]),
+        "active_memory_ratio_summary": _ratio_summary([metric.active_memory_ratio for metric in metrics]),
         "fastest_jax_vs_fortran_cases": _top_metrics(metrics, key="runtime_ratio", n=n_top, reverse=False),
         "slowest_jax_vs_fortran_cases": _top_metrics(metrics, key="runtime_ratio", n=n_top, reverse=True),
         "highest_memory_ratio_cases": _top_metrics(metrics, key="memory_ratio", n=n_top, reverse=True),
+        "highest_active_memory_ratio_cases": _top_metrics(
+            metrics,
+            key="active_memory_ratio",
+            n=n_top,
+            reverse=True,
+        ),
         "highest_jax_runtime_cases": _top_metrics(metrics, key="jax_runtime_s", n=n_top, reverse=True),
         "highest_jax_memory_cases": _top_metrics(metrics, key="jax_max_rss_mb", n=n_top, reverse=True),
+        "highest_active_jax_memory_cases": _top_metrics(
+            metrics,
+            key="active_jax_memory_mb",
+            n=n_top,
+            reverse=True,
+        ),
     }
 
 
@@ -1108,7 +1152,8 @@ def build_fortran_suite_benchmark_summary(
             "min_fortran_runtime_s": None if min_fortran_runtime_s is None else float(min_fortran_runtime_s),
             "excluded_low_fortran_runtime_cases": excluded_cases,
             "notes": [
-                "Ratios use the audited wall-clock and maximum-RSS fields stored in the frozen suite reports.",
+                "Runtime ratios use audited wall-clock fields stored in the frozen suite reports.",
+                "Process memory ratios use audited maximum-RSS fields; active JAX memory ratios use profiler dpeak_rss_mb/drss_mb deltas when available.",
                 "The summary is a release gate: all audited CPU/GPU cases must remain parity_ok with no strict mismatches before filtering.",
                 "README-facing performance plots filter out very short Fortran reference runs so public runtime claims are based on production-scale rows.",
                 "The artifacts compare sfincs_jax against the Fortran v3 reference implementation on the vendored example suite.",
