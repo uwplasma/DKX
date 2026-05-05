@@ -16,6 +16,8 @@ _SPEC.loader.exec_module(bench_inputs)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+MIN_3D = {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100}
+MIN_TOKAMAK = {"NTHETA": 25, "NX": 4, "NXI": 100}
 
 
 def _write_input(
@@ -56,6 +58,11 @@ def test_checked_in_production_manifest_is_sfincs_jax_only() -> None:
     assert not any("ntx" in str(case["source_input"]).lower() for case in cases)
 
 
+def _assert_floor(resolution: dict[str, int], floor: dict[str, int]) -> None:
+    for key, value in floor.items():
+        assert int(resolution[key]) >= int(value)
+
+
 def test_generator_enforces_research_baseline_on_examples_and_external_inputs(tmp_path: Path) -> None:
     examples_root = tmp_path / "examples"
     _write_input(examples_root / "tokamak_demo" / "input.namelist", ntheta=7, nzeta=1, nx=1, nxi=8)
@@ -88,20 +95,25 @@ def test_generator_enforces_research_baseline_on_examples_and_external_inputs(tm
     manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
     cases = {case["case"]: case for case in manifest["cases"]}
 
-    assert manifest["minimum_3d_resolution"] == {"NTHETA": 35, "NZETA": 43, "NX": 17, "NXI": 48}
-    assert manifest["minimum_tokamak_resolution"] == {"NTHETA": 42, "NX": 16, "NXI": 62}
+    assert manifest["minimum_3d_resolution"] == MIN_3D
+    assert manifest["minimum_tokamak_resolution"] == MIN_TOKAMAK
     assert manifest["target_fortran_min_runtime_s"] == 10.0
 
-    assert cases["tokamak_demo"]["benchmark_resolution"] == {"NTHETA": 42, "NZETA": 1, "NX": 16, "NXI": 62}
-    assert cases["stellarator_demo"]["benchmark_resolution"] == {"NTHETA": 35, "NZETA": 43, "NX": 17, "NXI": 48}
-    assert cases["tokamak_demo"]["size_estimate"]["total_unknowns_estimate"] == 41666
-    assert cases["tokamak_demo"]["size_estimate"]["run_recommendation"] == "remote_or_cluster_only"
+    assert cases["tokamak_demo"]["benchmark_resolution"] == {"NTHETA": 25, "NZETA": 1, "NX": 4, "NXI": 100}
+    assert cases["stellarator_demo"]["benchmark_resolution"] == MIN_3D
+    assert cases["tokamak_demo"]["size_estimate"]["total_unknowns_estimate"] == 10002
+    assert cases["tokamak_demo"]["size_estimate"]["run_recommendation"] == "bounded_local_ok"
+    tokamak_text = (out_root / cases["tokamak_demo"]["input"]).read_text(encoding="utf-8")
+    assert "preconditioner_x = 1" in tokamak_text
+    assert "whichParallelSolverToFactorPreconditioner = 1" in tokamak_text
+    assert "useIterativeLinearSolver = .false." in tokamak_text
 
     external_case_name = next(name for name in cases if name.startswith("external_"))
-    assert cases[external_case_name]["benchmark_resolution"] == {"NTHETA": 35, "NZETA": 43, "NX": 17, "NXI": 48}
+    assert cases[external_case_name]["benchmark_resolution"] == {"NTHETA": 25, "NZETA": 51, "NX": 5, "NXI": 100}
+    _assert_floor(cases[external_case_name]["benchmark_resolution"], MIN_3D)
     assert (
         cases[external_case_name]["resolution_policy"]
-        == "preserve nominal grid, but enforce 3D >= 35x43x17x48 and tokamak >= 42x1x16x62; production timing rows target Fortran v3 >= 10 s"
+        == "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s"
     )
 
     localized_input = out_root / cases[external_case_name]["input"]
@@ -113,7 +125,7 @@ def test_generator_enforces_research_baseline_on_examples_and_external_inputs(tm
 
 def test_generator_can_preserve_external_resolution_for_reproduction(tmp_path: Path) -> None:
     examples_root = tmp_path / "examples"
-    _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=35, nzeta=43, nx=17, nxi=48)
+    _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=25, nzeta=51, nx=4, nxi=100)
     external_input = tmp_path / "external" / "finite_beta" / "rho_0p5" / "input.namelist"
     _write_input(external_input, ntheta=13, nzeta=15, nx=5, nxi=8)
 
@@ -145,7 +157,7 @@ def test_generator_can_preserve_external_resolution_for_reproduction(tmp_path: P
 
 def test_generator_relabels_historic_external_deck_with_benchmark_resolution(tmp_path: Path) -> None:
     examples_root = tmp_path / "examples"
-    _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=35, nzeta=43, nx=17, nxi=48)
+    _write_input(examples_root / "stellarator_demo" / "input.namelist", ntheta=25, nzeta=51, nx=4, nxi=100)
     external_input = (
         tmp_path
         / "external"
@@ -177,7 +189,7 @@ def test_generator_relabels_historic_external_deck_with_benchmark_resolution(tmp
 
     manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
     cases = {case["case"]: case for case in manifest["cases"]}
-    assert any("cpu_35x43x17x48_deck" in name for name in cases)
+    assert any("cpu_25x51x5x100_deck" in name for name in cases)
     assert not any("cpu_17x21x12_deck" in name for name in cases)
 
 
@@ -217,15 +229,16 @@ def test_generator_estimates_large_pas_xdot_case_as_remote_only(tmp_path: Path) 
     case = manifest["cases"][0]
     size = case["size_estimate"]
 
-    assert case["benchmark_resolution"] == {"NTHETA": 35, "NZETA": 43, "NX": 17, "NXI": 48}
+    assert case["benchmark_resolution"] == {"NTHETA": 25, "NZETA": 51, "NX": 5, "NXI": 100}
+    _assert_floor(case["benchmark_resolution"], MIN_3D)
     assert size["species_count"] == 2
     assert size["collision_operator"] == 1
     assert size["include_xdot_requested"] is True
     assert size["include_xdot"] is True
     assert size["include_xdot_effective"] is True
-    assert size["total_unknowns_estimate"] == 2456194
-    assert size["dense_matrix_nbytes_estimate"] > 600_000_000_000
-    assert size["conservative_csr_nbytes_estimate"] > 8_000_000_000
+    assert size["total_unknowns_estimate"] == 1275010
+    assert size["dense_matrix_nbytes_estimate"] > 1_000_000_000_000
+    assert size["conservative_csr_nbytes_estimate"] > 10_000_000_000
     assert size["run_recommendation"] == "remote_or_cluster_only"
 
 
@@ -267,5 +280,43 @@ def test_generator_does_not_overestimate_zero_er_xdot_case(tmp_path: Path) -> No
     assert size["include_xdot_requested"] is True
     assert size["include_xdot"] is False
     assert size["include_xdot_effective"] is False
-    assert size["conservative_csr_nbytes_estimate"] < 20_000_000_000
+    assert size["conservative_csr_nbytes_estimate"] < 10_000_000_000
     assert size["run_recommendation"] == "remote_or_cluster_only"
+
+
+def test_generator_default_floor_keeps_hsx_fp_at_authored_large_resolution(tmp_path: Path) -> None:
+    examples_root = tmp_path / "examples"
+    _write_input(
+        examples_root / "HSX_FPCollisions_fullTrajectories" / "input.namelist",
+        ntheta=25,
+        nzeta=115,
+        nx=5,
+        nxi=149,
+    )
+    _write_input(examples_root / "tokamak_demo" / "input.namelist", ntheta=5, nzeta=1, nx=1, nxi=4)
+
+    out_root = tmp_path / "production_inputs"
+    assert (
+        bench_inputs.main(
+            [
+                "--examples-root",
+                str(examples_root),
+                "--additional-input",
+                str(tmp_path / "missing_input.namelist"),
+                "--out-root",
+                str(out_root),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    cases = {case["case"]: case for case in manifest["cases"]}
+    hsx_res = cases["HSX_FPCollisions_fullTrajectories"]["benchmark_resolution"]
+    tok_res = cases["tokamak_demo"]["benchmark_resolution"]
+
+    assert hsx_res == {"NTHETA": 25, "NZETA": 115, "NX": 5, "NXI": 149}
+    _assert_floor(hsx_res, MIN_3D)
+    assert tok_res == {"NTHETA": 25, "NZETA": 1, "NX": 4, "NXI": 100}
+    _assert_floor(tok_res, MIN_TOKAMAK)

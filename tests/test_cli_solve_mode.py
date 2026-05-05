@@ -297,6 +297,24 @@ def test_phi1_newton_fast_explicit_prefers_sparse_direct_on_large_cpu() -> None:
     assert any("host sparse-direct Newton step" in msg for msg in msgs)
 
 
+def test_phi1_newton_fast_explicit_prefers_sparse_direct_on_large_gpu() -> None:
+    msgs: list[str] = []
+
+    method = _select_phi1_newton_linear_solve_method(
+        active_total_size=12753,
+        dense_cutoff=5000,
+        default_method="incremental",
+        fast_explicit=True,
+        dense_auto_ok=False,
+        dense_auto_backend="gpu",
+        env_override="",
+        emit=lambda _lvl, msg: msgs.append(str(msg)),
+    )
+
+    assert method == "sparse_direct"
+    assert any("backend=gpu" in msg for msg in msgs)
+
+
 def test_phi1_newton_fast_explicit_prefers_sparse_direct_on_moderate_cpu() -> None:
     method = _select_phi1_newton_linear_solve_method(
         active_total_size=5703,

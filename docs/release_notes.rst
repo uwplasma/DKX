@@ -18,7 +18,10 @@ Highlights
   that is faster and lower-memory, while bounded geometry-rich PAS examples now
   prefer the measured lower-memory ``pas_tz`` path. On CPU, audited 3D full-FP
   RHSMode 1 cases can auto-select sparse-PC GMRES inside the measured size
-  window when it beats dense FP on both runtime and memory.
+  window when it beats dense FP on both runtime and memory. On GPU/CUDA,
+  production-floor tokamak full-FP no-Er/Er rows can auto-select sparse-PC GMRES
+  inside narrow measured windows when the matrix-free route is not residual-clean
+  and the faster theta-line route is too memory-heavy.
 - Monoenergetic transport benchmarks now time the actual RHSMode 2/3 transport
   solve instead of only output-field assembly, and small bounded GPU cases can use
   dense accelerator transport when it is validated to be faster.
