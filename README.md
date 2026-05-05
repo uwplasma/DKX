@@ -77,9 +77,11 @@ when it is faster and lower-memory than dense FP. Bounded CPU tokamak
 electric-field systems auto-select dense LU only in the validated active-size
 window where it avoids the slow Krylov/strong/sparse-rescue ladder; this is a
 runtime win with a higher transient memory footprint, so it is CPU-only and
-size-capped. Large constrained-PAS profile-current decks also auto-select
-sparse-PC GMRES when the problem size is in the validated production window.
-Explicit sparse-host LU remains available:
+size-capped. Measured GPU tokamak full-FP no-Er/Er production-floor rows
+auto-select sparse-PC GMRES when that is the parity-clean lower-memory route
+relative to the faster but memory-heavy theta-line solve. Large constrained-PAS
+profile-current decks also auto-select sparse-PC GMRES when the problem size is
+in the validated production window. Explicit sparse-host LU remains available:
 
 ```bash
 sfincs_jax write-output \

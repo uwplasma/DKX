@@ -219,6 +219,8 @@ docs/upstream/**/*.synctex.gz
 # Local benchmark scratch outputs.
 tests/current_*.json
 tests/current_sharded_*/
+tests/production_floor_*/
+benchmarks/production_resolution_inputs_*/
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

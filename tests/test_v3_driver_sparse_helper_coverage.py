@@ -74,6 +74,19 @@ def test_host_sparse_refine_step_parsing_and_skip_dense_ratio(monkeypatch) -> No
     assert v3_driver._host_sparse_direct_refine_steps("MY_REFINE_STEPS", default=2) == 0
 
 
+def test_rhs1_residual_rescue_uses_small_target_slack(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", raising=False)
+    assert not v3_driver._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
+    assert v3_driver._rhs1_residual_needs_rescue(1.02e-12, 1.0e-12)
+    assert v3_driver._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12, force=True)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", "0")
+    assert v3_driver._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", "bad")
+    assert not v3_driver._rhs1_residual_needs_rescue(1.006e-12, 1.0e-12)
+
+
 def test_host_direct_refinement_helpers_improve_residual() -> None:
     rhs = jnp.asarray([2.0, -4.0], dtype=jnp.float64)
     ident = np.eye(2, dtype=np.float64)
@@ -203,7 +216,7 @@ def test_build_host_sparse_direct_factor_from_matvec_falls_back_on_invalid_env(m
     assert kwargs["drop_tol"] == pytest.approx(0.0)
     assert kwargs["prefer_sparse_on_gpu"] is True
     assert kwargs["allow_operator_only"] is False
-    assert messages == [(1, "explicit_sparse: storage=csr reason=fallback factor_kind=lu permc=COLAMD")]
+    assert messages == [(1, "explicit_sparse: storage=csr reason=fallback factor_kind=lu permc=COLAMD diag_pivot=1")]
 
 
 def test_build_host_sparse_direct_factor_from_matvec_respects_env_overrides(monkeypatch) -> None:

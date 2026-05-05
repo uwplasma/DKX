@@ -36,8 +36,22 @@ def test_rhs1_fp_force_stage2_respects_abs_floor_and_include_phi1(monkeypatch) -
 def test_rhs1_pas_stage2_skip_respects_kind_and_invalid_env(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_PAS_STAGE2_SKIP_RATIO", "bad")
     assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="pas_lite", res_ratio=1.0e7)
+    assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="pas_ilu", res_ratio=1.0e7)
+    assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="schur", res_ratio=1.0e7)
+    assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="xblock_tz", res_ratio=1.0e7)
+    assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="xblock_tz_lmax", res_ratio=1.0e7)
     assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="theta_line", res_ratio=1.0e7)
     assert not rhs1_pas_stage2_skip(has_pas=False, rhs1_precond_kind="pas_lite", res_ratio=1.0e7)
     monkeypatch.setenv("SFINCS_JAX_PAS_STAGE2_SKIP_RATIO", "10")
     assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="pas_hybrid", res_ratio=11.0)
     assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="pas_hybrid", res_ratio=9.0)
+
+
+def test_rhs1_pas_stage2_skip_extended_is_opt_in(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_STAGE2_SKIP_RATIO", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_STAGE2_SKIP_EXTENDED", "1")
+    assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="pas_ilu", res_ratio=1.0e7)
+    assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="schur", res_ratio=1.0e7)
+    assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="xblock_tz", res_ratio=1.0e7)
+    assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="xblock_tz_lmax", res_ratio=1.0e7)
+    assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="theta_line", res_ratio=1.0e7)

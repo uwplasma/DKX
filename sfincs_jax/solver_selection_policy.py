@@ -32,6 +32,9 @@ class SolverCandidateMetrics:
     setup_s: float | None = None
     solve_s: float | None = None
     peak_rss_mb: float | None = None
+    active_rss_mb: float | None = None
+    device_peak_mb: float | None = None
+    compiled_temp_mb: float | None = None
     finite: bool = True
     parity_failures: int | None = None
     metadata: Mapping[str, object] = field(default_factory=dict, compare=False)
@@ -77,11 +80,40 @@ class SolverCandidateGate:
     residual_ratio: float | None = None
     runtime_ratio: float | None = None
     memory_ratio: float | None = None
+    memory_metric: str | None = None
 
 
 def _passes_residual(candidate: SolverCandidateMetrics, criteria: SolverAcceptanceCriteria) -> bool:
     ratio = candidate.residual_ratio
     return ratio is not None and ratio <= float(criteria.max_residual_ratio)
+
+
+def _paired_memory_values(
+    candidate: SolverCandidateMetrics,
+    baseline: SolverCandidateMetrics,
+) -> tuple[float | None, float | None, str | None]:
+    """Return comparable memory values and the metric name.
+
+    Candidate gates should not compare device memory against process RSS. Prefer
+    the most specific paired metric available, then fall back to legacy peak RSS.
+    """
+
+    for attr in ("device_peak_mb", "active_rss_mb", "compiled_temp_mb", "peak_rss_mb"):
+        cand = _finite_or_none(getattr(candidate, attr))
+        base = _finite_or_none(getattr(baseline, attr))
+        if cand is not None and base is not None:
+            return cand, base, attr
+    return None, None, None
+
+
+def _single_memory_value(candidate: SolverCandidateMetrics) -> float | None:
+    """Return the best available memory metric for tie-breaking."""
+
+    for attr in ("device_peak_mb", "active_rss_mb", "compiled_temp_mb", "peak_rss_mb"):
+        value = _finite_or_none(getattr(candidate, attr))
+        if value is not None:
+            return value
+    return None
 
 
 def solver_candidate_gate(
@@ -111,6 +143,7 @@ def solver_candidate_gate(
 
     runtime_ratio: float | None = None
     memory_ratio: float | None = None
+    memory_metric: str | None = None
     baseline_clean = False
     if baseline is not None:
         baseline_clean = baseline.finite and _passes_residual(baseline, criteria)
@@ -118,8 +151,7 @@ def solver_candidate_gate(
         base_time = baseline.total_s
         if cand_time is not None and base_time is not None and base_time > 0.0:
             runtime_ratio = cand_time / base_time
-        cand_mem = _finite_or_none(candidate.peak_rss_mb)
-        base_mem = _finite_or_none(baseline.peak_rss_mb)
+        cand_mem, base_mem, memory_metric = _paired_memory_values(candidate, baseline)
         if cand_mem is not None and base_mem is not None and base_mem > 0.0:
             memory_ratio = cand_mem / base_mem
 
@@ -139,7 +171,7 @@ def solver_candidate_gate(
         else:
             if candidate.total_s is None and not criteria.allow_unknown_runtime_when_baseline_failed:
                 reasons.append("missing_runtime")
-            if candidate.peak_rss_mb is None and not criteria.allow_unknown_memory_when_baseline_failed:
+            if _single_memory_value(candidate) is None and not criteria.allow_unknown_memory_when_baseline_failed:
                 reasons.append("missing_memory")
 
     return SolverCandidateGate(
@@ -148,6 +180,7 @@ def solver_candidate_gate(
         residual_ratio=residual_ratio,
         runtime_ratio=runtime_ratio,
         memory_ratio=memory_ratio,
+        memory_metric=memory_metric,
     )
 
 
@@ -164,11 +197,11 @@ def choose_solver_candidate(
         if not gate.accepted:
             continue
         total_s = candidate.total_s
-        peak_rss_mb = _finite_or_none(candidate.peak_rss_mb)
+        memory_mb = _single_memory_value(candidate)
         accepted.append(
             (
                 float(total_s) if total_s is not None else float("inf"),
-                float(peak_rss_mb) if peak_rss_mb is not None else float("inf"),
+                float(memory_mb) if memory_mb is not None else float("inf"),
                 candidate,
             )
         )

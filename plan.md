@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-03 (America/Chicago)
+Last updated: 2026-05-05 (America/Chicago)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -7934,3 +7934,375 @@ Active-memory reporting cleanup on 2026-05-03:
 - Regenerated the README/public benchmark plot and summary JSON, and updated the
   docs so every page labels the memory panel as active solver memory rather than
   raw JAX process RSS.
+
+Active lane (2026-05-04): Fortran-competitive memory management
+
+- Research conclusion: SFINCS Fortran v3/PETSc wins memory mostly through
+  algorithmic representation, not runtime bookkeeping. The important patterns
+  are sparse AIJ matrix preallocation, thresholded value insertion, distributed
+  row ownership, KSP/preconditioner reuse, fill-reducing orderings, and bounded
+  GMRES restart/short-recurrence Krylov choices. JAX memory knobs
+  (`XLA_PYTHON_CLIENT_PREALLOCATE`, device allocator choices, remat/offload,
+  buffer donation, sharding, and Pallas kernels) are useful only after the solver
+  avoids dense intermediates and replicated state.
+- First implementation step: added `sfincs_jax/memory_model.py` with conservative
+  dense/CSR/Krylov/preconditioner/device memory estimates and wired GMRES restart
+  limiting in `sfincs_jax/solver.py` to that shared model.
+- First route-selection guard: extended `sfincs_jax/solver_selection_policy.py`
+  so future automatic solver promotions compare paired memory metrics in order:
+  `device_peak_mb`, `active_rss_mb`, `compiled_temp_mb`, then legacy
+  `peak_rss_mb`. This prevents apples-to-oranges memory wins and gives GPU
+  memory-limited runs a first-class gate.
+- Immediate tests: keep `tests/test_memory_model.py` and the new
+  `tests/test_solver_selection_policy.py` cases green; these are unit-level
+  guards before touching expensive RHSMode=1/PAS/FP paths.
+- Next implementation steps:
+  1. Add compiled-memory instrumentation around representative JITed matvec and
+     solve kernels using `lower(...).compile().memory_analysis()` when available.
+  2. Add active/device/compiled memory fields to solver trace artifacts and
+     benchmark candidate JSON so route decisions are auditable case by case.
+  3. Use `estimate_linear_solve_memory(...)` before dense fallback,
+     sparse-from-matvec probing, Schur/PAS construction, and transport dense
+     retry admission; disallow dense routes when dense operator + factors +
+     Krylov basis + compiled temp exceed the configured budget.
+  4. Replace large dense `from_matvec` construction with pattern-probed CSR or
+     matrix-free preconditioners wherever parity and residual gates are clean.
+  5. Evaluate mixed-precision preconditioners with float64 residual refinement
+     for FP/PAS offenders, promoting only when all output comparisons stay clean.
+  6. Build the memory-limited GPU lane around sharded matvec/preconditioner state
+     across theta/zeta/radius/species partitions instead of replicated whole-case
+     solves; use Pallas only for proven stencil/matvec hotspots where XLA emits
+     large temporary buffers.
+  7. Evaluate Lineax/Equinox wrappers only behind the same gate. The expected
+     value is cleaner matrix-free operators and reusable differentiable solver
+     state, not automatic memory reduction.
+- Benchmark targets for this lane: production-resolution RHSMode=1 full-FP,
+  PAS-heavy geometry4/HSX/geometry11 rows, and the collaborator-scale
+  finite-beta/profile-current stress rows. A memory win is not public unless it
+  reduces measured active/device memory, preserves residual and output parity,
+  and does not introduce a runtime regression larger than the configured gate.
+
+Active lane (2026-05-04): production-resolution memory campaign and CPU/GPU parity/stall closure
+
+Problem statement:
+
+- The current README-facing benchmark summary is not strong enough for the next
+  public memory/performance claim. A quick audit of the frozen CPU/GPU reports
+  shows HSX full-FP rows with final resolution `Ntheta=5, Nzeta=5, Nx=2, Nxi=4`,
+  even though the new collaborator/research floor is at least
+  `Ntheta=25, Nzeta=51, Nx=4, Nxi=100` for 3D benchmark cases.
+- A dry-run with the requested floor via
+  `scripts/create_production_benchmark_inputs.py --min-3d-ntheta 25 --min-3d-nzeta 51 --min-3d-nx 4 --min-3d-nxi 100 --min-tokamak-ntheta 25 --min-tokamak-nx 4 --min-tokamak-nxi 100`
+  produced 39 inputs: 6 `bounded_local_ok`, 5 `bounded_remote`, and 28
+  `remote_or_cluster_only`. HSX FP preserves its authored larger grid
+  `25 x 115 x 5 x 149`, giving about `4.28e6` unknowns for two species and a
+  dense matrix estimate of about `1.47e14` bytes, so dense/full materialized
+  routes are impossible and must be rejected before allocation.
+- For tokamak cases, the physically meaningful public benchmark floor is
+  `Ntheta>=25, Nzeta=1, Nx>=4, Nxi>=100`. If an explicitly replicated
+  `Nzeta=51` tokamak stress test is desired, treat it as a separate GPU-memory
+  stress lane, not as the default axisymmetric physics comparison.
+- Collaborator reports of CPU/GPU solution differences and solver stalls must be
+  reproduced at this production floor before changing defaults. Any fix must be
+  gated by true residuals, HDF5 output parity with Fortran v3, CPU/GPU agreement,
+  runtime, active/device memory, and solver-search overhead.
+
+Ordered implementation plan:
+
+1. Lock the benchmark-resolution contract.
+
+   - Change `scripts/create_production_benchmark_inputs.py` defaults to
+     `DEFAULT_3D_MINIMUM = {NTHETA: 25, NZETA: 51, NX: 4, NXI: 100}` and
+     `DEFAULT_TOKAMAK_MINIMUM = {NTHETA: 25, NX: 4, NXI: 100}`.
+   - Update `tests/test_create_production_benchmark_inputs.py` to require that
+     all 3D manifest rows meet or exceed `25 x 51 x 4 x 100`, all tokamak rows
+     meet or exceed `25 x 1 x 4 x 100`, and HSX FP rows preserve the authored
+     larger `25 x 115 x 5 x 149` resolution.
+   - Add a validator in `sfincs_jax.validation_artifacts` that rejects public
+     benchmark summaries when any reported row lacks `final_resolution` or falls
+     below the benchmark floor. Wire it into
+     `examples/publication_figures/generate_fortran_suite_benchmark_summary.py`
+     and `tests/test_generate_fortran_suite_benchmark_summary.py`.
+   - Gate: no README/docs benchmark plot can be regenerated from a report that
+     includes below-floor production rows. Below-floor cases remain CI/smoke
+     tests only.
+
+2. Reproduce CPU/GPU mismatch and stall claims with a fixed input matrix.
+
+   - Generate the new production inputs into
+     `benchmarks/production_resolution_inputs_2026-05-04/` with the floor above.
+   - Run bounded CPU cases locally first:
+     `python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --max-run-recommendation bounded_local_ok --fortran-exe /Users/rogeriojorge/local/sfincs/fortran/version3/sfincs --out-root tests/production_floor_cpu_bounded_2026-05-04 --jax-repeats 2 --jax-cache-dir .jax_cache/production_floor --jax-profile-marks on --max-attempts 1 --timeout-s 1800 --reset-report`.
+   - Run bounded-remote and remote-only cases on `office` GPU with
+     `CUDA_VISIBLE_DEVICES=0` and again with `CUDA_VISIBLE_DEVICES=1`; use
+     `--jax-profile-marks full` only on targeted offenders because full
+     Perfetto/XPlane traces are large.
+   - For each completed row, compare:
+     Fortran v3 vs JAX CPU, Fortran v3 vs JAX GPU, and JAX CPU vs JAX GPU using
+     the same `compare_sfincs_outputs` practical and strict modes.
+   - Classify every non-clean row into exactly one blocker:
+     `fortran_reference_quality`, `cpu_gpu_output_mismatch`,
+     `true_residual_failure`, `timeout_or_stall`, `oom_or_allocator_failure`,
+     `solver_search_overhead`, `missing_output_key`, or `harness_failure`.
+   - Gate: do not optimize a case until it is reproducibly classified on both CPU
+     and GPU or is explicitly marked hardware-limited.
+
+3. Make solver decisions fully observable before adding more heuristics.
+
+   - Extend `sfincs_jax.solver_trace.SolverTrace` and
+     `SolverTraceCandidate` with `active_rss_mb`, `device_peak_mb`,
+     `compiled_temp_mb`, `memory_metric`, `estimated_dense_nbytes`,
+     `estimated_csr_nbytes`, `estimated_gmres_basis_nbytes`, `matvec_count`,
+     `candidate_setup_s`, and `candidate_solve_s`.
+   - Pass those fields from `sfincs_jax.solver_selection_policy`,
+     `sfincs_jax.rhs1_handoff`, `sfincs_jax.v3_driver`,
+     `sfincs_jax.profiling`, and `sfincs_jax.io`.
+   - Add compile-memory probes using
+     `lower(...).compile().memory_analysis()` around representative matvec,
+     preconditioner apply, and diagnostics kernels when the backend supports it.
+   - Add timeout-safe periodic solver-search logs: selected path, candidate path,
+     residual, target, elapsed time, active memory, device memory, and reason for
+     accepting/rejecting the candidate.
+   - Gate: default production runs may spend at most 10% of total solve time or
+     60 seconds, whichever is smaller, in route probing before selecting a solver.
+     Longer exploration belongs in `scripts/benchmark_case_variants.py`, not in
+     the default CLI/Python path.
+
+4. Convert route selection from heuristic thresholds to memory preflight plus
+   measured-candidate gates.
+
+   - Use `sfincs_jax.memory_model.estimate_linear_solve_memory(...)` before
+     dense fallback, dense preconditioner build, sparse-from-matvec probing,
+     Schur/PAS construction, and transport dense retry admission.
+   - Touch points:
+     `sfincs_jax.rhs1_host_policy`, `sfincs_jax.rhs1_pas_policy`,
+     `sfincs_jax.rhs1_schur_policy`, `sfincs_jax.rhs1_large_cpu_policy`,
+     `sfincs_jax.transport_solve_policy`, `sfincs_jax.transport_policy`,
+     `sfincs_jax.transport_dense_lu`, `sfincs_jax.explicit_sparse`, and
+     `sfincs_jax.v3_driver`.
+   - Dense or dense-probed routes are disallowed by default when
+     `dense_operator + factors + Krylov basis + compiled_temp` exceeds 70% of the
+     available host/GPU budget or exceeds the measured Fortran memory by more
+     than 1.25x without a runtime win.
+   - Gate: a route promotion must be residual-clean and parity-clean, then either
+     at least 15% faster at no more than 5% extra active/device memory, or at
+     least 25% lower active/device memory at no more than 10% runtime regression.
+     A memory-limited rescue can be accepted with up to 50% runtime regression
+     only if the incumbent OOMs/stalls and the rescue converges.
+
+5. Eliminate large dense materialization from production 3D RHSMode=1 routes.
+
+   - Replace large `explicit_sparse.build_operator_from_matvec` dense probing
+     with `v3_sparse_pattern` plus colored pattern-probed CSR construction.
+   - Stream CSR assembly in column-color chunks and write directly to CSR/COO
+     buffers instead of retaining dense seed/result blocks.
+   - Add pattern coverage tests against frozen Fortran PETSc matrices and
+     high-resolution synthetic patterns so the sparse pattern cannot silently
+     miss FP/PAS/Phi1/constraint couplings.
+   - Touch points:
+     `sfincs_jax.explicit_sparse`, `sfincs_jax.v3_sparse_pattern`,
+     `sfincs_jax.petsc_binary`, `tests/test_explicit_sparse.py`,
+     `tests/test_v3_sparse_pattern.py`, and `tests/test_full_system_matvec_parity.py`.
+   - Gate: pattern-probed CSR must reconstruct matrix actions to `<=1e-10`
+     relative error on small exact fixtures and preserve all output comparisons
+     on at least one PAS, one FP, one Phi1/QN, HSX FP full, and HSX FP DKES
+     case before becoming default.
+
+6. Try low-memory Krylov and preconditioner candidates in a fixed variant ladder.
+
+   - Candidate solvers to test: current GMRES, budget-capped restarted GMRES,
+     SciPy LGMRES for host-only explicit paths, BiCGStab, TFQMR/IDR(s)-style
+     short-recurrence alternatives if implemented, and sparse-PC GMRES with
+     smaller restart.
+   - Candidate preconditioners to test: collision diagonal, PAS tensor/line
+     smoother, PAS `theta/zeta` Schwarz, x-block/TZ block, sparse-PC,
+     FP species-x block, low-rank/Woodbury FP block, mixed-precision sparse
+     factors with float64 residual refinement, and no-preconditioner fallback.
+   - Run variants with `scripts/benchmark_case_variants.py --profile` on
+     HSX_FP_full, HSX_FP_DKES, geometry11, W7-X, geometry4 PAS, and the bounded
+     tokamak FP/PAS rows.
+   - Gate: keep as default only if it passes the route-promotion gate in step 4.
+     Keep as an opt-in memory-pressure mode if it reduces memory by at least 2x,
+     converges, and is slower than the default by at most 2x. Reject and remove
+     from auto-selection if it creates CPU/GPU drift, nonfinite residuals, or
+     solver-search overhead above the step-3 cap.
+
+7. Add GPU-specific memory-limited execution lanes.
+
+   - Use JAX device-memory profiles and compiled memory analysis to separate
+     persistent buffers from XLA temporary buffers.
+   - Add donation/rematerialization gates for large matvec and diagnostics calls:
+     `donate_argnums` where arrays are no longer needed, and `jax.checkpoint`
+     only where memory drops materially without excessive recomputation.
+   - Shard or chunk state over theta/zeta/species/radius where practical; use
+     `pjit`, `shard_map`, or process-parallel transport workers only when arrays
+     are actually partitioned rather than replicated.
+   - Consider Pallas kernels for derivative/stencil matvec hotspots if Perfetto
+     shows XLA materializing large temporary arrays for gather/scatter patterns.
+   - Touch points:
+     `sfincs_jax.v3_system`, `sfincs_jax.periodic_stencil`,
+     `sfincs_jax.transport_parallel_runtime`,
+     `sfincs_jax.transport_parallel_execution`, `sfincs_jax.solver`,
+     `tests/test_sharded_matvec.py`, and `tests/test_distributed_gmres_axis.py`.
+   - Gate: GPU path must match CPU JAX and Fortran v3 outputs within the same
+     comparison tolerances, reduce device peak memory by at least 25% or make a
+     previously OOM case run, and avoid a runtime regression larger than 20% for
+     cases that already fit.
+
+8. Evaluate Lineax/Equinox only as controlled abstractions, not automatic wins.
+
+   - Prototype a Lineax `AbstractLinearOperator` wrapper for the matrix-free
+     full-system operator and one transport operator.
+   - Check whether Lineax improves solver-state reuse, transpose/adjoint
+     consistency, or implicit differentiation memory; do not assume runtime or
+     memory wins.
+   - Use Equinox only if it simplifies static/dynamic PyTree partitioning for
+     compiled operator state and reduces recompilation or saved intermediates.
+   - Gate: require a measured active/device memory reduction or compile-time
+     reduction on a production-floor case plus identical residual/output parity.
+     Otherwise keep the current native JAX path.
+
+9. Build CI and nightly coverage without exhausting local/GitHub resources.
+
+   - CI keeps unit and bounded physics tests only: memory model, resolution
+     manifest validator, solver-trace schema, route-promotion gates,
+     pattern-CSR reconstruction, CPU/GPU-comparison logic on tiny deterministic
+     fixtures, and one bounded real input.
+   - Add optional/manual GitHub workflows for production benchmark tiers:
+     `benchmark-production-cpu.yml` and `benchmark-production-gpu.yml`, both
+     artifact-only and not required for normal PRs.
+   - Add `office`/cluster runbook commands in docs for the 28 remote-only cases,
+     including job-array slicing and trace collection.
+   - Gate: default CI remains under 10 minutes. Production benchmark artifacts
+     are accepted only when every row has the new resolution-floor metadata,
+     solver traces, CPU/GPU/Fortran comparisons, runtime, active memory, and
+     device memory when run on GPU.
+
+10. Refresh public docs only after the production-floor campaign is clean.
+
+   - Regenerate CPU/GPU/Fortran benchmark summaries from the new production-floor
+     reports only.
+   - Update README and docs to state which rows are production-floor benchmark
+     rows, which rows are smoke/parity rows, and which remote-only rows require
+     cluster/GPU-memory resources.
+   - Plot active solver memory and device peak memory separately when GPU traces
+     are available; never mix CPU process RSS, GPU device memory, and active RSS
+     in the same acceptance gate.
+   - Gate: public plot/table must have zero `jax_error`, zero `max_attempts`,
+     zero missing output keys, zero practical mismatches, documented strict
+     exceptions only when classified as `fortran_reference_quality`, and no
+     unclassified CPU/GPU drift.
+
+Immediate next actions when implementing this lane:
+
+1. Update the production input generator and tests to enforce the new floor.
+2. Add benchmark-summary floor validation so low-resolution rows cannot reach
+   the README plot/table.
+3. Extend solver trace records with active/device/compiled memory and candidate
+   memory metrics.
+4. Run bounded local CPU reproduction at the new floor.
+5. Run targeted office GPU reproduction for HSX FP full, HSX FP DKES, geometry11,
+   W7-X, and one tokamak FP/PAS row.
+6. Use the classified offenders to choose the first memory implementation:
+   dense-route preflight rejection, pattern-probed CSR, or GPU temporary-buffer
+   reduction, depending on the measured blocker.
+
+Progress update (2026-05-04, bounded production-floor campaign):
+
+- Implemented the production-resolution floor in
+  `scripts/create_production_benchmark_inputs.py` and generated
+  `benchmarks/production_resolution_inputs_2026-05-04/`. The manifest contains
+  39 cases: 6 `bounded_local_ok`, 5 `bounded_remote`, and 28
+  `remote_or_cluster_only`. Public benchmark summaries now reject rows below the
+  documented floor or rows missing `final_resolution`.
+- Local bounded CPU suite at `tests/production_floor_cpu_bounded_2026-05-04/`
+  completed 4/6 tokamak PAS rows with zero practical/strict mismatches. The two
+  failures are both production-floor tokamak PAS+Er full-trajectory rows:
+  `tokamak_1species_PASCollisions_withEr_fullTrajectories` and
+  `tokamak_2species_PASCollisions_withEr_fullTrajectories`.
+- The one-species PAS+Er offender is now classified as a true residual/stall
+  problem, not geometry/JIT/HDF5 overhead. Default CPU selected `pas_ilu`; the
+  first Krylov solve took about 99 s and returned residual `6.8e3` against a
+  `3.2e-8` target, then entered a timeout-prone stage-2 solve.
+- Forced production-floor variants on the same one-species input:
+  `pas_schur` completed in 84.5 s with about 1.22 GB RSS but had 40 Fortran
+  mismatches; `schur` completed in 71.8 s with about 1.17 GB RSS but had 38
+  mismatches; `xblock_tz_lmax` completed in 90.4 s with about 1.93 GB RSS but
+  had 36 mismatches; `bicgstab+xblock_tz` completed in 196 s with about
+  4.74 GB RSS and 36 mismatches; `sparse_pc_gmres` assembled the sparse pattern
+  quickly but SuperLU factorization failed. `schur` with stage 2 enabled timed
+  out at the 300 s cap after first-pass residual `1.09e7`.
+- `xblock_tz` on the true production-floor input reduced preconditioner setup
+  cost but still entered a long stage-2 solve with residual `5.3e-3`, so it is
+  not accepted as a default. Earlier apparent 8.6 s success was on the reduced
+  post-failure input (`13 x 1 x 4 x 50`), not the production-floor input
+  (`25 x 1 x 8 x 100`).
+- A targeted `office` GPU-0 reproduction used a temporary synced checkout in
+  `/tmp/sfincs_jax_current`, but both GPUs were occupied by unrelated
+  `spectraxgk` jobs using about 12 GB each. The SFINCS-JAX GPU default run was
+  terminated with return code `-15` after 103 s during the first Krylov solve
+  after selecting `pas_ilu`; no solution or parity comparison was produced.
+- Current conclusion: do not promote any of the tested heuristic route changes.
+  The next real implementation is a stronger production-floor PAS+Er convergence
+  path: either a better matrix-free preconditioner/rescue with bounded memory or
+  a robust non-autodiff sparse/direct lane that handles the constrained PAS+Er
+  operator without SuperLU failure. The default route must also fail/report
+  earlier when first-pass residuals are orders of magnitude above target.
+- A broader PAS stage-2 skip was tested as an implementation shortcut. It reduced
+  the one-species default route to 150 s but produced 40 Fortran mismatches, so it
+  is rejected as a default. The code keeps this broader skip only behind
+  `SFINCS_JAX_PAS_STAGE2_SKIP_EXTENDED=1` for diagnostic profiling; production
+  defaults still prioritize residual/parity correctness.
+- Closed the bounded CPU tokamak PAS+Er blocker with a narrow CPU/non-autodiff
+  sparse-PC GMRES route for tokamak PAS+Er full-trajectory `RHSMode=1` cases.
+  The measured stable constrained-PAS sparse settings are
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT=1e-8` and
+  `SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH=0`. The auto policy is limited
+  to CPU, no Phi1, pure PAS, constraintScheme=2, `Nzeta=1`, electric-field
+  trajectory terms, and `active_size` in the measured production-floor window.
+  Validation:
+  `tokamak_1species_PASCollisions_withEr_fullTrajectories` is parity-clean in
+  23.2 s with 1.46 GB RSS, and
+  `tokamak_2species_PASCollisions_withEr_fullTrajectories` is parity-clean in
+  44.6 s with 2.59 GB RSS at `25 x 1 x 8 x 100`.
+- Rerunning the bounded local production-floor CPU tier after the sparse-PC
+  route gives `6/6 parity_ok`, zero practical mismatches, zero strict mismatches,
+  no missing output keys, and no `max_attempts`/`jax_error` rows in
+  `tests/production_floor_cpu_bounded_sparsepc_2026-05-04/`.
+- Targeted `office` GPU forced sparse-PC checks on RTX A4000 are also
+  parity-clean: one-species PAS+Er completes in 45.7 s with 1.82 GB RSS and
+  two-species PAS+Er completes in 88.2 s with 2.36 GB RSS, both with zero
+  Fortran mismatches. This validates widening the same narrow auto policy to
+  CPU/GPU backends for this measured tokamak PAS+Er production-floor window.
+- After widening the policy, default GPU auto-selection on `office` also uses the
+  sparse-PC route without solver env overrides and remains parity-clean:
+  one-species PAS+Er completes in 44.3 s with 1.79 GB RSS, and two-species PAS+Er
+  completes in 85.6 s with 2.31 GB RSS. The small JSON artifacts are stored in
+  `examples/performance/output/gpu_tokamak_1species_pas_er_auto_sparse_pc_2026-05-05.json`
+  and
+  `examples/performance/output/gpu_tokamak_2species_pas_er_auto_sparse_pc_2026-05-05.json`.
+- Bounded `office` GPU full-FP production-floor rerun at
+  `25 x 1 x 8 x 100` classified the remaining default mismatch:
+  `tokamak_1species_FPCollisions_noEr` used the matrix-free XMG rescue ladder,
+  exited with residual `6.9e-3`, and mismatched three solver-sensitive outputs
+  against the Fortran direct reference. Variant probes on the same frozen case
+  showed `theta_line` is parity-clean but peaks at about 19.9 GB RSS, while
+  `sparse_pc_gmres` is parity-clean with about 8.8 GB RSS. Host sparse direct
+  failed SuperLU factorization and is rejected for this row.
+- Implemented a narrow GPU/CUDA default sparse-PC promotion for tokamak full-FP
+  no-Er `RHSMode=1`, no Phi1, `constraintScheme=0`, `Nzeta=1`, and the measured
+  production active-size window. The sparse-PC default uses the same stable
+  diagonal shift/pivot settings as the forced probe. Default verification on
+  `office` now completes `tokamak_1species_FPCollisions_noEr` in 147.9 s with
+  8.79 GB RSS and zero Fortran mismatches.
+- Closed verification: the complete five-case
+  `tokamak_1species_FPCollisions*` bounded-remote GPU tier now passes with no
+  solver overrides and the Fortran v3 MPI wrapper in
+  `tests/production_floor_bounded_remote_gpu_mpi4_final4_2026-05-05/` on
+  `office`. Results: `5/5 parity_ok`, zero practical mismatches, zero strict
+  mismatches, no missing output keys, no `max_attempts`, and no run exceeded the
+  600 s cap. The remaining public caveat is performance, not correctness:
+  sparse-PC FP no-Er/Er rows are 145-166 s and about 8.4 GB RSS while Fortran v3
+  is 6.7-7.9 s and about 100-140 MB RSS. The next memory lane should target
+  sparse-pattern assembly/factorization storage and a lower-memory Krylov
+  preconditioner rather than reverting to the nonconverged XMG default.

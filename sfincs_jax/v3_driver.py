@@ -329,6 +329,32 @@ def _use_solver_jit(size_hint: int | None = None) -> bool:
     return int(size_hint) <= thresh
 
 
+def _rhs1_residual_needs_rescue(residual_norm: float, target: float, *, force: bool = False) -> bool:
+    """Return whether a second-stage RHSMode=1 rescue is worth launching.
+
+    Large GPU Krylov solves can land within roundoff of the requested absolute
+    target. Launching a heavy fallback for a sub-percent overshoot increases peak
+    memory and runtime without changing the accepted physics outputs. Keep a tiny
+    relative slack by default, with an env override for audit runs.
+    """
+
+    if bool(force):
+        return True
+    residual = float(residual_norm)
+    target_value = float(target)
+    if not np.isfinite(residual):
+        return True
+    if target_value <= 0.0 or not np.isfinite(target_value):
+        return residual > target_value
+    slack_env = os.environ.get("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", "").strip()
+    try:
+        slack = float(slack_env) if slack_env else 1.0e-2
+    except ValueError:
+        slack = 1.0e-2
+    slack = max(0.0, float(slack))
+    return residual > target_value * (1.0 + slack)
+
+
 def _rhs1_gpu_sparse_fallback_skip_allowed(
     *,
     op: V3FullSystemOperator,
@@ -767,6 +793,7 @@ def _build_host_sparse_direct_factor_from_matvec(
     factor_dtype: np.dtype,
     pattern=None,
     emit: Callable[[int, str], None] | None = None,
+    default_diag_pivot_thresh: float = 1.0,
 ):
     block_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS", "").strip()
     dense_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DENSE_MAX_MB", "").strip()
@@ -805,9 +832,9 @@ def _build_host_sparse_direct_factor_from_matvec(
     if permc_env not in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}:
         permc_env = "COLAMD"
     try:
-        diag_pivot_thresh = float(pivot_env) if pivot_env else 1.0
+        diag_pivot_thresh = float(pivot_env) if pivot_env else float(default_diag_pivot_thresh)
     except ValueError:
-        diag_pivot_thresh = 1.0
+        diag_pivot_thresh = float(default_diag_pivot_thresh)
 
     def _matvec_np(x_np: np.ndarray) -> np.ndarray:
         return np.asarray(matvec(jnp.asarray(x_np, dtype=dtype)), dtype=np.float64)
@@ -846,7 +873,8 @@ def _build_host_sparse_direct_factor_from_matvec(
             1,
             "explicit_sparse: "
             f"storage={operator_bundle.metadata.storage_kind} "
-            f"reason={operator_bundle.metadata.reason} factor_kind={factor_kind} permc={permc_env}",
+            f"reason={operator_bundle.metadata.reason} factor_kind={factor_kind} "
+            f"permc={permc_env} diag_pivot={float(diag_pivot_thresh):.3g}",
         )
     factor_bundle = factorize_host_sparse_operator(
         operator_bundle,
@@ -10983,6 +11011,23 @@ def solve_v3_full_system_linear_gmres(
             _nml_get(phys_params, "useDKESExBdrift", _nml_get(phys_params, "use_dkes_exb_drift", None)),
         )
     )
+    include_xdot_sparse_pc = _nml_bool(_nml_get(phys_params, "includeXDotTerm", None))
+    include_electric_field_xi_sparse_pc = _nml_bool(_nml_get(phys_params, "includeElectricFieldTermInXiDot", None))
+
+    def _nml_abs_float(key: str) -> float:
+        value = _nml_get(phys_params, key, None)
+        try:
+            return abs(float(value)) if value is not None else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    er_abs_sparse_pc = max(
+        _nml_abs_float("Er"),
+        _nml_abs_float("dPhiHatdpsiHat"),
+        _nml_abs_float("dPhiHatdpsiN"),
+        _nml_abs_float("dPhiHatdrHat"),
+        _nml_abs_float("dPhiHatdrN"),
+    )
     if (
         int(op.rhs_mode) == 1
         and (not bool(op.include_phi1))
@@ -11347,12 +11392,43 @@ def solve_v3_full_system_linear_gmres(
                 f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
             )
 
+        constrained_pas_pc = bool(
+            int(op.rhs_mode) == 1
+            and int(op.constraint_scheme) == 2
+            and (not bool(op.include_phi1))
+            and op.fblock.pas is not None
+            and op.fblock.fp is None
+        )
+        tokamak_fp_er_pc = bool(
+            int(op.rhs_mode) == 1
+            and int(op.constraint_scheme) == 1
+            and (not bool(op.include_phi1))
+            and op.fblock.fp is not None
+            and op.fblock.pas is None
+            and int(getattr(op, "n_zeta", 1)) == 1
+            and float(er_abs_sparse_pc) > 0.0
+            and (
+                bool(use_dkes)
+                or bool(include_xdot_sparse_pc)
+                or bool(include_electric_field_xi_sparse_pc)
+            )
+        )
+        tokamak_fp_noer_pc = bool(
+            int(op.rhs_mode) == 1
+            and int(op.constraint_scheme) == 0
+            and (not bool(op.include_phi1))
+            and op.fblock.fp is not None
+            and op.fblock.pas is None
+            and int(getattr(op, "n_zeta", 1)) == 1
+            and float(er_abs_sparse_pc) == 0.0
+        )
+        tokamak_fp_pc = bool(tokamak_fp_er_pc or tokamak_fp_noer_pc)
         op_pc = _build_rhsmode1_preconditioner_operator_point(op)
         pc_shift_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT", "").strip()
         try:
-            pc_shift = float(pc_shift_env) if pc_shift_env else 0.0
+            pc_shift = float(pc_shift_env) if pc_shift_env else (1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0)
         except ValueError:
-            pc_shift = 0.0
+            pc_shift = 1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0
 
         def _sparse_pc_factor_mv(x_np: np.ndarray) -> jnp.ndarray:
             x_jnp = jnp.asarray(x_np, dtype=rhs.dtype)
@@ -11372,6 +11448,7 @@ def solve_v3_full_system_linear_gmres(
             factor_dtype=np.dtype(np.float64),
             pattern=pattern,
             emit=emit,
+            default_diag_pivot_thresh=0.0 if (constrained_pas_pc or tokamak_fp_pc) else 1.0,
         )
         pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
         setup_s = sparse_timer.elapsed_s()
@@ -14994,7 +15071,11 @@ def solve_v3_full_system_linear_gmres(
 
         if (
             strong_precond_kind is not None
-            and (float(res_reduced.residual_norm) > target_reduced or fp_force_strong)
+            and _rhs1_residual_needs_rescue(
+                float(res_reduced.residual_norm),
+                float(target_reduced),
+                force=bool(fp_force_strong),
+            )
             and strong_precond_trigger
             and not early_dense_shortcut
         ):
@@ -15025,7 +15106,11 @@ def solve_v3_full_system_linear_gmres(
                     strong_precond_kind = None
         if (
             strong_precond_kind is not None
-            and (float(res_reduced.residual_norm) > target_reduced or fp_force_strong)
+            and _rhs1_residual_needs_rescue(
+                float(res_reduced.residual_norm),
+                float(target_reduced),
+                force=bool(fp_force_strong),
+            )
             and strong_precond_trigger
             and not early_dense_shortcut
         ):
@@ -17751,7 +17836,10 @@ def solve_v3_full_system_linear_gmres(
         )
         strong_precond_kind = auto_sel.kind
 
-        if strong_precond_kind is not None and float(result.residual_norm) > target:
+        if strong_precond_kind is not None and _rhs1_residual_needs_rescue(
+            float(result.residual_norm),
+            float(target),
+        ):
             dd_block_theta = _parse_rhs1_dd_block("theta")
             dd_overlap_theta = _parse_rhs1_dd_overlap("theta", default=1)
             dd_block_zeta = _parse_rhs1_dd_block("zeta")
@@ -17773,7 +17861,10 @@ def solve_v3_full_system_linear_gmres(
                 dd_overlap_zeta=dd_overlap_zeta,
                 adi_sweeps=adi_sweeps,
             )
-        if strong_precond_kind is not None and float(result.residual_norm) > target:
+        if strong_precond_kind is not None and _rhs1_residual_needs_rescue(
+            float(result.residual_norm),
+            float(target),
+        ):
             _mark("rhs1_strong_precond_build_start")
             if emit is not None:
                 emit(

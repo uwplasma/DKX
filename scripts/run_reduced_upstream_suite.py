@@ -145,6 +145,33 @@ def _constraint_scheme_from_namelist(input_path: Path) -> int | None:
         return None
 
 
+def _use_iterative_linear_solver_from_namelist(input_path: Path) -> bool:
+    """Return the v3 direct/iterative linear-solver switch from an input deck."""
+    try:
+        nml = read_sfincs_input(input_path)
+    except Exception:  # noqa: BLE001
+        return True
+    group = nml.group("otherNumericalParameters")
+    for key in (
+        "useIterativeLinearSolver",
+        "USEITERATIVELINEARSOLVER",
+        "useiterativelinearsolver",
+        "use_iterative_linear_solver",
+    ):
+        if key not in group:
+            continue
+        value = group[key]
+        if isinstance(value, bool):
+            return bool(value)
+        if isinstance(value, (int, np.integer)):
+            return bool(int(value))
+        if isinstance(value, (float, np.floating)):
+            return bool(float(value))
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "t", "true", ".t.", ".true.", "yes", "on"}
+    return True
+
+
 def _sanitize_resolution(
     res: dict[str, int], *, current: dict[str, int] | None = None, rhs_mode: int | None = None
 ) -> dict[str, int]:
@@ -1248,10 +1275,12 @@ def _run_fortran_direct(
     t0 = time.perf_counter()
     env = dict(os.environ)
     constraint_scheme = _constraint_scheme_from_namelist(input_path)
+    use_iterative_linear_solver = _use_iterative_linear_solver_from_namelist(input_path)
     stable_cs0_env = env.get("SFINCS_JAX_FORTRAN_CS0_STABLE_SOLVE", "").strip().lower()
     stable_cs0_default = stable_cs0_env not in {"0", "false", "no", "off"}
     if (
         constraint_scheme == 0
+        and bool(use_iterative_linear_solver)
         and stable_cs0_default
         and not env.get("PETSC_OPTIONS", "").strip()
     ):

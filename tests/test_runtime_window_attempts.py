@@ -33,6 +33,22 @@ def test_executable_metadata_records_hash(tmp_path: Path) -> None:
     assert len(metadata["sha256"]) == 64
 
 
+def test_use_iterative_linear_solver_parser_respects_direct_solver_deck(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        textwrap.dedent(
+            """
+            &otherNumericalParameters
+              useIterativeLinearSolver = .false.
+            /
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    assert suite._use_iterative_linear_solver_from_namelist(input_path) is False
+
+
 def test_fortran_final_residual_parser_and_quality_classifier(tmp_path: Path) -> None:
     log = tmp_path / "sfincs.log"
     log.write_text(

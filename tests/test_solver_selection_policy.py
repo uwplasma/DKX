@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from sfincs_jax.solver_selection_policy import (
     SolverAcceptanceCriteria,
     SolverCandidateMetrics,
@@ -131,6 +133,62 @@ def test_accepts_runtime_or_memory_improvement_against_clean_baseline() -> None:
 
     assert solver_candidate_gate(faster, baseline=baseline).accepted
     assert solver_candidate_gate(lower_memory, baseline=baseline).accepted
+
+
+def test_solver_candidate_gate_compares_paired_active_memory() -> None:
+    baseline = SolverCandidateMetrics(
+        name="baseline",
+        residual_norm=1.0e-12,
+        target=1.0e-10,
+        setup_s=1.0,
+        solve_s=1.0,
+        peak_rss_mb=900.0,
+        active_rss_mb=300.0,
+    )
+    candidate = SolverCandidateMetrics(
+        name="candidate",
+        residual_norm=1.0e-12,
+        target=1.0e-10,
+        setup_s=1.0,
+        solve_s=1.0,
+        peak_rss_mb=950.0,
+        active_rss_mb=200.0,
+    )
+
+    gate = solver_candidate_gate(candidate, baseline=baseline)
+
+    assert gate.accepted
+    assert gate.memory_metric == "active_rss_mb"
+    assert gate.memory_ratio == pytest.approx(2.0 / 3.0)
+
+
+def test_solver_candidate_gate_uses_device_memory_before_rss() -> None:
+    baseline = SolverCandidateMetrics(
+        name="baseline",
+        residual_norm=1.0e-12,
+        target=1.0e-10,
+        setup_s=1.0,
+        solve_s=1.0,
+        peak_rss_mb=900.0,
+        active_rss_mb=300.0,
+        device_peak_mb=500.0,
+    )
+    candidate = SolverCandidateMetrics(
+        name="candidate",
+        residual_norm=1.0e-12,
+        target=1.0e-10,
+        setup_s=1.0,
+        solve_s=1.0,
+        peak_rss_mb=800.0,
+        active_rss_mb=200.0,
+        device_peak_mb=400.0,
+    )
+
+    gate = solver_candidate_gate(candidate, baseline=baseline)
+
+    assert gate.accepted
+    assert gate.memory_metric == "device_peak_mb"
+    assert gate.memory_ratio == pytest.approx(0.8)
 
 
 def test_choose_solver_candidate_prefers_fastest_accepted_path() -> None:

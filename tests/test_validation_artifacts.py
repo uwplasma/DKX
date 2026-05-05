@@ -5,11 +5,13 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
 from sfincs_jax.validation_artifacts import (
     appendix_b_geometry_audit_from_h5,
     autodiff_gradient_error_summary,
     build_fortran_suite_benchmark_summary,
+    benchmark_resolution_floor_violations,
     load_autodiff_sensitivity_summary,
     build_high_collisionality_trend_proxy_summary,
     build_publication_validation_summary,
@@ -50,6 +52,7 @@ def _synthetic_suite_rows(n: int = 39) -> list[dict[str, object]]:
                 "jax_incremental_max_rss_mb": 200.0 + idx,
                 "jax_rss_baseline_mb": 300.0,
                 "jax_memory_metric_source": "drss_mb",
+                "final_resolution": {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100},
                 "n_mismatch_common": 0,
                 "n_mismatch_physics": 0,
                 "n_mismatch_solver": 0,
@@ -241,7 +244,28 @@ def test_fortran_suite_benchmark_summary_can_filter_short_reference_runs(tmp_pat
     assert payload["metadata"]["excluded_low_fortran_runtime_cases"] == [
         {"case": "case_00", "fortran_runtime_s": 0.2}
     ]
+    assert payload["metadata"]["resolution_floor_violations"] == {"cpu": [], "gpu": []}
     assert payload["reports"]["cpu"]["total_cases"] == 2
+
+
+def test_fortran_suite_benchmark_summary_rejects_below_floor_public_rows(tmp_path: Path) -> None:
+    cpu_report = tmp_path / "cpu_report.json"
+    gpu_report = tmp_path / "gpu_report.json"
+    rows = _synthetic_suite_rows(n=2)
+    rows[0]["final_resolution"] = {"NTHETA": 5, "NZETA": 5, "NX": 2, "NXI": 4}
+    cpu_report.write_text(json.dumps(rows, indent=2) + "\n")
+    gpu_report.write_text(json.dumps(rows, indent=2) + "\n")
+
+    violations = benchmark_resolution_floor_violations(rows)
+    assert violations[0]["case"] == "case_00"
+    assert violations[0]["reason"] == "below_public_benchmark_resolution_floor"
+
+    with pytest.raises(ValueError, match="below_public_benchmark_resolution_floor"):
+        build_fortran_suite_benchmark_summary(
+            cpu_report=cpu_report,
+            gpu_report=gpu_report,
+            min_fortran_runtime_s=10.0,
+        )
 
 
 def test_fortran_suite_benchmark_summary_records_source_reports_and_gates() -> None:
