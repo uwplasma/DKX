@@ -18,7 +18,7 @@ from typing import Iterable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT_ROOT = REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-04-30"
+DEFAULT_OUT_ROOT = REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-05-04"
 DEFAULT_EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
 DEFAULT_ADDITIONAL_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
 # Archived downstream NTX decks can still be imported explicitly for local
@@ -53,8 +53,8 @@ DEFAULT_ARCHIVED_NTX_INPUTS = (
 )
 
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
-DEFAULT_3D_MINIMUM = {"NTHETA": 35, "NZETA": 43, "NX": 17, "NXI": 48}
-DEFAULT_TOKAMAK_MINIMUM = {"NTHETA": 42, "NX": 16, "NXI": 62}
+DEFAULT_3D_MINIMUM = {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100}
+DEFAULT_TOKAMAK_MINIMUM = {"NTHETA": 25, "NX": 4, "NXI": 100}
 DEFAULT_TARGET_FORTRAN_MIN_RUNTIME_S = 10.0
 
 
@@ -122,6 +122,60 @@ def _replace_or_append_resolution(text: str, updates: dict[str, int]) -> str:
         return updated
     block = "\n&resolutionParameters\n" + "".join(f"  {key} = {value}\n" for key, value in missing.items()) + "/\n"
     return updated.rstrip() + block
+
+
+def _replace_or_append_namelist_parameter(text: str, *, group: str, key: str, value: str) -> str:
+    """Replace a scalar namelist parameter or append it to the requested group."""
+    pattern = re.compile(rf"(?im)^(\s*{re.escape(key)}\s*=\s*)([^!\n/]+)(.*)$")
+    if pattern.search(text):
+        return pattern.sub(rf"\g<1>{value}\3", text, count=1)
+
+    group_pattern = re.compile(rf"(?ims)(^\s*&{re.escape(group)}\b.*?)(^\s*/\s*$)")
+    match = group_pattern.search(text)
+    if match is not None:
+        return text[: match.start(2)] + f"  {key} = {value}\n" + text[match.start(2) :]
+
+    return text.rstrip() + f"\n\n&{group}\n  {key} = {value}\n/\n"
+
+
+def _apply_benchmark_solver_hints(text: str) -> str:
+    """Apply non-physics solver hints needed for robust production benchmarks.
+
+    The public benchmark floor lifts several old small tokamak FP decks far above
+    their authored resolution. SFINCS v3 itself warns that ``preconditioner_x = 1``
+    is usually the best option; without it, the full ``Nxi=100`` no-Er FP deck can
+    run to the PETSc iteration ceiling and abort before a reference comparison is
+    possible. This changes only the linear-solver preconditioner, not the physics
+    model or requested outputs.
+    """
+
+    rhs_mode = int(_read_int_parameter(text, "RHSMode", 1) or 1)
+    collision_operator = int(_read_int_parameter(text, "collisionOperator", 0) or 0)
+    if rhs_mode == 1 and collision_operator == 0:
+        text = _replace_or_append_namelist_parameter(
+            text,
+            group="preconditionerOptions",
+            key="preconditioner_x",
+            value="1",
+        )
+        text = _replace_or_append_namelist_parameter(
+            text,
+            group="otherNumericalParameters",
+            key="whichParallelSolverToFactorPreconditioner",
+            value="1",
+        )
+        resolution = _read_resolution(text)
+        phase_points = _phase_points(resolution) or 0
+        tokamak_like = int(resolution.get("NZETA", 1)) == 1
+        include_phi1 = _read_logical_parameter(text, "includePhi1", False)
+        if tokamak_like and (not include_phi1) and int(phase_points) <= 30_000:
+            text = _replace_or_append_namelist_parameter(
+                text,
+                group="otherNumericalParameters",
+                key="useIterativeLinearSolver",
+                value=".false.",
+            )
+    return text
 
 
 def _normalize_generated_text(text: str) -> str:
@@ -379,7 +433,9 @@ def _build_entry(
     _copy_referenced_absolute_files(text, dst_dir)
     dst_input = dst_dir / "input.namelist"
     text = _localize_copied_absolute_paths(text, dst_dir)
-    dst_input.write_text(_normalize_generated_text(_replace_or_append_resolution(text, benchmark)), encoding="utf-8")
+    generated_text = _replace_or_append_resolution(text, benchmark)
+    generated_text = _apply_benchmark_solver_hints(generated_text)
+    dst_input.write_text(_normalize_generated_text(generated_text), encoding="utf-8")
     size_estimate = _estimate_case_size(text, benchmark)
     return {
         "case": case,

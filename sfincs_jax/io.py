@@ -38,6 +38,9 @@ from .rhs1_host_policy import (
     rhs1_dense_backend_allowed,
     rhs1_fp_3d_sparse_pc_auto_allowed,
     rhs1_tokamak_er_dense_auto_allowed,
+    rhs1_tokamak_fp_er_sparse_pc_auto_allowed,
+    rhs1_tokamak_fp_noer_sparse_pc_auto_allowed,
+    rhs1_tokamak_pas_er_sparse_pc_auto_allowed,
 )
 from .solver_trace import SolverTrace, write_solver_trace_h5, write_solver_trace_json
 from .solver_progress import format_duration, runtime_scale_hint
@@ -363,9 +366,11 @@ def _select_phi1_newton_linear_solve_method(
             sparse_direct_min = int(sparse_direct_min_env) if sparse_direct_min_env else 5000
         except ValueError:
             sparse_direct_min = 5000
+        backend = str(dense_auto_backend).strip().lower()
+        sparse_direct_backend_ok = backend in {"cpu", "gpu", "cuda"}
         if (
             int(active_total_size) > int(dense_cutoff)
-            and str(dense_auto_backend).strip().lower() == "cpu"
+            and sparse_direct_backend_ok
             and int(active_total_size) >= max(1, int(sparse_direct_min))
         ):
             method = "sparse_direct"
@@ -373,7 +378,7 @@ def _select_phi1_newton_linear_solve_method(
                 emit(
                     1,
                     "write_sfincs_jax_output_h5: includePhi1 fast explicit mode -> "
-                    "preferring host sparse-direct Newton step",
+                    f"preferring host sparse-direct Newton step on backend={backend}",
                 )
         elif method == "batched":
             method = "incremental"
@@ -3287,6 +3292,27 @@ def write_sfincs_jax_output_h5(
                 emit(1, f"write_sfincs_jax_output_h5: keeping explicit solve_method={solve_method}")
         elif (
             (not force_krylov)
+            and rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
+                op=op0,
+                active_size=int(active_total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind=solve_method,
+                backend=str(dense_auto_backend),
+                er_abs=float(er_abs),
+                use_dkes=bool(use_dkes),
+                include_xdot=bool(include_xdot),
+                include_electric_field_xi=bool(include_electric_field_xi),
+            )
+        ):
+            solve_method = "sparse_pc_gmres"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: tokamak PAS+Er RHSMode=1 "
+                    "-> using sparse-PC GMRES host solve",
+                )
+        elif (
+            (not force_krylov)
             and rhs1_tokamak_er_dense_auto_allowed(
                 op=op0,
                 active_size=int(active_total_size),
@@ -3305,6 +3331,48 @@ def write_sfincs_jax_output_h5(
                     1,
                     "write_sfincs_jax_output_h5: bounded tokamak Er RHSMode=1 "
                     "-> using dense CPU solve",
+                )
+        elif (
+            (not force_krylov)
+            and rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
+                op=op0,
+                active_size=int(active_total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind=solve_method,
+                backend=str(dense_auto_backend),
+                er_abs=float(er_abs),
+                use_dkes=bool(use_dkes),
+                include_xdot=bool(include_xdot),
+                include_electric_field_xi=bool(include_electric_field_xi),
+            )
+        ):
+            solve_method = "sparse_pc_gmres"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: tokamak full-FP+Er RHSMode=1 "
+                    "-> using sparse-PC GMRES host solve",
+                )
+        elif (
+            (not force_krylov)
+            and rhs1_tokamak_fp_noer_sparse_pc_auto_allowed(
+                op=op0,
+                active_size=int(active_total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind=solve_method,
+                backend=str(dense_auto_backend),
+                er_abs=float(er_abs),
+                use_dkes=bool(use_dkes),
+                include_xdot=bool(include_xdot),
+                include_electric_field_xi=bool(include_electric_field_xi),
+            )
+        ):
+            solve_method = "sparse_pc_gmres"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: tokamak full-FP no-Er RHSMode=1 "
+                    "-> using sparse-PC GMRES host solve",
                 )
         elif (
             (not force_krylov)

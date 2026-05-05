@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 from dataclasses import dataclass
 from functools import lru_cache
 import os
@@ -27,6 +29,8 @@ from scipy.sparse.linalg import LinearOperator as _LinearOperator
 from scipy.sparse.linalg import gmres as _scipy_gmres
 from scipy.sparse.linalg import bicgstab as _scipy_bicgstab
 from scipy.sparse.linalg import lgmres as _scipy_lgmres
+
+from .memory_model import gmres_restart_for_budget
 
 
 @jtu.register_pytree_node_class
@@ -87,11 +91,14 @@ def _maybe_limit_restart(n: int, restart: int, dtype: jnp.dtype) -> int:
     if bytes_per_elem <= 0:
         return restart
     max_bytes = max_mb * 1e6
-    # Estimate Krylov basis storage ~ (restart+1) * n * bytes_per_elem.
-    max_restart = int(max_bytes // (bytes_per_elem * n)) - 1
-    if max_restart < 1:
-        max_restart = 1
-    return min(int(restart), int(max_restart))
+    # Estimate Krylov basis storage plus a few work vectors. The conservative
+    # model matches the standalone memory preflight helper used by benchmarks.
+    return gmres_restart_for_budget(
+        n=int(n),
+        requested_restart=int(restart),
+        dtype=np.dtype(dtype),
+        max_bytes=max_bytes,
+    )
 
 
 def _materialize_distributed_input(arr: jnp.ndarray | None, *, dtype: jnp.dtype | None = None) -> jnp.ndarray | None:

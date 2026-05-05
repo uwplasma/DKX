@@ -184,7 +184,10 @@ Solving a supported v3 linear run (matrix-free)
    constrained-PAS RHSMode=1 profile-current decks auto-select the sparse-PC GMRES
    host lane inside the
    validated production size window so they do not spend minutes in a
-   matrix-free fallback that stalls at a large residual. For PAS tokamak-like ``N_zeta=1`` cases with
+   matrix-free fallback that stalls at a large residual. Measured GPU tokamak
+   full-FP no-Er/Er production-floor rows also auto-select sparse-PC GMRES in a
+   narrow ``N_zeta=1`` size window when the matrix-free route is not
+   residual-clean and theta-line is parity-clean but too memory-heavy. For PAS tokamak-like ``N_zeta=1`` cases with
    constraint projection enabled, ``sfincs_jax`` upgrades to the ``xblock_tz`` preconditioner by
    default to reduce Krylov iterations. For strict PETSc-style iteration histories, use
    ``--solve-method incremental``. For non-differentiable full-system RHSMode=1
@@ -332,6 +335,20 @@ performance without changing the input file:
 - ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN`` /
   ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``: active-DOF bounds for the audited
   CPU 3D full-FP sparse-PC GMRES auto lane. Defaults are ``300`` and ``20000``.
+
+- ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` and
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC``: enable or disable the
+  GPU/CUDA tokamak full-FP sparse-PC GMRES auto lanes for the measured
+  production-floor ``N_zeta=1`` windows. Defaults are ``auto``. Set to ``0`` to
+  force the older matrix-free policy, or ``1`` to allow CPU as well while keeping
+  the other safety checks.
+
+- ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN`` /
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MAX`` and
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN`` /
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MAX``: active-DOF bounds for
+  those GPU tokamak full-FP sparse-PC GMRES auto lanes. Defaults are ``10000``
+  and ``60000``.
 
 - ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` (GMRES only): optional RHSMode=1 preconditioning.
 

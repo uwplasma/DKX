@@ -178,6 +178,11 @@ def main() -> int:
         action="store_true",
         help="Enable sfincs_jax profiling marks and include solver-stage timings/RSS in the JSON rows.",
     )
+    parser.add_argument(
+        "--no-default",
+        action="store_true",
+        help="Run only the explicitly requested variants instead of prepending the unmodified default route.",
+    )
     args = parser.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -191,7 +196,9 @@ def main() -> int:
     have_reference = reference.exists()
 
     variants = [_parse_variant(spec) for spec in args.variant] if args.variant else [("default", {})]
-    if not any(name == "default" for name, _ in variants):
+    if args.no_default and not args.variant:
+        raise ValueError("--no-default requires at least one --variant")
+    if (not args.no_default) and not any(name == "default" for name, _ in variants):
         variants = [("default", {})] + variants
 
     child = r"""

@@ -248,6 +248,174 @@ def rhs1_constrained_pas_sparse_pc_auto_allowed(
     return int(active_size) >= max(0, int(min_size))
 
 
+def rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    er_abs: float,
+    use_dkes: bool,
+    include_xdot: bool,
+    include_electric_field_xi: bool,
+) -> bool:
+    """Return whether tokamak PAS+Er should start the host sparse-PC lane.
+
+    Production-floor tokamak PAS+Er full-trajectory cases at
+    ``25 x 1 x 8 x 100`` stall in the matrix-free PAS-ILU/Schur fallback ladder
+    but are parity-clean with the non-differentiable sparse-PC GMRES route using
+    a tiny diagonal shift and relaxed SuperLU pivoting. Keep this policy narrow:
+    CPU/GPU only, no Phi1, pure PAS, axisymmetric, electric-field trajectory
+    terms enabled, and active size in the measured window. The sparse
+    factorization is still hosted, but the matrix-vector probes follow the
+    active JAX backend; keep accelerators outside CPU/GPU opt-in until tested.
+    """
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC")
+    if env is False:
+        return False
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in {"cpu", "gpu", "cuda"}:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 2:
+        return False
+    if op.fblock.fp is not None or op.fblock.pas is None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    has_er_drive = abs(float(er_abs)) > 0.0 and (
+        bool(use_dkes) or bool(include_xdot) or bool(include_electric_field_xi)
+    )
+    if not has_er_drive:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC_MIN", 10_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC_MAX", 60_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    er_abs: float,
+    use_dkes: bool,
+    include_xdot: bool,
+    include_electric_field_xi: bool,
+) -> bool:
+    """Return whether tokamak full-FP + Er should start sparse-PC GMRES.
+
+    Production-floor GPU probes at ``25 x 1 x 8 x 100`` show the matrix-free
+    FP+Er routes can either stall before the strong fallback or build very large
+    XLA executables. The sparse-PC route is slower than the fastest theta-line
+    full-trajectory solve, but it is parity-clean and materially lowers peak
+    memory on the memory-limited GPU lane. Keep the default promotion GPU-only
+    until the same window is rebenchmarked on CPU.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC")
+    if env is False:
+        return False
+    backend_norm = str(backend).strip().lower()
+    allowed_backends = {"gpu", "cuda"} if env is not True else {"cpu", "gpu", "cuda"}
+    if backend_norm not in allowed_backends:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 1:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    has_er_drive = abs(float(er_abs)) > 0.0 and (
+        bool(use_dkes) or bool(include_xdot) or bool(include_electric_field_xi)
+    )
+    if not has_er_drive:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN", 10_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MAX", 60_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_tokamak_fp_noer_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    er_abs: float,
+    use_dkes: bool,
+    include_xdot: bool,
+    include_electric_field_xi: bool,
+) -> bool:
+    """Return whether tokamak full-FP no-Er should start sparse-PC GMRES.
+
+    The production-floor ``tokamak_1species_FPCollisions_noEr`` GPU row at
+    ``25 x 1 x 8 x 100`` can exit the matrix-free XMG/strong-preconditioner
+    ladder with a small-but-physics-visible residual.  Sparse-PC GMRES is slower
+    than the memory-heavy theta-line route, but it is parity-clean against the
+    Fortran direct solve and has substantially lower peak memory.  Keep this
+    default GPU-only and constrained to the measured axisymmetric no-Er window.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC")
+    if env is False:
+        return False
+    backend_norm = str(backend).strip().lower()
+    allowed_backends = {"gpu", "cuda"} if env is not True else {"cpu", "gpu", "cuda"}
+    if backend_norm not in allowed_backends:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 0:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    has_er_drive = abs(float(er_abs)) > 0.0 and (
+        bool(use_dkes) or bool(include_xdot) or bool(include_electric_field_xi)
+    )
+    if has_er_drive:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN", 10_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MAX", 60_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
 def rhs1_fp_3d_sparse_pc_auto_allowed(
     *,
     op: Any,
@@ -415,5 +583,8 @@ __all__ = [
     "rhs1_constrained_pas_sparse_pc_auto_allowed",
     "rhs1_fp_3d_sparse_pc_auto_allowed",
     "rhs1_tokamak_er_dense_auto_allowed",
+    "rhs1_tokamak_fp_er_sparse_pc_auto_allowed",
+    "rhs1_tokamak_fp_noer_sparse_pc_auto_allowed",
+    "rhs1_tokamak_pas_er_sparse_pc_auto_allowed",
     "rhs1_sparse_operator_preconditioned_rescue_allowed",
 ]

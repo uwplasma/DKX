@@ -21,6 +21,12 @@ class SolverTraceCandidate:
     residual_ratio: float | None = None
     runtime_ratio: float | None = None
     memory_ratio: float | None = None
+    memory_metric: str | None = None
+    active_rss_mb: float | None = None
+    device_peak_mb: float | None = None
+    compiled_temp_mb: float | None = None
+    candidate_setup_s: float | None = None
+    candidate_solve_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +52,13 @@ class SolverTrace:
     setup_s: float | None = None
     solve_s: float | None = None
     peak_rss_mb: float | None = None
+    active_rss_mb: float | None = None
+    device_peak_mb: float | None = None
+    compiled_temp_mb: float | None = None
+    estimated_dense_nbytes: int | None = None
+    estimated_csr_nbytes: int | None = None
+    estimated_gmres_basis_nbytes: int | None = None
+    matvec_count: int | None = None
     candidate_decisions: tuple[SolverTraceCandidate, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict, compare=False)
 
@@ -69,6 +82,12 @@ class SolverTrace:
                 residual_ratio=item.get("residual_ratio"),
                 runtime_ratio=item.get("runtime_ratio"),
                 memory_ratio=item.get("memory_ratio"),
+                memory_metric=item.get("memory_metric"),
+                active_rss_mb=item.get("active_rss_mb"),
+                device_peak_mb=item.get("device_peak_mb"),
+                compiled_temp_mb=item.get("compiled_temp_mb"),
+                candidate_setup_s=item.get("candidate_setup_s"),
+                candidate_solve_s=item.get("candidate_solve_s"),
             )
             for item in data.get("candidate_decisions", ())
         )
@@ -92,6 +111,13 @@ class SolverTrace:
             setup_s=data.get("setup_s"),
             solve_s=data.get("solve_s"),
             peak_rss_mb=data.get("peak_rss_mb"),
+            active_rss_mb=data.get("active_rss_mb"),
+            device_peak_mb=data.get("device_peak_mb"),
+            compiled_temp_mb=data.get("compiled_temp_mb"),
+            estimated_dense_nbytes=data.get("estimated_dense_nbytes"),
+            estimated_csr_nbytes=data.get("estimated_csr_nbytes"),
+            estimated_gmres_basis_nbytes=data.get("estimated_gmres_basis_nbytes"),
+            matvec_count=data.get("matvec_count"),
             candidate_decisions=candidates,
             metadata=data.get("metadata", {}),
         )

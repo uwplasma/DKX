@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import pytest
 
 import sfincs_jax.solver as solver
+from sfincs_jax.memory_model import gmres_basis_nbytes
 from sfincs_jax.solver import (
     _distributed_gmres_axis,
     _maybe_limit_restart,
@@ -23,7 +24,9 @@ def test_normalize_krylov_method_and_restart_limit_env(monkeypatch: pytest.Monke
     monkeypatch.delenv("SFINCS_JAX_GMRES_AUTO_RESTART", raising=False)
     monkeypatch.setenv("SFINCS_JAX_GMRES_MAX_MB", "1")
     capped = _maybe_limit_restart(1000, 500, jnp.float64)
-    assert capped == 124
+    assert capped == 120
+    assert gmres_basis_nbytes(1000, capped, dtype=np.float64) <= 1_000_000
+    assert gmres_basis_nbytes(1000, capped + 1, dtype=np.float64) > 1_000_000
 
     monkeypatch.setenv("SFINCS_JAX_GMRES_AUTO_RESTART", "off")
     assert _maybe_limit_restart(1000, 500, jnp.float64) == 500

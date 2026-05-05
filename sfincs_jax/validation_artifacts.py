@@ -15,6 +15,9 @@ SIMAKOV_HELANDER_HIGH_COLLISIONALITY_URL = "https://doi.org/10.1063/1.3104715"
 PAUL_2019_ADJOINT_URL = "https://arxiv.org/abs/1904.06430"
 SFINCS_ADJOINT_APS_URL = "https://meetings-archive.aps.org/dpp/2018/bp11/36/"
 
+PUBLIC_3D_BENCHMARK_FLOOR = {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100}
+PUBLIC_TOKAMAK_BENCHMARK_FLOOR = {"NTHETA": 25, "NZETA": 1, "NX": 4, "NXI": 100}
+
 SUITE_MISMATCH_FIELDS = (
     "n_mismatch_common",
     "n_mismatch_physics",
@@ -421,6 +424,70 @@ def filter_suite_metrics_by_fortran_runtime(
     filtered_cpu = sorted((metric for metric in cpu_metrics if metric.case in included_cases), key=lambda item: item.case)
     filtered_gpu = sorted((metric for metric in gpu_metrics if metric.case in included_cases), key=lambda item: item.case)
     return filtered_cpu, filtered_gpu, excluded_cases
+
+
+def _row_resolution(row: Mapping[str, object]) -> dict[str, int] | None:
+    """Return normalized resolution metadata from a suite row when available."""
+
+    raw = row.get("final_resolution") or row.get("benchmark_resolution")
+    if not isinstance(raw, Mapping):
+        return None
+    resolution: dict[str, int] = {}
+    for key, value in raw.items():
+        try:
+            resolution[str(key).upper()] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return resolution or None
+
+
+def _row_floor(row: Mapping[str, object]) -> dict[str, int]:
+    """Return the public benchmark floor appropriate for one suite row."""
+
+    case = str(row.get("case", "")).lower()
+    resolution = _row_resolution(row) or {}
+    n_zeta = resolution.get("NZETA")
+    if "tokamak" in case or n_zeta == 1:
+        return PUBLIC_TOKAMAK_BENCHMARK_FLOOR
+    return PUBLIC_3D_BENCHMARK_FLOOR
+
+
+def benchmark_resolution_floor_violations(
+    rows: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    """Return public benchmark rows that are below the production-resolution floor."""
+
+    violations: list[dict[str, object]] = []
+    for row in rows:
+        case = str(row.get("case", ""))
+        resolution = _row_resolution(row)
+        if resolution is None:
+            violations.append(
+                {
+                    "case": case,
+                    "reason": "missing_final_resolution",
+                    "resolution": None,
+                    "required": _row_floor(row),
+                }
+            )
+            continue
+        floor = _row_floor(row)
+        missing_or_low = {
+            key: {"actual": resolution.get(key), "required": int(required)}
+            for key, required in floor.items()
+            if resolution.get(key) is None or int(resolution[key]) < int(required)
+        }
+        if missing_or_low:
+            violations.append(
+                {
+                    "case": case,
+                    "reason": "below_public_benchmark_resolution_floor",
+                    "resolution": dict(sorted(resolution.items())),
+                    "required": dict(floor),
+                    "fields": missing_or_low,
+                }
+            )
+    return violations
 
 
 def _counts(values: Sequence[str]) -> dict[str, int]:
@@ -1110,6 +1177,7 @@ def build_fortran_suite_benchmark_summary(
     cpu_report: Path,
     gpu_report: Path,
     min_fortran_runtime_s: float | None = None,
+    enforce_public_resolution_floor: bool = True,
 ) -> dict[str, object]:
     """Build a CPU/GPU suite benchmark summary against the Fortran v3 reference."""
 
@@ -1128,6 +1196,17 @@ def build_fortran_suite_benchmark_summary(
     gpu_reported_cases = {metric.case for metric in gpu_metrics}
     cpu_rows = [row for row in raw_cpu_rows if str(row.get("case", "")) in cpu_reported_cases]
     gpu_rows = [row for row in raw_gpu_rows if str(row.get("case", "")) in gpu_reported_cases]
+    resolution_floor_violations = {
+        "cpu": benchmark_resolution_floor_violations(cpu_rows),
+        "gpu": benchmark_resolution_floor_violations(gpu_rows),
+    }
+    if enforce_public_resolution_floor and (
+        resolution_floor_violations["cpu"] or resolution_floor_violations["gpu"]
+    ):
+        raise ValueError(
+            "Public benchmark summary includes below-floor or untagged rows: "
+            + json.dumps(resolution_floor_violations, sort_keys=True)
+        )
     return {
         "metadata": {
             "schema_version": 1,
@@ -1151,11 +1230,15 @@ def build_fortran_suite_benchmark_summary(
             },
             "min_fortran_runtime_s": None if min_fortran_runtime_s is None else float(min_fortran_runtime_s),
             "excluded_low_fortran_runtime_cases": excluded_cases,
+            "public_3d_benchmark_floor": dict(PUBLIC_3D_BENCHMARK_FLOOR),
+            "public_tokamak_benchmark_floor": dict(PUBLIC_TOKAMAK_BENCHMARK_FLOOR),
+            "resolution_floor_violations": resolution_floor_violations,
             "notes": [
                 "Runtime ratios use audited wall-clock fields stored in the frozen suite reports.",
                 "Process memory ratios use audited maximum-RSS fields; active JAX memory ratios use profiler dpeak_rss_mb/drss_mb deltas when available.",
                 "The summary is a release gate: all audited CPU/GPU cases must remain parity_ok with no strict mismatches before filtering.",
                 "README-facing performance plots filter out very short Fortran reference runs so public runtime claims are based on production-scale rows.",
+                "README-facing performance plots also require final_resolution metadata meeting the public production-resolution floor.",
                 "The artifacts compare sfincs_jax against the Fortran v3 reference implementation on the vendored example suite.",
             ],
         },

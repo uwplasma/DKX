@@ -398,6 +398,17 @@ GMRES outputs also record setup time, solve time, sparse-pattern build time,
 preconditioner factorization time, matvecs, and sparse-pattern row-density
 counters, so large-run regressions can be separated into pre-solve setup and
 Krylov iteration costs.
+
+Tokamak full-FP ``N_zeta=1`` production-floor rows are handled by separate,
+narrow GPU/CUDA policies rather than by the CPU 3D full-FP lane above.
+``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` covers no-Er
+``constraintScheme=0`` rows and ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC``
+covers electric-field ``constraintScheme=1`` rows. The audited
+``25 x 1 x 8 x 100`` RTX A4000 suite stayed ``5/5 parity_ok`` with zero strict
+mismatches and no missing output keys. The sparse-PC route is still slower and
+more memory intensive than Fortran v3, but it is residual/parity-clean and uses
+less memory than the faster theta-line alternative for these rows.
+
 Controls for the CPU 3D full-FP auto lane are
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``,
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN``, and
@@ -432,6 +443,21 @@ overrides on one promoted suite case without disturbing the full-suite artifacts
 The helper runs the default variant plus any requested overrides, records wall
 time and ``ru_maxrss``, and compares each output H5 against both the frozen
 Fortran output (when present) and the default variant.
+
+For targeted rescue testing, skip the known default route with ``--no-default``:
+
+.. code-block:: bash
+
+   python scripts/benchmark_case_variants.py \
+     --case-dir tests/production_floor_cpu_bounded_2026-05-04/tokamak_1species_PASCollisions_withEr_fullTrajectories/variant_prod_case \
+     --no-default \
+     --variant 'schur=SFINCS_JAX_RHSMODE1_PRECONDITIONER=schur' \
+     --timeout-s 300 \
+     --profile
+
+Use this mode only for controlled profiling. A variant is not eligible for
+automatic selection unless it is residual-clean, parity-clean against the frozen
+Fortran output, and passes the documented runtime/memory promotion gates.
 
 Adaptive PAS smoother stage
 ---------------------------
@@ -1345,8 +1371,36 @@ Controls:
   preconditioner probe (one matvec) and, if the residual ratio still exceeds
   ``SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO``, skip stage-2/strong Krylov attempts
   and proceed directly to the dense fallback.
+- ``SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC`` (default: auto). On CPU/GPU,
+  non-differentiable tokamak PAS+Er full-trajectory RHSMode=1 runs in the
+  measured production-floor window use the host sparse-PC GMRES route. This
+  avoids the PAS-ILU/Schur stage-2 stall while preserving Fortran parity for the
+  audited one- and two-species ``25 x 1 x 8 x 100`` CPU and RTX A4000 GPU cases.
+  The route defaults to
+  ``SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT=1e-8`` and
+  ``SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH=0`` for constrained PAS unless
+  the user overrides those values. Measured default auto-selection runtimes are
+  about ``23 s``/``45 s`` on CPU for one-/two-species and ``44 s``/``86 s`` on an
+  RTX A4000 GPU for the same one-/two-species production-floor cases, all with
+  zero Fortran output mismatches.
+- ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` and
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC`` (default: auto). On GPU/CUDA,
+  non-differentiable tokamak full-FP RHSMode=1 rows in the measured
+  production-floor ``N_zeta=1`` window use the host sparse-PC GMRES route when
+  the default matrix-free route is not residual/parity-clean or when theta-line
+  is parity-clean but memory-heavy. Set either variable to ``0`` to force the
+  older policy, or to ``1`` to include CPU while retaining the remaining guards.
+  The default active-size bounds are
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN/MAX=10000/60000`` and
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN/MAX=10000/60000``.
 - ``SFINCS_JAX_LINEAR_STAGE2_RATIO`` (default: ``1e2``). Stage-2 GMRES only runs
   when ``||r|| / target`` exceeds this ratio (set ``<= 0`` to always allow).
+- ``SFINCS_JAX_PAS_STAGE2_SKIP_RATIO`` (default: ``1e6``) skips stage-2 for the
+  measured PAS-lite/hybrid/tz family when the first residual is far too large
+  for a polish solve. ``SFINCS_JAX_PAS_STAGE2_SKIP_EXTENDED=1`` also applies this
+  diagnostic skip to ``pas_ilu``, ``schur``, and ``xblock_tz`` routes, but this
+  is not a production default because the production-floor tokamak PAS+Er audit
+  showed faster completed outputs that were not parity-clean.
 - ``SFINCS_JAX_TRANSPORT_DENSE_RETRY_MAX`` (default: ``6000`` for RHSMode=2/3).
 - ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK`` / ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK_MAX``.
 - ``SFINCS_JAX_TRANSPORT_DENSE_MAX_MB`` (default: ``128``). Disable dense transport
@@ -1396,6 +1450,73 @@ Memory reduction: remat/checkpoint + short recurrence
 
 BiCGStab avoids storing a full GMRES basis, reducing memory pressure in large
 transport and multispecies FP runs.
+
+Memory reduction: operator representation and measured gates
+------------------------------------------------------------
+
+The public benchmark table reports active solver memory, but lowering the
+actual footprint requires reducing the arrays allocated by the numerical path.
+The local Fortran v3 source and PETSc documentation point to the important
+distinction: SFINCS v3 keeps memory controlled by using sparse AIJ matrices with
+careful nonzero preallocation, thresholded value insertion, PETSc KSP/PC reuse,
+fill-reducing orderings for direct solves, and distributed row ownership. JAX
+allocator settings can change when memory is reserved, but they do not by
+themselves replace dense intermediates, Krylov basis storage, or replicated
+preconditioner state.
+
+``sfincs_jax.memory_model`` provides a small conservative model for the dominant
+linear-solve terms:
+
+.. math::
+
+   M_\mathrm{dense} \approx n^2 b
+      + (r+1+n_\mathrm{work}) n b
+      + M_\mathrm{pc} + M_\mathrm{tmp},
+
+.. math::
+
+   M_\mathrm{csr} \approx \mathrm{nnz}(b+b_i) + (n+1)b_i
+      + (r+1+n_\mathrm{work}) n b
+      + M_\mathrm{pc} + M_\mathrm{tmp},
+
+where :math:`n` is the active unknown count, :math:`r` is the GMRES restart,
+:math:`b` is scalar storage, :math:`b_i` is index storage, and
+:math:`M_\mathrm{pc}` / :math:`M_\mathrm{tmp}` are preconditioner and compiled
+temporary estimates when available. The GMRES restart cap in
+``sfincs_jax.solver`` now uses this shared model, and
+``sfincs_jax.solver_selection_policy`` can compare candidate routes using paired
+memory metrics in priority order: device peak memory, active RSS, compiled
+temporary memory, and finally legacy process peak RSS. This avoids promoting a
+route by comparing GPU device memory against CPU process RSS or by hiding a true
+solver-state regression behind the fixed Python/JAX runtime baseline.
+
+The intended production gate for future memory optimizations is:
+
+- preflight the route with ``estimate_linear_solve_memory(...)`` before dense
+  assembly, sparse probing, or large-preconditioner construction;
+- collect measured active RSS and, on accelerators, JAX device-memory profiles;
+- collect compiled temporary estimates from JAX
+  ``lower(...).compile().memory_analysis()`` when the backend reports them;
+- auto-promote a candidate only when it is residual-clean, parity-clean, and
+  materially faster or lower-memory than the incumbent on the same memory metric.
+
+The remaining high-impact memory lanes are algorithmic:
+
+- prefer matrix-free operators with structured preconditioners for production
+  RHSMode=1 whenever an explicit dense operator is not provably cheaper;
+- build CSR operators only from known/probed sparsity patterns and avoid dense
+  ``from_matvec`` materialization for large systems;
+- use short-recurrence Krylov methods or smaller restarted GMRES when residual
+  quality stays within the physics gate;
+- use mixed-precision preconditioners with float64 residual refinement where the
+  measured residual and output parity stay clean;
+- shard theta/zeta/radius/species work over CPU/GPU meshes so preconditioner
+  state and matvec buffers are distributed instead of replicated;
+- consider Pallas kernels only for proven stencil/matvec hotspots where XLA
+  creates large temporaries that block memory-limited GPUs;
+- evaluate Lineax/Equinox operators only behind the same gate, since their main
+  value here is a cleaner matrix-free operator abstraction and differentiable
+  solver state, not automatic memory reduction.
 
 Geometry parsing cache
 ----------------------
@@ -1493,4 +1614,32 @@ References (vendored)
   SIAM J. Sci. Stat. Comput. 13(2):631–644 (1992). DBLP: https://dblp.org/rec/journals/sisc/Vorst92.html
 - P. Sonneveld and M. B. van Gijzen, “IDR(s): A family of simple and fast algorithms for
   solving large nonsymmetric linear systems,” SIAM J. Sci. Comput. 31(2):1035–1062 (2008).
+
+External performance references
+-------------------------------
+
+- PETSc sparse AIJ preallocation and distributed sparse matrices:
+  https://petsc.org/main/manual/mat/
+- PETSc matrix-free shell matrices and custom shell preconditioners:
+  https://petsc.org/main/manualpages/Mat/MATSHELL/
+- PETSc GMRES restart memory tradeoff:
+  https://petsc.org/release/manualpages/KSP/KSPGMRESSetRestart/
+- JAX GPU memory allocation controls:
+  https://docs.jax.dev/en/latest/gpu_memory_allocation.html
+- JAX device-memory profiling:
+  https://docs.jax.dev/en/latest/device_memory_profiling.html
+- JAX compiled executable memory analysis:
+  https://docs.jax.dev/en/latest/jax.stages.html
+- JAX buffer donation:
+  https://docs.jax.dev/en/latest/buffer_donation.html
+- JAX rematerialization/checkpointing and activation offload:
+  https://docs.jax.dev/en/latest/gradient-checkpointing.html
+  and https://docs.jax.dev/en/latest/notebooks/host-offloading.html
+- JAX sharding/memory kinds:
+  https://docs.jax.dev/en/latest/jax.sharding.html
+- JAX Pallas kernels:
+  https://docs.jax.dev/en/latest/pallas/index.html
+- Lineax matrix-free linear operators and solver state reuse:
+  https://docs.kidger.site/lineax/api/operators/
+  and https://docs.kidger.site/lineax/api/linear_solve/
   DBLP: https://dblp.org/rec/journals/sisc/SonneveldG08.html

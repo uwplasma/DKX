@@ -58,6 +58,9 @@ API reference
 .. automodule:: sfincs_jax.validation_artifacts
    :members:
 
+.. automodule:: sfincs_jax.memory_model
+   :members:
+
 .. automodule:: sfincs_jax.v3_driver
    :members:
 
