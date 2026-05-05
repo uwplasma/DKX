@@ -246,11 +246,16 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   lightweight so CLI progress can stay informative without importing heavy solver
   dependencies. It is solver-neutral: it improves observability without affecting
   numerical decisions.
+- ``sfincs_jax/memory_model.py``:
+  conservative dense/CSR/Krylov/preconditioner memory estimates used by solver
+  restart caps, benchmark manifests, and measured solver-candidate gates. This is
+  the preflight layer that keeps future memory-saving defaults testable before
+  expensive operators or preconditioners are materialized.
 - ``sfincs_jax/rhs1_host_policy.py``:
   tested admission gates for RHSMode=1 host dense, sparse-host, constrained-PAS
-  sparse-PC, and CPU 3D full-FP sparse-PC auto lanes. These helpers keep solver
-  path promotion rules explicit and unit-testable without assembling a kinetic
-  operator.
+  sparse-PC, CPU 3D full-FP sparse-PC, and GPU tokamak full-FP no-Er/Er
+  sparse-PC auto lanes. These helpers keep solver path promotion rules explicit
+  and unit-testable without assembling a kinetic operator.
 
 ``sfincs_jax/solver.py`` and ``sfincs_jax/implicit_solve.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
