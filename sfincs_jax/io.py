@@ -357,6 +357,7 @@ def _add_rhsmode1_solver_diagnostics(
         "sparse_pattern_max_row_nnz": "linearSolverSparsePatternMaxRowNnz",
         "sparse_pc_factor_nbytes_estimate": "linearSolverSparsePCFactorNbytesEstimate",
         "sparse_pc_factor_nnz_estimate": "linearSolverSparsePCFactorNnzEstimate",
+        "sparse_pc_xblock_preconditioner_xi": "linearSolverSparsePCXBlockPreconditionerXi",
     }
     for metadata_key, output_key in int_fields.items():
         if metadata_key in solver_metadata:
@@ -365,6 +366,10 @@ def _add_rhsmode1_solver_diagnostics(
         data["linearSolverSparsePatternAvgRowNnz"] = np.asarray(
             float(solver_metadata["sparse_pattern_avg_row_nnz"]),
             dtype=np.float64,
+        )
+    if "sparse_pc_xblock_assembled_host" in solver_metadata:
+        data["linearSolverSparsePCXBlockAssembledHost"] = _fortran_logical(
+            bool(solver_metadata["sparse_pc_xblock_assembled_host"])
         )
     if float(residual_target) > 0.0:
         data["linearSolverResidualTargetRatio"] = np.asarray(
@@ -409,6 +414,10 @@ def _select_rhsmode1_linear_solve_method(
         "host_sparse",
         "sparse_host_lu",
         "sparse_pc_gmres",
+        "xblock_sparse_pc_gmres",
+        "sparse_xblock_pc_gmres",
+        "xblock_host_pc_gmres",
+        "host_xblock_pc_gmres",
         "sparse_host_gmres",
         "sparse_host_pc",
         "host_sparse_pc_gmres",
@@ -3441,12 +3450,12 @@ def write_sfincs_jax_output_h5(
                 include_electric_field_xi=bool(include_electric_field_xi),
             )
         ):
-            solve_method = "sparse_pc_gmres"
+            solve_method = "xblock_sparse_pc_gmres"
             if emit is not None:
                 emit(
                     1,
                     "write_sfincs_jax_output_h5: tokamak full-FP+Er RHSMode=1 "
-                    "-> using sparse-PC GMRES host solve",
+                    "-> using x-block sparse-PC GMRES host solve",
                 )
         elif (
             (not force_krylov)
@@ -3462,12 +3471,12 @@ def write_sfincs_jax_output_h5(
                 include_electric_field_xi=bool(include_electric_field_xi),
             )
         ):
-            solve_method = "sparse_pc_gmres"
+            solve_method = "xblock_sparse_pc_gmres"
             if emit is not None:
                 emit(
                     1,
                     "write_sfincs_jax_output_h5: tokamak full-FP no-Er RHSMode=1 "
-                    "-> using sparse-PC GMRES host solve",
+                    "-> using x-block sparse-PC GMRES host solve",
                 )
         elif (
             (not force_krylov)
