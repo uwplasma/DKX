@@ -86,11 +86,44 @@ class SparseFactorBundle:
     operator: SparseOperatorBundle
     metadata: SparseDecision
     kind: FactorKind
+    factor_nbytes_estimate: int | None = None
+    factor_nnz_estimate: int | None = None
 
     def solve(self, rhs) -> np.ndarray:
         rhs_host = _host_array(rhs, dtype=self.operator.matrix.dtype if self.operator.matrix is not None else None)
         sol = self.factor.solve(rhs_host)
         return np.asarray(sol)
+
+
+def estimate_superlu_factor_storage(factor: object) -> tuple[int | None, int | None]:
+    """Estimate SuperLU/ILU storage from materialized ``L`` and ``U`` factors."""
+
+    total_nbytes = 0
+    total_nnz = 0
+    saw_factor = False
+    for name in ("L", "U"):
+        matrix = getattr(factor, name, None)
+        if matrix is None:
+            continue
+        if sp.issparse(matrix):
+            matrix_csr = matrix.tocsr()
+            total_nbytes += estimate_csr_nbytes(
+                tuple(matrix_csr.shape),
+                int(matrix_csr.nnz),
+                data_dtype=matrix_csr.dtype,
+                index_dtype=matrix_csr.indices.dtype,
+            )
+            total_nnz += int(matrix_csr.nnz)
+            saw_factor = True
+            continue
+        arr = np.asarray(matrix)
+        if arr.size:
+            total_nbytes += int(arr.nbytes)
+            total_nnz += int(np.count_nonzero(arr))
+            saw_factor = True
+    if not saw_factor:
+        return None, None
+    return int(total_nbytes), int(total_nnz)
 
 
 def choose_storage_kind(
@@ -603,4 +636,12 @@ def factorize_host_sparse_operator(
             "Use the default solver for parity runs, try solve_method='sparse_lsmr' only for diagnostic "
             "minimum-norm probes, or adjust SFINCS_JAX_EXPLICIT_SPARSE_* factorization controls."
         ) from exc
-    return SparseFactorBundle(factor=factor, operator=SparseOperatorBundle(matrix=matrix, operator=_operator_from_matrix(matrix), metadata=metadata), metadata=metadata, kind=kind)
+    factor_nbytes, factor_nnz = estimate_superlu_factor_storage(factor)
+    return SparseFactorBundle(
+        factor=factor,
+        operator=SparseOperatorBundle(matrix=matrix, operator=_operator_from_matrix(matrix), metadata=metadata),
+        metadata=metadata,
+        kind=kind,
+        factor_nbytes_estimate=factor_nbytes,
+        factor_nnz_estimate=factor_nnz,
+    )

@@ -48,6 +48,7 @@ from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residu
 from .structured_velocity import factor_block_tridiagonal
 from .pas_smoother import adaptive_pas_smoother
 from .explicit_sparse import build_operator_from_matvec, build_operator_from_pattern, factorize_host_sparse_operator
+from .memory_model import estimate_sparse_pc_memory
 from .rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
@@ -289,6 +290,14 @@ _SPARSE_HOST_PC_GMRES_SOLVE_METHODS = frozenset(
         "host_sparse_pc_gmres",
         "petsc_host",
         "petsc_host_gmres",
+    }
+)
+_SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS = frozenset(
+    {
+        "xblock_sparse_pc_gmres",
+        "sparse_xblock_pc_gmres",
+        "xblock_host_pc_gmres",
+        "host_xblock_pc_gmres",
     }
 )
 _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS = frozenset(
@@ -8979,6 +8988,18 @@ def _build_rhsmode1_xblock_tz_lmax_preconditioner(
     return _apply_reduced
 
 
+def _rhsmode1_xblock_sparse_lu_default_max(op: object, *, build_jax_factors: bool) -> int:
+    """Default exact-LU cap for RHSMode=1 x-block sparse preconditioners."""
+    fblock = getattr(op, "fblock", None)
+    if (
+        (not bool(build_jax_factors))
+        and getattr(fblock, "fp", None) is not None
+        and getattr(fblock, "pas", None) is None
+    ):
+        return 3000
+    return 2000
+
+
 def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -8991,6 +9012,7 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     drop_rel: float,
     ilu_drop_tol: float,
     fill_factor: float,
+    force_assembled_host_fp: bool = False,
     emit: Callable[[int, str], None] | None = None,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse per-x preconditioner for large FP RHSMode=1 systems.
@@ -9006,15 +9028,6 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     except ValueError:
         row_cap = 64
     row_cap = max(0, int(row_cap))
-    cache_key = (
-        *_rhsmode1_precond_cache_key(op, "xblock_tz_sparse"),
-        bool(build_jax_factors),
-        float(drop_tol),
-        float(drop_rel),
-        float(ilu_drop_tol),
-        float(fill_factor),
-        int(row_cap),
-    )
     n_species = int(op.n_species)
     n_x = int(op.n_x)
     n_l = int(op.n_xi)
@@ -9023,12 +9036,24 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     total_size = int(op.total_size)
     nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
     block_size_max = int(n_l * n_theta * n_zeta)
+    default_lu_max = _rhsmode1_xblock_sparse_lu_default_max(op, build_jax_factors=build_jax_factors)
     lu_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX", "").strip()
     try:
-        lu_max = int(lu_max_env) if lu_max_env else 2000
+        lu_max = int(lu_max_env) if lu_max_env else default_lu_max
     except ValueError:
-        lu_max = 2000
+        lu_max = default_lu_max
     lu_max = max(0, int(lu_max))
+    cache_key = (
+        *_rhsmode1_precond_cache_key(op, "xblock_tz_sparse"),
+        bool(build_jax_factors),
+        float(drop_tol),
+        float(drop_rel),
+        float(ilu_drop_tol),
+        float(fill_factor),
+        int(row_cap),
+        int(lu_max),
+        bool(force_assembled_host_fp),
+    )
 
     if build_jax_factors:
         cached = _RHSMODE1_SPARSE_XBLOCK_PRECOND_CACHE.get(cache_key)
@@ -9041,11 +9066,24 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         extra_idx_np = np.arange(extra_start, extra_start + extra_size, dtype=np.int32)
         reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_PRECOND_REG", "").strip()
         reg_val = float(reg_env) if reg_env else 1e-10
-        assembled_host_fp = _rhsmode1_fp_xblock_assembled_host_allowed(
-            op=op,
-            preconditioner_species=preconditioner_species,
-            preconditioner_xi=preconditioner_xi,
-            use_implicit=build_jax_factors,
+        assembled_host_fp = bool(
+            (
+                bool(force_assembled_host_fp)
+                and (not bool(build_jax_factors))
+                and int(op.rhs_mode) == 1
+                and (not bool(op.include_phi1))
+                and op.fblock.fp is not None
+                and op.fblock.pas is None
+                and int(preconditioner_species) != 0
+                and int(preconditioner_xi) == 1
+                and (not bool(op.point_at_x0))
+            )
+            or _rhsmode1_fp_xblock_assembled_host_allowed(
+                op=op,
+                preconditioner_species=preconditioner_species,
+                preconditioner_xi=preconditioner_xi,
+                use_implicit=build_jax_factors,
+            )
         )
         assembled_host_cache = _get_rhsmode1_fp_xblock_assembled_host_cache(op=op) if assembled_host_fp else None
 
@@ -10937,7 +10975,10 @@ def solve_v3_full_system_linear_gmres(
     solve_method_kind_requested = str(solve_method).strip().lower().replace("-", "_")
     sparse_host_requested = solve_method_kind_requested in _SPARSE_HOST_DIRECT_SOLVE_METHODS
     sparse_host_safe_requested = solve_method_kind_requested in _SPARSE_HOST_SAFE_SOLVE_METHODS
-    sparse_pc_gmres_requested = solve_method_kind_requested in _SPARSE_HOST_PC_GMRES_SOLVE_METHODS
+    sparse_pc_gmres_requested = (
+        solve_method_kind_requested in _SPARSE_HOST_PC_GMRES_SOLVE_METHODS
+        or solve_method_kind_requested in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+    )
     sparse_minimum_norm_requested = solve_method_kind_requested in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS
     sparse_host_like_requested = (
         sparse_host_requested
@@ -11367,29 +11408,22 @@ def solve_v3_full_system_linear_gmres(
                 }
             )
             return replace(compat_result, metadata=metadata)
-    if solve_method_kind_explicit in _SPARSE_HOST_PC_GMRES_SOLVE_METHODS:
+    if (
+        solve_method_kind_explicit in _SPARSE_HOST_PC_GMRES_SOLVE_METHODS
+        or solve_method_kind_explicit in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+    ):
         if differentiable is True:
-            raise ValueError("solve_method='sparse_pc_gmres' is a non-differentiable host sparse-PC GMRES path.")
+            raise ValueError(
+                "solve_method='sparse_pc_gmres'/'xblock_sparse_pc_gmres' is a non-differentiable host sparse-PC GMRES path."
+            )
         if int(op.rhs_mode) != 1:
-            raise NotImplementedError("solve_method='sparse_pc_gmres' is currently implemented for RHSMode=1 only.")
+            raise NotImplementedError(
+                "solve_method='sparse_pc_gmres'/'xblock_sparse_pc_gmres' is currently implemented for RHSMode=1 only."
+            )
         if use_active_dof_mode:
             raise NotImplementedError(
-                "solve_method='sparse_pc_gmres' currently targets the full system; set SFINCS_JAX_ACTIVE_DOF=0 "
+                "solve_method='sparse_pc_gmres'/'xblock_sparse_pc_gmres' currently targets the full system; set SFINCS_JAX_ACTIVE_DOF=0 "
                 "or use the default matrix-free solver for active-DOF runs."
-            )
-
-        sparse_timer = Timer()
-        pattern_start_s = sparse_timer.elapsed_s()
-        if emit is not None:
-            emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern")
-        pattern = v3_full_system_conservative_sparsity_pattern(op)
-        pattern_build_s = sparse_timer.elapsed_s() - pattern_start_s
-        summary = summarize_v3_sparse_pattern(op, pattern)
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
-                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
             )
 
         constrained_pas_pc = bool(
@@ -11423,12 +11457,242 @@ def solve_v3_full_system_linear_gmres(
             and float(er_abs_sparse_pc) == 0.0
         )
         tokamak_fp_pc = bool(tokamak_fp_er_pc or tokamak_fp_noer_pc)
+        xblock_sparse_pc = solve_method_kind_explicit in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+        fp_dense_velocity_env = os.environ.get(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK",
+            "",
+        ).strip().lower()
+        if fp_dense_velocity_env in {"0", "false", "f", "no", "off", ".false.", ".f."}:
+            sparse_pc_fp_dense_velocity_block: bool | None = False
+        elif fp_dense_velocity_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
+            sparse_pc_fp_dense_velocity_block = True
+        else:
+            sparse_pc_fp_dense_velocity_block = None
+
+        sparse_timer = Timer()
+        pc_restart, pc_maxiter = rhs1_parse_polish_gmres_config(
+            restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
+            maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
+            default_restart=max(20, int(restart)),
+            default_maxiter=max(100, int(maxiter) if maxiter is not None else 400),
+            min_restart=2,
+            min_maxiter=1,
+        )
+
+        if xblock_sparse_pc:
+            if op.fblock.fp is None or op.fblock.pas is not None:
+                raise NotImplementedError("solve_method='xblock_sparse_pc_gmres' currently targets full-FP RHSMode=1 systems.")
+
+            def _env_float(name: str, default: float) -> float:
+                raw = os.environ.get(name, "").strip()
+                try:
+                    return float(raw) if raw else float(default)
+                except ValueError:
+                    return float(default)
+
+            xblock_drop_tol = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_TOL", 0.0)
+            xblock_drop_rel = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_REL", 1.0e-8)
+            xblock_ilu_drop_tol = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_ILU_DROP_TOL", 1.0e-4)
+            xblock_fill_factor = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FILL_FACTOR", 10.0)
+            xblock_preconditioner_xi = int(preconditioner_xi)
+            if xblock_preconditioner_xi == 0:
+                xblock_preconditioner_xi = 1
+            force_assembled_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_ASSEMBLED_HOST",
+                "",
+            ).strip().lower()
+            force_assembled_host_fp = force_assembled_env not in {"0", "false", "f", "no", "off", ".false.", ".f."}
+            xblock_assembled_host_fp = bool(
+                (
+                    bool(force_assembled_host_fp)
+                    and int(op.rhs_mode) == 1
+                    and (not bool(op.include_phi1))
+                    and op.fblock.fp is not None
+                    and op.fblock.pas is None
+                    and int(preconditioner_species) != 0
+                    and int(xblock_preconditioner_xi) == 1
+                    and (not bool(op.point_at_x0))
+                )
+                or _rhsmode1_fp_xblock_assembled_host_allowed(
+                    op=op,
+                    preconditioner_species=preconditioner_species,
+                    preconditioner_xi=xblock_preconditioner_xi,
+                    use_implicit=False,
+                )
+            )
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building "
+                    f"host x-block preconditioner preconditioner_xi={int(xblock_preconditioner_xi)}",
+                )
+            factor_start_s = sparse_timer.elapsed_s()
+            precond_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
+                op=op,
+                build_jax_factors=False,
+                preconditioner_species=preconditioner_species,
+                preconditioner_xi=xblock_preconditioner_xi,
+                drop_tol=xblock_drop_tol,
+                drop_rel=xblock_drop_rel,
+                ilu_drop_tol=xblock_ilu_drop_tol,
+                fill_factor=xblock_fill_factor,
+                force_assembled_host_fp=bool(force_assembled_host_fp),
+                emit=emit,
+            )
+            pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
+            setup_s = sparse_timer.elapsed_s()
+
+            side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
+            precondition_side = side_env if side_env in {"left", "right", "none"} else "left"
+            progress_every_env = os.environ.get("SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY", "").strip()
+            try:
+                progress_every = int(progress_every_env) if progress_every_env else 25
+            except ValueError:
+                progress_every = 25
+            progress_every = max(0, int(progress_every))
+            mv_count = 0
+
+            def _mv_true(v: jnp.ndarray) -> jnp.ndarray:
+                nonlocal mv_count
+                mv_count += 1
+                if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        f"matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
+                    )
+                return apply_v3_full_system_operator_cached(op, jnp.asarray(v, dtype=rhs.dtype))
+
+            x0_full = None
+            if x0 is not None:
+                x0_arr = jnp.asarray(x0, dtype=jnp.float64)
+                if x0_arr.shape == rhs.shape:
+                    x0_full = x0_arr
+                elif emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres ignoring incompatible x0 "
+                        f"shape={tuple(x0_arr.shape)} expected={tuple(rhs.shape)}",
+                    )
+
+            if emit is not None:
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres solve start "
+                    f"restart={int(pc_restart)} maxiter={int(pc_maxiter)} precondition_side={precondition_side}",
+                )
+            solve_start_s = sparse_timer.elapsed_s()
+            x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
+                matvec=_mv_true,
+                b=rhs,
+                preconditioner=precond_xblock if precondition_side != "none" else None,
+                x0=x0_full,
+                tol=tol,
+                atol=atol,
+                restart=pc_restart,
+                maxiter=pc_maxiter,
+                precondition_side=precondition_side,
+            )
+            solve_s = sparse_timer.elapsed_s() - solve_start_s
+            try:
+                residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
+                    jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
+                    dtype=np.float64,
+                )
+                residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
+            except Exception:
+                residual_norm_xblock_pc = float(residual_norm_xblock_pc)
+            if emit is not None:
+                target = max(float(atol), float(tol) * float(rhs_norm))
+                ksp_suffix = f" ksp_residual={float(history[-1]):.6e}" if history else ""
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
+                    f"elapsed_s={sparse_timer.elapsed_s():.3f} iters={len(history or [])} "
+                    f"matvecs={int(mv_count)} residual={float(residual_norm_xblock_pc):.6e} "
+                    f"target={float(target):.6e}{ksp_suffix}",
+                )
+            return V3LinearSolveResult(
+                op=op,
+                rhs=rhs,
+                gmres=GMRESSolveResult(
+                    x=jnp.asarray(x_np, dtype=jnp.float64),
+                    residual_norm=jnp.asarray(residual_norm_xblock_pc, dtype=jnp.float64),
+                ),
+                metadata={
+                    "solver_kind": "xblock_sparse_pc_gmres",
+                    "residual_kind": "true_residual",
+                    "accepted_converged": bool(
+                        float(residual_norm_xblock_pc) <= max(float(atol), float(tol) * float(rhs_norm))
+                    ),
+                    "acceptance_criterion": "true_residual",
+                    "iterations": int(len(history or [])),
+                    "matvecs": int(mv_count),
+                    "gmres_restart": int(pc_restart),
+                    "gmres_maxiter": int(pc_maxiter),
+                    "setup_s": float(setup_s),
+                    "solve_s": float(solve_s),
+                    "elapsed_s": float(sparse_timer.elapsed_s()),
+                    "sparse_pc_factor_s": float(pc_factor_s),
+                    "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
+                    "sparse_pc_xblock_assembled_host": bool(xblock_assembled_host_fp),
+                },
+            )
+
+        pattern_start_s = sparse_timer.elapsed_s()
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern")
+        pattern = v3_full_system_conservative_sparsity_pattern(
+            op,
+            fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+        )
+        pattern_build_s = sparse_timer.elapsed_s() - pattern_start_s
+        summary = summarize_v3_sparse_pattern(op, pattern)
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
+                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
+            )
         op_pc = _build_rhsmode1_preconditioner_operator_point(op)
         pc_shift_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT", "").strip()
         try:
             pc_shift = float(pc_shift_env) if pc_shift_env else (1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0)
         except ValueError:
             pc_shift = 1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0
+        budget_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB", "").strip()
+        if budget_env:
+            try:
+                budget_mb = float(budget_env)
+            except ValueError:
+                budget_mb = 0.0
+            if budget_mb > 0.0:
+                fill_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_FILL_ESTIMATE", "").strip()
+                try:
+                    fill_estimate = float(fill_env) if fill_env else 8.0
+                except ValueError:
+                    fill_estimate = 8.0
+                memory_estimate = estimate_sparse_pc_memory(
+                    unknowns=int(op.total_size),
+                    gmres_restart=int(pc_restart),
+                    csr_nnz=int(summary.nnz),
+                    dtype=np.float64,
+                    factor_fill_estimate=float(fill_estimate),
+                    device_count=max(1, int(jax.device_count())),
+                )
+                estimated_mb = (
+                    float(memory_estimate.csr_total_nbytes or memory_estimate.dense_total_nbytes)
+                    / 1.0e6
+                )
+                if estimated_mb > float(budget_mb):
+                    raise MemoryError(
+                        "sparse_pc_gmres memory preflight exceeds "
+                        "SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB: "
+                        f"estimated={estimated_mb:.3f} MB budget={float(budget_mb):.3f} MB "
+                        f"unknowns={int(op.total_size)} csr_nnz={int(summary.nnz)} "
+                        f"restart={int(pc_restart)} factor_fill_estimate={float(fill_estimate):.3g}. "
+                        "Raise the budget, lower the resolution, or use a lower-memory matrix-free route."
+                    )
 
         def _sparse_pc_factor_mv(x_np: np.ndarray) -> jnp.ndarray:
             x_jnp = jnp.asarray(x_np, dtype=rhs.dtype)
@@ -11455,14 +11719,6 @@ def solve_v3_full_system_linear_gmres(
 
         side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
         precondition_side = side_env if side_env in {"left", "right", "none"} else "left"
-        pc_restart, pc_maxiter = rhs1_parse_polish_gmres_config(
-            restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
-            maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
-            default_restart=max(20, int(restart)),
-            default_maxiter=max(100, int(maxiter) if maxiter is not None else 400),
-            min_restart=2,
-            min_maxiter=1,
-        )
         pc_form = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM", "").strip().lower()
         if pc_form not in {"", "scipy_left", "scipy", "explicit_left", "petsc_left"}:
             pc_form = ""
@@ -11570,6 +11826,14 @@ def solve_v3_full_system_linear_gmres(
                 "acceptance_criterion": "true_residual",
                 "iterations": int(len(history or [])),
                 "matvecs": int(mv_count),
+                "gmres_restart": int(pc_restart),
+                "gmres_maxiter": int(pc_maxiter),
+                "sparse_pc_shift": float(pc_shift),
+                "sparse_pc_fp_dense_velocity_block": (
+                    None
+                    if sparse_pc_fp_dense_velocity_block is None
+                    else bool(sparse_pc_fp_dense_velocity_block)
+                ),
                 "setup_s": float(setup_s),
                 "solve_s": float(solve_s),
                 "elapsed_s": float(sparse_timer.elapsed_s()),
@@ -11578,6 +11842,16 @@ def solve_v3_full_system_linear_gmres(
                 "sparse_pattern_max_row_nnz": int(summary.max_row_nnz),
                 "sparse_pattern_build_s": float(pattern_build_s),
                 "sparse_pc_factor_s": float(pc_factor_s),
+                "sparse_pc_factor_nbytes_estimate": (
+                    None
+                    if getattr(factor_bundle_pc, "factor_nbytes_estimate", None) is None
+                    else int(getattr(factor_bundle_pc, "factor_nbytes_estimate"))
+                ),
+                "sparse_pc_factor_nnz_estimate": (
+                    None
+                    if getattr(factor_bundle_pc, "factor_nnz_estimate", None) is None
+                    else int(getattr(factor_bundle_pc, "factor_nnz_estimate"))
+                ),
             },
         )
     if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:

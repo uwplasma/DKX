@@ -10,7 +10,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 README = REPO_ROOT / "README.md"
 DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_frozen_2026-04-25_v106"
-DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_gpu_bounded_default_2026-04-28"
+DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000"
 BASELINE_REPORT = REPO_ROOT / "tests" / "scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix" / "suite_report.json"
 EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
 EXTRA_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
@@ -530,6 +530,9 @@ def main() -> int:
             "The JAX memory columns match the plot and use profiler active RSS deltas "
             "(`jax_incremental_max_rss_mb`) when present; full process peak RSS remains "
             "available as `jax_max_rss_mb` in the frozen JSON reports.",
+            "The benchmark summary JSON records production-resolution floor violations for "
+            "legacy frozen rows, so the table should be read as a reference-runtime-window "
+            "comparison until every row has been rerun at the current production floor.",
             (
                 f"README-facing runtime/memory rows are restricted to cases where the "
                 f"SFINCS Fortran v3 reference runtime is at least `{float(args.min_fortran_runtime_s):g} s`. "
