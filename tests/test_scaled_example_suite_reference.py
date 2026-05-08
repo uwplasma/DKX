@@ -37,6 +37,34 @@ from run_reduced_upstream_suite import _solver_tolerance_from_namelist  # noqa: 
 import run_reduced_upstream_suite as reduced_suite  # noqa: E402
 
 
+def test_solver_trace_parser_prefers_realized_solver_metadata(tmp_path: Path) -> None:
+    output_path = tmp_path / "sfincsOutput_jax.h5"
+    trace_path = tmp_path / "sfincsOutput_jax.solver_trace.repeat2.json"
+    trace_path.write_text(
+        json.dumps(
+            {
+                "backend": "gpu",
+                "rhs_mode": 1,
+                "selected_path": "rhsmode1_solution",
+                "solve_method": "auto",
+                "matvec_count": None,
+                "metadata": {
+                    "solver_metadata": {
+                        "solver_kind": "xblock_sparse_pc_gmres",
+                        "matvecs": 17,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    iters, kinds = reduced_suite._parse_solver_trace_solver_stats(output_path)
+
+    assert iters == [17]
+    assert kinds == ["xblock_sparse_pc_gmres"]
+
+
 def test_stage_reference_fortran_artifacts_uses_last_success(tmp_path: Path) -> None:
     case_name = "tokamak_case"
     ref_root = tmp_path / "reference"
