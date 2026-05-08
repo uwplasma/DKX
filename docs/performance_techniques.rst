@@ -403,18 +403,22 @@ Tokamak full-FP ``N_zeta=1`` production-floor rows are handled by separate,
 narrow GPU/CUDA policies rather than by the CPU 3D full-FP lane above.
 ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` covers no-Er
 ``constraintScheme=0`` rows and ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC``
-covers electric-field ``constraintScheme=1`` rows. The audited
-``25 x 1 x 8 x 100`` RTX A4000 suite stayed ``5/5 parity_ok`` with zero strict
-mismatches and no missing output keys. The sparse-PC route is still slower and
-more memory intensive than Fortran v3, but it is residual/parity-clean and uses
-less memory than the faster theta-line alternative for these rows.
+covers electric-field ``constraintScheme=1`` rows. These policies now select
+``xblock_sparse_pc_gmres`` for the validated full-FP branch, using compact
+per-x/TZ host preconditioners instead of the earlier global dense-velocity
+sparse-pattern probe. The audited ``25 x 1 x 8 x 100`` RTX A4000 default-policy
+checks stayed parity-clean against Fortran v3: no-Er compared ``188`` datasets
+with ``0`` mismatches in ``5.79 s`` wall / ``0.97 GB`` peak RSS, and with-Er
+compared ``214`` datasets with ``0`` mismatches in ``1:13.3`` wall / ``1.43 GB``
+peak RSS. The no-Er row replaces the previous global sparse-PC default that
+took ``2:31.6`` and about ``8.42 GB`` peak RSS.
 
 Controls for the CPU 3D full-FP auto lane are
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``,
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN``, and
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``.
-The production benchmark manifest now enforces at least ``35 x 43 x 17 x 48``
-(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``42 x 1 x 16 x 62`` for
+The production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
+(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 4 x 100`` for
 tokamak cases, with a ``10 s`` minimum SFINCS Fortran v3 timing target for
 public production rows. Performance claims for this lane should be regenerated
 from that manifest rather than from earlier lower-resolution bring-up probes. It is
@@ -423,6 +427,8 @@ available via:
 .. code-block:: bash
 
    sfincs_jax write-output --input input.namelist --out sfincsOutput.h5 --solve-method sparse_host_safe
+
+   sfincs_jax write-output --input input.namelist --out sfincsOutput.h5 --solve-method xblock_sparse_pc_gmres
 
 The historical finite-beta ``17 x 21 x 5 x 12`` PAS/profile-current deck remains
 useful as a solver bring-up regression for sparse-host correctness, but it is no
@@ -1393,6 +1399,13 @@ Controls:
   The default active-size bounds are
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN/MAX=10000/60000`` and
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN/MAX=10000/60000``.
+- ``SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB`` (default: unset). When set
+  to a positive value, sparse-PC GMRES estimates CSR operator storage, GMRES
+  basis storage, and SuperLU/ILU factor fill before factorization. If the
+  estimate exceeds the budget, the run raises a clear ``MemoryError`` before
+  entering the expensive factorization. Use
+  ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_FILL_ESTIMATE`` (default: ``8``) to
+  adjust the preflight fill multiplier for a known machine/case family.
 - ``SFINCS_JAX_LINEAR_STAGE2_RATIO`` (default: ``1e2``). Stage-2 GMRES only runs
   when ``||r|| / target`` exceeds this ratio (set ``<= 0`` to always allow).
 - ``SFINCS_JAX_PAS_STAGE2_SKIP_RATIO`` (default: ``1e6``) skips stage-2 for the
@@ -1499,6 +1512,17 @@ The intended production gate for future memory optimizations is:
   ``lower(...).compile().memory_analysis()`` when the backend reports them;
 - auto-promote a candidate only when it is residual-clean, parity-clean, and
   materially faster or lower-memory than the incumbent on the same memory metric.
+
+Solver traces now carry both measured and estimated memory fields. The JSON
+sidecar records ``active_rss_mb``, ``device_peak_mb`` when available,
+``estimated_dense_nbytes``, ``estimated_csr_nbytes``,
+``estimated_gmres_basis_nbytes``, and a ``metadata.memory_estimate`` block with
+dense/CSR totals and per-device estimates. Sparse-PC traces also include the
+actual GMRES restart, maximum iteration count, diagonal shift, sparse pattern
+nonzeros, pattern-build time, preconditioner-factor time, and SuperLU ``L``/``U``
+factor storage estimates. This makes the next optimization pass auditable: a
+claimed memory win must reduce the measured active/device metric and should also
+reduce the estimated dominant storage term.
 
 The remaining high-impact memory lanes are algorithmic:
 
