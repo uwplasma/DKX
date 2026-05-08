@@ -33,8 +33,8 @@ This manual is organized around the actual user and developer workflows:
    :align: center
    :width: 90%
 
-   Release benchmark for production-scale rows whose SFINCS Fortran v3 reference
-   runtime is at least ``10 s``. Panel A compares wall-clock runtime and Panel B
+   Release benchmark for reference-runtime-window rows whose SFINCS Fortran v3
+   reference runtime is at least ``10 s``. Panel A compares wall-clock runtime and Panel B
    compares active solver memory for SFINCS Fortran v3, ``sfincs_jax`` CPU
    cold/warm, and ``sfincs_jax`` GPU cold/warm. Fortran memory is process
    maximum RSS; JAX memory uses profiler RSS deltas over the fixed runtime

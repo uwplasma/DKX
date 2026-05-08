@@ -188,7 +188,10 @@ Solving a supported v3 linear run (matrix-free)
    full-FP no-Er/Er production-floor rows also auto-select structured x-block
    sparse-PC GMRES in a narrow ``N_zeta=1`` size window. This avoids the
    global dense-velocity sparse-pattern setup from the older sparse-PC path
-   while preserving the true-residual and Fortran-parity gates. For PAS tokamak-like ``N_zeta=1`` cases with
+   while preserving the true-residual and Fortran-parity gates. On that
+   non-differentiable full-FP x-block path, per-x/TZ blocks up to size ``3000``
+   use exact sparse LU before falling back to ILU; PAS and autodiff paths keep
+   their stricter caps. For PAS tokamak-like ``N_zeta=1`` cases with
    constraint projection enabled, ``sfincs_jax`` upgrades to the ``xblock_tz`` preconditioner by
    default to reduce Krylov iterations. For strict PETSc-style iteration histories, use
    ``--solve-method incremental``. For non-differentiable full-system RHSMode=1
