@@ -283,6 +283,30 @@ def test_fortran_suite_benchmark_summary_records_source_reports_and_gates() -> N
     assert payload["reports"]["gpu"]["strict_mismatch_total"] == 0
 
 
+def test_production_gpu_report_preserves_trace_backed_solver_metadata() -> None:
+    report = (
+        Path(__file__).resolve().parents[1]
+        / "tests"
+        / "scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas"
+        / "suite_report.json"
+    )
+    rows = {str(row["case"]): row for row in json.loads(report.read_text())}
+
+    expected = {
+        "tokamak_1species_FPCollisions_noEr": ("xblock_sparse_pc_gmres", 60),
+        "tokamak_1species_FPCollisions_withEr_DKESTrajectories": ("xblock_sparse_pc_gmres", 250),
+        "tokamak_1species_FPCollisions_withEr_fullTrajectories": ("xblock_sparse_pc_gmres", 600),
+        "tokamak_2species_PASCollisions_withEr_fullTrajectories": ("sparse_pc_gmres", 20),
+    }
+    for case, (solver_kind, max_matvecs) in expected.items():
+        row = rows[case]
+        assert row["status"] == "parity_ok"
+        assert row["strict_n_mismatch_common"] == 0
+        assert row["jax_solver_kinds"] == [solver_kind]
+        assert row["jax_solver_iters_n"] == 1
+        assert row["jax_solver_iters_max"] <= max_matvecs
+
+
 def test_autodiff_sensitivity_summary_records_gradient_and_residual_gates() -> None:
     payload = load_autodiff_sensitivity_summary(
         _artifact_dir() / "sfincs_jax_autodiff_sensitivity_validation_summary.json"
