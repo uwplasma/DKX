@@ -34,12 +34,12 @@ from sfincs_jax.validation_artifacts import (
 
 
 DEFAULT_CPU_REPORT = (
-    _REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_frozen_2026-04-25_v106" / "suite_report.json"
+    _REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_2026-05-08_production_tokamak" / "suite_report.json"
 )
 DEFAULT_GPU_REPORT = (
     _REPO_ROOT
     / "tests"
-    / "scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000"
+    / "scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas"
     / "suite_report.json"
 )
 DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifacts"
