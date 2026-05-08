@@ -95,6 +95,8 @@ def test_profile_write_output_trace_main_runs_warmup_trace_and_memory_dump(
     assert run_calls[1]["output_path"] == out_path
     assert run_calls[0]["compute_solution"] is True
     assert run_calls[1]["compute_solution"] is True
+    assert run_calls[0]["differentiable"] is False
+    assert run_calls[1]["differentiable"] is False
     assert prepare_calls[0]["wout_path"] == str(tmp_path / "wout_test.nc")
     assert run_calls[1]["wout_path"] == str(tmp_path / "wout_test.nc")
     assert run_calls[0]["solver_trace_path"] is None
@@ -104,6 +106,7 @@ def test_profile_write_output_trace_main_runs_warmup_trace_and_memory_dump(
     phase_log = trace_dir / "profile_write_output_trace_phases.json"
     phases = json.loads(phase_log.read_text(encoding="utf-8"))
     assert phases["status"] == "completed"
+    assert phases["differentiable"] is False
     assert phases["solver_trace"] == str(solver_trace_path.resolve())
     assert [phase["name"] for phase in phases["phases"]] == [
         "prepare_input",
