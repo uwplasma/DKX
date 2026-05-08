@@ -6,6 +6,7 @@ from sfincs_jax.memory_model import (
     csr_matrix_nbytes,
     dense_matrix_nbytes,
     estimate_linear_solve_memory,
+    estimate_sparse_pc_memory,
     gmres_basis_nbytes,
     gmres_restart_for_budget,
 )
@@ -40,3 +41,18 @@ def test_linear_solve_memory_estimate_reports_per_device_totals() -> None:
     assert data["dense_total_nbytes"] == estimate.dense_total_nbytes
     assert data["dense_per_device_nbytes"] == estimate.dense_per_device_nbytes
     assert estimate.csr_per_device_nbytes is not None
+
+
+def test_sparse_pc_memory_estimate_includes_factor_fill() -> None:
+    estimate = estimate_sparse_pc_memory(
+        unknowns=100,
+        gmres_restart=20,
+        csr_nnz=500,
+        factor_fill_estimate=3.0,
+    )
+
+    assert estimate.csr_operator_nbytes == csr_matrix_nbytes(100, 500)
+    assert estimate.preconditioner_nbytes == 3 * estimate.csr_operator_nbytes
+    assert estimate.csr_total_nbytes == (
+        estimate.csr_operator_nbytes + estimate.gmres_basis_nbytes + estimate.preconditioner_nbytes
+    )
