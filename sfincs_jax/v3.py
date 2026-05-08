@@ -20,6 +20,13 @@ from .paths import resolve_existing_path
 from .vmec_geometry import vmec_geometry_from_wout_file
 from .vmec_wout import read_vmec_wout
 from .xgrid import XGrid, make_x_grid, make_x_polynomial_diff_matrices
+from .adaptive_maps import (
+    AffineXMap,
+    RationalTailXMap,
+    SoftplusCellXMap,
+    SplineDensityXMap,
+    make_reference_eta_grid,
+)
 
 
 def _n_periods_from_bc_file(path: str, *, base_dir: Path | None = None) -> int:
@@ -274,6 +281,64 @@ def _get_float(group: dict, key: str, default: float) -> float:
     return float(v)
 
 
+def _get_str(group: dict, key: str, default: str) -> str:
+    v = group.get(key.upper(), default)
+    if isinstance(v, list):
+        v = v[0] if v else default
+    return str(v)
+
+
+def _as_1d_float_default(group: dict, key: str, *, default: float | list[float]) -> np.ndarray:
+    v = group.get(key.upper(), default)
+    return np.atleast_1d(np.asarray(v, dtype=np.float64))
+
+
+def _mapped_x_grid_from_options(*, nx: int, other: dict):
+    eta_kind = _get_str(other, "mappedXGridEtaKind", "gauss")
+    derivative = _get_str(other, "mappedXGridDerivative", "barycentric")
+    family = _get_str(other, "mappedXGridFamily", "rational_tail").strip().lower()
+    eta, eta_weights = make_reference_eta_grid(nx, kind=eta_kind)
+    if family in {"affine", "linear"}:
+        mapper = AffineXMap(
+            x0=_get_float(other, "mappedXGridX0", 0.0),
+            derivative=derivative,
+        )
+        return mapper(_get_float(other, "mappedXGridLogScale", 0.0), eta=eta, eta_weights=eta_weights)
+    if family in {"rational", "rational_tail", "tail"}:
+        mapper = RationalTailXMap(
+            x0=_get_float(other, "mappedXGridX0", 0.0),
+            eps=_get_float(other, "mappedXGridEps", 1.0e-6),
+            derivative=derivative,
+        )
+        return mapper(_get_float(other, "mappedXGridLogLength", 0.0), eta=eta, eta_weights=eta_weights)
+    if family in {"softplus", "softplus_cell", "cell"}:
+        x_max_raw = other.get("MAPPEDXGRIDXMAX", None)
+        x_max = None if x_max_raw is None else _get_float(other, "mappedXGridXMax", 1.0)
+        mapper = SoftplusCellXMap(
+            x_min=_get_float(other, "mappedXGridXMin", 0.0),
+            x_max=x_max,
+            delta_min=_get_float(other, "mappedXGridDeltaMin", 1.0e-8),
+            derivative=derivative,
+        )
+        params = _as_1d_float_default(other, "mappedXGridParams", default=_get_float(other, "mappedXGridParam", 0.0))
+        if params.size == 1:
+            params = np.full((nx,), float(params[0]), dtype=np.float64)
+        if params.size != nx:
+            raise ValueError(f"mappedXGridParams must have length 1 or Nx={nx} for softplus_cell maps")
+        return mapper(jnp.asarray(params), eta=eta, eta_weights=eta_weights)
+    if family in {"spline", "spline_density", "density"}:
+        mapper = SplineDensityXMap(
+            x0=_get_float(other, "mappedXGridX0", 0.0),
+            density_floor=_get_float(other, "mappedXGridDensityFloor", 1.0e-8),
+            derivative=derivative,
+        )
+        coeffs = _as_1d_float_default(other, "mappedXGridParams", default=[0.0])
+        return mapper(jnp.asarray(coeffs), eta=eta, eta_weights=eta_weights)
+    raise ValueError(
+        "mappedXGridFamily must be one of {'affine', 'rational_tail', 'softplus_cell', 'spline_density'}"
+    )
+
+
 def grids_from_namelist(nml: Namelist) -> V3Grids:
     """Construct v3 grids using the same defaults as the Fortran code (where implemented)."""
     cache_env = os.environ.get("SFINCS_JAX_GRIDS_CACHE", "").strip().lower()
@@ -323,6 +388,19 @@ def grids_from_namelist(nml: Namelist) -> V3Grids:
                 "magneticDriftDerivativeScheme",
                 "xGridScheme",
                 "xGrid_k",
+                "mappedXGridEtaKind",
+                "mappedXGridDerivative",
+                "mappedXGridFamily",
+                "mappedXGridX0",
+                "mappedXGridXMin",
+                "mappedXGridXMax",
+                "mappedXGridEps",
+                "mappedXGridLogLength",
+                "mappedXGridLogScale",
+                "mappedXGridDeltaMin",
+                "mappedXGridDensityFloor",
+                "mappedXGridParam",
+                "mappedXGridParams",
                 "Nxi_for_x_option",
                 "xDotDerivativeScheme",
             ],
@@ -460,7 +538,13 @@ def grids_from_namelist(nml: Namelist) -> V3Grids:
         ddx = jnp.zeros((nx, nx), dtype=jnp.float64)
         d2dx2 = jnp.zeros((nx, nx), dtype=jnp.float64)
     else:
-        if x_grid_scheme in {1, 5}:
+        if x_grid_scheme >= 50:
+            mapped = _mapped_x_grid_from_options(nx=nx, other=other)
+            x = mapped.x
+            x_weights = mapped.x_weights
+            ddx = mapped.ddx
+            d2dx2 = mapped.d2dx2
+        elif x_grid_scheme in {1, 5}:
             include_x0 = False
         elif x_grid_scheme in {2, 6}:
             include_x0 = True
@@ -469,14 +553,15 @@ def grids_from_namelist(nml: Namelist) -> V3Grids:
                 f"Only xGridScheme in {{1,2,5,6}} is implemented (got {x_grid_scheme})."
             )
 
-        xg: XGrid = make_x_grid(n=nx, k=x_grid_k, include_point_at_x0=include_x0)
-        x = jnp.asarray(xg.x)
-        x_weights = jnp.asarray(xg.dx_weights(x_grid_k))
+        if x_grid_scheme < 50:
+            xg: XGrid = make_x_grid(n=nx, k=x_grid_k, include_point_at_x0=include_x0)
+            x = jnp.asarray(xg.x)
+            x_weights = jnp.asarray(xg.dx_weights(x_grid_k))
 
-        # x differentiation matrix (used by the Er xDot term and by collisions).
-        ddx_np, d2dx2_np = make_x_polynomial_diff_matrices(np.asarray(xg.x, dtype=np.float64), k=x_grid_k)
-        ddx = jnp.asarray(ddx_np)
-        d2dx2 = jnp.asarray(d2dx2_np)
+            # x differentiation matrix (used by the Er xDot term and by collisions).
+            ddx_np, d2dx2_np = make_x_polynomial_diff_matrices(np.asarray(xg.x, dtype=np.float64), k=x_grid_k)
+            ddx = jnp.asarray(ddx_np)
+            d2dx2 = jnp.asarray(d2dx2_np)
 
         if xdot_derivative_scheme != 0:
             raise NotImplementedError(
