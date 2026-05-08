@@ -126,12 +126,28 @@ Current active lane (2026-05-08, production-floor FP memory audit):
   `tests/production_floor_bounded_remote_gpu_xblock_lu3000_2026-05-08`
   completed `5/5 parity_ok`, strict `0` mismatches, missing Fortran output keys
   `0`, and no resolution reductions at `Ntheta=25, Nzeta=1, Nx=8, Nxi=100`.
+- Validation: the bounded CPU production-floor full-FP tokamak refresh at
+  `tests/production_floor_cpu_tokamak_fp_lu3000_2026-05-08` completed
+  `5/5 parity_ok`, strict `0` mismatches, missing Fortran output keys `0`, and
+  no resolution reductions at `Ntheta=25, Nzeta=1, Nx=8, Nxi=100`.
+- Validation: the bounded GPU production-floor PAS tokamak refresh at
+  `tests/production_floor_gpu_tokamak_pas_2026-05-08` completed
+  `6/6 parity_ok`, strict `0` mismatches, missing Fortran output keys `0`, and
+  no resolution reductions. Together with the existing CPU PAS floor artifact,
+  the bounded tokamak FP/PAS benchmark lanes are closed on CPU and GPU.
+- Artifact update: the public README/docs benchmark source reports now point at
+  `tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak` and
+  `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas`.
+  Remaining production-resolution floor violations dropped to the 16
+  remote/cluster-scale 3D rows on each backend; these are explicitly classified
+  by the manifest as `remote_or_cluster_only` (`~1.0M` to `4.3M` unknowns) and
+  should not be launched as local bounded jobs.
 - [x] Add regression coverage for the new solve-method aliases, the explicit
   x-block full-FP solve, the automatic no-Er policy selection, and the HDF5
   diagnostics reporting x-block preconditioner details.
-- Next best steps: run the broader bounded benchmark/parity refresh with the
-  new default policy, then update the public runtime/memory plot if the suite
-  confirms the same reduction outside the two production-floor probe cases.
+- Next best steps: keep the 16 remaining 3D floor rows as a cluster/nightly
+  campaign unless a dedicated large-memory node is available; do not include
+  them as production-floor public rows from legacy small-resolution artifacts.
 
 Current active lane (2026-04-27):
 - [x] Audit RHSMode=1 solver-path selection after the reported full-collision Nxi cliff.
