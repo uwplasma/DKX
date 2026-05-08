@@ -88,10 +88,32 @@ Current active lane (2026-05-08, production-floor FP memory audit):
   unknowns so production-floor runs like this one cannot write benchmark/public
   RHSMode=1 diagnostics when an explicitly forced path misses the true residual
   target, unless `SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1` is set for debugging.
-- Next best steps: implement a structured FP block preconditioner candidate
-  using the existing x-block/TZ assembly helpers rather than probing a global
-  dense-velocity sparse pattern; gate it against the current default on
-  parity, true residual, wall time, host RSS, and GPU memory.
+- [x] Implement an explicit `xblock_sparse_pc_gmres` solver method for
+  nondifferentiable RHSMode=1 full-FP systems. This reuses the existing
+  per-x/TZ assembly helpers, forces a compact x-block host preconditioner where
+  safe, avoids the previous global dense-velocity sparse-pattern probe, records
+  setup/solve/factorization metadata, and preserves a true-residual acceptance
+  gate.
+- [x] Promote the validated production-floor tokamak full-FP GPU policy from
+  global `sparse_pc_gmres` to `xblock_sparse_pc_gmres` for the auto-selected
+  no-Er and with-Er branches. Explicit `sparse_pc_gmres` remains available for
+  diagnostics/backward comparison.
+- Validation: office GPU default-policy reruns at `Ntheta=25, Nzeta=1,
+  Nxi=100, NL=4, Nx=8` are parity-clean against Fortran v3. No-Er selected
+  `xblock_sparse_pc_gmres`, compared `188` datasets with `0` mismatches, and
+  completed in `5.79 s` wall / `0.97 GB` peak RSS (`trace elapsed=3.89 s`,
+  residual `1.25e-09` against target `3.43e-09`, `33` matvecs). This replaces
+  the previous global sparse-PC default (`2:31.6`, about `8.42 GB` peak RSS).
+- Validation: office GPU default-policy with-Er selected
+  `xblock_sparse_pc_gmres`, compared `214` datasets with `0` mismatches, and
+  completed in `1:13.3` wall / `1.43 GB` peak RSS (`trace elapsed=71.33 s`,
+  residual `1.48e-15` against target `3.18e-14`, `467` matvecs).
+- [x] Add regression coverage for the new solve-method aliases, the explicit
+  x-block full-FP solve, the automatic no-Er policy selection, and the HDF5
+  diagnostics reporting x-block preconditioner details.
+- Next best steps: run the broader bounded benchmark/parity refresh with the
+  new default policy, then update the public runtime/memory plot if the suite
+  confirms the same reduction outside the two production-floor probe cases.
 
 Current active lane (2026-04-27):
 - [x] Audit RHSMode=1 solver-path selection after the reported full-collision Nxi cliff.

@@ -78,16 +78,24 @@ electric-field systems auto-select dense LU only in the validated active-size
 window where it avoids the slow Krylov/strong/sparse-rescue ladder; this is a
 runtime win with a higher transient memory footprint, so it is CPU-only and
 size-capped. Measured GPU tokamak full-FP no-Er/Er production-floor rows
-auto-select sparse-PC GMRES when that is the parity-clean lower-memory route
-relative to the faster but memory-heavy theta-line solve. Large constrained-PAS
+auto-select structured x-block sparse-PC GMRES when that is the parity-clean,
+lower-memory route; this avoids the global dense-velocity sparse-pattern setup
+that dominated earlier production-floor runs. Large constrained-PAS
 profile-current decks also auto-select sparse-PC GMRES when the problem size is
-in the validated production window. Explicit sparse-host LU remains available:
+in the validated production window. Explicit sparse-host LU and x-block sparse
+PC remain available:
 
 ```bash
 sfincs_jax write-output \
   --input /path/to/input.namelist \
   --out sfincsOutput.h5 \
   --solve-method sparse_host_safe \
+  --solver-trace solver_trace.json
+
+sfincs_jax write-output \
+  --input /path/to/input.namelist \
+  --out sfincsOutput.h5 \
+  --solve-method xblock_sparse_pc_gmres \
   --solver-trace solver_trace.json
 ```
 
@@ -103,7 +111,9 @@ target was met. RHSMode=1 outputs include `linearSolverMethod`,
 file. Sparse-PC runs also write setup/solve/factorization timings and
 sparse-pattern counters such as `linearSolverMatvecs`,
 `linearSolverSetupTime`, `linearSolverSolveTime`,
-`linearSolverSparsePCFactorTime`, and `linearSolverSparsePatternNnz`.
+`linearSolverSparsePCFactorTime`, `linearSolverSparsePatternNnz`,
+`linearSolverSparsePCXBlockPreconditionerXi`, and
+`linearSolverSparsePCXBlockAssembledHost`.
 The production benchmark manifest now enforces large research-scale floors:
 `35 x 43 x 17 x 48` (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and
 `42 x 1 x 16 x 62` for tokamak cases. Public production timing rows target

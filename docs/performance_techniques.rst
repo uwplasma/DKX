@@ -403,11 +403,15 @@ Tokamak full-FP ``N_zeta=1`` production-floor rows are handled by separate,
 narrow GPU/CUDA policies rather than by the CPU 3D full-FP lane above.
 ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` covers no-Er
 ``constraintScheme=0`` rows and ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC``
-covers electric-field ``constraintScheme=1`` rows. The audited
-``25 x 1 x 8 x 100`` RTX A4000 suite stayed ``5/5 parity_ok`` with zero strict
-mismatches and no missing output keys. The sparse-PC route is still slower and
-more memory intensive than Fortran v3, but it is residual/parity-clean and uses
-less memory than the faster theta-line alternative for these rows.
+covers electric-field ``constraintScheme=1`` rows. These policies now select
+``xblock_sparse_pc_gmres`` for the validated full-FP branch, using compact
+per-x/TZ host preconditioners instead of the earlier global dense-velocity
+sparse-pattern probe. The audited ``25 x 1 x 8 x 100`` RTX A4000 default-policy
+checks stayed parity-clean against Fortran v3: no-Er compared ``188`` datasets
+with ``0`` mismatches in ``5.79 s`` wall / ``0.97 GB`` peak RSS, and with-Er
+compared ``214`` datasets with ``0`` mismatches in ``1:13.3`` wall / ``1.43 GB``
+peak RSS. The no-Er row replaces the previous global sparse-PC default that
+took ``2:31.6`` and about ``8.42 GB`` peak RSS.
 
 Controls for the CPU 3D full-FP auto lane are
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``,
@@ -423,6 +427,8 @@ available via:
 .. code-block:: bash
 
    sfincs_jax write-output --input input.namelist --out sfincsOutput.h5 --solve-method sparse_host_safe
+
+   sfincs_jax write-output --input input.namelist --out sfincsOutput.h5 --solve-method xblock_sparse_pc_gmres
 
 The historical finite-beta ``17 x 21 x 5 x 12`` PAS/profile-current deck remains
 useful as a solver bring-up regression for sparse-host correctness, but it is no
