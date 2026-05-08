@@ -18,8 +18,9 @@ The first implementation is intentionally standalone. It provides:
 - automatic-differentiation checks against finite differences in tests.
 
 The current production grid construction in ``sfincs_jax.v3`` remains unchanged.
-Solver integration should happen only in later opt-in branches after these
-primitives are trusted.
+An opt-in research construction path is available through ``xGridScheme = 50``.
+This path only changes the speed grid when explicitly requested in the namelist.
+It does not change the default SFINCS-v3-compatible grids.
 
 Map families
 ------------
@@ -39,6 +40,39 @@ The module includes three map families plus an affine test map:
 ``SplineDensityXMap``
   Smooth monotone map built from a positive density sampled on reference nodes.
 
+Opt-in namelist keys
+--------------------
+
+The mapped-grid path is selected with:
+
+.. code-block:: text
+
+   &otherNumericalParameters
+     xGridScheme = 50
+     mappedXGridFamily = 'rational_tail'
+   /
+
+Supported families are ``affine``, ``rational_tail``, ``softplus_cell``, and
+``spline_density``. Common optional keys include:
+
+``mappedXGridEtaKind``
+  ``gauss`` or ``uniform`` reference nodes on ``[0, 1]``.
+
+``mappedXGridDerivative``
+  ``barycentric`` or ``chain-rule`` derivative construction.
+
+``mappedXGridLogLength`` / ``mappedXGridLogScale``
+  Scale parameters for rational-tail and affine maps.
+
+``mappedXGridXMax`` and ``mappedXGridParam(s)``
+  Bounded extent and cell parameters for ``softplus_cell``.
+
+``mappedXGridParams``
+  Polynomial density coefficients for ``spline_density``.
+
+For ``RHSMode = 3`` the existing monoenergetic override is preserved:
+``x = 1`` and ``xWeights = exp(1)``.
+
 Derivative matrices
 -------------------
 
@@ -54,11 +88,11 @@ Two derivative constructions are provided:
 Limitations
 -----------
 
-These primitives do not make the full Fokker-Planck collision operator
-differentiable. The current full-FP setup contains NumPy/SciPy precomputations,
-including Rosenbluth-potential quadrature and interpolation matrices. A true
-mapped full-FP path requires a separate JAX-native collision-precompute
-research branch.
+These primitives and the ``xGridScheme = 50`` construction path do not make the
+full Fokker-Planck collision operator differentiable. The current full-FP setup
+contains NumPy/SciPy precomputations, including Rosenbluth-potential quadrature
+and interpolation matrices. A true mapped full-FP path requires a separate
+JAX-native collision-precompute research branch.
 
 Near-term acceptance tests
 --------------------------
