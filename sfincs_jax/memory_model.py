@@ -204,6 +204,43 @@ def estimate_linear_solve_memory(
     )
 
 
+def estimate_sparse_pc_memory(
+    *,
+    unknowns: int,
+    gmres_restart: int,
+    csr_nnz: int,
+    dtype: Any = np.float64,
+    factor_fill_estimate: float = 8.0,
+    device_count: int = 1,
+) -> LinearSolveMemoryEstimate:
+    """Estimate sparse-PC storage before factorizing the preconditioner.
+
+    ``factor_fill_estimate`` is a multiplicative estimate for SuperLU/ILU
+    factor storage relative to the input CSR operator. It is intentionally
+    conservative and is used only for opt-in memory-budget preflight checks; the
+    measured ``L``/``U`` factor storage in solver traces remains authoritative.
+    """
+
+    base = estimate_linear_solve_memory(
+        unknowns=unknowns,
+        gmres_restart=gmres_restart,
+        dtype=dtype,
+        csr_nnz=csr_nnz,
+        device_count=device_count,
+    )
+    csr_bytes = int(base.csr_operator_nbytes or 0)
+    factor_fill = max(0.0, float(factor_fill_estimate))
+    factor_bytes = int(math.ceil(csr_bytes * factor_fill)) if csr_bytes > 0 and factor_fill > 0.0 else None
+    return estimate_linear_solve_memory(
+        unknowns=unknowns,
+        gmres_restart=gmres_restart,
+        dtype=dtype,
+        csr_nnz=csr_nnz,
+        preconditioner_nbytes=factor_bytes,
+        device_count=device_count,
+    )
+
+
 __all__ = [
     "LinearSolveMemoryEstimate",
     "bicgstab_work_nbytes",
@@ -211,6 +248,7 @@ __all__ = [
     "dense_matrix_nbytes",
     "dtype_nbytes",
     "estimate_linear_solve_memory",
+    "estimate_sparse_pc_memory",
     "gmres_basis_nbytes",
     "gmres_restart_for_budget",
 ]

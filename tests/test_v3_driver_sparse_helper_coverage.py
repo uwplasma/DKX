@@ -15,6 +15,17 @@ class _HalfSolve:
         return 0.5 * np.asarray(rhs, dtype=np.float64)
 
 
+def test_rhsmode1_xblock_sparse_lu_default_max_targets_full_fp_host_path() -> None:
+    full_fp_op = SimpleNamespace(fblock=SimpleNamespace(fp=object(), pas=None))
+    pas_op = SimpleNamespace(fblock=SimpleNamespace(fp=None, pas=object()))
+    generic_op = SimpleNamespace(fblock=SimpleNamespace(fp=None, pas=None))
+
+    assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=False) == 3000
+    assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(full_fp_op, build_jax_factors=True) == 2000
+    assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(pas_op, build_jax_factors=False) == 2000
+    assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(generic_op, build_jax_factors=False) == 2000
+
+
 def test_host_sparse_direct_allowed_and_sparse_pc_rescue_policy(monkeypatch) -> None:
     assert not v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=False)
     assert not v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=True)

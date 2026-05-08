@@ -143,6 +143,94 @@ def test_runtime_window_max_attempts_returns_last_success(tmp_path: Path, monkey
     assert result.fortran_runtime_s == pytest.approx(0.5)
 
 
+def test_runtime_floor_without_explicit_cap_keeps_slow_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case_input = tmp_path / "seed.namelist"
+    reference_input = tmp_path / "reference.namelist"
+    text = (
+        "&general\n/\n"
+        "&resolutionParameters\n"
+        "  NTHETA = 25\n"
+        "  NZETA = 1\n"
+        "  NX = 4\n"
+        "  NXI = 100\n"
+        "/\n"
+    )
+    case_input.write_text(text, encoding="utf-8")
+    reference_input.write_text(text, encoding="utf-8")
+
+    monkeypatch.setattr(suite, "localize_equilibrium_file_in_place", lambda *args, **kwargs: None)
+
+    def fake_fortran(*, input_path: Path, exe: Path, timeout_s: float, log_path: Path):
+        assert "NTHETA = 25" in input_path.read_text(encoding="utf-8")
+        out = input_path.parent / "sfincsOutput.h5"
+        out.write_text("fortran-h5", encoding="utf-8")
+        log_path.write_text("Time to solve: 41.0 seconds\n", encoding="utf-8")
+        return 41.0, out, 0, 100.0
+
+    jax_calls = {"n": 0}
+
+    def fake_jax(
+        *,
+        input_path: Path,
+        output_path: Path,
+        timeout_s: float,
+        log_path: Path,
+        compute_solution: bool,
+        compute_transport_matrix: bool,
+        collect_iterations: bool = True,
+        repeats: int = 1,
+        cache_dir: Path | None = None,
+        profile_mode: str = "off",
+    ):
+        jax_calls["n"] += 1
+        assert input_path.read_text(encoding="utf-8") == text
+        output_path.write_text("jax-h5", encoding="utf-8")
+        output_path.with_name(f"{output_path.stem}.solver_trace.repeat1.json").write_text(
+            json.dumps({"solve_method": "xblock_sparse_pc_gmres", "matvec_count": 33}),
+            encoding="utf-8",
+        )
+        log_path.write_text("elapsed_s=2.0\n", encoding="utf-8")
+        return 2.0, None, 200.0, 2.0
+
+    monkeypatch.setattr(suite, "_run_fortran_direct", fake_fortran)
+    monkeypatch.setattr(suite, "_run_jax_cli", fake_jax)
+    monkeypatch.setattr(suite, "_compare_outputs", lambda *args, **kwargs: (10, 0, 0.0, []))
+    monkeypatch.setattr(suite, "_compute_print_parity", lambda *args, **kwargs: (0, 0, []))
+    monkeypatch.setattr(suite, "_parse_ksp_iterations", lambda *args, **kwargs: ([], []))
+
+    result = suite._run_case(
+        case_name="slow_reference",
+        case_input=case_input,
+        reference_input=reference_input,
+        case_out_dir=tmp_path / "out",
+        fortran_exe=tmp_path / "sfincs",
+        timeout_s=60.0,
+        rtol=5e-4,
+        atol=1e-9,
+        max_attempts=1,
+        target_runtime_s=10.0,
+        target_runtime_max_s=None,
+        target_runtime_max_iters=1,
+        target_runtime_basis="fortran",
+        use_seed_resolution=True,
+        reuse_fortran=False,
+        collect_iterations=False,
+        jax_repeats=1,
+        jax_cache_dir=None,
+        jax_profile_mode="off",
+    )
+
+    assert jax_calls["n"] == 1
+    assert result.status == "parity_ok"
+    assert result.final_resolution == {"NTHETA": 25, "NZETA": 1, "NX": 4, "NXI": 100}
+    assert result.fortran_runtime_s == pytest.approx(41.0)
+    assert result.jax_solver_kinds == ["xblock_sparse_pc_gmres"]
+    assert result.jax_solver_iters_detail == [33]
+    assert result.jax_solver_iters_mean == pytest.approx(33.0)
+
+
 def test_frozen_reference_reuse_aligns_to_staged_input_without_live_fortran(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -47,6 +47,7 @@ def _run_write_output(
     equilibrium_file: str | None,
     wout_path: str | None,
     solver_trace_path: Path | None = None,
+    differentiable: bool = False,
 ) -> None:
     write_sfincs_jax_output_h5(
         input_namelist=input_path,
@@ -58,6 +59,7 @@ def _run_write_output(
         overwrite=True,
         verbose=True,
         solver_trace_path=solver_trace_path,
+        differentiable=bool(differentiable),
     )
 
 
@@ -136,6 +138,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional JSON solver-trace sidecar written by write_sfincs_jax_output_h5.",
     )
     parser.add_argument(
+        "--differentiable",
+        action="store_true",
+        help=(
+            "Profile the differentiable implicit-solve path. By default this wrapper "
+            "matches the CLI write-output fast path and uses differentiable=False."
+        ),
+    )
+    parser.add_argument(
         "--strict-profiler",
         action="store_true",
         help=(
@@ -186,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         "jax_trace": not bool(args.no_jax_trace),
         "compute_solution": bool(args.compute_solution),
         "compute_transport_matrix": bool(args.compute_transport_matrix),
+        "differentiable": bool(args.differentiable),
         "phase_log_interval_s": float(args.phase_log_interval_s),
         "solver_trace": str(args.solver_trace.resolve()) if args.solver_trace is not None else None,
         "device_memory_profile": str(args.device_memory_profile.resolve())
@@ -266,11 +277,12 @@ def main(argv: list[str] | None = None) -> int:
                 input_path=work_input,
                 output_path=warmup_out,
                 compute_solution=bool(args.compute_solution),
-            compute_transport_matrix=bool(args.compute_transport_matrix),
-            equilibrium_file=args.equilibrium_file,
-            wout_path=args.wout_path,
-            solver_trace_path=None,
-        )
+                compute_transport_matrix=bool(args.compute_transport_matrix),
+                equilibrium_file=args.equilibrium_file,
+                wout_path=args.wout_path,
+                solver_trace_path=None,
+                differentiable=bool(args.differentiable),
+            )
             if warmup_out.exists():
                 warmup_out.unlink()
         except Exception as exc:  # noqa: BLE001
@@ -315,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
                 equilibrium_file=args.equilibrium_file,
                 wout_path=args.wout_path,
                 solver_trace_path=args.solver_trace.resolve() if args.solver_trace is not None else None,
+                differentiable=bool(args.differentiable),
             )
             solve_completed = True
             _finish_phase(solve_phase, output_exists=output_path.exists())
@@ -335,6 +348,7 @@ def main(argv: list[str] | None = None) -> int:
                     equilibrium_file=args.equilibrium_file,
                     wout_path=args.wout_path,
                     solver_trace_path=args.solver_trace.resolve() if args.solver_trace is not None else None,
+                    differentiable=bool(args.differentiable),
                 )
                 solve_completed = True
                 _finish_phase(solve_phase, output_exists=output_path.exists())

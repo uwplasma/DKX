@@ -235,6 +235,19 @@ def test_rhsmode1_solve_method_env_accepts_sparse_pc_gmres() -> None:
     assert any("solve method forced by env -> sparse_pc_gmres" in msg for msg in msgs)
 
 
+def test_rhsmode1_solve_method_env_accepts_xblock_sparse_pc_gmres() -> None:
+    msgs: list[str] = []
+
+    method = _select_rhsmode1_linear_solve_method(
+        default_method="incremental",
+        env_override="xblock_sparse_pc_gmres",
+        emit=lambda _lvl, msg: msgs.append(str(msg)),
+    )
+
+    assert method == "xblock_sparse_pc_gmres"
+    assert any("solve method forced by env -> xblock_sparse_pc_gmres" in msg for msg in msgs)
+
+
 def test_rhsmode1_solve_method_env_accepts_sparse_lsmr() -> None:
     msgs: list[str] = []
 
@@ -771,6 +784,36 @@ def test_main_write_output_forwards_sparse_pc_gmres_solve_method(monkeypatch, tm
 
     assert rc == 0
     assert captured["solve_method"] == "sparse_pc_gmres"
+
+
+def test_main_write_output_forwards_xblock_sparse_pc_gmres_solve_method(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            "write-output",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--solve-method",
+            "xblock_sparse_pc_gmres",
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["solve_method"] == "xblock_sparse_pc_gmres"
 
 
 def test_main_write_output_forwards_sparse_lsmr_solve_method(monkeypatch, tmp_path: Path) -> None:
