@@ -80,7 +80,11 @@ runtime win with a higher transient memory footprint, so it is CPU-only and
 size-capped. Measured GPU tokamak full-FP no-Er/Er production-floor rows
 auto-select structured x-block sparse-PC GMRES when that is the parity-clean,
 lower-memory route; this avoids the global dense-velocity sparse-pattern setup
-that dominated earlier production-floor runs. Large constrained-PAS
+that dominated earlier production-floor runs. On the non-differentiable
+full-FP x-block path, per-x/TZ blocks up to size `3000` use exact sparse LU
+before falling back to ILU; this measured policy removes the remaining
+production-floor full-trajectory cliff without changing PAS or autodiff paths.
+Large constrained-PAS
 profile-current decks also auto-select sparse-PC GMRES when the problem size is
 in the validated production window. Explicit sparse-host LU and x-block sparse
 PC remain available:
@@ -127,7 +131,9 @@ this solver lane, not public production baselines.
 
 The release benchmark above compares SFINCS Fortran v3, `sfincs_jax` CPU cold,
 `sfincs_jax` CPU warm, `sfincs_jax` GPU cold, and `sfincs_jax` GPU warm only for
-production-scale rows whose Fortran v3 reference runtime is at least `10 s`.
+reference-runtime-window rows whose Fortran v3 reference runtime is at least
+`10 s`; the summary JSON records which legacy frozen rows still need a full
+production-resolution rerun.
 The left panel shows wall-clock runtime and the right panel shows active solver
 memory, both on log axes. Fortran memory is process maximum RSS; JAX memory uses
 profiler RSS deltas over the fixed Python/JAX/XLA runtime baseline, while the
@@ -489,7 +495,7 @@ lanes.
 
 <!-- BEGIN FAST_BRANCH_AUDIT -->
 Current `main` CPU audit comes from `tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106`.
-Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_gpu_bounded_default_2026-04-28`.
+Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000`.
 
 - Recorded cases: `39/39`
 - Practical status counts: `parity_ok=39`
@@ -510,6 +516,7 @@ Current mismatches:
 - GPU practical/strict mismatches: none
 
 Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the frozen JSON reports.
+The benchmark summary JSON records production-resolution floor violations for legacy frozen rows, so the table should be read as a reference-runtime-window comparison until every row has been rerun at the current production floor.
 README-facing runtime/memory rows are restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_PASCollisions_noEr` (0.309s), `tokamak_1species_PASCollisions_noEr_Nx1` (0.017s), `tokamak_1species_PASCollisions_noEr_withQN` (0.888s), `tokamak_1species_PASCollisions_withEr_fullTrajectories` (0.017s), `tokamak_2species_PASCollisions_noEr` (0.331s), `tokamak_2species_PASCollisions_withEr_fullTrajectories` (1.330s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
 
 Full per-case runtime / memory table:
@@ -531,11 +538,11 @@ Full per-case runtime / memory table:
 | `quick_2species_FPCollisions_noEr` | 166.945 | 1.531 | 0.01x | 0.983 | 0.01x | 2.938 | 0.02x | 2.200 | 0.01x | 97.1 | 269.0 | 2.77x | 363.7 | 3.74x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories` | 76.666 | 1.653 | 0.02x | 1.110 | 0.01x | 3.188 | 0.04x | 2.391 | 0.03x | 106.7 | 294.2 | 2.76x | 367.6 | 3.44x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` | 93.439 | 1.767 | 0.02x | 1.177 | 0.01x | 3.138 | 0.03x | 2.363 | 0.03x | 94.0 | 303.6 | 3.23x | 372.2 | 3.96x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr` | 160.856 | 1.395 | 0.01x | 0.841 | 0.01x | 2.534 | 0.02x | 1.794 | 0.01x | 93.2 | 185.6 | 1.99x | 311.9 | 3.35x | 0/188 (strict 0/188) | 0/188 (strict 0/188) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` | 259.575 | 1.783 | 0.01x | 1.217 | 0.00x | 3.592 | 0.01x | 2.783 | 0.01x | 89.6 | 258.3 | 2.88x | 382.8 | 4.27x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr_withQN` | 237.879 | 1.508 | 0.01x | 0.975 | 0.00x | 3.185 | 0.01x | 2.363 | 0.01x | 102.6 | 231.6 | 2.26x | 370.5 | 3.61x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_withEr_DKESTrajectories` | 155.955 | 1.510 | 0.01x | 0.970 | 0.01x | 2.886 | 0.02x | 2.107 | 0.01x | 103.1 | 242.6 | 2.35x | 357.7 | 3.47x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_withEr_fullTrajectories` | 154.953 | 1.623 | 0.01x | 1.077 | 0.01x | 3.038 | 0.02x | 2.261 | 0.01x | 101.1 | 247.5 | 2.45x | 362.9 | 3.59x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_noEr` | 160.856 | 1.395 | 0.01x | 0.841 | 0.01x | 4.545 | 0.03x | 3.230 | 0.02x | 93.2 | 185.6 | 1.99x | 316.1 | 3.39x | 0/188 (strict 0/188) | 0/188 (strict 0/188) | 9/9 | 8/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` | 259.575 | 1.783 | 0.01x | 1.217 | 0.00x | 16.743 | 0.06x | 15.433 | 0.06x | 89.6 | 258.3 | 2.88x | 612.9 | 6.84x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_noEr_withQN` | 237.879 | 1.508 | 0.01x | 0.975 | 0.00x | 7.372 | 0.03x | 6.080 | 0.03x | 102.6 | 231.6 | 2.26x | 467.9 | 4.56x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_withEr_DKESTrajectories` | 155.955 | 1.510 | 0.01x | 0.970 | 0.01x | 23.799 | 0.15x | 22.489 | 0.14x | 103.1 | 242.6 | 2.35x | 725.6 | 7.04x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 8/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_withEr_fullTrajectories` | 154.953 | 1.623 | 0.01x | 1.077 | 0.01x | 44.718 | 0.29x | 43.342 | 0.28x | 101.1 | 247.5 | 2.45x | 791.6 | 7.83x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 8/9 | parity_ok | parity_ok |
 
 Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
 - `tokamak_1species_FPCollisions_noEr_withPhi1InDKE`: 2.4s -> 1.8s (delta=0.6s)

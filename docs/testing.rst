@@ -94,9 +94,9 @@ physics invariants that come directly from the SFINCS validation literature:
 - The frozen CPU/GPU Fortran-suite benchmark artifact must retain ``39/39`` audited
   cases on both backends, with zero strict mismatches, zero ``jax_error`` cases, and
   zero ``max_attempts`` cases before the release comparison figure can be regenerated.
-  The public runtime/memory figure then filters to production-scale rows with
-  Fortran v3 runtime at least ``10 s``; lower-resolution rows stay as CI parity
-  checks unless rerun at production-comparison resolution.
+  The public runtime/memory figure then filters to reference-runtime-window rows
+  with Fortran v3 runtime at least ``10 s``; the summary JSON records which
+  legacy rows still need production-resolution reruns.
 
 The corresponding tests are ``tests/test_validation_artifacts.py`` and
 ``tests/test_generate_validation_dashboard.py``. The high-collisionality plot smoke
@@ -353,6 +353,11 @@ promotion after a good seed, x-block sparse rescue, host x-block assembly,
 primary-solve skipping, and the explicit multispecies species-x-block rescue
 opt-in. This keeps the CPU runtime-offender routing testable without running a
 large solve in CI.
+
+The sparse helper coverage in ``tests/test_v3_driver_sparse_helper_coverage.py``
+also protects the host full-FP x-block exact-LU cap. It verifies that only the
+non-differentiable full-FP x-block path defaults to the larger production-floor
+cap, while PAS and JAX-factor paths retain the lower memory-conservative cap.
 
 The follow-up post-x-block policy split is covered by
 ``tests/test_rhs1_post_xblock_policy.py``. These tests check the residual and
