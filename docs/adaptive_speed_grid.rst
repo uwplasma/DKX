@@ -85,6 +85,29 @@ Two derivative constructions are provided:
   Uses ``d/dx = J^{-1} d/deta`` and the corresponding second-derivative
   transform. This is useful for smooth maps with reliable Jacobians.
 
+Transport moment objectives
+---------------------------
+
+``sfincs_jax.mapped_xgrid_objectives`` adds the first transport-facing objective
+layer. It does not solve the drift-kinetic equation. Instead, it scores mapped
+speed grids by how accurately they integrate Maxwellian speed moments,
+
+.. math::
+
+   I_p = \int_0^\infty x^p e^{-x^2}\,dx
+       = {1 \over 2}\Gamma\!\left({p+1 \over 2}\right),
+
+which are the building blocks of velocity-weighted neoclassical transport
+integrals. The default proxy minimizes relative errors in low-order moments such
+as ``p = 2, 4, 6`` and can add smoothness, Jacobian-roughness, tail, and
+conditioning penalties from the mapped-grid diagnostics.
+
+This objective gives fast AD/finite-difference and baseline-tuning tests before
+attempting expensive implicit-solve objectives. It should be interpreted as a
+screening metric for speed-grid candidates, not as evidence that a mapped grid
+improves a full SFINCS transport coefficient until the solve-level branch
+demonstrates that directly.
+
 Limitations
 -----------
 
