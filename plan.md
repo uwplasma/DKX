@@ -108,6 +108,24 @@ Current active lane (2026-05-08, production-floor FP memory audit):
   `xblock_sparse_pc_gmres`, compared `214` datasets with `0` mismatches, and
   completed in `1:13.3` wall / `1.43 GB` peak RSS (`trace elapsed=71.33 s`,
   residual `1.48e-15` against target `3.18e-14`, `467` matvecs).
+- [x] Re-profile the remaining full-trajectory GPU offender and the adjacent
+  full-FP tokamak rows. Rejected default changes: right preconditioning
+  (`133.3 s`), GMRES restart `120` (`107.0 s`), and restart `160`
+  (`185.1 s`) were all slower than the existing left-preconditioned baseline.
+  Promoted change: use exact per-x/TZ sparse LU up to block size `3000` for
+  host-side full-FP `xblock_sparse_pc_gmres` before falling back to ILU. This
+  keeps PAS/JAX-factor paths at the previous `2000` cap and records the cap in
+  the preconditioner cache key.
+- Validation: office GPU default-policy reruns after the exact-LU cap promotion
+  were parity-clean against Fortran v3. No-Er completed in `4.40 s` wall /
+  `0.866 GB` peak RSS (`trace elapsed=3.37 s`), with-Er DKES in `26.28 s` wall /
+  `1.28 GB` peak RSS (`trace elapsed=25.26 s`), and with-Er full trajectories
+  in `43.83 s` wall / `1.34 GB` peak RSS (`trace elapsed=42.75 s`); each had
+  `0` output mismatches.
+- Validation: the five-case bounded GPU production-floor refresh at
+  `tests/production_floor_bounded_remote_gpu_xblock_lu3000_2026-05-08`
+  completed `5/5 parity_ok`, strict `0` mismatches, missing Fortran output keys
+  `0`, and no resolution reductions at `Ntheta=25, Nzeta=1, Nx=8, Nxi=100`.
 - [x] Add regression coverage for the new solve-method aliases, the explicit
   x-block full-FP solve, the automatic no-Er policy selection, and the HDF5
   diagnostics reporting x-block preconditioner details.

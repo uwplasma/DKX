@@ -8988,6 +8988,18 @@ def _build_rhsmode1_xblock_tz_lmax_preconditioner(
     return _apply_reduced
 
 
+def _rhsmode1_xblock_sparse_lu_default_max(op: object, *, build_jax_factors: bool) -> int:
+    """Default exact-LU cap for RHSMode=1 x-block sparse preconditioners."""
+    fblock = getattr(op, "fblock", None)
+    if (
+        (not bool(build_jax_factors))
+        and getattr(fblock, "fp", None) is not None
+        and getattr(fblock, "pas", None) is None
+    ):
+        return 3000
+    return 2000
+
+
 def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -9016,16 +9028,6 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     except ValueError:
         row_cap = 64
     row_cap = max(0, int(row_cap))
-    cache_key = (
-        *_rhsmode1_precond_cache_key(op, "xblock_tz_sparse"),
-        bool(build_jax_factors),
-        float(drop_tol),
-        float(drop_rel),
-        float(ilu_drop_tol),
-        float(fill_factor),
-        int(row_cap),
-        bool(force_assembled_host_fp),
-    )
     n_species = int(op.n_species)
     n_x = int(op.n_x)
     n_l = int(op.n_xi)
@@ -9034,12 +9036,24 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     total_size = int(op.total_size)
     nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
     block_size_max = int(n_l * n_theta * n_zeta)
+    default_lu_max = _rhsmode1_xblock_sparse_lu_default_max(op, build_jax_factors=build_jax_factors)
     lu_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX", "").strip()
     try:
-        lu_max = int(lu_max_env) if lu_max_env else 2000
+        lu_max = int(lu_max_env) if lu_max_env else default_lu_max
     except ValueError:
-        lu_max = 2000
+        lu_max = default_lu_max
     lu_max = max(0, int(lu_max))
+    cache_key = (
+        *_rhsmode1_precond_cache_key(op, "xblock_tz_sparse"),
+        bool(build_jax_factors),
+        float(drop_tol),
+        float(drop_rel),
+        float(ilu_drop_tol),
+        float(fill_factor),
+        int(row_cap),
+        int(lu_max),
+        bool(force_assembled_host_fp),
+    )
 
     if build_jax_factors:
         cached = _RHSMODE1_SPARSE_XBLOCK_PRECOND_CACHE.get(cache_key)
