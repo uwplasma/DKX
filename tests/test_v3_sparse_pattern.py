@@ -5,15 +5,17 @@ from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 import scipy.sparse as sp
 
 import sfincs_jax.io as io_module
+import sfincs_jax.v3_driver as v3_driver_module
 from sfincs_jax.explicit_sparse import build_operator_from_pattern
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_mat_aij
 from sfincs_jax.v3_sparse_pattern import summarize_v3_sparse_pattern, v3_full_system_conservative_sparsity_pattern
-from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
+from sfincs_jax.v3_driver import _rhs1_xblock_precondition_side, solve_v3_full_system_linear_gmres
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
@@ -29,6 +31,35 @@ def _assert_pattern_covers_matrix(pattern: sp.spmatrix, matrix: sp.spmatrix) -> 
     missing = matrix_bool.astype(np.int8) - covered.astype(np.int8)
     missing.eliminate_zeros()
     assert missing.nnz == 0
+
+
+def test_xblock_precondition_side_defaults_right_only_for_full_fp_er() -> None:
+    side, auto_right = _rhs1_xblock_precondition_side(
+        env_value="",
+        tokamak_fp_er_pc=True,
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=True,
+    )
+    assert (side, auto_right) == ("right", True)
+
+    side, auto_right = _rhs1_xblock_precondition_side(
+        env_value="",
+        tokamak_fp_er_pc=True,
+        use_dkes=True,
+        include_xdot=False,
+        include_electric_field_xi=False,
+    )
+    assert (side, auto_right) == ("left", False)
+
+    side, auto_right = _rhs1_xblock_precondition_side(
+        env_value="left",
+        tokamak_fp_er_pc=True,
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=True,
+    )
+    assert (side, auto_right) == ("left", False)
 
 
 def test_conservative_sparse_pattern_covers_pas_fortran_matrix() -> None:
@@ -169,6 +200,65 @@ def test_xblock_sparse_pc_gmres_solve_method_solves_fp_rhs1_system(monkeypatch) 
     assert result.metadata["solve_s"] >= 0.0
     assert result.metadata["elapsed_s"] >= result.metadata["setup_s"]
     assert any("xblock_sparse_pc_gmres complete" in msg for msg in messages)
+
+
+@pytest.mark.parametrize(
+    ("method", "expected_solver_kind"),
+    [
+        ("gmres", "xblock_sparse_pc_gmres"),
+        ("lgmres", "xblock_sparse_pc_lgmres"),
+    ],
+)
+def test_xblock_sparse_pc_gmres_opt_in_krylov_method_records_realized_solver(
+    monkeypatch,
+    method: str,
+    expected_solver_kind: str,
+) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", method)
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["solver_kind"] == expected_solver_kind
+    assert result.metadata["krylov_method"] == method
+    assert result.metadata["candidate_krylov_method"] == method
+    assert result.metadata["fallback_from_krylov_method"] is None
+    assert result.metadata["matvecs"] >= result.metadata["candidate_matvecs"]
+
+
+def test_xblock_sparse_pc_candidate_falls_back_to_gmres_when_residual_is_bad(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "bicgstab")
+
+    def fake_bicgstab(*, b, **_kwargs):
+        return np.zeros(int(b.size), dtype=np.float64), float("inf"), [float("inf")]
+
+    monkeypatch.setattr(v3_driver_module, "bicgstab_solve_with_history_scipy", fake_bicgstab)
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_gmres"
+    assert result.metadata["krylov_method"] == "gmres"
+    assert result.metadata["candidate_krylov_method"] == "bicgstab"
+    assert result.metadata["fallback_from_krylov_method"] == "bicgstab"
+    assert result.metadata["candidate_residual_norm"] > 1.0e-8
+    assert result.metadata["candidate_iterations"] == 1
 
 
 def test_sparse_lsmr_solve_method_solves_tiny_rhs1_system(monkeypatch) -> None:
