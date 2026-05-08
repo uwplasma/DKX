@@ -185,9 +185,13 @@ Solving a supported v3 linear run (matrix-free)
    host lane inside the
    validated production size window so they do not spend minutes in a
    matrix-free fallback that stalls at a large residual. Measured GPU tokamak
-   full-FP no-Er/Er production-floor rows also auto-select sparse-PC GMRES in a
-   narrow ``N_zeta=1`` size window when the matrix-free route is not
-   residual-clean and theta-line is parity-clean but too memory-heavy. For PAS tokamak-like ``N_zeta=1`` cases with
+   full-FP no-Er/Er production-floor rows also auto-select structured x-block
+   sparse-PC GMRES in a narrow ``N_zeta=1`` size window. This avoids the
+   global dense-velocity sparse-pattern setup from the older sparse-PC path
+   while preserving the true-residual and Fortran-parity gates. On that
+   non-differentiable full-FP x-block path, per-x/TZ blocks up to size ``3000``
+   use exact sparse LU before falling back to ILU; PAS and autodiff paths keep
+   their stricter caps. For PAS tokamak-like ``N_zeta=1`` cases with
    constraint projection enabled, ``sfincs_jax`` upgrades to the ``xblock_tz`` preconditioner by
    default to reduce Krylov iterations. For strict PETSc-style iteration histories, use
    ``--solve-method incremental``. For non-differentiable full-system RHSMode=1
@@ -203,6 +207,12 @@ Solving a supported v3 linear run (matrix-free)
      --solve-method sparse_host_safe \
      --solver-trace solver_trace.json
 
+   sfincs_jax write-output \
+     --input /path/to/input.namelist \
+     --out sfincsOutput.h5 \
+     --solve-method xblock_sparse_pc_gmres \
+     --solver-trace solver_trace.json
+
 The sparse-host lane is intentionally explicit rather than the default
 differentiable path. It is appropriate for CLI/Python production solves that do
 not require end-to-end autodiff, but it is not a universal default. The
@@ -211,9 +221,12 @@ exposes a singular/gauge-sensitive constrained-PAS system, it falls back to a
 PETSc-compatible minimum-norm branch and labels that branch explicitly. The
 diagnostic ``sparse_lsmr`` lane can probe the same minimum-norm branch directly,
 but use it for research triage only unless ``linearSolverAccepted`` is true in
-the output and the acceptance criterion is the one intended for that study. The
-production benchmark manifest now enforces at least ``35 x 43 x 17 x 48``
-(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``42 x 1 x 16 x 62`` for
+the output and the acceptance criterion is the one intended for that study.
+The explicit ``xblock_sparse_pc_gmres`` lane targets nondifferentiable full-FP
+RHSMode=1 systems where compact per-x/TZ host preconditioning is preferable to a
+global sparse-pattern probe. The
+production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
+(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 4 x 100`` for
 tokamak cases, with a ``10 s`` minimum SFINCS Fortran v3 timing target for
 public production rows. Earlier ``17 x 21 x 5 x 12`` finite-beta/profile-current
 timings were lower-resolution bring-up checks for this sparse-host lane, not
