@@ -61,6 +61,11 @@ def test_nonconverged_rhsmode1_production_output_gate(monkeypatch) -> None:
         residual_norm=residual_norm,
         residual_target=residual_target,
     )
+    assert _should_fail_nonconverged_rhsmode1_output(
+        active_total_size=12_725,
+        residual_norm=residual_norm,
+        residual_target=residual_target,
+    )
     assert not _should_fail_nonconverged_rhsmode1_output(
         active_total_size=100_000,
         residual_norm=residual_norm,

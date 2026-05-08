@@ -11379,20 +11379,6 @@ def solve_v3_full_system_linear_gmres(
                 "or use the default matrix-free solver for active-DOF runs."
             )
 
-        sparse_timer = Timer()
-        pattern_start_s = sparse_timer.elapsed_s()
-        if emit is not None:
-            emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern")
-        pattern = v3_full_system_conservative_sparsity_pattern(op)
-        pattern_build_s = sparse_timer.elapsed_s() - pattern_start_s
-        summary = summarize_v3_sparse_pattern(op, pattern)
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
-                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
-            )
-
         constrained_pas_pc = bool(
             int(op.rhs_mode) == 1
             and int(op.constraint_scheme) == 2
@@ -11424,6 +11410,33 @@ def solve_v3_full_system_linear_gmres(
             and float(er_abs_sparse_pc) == 0.0
         )
         tokamak_fp_pc = bool(tokamak_fp_er_pc or tokamak_fp_noer_pc)
+        fp_dense_velocity_env = os.environ.get(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK",
+            "",
+        ).strip().lower()
+        if fp_dense_velocity_env in {"0", "false", "f", "no", "off", ".false.", ".f."}:
+            sparse_pc_fp_dense_velocity_block: bool | None = False
+        elif fp_dense_velocity_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
+            sparse_pc_fp_dense_velocity_block = True
+        else:
+            sparse_pc_fp_dense_velocity_block = None
+
+        sparse_timer = Timer()
+        pattern_start_s = sparse_timer.elapsed_s()
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern")
+        pattern = v3_full_system_conservative_sparsity_pattern(
+            op,
+            fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+        )
+        pattern_build_s = sparse_timer.elapsed_s() - pattern_start_s
+        summary = summarize_v3_sparse_pattern(op, pattern)
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
+                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
+            )
         op_pc = _build_rhsmode1_preconditioner_operator_point(op)
         pc_shift_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT", "").strip()
         try:
@@ -11607,6 +11620,11 @@ def solve_v3_full_system_linear_gmres(
                 "gmres_restart": int(pc_restart),
                 "gmres_maxiter": int(pc_maxiter),
                 "sparse_pc_shift": float(pc_shift),
+                "sparse_pc_fp_dense_velocity_block": (
+                    None
+                    if sparse_pc_fp_dense_velocity_block is None
+                    else bool(sparse_pc_fp_dense_velocity_block)
+                ),
                 "setup_s": float(setup_s),
                 "solve_s": float(solve_s),
                 "elapsed_s": float(sparse_timer.elapsed_s()),

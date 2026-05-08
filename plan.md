@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-05 (America/Chicago)
+Last updated: 2026-05-08 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -42,6 +42,56 @@ Immediate priorities:
 - Eliminate remaining solver branch fragility while preserving differentiability,
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
+
+Current active lane (2026-05-08, production-floor FP memory audit):
+- [x] Verify `office` is reachable and run the latest clean local `main` source
+  from an isolated remote scratch tree instead of mutating stale remote artifacts.
+- [x] Re-run focused remote tests for the sparse-PC memory/trace changes:
+  `pytest -q tests/test_memory_model.py tests/test_explicit_sparse.py
+  tests/test_solver_trace_output_formats.py
+  tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible`
+  (`27 passed` on `office`).
+- [x] Profile the real production-floor GPU offender
+  `tokamak_1species_FPCollisions_noEr` at `Ntheta=25, Nzeta=1, Nxi=100,
+  NL=4, Nx=8` against the existing Fortran v3 reference. Current default
+  sparse-PC GMRES is accurate: `188` compared datasets, `0` mismatches, true
+  residual `1.33e-09` against target `3.43e-09`.
+- Result: current sparse-PC GMRES completed in `2:31.6` on office GPU 0. The
+  trace shows the runtime is pre-solve setup dominated: `setup_s=148.13`,
+  `solve_s=0.59`, `sparse_pattern_build_s=122.70`, `sparse_pc_factor_s=25.38`,
+  and only `14` true-operator matvecs. Peak host RSS was about `8.42 GB`;
+  estimated CSR storage was about `0.96 GB`, GMRES basis about `13.6 MB`, and
+  SuperLU factor storage estimate about `57.9 MB`. The performance/memory issue
+  is the conservative FP preconditioner pattern, not Krylov iteration count.
+- [x] Add an opt-in sparse-PC knob
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK` plus solver metadata
+  `sparse_pc_fp_dense_velocity_block`, and add a focused regression showing the
+  local-velocity FP pattern is strictly smaller than the dense-velocity
+  conservative pattern.
+- Candidate rejected as default: forcing the matrix-free incremental GPU path
+  completed in `1:13.9` with lower host RSS (`2.34 GB`) but stopped at residual
+  `6.91e-03` against target `3.43e-09`; it is not a parity-safe production
+  answer.
+- Candidate rejected as default: forcing
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK=false` reduced the
+  sparse-PC pattern from `80,000,000` nnz to `494,000` nnz and reduced probing
+  from `4000` colors to `25`, but it was still running after `208 s` and
+  `1475` matvecs, so it failed the wall-time gate versus the current `150 s`
+  accurate baseline. Keep it as an explicit memory-pressure experiment only.
+- Candidate rejected as default: enabling the existing reduced sparse rescue
+  with `SFINCS_JAX_RHSMODE1_SPARSE_MAX=20000` and sparse preconditioning built
+  a much smaller reduced operator (`~190k` nnz, peak RSS about `1.05 GB`) but
+  timed out at `360 s` inside the sparse-ILU GMRES fallback. This confirms the
+  next useful candidate must be a stronger structured FP block method, not the
+  current generic sparse-ILU reduced fallback.
+- [x] Lower the default nonconverged-output guard threshold to `10,000` active
+  unknowns so production-floor runs like this one cannot write benchmark/public
+  RHSMode=1 diagnostics when an explicitly forced path misses the true residual
+  target, unless `SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1` is set for debugging.
+- Next best steps: implement a structured FP block preconditioner candidate
+  using the existing x-block/TZ assembly helpers rather than probing a global
+  dense-velocity sparse pattern; gate it against the current default on
+  parity, true residual, wall time, host RSS, and GPU memory.
 
 Current active lane (2026-04-27):
 - [x] Audit RHSMode=1 solver-path selection after the reported full-collision Nxi cliff.
