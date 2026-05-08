@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import h5py
 import numpy as np
 import pytest
 
-from sfincs_jax.io import write_sfincs_output_file
+from sfincs_jax.io import _profile_memory_summary, _solver_trace_memory_estimate, write_sfincs_output_file
 from sfincs_jax.solver_trace import (
     SolverTrace,
     SolverTraceCandidate,
@@ -79,3 +80,38 @@ def test_write_sfincs_output_file_can_attach_solver_trace(tmp_path: Path, suffix
             loaded = SolverTrace.from_json(str(npz["sfincs_jax_solver_trace_json"].reshape(()).item()))
 
     assert loaded == trace
+
+
+def test_solver_trace_memory_estimate_uses_sparse_metadata() -> None:
+    estimate = _solver_trace_memory_estimate(
+        total_size=100,
+        active_size=80,
+        solver_metadata={
+            "sparse_pattern_nnz": 1_200,
+            "gmres_restart": 30,
+            "sparse_pc_factor_nbytes_estimate": 50_000,
+        },
+        device_count=2,
+    )
+
+    assert estimate is not None
+    assert estimate["dense_operator_nbytes"] == 100 * 100 * 8
+    assert estimate["csr_operator_nbytes"] == 1_200 * (8 + 4) + 101 * 4
+    assert estimate["gmres_basis_nbytes"] == 100 * (30 + 1 + 4) * 8
+    assert estimate["preconditioner_nbytes"] == 50_000
+    assert estimate["csr_per_device_nbytes"] > 0
+
+
+def test_profile_memory_summary_prefers_active_and_device_peaks() -> None:
+    profiler = SimpleNamespace(
+        entries=[
+            {"rss_mb": 100.0, "peak_rss_mb": 120.0, "dpeak_rss_mb": 10.0, "device_mb": 30.0},
+            {"rss_mb": 110.0, "peak_rss_mb": 150.0, "dpeak_rss_mb": 42.0, "device_mb": 55.0},
+        ]
+    )
+
+    active_rss_mb, device_peak_mb, peak_rss_mb = _profile_memory_summary(profiler)
+
+    assert active_rss_mb == 42.0
+    assert device_peak_mb == 55.0
+    assert peak_rss_mb == 150.0

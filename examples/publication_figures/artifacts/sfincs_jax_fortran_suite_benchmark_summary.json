@@ -86,11 +86,1268 @@
       "Process memory ratios use audited maximum-RSS fields; active JAX memory ratios use profiler dpeak_rss_mb/drss_mb deltas when available.",
       "The summary is a release gate: all audited CPU/GPU cases must remain parity_ok with no strict mismatches before filtering.",
       "README-facing performance plots filter out very short Fortran reference runs so public runtime claims are based on production-scale rows.",
+      "README-facing performance plots also require final_resolution metadata meeting the public production-resolution floor.",
       "The artifacts compare sfincs_jax against the Fortran v3 reference implementation on the vendored example suite."
     ],
+    "public_3d_benchmark_floor": {
+      "NTHETA": 25,
+      "NX": 4,
+      "NXI": 100,
+      "NZETA": 51
+    },
+    "public_tokamak_benchmark_floor": {
+      "NTHETA": 25,
+      "NX": 4,
+      "NXI": 100,
+      "NZETA": 1
+    },
     "reported_case_counts": {
       "cpu": 21,
       "gpu": 21
+    },
+    "resolution_floor_violations": {
+      "cpu": [
+        {
+          "case": "HSX_FPCollisions_DKESTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "HSX_FPCollisions_fullTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "additional_examples",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "filteredW7XNetCDF_2species_magneticDrifts_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "filteredW7XNetCDF_2species_magneticDrifts_withEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "filteredW7XNetCDF_2species_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_noEr_withQN",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_withEr_fullTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme5_3species_loRes",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "inductiveE_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "quick_2species_FPCollisions_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "tokamak_1species_FPCollisions_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 1
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 1
+          }
+        },
+        {
+          "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 1
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 1
+          }
+        },
+        {
+          "case": "tokamak_1species_FPCollisions_noEr_withQN",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 1
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 1
+          }
+        },
+        {
+          "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 1
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 1
+          }
+        },
+        {
+          "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 1
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 1
+          }
+        }
+      ],
+      "gpu": [
+        {
+          "case": "HSX_FPCollisions_DKESTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "HSX_FPCollisions_fullTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "additional_examples",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "filteredW7XNetCDF_2species_magneticDrifts_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "filteredW7XNetCDF_2species_magneticDrifts_withEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "filteredW7XNetCDF_2species_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_noEr_withQN",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_withEr_fullTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "geometryScheme5_3species_loRes",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "inductiveE_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "quick_2species_FPCollisions_noEr",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        },
+        {
+          "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories",
+          "fields": {
+            "NTHETA": {
+              "actual": 5,
+              "required": 25
+            },
+            "NX": {
+              "actual": 2,
+              "required": 4
+            },
+            "NXI": {
+              "actual": 4,
+              "required": 100
+            },
+            "NZETA": {
+              "actual": 5,
+              "required": 51
+            }
+          },
+          "reason": "below_public_benchmark_resolution_floor",
+          "required": {
+            "NTHETA": 25,
+            "NX": 4,
+            "NXI": 100,
+            "NZETA": 51
+          },
+          "resolution": {
+            "NTHETA": 5,
+            "NX": 2,
+            "NXI": 4,
+            "NZETA": 5
+          }
+        }
+      ]
     },
     "schema_version": 1,
     "source_case_counts": {
@@ -99,7 +1356,7 @@
     },
     "source_reports": {
       "cpu": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/suite_report.json",
-      "gpu": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_gpu_bounded_default_2026-04-28/suite_report.json"
+      "gpu": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000/suite_report.json"
     }
   },
   "reports": {
@@ -1169,9 +2426,9 @@
     "gpu": {
       "active_memory_ratio_summary": {
         "count": 21,
-        "max": 4.273364730507588,
-        "mean": 3.6170501299244635,
-        "median": 3.6107811786203747,
+        "max": 6.90559500353173,
+        "mean": 3.8051806188435244,
+        "median": 3.6773035123641518,
         "min": 2.8040520984081043
       },
       "blocker_counts": {
@@ -1179,9 +2436,9 @@
       },
       "cold_runtime_ratio_summary": {
         "count": 21,
-        "max": 0.1785906247635007,
-        "mean": 0.03314508371247103,
-        "median": 0.021274189987299408,
+        "max": 6.638728336171125,
+        "mean": 0.5871286384652378,
+        "median": 0.03498937999870549,
         "min": 0.011387176881717191
       },
       "fastest_jax_vs_fortran_cases": [
@@ -1214,62 +2471,6 @@
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 370.5,
-          "active_memory_ratio": 3.6107811786203747,
-          "blocker_type": "none",
-          "case": "tokamak_1species_FPCollisions_noEr_withQN",
-          "cold_runtime_ratio": 0.013387871114440602,
-          "fortran_max_rss_mb": 102.609375,
-          "fortran_runtime_s": 237.87899999998626,
-          "jax_incremental_max_rss_mb": 370.5,
-          "jax_logged_elapsed_s": 2.363,
-          "jax_max_rss_mb": 919.4,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.9,
-          "jax_runtime_s": 3.184693392831832,
-          "jax_runtime_s_cold": 3.184693392831832,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.009933621715242357,
-          "memory_ratio": 8.960194913963758,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.013387871114440602,
-          "sort_field": "runtime_ratio",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.009933621715242357,
-          "warm_or_logged_runtime_s": 2.363,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 382.8,
-          "active_memory_ratio": 4.273364730507588,
-          "blocker_type": "none",
-          "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
-          "cold_runtime_ratio": 0.01383861872987035,
-          "fortran_max_rss_mb": 89.578125,
-          "fortran_runtime_s": 259.57500000001164,
-          "jax_incremental_max_rss_mb": 382.8,
-          "jax_logged_elapsed_s": 2.783,
-          "jax_max_rss_mb": 932.1,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 549.3,
-          "jax_runtime_s": 3.5921594568062574,
-          "jax_runtime_s_cold": 3.5921594568062574,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.01072137147259896,
-          "memory_ratio": 10.405442176870748,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.01383861872987035,
-          "sort_field": "runtime_ratio",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.01072137147259896,
-          "warm_or_logged_runtime_s": 2.783,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
-        },
-        {
           "active_jax_memory_mb": 384.2,
           "active_memory_ratio": 3.8875573122529645,
           "blocker_type": "none",
@@ -1298,35 +2499,203 @@
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 311.9,
-          "active_memory_ratio": 3.3475767231259432,
+          "active_jax_memory_mb": 364.8,
+          "active_memory_ratio": 3.6773035123641518,
           "blocker_type": "none",
-          "case": "tokamak_1species_FPCollisions_noEr",
-          "cold_runtime_ratio": 0.01575527305188334,
-          "fortran_max_rss_mb": 93.171875,
-          "fortran_runtime_s": 160.85599999999977,
-          "jax_incremental_max_rss_mb": 311.9,
-          "jax_logged_elapsed_s": 1.794,
-          "jax_max_rss_mb": 860.4,
+          "case": "inductiveE_noEr",
+          "cold_runtime_ratio": 0.0167149082913741,
+          "fortran_max_rss_mb": 99.203125,
+          "fortran_runtime_s": 166.6140000000014,
+          "jax_incremental_max_rss_mb": 364.8,
+          "jax_logged_elapsed_s": 1.992,
+          "jax_max_rss_mb": 913.7,
           "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.5,
-          "jax_runtime_s": 2.5343302020337433,
-          "jax_runtime_s_cold": 2.5343302020337433,
+          "jax_rss_baseline_mb": 548.9000000000001,
+          "jax_runtime_s": 2.7849377300590277,
+          "jax_runtime_s_cold": 2.7849377300590277,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.011152832346943867,
-          "memory_ratio": 9.23454636927721,
+          "logged_runtime_ratio": 0.011955778025856071,
+          "memory_ratio": 9.21039533784848,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.01575527305188334,
+          "runtime_ratio": 0.0167149082913741,
           "sort_field": "runtime_ratio",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.011152832346943867,
-          "warm_or_logged_runtime_s": 1.794,
+          "warm_or_logged_runtime_ratio": 0.011955778025856071,
+          "warm_or_logged_runtime_s": 1.992,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 363.7,
+          "active_memory_ratio": 3.7440566189480458,
+          "blocker_type": "none",
+          "case": "quick_2species_FPCollisions_noEr",
+          "cold_runtime_ratio": 0.017597934410179223,
+          "fortran_max_rss_mb": 97.140625,
+          "fortran_runtime_s": 166.94500000000698,
+          "jax_incremental_max_rss_mb": 363.7,
+          "jax_logged_elapsed_s": 2.2,
+          "jax_max_rss_mb": 912.9,
+          "jax_memory_metric_source": "drss_mb",
+          "jax_rss_baseline_mb": 549.2,
+          "jax_runtime_s": 2.9378871601074934,
+          "jax_runtime_s_cold": 2.9378871601074934,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 0.013177992752103436,
+          "memory_ratio": 9.397715940164066,
+          "practical_mismatches": 0,
+          "runtime_ratio": 0.017597934410179223,
+          "sort_field": "runtime_ratio",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 0.013177992752103436,
+          "warm_or_logged_runtime_s": 2.2,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 364.2,
+          "active_memory_ratio": 3.9479674796747966,
+          "blocker_type": "none",
+          "case": "geometryScheme4_2species_noEr",
+          "cold_runtime_ratio": 0.020740956449759512,
+          "fortran_max_rss_mb": 92.25,
+          "fortran_runtime_s": 139.2399999999907,
+          "jax_incremental_max_rss_mb": 364.2,
+          "jax_logged_elapsed_s": 2.105,
+          "jax_max_rss_mb": 913.8,
+          "jax_memory_metric_source": "drss_mb",
+          "jax_rss_baseline_mb": 549.5999999999999,
+          "jax_runtime_s": 2.8879707760643214,
+          "jax_runtime_s_cold": 2.8879707760643214,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 0.015117782246481908,
+          "memory_ratio": 9.905691056910568,
+          "practical_mismatches": 0,
+          "runtime_ratio": 0.020740956449759512,
+          "sort_field": "runtime_ratio",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 0.015117782246481908,
+          "warm_or_logged_runtime_s": 2.105,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         }
       ],
       "highest_active_jax_memory_cases": [
+        {
+          "active_jax_memory_mb": 791.6,
+          "active_memory_ratio": 5.67852719477681,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+          "cold_runtime_ratio": 6.638728336171125,
+          "fortran_max_rss_mb": 139.40234375,
+          "fortran_runtime_s": 6.735952196177095,
+          "jax_incremental_max_rss_mb": 791.6,
+          "jax_logged_elapsed_s": 43.34206037316471,
+          "jax_max_rss_mb": 1380.02734375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 551.9999999999999,
+          "jax_runtime_s": 44.718156715855,
+          "jax_runtime_s_cold": 44.718156715855,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 6.434437049265723,
+          "memory_ratio": 9.89959929386051,
+          "practical_mismatches": 0,
+          "runtime_ratio": 6.638728336171125,
+          "sort_field": "active_jax_memory_mb",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 6.434437049265723,
+          "warm_or_logged_runtime_s": 43.34206037316471,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 725.6,
+          "active_memory_ratio": 6.90559500353173,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+          "cold_runtime_ratio": 3.420298724584568,
+          "fortran_max_rss_mb": 105.07421875,
+          "fortran_runtime_s": 6.9583003469742835,
+          "jax_incremental_max_rss_mb": 725.6,
+          "jax_logged_elapsed_s": 22.488597380928695,
+          "jax_max_rss_mb": 1313.1328125,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 23.7994658020325,
+          "jax_runtime_s_cold": 23.7994658020325,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 3.2319095554286523,
+          "memory_ratio": 12.497193204208335,
+          "practical_mismatches": 0,
+          "runtime_ratio": 3.420298724584568,
+          "sort_field": "active_jax_memory_mb",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 3.2319095554286523,
+          "warm_or_logged_runtime_s": 22.488597380928695,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 612.9,
+          "active_memory_ratio": 3.624867737091371,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
+          "cold_runtime_ratio": 0.4070590272504928,
+          "fortran_max_rss_mb": 169.08203125,
+          "fortran_runtime_s": 41.13242992805317,
+          "jax_incremental_max_rss_mb": 612.9,
+          "jax_logged_elapsed_s": 15.433474618010223,
+          "jax_max_rss_mb": 1246.80859375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.6,
+          "jax_runtime_s": 16.74332691496238,
+          "jax_runtime_s_cold": 16.74332691496238,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 0.3752142687656844,
+          "memory_ratio": 7.3739863694120364,
+          "practical_mismatches": 0,
+          "runtime_ratio": 0.4070590272504928,
+          "sort_field": "active_jax_memory_mb",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 0.3752142687656844,
+          "warm_or_logged_runtime_s": 15.433474618010223,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 467.9,
+          "active_memory_ratio": 2.9356272823076734,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_noEr_withQN",
+          "cold_runtime_ratio": 0.6730812537783846,
+          "fortran_max_rss_mb": 159.38671875,
+          "fortran_runtime_s": 10.951943814288825,
+          "jax_incremental_max_rss_mb": 467.9,
+          "jax_logged_elapsed_s": 6.0797544699162245,
+          "jax_max_rss_mb": 1101.32421875,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 7.371548073831946,
+          "jax_runtime_s_cold": 7.371548073831946,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 0.5551301735116707,
+          "memory_ratio": 6.909761537141877,
+          "practical_mismatches": 0,
+          "runtime_ratio": 0.6730812537783846,
+          "sort_field": "active_jax_memory_mb",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 0.5551301735116707,
+          "warm_or_logged_runtime_s": 6.0797544699162245,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
         {
           "active_jax_memory_mb": 394.0,
           "active_memory_ratio": 3.914920043471511,
@@ -1354,146 +2723,62 @@
           "warm_or_logged_runtime_s": 2.596,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 384.2,
-          "active_memory_ratio": 3.8875573122529645,
-          "blocker_type": "none",
-          "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
-          "cold_runtime_ratio": 0.01460789302566369,
-          "fortran_max_rss_mb": 98.828125,
-          "fortran_runtime_s": 211.35800000000745,
-          "jax_incremental_max_rss_mb": 384.2,
-          "jax_logged_elapsed_s": 2.314,
-          "jax_max_rss_mb": 932.7,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.5,
-          "jax_runtime_s": 3.0874950541183352,
-          "jax_runtime_s_cold": 3.0874950541183352,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.010948248942552061,
-          "memory_ratio": 9.437596837944664,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.01460789302566369,
-          "sort_field": "active_jax_memory_mb",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.010948248942552061,
-          "warm_or_logged_runtime_s": 2.314,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 382.8,
-          "active_memory_ratio": 4.273364730507588,
-          "blocker_type": "none",
-          "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
-          "cold_runtime_ratio": 0.01383861872987035,
-          "fortran_max_rss_mb": 89.578125,
-          "fortran_runtime_s": 259.57500000001164,
-          "jax_incremental_max_rss_mb": 382.8,
-          "jax_logged_elapsed_s": 2.783,
-          "jax_max_rss_mb": 932.1,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 549.3,
-          "jax_runtime_s": 3.5921594568062574,
-          "jax_runtime_s_cold": 3.5921594568062574,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.01072137147259896,
-          "memory_ratio": 10.405442176870748,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.01383861872987035,
-          "sort_field": "active_jax_memory_mb",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.01072137147259896,
-          "warm_or_logged_runtime_s": 2.783,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 381.2,
-          "active_memory_ratio": 4.009993425378041,
-          "blocker_type": "none",
-          "case": "geometryScheme4_2species_noEr_withQN",
-          "cold_runtime_ratio": 0.02134371990160832,
-          "fortran_max_rss_mb": 95.0625,
-          "fortran_runtime_s": 146.73399999999674,
-          "jax_incremental_max_rss_mb": 381.2,
-          "jax_logged_elapsed_s": 2.402,
-          "jax_max_rss_mb": 930.5,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 549.3,
-          "jax_runtime_s": 3.1318493960425258,
-          "jax_runtime_s_cold": 3.1318493960425258,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.01636975752041145,
-          "memory_ratio": 9.788297172912557,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.02134371990160832,
-          "sort_field": "active_jax_memory_mb",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.01636975752041145,
-          "warm_or_logged_runtime_s": 2.402,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 374.9,
-          "active_memory_ratio": 3.7182085851541915,
-          "blocker_type": "none",
-          "case": "HSX_FPCollisions_fullTrajectories",
-          "cold_runtime_ratio": 0.05928462616394579,
-          "fortran_max_rss_mb": 100.828125,
-          "fortran_runtime_s": 88.50399999998626,
-          "jax_incremental_max_rss_mb": 374.9,
-          "jax_logged_elapsed_s": 4.493,
-          "jax_max_rss_mb": 923.7,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.8000000000001,
-          "jax_runtime_s": 5.246926554013044,
-          "jax_runtime_s_cold": 5.246926554013044,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.05076606707042278,
-          "memory_ratio": 9.161134356113436,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.05928462616394579,
-          "sort_field": "active_jax_memory_mb",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.05076606707042278,
-          "warm_or_logged_runtime_s": 4.493,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
         }
       ],
       "highest_active_memory_ratio_cases": [
         {
-          "active_jax_memory_mb": 382.8,
-          "active_memory_ratio": 4.273364730507588,
+          "active_jax_memory_mb": 725.6,
+          "active_memory_ratio": 6.90559500353173,
           "blocker_type": "none",
-          "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
-          "cold_runtime_ratio": 0.01383861872987035,
-          "fortran_max_rss_mb": 89.578125,
-          "fortran_runtime_s": 259.57500000001164,
-          "jax_incremental_max_rss_mb": 382.8,
-          "jax_logged_elapsed_s": 2.783,
-          "jax_max_rss_mb": 932.1,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 549.3,
-          "jax_runtime_s": 3.5921594568062574,
-          "jax_runtime_s_cold": 3.5921594568062574,
+          "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+          "cold_runtime_ratio": 3.420298724584568,
+          "fortran_max_rss_mb": 105.07421875,
+          "fortran_runtime_s": 6.9583003469742835,
+          "jax_incremental_max_rss_mb": 725.6,
+          "jax_logged_elapsed_s": 22.488597380928695,
+          "jax_max_rss_mb": 1313.1328125,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 23.7994658020325,
+          "jax_runtime_s_cold": 23.7994658020325,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.01072137147259896,
-          "memory_ratio": 10.405442176870748,
+          "logged_runtime_ratio": 3.2319095554286523,
+          "memory_ratio": 12.497193204208335,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.01383861872987035,
+          "runtime_ratio": 3.420298724584568,
           "sort_field": "active_memory_ratio",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.01072137147259896,
-          "warm_or_logged_runtime_s": 2.783,
+          "warm_or_logged_runtime_ratio": 3.2319095554286523,
+          "warm_or_logged_runtime_s": 22.488597380928695,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 791.6,
+          "active_memory_ratio": 5.67852719477681,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+          "cold_runtime_ratio": 6.638728336171125,
+          "fortran_max_rss_mb": 139.40234375,
+          "fortran_runtime_s": 6.735952196177095,
+          "jax_incremental_max_rss_mb": 791.6,
+          "jax_logged_elapsed_s": 43.34206037316471,
+          "jax_max_rss_mb": 1380.02734375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 551.9999999999999,
+          "jax_runtime_s": 44.718156715855,
+          "jax_runtime_s_cold": 44.718156715855,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 6.434437049265723,
+          "memory_ratio": 9.89959929386051,
+          "practical_mismatches": 0,
+          "runtime_ratio": 6.638728336171125,
+          "sort_field": "active_memory_ratio",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 6.434437049265723,
+          "warm_or_logged_runtime_s": 43.34206037316471,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
@@ -1580,179 +2865,263 @@
           "warm_or_logged_runtime_s": 2.105,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 394.0,
-          "active_memory_ratio": 3.914920043471511,
-          "blocker_type": "none",
-          "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
-          "cold_runtime_ratio": 0.011387176881717191,
-          "fortran_max_rss_mb": 100.640625,
-          "fortran_runtime_s": 293.2749999999942,
-          "jax_incremental_max_rss_mb": 394.0,
-          "jax_logged_elapsed_s": 2.596,
-          "jax_max_rss_mb": 942.8,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.8,
-          "jax_runtime_s": 3.339574299985543,
-          "jax_runtime_s_cold": 3.339574299985543,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.008851760293240309,
-          "memory_ratio": 9.36798633752523,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.011387176881717191,
-          "sort_field": "active_memory_ratio",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.008851760293240309,
-          "warm_or_logged_runtime_s": 2.596,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
         }
       ],
       "highest_jax_memory_cases": [
         {
-          "active_jax_memory_mb": 394.0,
-          "active_memory_ratio": 3.914920043471511,
+          "active_jax_memory_mb": 791.6,
+          "active_memory_ratio": 5.67852719477681,
           "blocker_type": "none",
-          "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
-          "cold_runtime_ratio": 0.011387176881717191,
-          "fortran_max_rss_mb": 100.640625,
-          "fortran_runtime_s": 293.2749999999942,
-          "jax_incremental_max_rss_mb": 394.0,
-          "jax_logged_elapsed_s": 2.596,
-          "jax_max_rss_mb": 942.8,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.8,
-          "jax_runtime_s": 3.339574299985543,
-          "jax_runtime_s_cold": 3.339574299985543,
+          "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+          "cold_runtime_ratio": 6.638728336171125,
+          "fortran_max_rss_mb": 139.40234375,
+          "fortran_runtime_s": 6.735952196177095,
+          "jax_incremental_max_rss_mb": 791.6,
+          "jax_logged_elapsed_s": 43.34206037316471,
+          "jax_max_rss_mb": 1380.02734375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 551.9999999999999,
+          "jax_runtime_s": 44.718156715855,
+          "jax_runtime_s_cold": 44.718156715855,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.008851760293240309,
-          "memory_ratio": 9.36798633752523,
+          "logged_runtime_ratio": 6.434437049265723,
+          "memory_ratio": 9.89959929386051,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.011387176881717191,
+          "runtime_ratio": 6.638728336171125,
           "sort_field": "jax_max_rss_mb",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.008851760293240309,
-          "warm_or_logged_runtime_s": 2.596,
+          "warm_or_logged_runtime_ratio": 6.434437049265723,
+          "warm_or_logged_runtime_s": 43.34206037316471,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 384.2,
-          "active_memory_ratio": 3.8875573122529645,
+          "active_jax_memory_mb": 725.6,
+          "active_memory_ratio": 6.90559500353173,
           "blocker_type": "none",
-          "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
-          "cold_runtime_ratio": 0.01460789302566369,
-          "fortran_max_rss_mb": 98.828125,
-          "fortran_runtime_s": 211.35800000000745,
-          "jax_incremental_max_rss_mb": 384.2,
-          "jax_logged_elapsed_s": 2.314,
-          "jax_max_rss_mb": 932.7,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.5,
-          "jax_runtime_s": 3.0874950541183352,
-          "jax_runtime_s_cold": 3.0874950541183352,
+          "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+          "cold_runtime_ratio": 3.420298724584568,
+          "fortran_max_rss_mb": 105.07421875,
+          "fortran_runtime_s": 6.9583003469742835,
+          "jax_incremental_max_rss_mb": 725.6,
+          "jax_logged_elapsed_s": 22.488597380928695,
+          "jax_max_rss_mb": 1313.1328125,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 23.7994658020325,
+          "jax_runtime_s_cold": 23.7994658020325,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.010948248942552061,
-          "memory_ratio": 9.437596837944664,
+          "logged_runtime_ratio": 3.2319095554286523,
+          "memory_ratio": 12.497193204208335,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.01460789302566369,
+          "runtime_ratio": 3.420298724584568,
           "sort_field": "jax_max_rss_mb",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.010948248942552061,
-          "warm_or_logged_runtime_s": 2.314,
+          "warm_or_logged_runtime_ratio": 3.2319095554286523,
+          "warm_or_logged_runtime_s": 22.488597380928695,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 382.8,
-          "active_memory_ratio": 4.273364730507588,
+          "active_jax_memory_mb": 612.9,
+          "active_memory_ratio": 3.624867737091371,
           "blocker_type": "none",
           "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
-          "cold_runtime_ratio": 0.01383861872987035,
-          "fortran_max_rss_mb": 89.578125,
-          "fortran_runtime_s": 259.57500000001164,
-          "jax_incremental_max_rss_mb": 382.8,
-          "jax_logged_elapsed_s": 2.783,
-          "jax_max_rss_mb": 932.1,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 549.3,
-          "jax_runtime_s": 3.5921594568062574,
-          "jax_runtime_s_cold": 3.5921594568062574,
+          "cold_runtime_ratio": 0.4070590272504928,
+          "fortran_max_rss_mb": 169.08203125,
+          "fortran_runtime_s": 41.13242992805317,
+          "jax_incremental_max_rss_mb": 612.9,
+          "jax_logged_elapsed_s": 15.433474618010223,
+          "jax_max_rss_mb": 1246.80859375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.6,
+          "jax_runtime_s": 16.74332691496238,
+          "jax_runtime_s_cold": 16.74332691496238,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.01072137147259896,
-          "memory_ratio": 10.405442176870748,
+          "logged_runtime_ratio": 0.3752142687656844,
+          "memory_ratio": 7.3739863694120364,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.01383861872987035,
+          "runtime_ratio": 0.4070590272504928,
           "sort_field": "jax_max_rss_mb",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.01072137147259896,
-          "warm_or_logged_runtime_s": 2.783,
+          "warm_or_logged_runtime_ratio": 0.3752142687656844,
+          "warm_or_logged_runtime_s": 15.433474618010223,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 381.2,
-          "active_memory_ratio": 4.009993425378041,
+          "active_jax_memory_mb": 467.9,
+          "active_memory_ratio": 2.9356272823076734,
           "blocker_type": "none",
-          "case": "geometryScheme4_2species_noEr_withQN",
-          "cold_runtime_ratio": 0.02134371990160832,
-          "fortran_max_rss_mb": 95.0625,
-          "fortran_runtime_s": 146.73399999999674,
-          "jax_incremental_max_rss_mb": 381.2,
-          "jax_logged_elapsed_s": 2.402,
-          "jax_max_rss_mb": 930.5,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 549.3,
-          "jax_runtime_s": 3.1318493960425258,
-          "jax_runtime_s_cold": 3.1318493960425258,
+          "case": "tokamak_1species_FPCollisions_noEr_withQN",
+          "cold_runtime_ratio": 0.6730812537783846,
+          "fortran_max_rss_mb": 159.38671875,
+          "fortran_runtime_s": 10.951943814288825,
+          "jax_incremental_max_rss_mb": 467.9,
+          "jax_logged_elapsed_s": 6.0797544699162245,
+          "jax_max_rss_mb": 1101.32421875,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 7.371548073831946,
+          "jax_runtime_s_cold": 7.371548073831946,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.01636975752041145,
-          "memory_ratio": 9.788297172912557,
+          "logged_runtime_ratio": 0.5551301735116707,
+          "memory_ratio": 6.909761537141877,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.02134371990160832,
+          "runtime_ratio": 0.6730812537783846,
           "sort_field": "jax_max_rss_mb",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.01636975752041145,
-          "warm_or_logged_runtime_s": 2.402,
+          "warm_or_logged_runtime_ratio": 0.5551301735116707,
+          "warm_or_logged_runtime_s": 6.0797544699162245,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 374.9,
-          "active_memory_ratio": 3.7182085851541915,
+          "active_jax_memory_mb": 316.1,
+          "active_memory_ratio": 3.0972404026486013,
           "blocker_type": "none",
-          "case": "HSX_FPCollisions_fullTrajectories",
-          "cold_runtime_ratio": 0.05928462616394579,
-          "fortran_max_rss_mb": 100.828125,
-          "fortran_runtime_s": 88.50399999998626,
-          "jax_incremental_max_rss_mb": 374.9,
-          "jax_logged_elapsed_s": 4.493,
-          "jax_max_rss_mb": 923.7,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.8000000000001,
-          "jax_runtime_s": 5.246926554013044,
-          "jax_runtime_s_cold": 5.246926554013044,
+          "case": "tokamak_1species_FPCollisions_noEr",
+          "cold_runtime_ratio": 0.5755810083125118,
+          "fortran_max_rss_mb": 102.05859375,
+          "fortran_runtime_s": 7.896682255901396,
+          "jax_incremental_max_rss_mb": 316.1,
+          "jax_logged_elapsed_s": 3.2299875537864864,
+          "jax_max_rss_mb": 949.38671875,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 551.4,
+          "jax_runtime_s": 4.545180335175246,
+          "jax_runtime_s_cold": 4.545180335175246,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.05076606707042278,
-          "memory_ratio": 9.161134356113436,
+          "logged_runtime_ratio": 0.40903096377882403,
+          "memory_ratio": 9.302369196616526,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.05928462616394579,
+          "runtime_ratio": 0.5755810083125118,
           "sort_field": "jax_max_rss_mb",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.05076606707042278,
-          "warm_or_logged_runtime_s": 4.493,
+          "warm_or_logged_runtime_ratio": 0.40903096377882403,
+          "warm_or_logged_runtime_s": 3.2299875537864864,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         }
       ],
       "highest_jax_runtime_cases": [
+        {
+          "active_jax_memory_mb": 791.6,
+          "active_memory_ratio": 5.67852719477681,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+          "cold_runtime_ratio": 6.638728336171125,
+          "fortran_max_rss_mb": 139.40234375,
+          "fortran_runtime_s": 6.735952196177095,
+          "jax_incremental_max_rss_mb": 791.6,
+          "jax_logged_elapsed_s": 43.34206037316471,
+          "jax_max_rss_mb": 1380.02734375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 551.9999999999999,
+          "jax_runtime_s": 44.718156715855,
+          "jax_runtime_s_cold": 44.718156715855,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 6.434437049265723,
+          "memory_ratio": 9.89959929386051,
+          "practical_mismatches": 0,
+          "runtime_ratio": 6.638728336171125,
+          "sort_field": "jax_runtime_s",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 6.434437049265723,
+          "warm_or_logged_runtime_s": 43.34206037316471,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 725.6,
+          "active_memory_ratio": 6.90559500353173,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+          "cold_runtime_ratio": 3.420298724584568,
+          "fortran_max_rss_mb": 105.07421875,
+          "fortran_runtime_s": 6.9583003469742835,
+          "jax_incremental_max_rss_mb": 725.6,
+          "jax_logged_elapsed_s": 22.488597380928695,
+          "jax_max_rss_mb": 1313.1328125,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 23.7994658020325,
+          "jax_runtime_s_cold": 23.7994658020325,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 3.2319095554286523,
+          "memory_ratio": 12.497193204208335,
+          "practical_mismatches": 0,
+          "runtime_ratio": 3.420298724584568,
+          "sort_field": "jax_runtime_s",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 3.2319095554286523,
+          "warm_or_logged_runtime_s": 22.488597380928695,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 612.9,
+          "active_memory_ratio": 3.624867737091371,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
+          "cold_runtime_ratio": 0.4070590272504928,
+          "fortran_max_rss_mb": 169.08203125,
+          "fortran_runtime_s": 41.13242992805317,
+          "jax_incremental_max_rss_mb": 612.9,
+          "jax_logged_elapsed_s": 15.433474618010223,
+          "jax_max_rss_mb": 1246.80859375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.6,
+          "jax_runtime_s": 16.74332691496238,
+          "jax_runtime_s_cold": 16.74332691496238,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 0.3752142687656844,
+          "memory_ratio": 7.3739863694120364,
+          "practical_mismatches": 0,
+          "runtime_ratio": 0.4070590272504928,
+          "sort_field": "jax_runtime_s",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 0.3752142687656844,
+          "warm_or_logged_runtime_s": 15.433474618010223,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 467.9,
+          "active_memory_ratio": 2.9356272823076734,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_noEr_withQN",
+          "cold_runtime_ratio": 0.6730812537783846,
+          "fortran_max_rss_mb": 159.38671875,
+          "fortran_runtime_s": 10.951943814288825,
+          "jax_incremental_max_rss_mb": 467.9,
+          "jax_logged_elapsed_s": 6.0797544699162245,
+          "jax_max_rss_mb": 1101.32421875,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 7.371548073831946,
+          "jax_runtime_s_cold": 7.371548073831946,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 0.5551301735116707,
+          "memory_ratio": 6.909761537141877,
+          "practical_mismatches": 0,
+          "runtime_ratio": 0.6730812537783846,
+          "sort_field": "jax_runtime_s",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 0.5551301735116707,
+          "warm_or_logged_runtime_s": 6.0797544699162245,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
         {
           "active_jax_memory_mb": 370.1,
           "active_memory_ratio": 3.5921140430694574,
@@ -1780,146 +3149,34 @@
           "warm_or_logged_runtime_s": 4.514,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 374.9,
-          "active_memory_ratio": 3.7182085851541915,
-          "blocker_type": "none",
-          "case": "HSX_FPCollisions_fullTrajectories",
-          "cold_runtime_ratio": 0.05928462616394579,
-          "fortran_max_rss_mb": 100.828125,
-          "fortran_runtime_s": 88.50399999998626,
-          "jax_incremental_max_rss_mb": 374.9,
-          "jax_logged_elapsed_s": 4.493,
-          "jax_max_rss_mb": 923.7,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.8000000000001,
-          "jax_runtime_s": 5.246926554013044,
-          "jax_runtime_s_cold": 5.246926554013044,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.05076606707042278,
-          "memory_ratio": 9.161134356113436,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.05928462616394579,
-          "sort_field": "jax_runtime_s",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.05076606707042278,
-          "warm_or_logged_runtime_s": 4.493,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 363.3,
-          "active_memory_ratio": 2.8040520984081043,
-          "blocker_type": "none",
-          "case": "geometryScheme5_3species_loRes",
-          "cold_runtime_ratio": 0.037286829008327305,
-          "fortran_max_rss_mb": 129.5625,
-          "fortran_runtime_s": 98.97599999999511,
-          "jax_incremental_max_rss_mb": 363.3,
-          "jax_logged_elapsed_s": 2.908,
-          "jax_max_rss_mb": 911.6,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.3,
-          "jax_runtime_s": 3.690501187928021,
-          "jax_runtime_s_cold": 3.690501187928021,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.029380860006467665,
-          "memory_ratio": 7.035986493005306,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.037286829008327305,
-          "sort_field": "jax_runtime_s",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.029380860006467665,
-          "warm_or_logged_runtime_s": 2.908,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 382.8,
-          "active_memory_ratio": 4.273364730507588,
-          "blocker_type": "none",
-          "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
-          "cold_runtime_ratio": 0.01383861872987035,
-          "fortran_max_rss_mb": 89.578125,
-          "fortran_runtime_s": 259.57500000001164,
-          "jax_incremental_max_rss_mb": 382.8,
-          "jax_logged_elapsed_s": 2.783,
-          "jax_max_rss_mb": 932.1,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 549.3,
-          "jax_runtime_s": 3.5921594568062574,
-          "jax_runtime_s_cold": 3.5921594568062574,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.01072137147259896,
-          "memory_ratio": 10.405442176870748,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.01383861872987035,
-          "sort_field": "jax_runtime_s",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.01072137147259896,
-          "warm_or_logged_runtime_s": 2.783,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 394.0,
-          "active_memory_ratio": 3.914920043471511,
-          "blocker_type": "none",
-          "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
-          "cold_runtime_ratio": 0.011387176881717191,
-          "fortran_max_rss_mb": 100.640625,
-          "fortran_runtime_s": 293.2749999999942,
-          "jax_incremental_max_rss_mb": 394.0,
-          "jax_logged_elapsed_s": 2.596,
-          "jax_max_rss_mb": 942.8,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.8,
-          "jax_runtime_s": 3.339574299985543,
-          "jax_runtime_s_cold": 3.339574299985543,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.008851760293240309,
-          "memory_ratio": 9.36798633752523,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.011387176881717191,
-          "sort_field": "jax_runtime_s",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.008851760293240309,
-          "warm_or_logged_runtime_s": 2.596,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
         }
       ],
       "highest_memory_ratio_cases": [
         {
-          "active_jax_memory_mb": 382.8,
-          "active_memory_ratio": 4.273364730507588,
+          "active_jax_memory_mb": 725.6,
+          "active_memory_ratio": 6.90559500353173,
           "blocker_type": "none",
-          "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
-          "cold_runtime_ratio": 0.01383861872987035,
-          "fortran_max_rss_mb": 89.578125,
-          "fortran_runtime_s": 259.57500000001164,
-          "jax_incremental_max_rss_mb": 382.8,
-          "jax_logged_elapsed_s": 2.783,
-          "jax_max_rss_mb": 932.1,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 549.3,
-          "jax_runtime_s": 3.5921594568062574,
-          "jax_runtime_s_cold": 3.5921594568062574,
+          "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+          "cold_runtime_ratio": 3.420298724584568,
+          "fortran_max_rss_mb": 105.07421875,
+          "fortran_runtime_s": 6.9583003469742835,
+          "jax_incremental_max_rss_mb": 725.6,
+          "jax_logged_elapsed_s": 22.488597380928695,
+          "jax_max_rss_mb": 1313.1328125,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 23.7994658020325,
+          "jax_runtime_s_cold": 23.7994658020325,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.01072137147259896,
-          "memory_ratio": 10.405442176870748,
+          "logged_runtime_ratio": 3.2319095554286523,
+          "memory_ratio": 12.497193204208335,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.01383861872987035,
+          "runtime_ratio": 3.420298724584568,
           "sort_field": "memory_ratio",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.01072137147259896,
-          "warm_or_logged_runtime_s": 2.783,
+          "warm_or_logged_runtime_ratio": 3.2319095554286523,
+          "warm_or_logged_runtime_s": 22.488597380928695,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
@@ -1948,6 +3205,34 @@
           "strict_mismatches": 0,
           "warm_or_logged_runtime_ratio": 0.015117782246481908,
           "warm_or_logged_runtime_s": 2.105,
+          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
+          "warm_runtime_ratio": null
+        },
+        {
+          "active_jax_memory_mb": 791.6,
+          "active_memory_ratio": 5.67852719477681,
+          "blocker_type": "none",
+          "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+          "cold_runtime_ratio": 6.638728336171125,
+          "fortran_max_rss_mb": 139.40234375,
+          "fortran_runtime_s": 6.735952196177095,
+          "jax_incremental_max_rss_mb": 791.6,
+          "jax_logged_elapsed_s": 43.34206037316471,
+          "jax_max_rss_mb": 1380.02734375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 551.9999999999999,
+          "jax_runtime_s": 44.718156715855,
+          "jax_runtime_s_cold": 44.718156715855,
+          "jax_runtime_s_warm": null,
+          "logged_runtime_ratio": 6.434437049265723,
+          "memory_ratio": 9.89959929386051,
+          "practical_mismatches": 0,
+          "runtime_ratio": 6.638728336171125,
+          "sort_field": "memory_ratio",
+          "status": "parity_ok",
+          "strict_mismatches": 0,
+          "warm_or_logged_runtime_ratio": 6.434437049265723,
+          "warm_or_logged_runtime_s": 43.34206037316471,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
@@ -2004,34 +3289,6 @@
           "strict_mismatches": 0,
           "warm_or_logged_runtime_ratio": 0.01636975752041145,
           "warm_or_logged_runtime_s": 2.402,
-          "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
-          "warm_runtime_ratio": null
-        },
-        {
-          "active_jax_memory_mb": 384.2,
-          "active_memory_ratio": 3.8875573122529645,
-          "blocker_type": "none",
-          "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
-          "cold_runtime_ratio": 0.01460789302566369,
-          "fortran_max_rss_mb": 98.828125,
-          "fortran_runtime_s": 211.35800000000745,
-          "jax_incremental_max_rss_mb": 384.2,
-          "jax_logged_elapsed_s": 2.314,
-          "jax_max_rss_mb": 932.7,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.5,
-          "jax_runtime_s": 3.0874950541183352,
-          "jax_runtime_s_cold": 3.0874950541183352,
-          "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.010948248942552061,
-          "memory_ratio": 9.437596837944664,
-          "practical_mismatches": 0,
-          "runtime_ratio": 0.01460789302566369,
-          "sort_field": "memory_ratio",
-          "status": "parity_ok",
-          "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.010948248942552061,
-          "warm_or_logged_runtime_s": 2.314,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         }
@@ -2040,167 +3297,167 @@
       "label": "GPU",
       "logged_runtime_ratio_summary": {
         "count": 21,
-        "max": 0.15217098166117618,
-        "mean": 0.02599992761883389,
-        "median": 0.015283095215861853,
+        "max": 6.434437049265723,
+        "mean": 0.5472290874500374,
+        "median": 0.02713746856663806,
         "min": 0.008851760293240309
       },
       "max_attempts_cases": 0,
       "memory_ratio_summary": {
         "count": 21,
-        "max": 10.405442176870748,
-        "mean": 9.080026159803266,
-        "median": 9.161134356113436,
-        "min": 7.035986493005306
+        "max": 12.497193204208335,
+        "mean": 9.059896370335586,
+        "median": 9.21039533784848,
+        "min": 6.909761537141877
       },
       "parity_ok_cases": 21,
       "practical_mismatch_cases": 0,
       "practical_mismatch_total": 0,
       "runtime_ratio_summary": {
         "count": 21,
-        "max": 0.1785906247635007,
-        "mean": 0.03314508371247103,
-        "median": 0.021274189987299408,
+        "max": 6.638728336171125,
+        "mean": 0.5871286384652378,
+        "median": 0.03498937999870549,
         "min": 0.011387176881717191
       },
       "slowest_jax_vs_fortran_cases": [
         {
-          "active_jax_memory_mb": 370.1,
-          "active_memory_ratio": 3.5921140430694574,
+          "active_jax_memory_mb": 791.6,
+          "active_memory_ratio": 5.67852719477681,
           "blocker_type": "none",
-          "case": "HSX_FPCollisions_DKESTrajectories",
-          "cold_runtime_ratio": 0.1785906247635007,
-          "fortran_max_rss_mb": 103.03125,
-          "fortran_runtime_s": 29.66400000001886,
-          "jax_incremental_max_rss_mb": 370.1,
-          "jax_logged_elapsed_s": 4.514,
-          "jax_max_rss_mb": 918.3,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.1999999999999,
-          "jax_runtime_s": 5.297712292987853,
-          "jax_runtime_s_cold": 5.297712292987853,
+          "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+          "cold_runtime_ratio": 6.638728336171125,
+          "fortran_max_rss_mb": 139.40234375,
+          "fortran_runtime_s": 6.735952196177095,
+          "jax_incremental_max_rss_mb": 791.6,
+          "jax_logged_elapsed_s": 43.34206037316471,
+          "jax_max_rss_mb": 1380.02734375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 551.9999999999999,
+          "jax_runtime_s": 44.718156715855,
+          "jax_runtime_s_cold": 44.718156715855,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.15217098166117618,
-          "memory_ratio": 8.91282984531392,
+          "logged_runtime_ratio": 6.434437049265723,
+          "memory_ratio": 9.89959929386051,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.1785906247635007,
+          "runtime_ratio": 6.638728336171125,
           "sort_field": "runtime_ratio",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.15217098166117618,
-          "warm_or_logged_runtime_s": 4.514,
+          "warm_or_logged_runtime_ratio": 6.434437049265723,
+          "warm_or_logged_runtime_s": 43.34206037316471,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 374.9,
-          "active_memory_ratio": 3.7182085851541915,
+          "active_jax_memory_mb": 725.6,
+          "active_memory_ratio": 6.90559500353173,
           "blocker_type": "none",
-          "case": "HSX_FPCollisions_fullTrajectories",
-          "cold_runtime_ratio": 0.05928462616394579,
-          "fortran_max_rss_mb": 100.828125,
-          "fortran_runtime_s": 88.50399999998626,
-          "jax_incremental_max_rss_mb": 374.9,
-          "jax_logged_elapsed_s": 4.493,
-          "jax_max_rss_mb": 923.7,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.8000000000001,
-          "jax_runtime_s": 5.246926554013044,
-          "jax_runtime_s_cold": 5.246926554013044,
+          "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+          "cold_runtime_ratio": 3.420298724584568,
+          "fortran_max_rss_mb": 105.07421875,
+          "fortran_runtime_s": 6.9583003469742835,
+          "jax_incremental_max_rss_mb": 725.6,
+          "jax_logged_elapsed_s": 22.488597380928695,
+          "jax_max_rss_mb": 1313.1328125,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 23.7994658020325,
+          "jax_runtime_s_cold": 23.7994658020325,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.05076606707042278,
-          "memory_ratio": 9.161134356113436,
+          "logged_runtime_ratio": 3.2319095554286523,
+          "memory_ratio": 12.497193204208335,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.05928462616394579,
+          "runtime_ratio": 3.420298724584568,
           "sort_field": "runtime_ratio",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.05076606707042278,
-          "warm_or_logged_runtime_s": 4.493,
+          "warm_or_logged_runtime_ratio": 3.2319095554286523,
+          "warm_or_logged_runtime_s": 22.488597380928695,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 359.1,
-          "active_memory_ratio": 3.1673649393605294,
+          "active_jax_memory_mb": 467.9,
+          "active_memory_ratio": 2.9356272823076734,
           "blocker_type": "none",
-          "case": "geometryScheme4_2species_withEr_fullTrajectories",
-          "cold_runtime_ratio": 0.052228392520919,
-          "fortran_max_rss_mb": 113.375,
-          "fortran_runtime_s": 58.05299999998533,
-          "jax_incremental_max_rss_mb": 359.1,
-          "jax_logged_elapsed_s": 2.258,
-          "jax_max_rss_mb": 907.9,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.8,
-          "jax_runtime_s": 3.0320148710161448,
-          "jax_runtime_s_cold": 3.0320148710161448,
+          "case": "tokamak_1species_FPCollisions_noEr_withQN",
+          "cold_runtime_ratio": 0.6730812537783846,
+          "fortran_max_rss_mb": 159.38671875,
+          "fortran_runtime_s": 10.951943814288825,
+          "jax_incremental_max_rss_mb": 467.9,
+          "jax_logged_elapsed_s": 6.0797544699162245,
+          "jax_max_rss_mb": 1101.32421875,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.1,
+          "jax_runtime_s": 7.371548073831946,
+          "jax_runtime_s_cold": 7.371548073831946,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.038895492050377595,
-          "memory_ratio": 8.007938257993384,
+          "logged_runtime_ratio": 0.5551301735116707,
+          "memory_ratio": 6.909761537141877,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.052228392520919,
+          "runtime_ratio": 0.6730812537783846,
           "sort_field": "runtime_ratio",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.038895492050377595,
-          "warm_or_logged_runtime_s": 2.258,
+          "warm_or_logged_runtime_ratio": 0.5551301735116707,
+          "warm_or_logged_runtime_s": 6.0797544699162245,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 367.6,
-          "active_memory_ratio": 3.4440638266725228,
+          "active_jax_memory_mb": 316.1,
+          "active_memory_ratio": 3.0972404026486013,
           "blocker_type": "none",
-          "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories",
-          "cold_runtime_ratio": 0.04157909849206898,
-          "fortran_max_rss_mb": 106.734375,
-          "fortran_runtime_s": 76.66599999999744,
-          "jax_incremental_max_rss_mb": 367.6,
-          "jax_logged_elapsed_s": 2.391,
-          "jax_max_rss_mb": 915.8,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.1999999999999,
-          "jax_runtime_s": 3.187703164992854,
-          "jax_runtime_s_cold": 3.187703164992854,
+          "case": "tokamak_1species_FPCollisions_noEr",
+          "cold_runtime_ratio": 0.5755810083125118,
+          "fortran_max_rss_mb": 102.05859375,
+          "fortran_runtime_s": 7.896682255901396,
+          "jax_incremental_max_rss_mb": 316.1,
+          "jax_logged_elapsed_s": 3.2299875537864864,
+          "jax_max_rss_mb": 949.38671875,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 551.4,
+          "jax_runtime_s": 4.545180335175246,
+          "jax_runtime_s_cold": 4.545180335175246,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.031187227715024652,
-          "memory_ratio": 8.580178597569901,
+          "logged_runtime_ratio": 0.40903096377882403,
+          "memory_ratio": 9.302369196616526,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.04157909849206898,
+          "runtime_ratio": 0.5755810083125118,
           "sort_field": "runtime_ratio",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.031187227715024652,
-          "warm_or_logged_runtime_s": 2.391,
+          "warm_or_logged_runtime_ratio": 0.40903096377882403,
+          "warm_or_logged_runtime_s": 3.2299875537864864,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         },
         {
-          "active_jax_memory_mb": 363.3,
-          "active_memory_ratio": 2.8040520984081043,
+          "active_jax_memory_mb": 612.9,
+          "active_memory_ratio": 3.624867737091371,
           "blocker_type": "none",
-          "case": "geometryScheme5_3species_loRes",
-          "cold_runtime_ratio": 0.037286829008327305,
-          "fortran_max_rss_mb": 129.5625,
-          "fortran_runtime_s": 98.97599999999511,
-          "jax_incremental_max_rss_mb": 363.3,
-          "jax_logged_elapsed_s": 2.908,
-          "jax_max_rss_mb": 911.6,
-          "jax_memory_metric_source": "drss_mb",
-          "jax_rss_baseline_mb": 548.3,
-          "jax_runtime_s": 3.690501187928021,
-          "jax_runtime_s_cold": 3.690501187928021,
+          "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
+          "cold_runtime_ratio": 0.4070590272504928,
+          "fortran_max_rss_mb": 169.08203125,
+          "fortran_runtime_s": 41.13242992805317,
+          "jax_incremental_max_rss_mb": 612.9,
+          "jax_logged_elapsed_s": 15.433474618010223,
+          "jax_max_rss_mb": 1246.80859375,
+          "jax_memory_metric_source": "dpeak_rss_mb",
+          "jax_rss_baseline_mb": 552.6,
+          "jax_runtime_s": 16.74332691496238,
+          "jax_runtime_s_cold": 16.74332691496238,
           "jax_runtime_s_warm": null,
-          "logged_runtime_ratio": 0.029380860006467665,
-          "memory_ratio": 7.035986493005306,
+          "logged_runtime_ratio": 0.3752142687656844,
+          "memory_ratio": 7.3739863694120364,
           "practical_mismatches": 0,
-          "runtime_ratio": 0.037286829008327305,
+          "runtime_ratio": 0.4070590272504928,
           "sort_field": "runtime_ratio",
           "status": "parity_ok",
           "strict_mismatches": 0,
-          "warm_or_logged_runtime_ratio": 0.029380860006467665,
-          "warm_or_logged_runtime_s": 2.908,
+          "warm_or_logged_runtime_ratio": 0.3752142687656844,
+          "warm_or_logged_runtime_s": 15.433474618010223,
           "warm_or_logged_runtime_source": "jax_logged_elapsed_s",
           "warm_runtime_ratio": null
         }
@@ -2213,9 +3470,9 @@
       "total_cases": 21,
       "warm_or_logged_runtime_ratio_summary": {
         "count": 21,
-        "max": 0.15217098166117618,
-        "mean": 0.02599992761883389,
-        "median": 0.015283095215861853,
+        "max": 6.434437049265723,
+        "mean": 0.5472290874500374,
+        "median": 0.02713746856663806,
         "min": 0.008851760293240309
       },
       "warm_or_logged_runtime_source_counts": {
