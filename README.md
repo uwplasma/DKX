@@ -494,19 +494,18 @@ Production-resolution inputs are generated separately with
 lanes.
 
 <!-- BEGIN FAST_BRANCH_AUDIT -->
-Current `main` CPU audit comes from `tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106`.
-Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000`.
+Current `main` CPU audit comes from `tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak`.
+Matching frozen-reference GPU audit comes from `tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas`.
 
 - Recorded cases: `39/39`
 - Practical status counts: `parity_ok=39`
 - Strict status counts: `parity_ok=39`
 - GPU practical status counts: `parity_ok=39`
 - GPU strict status counts: `parity_ok=39`
-- CPU output-key coverage: `missing_total=0, extra_total=70, audited_cases=39, skipped_cases=0`
-- GPU output-key coverage: `missing_total=0, extra_total=70, audited_cases=39, skipped_cases=0`
+- CPU output-key coverage: `missing_total=0, extra_total=-, audited_cases=39, skipped_cases=0`
+- GPU output-key coverage: `missing_total=0, extra_total=-, audited_cases=39, skipped_cases=0`
 - CPU runtime drift watchlist vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`: none
 - GPU runtime drift watchlist vs `tests/scaled_example_suite_release_gpu_2026-04-25_v106/suite_report.json`: none
-- Resolution policy: `reference_first_runtime_window, scale_factor=1.0, runtime_basis=fortran, fortran_min=0.0, fortran_max=None, adjust_iters=0`
 - Remaining cases: none
 - Additional example: `parity_ok` on CPU and `parity_ok` on GPU
 
@@ -517,7 +516,7 @@ Current mismatches:
 
 Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the frozen JSON reports.
 The benchmark summary JSON records production-resolution floor violations for legacy frozen rows, so the table should be read as a reference-runtime-window comparison until every row has been rerun at the current production floor.
-README-facing runtime/memory rows are restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_PASCollisions_noEr` (0.309s), `tokamak_1species_PASCollisions_noEr_Nx1` (0.017s), `tokamak_1species_PASCollisions_noEr_withQN` (0.888s), `tokamak_1species_PASCollisions_withEr_fullTrajectories` (0.017s), `tokamak_2species_PASCollisions_noEr` (0.331s), `tokamak_2species_PASCollisions_withEr_fullTrajectories` (1.330s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
+README-facing runtime/memory rows are restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_FPCollisions_noEr` (7.897s), `tokamak_1species_FPCollisions_withEr_DKESTrajectories` (6.958s), `tokamak_1species_FPCollisions_withEr_fullTrajectories` (6.736s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
 
 Full per-case runtime / memory table:
 | Case | Fortran CPU(s) | JAX CPU cold(s) | CPU cold x | JAX CPU warm/logged(s) | CPU warm/logged x | JAX GPU cold(s) | GPU cold x | JAX GPU warm/logged(s) | GPU warm/logged x | Fortran MB | JAX CPU active MB | CPU MB x | JAX GPU active MB | GPU MB x | CPU mismatch | GPU mismatch | CPU print | GPU print | CPU status | GPU status |
@@ -538,25 +537,28 @@ Full per-case runtime / memory table:
 | `quick_2species_FPCollisions_noEr` | 166.945 | 1.531 | 0.01x | 0.983 | 0.01x | 2.938 | 0.02x | 2.200 | 0.01x | 97.1 | 269.0 | 2.77x | 363.7 | 3.74x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories` | 76.666 | 1.653 | 0.02x | 1.110 | 0.01x | 3.188 | 0.04x | 2.391 | 0.03x | 106.7 | 294.2 | 2.76x | 367.6 | 3.44x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` | 93.439 | 1.767 | 0.02x | 1.177 | 0.01x | 3.138 | 0.03x | 2.363 | 0.03x | 94.0 | 303.6 | 3.23x | 372.2 | 3.96x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr` | 160.856 | 1.395 | 0.01x | 0.841 | 0.01x | 4.545 | 0.03x | 3.230 | 0.02x | 93.2 | 185.6 | 1.99x | 316.1 | 3.39x | 0/188 (strict 0/188) | 0/188 (strict 0/188) | 9/9 | 8/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` | 259.575 | 1.783 | 0.01x | 1.217 | 0.00x | 16.743 | 0.06x | 15.433 | 0.06x | 89.6 | 258.3 | 2.88x | 612.9 | 6.84x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_noEr_withQN` | 237.879 | 1.508 | 0.01x | 0.975 | 0.00x | 7.372 | 0.03x | 6.080 | 0.03x | 102.6 | 231.6 | 2.26x | 467.9 | 4.56x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_withEr_DKESTrajectories` | 155.955 | 1.510 | 0.01x | 0.970 | 0.01x | 23.799 | 0.15x | 22.489 | 0.14x | 103.1 | 242.6 | 2.35x | 725.6 | 7.04x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 8/9 | parity_ok | parity_ok |
-| `tokamak_1species_FPCollisions_withEr_fullTrajectories` | 154.953 | 1.623 | 0.01x | 1.077 | 0.01x | 44.718 | 0.29x | 43.342 | 0.28x | 101.1 | 247.5 | 2.45x | 791.6 | 7.83x | 0/214 (strict 0/214) | 0/214 (strict 0/214) | 9/9 | 8/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` | 41.132 | 13.276 | 0.32x | 12.527 | 0.30x | 16.743 | 0.41x | 15.433 | 0.38x | 169.1 | 796.8 | 4.71x | 612.9 | 3.62x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_FPCollisions_noEr_withQN` | 10.952 | 9.019 | 0.82x | 8.255 | 0.75x | 7.372 | 0.67x | 6.080 | 0.56x | 159.4 | 800.0 | 5.02x | 467.9 | 2.94x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_noEr` | 75.566 | 3.073 | 0.04x | 3.073 | 0.04x | 14.166 | 0.19x | 12.654 | 0.17x | 155.3 | 696.3 | 4.48x | 659.0 | 4.24x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_noEr_Nx1` | 75.533 | 2.519 | 0.03x | 2.519 | 0.03x | 28.827 | 0.38x | 27.403 | 0.36x | 119.2 | 473.8 | 3.97x | 563.0 | 4.72x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_noEr_withQN` | 75.242 | 5.147 | 0.07x | 5.147 | 0.07x | 11.444 | 0.15x | 10.019 | 0.13x | 165.0 | 612.3 | 3.71x | 459.5 | 2.78x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 75.698 | 21.970 | 0.29x | 21.970 | 0.29x | 46.297 | 0.61x | 44.905 | 0.59x | 248.9 | 1940.7 | 7.80x | 1633.3 | 6.56x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
+| `tokamak_2species_PASCollisions_noEr` | 75.362 | 2.855 | 0.04x | 2.855 | 0.04x | 14.717 | 0.20x | 13.226 | 0.18x | 215.3 | 1753.0 | 8.14x | 1112.0 | 5.17x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 41.632 | 0.54x | 41.632 | 0.54x | 92.590 | 1.21x | 91.139 | 1.19x | 386.6 | 3828.1 | 9.90x | 2941.5 | 7.61x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 
 Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
-- `tokamak_1species_FPCollisions_noEr_withPhi1InDKE`: 2.4s -> 1.8s (delta=0.6s)
+- `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.9s (delta=1.1s)
 - `quick_2species_FPCollisions_noEr`: 2.1s -> 1.5s (delta=0.6s)
 - `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories`: 2.3s -> 1.8s (delta=0.5s)
 - `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories`: 2.2s -> 1.7s (delta=0.5s)
 - `inductiveE_noEr`: 2.1s -> 1.6s (delta=0.5s)
 
 Largest CPU process peak-RSS improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
+- `tokamak_2species_PASCollisions_noEr`: 2088.6 MB -> 2030.6 MB (delta=58.0 MB)
 - `geometryScheme5_3species_loRes`: 569.4 MB -> 540.3 MB (delta=29.1 MB)
 - `geometryScheme4_2species_withEr_fullTrajectories_withQN`: 512.4 MB -> 486.4 MB (delta=26.0 MB)
 - `geometryScheme4_2species_noEr_withPhi1InDKE`: 506.0 MB -> 480.9 MB (delta=25.1 MB)
 - `filteredW7XNetCDF_2species_magneticDrifts_withEr`: 536.3 MB -> 512.0 MB (delta=24.3 MB)
-- `tokamak_1species_FPCollisions_noEr_withPhi1InDKE`: 474.3 MB -> 450.1 MB (delta=24.2 MB)
 <!-- END FAST_BRANCH_AUDIT -->
 
 ## Documentation

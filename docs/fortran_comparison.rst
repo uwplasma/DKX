@@ -40,11 +40,11 @@ checks unless they are rerun at production-comparison resolution.
    Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran v3
    runtime.
    The current artifacts have median cold JAX/Fortran wall-clock ratios of about
-   ``0.012x`` on CPU and ``0.035x`` on GPU for the plotted reference-runtime
+   ``0.022x`` on CPU and ``0.039x`` on GPU for the plotted reference-runtime
    subset. Median process maximum-RSS ratios remain available in the JSON audit
    fields, while the public memory bars use profiler active RSS deltas over the
    fixed Python/JAX/XLA baseline; the median active-memory ratios are about
-   ``2.79x`` on CPU and ``3.68x`` on GPU. The top runtime and memory cases are recorded in
+   ``2.99x`` on CPU and ``3.71x`` on GPU. The top runtime and memory cases are recorded in
    ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``.
 
 Use :doc:`parity` for the scope map and comparison policy, :doc:`performance` for CPU/GPU
