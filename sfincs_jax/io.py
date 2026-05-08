@@ -166,9 +166,9 @@ def _should_fail_nonconverged_rhsmode1_output(
         return False
     min_env = os.environ.get("SFINCS_JAX_NONCONVERGED_FAIL_MIN_SIZE", "").strip()
     try:
-        min_size = int(min_env) if min_env else 80_000
+        min_size = int(min_env) if min_env else 10_000
     except ValueError:
-        min_size = 80_000
+        min_size = 10_000
     if int(active_total_size) < max(0, min_size):
         return False
     if residual_norm is None or residual_target is None:

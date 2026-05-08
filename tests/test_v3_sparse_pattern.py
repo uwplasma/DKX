@@ -59,6 +59,19 @@ def test_conservative_sparse_pattern_covers_fp_fortran_matrix() -> None:
     assert summary.avg_row_nnz > 0.0
 
 
+def test_fp_sparse_pc_can_use_local_velocity_pattern() -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+
+    dense_velocity = v3_full_system_conservative_sparsity_pattern(op, fp_dense_velocity_block=True)
+    local_velocity = v3_full_system_conservative_sparsity_pattern(op, fp_dense_velocity_block=False)
+
+    assert local_velocity.shape == dense_velocity.shape == (op.total_size, op.total_size)
+    assert local_velocity.nnz < dense_velocity.nnz
+    assert summarize_v3_sparse_pattern(op, local_velocity).has_fp
+
+
 def test_conservative_sparse_pattern_covers_phi1_fortran_matrix() -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "pas_1species_PAS_noEr_tiny_withPhi1_linear.input.namelist")
