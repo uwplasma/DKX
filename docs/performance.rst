@@ -79,9 +79,10 @@ production-resolution input tier:
 
    python scripts/create_production_benchmark_inputs.py --clean
 
-By default this writes ``benchmarks/production_resolution_inputs_2026-04-30``
+By default this writes ``benchmarks/production_resolution_inputs_2026-05-04``
 from the public SFINCS_JAX example decks only. It enforces at least
-``35 x 43 x 17 x 48`` on 3D grids and ``42 x 1 x 16 x 62`` on tokamak grids,
+``25 x 51 x 4 x 100`` (``Ntheta x Nzeta x Nx x Nxi``) on 3D grids and
+``25 x 1 x 4 x 100`` on tokamak grids,
 and the manifest records a ``10 s`` minimum SFINCS Fortran v3 runtime target
 for public production timing rows.
 Additional local decks can be added without changing the public manifest:
@@ -113,11 +114,15 @@ The scaled-suite runner also understands these manifest recommendations. When
 .. code-block:: bash
 
    python scripts/run_scaled_example_suite.py \
-     --examples-root benchmarks/production_resolution_inputs_2026-04-30/inputs \
+     --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs \
      --fortran-exe /path/to/sfincs/fortran/version3/sfincs \
      --fortran-min-runtime-s 10.0 \
      --runtime-adjustment-iters 0 \
      --out-root benchmarks/production_resolution_cpu_local
+
+``--fortran-min-runtime-s`` is a floor. It does not cap valid slower
+production references. Add ``--fortran-max-runtime-s`` only when an explicitly
+budgeted campaign should downscale cases above a known wall-clock ceiling.
 
 Raise the guard only on an explicitly budgeted remote or cluster lane:
 ``--max-run-recommendation bounded_remote``,
@@ -135,6 +140,32 @@ reruns are:
 - GPU memory: ``sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories`` at ``2097.6 MB``
 
 In other words, all examples run on CPU and GPU, but a handful of cases remain the clear optimization targets.
+
+Targeted solver profiling
+-------------------------
+
+Use ``scripts/profile_write_output_trace.py`` for one-case kernel, phase, and
+device-memory investigations. The wrapper matches the CLI ``write-output`` path
+by default, meaning it uses the fast non-differentiable solve policy. Opt into
+the differentiable implicit path only when that is the object of the profile:
+
+.. code-block:: bash
+
+   CUDA_VISIBLE_DEVICES=0 \
+   JAX_ENABLE_X64=True \
+   XLA_PYTHON_CLIENT_PREALLOCATE=false \
+   SFINCS_JAX_PROFILE=full \
+   python scripts/profile_write_output_trace.py \
+     --input benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist \
+     --trace-dir outputs/profile_tokamak_fp_er \
+     --out outputs/profile_tokamak_fp_er/sfincsOutput.h5 \
+     --compute-solution \
+     --no-jax-trace \
+     --solver-trace outputs/profile_tokamak_fp_er/solver_trace.json \
+     --device-memory-profile outputs/profile_tokamak_fp_er/device_memory.prof
+
+Add ``--differentiable`` to profile the gradient-preserving implicit solve
+instead of the default CLI-equivalent production solve.
 
 Recent current-tip GPU fixes that are now reflected in the release artifacts:
 
