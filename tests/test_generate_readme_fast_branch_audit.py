@@ -86,3 +86,21 @@ def test_public_comparison_cases_filter_short_fortran_reference_runs() -> None:
     assert included == ["production_case"]
     assert excluded == [{"case": "short_case", "fortran_runtime_s": 0.7}]
     assert "`short_case` (0.700s)" in module._format_excluded_public_cases(excluded)
+
+
+def test_runtime_drift_summary_skips_mismatched_resolution_tiers() -> None:
+    module = _load_module()
+
+    line = module._format_runtime_drift_summary(
+        "GPU",
+        {
+            "status": "not_applicable",
+            "reason": "production-floor reruns are not same-resolution with the frozen smoke baseline",
+            "flagged_cases": 999,
+        },
+    )
+
+    assert line == (
+        "- GPU runtime drift watchlist: not applicable: "
+        "production-floor reruns are not same-resolution with the frozen smoke baseline"
+    )
