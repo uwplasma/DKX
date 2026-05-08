@@ -56,6 +56,11 @@ main file:
 - ``linearSolverSparsePatternNnz``, ``linearSolverSparsePatternAvgRowNnz``, and
   ``linearSolverSparsePatternMaxRowNnz`` record the structural sparse pattern
   used by the explicit host sparse-PC lane.
+- ``linearSolverSparsePCFactorNbytesEstimate`` and
+  ``linearSolverSparsePCFactorNnzEstimate`` estimate SuperLU ``L``/``U`` factor
+  storage for sparse-PC routes. These are estimates of factor arrays, not full
+  process RSS, and should be compared with solver-trace active/device memory
+  fields when auditing memory-limited runs.
 
 For a publication-style PDF diagnostics panel from an existing output file:
 
