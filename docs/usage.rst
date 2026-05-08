@@ -222,8 +222,8 @@ the output and the acceptance criterion is the one intended for that study.
 The explicit ``xblock_sparse_pc_gmres`` lane targets nondifferentiable full-FP
 RHSMode=1 systems where compact per-x/TZ host preconditioning is preferable to a
 global sparse-pattern probe. The
-production benchmark manifest now enforces at least ``35 x 43 x 17 x 48``
-(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``42 x 1 x 16 x 62`` for
+production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
+(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 4 x 100`` for
 tokamak cases, with a ``10 s`` minimum SFINCS Fortran v3 timing target for
 public production rows. Earlier ``17 x 21 x 5 x 12`` finite-beta/profile-current
 timings were lower-resolution bring-up checks for this sparse-host lane, not
