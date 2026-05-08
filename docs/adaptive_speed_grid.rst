@@ -108,6 +108,35 @@ screening metric for speed-grid candidates, not as evidence that a mapped grid
 improves a full SFINCS transport coefficient until the solve-level branch
 demonstrates that directly.
 
+PAS transport-matrix evidence
+-----------------------------
+
+``sfincs_jax.mapped_xgrid_transport_evidence`` adds the first solve-facing
+comparison layer for the opt-in mapped grid. It copies a namelist, sets
+``xGridScheme = 50`` with rational-tail map parameters, runs a transport-matrix
+solve for each candidate, and compares each result against a reference solve.
+The report records the proxy moment objective, mapped-grid conditioning
+diagnostics, residual norms, elapsed time, and transport-matrix error,
+
+.. math::
+
+   \epsilon_T =
+   {\left\|T_{\mathrm{mapped}} - T_{\mathrm{ref}}\right\|_F
+    \over
+    \max\left(\left\|T_{\mathrm{ref}}\right\|_F, 10^{-300}\right)} .
+
+This layer is intentionally conservative. It is designed to test whether the
+cheap moment objective predicts a useful transport-matrix grid, not to replace
+the transport solve itself. It currently targets the PAS path because mapped
+``xGridScheme = 50`` is not yet compatible with the full-FP collision
+precompute assumptions.
+
+For reviewer-facing evidence, use ``reference_nml`` or a precomputed
+``reference_result`` from a higher-resolution default-grid solve, then compare
+lower-resolution mapped candidates against that reference. Comparing only
+same-resolution grids is a useful smoke test but is not enough to support a
+resolution-reduction claim.
+
 Limitations
 -----------
 
