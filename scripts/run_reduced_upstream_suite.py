@@ -818,6 +818,40 @@ def _parse_solver_trace_elapsed_s(path: Path) -> float | None:
         return None
 
 
+def _parse_solver_trace_solver_stats(output_path: Path) -> tuple[list[int], list[str]]:
+    """Return solver matvec counts and methods from the latest JSON trace sidecar.
+
+    Suite runs can execute repeated JAX solves for cold/warm timing. The latest
+    repeat is the warm timing row reported in the suite summary, so use it for
+    solver-path metadata when KSP-style log lines are unavailable.
+    """
+    trace_paths = sorted(output_path.parent.glob(f"{output_path.stem}.solver_trace.repeat*.json"))
+    fallback = output_path.with_name(f"{output_path.stem}.solver_trace.json")
+    if fallback.exists():
+        trace_paths.append(fallback)
+    for trace_path in reversed(trace_paths):
+        try:
+            data = json.loads(trace_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        method = data.get("solve_method") or data.get("selected_path")
+        if method is None:
+            metadata = data.get("metadata")
+            if isinstance(metadata, dict):
+                solver_metadata = metadata.get("solver_metadata")
+                if isinstance(solver_metadata, dict):
+                    method = solver_metadata.get("solve_method") or solver_metadata.get("selected_path")
+        methods = [str(method).lower()] if method is not None else []
+        matvec_count = data.get("matvec_count")
+        if matvec_count is None:
+            return [], methods
+        try:
+            return [int(matvec_count)], methods
+        except (TypeError, ValueError):
+            return [], methods
+    return [], []
+
+
 def _time_command_prefix() -> list[str]:
     """Return a portable `/usr/bin/time` prefix for subprocess RSS accounting."""
     if not Path("/usr/bin/time").exists():
@@ -2023,7 +2057,7 @@ def _run_case(
             continue
 
         if target_runtime_s is not None and fortran_runtime is not None and runtime_basis == "fortran":
-            target_cap = target_runtime_max_s if target_runtime_max_s is not None else target_runtime_s
+            target_cap = target_runtime_max_s
             if (
                 target_cap is not None
                 and float(fortran_runtime) > float(target_cap)
@@ -2155,9 +2189,15 @@ def _run_case(
                 note = f"{note} printParity={print_signals}/{print_total} missing={','.join(print_missing[:3])}"
         if jax_log_path is not None and jax_log_path.exists():
             iters, kinds = _parse_ksp_iterations(jax_log_path)
+            trace_iters, trace_kinds = _parse_solver_trace_solver_stats(jax_h5_path)
+            if not iters:
+                iters = trace_iters
+            if not kinds:
+                kinds = trace_kinds
+            if kinds:
+                jax_solver_kinds = kinds
             if iters:
                 jax_solver_iters_detail = iters
-                jax_solver_kinds = kinds
                 jax_solver_iters_n = len(iters)
                 jax_solver_iters_mean = float(np.mean(np.asarray(iters, dtype=np.float64)))
                 jax_solver_iters_min = int(min(iters))
@@ -2219,7 +2259,7 @@ def _run_case(
             basis=runtime_basis,
         )
         if target_runtime_s is not None and metric_runtime is not None:
-            target_cap = target_runtime_max_s if target_runtime_max_s is not None else target_runtime_s
+            target_cap = target_runtime_max_s
             if (
                 metric_runtime < float(target_runtime_s)
                 and scale_iters < int(target_runtime_max_iters)

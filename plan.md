@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-05 (America/Chicago)
+Last updated: 2026-05-08 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -42,6 +42,96 @@ Immediate priorities:
 - Eliminate remaining solver branch fragility while preserving differentiability,
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
+
+Current active lane (2026-05-08, production-floor FP memory audit):
+- [x] Verify `office` is reachable and run the latest clean local `main` source
+  from an isolated remote scratch tree instead of mutating stale remote artifacts.
+- [x] Re-run focused remote tests for the sparse-PC memory/trace changes:
+  `pytest -q tests/test_memory_model.py tests/test_explicit_sparse.py
+  tests/test_solver_trace_output_formats.py
+  tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible`
+  (`27 passed` on `office`).
+- [x] Profile the real production-floor GPU offender
+  `tokamak_1species_FPCollisions_noEr` at `Ntheta=25, Nzeta=1, Nxi=100,
+  NL=4, Nx=8` against the existing Fortran v3 reference. Current default
+  sparse-PC GMRES is accurate: `188` compared datasets, `0` mismatches, true
+  residual `1.33e-09` against target `3.43e-09`.
+- Result: current sparse-PC GMRES completed in `2:31.6` on office GPU 0. The
+  trace shows the runtime is pre-solve setup dominated: `setup_s=148.13`,
+  `solve_s=0.59`, `sparse_pattern_build_s=122.70`, `sparse_pc_factor_s=25.38`,
+  and only `14` true-operator matvecs. Peak host RSS was about `8.42 GB`;
+  estimated CSR storage was about `0.96 GB`, GMRES basis about `13.6 MB`, and
+  SuperLU factor storage estimate about `57.9 MB`. The performance/memory issue
+  is the conservative FP preconditioner pattern, not Krylov iteration count.
+- [x] Add an opt-in sparse-PC knob
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK` plus solver metadata
+  `sparse_pc_fp_dense_velocity_block`, and add a focused regression showing the
+  local-velocity FP pattern is strictly smaller than the dense-velocity
+  conservative pattern.
+- Candidate rejected as default: forcing the matrix-free incremental GPU path
+  completed in `1:13.9` with lower host RSS (`2.34 GB`) but stopped at residual
+  `6.91e-03` against target `3.43e-09`; it is not a parity-safe production
+  answer.
+- Candidate rejected as default: forcing
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK=false` reduced the
+  sparse-PC pattern from `80,000,000` nnz to `494,000` nnz and reduced probing
+  from `4000` colors to `25`, but it was still running after `208 s` and
+  `1475` matvecs, so it failed the wall-time gate versus the current `150 s`
+  accurate baseline. Keep it as an explicit memory-pressure experiment only.
+- Candidate rejected as default: enabling the existing reduced sparse rescue
+  with `SFINCS_JAX_RHSMODE1_SPARSE_MAX=20000` and sparse preconditioning built
+  a much smaller reduced operator (`~190k` nnz, peak RSS about `1.05 GB`) but
+  timed out at `360 s` inside the sparse-ILU GMRES fallback. This confirms the
+  next useful candidate must be a stronger structured FP block method, not the
+  current generic sparse-ILU reduced fallback.
+- [x] Lower the default nonconverged-output guard threshold to `10,000` active
+  unknowns so production-floor runs like this one cannot write benchmark/public
+  RHSMode=1 diagnostics when an explicitly forced path misses the true residual
+  target, unless `SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1` is set for debugging.
+- [x] Implement an explicit `xblock_sparse_pc_gmres` solver method for
+  nondifferentiable RHSMode=1 full-FP systems. This reuses the existing
+  per-x/TZ assembly helpers, forces a compact x-block host preconditioner where
+  safe, avoids the previous global dense-velocity sparse-pattern probe, records
+  setup/solve/factorization metadata, and preserves a true-residual acceptance
+  gate.
+- [x] Promote the validated production-floor tokamak full-FP GPU policy from
+  global `sparse_pc_gmres` to `xblock_sparse_pc_gmres` for the auto-selected
+  no-Er and with-Er branches. Explicit `sparse_pc_gmres` remains available for
+  diagnostics/backward comparison.
+- Validation: office GPU default-policy reruns at `Ntheta=25, Nzeta=1,
+  Nxi=100, NL=4, Nx=8` are parity-clean against Fortran v3. No-Er selected
+  `xblock_sparse_pc_gmres`, compared `188` datasets with `0` mismatches, and
+  completed in `5.79 s` wall / `0.97 GB` peak RSS (`trace elapsed=3.89 s`,
+  residual `1.25e-09` against target `3.43e-09`, `33` matvecs). This replaces
+  the previous global sparse-PC default (`2:31.6`, about `8.42 GB` peak RSS).
+- Validation: office GPU default-policy with-Er selected
+  `xblock_sparse_pc_gmres`, compared `214` datasets with `0` mismatches, and
+  completed in `1:13.3` wall / `1.43 GB` peak RSS (`trace elapsed=71.33 s`,
+  residual `1.48e-15` against target `3.18e-14`, `467` matvecs).
+- [x] Re-profile the remaining full-trajectory GPU offender and the adjacent
+  full-FP tokamak rows. Rejected default changes: right preconditioning
+  (`133.3 s`), GMRES restart `120` (`107.0 s`), and restart `160`
+  (`185.1 s`) were all slower than the existing left-preconditioned baseline.
+  Promoted change: use exact per-x/TZ sparse LU up to block size `3000` for
+  host-side full-FP `xblock_sparse_pc_gmres` before falling back to ILU. This
+  keeps PAS/JAX-factor paths at the previous `2000` cap and records the cap in
+  the preconditioner cache key.
+- Validation: office GPU default-policy reruns after the exact-LU cap promotion
+  were parity-clean against Fortran v3. No-Er completed in `4.40 s` wall /
+  `0.866 GB` peak RSS (`trace elapsed=3.37 s`), with-Er DKES in `26.28 s` wall /
+  `1.28 GB` peak RSS (`trace elapsed=25.26 s`), and with-Er full trajectories
+  in `43.83 s` wall / `1.34 GB` peak RSS (`trace elapsed=42.75 s`); each had
+  `0` output mismatches.
+- Validation: the five-case bounded GPU production-floor refresh at
+  `tests/production_floor_bounded_remote_gpu_xblock_lu3000_2026-05-08`
+  completed `5/5 parity_ok`, strict `0` mismatches, missing Fortran output keys
+  `0`, and no resolution reductions at `Ntheta=25, Nzeta=1, Nx=8, Nxi=100`.
+- [x] Add regression coverage for the new solve-method aliases, the explicit
+  x-block full-FP solve, the automatic no-Er policy selection, and the HDF5
+  diagnostics reporting x-block preconditioner details.
+- Next best steps: run the broader bounded benchmark/parity refresh with the
+  new default policy, then update the public runtime/memory plot if the suite
+  confirms the same reduction outside the two production-floor probe cases.
 
 Current active lane (2026-04-27):
 - [x] Audit RHSMode=1 solver-path selection after the reported full-collision Nxi cliff.
@@ -8306,3 +8396,112 @@ Progress update (2026-05-04, bounded production-floor campaign):
   is 6.7-7.9 s and about 100-140 MB RSS. The next memory lane should target
   sparse-pattern assembly/factorization storage and a lower-memory Krylov
   preconditioner rather than reverting to the nonconverged XMG default.
+
+Progress update (2026-05-08): memory observability for the remaining lanes
+
+- Wired the existing memory model into solver trace emission. New traces now
+  populate `active_rss_mb`, `device_peak_mb` when profiling reports it,
+  `estimated_dense_nbytes`, `estimated_csr_nbytes`,
+  `estimated_gmres_basis_nbytes`, `matvec_count`, and
+  `metadata.memory_estimate` with dense/CSR totals and per-device estimates.
+- Sparse-PC metadata now records the actual GMRES restart, maximum iteration
+  count, diagonal shift, and SuperLU `L`/`U` factor storage estimate in addition
+  to sparse-pattern nonzeros, pattern-build time, factor time, setup time, solve
+  time, and true residual. This closes the observability prerequisite for the
+  remaining memory lane: the next benchmark artifacts can distinguish dense
+  storage, CSR storage, GMRES basis growth, and sparse-PC factorization/setup.
+- Acceptance gate for the next implementation remains unchanged: do not promote
+  a lower-memory solver path unless it is residual-clean, parity-clean, and
+  either at least 25% lower active/device memory at no more than 10% runtime
+  regression, or it fixes a nonconverged baseline within the documented
+  memory-limited rescue allowance.
+- Added an opt-in sparse-PC memory preflight budget:
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB`. When set, the sparse-PC path
+  estimates CSR operator storage, GMRES basis storage, and SuperLU/ILU factor
+  fill before factorization and raises a clear `MemoryError` if the estimate
+  exceeds the budget. A tiny forced sparse-PC check verified the guard fails
+  before factorization with an actionable message. Defaults are unchanged unless
+  the budget variable is set.
+
+Next concrete memory/performance actions:
+
+1. Rerun one bounded CPU trace and one `office` GPU trace for the sparse-PC FP
+   offenders with `SFINCS_JAX_PROFILE=1` and, on GPU, device-memory profiling.
+   Confirm whether the measured peak is dominated by CSR operator storage,
+   SuperLU factorization, or GMRES basis/work vectors.
+2. Use production traces to tune the sparse-PC fill multiplier and budget for
+   memory-limited machines; keep it opt-in until a matrix-free alternative is
+   residual-clean for the same rows.
+3. Prototype the next lower-memory candidate behind an explicit env gate:
+   smaller-restart right-preconditioned GMRES, LGMRES with bounded augmentation,
+   or BiCGStab/IDR-style short recurrence with sparse-PC preconditioning. Keep
+   the current sparse-PC default until a candidate passes parity and residual
+   gates on the production-floor cases.
+
+Progress update (2026-05-08): bounded production refresh after x-block sparse-PC
+
+- Fixed a benchmark-runner policy bug: `--fortran-min-runtime-s` now enforces
+  only the lower benchmark floor. It no longer acts as an implicit maximum
+  runtime cap unless `--fortran-max-runtime-s` is explicitly supplied. This
+  closed the false `max_attempts` artifact for
+  `tokamak_1species_FPCollisions_noEr_withPhi1InDKE`, whose frozen Fortran v3
+  reference takes about 41 s and should not be downscaled merely because the
+  production-floor minimum is 10 s.
+- Added solver-trace ingestion to the suite reports so warm-run sidecars record
+  the selected solver method and matvec count even when no PETSc/KSP-style log
+  line exists. Future reports can now distinguish `xblock_sparse_pc_gmres`,
+  `auto`, residual status, active memory, estimated dense/CSR/GMRES storage, and
+  true matvec count from the JSON trace artifacts.
+- Local bounded CPU production-floor refresh:
+  `tests/production_floor_cpu_bounded_xblock_2026-05-08/` has `6/6 parity_ok`,
+  zero practical mismatches, zero strict mismatches, and no missing Fortran v3
+  output keys for the tokamak PAS rows at `25 x 1 x 8 x 100` or
+  `25 x 1 x 4 x 100` for the Nx=1 row. The slowest JAX row is the two-species
+  PAS+Er full-trajectory case at about 41.6 s warm and 4.2 GB RSS, still below
+  the about 76.5 s Fortran v3 reference but still a memory-ratio target.
+- Office GPU bounded full-FP refresh:
+  `tests/production_floor_bounded_remote_gpu_xblock_floorfix_2026-05-08/` has
+  `5/5 parity_ok`, zero practical mismatches, zero strict mismatches, and no
+  missing Fortran v3 output keys for all bounded
+  `tokamak_1species_FPCollisions*` rows at `25 x 1 x 8 x 100`.
+- GPU runtime/memory delta versus the previous bounded sparse-PC report:
+  `tokamak_1species_FPCollisions_noEr` improved from about 150.2 s / 8.42 GB RSS
+  to 4.60 s / 0.95 GB RSS; `withEr_DKESTrajectories` improved from about
+  146.0 s / 8.43 GB RSS to 31.8 s / 1.34 GB RSS; `withEr_fullTrajectories`
+  improved from about 167.1 s / 8.43 GB RSS to 69.8 s / 1.40 GB RSS. The Phi1
+  and QN rows are unchanged within noise and remain parity-clean.
+- Fixed a profiler-wrapper mismatch exposed by the first targeted GPU profile:
+  `scripts/profile_write_output_trace.py` called the Python API with
+  `differentiable=None`, while the CLI uses `differentiable=False` for
+  throughput-oriented output generation. The wrapper now matches CLI semantics
+  by default and has an explicit `--differentiable` flag for implicit-solve
+  profiling. Before the fix, the same `withEr_fullTrajectories` input selected a
+  nonconverged implicit/incremental fallback and failed after about 3:27 with
+  residual `1.56e-1`.
+- Corrected targeted GPU profile for
+  `tokamak_1species_FPCollisions_withEr_fullTrajectories`:
+  `xblock_sparse_pc_gmres`, `467` matvecs, residual `1.48e-15` against target
+  `3.18e-14`, total trace elapsed about `66.1 s`, setup about `3.6 s`, solve
+  about `60.8 s`, diagnostics plus HDF5 under `0.7 s`, peak RSS about `1.40 GB`,
+  active RSS about `1.23 GB`, and sampled device peak about `240 MB`. This
+  classifies the remaining slow GPU FP+Er row as Krylov/matvec-count dominated,
+  not output, HDF5, or device-allocation dominated.
+- Current status: bounded CPU/GPU correctness and the worst full-FP sparse-PC
+  memory cliff are closed. Do not regenerate README production claims yet from
+  these partial bounded artifacts alone. The public benchmark plot/table should
+  be refreshed only after the same trace-backed policy is run on the broader
+  production-floor matrix or the remaining `remote_or_cluster_only` rows are
+  clearly labeled as deferred cluster artifacts.
+
+Next concrete actions after this refresh:
+
+1. Use the postprocessed bounded reports, now carrying solver-trace-derived
+   `jax_solver_kinds` and matvec counts, as regression fixtures for
+   route-selection and memory-policy tests.
+2. Use the corrected bounded GPU device-memory trace for
+   `withEr_fullTrajectories` to prototype the next solver candidate around
+   Krylov/matvec-count reduction rather than output, HDF5, or device-allocation
+   reductions.
+3. Keep the README top plot unchanged until the full production-floor benchmark
+   set is refreshed without `max_attempts`, `jax_error`, missing output keys, or
+   unclassified CPU/GPU drift.
