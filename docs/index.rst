@@ -82,6 +82,7 @@ This manual is organized around the actual user and developer workflows:
    parallelism
    performance
    performance_techniques
+   adaptive_speed_grid
    testing
    validation_matrix
    paper_figures
