@@ -8557,3 +8557,45 @@ Next concrete actions after audit hardening:
    cluster/nightly campaign with the same trace schema, not as local CI jobs.
 3. Keep same-resolution runtime drift as the only drift gate. Do not compare
    production-floor rows against smoke-resolution frozen baselines.
+
+Progress update (2026-05-08): x-block right-preconditioned GPU full-FP lane
+
+- Added an opt-in x-block sparse-PC Krylov selector,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV={gmres,lgmres,bicgstab}`, with an
+  automatic GMRES rescue for non-GMRES candidates that fail the true-residual
+  gate. This keeps candidate experiments from compromising parity.
+- Office GPU full-trajectory LGMRES probe was rejected: it was residual-clean
+  but took `439` matvecs and about `103.4 s`, slower than the current GMRES
+  artifact.
+- Office GPU right-preconditioned GMRES probe on
+  `tokamak_1species_FPCollisions_withEr_fullTrajectories` was accepted:
+  residual `4.14e-15` against target `3.18e-14`, `187` matvecs, total trace
+  elapsed about `33.8-35.5 s`, active RSS about `1.18 GB`. The previous
+  production-floor artifact for the same row was `467` matvecs and about
+  `68.5 s` logged.
+- Neighboring office probes show the policy must stay narrow:
+  `tokamak_1species_FPCollisions_withEr_DKESTrajectories` became slightly worse
+  with right preconditioning (`252` matvecs, about `36.0 s`, compared with the
+  existing about `31.8 s` row), while the no-Er row remained clean. Therefore
+  the default right-preconditioned path is enabled only for tokamak full-FP Er
+  full-trajectory x-block solves (`useDKESExBDrift = false` with full trajectory
+  terms active).
+- Validation: the new right-preconditioned GPU full-trajectory HDF5 has `0`
+  mismatches against the Fortran v3 production-floor output at `rtol=5e-4`,
+  `atol=1e-9`; timing-only fields differ from the older JAX output as expected.
+  The merged GPU report was refreshed with the new `187` matvec trace-backed
+  row, and the README/benchmark summary figures were regenerated.
+
+Next concrete actions after right-PC promotion:
+
+1. Run the default right-PC full-trajectory row through the formal
+   `run_scaled_example_suite.py` harness on `office` when a same-resolution
+   Fortran reference root is staged there, so the report can be regenerated
+   without manual row replacement.
+2. Prototype a second, stricter lower-memory variant for right-PC full-FP:
+   smaller GMRES restart or memory-budgeted restart selection. Keep it opt-in
+   until it preserves the `187`-matvec class and does not increase active/device
+   memory.
+3. Keep LGMRES and BiCGStab as explicit experiment knobs only; do not promote
+   them unless a production-floor row shows a measured runtime/memory win with
+   clean residual and parity.
