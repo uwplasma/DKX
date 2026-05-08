@@ -835,14 +835,20 @@ def _parse_solver_trace_solver_stats(output_path: Path) -> tuple[list[int], list
         except Exception:
             continue
         method = data.get("solve_method") or data.get("selected_path")
-        if method is None:
-            metadata = data.get("metadata")
-            if isinstance(metadata, dict):
-                solver_metadata = metadata.get("solver_metadata")
-                if isinstance(solver_metadata, dict):
-                    method = solver_metadata.get("solve_method") or solver_metadata.get("selected_path")
+        metadata = data.get("metadata")
+        solver_metadata = metadata.get("solver_metadata") if isinstance(metadata, dict) else None
+        if isinstance(solver_metadata, dict):
+            realized_method = (
+                solver_metadata.get("solver_kind")
+                or solver_metadata.get("solve_method")
+                or solver_metadata.get("selected_path")
+            )
+            if realized_method is not None and (method is None or str(method).lower() == "auto"):
+                method = realized_method
         methods = [str(method).lower()] if method is not None else []
         matvec_count = data.get("matvec_count")
+        if matvec_count is None and isinstance(solver_metadata, dict):
+            matvec_count = solver_metadata.get("matvecs")
         if matvec_count is None:
             return [], methods
         try:
