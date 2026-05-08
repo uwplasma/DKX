@@ -321,6 +321,27 @@ def _format_improvement(
     )
 
 
+def _format_runtime_drift_summary(prefix: str, summary: dict[str, object]) -> str:
+    """Format only same-resolution runtime drift as a gate."""
+    status = str(summary.get("status", "")).strip().lower()
+    if status in {"not_applicable", "skipped"}:
+        reason = str(summary.get("reason", "")).strip()
+        suffix = f": {reason}" if reason else ""
+        return f"- {prefix} runtime drift watchlist: not applicable{suffix}"
+
+    flagged = int(summary.get("flagged_cases", 0))
+    threshold = summary.get("threshold_ratio", "-")
+    baseline = summary.get("baseline_report", "-")
+    cases = [str(case) for case in summary.get("cases", [])]
+    if flagged > 0:
+        return (
+            f"- {prefix} runtime drift watchlist vs `{baseline}`: "
+            f"`{flagged}` cases above `{threshold}x` "
+            f"({', '.join(cases[:4])})"
+        )
+    return f"- {prefix} runtime drift watchlist vs `{baseline}`: none"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update README full example-suite audit block.")
     parser.add_argument(
@@ -406,9 +427,9 @@ def main() -> int:
         BEGIN,
         f"Current `main` CPU audit comes from `{_repo_rel(out_root)}`.",
         (
-            f"Matching frozen-reference GPU audit comes from `{_repo_rel(gpu_out_root)}`."
+            f"Matching `main` GPU audit comes from `{_repo_rel(gpu_out_root)}`."
             if gpu_rows
-            else "Matching frozen-reference GPU audit: not available."
+            else "Matching `main` GPU audit: not available."
         ),
         "",
         f"- Recorded cases: `{len(rows)}/{total_cases}`",
@@ -439,31 +460,9 @@ def main() -> int:
             f"skipped_cases={gpu_key_summary.get('skipped_cases') or 0}`"
         )
     if cpu_runtime_drift_summary is not None:
-        cpu_flagged = int(cpu_runtime_drift_summary.get("flagged_cases", 0))
-        cpu_threshold = cpu_runtime_drift_summary.get("threshold_ratio", "-")
-        cpu_baseline = cpu_runtime_drift_summary.get("baseline_report", "-")
-        cpu_cases = list(cpu_runtime_drift_summary.get("cases", []))
-        if cpu_flagged > 0:
-            lines.append(
-                f"- CPU runtime drift watchlist vs `{cpu_baseline}`: "
-                f"`{cpu_flagged}` cases above `{cpu_threshold}x` "
-                f"({', '.join(cpu_cases[:4])})"
-            )
-        else:
-            lines.append(f"- CPU runtime drift watchlist vs `{cpu_baseline}`: none")
+        lines.append(_format_runtime_drift_summary("CPU", cpu_runtime_drift_summary))
     if gpu_runtime_drift_summary is not None:
-        gpu_flagged = int(gpu_runtime_drift_summary.get("flagged_cases", 0))
-        gpu_threshold = gpu_runtime_drift_summary.get("threshold_ratio", "-")
-        gpu_baseline = gpu_runtime_drift_summary.get("baseline_report", "-")
-        gpu_cases = list(gpu_runtime_drift_summary.get("cases", []))
-        if gpu_flagged > 0:
-            lines.append(
-                f"- GPU runtime drift watchlist vs `{gpu_baseline}`: "
-                f"`{gpu_flagged}` cases above `{gpu_threshold}x` "
-                f"({', '.join(gpu_cases[:4])})"
-            )
-        else:
-            lines.append(f"- GPU runtime drift watchlist vs `{gpu_baseline}`: none")
+        lines.append(_format_runtime_drift_summary("GPU", gpu_runtime_drift_summary))
     if manifest:
         resolution_policy = manifest.get("resolution_policy")
         scale_factor = manifest.get("scale_factor")
@@ -529,7 +528,7 @@ def main() -> int:
             "`jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. "
             "The JAX memory columns match the plot and use profiler active RSS deltas "
             "(`jax_incremental_max_rss_mb`) when present; full process peak RSS remains "
-            "available as `jax_max_rss_mb` in the frozen JSON reports.",
+            "available as `jax_max_rss_mb` in the merged JSON reports.",
             "The benchmark summary JSON records production-resolution floor violations for "
             "legacy frozen rows, so the table should be read as a reference-runtime-window "
             "comparison until every row has been rerun at the current production floor.",
