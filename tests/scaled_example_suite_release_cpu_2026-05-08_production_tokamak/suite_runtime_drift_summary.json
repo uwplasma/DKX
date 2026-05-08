@@ -1,6 +1,8 @@
 {
+  "status": "not_applicable",
+  "reason": "production-floor reruns are not same-resolution with the older frozen smoke baseline",
   "baseline_report": "tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json",
-  "candidate_report": "tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106/suite_report.json",
+  "candidate_report": "tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json",
   "threshold_ratio": 1.25,
   "min_baseline_runtime_s": 1.0,
   "flagged_cases": 0,
