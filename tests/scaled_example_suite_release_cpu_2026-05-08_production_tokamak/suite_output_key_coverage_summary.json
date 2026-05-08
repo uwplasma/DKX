@@ -1,0 +1,7 @@
+{
+  "audited_cases": 39,
+  "extra_total": null,
+  "missing_total": 0,
+  "skipped_cases": 0,
+  "source": "merged from frozen base plus production-floor bounded reruns"
+}
