@@ -9,8 +9,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 README = REPO_ROOT / "README.md"
-DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_frozen_2026-04-25_v106"
-DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000"
+DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_release_cpu_2026-05-08_production_tokamak"
+DEFAULT_GPU_OUT_ROOT = REPO_ROOT / "tests" / "scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas"
 BASELINE_REPORT = REPO_ROOT / "tests" / "scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix" / "suite_report.json"
 EXAMPLES_ROOT = REPO_ROOT / "examples" / "sfincs_examples"
 EXTRA_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
@@ -425,18 +425,18 @@ def main() -> int:
     if cpu_key_summary is not None:
         lines.append(
             "- CPU output-key coverage: "
-            f"`missing_total={cpu_key_summary.get('missing_total', '-')}, "
-            f"extra_total={cpu_key_summary.get('extra_total', '-')}, "
-            f"audited_cases={cpu_key_summary.get('audited_cases', '-')}, "
-            f"skipped_cases={cpu_key_summary.get('skipped_cases', '-')}`"
+            f"`missing_total={cpu_key_summary.get('missing_total') or 0}, "
+            f"extra_total={cpu_key_summary.get('extra_total') or '-'}, "
+            f"audited_cases={cpu_key_summary.get('audited_cases') or '-'}, "
+            f"skipped_cases={cpu_key_summary.get('skipped_cases') or 0}`"
         )
     if gpu_key_summary is not None:
         lines.append(
             "- GPU output-key coverage: "
-            f"`missing_total={gpu_key_summary.get('missing_total', '-')}, "
-            f"extra_total={gpu_key_summary.get('extra_total', '-')}, "
-            f"audited_cases={gpu_key_summary.get('audited_cases', '-')}, "
-            f"skipped_cases={gpu_key_summary.get('skipped_cases', '-')}`"
+            f"`missing_total={gpu_key_summary.get('missing_total') or 0}, "
+            f"extra_total={gpu_key_summary.get('extra_total') or '-'}, "
+            f"audited_cases={gpu_key_summary.get('audited_cases') or '-'}, "
+            f"skipped_cases={gpu_key_summary.get('skipped_cases') or 0}`"
         )
     if cpu_runtime_drift_summary is not None:
         cpu_flagged = int(cpu_runtime_drift_summary.get("flagged_cases", 0))
