@@ -8518,6 +8518,42 @@ Next concrete actions after this refresh:
    `withEr_fullTrajectories` to prototype the next solver candidate around
    Krylov/matvec-count reduction rather than output, HDF5, or device-allocation
    reductions.
-3. Keep the README top plot unchanged until the full production-floor benchmark
-   set is refreshed without `max_attempts`, `jax_error`, missing output keys, or
-   unclassified CPU/GPU drift.
+3. Completed below: refresh the README top plot only after the bounded
+   production-floor rows are merged with clean parity and the remaining
+   cluster-only 3D floor gaps are explicitly labeled.
+
+Progress update (2026-05-08): production-floor audit hardening
+
+- Refreshed the README/top-plot benchmark artifacts from the merged
+  production-floor tokamak CPU/GPU reports. The public summary now has `24`
+  plotted reference-runtime rows per backend, all `parity_ok`, zero strict
+  mismatches, zero missing Fortran output keys, and no `jax_error` or
+  `max_attempts`.
+- Replaced the merged GPU full-FP tokamak rows with the authoritative
+  production-floor GPU report so the frozen fixture preserves trace-derived
+  `jax_solver_kinds` and matvec counts. The full-FP GPU rows now explicitly
+  record `xblock_sparse_pc_gmres` with bounded matvec counts, while the heavy
+  PAS+Er row records `sparse_pc_gmres`.
+- Removed the stale merged `solver_path_audit.json` sidecar that still pointed
+  to lower-resolution 2026-04-28 logs. The suite report is now the authoritative
+  fixture for solver-kind/matvec regression gates in this production-floor
+  merged lane.
+- Marked CPU/GPU runtime-drift summaries as not applicable for this mixed
+  production-floor refresh: comparing production-floor reruns against older
+  lower-resolution frozen smoke reports is not a same-resolution drift gate.
+- Added regression tests for trace-parser realized solver metadata and for the
+  production GPU report's solver-kind/matvec fixtures.
+- Remaining benchmark-floor gap: `16` non-axisymmetric 3D rows are still
+  `remote_or_cluster_only` and below the current public production floor in the
+  merged release artifact. They remain a cluster/nightly campaign, not a local
+  ship blocker, until a dedicated large-memory node is allocated.
+
+Next concrete actions after audit hardening:
+
+1. Prototype a lower-matvec full-FP candidate for the slow GPU Er rows behind an
+   explicit opt-in gate. Promote only if residual/parity stay clean and active
+   or device memory is not worse.
+2. Run the remaining `remote_or_cluster_only` 3D production-floor rows as a
+   cluster/nightly campaign with the same trace schema, not as local CI jobs.
+3. Keep same-resolution runtime drift as the only drift gate. Do not compare
+   production-floor rows against smoke-resolution frozen baselines.

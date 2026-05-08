@@ -7,10 +7,11 @@ Validation against reference implementations
 reference implementation.
 
 On the current ``main`` branch, the release-facing comparison is the full vendored
-example-suite audit:
+example-suite audit, with production-floor tokamak reruns merged into the frozen
+reference suite:
 
-- CPU: ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
-- GPU: ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28``
+- CPU: ``tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak``
+- GPU: ``tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas``
 
 Those artifacts currently report:
 
@@ -20,7 +21,7 @@ Those artifacts currently report:
 - no ``jax_error``,
 - no ``max_attempts``.
 
-The frozen reports also generate a publication-facing runtime and memory
+The merged reports also generate a publication-facing runtime and memory
 comparison. The plotted rows are restricted to cases whose SFINCS Fortran v3
 reference runtime is at least ``10 s``; shorter rows remain CI parity/smoke
 checks unless they are rerun at production-comparison resolution.
@@ -30,7 +31,7 @@ checks unless they are rerun at production-comparison resolution.
    python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
 .. figure:: _static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png
-   :alt: sfincs_jax frozen CPU/GPU suite benchmark against SFINCS Fortran v3
+   :alt: sfincs_jax CPU/GPU suite benchmark against SFINCS Fortran v3
    :width: 92%
 
    Release benchmark generated from the profiled CPU/GPU suite reports. Panel A
