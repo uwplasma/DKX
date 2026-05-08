@@ -39,7 +39,7 @@ DEFAULT_CPU_REPORT = (
 DEFAULT_GPU_REPORT = (
     _REPO_ROOT
     / "tests"
-    / "scaled_example_suite_gpu_bounded_default_2026-04-28"
+    / "scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000"
     / "suite_report.json"
 )
 DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifacts"
@@ -92,6 +92,15 @@ def _build_parser() -> argparse.ArgumentParser:
             "Use 0 to regenerate the all-case smoke/regression comparison."
         ),
     )
+    parser.add_argument(
+        "--enforce-public-resolution-floor",
+        action="store_true",
+        help=(
+            "Fail if any plotted row is below the documented production-resolution floor. "
+            "By default, legacy frozen-report regeneration is allowed and the floor "
+            "violations are recorded in the summary JSON."
+        ),
+    )
     parser.add_argument("--stem", default=DEFAULT_STEM)
     return parser
 
@@ -102,11 +111,13 @@ def write_benchmark_summary(
     gpu_report: Path,
     summary_json: Path,
     min_fortran_runtime_s: float | None = DEFAULT_MIN_FORTRAN_RUNTIME_S,
+    enforce_public_resolution_floor: bool = False,
 ) -> dict[str, object]:
     payload = build_fortran_suite_benchmark_summary(
         cpu_report=Path(cpu_report),
         gpu_report=Path(gpu_report),
         min_fortran_runtime_s=min_fortran_runtime_s,
+        enforce_public_resolution_floor=enforce_public_resolution_floor,
     )
     summary_json.parent.mkdir(parents=True, exist_ok=True)
     summary_json.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -320,7 +331,7 @@ def plot_benchmark_summary(
     if min_fortran_runtime_s is None or float(min_fortran_runtime_s) <= 0.0:
         scope = "all audited example-suite cases"
     else:
-        scope = f"production-scale rows; Fortran v3 >= {float(min_fortran_runtime_s):g} s"
+        scope = f"reference-runtime rows; Fortran v3 >= {float(min_fortran_runtime_s):g} s"
     fig.suptitle(
         f"SFINCS Fortran v3 vs sfincs_jax cold/warm CPU/GPU: {scope}",
         fontsize=13.0,
@@ -332,7 +343,7 @@ def plot_benchmark_summary(
         "Cold = first external suite command. Warm runtime = jax_runtime_s_warm when present, otherwise CLI "
         "jax_logged_elapsed_s.\n"
         f"Excluded low-reference-runtime CI/smoke rows: {len(excluded_cases)}. "
-        "JAX memory bars use profiler active RSS deltas; full process RSS remains in the JSON/README audit fields.",
+        "Resolution-floor audit is recorded in JSON. JAX memory bars use profiler active RSS deltas.",
         ha="center",
         va="bottom",
         fontsize=8.0,
@@ -350,6 +361,7 @@ def main(argv: list[str] | None = None) -> int:
         gpu_report=Path(args.gpu_report),
         summary_json=Path(args.summary_json),
         min_fortran_runtime_s=float(args.min_fortran_runtime_s),
+        enforce_public_resolution_floor=bool(args.enforce_public_resolution_floor),
     )
     plot_benchmark_summary(
         cpu_report=Path(args.cpu_report),

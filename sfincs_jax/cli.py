@@ -824,7 +824,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Linear solver mode "
             "(auto|bicgstab|batched|incremental|dense|sparse_host|sparse_host_safe|"
-            "sparse_pc_gmres|sparse_lsmr|petsc_compat)"
+            "sparse_pc_gmres|xblock_sparse_pc_gmres|sparse_lsmr|petsc_compat)"
         ),
     )
     p_solve.add_argument(
@@ -937,6 +937,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "RHSMode=1 linear solver mode for output generation "
             "(auto|incremental|dense|sparse_host|sparse_host_safe|sparse_pc_gmres|"
+            "xblock_sparse_pc_gmres|"
             "sparse_lsmr|petsc_compat)."
         ),
     )
