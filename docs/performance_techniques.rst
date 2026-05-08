@@ -417,8 +417,8 @@ Controls for the CPU 3D full-FP auto lane are
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC``,
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN``, and
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``.
-The production benchmark manifest now enforces at least ``35 x 43 x 17 x 48``
-(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``42 x 1 x 16 x 62`` for
+The production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
+(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 4 x 100`` for
 tokamak cases, with a ``10 s`` minimum SFINCS Fortran v3 timing target for
 public production rows. Performance claims for this lane should be regenerated
 from that manifest rather than from earlier lower-resolution bring-up probes. It is

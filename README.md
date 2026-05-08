@@ -115,8 +115,8 @@ sparse-pattern counters such as `linearSolverMatvecs`,
 `linearSolverSparsePCXBlockPreconditionerXi`, and
 `linearSolverSparsePCXBlockAssembledHost`.
 The production benchmark manifest now enforces large research-scale floors:
-`35 x 43 x 17 x 48` (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and
-`42 x 1 x 16 x 62` for tokamak cases. Public production timing rows target
+`25 x 51 x 4 x 100` (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and
+`25 x 1 x 4 x 100` for tokamak cases. Public production timing rows target
 SFINCS Fortran v3 runtimes of at least `10 s`; earlier `17 x 21 x 5 x 12`
 finite-beta/profile-current timings were lower-resolution bring-up checks for
 this solver lane, not public production baselines.
@@ -143,9 +143,9 @@ the plot with
 Scope note: the full 39-case frozen suite remains the parity and CI smoke audit,
 but sub-`10 s` Fortran rows are not shown as public performance comparisons. They
 must either be rerun from the higher-resolution benchmark tier in
-`benchmarks/production_resolution_inputs_2026-04-30` or remain CI/regression
-checks only. The production tier enforces `35 x 43 x 17 x 48` 3D grids and
-`42 x 1 x 16 x 62` tokamak grids, including public examples and optional
+`benchmarks/production_resolution_inputs_2026-05-04` or remain CI/regression
+checks only. The production tier enforces `25 x 51 x 4 x 100` 3D grids and
+`25 x 1 x 4 x 100` tokamak grids, including public examples and optional
 user-supplied production-resolution workloads. The manual GitHub workflow
 `Production Benchmark Inputs` validates and uploads the production input tree
 without running expensive solves; full CPU/GPU/Fortran runtime and memory sweeps

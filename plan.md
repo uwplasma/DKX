@@ -8419,3 +8419,71 @@ Next concrete memory/performance actions:
    or BiCGStab/IDR-style short recurrence with sparse-PC preconditioning. Keep
    the current sparse-PC default until a candidate passes parity and residual
    gates on the production-floor cases.
+
+Progress update (2026-05-08): bounded production refresh after x-block sparse-PC
+
+- Fixed a benchmark-runner policy bug: `--fortran-min-runtime-s` now enforces
+  only the lower benchmark floor. It no longer acts as an implicit maximum
+  runtime cap unless `--fortran-max-runtime-s` is explicitly supplied. This
+  closed the false `max_attempts` artifact for
+  `tokamak_1species_FPCollisions_noEr_withPhi1InDKE`, whose frozen Fortran v3
+  reference takes about 41 s and should not be downscaled merely because the
+  production-floor minimum is 10 s.
+- Added solver-trace ingestion to the suite reports so warm-run sidecars record
+  the selected solver method and matvec count even when no PETSc/KSP-style log
+  line exists. Future reports can now distinguish `xblock_sparse_pc_gmres`,
+  `auto`, residual status, active memory, estimated dense/CSR/GMRES storage, and
+  true matvec count from the JSON trace artifacts.
+- Local bounded CPU production-floor refresh:
+  `tests/production_floor_cpu_bounded_xblock_2026-05-08/` has `6/6 parity_ok`,
+  zero practical mismatches, zero strict mismatches, and no missing Fortran v3
+  output keys for the tokamak PAS rows at `25 x 1 x 8 x 100` or
+  `25 x 1 x 4 x 100` for the Nx=1 row. The slowest JAX row is the two-species
+  PAS+Er full-trajectory case at about 41.6 s warm and 4.2 GB RSS, still below
+  the about 76.5 s Fortran v3 reference but still a memory-ratio target.
+- Office GPU bounded full-FP refresh:
+  `tests/production_floor_bounded_remote_gpu_xblock_floorfix_2026-05-08/` has
+  `5/5 parity_ok`, zero practical mismatches, zero strict mismatches, and no
+  missing Fortran v3 output keys for all bounded
+  `tokamak_1species_FPCollisions*` rows at `25 x 1 x 8 x 100`.
+- GPU runtime/memory delta versus the previous bounded sparse-PC report:
+  `tokamak_1species_FPCollisions_noEr` improved from about 150.2 s / 8.42 GB RSS
+  to 4.60 s / 0.95 GB RSS; `withEr_DKESTrajectories` improved from about
+  146.0 s / 8.43 GB RSS to 31.8 s / 1.34 GB RSS; `withEr_fullTrajectories`
+  improved from about 167.1 s / 8.43 GB RSS to 69.8 s / 1.40 GB RSS. The Phi1
+  and QN rows are unchanged within noise and remain parity-clean.
+- Fixed a profiler-wrapper mismatch exposed by the first targeted GPU profile:
+  `scripts/profile_write_output_trace.py` called the Python API with
+  `differentiable=None`, while the CLI uses `differentiable=False` for
+  throughput-oriented output generation. The wrapper now matches CLI semantics
+  by default and has an explicit `--differentiable` flag for implicit-solve
+  profiling. Before the fix, the same `withEr_fullTrajectories` input selected a
+  nonconverged implicit/incremental fallback and failed after about 3:27 with
+  residual `1.56e-1`.
+- Corrected targeted GPU profile for
+  `tokamak_1species_FPCollisions_withEr_fullTrajectories`:
+  `xblock_sparse_pc_gmres`, `467` matvecs, residual `1.48e-15` against target
+  `3.18e-14`, total trace elapsed about `66.1 s`, setup about `3.6 s`, solve
+  about `60.8 s`, diagnostics plus HDF5 under `0.7 s`, peak RSS about `1.40 GB`,
+  active RSS about `1.23 GB`, and sampled device peak about `240 MB`. This
+  classifies the remaining slow GPU FP+Er row as Krylov/matvec-count dominated,
+  not output, HDF5, or device-allocation dominated.
+- Current status: bounded CPU/GPU correctness and the worst full-FP sparse-PC
+  memory cliff are closed. Do not regenerate README production claims yet from
+  these partial bounded artifacts alone. The public benchmark plot/table should
+  be refreshed only after the same trace-backed policy is run on the broader
+  production-floor matrix or the remaining `remote_or_cluster_only` rows are
+  clearly labeled as deferred cluster artifacts.
+
+Next concrete actions after this refresh:
+
+1. Use the postprocessed bounded reports, now carrying solver-trace-derived
+   `jax_solver_kinds` and matvec counts, as regression fixtures for
+   route-selection and memory-policy tests.
+2. Use the corrected bounded GPU device-memory trace for
+   `withEr_fullTrajectories` to prototype the next solver candidate around
+   Krylov/matvec-count reduction rather than output, HDF5, or device-allocation
+   reductions.
+3. Keep the README top plot unchanged until the full production-floor benchmark
+   set is refreshed without `max_attempts`, `jax_error`, missing output keys, or
+   unclassified CPU/GPU drift.
