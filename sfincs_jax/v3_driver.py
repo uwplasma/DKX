@@ -11570,6 +11570,9 @@ def solve_v3_full_system_linear_gmres(
                 "acceptance_criterion": "true_residual",
                 "iterations": int(len(history or [])),
                 "matvecs": int(mv_count),
+                "gmres_restart": int(pc_restart),
+                "gmres_maxiter": int(pc_maxiter),
+                "sparse_pc_shift": float(pc_shift),
                 "setup_s": float(setup_s),
                 "solve_s": float(solve_s),
                 "elapsed_s": float(sparse_timer.elapsed_s()),
@@ -11578,6 +11581,16 @@ def solve_v3_full_system_linear_gmres(
                 "sparse_pattern_max_row_nnz": int(summary.max_row_nnz),
                 "sparse_pattern_build_s": float(pattern_build_s),
                 "sparse_pc_factor_s": float(pc_factor_s),
+                "sparse_pc_factor_nbytes_estimate": (
+                    None
+                    if getattr(factor_bundle_pc, "factor_nbytes_estimate", None) is None
+                    else int(getattr(factor_bundle_pc, "factor_nbytes_estimate"))
+                ),
+                "sparse_pc_factor_nnz_estimate": (
+                    None
+                    if getattr(factor_bundle_pc, "factor_nnz_estimate", None) is None
+                    else int(getattr(factor_bundle_pc, "factor_nnz_estimate"))
+                ),
             },
         )
     if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:

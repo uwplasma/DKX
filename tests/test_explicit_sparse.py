@@ -15,6 +15,7 @@ from sfincs_jax.explicit_sparse import (
     color_pattern_columns,
     estimate_csr_nbytes,
     estimate_dense_nbytes,
+    estimate_superlu_factor_storage,
     factorize_host_sparse_operator,
 )
 
@@ -255,6 +256,12 @@ def test_factorize_host_sparse_operator_solves_exactly() -> None:
     np.testing.assert_allclose(sol, np.linalg.solve(dense, rhs))
     assert factor.kind == "lu"
     assert factor.metadata.storage_kind == "csr"
+    assert factor.factor_nbytes_estimate is not None and factor.factor_nbytes_estimate > 0
+    assert factor.factor_nnz_estimate is not None and factor.factor_nnz_estimate >= bundle.matrix.nnz
+    assert estimate_superlu_factor_storage(factor.factor) == (
+        factor.factor_nbytes_estimate,
+        factor.factor_nnz_estimate,
+    )
 
 
 def test_factorize_host_sparse_operator_accepts_raw_sparse_matrix() -> None:

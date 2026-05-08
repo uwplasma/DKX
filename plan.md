@@ -8306,3 +8306,37 @@ Progress update (2026-05-04, bounded production-floor campaign):
   is 6.7-7.9 s and about 100-140 MB RSS. The next memory lane should target
   sparse-pattern assembly/factorization storage and a lower-memory Krylov
   preconditioner rather than reverting to the nonconverged XMG default.
+
+Progress update (2026-05-08): memory observability for the remaining lanes
+
+- Wired the existing memory model into solver trace emission. New traces now
+  populate `active_rss_mb`, `device_peak_mb` when profiling reports it,
+  `estimated_dense_nbytes`, `estimated_csr_nbytes`,
+  `estimated_gmres_basis_nbytes`, `matvec_count`, and
+  `metadata.memory_estimate` with dense/CSR totals and per-device estimates.
+- Sparse-PC metadata now records the actual GMRES restart, maximum iteration
+  count, diagonal shift, and SuperLU `L`/`U` factor storage estimate in addition
+  to sparse-pattern nonzeros, pattern-build time, factor time, setup time, solve
+  time, and true residual. This closes the observability prerequisite for the
+  remaining memory lane: the next benchmark artifacts can distinguish dense
+  storage, CSR storage, GMRES basis growth, and sparse-PC factorization/setup.
+- Acceptance gate for the next implementation remains unchanged: do not promote
+  a lower-memory solver path unless it is residual-clean, parity-clean, and
+  either at least 25% lower active/device memory at no more than 10% runtime
+  regression, or it fixes a nonconverged baseline within the documented
+  memory-limited rescue allowance.
+
+Next concrete memory/performance actions:
+
+1. Rerun one bounded CPU trace and one `office` GPU trace for the sparse-PC FP
+   offenders with `SFINCS_JAX_PROFILE=1` and, on GPU, device-memory profiling.
+   Confirm whether the measured peak is dominated by CSR operator storage,
+   SuperLU factorization, or GMRES basis/work vectors.
+2. Use the sparse-PC factor storage estimate to reject sparse-PC when the factor
+   estimate exceeds a configured host/GPU budget and a matrix-free alternative is
+   residual-clean.
+3. Prototype the next lower-memory candidate behind an explicit env gate:
+   smaller-restart right-preconditioned GMRES, LGMRES with bounded augmentation,
+   or BiCGStab/IDR-style short recurrence with sparse-PC preconditioning. Keep
+   the current sparse-PC default until a candidate passes parity and residual
+   gates on the production-floor cases.

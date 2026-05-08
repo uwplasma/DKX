@@ -109,6 +109,8 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
             "sparse_pattern_max_row_nnz": 9,
             "sparse_pattern_build_s": 0.1,
             "sparse_pc_factor_s": 0.15,
+            "sparse_pc_factor_nbytes_estimate": 4567,
+            "sparse_pc_factor_nnz_estimate": 321,
         },
     )
 
@@ -128,6 +130,8 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverSparsePatternMaxRowNnz"])) == 9
     assert float(np.asarray(data["linearSolverSparsePatternBuildTime"])) == pytest.approx(0.1)
     assert float(np.asarray(data["linearSolverSparsePCFactorTime"])) == pytest.approx(0.15)
+    assert int(np.asarray(data["linearSolverSparsePCFactorNbytesEstimate"])) == 4567
+    assert int(np.asarray(data["linearSolverSparsePCFactorNnzEstimate"])) == 321
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(0.2)
 
 

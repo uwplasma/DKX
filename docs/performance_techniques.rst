@@ -1500,6 +1500,17 @@ The intended production gate for future memory optimizations is:
 - auto-promote a candidate only when it is residual-clean, parity-clean, and
   materially faster or lower-memory than the incumbent on the same memory metric.
 
+Solver traces now carry both measured and estimated memory fields. The JSON
+sidecar records ``active_rss_mb``, ``device_peak_mb`` when available,
+``estimated_dense_nbytes``, ``estimated_csr_nbytes``,
+``estimated_gmres_basis_nbytes``, and a ``metadata.memory_estimate`` block with
+dense/CSR totals and per-device estimates. Sparse-PC traces also include the
+actual GMRES restart, maximum iteration count, diagonal shift, sparse pattern
+nonzeros, pattern-build time, preconditioner-factor time, and SuperLU ``L``/``U``
+factor storage estimates. This makes the next optimization pass auditable: a
+claimed memory win must reduce the measured active/device metric and should also
+reduce the estimated dominant storage term.
+
 The remaining high-impact memory lanes are algorithmic:
 
 - prefer matrix-free operators with structured preconditioners for production
