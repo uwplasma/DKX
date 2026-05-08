@@ -8325,6 +8325,13 @@ Progress update (2026-05-08): memory observability for the remaining lanes
   either at least 25% lower active/device memory at no more than 10% runtime
   regression, or it fixes a nonconverged baseline within the documented
   memory-limited rescue allowance.
+- Added an opt-in sparse-PC memory preflight budget:
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB`. When set, the sparse-PC path
+  estimates CSR operator storage, GMRES basis storage, and SuperLU/ILU factor
+  fill before factorization and raises a clear `MemoryError` if the estimate
+  exceeds the budget. A tiny forced sparse-PC check verified the guard fails
+  before factorization with an actionable message. Defaults are unchanged unless
+  the budget variable is set.
 
 Next concrete memory/performance actions:
 
@@ -8332,9 +8339,9 @@ Next concrete memory/performance actions:
    offenders with `SFINCS_JAX_PROFILE=1` and, on GPU, device-memory profiling.
    Confirm whether the measured peak is dominated by CSR operator storage,
    SuperLU factorization, or GMRES basis/work vectors.
-2. Use the sparse-PC factor storage estimate to reject sparse-PC when the factor
-   estimate exceeds a configured host/GPU budget and a matrix-free alternative is
-   residual-clean.
+2. Use production traces to tune the sparse-PC fill multiplier and budget for
+   memory-limited machines; keep it opt-in until a matrix-free alternative is
+   residual-clean for the same rows.
 3. Prototype the next lower-memory candidate behind an explicit env gate:
    smaller-restart right-preconditioned GMRES, LGMRES with bounded augmentation,
    or BiCGStab/IDR-style short recurrence with sparse-PC preconditioning. Keep

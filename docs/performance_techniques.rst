@@ -1393,6 +1393,13 @@ Controls:
   The default active-size bounds are
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN/MAX=10000/60000`` and
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN/MAX=10000/60000``.
+- ``SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB`` (default: unset). When set
+  to a positive value, sparse-PC GMRES estimates CSR operator storage, GMRES
+  basis storage, and SuperLU/ILU factor fill before factorization. If the
+  estimate exceeds the budget, the run raises a clear ``MemoryError`` before
+  entering the expensive factorization. Use
+  ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_FILL_ESTIMATE`` (default: ``8``) to
+  adjust the preflight fill multiplier for a known machine/case family.
 - ``SFINCS_JAX_LINEAR_STAGE2_RATIO`` (default: ``1e2``). Stage-2 GMRES only runs
   when ``||r|| / target`` exceeds this ratio (set ``<= 0`` to always allow).
 - ``SFINCS_JAX_PAS_STAGE2_SKIP_RATIO`` (default: ``1e6``) skips stage-2 for the

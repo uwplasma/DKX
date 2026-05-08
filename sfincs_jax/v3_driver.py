@@ -48,6 +48,7 @@ from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residu
 from .structured_velocity import factor_block_tridiagonal
 from .pas_smoother import adaptive_pas_smoother
 from .explicit_sparse import build_operator_from_matvec, build_operator_from_pattern, factorize_host_sparse_operator
+from .memory_model import estimate_sparse_pc_memory
 from .rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
@@ -11429,6 +11430,47 @@ def solve_v3_full_system_linear_gmres(
             pc_shift = float(pc_shift_env) if pc_shift_env else (1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0)
         except ValueError:
             pc_shift = 1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0
+        pc_restart, pc_maxiter = rhs1_parse_polish_gmres_config(
+            restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
+            maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
+            default_restart=max(20, int(restart)),
+            default_maxiter=max(100, int(maxiter) if maxiter is not None else 400),
+            min_restart=2,
+            min_maxiter=1,
+        )
+        budget_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB", "").strip()
+        if budget_env:
+            try:
+                budget_mb = float(budget_env)
+            except ValueError:
+                budget_mb = 0.0
+            if budget_mb > 0.0:
+                fill_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_FILL_ESTIMATE", "").strip()
+                try:
+                    fill_estimate = float(fill_env) if fill_env else 8.0
+                except ValueError:
+                    fill_estimate = 8.0
+                memory_estimate = estimate_sparse_pc_memory(
+                    unknowns=int(op.total_size),
+                    gmres_restart=int(pc_restart),
+                    csr_nnz=int(summary.nnz),
+                    dtype=np.float64,
+                    factor_fill_estimate=float(fill_estimate),
+                    device_count=max(1, int(jax.device_count())),
+                )
+                estimated_mb = (
+                    float(memory_estimate.csr_total_nbytes or memory_estimate.dense_total_nbytes)
+                    / 1.0e6
+                )
+                if estimated_mb > float(budget_mb):
+                    raise MemoryError(
+                        "sparse_pc_gmres memory preflight exceeds "
+                        "SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB: "
+                        f"estimated={estimated_mb:.3f} MB budget={float(budget_mb):.3f} MB "
+                        f"unknowns={int(op.total_size)} csr_nnz={int(summary.nnz)} "
+                        f"restart={int(pc_restart)} factor_fill_estimate={float(fill_estimate):.3g}. "
+                        "Raise the budget, lower the resolution, or use a lower-memory matrix-free route."
+                    )
 
         def _sparse_pc_factor_mv(x_np: np.ndarray) -> jnp.ndarray:
             x_jnp = jnp.asarray(x_np, dtype=rhs.dtype)
@@ -11455,14 +11497,6 @@ def solve_v3_full_system_linear_gmres(
 
         side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
         precondition_side = side_env if side_env in {"left", "right", "none"} else "left"
-        pc_restart, pc_maxiter = rhs1_parse_polish_gmres_config(
-            restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
-            maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
-            default_restart=max(20, int(restart)),
-            default_maxiter=max(100, int(maxiter) if maxiter is not None else 400),
-            min_restart=2,
-            min_maxiter=1,
-        )
         pc_form = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM", "").strip().lower()
         if pc_form not in {"", "scipy_left", "scipy", "explicit_left", "petsc_left"}:
             pc_form = ""
