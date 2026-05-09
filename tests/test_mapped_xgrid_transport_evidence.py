@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,8 +12,11 @@ from sfincs_jax.mapped_xgrid_transport_evidence import (
     copy_namelist_with_mapped_xgrid,
     copy_namelist_with_resolution,
     run_rational_tail_transport_comparison,
+    transport_evidence_report_to_dict,
     transport_matrix_error,
     transport_solve_summary,
+    write_transport_evidence_csv,
+    write_transport_evidence_json,
 )
 from sfincs_jax.namelist import Namelist, read_sfincs_input
 from sfincs_jax.v3 import grids_from_namelist
@@ -214,6 +219,36 @@ def test_run_rational_tail_transport_comparison_can_reuse_reference_result():
 
     assert report.reference_summary.n_x == 9
     assert seen_nx == [5]
+
+
+def test_transport_evidence_report_artifacts_roundtrip(tmp_path: Path):
+    report = run_rational_tail_transport_comparison(
+        _nml(),
+        log_length_values=(-0.5, 0.0),
+        reference_result=_fake_transport_solve(nml=copy_namelist_with_resolution(_nml(), nx=9)),
+        solve_fn=_fake_transport_solve,
+    )
+
+    payload = transport_evidence_report_to_dict(report, metadata={"case": "tiny_pas"})
+    assert payload["kind"] == "mapped_xgrid_transport_evidence"
+    assert payload["metadata"]["case"] == "tiny_pas"
+    assert payload["reference_summary"]["n_x"] == 9
+    assert payload["rows"][0]["solver_kinds"] == ["gmres", "sparse_lu"]
+
+    json_path = tmp_path / "evidence.json"
+    csv_path = tmp_path / "evidence.csv"
+    write_transport_evidence_json(report, json_path, metadata={"case": "tiny_pas"})
+    write_transport_evidence_csv(report, csv_path)
+
+    reloaded = json.loads(json_path.read_text(encoding="utf-8"))
+    assert reloaded["best_by_transport_error_log_length"] == -0.5
+    assert reloaded["reference_summary"]["active_size"] == 8
+
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 2
+    assert rows[0]["solver_kinds"] == "gmres;sparse_lu"
+    assert rows[0]["reference_n_x"] == "9"
 
 
 def test_run_rational_tail_transport_comparison_rejects_empty_scan():

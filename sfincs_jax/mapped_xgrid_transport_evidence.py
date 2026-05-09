@@ -10,8 +10,11 @@ scheme assumptions that are not yet mapped-grid compatible.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, Mapping, Sequence
+import csv
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -22,6 +25,38 @@ from .v3_driver import V3TransportMatrixSolveResult, solve_v3_transport_matrix_l
 
 
 SolveFn = Callable[..., V3TransportMatrixSolveResult]
+
+
+EVIDENCE_CSV_FIELDS = (
+    "log_length",
+    "moment_objective",
+    "moment_loss",
+    "regularization_loss",
+    "matrix_relative_frobenius_error",
+    "matrix_max_abs_error",
+    "max_residual_norm",
+    "max_relative_residual_norm",
+    "total_elapsed_time_s",
+    "total_size",
+    "active_size",
+    "active_fraction",
+    "n_x",
+    "use_active_dof_mode",
+    "solver_kinds",
+    "solve_methods",
+    "min_dx",
+    "width_ratio",
+    "smoothness",
+    "jac_roughness",
+    "tail_mass_proxy",
+    "reference_total_size",
+    "reference_active_size",
+    "reference_active_fraction",
+    "reference_n_x",
+    "reference_max_residual_norm",
+    "reference_max_relative_residual_norm",
+    "reference_total_elapsed_time_s",
+)
 
 
 @dataclass(frozen=True)
@@ -94,6 +129,87 @@ class MappedTransportEvidenceReport:
         """Return the candidate closest to the reference transport matrix."""
 
         return min(self.rows, key=lambda row: row.matrix_relative_frobenius_error)
+
+
+def _json_scalar(value: Any) -> Any:
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float):
+        return value if np.isfinite(value) else None
+    if isinstance(value, dict):
+        return {str(key): _json_scalar(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_scalar(item) for item in value]
+    return value
+
+
+def _csv_scalar(value: Any) -> Any:
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float) and not np.isfinite(value):
+        return ""
+    if isinstance(value, (list, tuple)):
+        return ";".join(str(item) for item in value)
+    if value is None:
+        return ""
+    return value
+
+
+def transport_evidence_report_to_dict(
+    report: MappedTransportEvidenceReport,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a JSON-serializable mapped transport evidence payload."""
+
+    payload = {
+        "kind": "mapped_xgrid_transport_evidence",
+        "reference_summary": asdict(report.reference_summary),
+        "rows": [asdict(row) for row in report.rows],
+        "best_by_moment_log_length": report.best_by_moment.log_length,
+        "best_by_transport_error_log_length": report.best_by_transport_error.log_length,
+        "metadata": dict(metadata or {}),
+    }
+    return _json_scalar(payload)
+
+
+def write_transport_evidence_json(
+    report: MappedTransportEvidenceReport,
+    path: str | Path,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+) -> None:
+    """Write mapped transport evidence as a stable JSON artifact."""
+
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    payload = transport_evidence_report_to_dict(report, metadata=metadata)
+    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def write_transport_evidence_csv(report: MappedTransportEvidenceReport, path: str | Path) -> None:
+    """Write candidate mapped-grid evidence rows as a flat CSV artifact."""
+
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    reference = report.reference_summary
+    with output.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=EVIDENCE_CSV_FIELDS)
+        writer.writeheader()
+        for row in report.rows:
+            record = asdict(row)
+            record.update(
+                {
+                    "reference_total_size": reference.total_size,
+                    "reference_active_size": reference.active_size,
+                    "reference_active_fraction": reference.active_fraction,
+                    "reference_n_x": reference.n_x,
+                    "reference_max_residual_norm": reference.max_residual_norm,
+                    "reference_max_relative_residual_norm": reference.max_relative_residual_norm,
+                    "reference_total_elapsed_time_s": reference.total_elapsed_time_s,
+                }
+            )
+            writer.writerow({key: _csv_scalar(record.get(key)) for key in EVIDENCE_CSV_FIELDS})
 
 
 def _copy_indexed(indexed: Mapping[str, Mapping[str, Mapping[tuple[int, ...], object]]]) -> dict:
