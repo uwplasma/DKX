@@ -61,6 +61,10 @@ main file:
   storage for sparse-PC routes. These are estimates of factor arrays, not full
   process RSS, and should be compared with solver-trace active/device memory
   fields when auditing memory-limited runs.
+- The optional solver-trace sidecar also records string-valued sparse-PC policy
+  metadata such as ``sparse_pc_permc_spec`` and ``sparse_pc_factor_dtype``. Use
+  this sidecar when auditing why two runs with the same input used different
+  sparse-factor ordering or precision.
 
 For a publication-style PDF diagnostics panel from an existing output file:
 

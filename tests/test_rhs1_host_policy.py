@@ -24,6 +24,7 @@ from sfincs_jax.rhs1_host_policy import (
     rhs1_tokamak_fp_er_sparse_pc_auto_allowed,
     rhs1_tokamak_fp_noer_sparse_pc_auto_allowed,
     rhs1_tokamak_pas_er_sparse_pc_auto_allowed,
+    rhs1_tokamak_pas_noer_sparse_pc_auto_allowed,
 )
 
 
@@ -504,6 +505,42 @@ def test_rhs1_tokamak_pas_er_sparse_pc_targets_production_floor_window(monkeypat
     assert rhs1_tokamak_pas_er_sparse_pc_auto_allowed(**{**common, "active_size": 1})
 
 
+def test_rhs1_tokamak_pas_noer_sparse_pc_targets_production_floor_window(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC_MAX", raising=False)
+
+    pas_tokamak = _op(has_fp=False, has_pas=True, constraint_scheme=2)
+    pas_tokamak.n_zeta = 1
+    common = dict(
+        op=pas_tokamak,
+        active_size=25_466,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+        er_abs=0.0,
+    )
+    assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**common)
+    assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "active_size": 5_604})
+    assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "backend": "gpu"})
+    assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "backend": "cuda"})
+    assert not rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "backend": "tpu"})
+    assert not rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "active_size": 2_000})
+    assert not rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "use_implicit": True})
+    assert not rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "solve_method_kind": "dense"})
+    assert not rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "er_abs": 1.0e-2})
+
+    non_tokamak = _op(has_fp=False, has_pas=True, constraint_scheme=2)
+    non_tokamak.n_zeta = 5
+    assert not rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "op": non_tokamak})
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC", "off")
+    assert not rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**common)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC", "on")
+    assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "active_size": 1})
+
+
 def test_rhs1_tokamak_fp_er_sparse_pc_targets_gpu_production_floor(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN", raising=False)
@@ -524,7 +561,7 @@ def test_rhs1_tokamak_fp_er_sparse_pc_targets_gpu_production_floor(monkeypatch) 
     )
     assert rhs1_tokamak_fp_er_sparse_pc_auto_allowed(**common)
     assert rhs1_tokamak_fp_er_sparse_pc_auto_allowed(**{**common, "backend": "cuda"})
-    assert not rhs1_tokamak_fp_er_sparse_pc_auto_allowed(**{**common, "backend": "cpu"})
+    assert rhs1_tokamak_fp_er_sparse_pc_auto_allowed(**{**common, "backend": "cpu"})
     assert not rhs1_tokamak_fp_er_sparse_pc_auto_allowed(**{**common, "active_size": 2_000})
     assert not rhs1_tokamak_fp_er_sparse_pc_auto_allowed(**{**common, "use_implicit": True})
     assert not rhs1_tokamak_fp_er_sparse_pc_auto_allowed(**{**common, "solve_method_kind": "dense"})
