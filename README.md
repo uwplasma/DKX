@@ -95,12 +95,15 @@ DKES trajectories and `11.0 s` for full trajectories, with active RSS deltas
 near `1.1 GB`; the full-trajectory row uses right-preconditioned GMRES with a
 short restart.
 Large constrained-PAS profile-current decks also auto-select sparse-PC GMRES
-when the problem size is in the validated production window. Tokamak PAS+Er
-production-floor sparse-PC runs use the measured `MMD_ATA` SuperLU ordering by
-default and now factor only the active `Nxi_for_x` degrees of freedom, which
-cuts sparse-factor fill while preserving strict Fortran parity on the audited
-CPU and RTX A4000 GPU rows. Explicit sparse-host LU and x-block sparse PC remain
-available:
+when the problem size is in the validated production window. Tokamak PAS no-Er
+and PAS+Er production-floor sparse-PC runs use the measured `MMD_ATA` SuperLU
+ordering by default and now factor only the active `Nxi_for_x` degrees of
+freedom, which cuts sparse-factor fill while preserving strict Fortran parity on
+the audited CPU and RTX A4000 GPU rows. On the public no-Er production rows,
+this lowers the two-species CPU active RSS to about `0.39 GB`, cuts the
+two-species GPU runtime to about `5.2 s`, and cuts the one-species `Nx=4` GPU
+runtime from about `28.8 s` to about `3.0 s`, all with zero Fortran output
+mismatches. Explicit sparse-host LU and x-block sparse PC remain available:
 
 ```bash
 sfincs_jax write-output \
@@ -552,26 +555,26 @@ Full per-case runtime / memory table:
 | `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories` | 93.439 | 1.767 | 0.02x | 1.177 | 0.01x | 3.138 | 0.03x | 2.363 | 0.03x | 94.0 | 303.6 | 3.23x | 372.2 | 3.96x | 0/207 (strict 0/207) | 0/207 (strict 0/207) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_FPCollisions_noEr_withPhi1InDKE` | 41.132 | 13.276 | 0.32x | 12.527 | 0.30x | 16.744 | 0.41x | 16.744 | 0.41x | 169.1 | 796.8 | 4.71x | 613.9 | 3.63x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_FPCollisions_noEr_withQN` | 10.952 | 9.019 | 0.82x | 8.255 | 0.75x | 7.175 | 0.66x | 7.175 | 0.66x | 159.4 | 800.0 | 5.02x | 469.1 | 2.94x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr` | 75.566 | 3.073 | 0.04x | 3.073 | 0.04x | 14.166 | 0.19x | 12.654 | 0.17x | 155.3 | 696.3 | 4.48x | 659.0 | 4.24x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_noEr_Nx1` | 75.533 | 2.519 | 0.03x | 2.519 | 0.03x | 28.827 | 0.38x | 27.403 | 0.36x | 119.2 | 473.8 | 3.97x | 563.0 | 4.72x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_noEr` | 75.566 | 2.297 | 0.03x | 2.281 | 0.03x | 3.629 | 0.05x | 3.591 | 0.05x | 155.3 | 336.5 | 2.17x | 1094.1 | 7.05x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_noEr_Nx1` | 75.533 | 1.339 | 0.02x | 1.330 | 0.02x | 2.728 | 0.04x | 2.718 | 0.04x | 119.2 | 278.2 | 2.33x | 1076.7 | 9.03x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_PASCollisions_noEr_withQN` | 75.242 | 5.147 | 0.07x | 5.147 | 0.07x | 11.444 | 0.15x | 10.019 | 0.13x | 165.0 | 612.3 | 3.71x | 459.5 | 2.78x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 75.698 | 7.049 | 0.09x | 6.231 | 0.08x | 14.423 | 0.19x | 13.193 | 0.17x | 248.9 | 1319.5 | 5.30x | 1572.1 | 6.32x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_noEr` | 75.362 | 2.855 | 0.04x | 2.855 | 0.04x | 14.717 | 0.20x | 13.226 | 0.18x | 215.3 | 1753.0 | 8.14x | 1112.0 | 5.17x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
+| `tokamak_2species_PASCollisions_noEr` | 75.362 | 2.033 | 0.03x | 2.023 | 0.03x | 5.243 | 0.07x | 5.207 | 0.07x | 215.3 | 393.5 | 1.83x | 1168.7 | 5.43x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 9.753 | 0.13x | 9.743 | 0.13x | 22.165 | 0.29x | 22.158 | 0.29x | 386.6 | 1585.2 | 4.10x | 2124.0 | 5.49x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 
 Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
-- `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.9s (delta=1.1s)
+- `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.0s (delta=2.0s)
+- `tokamak_1species_PASCollisions_noEr_Nx1`: 2.4s -> 1.3s (delta=1.1s)
 - `quick_2species_FPCollisions_noEr`: 2.1s -> 1.5s (delta=0.6s)
 - `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories`: 2.3s -> 1.8s (delta=0.5s)
 - `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories`: 2.2s -> 1.7s (delta=0.5s)
-- `inductiveE_noEr`: 2.1s -> 1.6s (delta=0.5s)
 
 Largest CPU process peak-RSS improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
-- `tokamak_2species_PASCollisions_noEr`: 2088.6 MB -> 2030.6 MB (delta=58.0 MB)
+- `tokamak_2species_PASCollisions_noEr`: 2088.6 MB -> 584.8 MB (delta=1503.8 MB)
+- `tokamak_1species_PASCollisions_noEr`: 612.9 MB -> 527.8 MB (delta=85.1 MB)
+- `tokamak_1species_PASCollisions_noEr_Nx1`: 520.3 MB -> 464.3 MB (delta=56.0 MB)
 - `geometryScheme5_3species_loRes`: 569.4 MB -> 540.3 MB (delta=29.1 MB)
 - `geometryScheme4_2species_withEr_fullTrajectories_withQN`: 512.4 MB -> 486.4 MB (delta=26.0 MB)
-- `geometryScheme4_2species_noEr_withPhi1InDKE`: 506.0 MB -> 480.9 MB (delta=25.1 MB)
-- `filteredW7XNetCDF_2species_magneticDrifts_withEr`: 536.3 MB -> 512.0 MB (delta=24.3 MB)
 <!-- END FAST_BRANCH_AUDIT -->
 
 ## Documentation

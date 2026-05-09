@@ -8806,3 +8806,61 @@ Next concrete actions after active sparse-PC:
 2. Re-rank the refreshed reports. The remaining memory lane should move away
    from tokamak PAS+Er sparse-PC setup and toward geometry-rich PAS/HSX
    diagnostics/output retention and larger-resolution research workloads.
+
+Progress update (2026-05-09): active-DOF sparse-PC for tokamak PAS no-Er
+
+- Profiled the public production-floor
+  `tokamak_2species_PASCollisions_noEr` row at `25 x 1 x 8 x 100`. The current
+  default matrix-free Krylov path was already fast on CPU (`2.14 s` external,
+  residual `2.30e-18`) but spent most active memory inside the solve, peaking at
+  about `1.74 GB` active RSS. A forced active-DOF sparse-PC run reached the same
+  Fortran outputs with `0/212` mismatches, residual `3.53e-10` against target
+  `6.14e-10`, and active RSS about `0.44 GB`.
+- Validated the same sparse-PC route on `office` RTX A4000. The default GPU
+  matrix-free report row was `14.7 s` cold / `13.2 s` logged; the active
+  sparse-PC route completed in `5.24 s` cold / `5.21 s` logged with residual
+  `2.23e-10` against target `6.14e-10`. GPU-vs-Fortran comparison stayed
+  `0/212` mismatches; CPU-vs-GPU differences were only solver timing metadata.
+- Landed a scoped `SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC` policy for
+  non-differentiable, axisymmetric, no-Phi1, constrained-PAS RHSMode=1 systems
+  in the measured active-size window. The existing
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF=auto` path now covers the validated
+  no-Er window as well as the PAS+Er window.
+- Refreshed tracked CPU/GPU benchmark reports, README benchmark table, benchmark
+  summary JSON/PNG/PDF, and performance documentation. The README-facing row now
+  reports CPU `2.033 s` / `393.5 MB`, GPU `5.243 s` / `1168.7 MB`, and zero
+  CPU/GPU Fortran mismatches.
+
+Next concrete actions after tokamak PAS no-Er sparse-PC:
+
+1. Run focused policy, sparse-PC, validation-artifact, docs, and a bounded full
+   local test pass.
+2. Re-rank the benchmark reports again. If no tokamak PAS sparse-PC rows remain
+   as dominant CPU memory offenders, move to geometry-rich PAS/HSX diagnostics
+   and output-retention memory, where the likely fix is reducing retained
+   diagnostic arrays rather than changing the linear solver.
+
+Follow-up update (2026-05-09): one-species PAS no-Er threshold closure
+
+- Checked the same no-Er sparse-PC policy on the public one-species PAS no-Er
+  rows. The `Nx=8` row auto-selected active sparse-PC after the first no-Er
+  policy change and remained `0/212` against Fortran. CPU active RSS dropped
+  from the public report's `696 MB` to `336 MB`; the RTX A4000 runtime dropped
+  from `14.2 s` to `3.6 s`.
+- The `Nx=4` row was below the original `10000` active-unknown floor and stayed
+  on the matrix-free path. A forced sparse-PC probe was `0/212` against Fortran,
+  reduced CPU active RSS from `525 MB` to `309 MB` in the local profile, and
+  reduced RTX A4000 runtime from the public `28.8 s` row to `3.0 s`. GPU process
+  peak RSS increased modestly (`~1.17 GB` to `~1.28 GB`), so this is a deliberate
+  runtime-offender closure rather than a GPU memory win.
+- Lowered the no-Er tokamak PAS sparse-PC active-size floor to `5000`, preserving
+  the upper bound and all geometry/Phi1/RHSMode guards. Refreshed the CPU/GPU
+  benchmark reports, README table, benchmark summary JSON/PNG/PDF, and
+  performance documentation for the one-species no-Er rows.
+
+Next concrete actions after no-Er tokamak PAS closure:
+
+1. Run the full focused validation stack again after the threshold change.
+2. Re-rank remaining CPU/GPU offenders. Expect the remaining dominant cases to
+   be PAS+Er GPU memory/runtime and full-FP no-Er Phi1/QN rows, then
+   geometry-rich PAS/HSX diagnostics/output retention.
