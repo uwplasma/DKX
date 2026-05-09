@@ -1382,13 +1382,24 @@ Controls:
   measured production-floor window use the host sparse-PC GMRES route. This
   avoids the PAS-ILU/Schur stage-2 stall while preserving Fortran parity for the
   audited one- and two-species ``25 x 1 x 8 x 100`` CPU and RTX A4000 GPU cases.
-  The route defaults to
+  The route defaults to the lower-fill ``MMD_ATA`` SuperLU column ordering for
+  constrained PAS systems,
   ``SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT=1e-8`` and
   ``SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH=0`` for constrained PAS unless
   the user overrides those values. Measured default auto-selection runtimes are
-  about ``23 s``/``45 s`` on CPU for one-/two-species and ``44 s``/``86 s`` on an
-  RTX A4000 GPU for the same one-/two-species production-floor cases, all with
-  zero Fortran output mismatches.
+  about ``6.2 s``/``11.8 s`` logged on CPU for one-/two-species and
+  ``13.2 s``/``25.0 s`` logged on an RTX A4000 GPU for the same one-/two-species
+  production-floor cases, all with zero strict Fortran output mismatches. The
+  older ``COLAMD`` ordering remains available through
+  ``SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC=COLAMD``; it is higher-fill on these
+  cases and is retained as an explicit reproducibility knob.
+- ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE`` (default: ``float64`` for
+  sparse-PC GMRES). Set to ``32`` only for controlled memory experiments. When
+  single-precision factors are requested, the first Krylov attempt is capped by
+  ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FP32_PROBE_MAXITER`` (default: ``2``) before
+  falling back to ``float64`` if the true residual target is not met. This
+  prevents weak low-precision preconditioners from consuming the full run
+  timeout.
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` and
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC`` (default: auto). On GPU/CUDA,
   non-differentiable tokamak full-FP RHSMode=1 rows in the measured

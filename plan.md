@@ -8677,3 +8677,47 @@ Next concrete actions after CPU x-block promotion:
 2. For the next code change, target memory-ratio reduction, not another blanket
    Krylov selector. Candidate routes are PAS diagnostics/output chunking and
    lower-retention sparse/preconditioner lifetimes.
+
+Progress update (2026-05-09): constrained-PAS sparse-PC fill reduction
+
+- Re-ranked the current production reports after the CPU x-block promotion. The
+  highest remaining trace-backed sparse-PC offender was
+  `tokamak_2species_PASCollisions_withEr_fullTrajectories`: about `40.0 s`
+  logged, `4.0 GB` RSS, `sparse_pc_factor_s=34.2 s`, and an estimated
+  `821.9 MB` SuperLU factor. The Krylov solve itself was already cheap
+  (`5` matvecs), so the bottleneck was sparse factor fill/setup.
+- Tested CPU single-precision sparse-PC factorization. It reduced factor
+  storage but failed the performance gate: GMRES exceeded `4600` matvecs and
+  hit the `180 s` timeout. The code now keeps sparse-PC factorization `float64`
+  by default; `SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE=32` remains an
+  explicit memory experiment, guarded by true-residual metadata, a capped
+  first-attempt probe (`SFINCS_JAX_RHSMODE1_SPARSE_PC_FP32_PROBE_MAXITER`,
+  default `2`), and float64 retry logic.
+- Tested SuperLU column orderings on the same production row. `MMD_AT_PLUS_A`
+  was fast and lower-memory but introduced four current-related strict
+  mismatches (`max_abs≈1.64e-6`), so it was rejected. `MMD_ATA` was strict-clean
+  and lower-fill.
+- Landed `MMD_ATA` as the scoped default only for constrained-PAS sparse-PC
+  GMRES. `COLAMD` remains the global explicit-sparse default and can still be
+  forced with `SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC=COLAMD`.
+- Validation:
+  - CPU production-floor PAS+Er one-/two-species rows, no solver env overrides:
+    both `parity_ok`, strict `0/212`; logged times `6.231 s` / `11.848 s`;
+    RSS `1319.5 MB` / `2262.5 MB`.
+  - Clean `office` RTX A4000 GPU clone, no solver env overrides:
+    both `parity_ok`, strict `0/212`; logged times `13.193 s` / `25.021 s`;
+    RSS `1572.1 MB` / `2322.5 MB`.
+  - Focused tests: sparse-helper metadata and tiny sparse-PC solve checks
+    passed (`4 passed`); changed test files pass `ruff`.
+- Refreshed the tracked CPU/GPU benchmark reports, README benchmark table,
+  benchmark summary JSON/PNG/PDF, and performance/outputs documentation with
+  the new trace-backed values and the new sparse-PC ordering metadata.
+
+Next concrete actions after constrained-PAS fill reduction:
+
+1. Run the focused validation-artifact tests and Sphinx docs build to catch any
+   benchmark-summary or documentation drift.
+2. Re-rank the refreshed reports again. If the tokamak PAS+Er rows are no
+   longer top memory offenders, move to the geometry-rich PAS/HSX rows where
+   memory is dominated by diagnostics/output retention rather than sparse-PC
+   factor fill.
