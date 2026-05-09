@@ -19979,6 +19979,10 @@ class V3TransportMatrixSolveResult:
     elapsed_time_s: jnp.ndarray  # (N,)
     transport_output_fields: dict[str, np.ndarray] | None = None
     rhs_norms_by_rhs: dict[int, jnp.ndarray] | None = None
+    active_size: int | None = None
+    use_active_dof_mode: bool | None = None
+    solver_kinds_by_rhs: dict[int, str] | None = None
+    solve_methods_by_rhs: dict[int, str] | None = None
 
 
 def _rewrite_xla_flags(flags: str, *, cpu_threads: int | None, host_devices: int | None) -> str:
@@ -21289,6 +21293,8 @@ def solve_v3_transport_matrix_linear_gmres(
 
     state_vectors: dict[int, jnp.ndarray] = {}
     residual_norms: dict[int, jnp.ndarray] = {}
+    solver_kinds_by_rhs: dict[int, str] = {}
+    solve_methods_by_rhs: dict[int, str] = {}
     elapsed_s = np.zeros((n,), dtype=np.float64)
     elapsed_history_transport: list[float] = []
     op_rhs_by_index = [with_transport_rhs_settings(op0, which_rhs=which_rhs) for which_rhs in which_rhs_values]
@@ -22378,6 +22384,8 @@ def solve_v3_transport_matrix_linear_gmres(
                 if store_state_vectors:
                     state_vectors[which_rhs] = x_full
                 residual_norms[which_rhs] = res_norm_full
+                solver_kinds_by_rhs[which_rhs] = str(solver_kind_used)
+                solve_methods_by_rhs[which_rhs] = str(solve_method_used)
                 if stream_diagnostics:
                     _collect_transport_outputs(int(which_rhs), x_full)
                 if recycle_k > 0:
@@ -22773,6 +22781,8 @@ def solve_v3_transport_matrix_linear_gmres(
                     ax_full = apply_v3_full_system_operator_cached(op_matvec, x_full)
                     residual_vec = ax_full - rhs
                     residual_norms[which_rhs] = jnp.linalg.norm(residual_vec)
+                solver_kinds_by_rhs[which_rhs] = str(solver_kind_used)
+                solve_methods_by_rhs[which_rhs] = str(solve_method_used)
                 if stream_diagnostics:
                     _collect_transport_outputs(int(which_rhs), x_full)
                 if recycle_k > 0:
@@ -23042,4 +23052,8 @@ def solve_v3_transport_matrix_linear_gmres(
         elapsed_time_s=jnp.asarray(elapsed_s, dtype=jnp.float64),
         transport_output_fields=transport_output_fields,
         rhs_norms_by_rhs=rhs_norms,
+        active_size=int(active_size),
+        use_active_dof_mode=bool(use_active_dof_mode),
+        solver_kinds_by_rhs=solver_kinds_by_rhs,
+        solve_methods_by_rhs=solve_methods_by_rhs,
     )
