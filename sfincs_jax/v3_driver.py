@@ -11500,6 +11500,21 @@ def solve_v3_full_system_linear_gmres(
             and op.fblock.pas is not None
             and op.fblock.fp is None
         )
+        tokamak_pas_noer_pc = bool(
+            constrained_pas_pc
+            and int(getattr(op, "n_zeta", 1)) == 1
+            and float(er_abs_sparse_pc) == 0.0
+        )
+        tokamak_pas_er_pc = bool(
+            constrained_pas_pc
+            and int(getattr(op, "n_zeta", 1)) == 1
+            and float(er_abs_sparse_pc) > 0.0
+            and (
+                bool(use_dkes)
+                or bool(include_xdot_sparse_pc)
+                or bool(include_electric_field_xi_sparse_pc)
+            )
+        )
         tokamak_fp_er_pc = bool(
             int(op.rhs_mode) == 1
             and int(op.constraint_scheme) == 1
@@ -11538,16 +11553,7 @@ def solve_v3_full_system_linear_gmres(
                 sparse_pc_active_forced_on
                 or (
                     sparse_pc_active_auto
-                    and constrained_pas_pc
-                    and op.fblock.pas is not None
-                    and op.fblock.fp is None
-                    and int(getattr(op, "n_zeta", 1)) == 1
-                    and float(er_abs_sparse_pc) > 0.0
-                    and (
-                        bool(use_dkes)
-                        or bool(include_xdot_sparse_pc)
-                        or bool(include_electric_field_xi_sparse_pc)
-                    )
+                    and (tokamak_pas_er_pc or tokamak_pas_noer_pc)
                 )
             )
             and (not sparse_pc_active_forced_off)

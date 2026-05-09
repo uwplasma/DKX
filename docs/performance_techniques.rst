@@ -1377,6 +1377,19 @@ Controls:
   preconditioner probe (one matvec) and, if the residual ratio still exceeds
   ``SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO``, skip stage-2/strong Krylov attempts
   and proceed directly to the dense fallback.
+- ``SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC`` (default: auto). On CPU/GPU,
+  non-differentiable tokamak PAS no-Er RHSMode=1 runs in the measured
+  production-floor window use the host sparse-PC GMRES route. This avoids the
+  matrix-free Krylov memory cliff for the audited two-species ``25 x 1 x 8 x
+  100`` row and the GPU runtime cliff for the one-species ``25 x 1 x 4 x 100``
+  row while preserving Fortran parity. The default route factors the active
+  ``Nxi_for_x`` degrees of freedom rather than the padded full Legendre grid:
+  the public two-species CPU row drops from about ``1.75 GB`` active RSS on the
+  matrix-free path to about ``0.39 GB`` with sparse-PC GMRES, the two-species
+  RTX A4000 row drops from about ``14.7 s`` to about ``5.2 s``, and the
+  one-species ``Nx=4`` RTX A4000 row drops from about ``28.8 s`` to about
+  ``3.0 s``. Set this variable to ``0`` to force the older matrix-free path, or
+  to ``1`` to force the route while retaining the remaining guards.
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC`` (default: auto). On CPU/GPU,
   non-differentiable tokamak PAS+Er full-trajectory RHSMode=1 runs in the
   measured production-floor window use the host sparse-PC GMRES route. This
@@ -1400,11 +1413,11 @@ Controls:
   ``SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC=COLAMD``; it is higher-fill on these
   cases and is retained as an explicit reproducibility knob.
 - ``SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF`` (default: auto for the measured
-  tokamak PAS+Er constrained-PAS sparse-PC window). Set to ``0`` to factor the
-  padded full system for reproducibility experiments, or ``1`` to force the
-  active-DOF sparse-PC reduction on another RHSMode=1 sparse-PC case. Forced use
-  outside the measured window should be treated as an experiment until the
-  output is compared against the Fortran reference for that geometry.
+  tokamak PAS no-Er/PAS+Er constrained-PAS sparse-PC windows). Set to ``0`` to
+  factor the padded full system for reproducibility experiments, or ``1`` to
+  force the active-DOF sparse-PC reduction on another RHSMode=1 sparse-PC case.
+  Forced use outside the measured window should be treated as an experiment
+  until the output is compared against the Fortran reference for that geometry.
 - ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE`` (default: ``float64`` for
   sparse-PC GMRES). Set to ``32`` only for controlled memory experiments. When
   single-precision factors are requested, the first Krylov attempt is capped by
