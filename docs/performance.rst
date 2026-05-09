@@ -207,9 +207,21 @@ Recent current-tip PAS full-trajectory fix:
   full-trajectory default remains unchanged until a matching measured GPU gate
   proves a win.
 
-Recent current-tip GPU tokamak PAS+Er fix:
+Recent production-floor tokamak PAS sparse-PC fill reduction:
 
-- ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` now uses a bounded one-GPU analytic-tokamak PAS+Er route that avoids the expensive ``xblock_tz`` setup and tightens the GMRES tolerance to ``1e-8``. The focused clean-remote ``office`` GPU probe completed parity-clean in ``3.249 s`` with about ``922 MB`` RSS, down from the previous release-table entry of ``18.199 s`` and ``1014.5 MB``. On GPU, medium bounded tokamak PAS+Er cases remain in the structured ``xblock_tz`` active-size window because that route avoids slow sparse fallback on the two-species GPU case.
+- Constrained tokamak PAS no-Er/PAS+Er sparse-PC GMRES now defaults to
+  ``MMD_ATA`` SuperLU ordering and active ``Nxi_for_x`` factorization in the
+  measured production-floor window. On the two-species no-Er ``25 x 1 x 8 x
+  100`` row, the CPU default is strict-clean at about ``2.0 s`` logged and
+  ``0.39 GB`` active RSS, while the RTX A4000 default is strict-clean at about
+  ``5.2 s`` logged and ``1.17 GB`` active RSS. The one-species no-Er ``Nx=8``
+  row is strict-clean at about ``2.3 s`` / ``0.34 GB`` on CPU and ``3.6 s`` on
+  the RTX A4000; the one-species no-Er ``Nx=4`` row is strict-clean at about
+  ``1.3 s`` / ``0.31 GB`` on CPU and ``3.0 s`` on the RTX A4000. On the PAS+Er
+  CPU rows, the one-/two-species cases are strict-clean and log about ``6.2 s``
+  / ``9.7 s`` with active RSS about ``1.3 GB`` / ``1.6 GB``. The previous
+  ``COLAMD`` ordering remains an explicit override, but it is higher-fill on
+  these audited constrained-PAS rows.
 
 Recent production-resolution CPU tokamak Er fix:
 
