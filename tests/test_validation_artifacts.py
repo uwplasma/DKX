@@ -295,7 +295,7 @@ def test_production_gpu_report_preserves_trace_backed_solver_metadata() -> None:
     expected = {
         "tokamak_1species_FPCollisions_noEr": ("xblock_sparse_pc_gmres", 60),
         "tokamak_1species_FPCollisions_withEr_DKESTrajectories": ("xblock_sparse_pc_gmres", 250),
-        "tokamak_1species_FPCollisions_withEr_fullTrajectories": ("xblock_sparse_pc_gmres", 600),
+        "tokamak_1species_FPCollisions_withEr_fullTrajectories": ("xblock_sparse_pc_gmres", 150),
         "tokamak_2species_PASCollisions_withEr_fullTrajectories": ("sparse_pc_gmres", 20),
     }
     for case, (solver_kind, max_matvecs) in expected.items():
@@ -305,6 +305,29 @@ def test_production_gpu_report_preserves_trace_backed_solver_metadata() -> None:
         assert row["jax_solver_kinds"] == [solver_kind]
         assert row["jax_solver_iters_n"] == 1
         assert row["jax_solver_iters_max"] <= max_matvecs
+
+
+def test_production_cpu_report_uses_xblock_for_tokamak_fp_er_rows() -> None:
+    report = (
+        Path(__file__).resolve().parents[1]
+        / "tests"
+        / "scaled_example_suite_release_cpu_2026-05-08_production_tokamak"
+        / "suite_report.json"
+    )
+    rows = {str(row["case"]): row for row in json.loads(report.read_text())}
+
+    expected = {
+        "tokamak_1species_FPCollisions_withEr_DKESTrajectories": 160,
+        "tokamak_1species_FPCollisions_withEr_fullTrajectories": 120,
+    }
+    for case, max_matvecs in expected.items():
+        row = rows[case]
+        assert row["status"] == "parity_ok"
+        assert row["strict_n_mismatch_common"] == 0
+        assert row["jax_solver_kinds"] == ["xblock_sparse_pc_gmres"]
+        assert row["jax_solver_iters_n"] == 1
+        assert row["jax_solver_iters_max"] <= max_matvecs
+        assert row["jax_max_rss_mb"] < 500.0
 
 
 def test_autodiff_sensitivity_summary_records_gradient_and_residual_gates() -> None:
