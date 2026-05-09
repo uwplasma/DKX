@@ -295,7 +295,7 @@ def test_production_gpu_report_preserves_trace_backed_solver_metadata() -> None:
     expected = {
         "tokamak_1species_FPCollisions_noEr": ("xblock_sparse_pc_gmres", 60),
         "tokamak_1species_FPCollisions_withEr_DKESTrajectories": ("xblock_sparse_pc_gmres", 250),
-        "tokamak_1species_FPCollisions_withEr_fullTrajectories": ("xblock_sparse_pc_gmres", 600),
+        "tokamak_1species_FPCollisions_withEr_fullTrajectories": ("xblock_sparse_pc_gmres", 120),
         "tokamak_2species_PASCollisions_withEr_fullTrajectories": ("sparse_pc_gmres", 20),
     }
     for case, (solver_kind, max_matvecs) in expected.items():

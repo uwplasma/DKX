@@ -85,8 +85,9 @@ full-FP x-block path, per-x/TZ blocks up to size `3000` use exact sparse LU
 before falling back to ILU; this measured policy removes the remaining
 production-floor full-trajectory cliff without changing PAS or autodiff paths.
 For tokamak full-FP Er full-trajectory x-block solves, the same path now uses
-right-preconditioned GMRES by default; the production-floor GPU row drops from
-`467` to `187` matvecs while staying residual-clean.
+right-preconditioned GMRES with a short restart by default; the
+production-floor GPU row drops from `467` to `106` matvecs while staying
+residual-clean.
 Large constrained-PAS
 profile-current decks also auto-select sparse-PC GMRES when the problem size is
 in the validated production window. Explicit sparse-host LU and x-block sparse
