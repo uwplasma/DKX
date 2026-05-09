@@ -8599,3 +8599,43 @@ Next concrete actions after right-PC promotion:
 3. Keep LGMRES and BiCGStab as explicit experiment knobs only; do not promote
    them unless a production-floor row shows a measured runtime/memory win with
    clean residual and parity.
+
+Progress update (2026-05-09): formal right-PC short-restart GPU full-FP lane
+
+- Ran the accepted right-preconditioned full-trajectory row through the formal
+  `run_scaled_example_suite.py` harness on `office` against the staged
+  same-resolution Fortran v3 reference. The case remained `parity_ok` with
+  `0/214` practical mismatches, `0/214` strict mismatches, and no missing
+  Fortran output keys.
+- Swept x-block right-PC GMRES restarts on the production-floor GPU row:
+  default `80` restart was strict-clean but about `38.7 s` logged / `187`
+  matvecs; restart `40` was strict-clean at about `16.2 s` logged / `99`
+  matvecs; restart `30` was strict-clean at about `12.9 s` logged / `86`
+  matvecs; restart `20` was strict-clean at about `10.5-11.3 s` logged / `106`
+  matvecs. Restart `10` was rejected because it was already slower than the
+  accepted candidates after more than a minute.
+- Landed a narrow automatic restart cap of `20` only when the code also
+  auto-selects the measured right-preconditioned tokamak full-FP Er
+  full-trajectory x-block policy. Explicit
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART` overrides and the neighboring
+  DKES/no-Er branches are unchanged.
+- Verified the new default, with no restart environment variable, through the
+  same formal GPU harness: residual/parity stayed clean, `gmres_restart=20`,
+  `default_short_restart_capped=true`, `106` matvecs, about `12.6 s` logged and
+  about `14.0 s` subprocess wall time. The merged GPU report fixture was
+  refreshed with this trace-backed row.
+- Local validation after landing the narrow policy: focused x-block/report tests
+  passed, docs built successfully with Sphinx, and the full local suite passed
+  with `1106 passed in 567.89 s`.
+
+Next concrete actions after short-restart promotion:
+
+1. Keep the public benchmark plot unchanged unless a future same-resolution
+   report includes this row in the public runtime floor; the current row remains
+   below the `10 s` Fortran-reference plotting threshold.
+2. Run the same formal harness for a small neighboring row only if a future
+   heuristic widens beyond the current full-trajectory-only gate. The current
+   tests and office probes intentionally keep the cap narrow.
+3. Move back to the remaining true memory-ratio offenders; this x-block lane is
+   now runtime-dominated by the unavoidable matrix-free matvec work rather than
+   by solver-path selection.

@@ -349,6 +349,33 @@ def _rhs1_xblock_precondition_side(
     return ("right" if default_right else "left"), default_right
 
 
+def _rhs1_xblock_gmres_restart(
+    *,
+    requested_restart: int,
+    restart_env_value: str,
+    krylov_method: str,
+    default_right_preconditioned: bool,
+) -> tuple[int, bool]:
+    """Return the x-block sparse-PC GMRES restart and whether it was auto-capped.
+
+    The production-floor GPU full-FP Er full-trajectory row converges faster
+    with a short restarted GMRES basis once the x-block preconditioner is applied
+    on the right. Keep this cap restricted to the measured auto-selected policy;
+    explicit user restart overrides and other trajectory branches remain
+    untouched.
+    """
+
+    restart_use = max(1, int(requested_restart))
+    if str(restart_env_value).strip():
+        return restart_use, False
+    if str(krylov_method).strip().lower() != "gmres":
+        return restart_use, False
+    if not bool(default_right_preconditioned):
+        return restart_use, False
+    capped = min(restart_use, 20)
+    return capped, bool(capped != restart_use)
+
+
 def _use_solver_jit(size_hint: int | None = None) -> bool:
     env = os.environ.get("SFINCS_JAX_SOLVER_JIT", "").strip().lower()
     if env in {"1", "true", "yes", "on"}:
@@ -11497,6 +11524,7 @@ def solve_v3_full_system_linear_gmres(
             sparse_pc_fp_dense_velocity_block = None
 
         sparse_timer = Timer()
+        pc_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "").strip()
         pc_restart, pc_maxiter = rhs1_parse_polish_gmres_config(
             restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
             maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
@@ -11591,8 +11619,14 @@ def solve_v3_full_system_linear_gmres(
                         1,
                         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                         f"ignoring unknown SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV={xblock_krylov_env!r}",
-                    )
+                )
                 xblock_krylov_method = "gmres"
+            pc_restart, xblock_default_restart_capped = _rhs1_xblock_gmres_restart(
+                requested_restart=int(pc_restart),
+                restart_env_value=pc_restart_env,
+                krylov_method=str(xblock_krylov_method),
+                default_right_preconditioned=bool(xblock_default_right_pc),
+            )
             progress_every_env = os.environ.get("SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY", "").strip()
             try:
                 progress_every = int(progress_every_env) if progress_every_env else 25
@@ -11761,6 +11795,7 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     "precondition_side": str(precondition_side),
                     "default_right_preconditioned": bool(xblock_default_right_pc),
+                    "default_short_restart_capped": bool(xblock_default_restart_capped),
                     "gmres_restart": int(pc_restart),
                     "gmres_maxiter": int(pc_maxiter),
                     "setup_s": float(setup_s),

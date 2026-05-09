@@ -15,7 +15,11 @@ from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_mat_aij
 from sfincs_jax.v3_sparse_pattern import summarize_v3_sparse_pattern, v3_full_system_conservative_sparsity_pattern
-from sfincs_jax.v3_driver import _rhs1_xblock_precondition_side, solve_v3_full_system_linear_gmres
+from sfincs_jax.v3_driver import (
+    _rhs1_xblock_gmres_restart,
+    _rhs1_xblock_precondition_side,
+    solve_v3_full_system_linear_gmres,
+)
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
@@ -60,6 +64,40 @@ def test_xblock_precondition_side_defaults_right_only_for_full_fp_er() -> None:
         include_electric_field_xi=True,
     )
     assert (side, auto_right) == ("left", False)
+
+
+def test_xblock_gmres_restart_caps_only_auto_right_preconditioned_path() -> None:
+    restart, capped = _rhs1_xblock_gmres_restart(
+        requested_restart=80,
+        restart_env_value="",
+        krylov_method="gmres",
+        default_right_preconditioned=True,
+    )
+    assert (restart, capped) == (20, True)
+
+    restart, capped = _rhs1_xblock_gmres_restart(
+        requested_restart=80,
+        restart_env_value="40",
+        krylov_method="gmres",
+        default_right_preconditioned=True,
+    )
+    assert (restart, capped) == (80, False)
+
+    restart, capped = _rhs1_xblock_gmres_restart(
+        requested_restart=80,
+        restart_env_value="",
+        krylov_method="lgmres",
+        default_right_preconditioned=True,
+    )
+    assert (restart, capped) == (80, False)
+
+    restart, capped = _rhs1_xblock_gmres_restart(
+        requested_restart=80,
+        restart_env_value="",
+        krylov_method="gmres",
+        default_right_preconditioned=False,
+    )
+    assert (restart, capped) == (80, False)
 
 
 def test_conservative_sparse_pattern_covers_pas_fortran_matrix() -> None:
