@@ -209,9 +209,12 @@ Recent current-tip PAS full-trajectory fix:
 
 Recent production-floor tokamak PAS sparse-PC fill reduction:
 
-- Constrained tokamak PAS no-Er/PAS+Er sparse-PC GMRES now defaults to
-  ``MMD_ATA`` SuperLU ordering and active ``Nxi_for_x`` factorization in the
-  measured production-floor window. On the two-species no-Er ``25 x 1 x 8 x
+- Constrained tokamak PAS sparse-PC GMRES now defaults to active
+  ``Nxi_for_x`` factorization in the measured production-floor window. The no-Er
+  rows and one-species PAS+Er row use measured ``MMD_ATA`` SuperLU ordering,
+  while the multi-species PAS+Er full-trajectory row uses the lower-fill
+  measured ``MMD_AT_PLUS_A`` ordering.
+  On the two-species no-Er ``25 x 1 x 8 x
   100`` row, the CPU default is strict-clean at about ``2.0 s`` logged and
   ``0.39 GB`` active RSS, while the RTX A4000 default is strict-clean at about
   ``5.2 s`` logged and ``1.17 GB`` active RSS. The one-species no-Er ``Nx=8``
