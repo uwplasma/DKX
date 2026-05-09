@@ -1197,6 +1197,16 @@ def _rhsmode1_fp_xblock_assembled_host_allowed(
     )
 
 
+def _rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+    *, op: V3FullSystemOperator, preconditioner_species: int
+) -> bool:
+    """Return whether x-block host assembly preserves the requested species coupling."""
+
+    if int(preconditioner_species) != 0:
+        return True
+    return int(getattr(op, "n_species", 0) or 0) == 1
+
+
 def _rhsmode1_large_cpu_xblock_skip_primary_allowed(
     *,
     op: V3FullSystemOperator,
@@ -9134,7 +9144,10 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
                 and (not bool(op.include_phi1))
                 and op.fblock.fp is not None
                 and op.fblock.pas is None
-                and int(preconditioner_species) != 0
+                and _rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+                    op=op,
+                    preconditioner_species=preconditioner_species,
+                )
                 and int(preconditioner_xi) == 1
                 and (not bool(op.point_at_x0))
             )
@@ -11570,7 +11583,10 @@ def solve_v3_full_system_linear_gmres(
                     and (not bool(op.include_phi1))
                     and op.fblock.fp is not None
                     and op.fblock.pas is None
-                    and int(preconditioner_species) != 0
+                    and _rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+                        op=op,
+                        preconditioner_species=preconditioner_species,
+                    )
                     and int(xblock_preconditioner_xi) == 1
                     and (not bool(op.point_at_x0))
                 )
