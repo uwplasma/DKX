@@ -85,10 +85,15 @@ full-FP x-block path, per-x/TZ blocks up to size `3000` use exact sparse LU
 before falling back to ILU; this measured policy removes the remaining
 production-floor full-trajectory cliff without changing PAS or autodiff paths.
 For tokamak full-FP Er x-block solves, the same path is now the default on CPU
-and GPU. The production-floor CPU Er rows drop from minute-scale generic
-`auto` solves to `3-4 s` logged x-block sparse-PC solves; the GPU
-full-trajectory row uses right-preconditioned GMRES with a short restart and
-drops from `467` to `106` matvecs while staying residual-clean.
+and GPU. For one-species decks, the Fortran-style
+`preconditioner_species = 0` setting is treated as equivalent to the compact
+per-species x-block because there is no inter-species coupling to preserve. The
+production-floor CPU Er rows now run in about `1 s` logged / `1.7-1.9 s` cold
+external time with about `0.42-0.44 GB` RSS instead of multi-GB dense-assembly
+setup. On an RTX A4000, the same rows are residual-clean at about `23.3 s` for
+DKES trajectories and `11.0 s` for full trajectories, with active RSS deltas
+near `1.1 GB`; the full-trajectory row uses right-preconditioned GMRES with a
+short restart.
 Large constrained-PAS profile-current decks also auto-select sparse-PC GMRES
 when the problem size is in the validated production window. Tokamak PAS+Er
 production-floor sparse-PC runs use the measured `MMD_ATA` SuperLU ordering by
