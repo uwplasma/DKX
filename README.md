@@ -96,10 +96,12 @@ near `1.1 GB`; the full-trajectory row uses right-preconditioned GMRES with a
 short restart.
 Large constrained-PAS profile-current decks also auto-select sparse-PC GMRES
 when the problem size is in the validated production window. Tokamak PAS no-Er
-and PAS+Er production-floor sparse-PC runs use the measured `MMD_ATA` SuperLU
-ordering by default and now factor only the active `Nxi_for_x` degrees of
-freedom, which cuts sparse-factor fill while preserving strict Fortran parity on
-the audited CPU and RTX A4000 GPU rows. On the public no-Er production rows,
+production-floor sparse-PC runs use the measured `MMD_ATA` SuperLU ordering by
+default; multi-species PAS+Er full-trajectory runs use the lower-fill measured
+`MMD_AT_PLUS_A` ordering. Both routes factor only the active `Nxi_for_x`
+degrees of freedom, which cuts sparse-factor fill while preserving strict
+Fortran parity on the audited CPU and RTX A4000 GPU rows. On the public no-Er
+production rows,
 this lowers the two-species CPU active RSS to about `0.39 GB`, cuts the
 two-species GPU runtime to about `5.2 s`, and cuts the one-species `Nx=4` GPU
 runtime from about `28.8 s` to about `3.0 s`, all with zero Fortran output

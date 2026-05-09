@@ -961,6 +961,28 @@ def _rhsmode1_explicit_sparse_pattern_probe_enabled() -> bool:
     return env in {"1", "true", "yes", "on", "pattern"}
 
 
+def _rhsmode1_sparse_pc_default_permc_spec(
+    *,
+    constrained_pas_pc: bool,
+    tokamak_pas_er_pc: bool,
+    n_species: int,
+) -> str:
+    """Return the measured SuperLU column-ordering default for sparse-PC RHSMode=1.
+
+    Constrained PAS systems usually benefit from ``MMD_ATA``. The only measured
+    exception kept as a default is the multi-species tokamak PAS+Er
+    full-trajectory window, where ``MMD_AT_PLUS_A`` lowers fill and runtime on
+    both CPU and one-GPU validation runs. One-species PAS+Er stays on
+    ``MMD_ATA`` because the same ordering slowed the measured GPU row.
+    """
+
+    if bool(tokamak_pas_er_pc) and int(n_species) > 1:
+        return "MMD_AT_PLUS_A"
+    if bool(constrained_pas_pc):
+        return "MMD_ATA"
+    return "COLAMD"
+
+
 def _maybe_rhsmode1_full_sparse_pattern(op: V3FullSystemOperator, emit: Callable[[int, str], None] | None = None):
     if not _rhsmode1_explicit_sparse_pattern_probe_enabled():
         return None
@@ -11946,7 +11968,11 @@ def solve_v3_full_system_linear_gmres(
             sparse_pc_factor_dtype_initial = np.dtype(np.float64)
         sparse_pc_factor_dtype_used = sparse_pc_factor_dtype_initial
         sparse_pc_factor_dtype_retry: str | None = None
-        sparse_pc_default_permc_spec = "MMD_ATA" if constrained_pas_pc else "COLAMD"
+        sparse_pc_default_permc_spec = _rhsmode1_sparse_pc_default_permc_spec(
+            constrained_pas_pc=bool(constrained_pas_pc),
+            tokamak_pas_er_pc=bool(tokamak_pas_er_pc),
+            n_species=int(op.n_species),
+        )
         sparse_pc_permc_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC", "").strip().upper()
         sparse_pc_permc_spec = (
             sparse_pc_permc_env
