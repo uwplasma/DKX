@@ -349,6 +349,33 @@ def _rhs1_xblock_precondition_side(
     return ("right" if default_right else "left"), default_right
 
 
+def _rhs1_xblock_gmres_restart(
+    *,
+    requested_restart: int,
+    restart_env_value: str,
+    krylov_method: str,
+    default_right_preconditioned: bool,
+) -> tuple[int, bool]:
+    """Return the x-block sparse-PC GMRES restart and whether it was auto-capped.
+
+    The production-floor GPU full-FP Er full-trajectory row converges faster
+    with a short restarted GMRES basis once the x-block preconditioner is applied
+    on the right. Keep this cap restricted to the measured auto-selected policy;
+    explicit user restart overrides and other trajectory branches remain
+    untouched.
+    """
+
+    restart_use = max(1, int(requested_restart))
+    if str(restart_env_value).strip():
+        return restart_use, False
+    if str(krylov_method).strip().lower() != "gmres":
+        return restart_use, False
+    if not bool(default_right_preconditioned):
+        return restart_use, False
+    capped = min(restart_use, 20)
+    return capped, bool(capped != restart_use)
+
+
 def _use_solver_jit(size_hint: int | None = None) -> bool:
     env = os.environ.get("SFINCS_JAX_SOLVER_JIT", "").strip().lower()
     if env in {"1", "true", "yes", "on"}:
@@ -830,7 +857,9 @@ def _build_host_sparse_direct_factor_from_matvec(
     pattern=None,
     emit: Callable[[int, str], None] | None = None,
     default_diag_pivot_thresh: float = 1.0,
+    default_permc_spec: str = "COLAMD",
 ):
+    factor_dtype_np = np.dtype(factor_dtype)
     block_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS", "").strip()
     dense_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DENSE_MAX_MB", "").strip()
     csr_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "").strip()
@@ -855,6 +884,9 @@ def _build_host_sparse_direct_factor_from_matvec(
     factor_kind = "ilu" if factor_kind_env in {"ilu", "spilu"} else "lu"
     ilu_fill_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_FILL_FACTOR", "").strip()
     ilu_drop_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_DROP_TOL", "").strip()
+    default_permc_spec_use = str(default_permc_spec).strip().upper()
+    if default_permc_spec_use not in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}:
+        default_permc_spec_use = "COLAMD"
     permc_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC", "").strip().upper()
     pivot_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH", "").strip()
     try:
@@ -866,7 +898,7 @@ def _build_host_sparse_direct_factor_from_matvec(
     except ValueError:
         ilu_drop_tol = 1.0e-4
     if permc_env not in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}:
-        permc_env = "COLAMD"
+        permc_env = default_permc_spec_use
     try:
         diag_pivot_thresh = float(pivot_env) if pivot_env else float(default_diag_pivot_thresh)
     except ValueError:
@@ -884,7 +916,7 @@ def _build_host_sparse_direct_factor_from_matvec(
         operator_bundle = build_operator_from_matvec(
             _matvec_np,
             n=int(n),
-            dtype=np.float64,
+            dtype=factor_dtype_np,
             backend=jax.default_backend(),
             block_cols=int(block_cols),
             dense_max_mb=float(dense_max_mb),
@@ -898,7 +930,7 @@ def _build_host_sparse_direct_factor_from_matvec(
         operator_bundle = build_operator_from_pattern(
             _matvec_np,
             pattern=pattern,
-            dtype=np.float64,
+            dtype=factor_dtype_np,
             backend=jax.default_backend(),
             csr_max_mb=float(csr_max_mb),
             drop_tol=float(drop_tol),
@@ -910,6 +942,7 @@ def _build_host_sparse_direct_factor_from_matvec(
             "explicit_sparse: "
             f"storage={operator_bundle.metadata.storage_kind} "
             f"reason={operator_bundle.metadata.reason} factor_kind={factor_kind} "
+            f"factor_dtype={factor_dtype_np.name} "
             f"permc={permc_env} diag_pivot={float(diag_pivot_thresh):.3g}",
         )
     factor_bundle = factorize_host_sparse_operator(
@@ -1162,6 +1195,16 @@ def _rhsmode1_fp_xblock_assembled_host_allowed(
         use_implicit=bool(use_implicit),
         backend=jax.default_backend(),
     )
+
+
+def _rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+    *, op: V3FullSystemOperator, preconditioner_species: int
+) -> bool:
+    """Return whether x-block host assembly preserves the requested species coupling."""
+
+    if int(preconditioner_species) != 0:
+        return True
+    return int(getattr(op, "n_species", 0) or 0) == 1
 
 
 def _rhsmode1_large_cpu_xblock_skip_primary_allowed(
@@ -9101,7 +9144,10 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
                 and (not bool(op.include_phi1))
                 and op.fblock.fp is not None
                 and op.fblock.pas is None
-                and int(preconditioner_species) != 0
+                and _rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+                    op=op,
+                    preconditioner_species=preconditioner_species,
+                )
                 and int(preconditioner_xi) == 1
                 and (not bool(op.point_at_x0))
             )
@@ -11447,18 +11493,27 @@ def solve_v3_full_system_linear_gmres(
             raise NotImplementedError(
                 "solve_method='sparse_pc_gmres'/'xblock_sparse_pc_gmres' is currently implemented for RHSMode=1 only."
             )
-        if use_active_dof_mode:
-            raise NotImplementedError(
-                "solve_method='sparse_pc_gmres'/'xblock_sparse_pc_gmres' currently targets the full system; set SFINCS_JAX_ACTIVE_DOF=0 "
-                "or use the default matrix-free solver for active-DOF runs."
-            )
-
         constrained_pas_pc = bool(
             int(op.rhs_mode) == 1
             and int(op.constraint_scheme) == 2
             and (not bool(op.include_phi1))
             and op.fblock.pas is not None
             and op.fblock.fp is None
+        )
+        tokamak_pas_noer_pc = bool(
+            constrained_pas_pc
+            and int(getattr(op, "n_zeta", 1)) == 1
+            and float(er_abs_sparse_pc) == 0.0
+        )
+        tokamak_pas_er_pc = bool(
+            constrained_pas_pc
+            and int(getattr(op, "n_zeta", 1)) == 1
+            and float(er_abs_sparse_pc) > 0.0
+            and (
+                bool(use_dkes)
+                or bool(include_xdot_sparse_pc)
+                or bool(include_electric_field_xi_sparse_pc)
+            )
         )
         tokamak_fp_er_pc = bool(
             int(op.rhs_mode) == 1
@@ -11485,6 +11540,30 @@ def solve_v3_full_system_linear_gmres(
         )
         tokamak_fp_pc = bool(tokamak_fp_er_pc or tokamak_fp_noer_pc)
         xblock_sparse_pc = solve_method_kind_explicit in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+        sparse_pc_active_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF", "").strip().lower()
+        sparse_pc_active_forced_on = sparse_pc_active_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}
+        sparse_pc_active_forced_off = sparse_pc_active_env in {"0", "false", "f", "no", "off", ".false.", ".f."}
+        sparse_pc_active_auto = sparse_pc_active_env in {"", "auto"}
+        sparse_pc_use_active_dof = bool(
+            (not xblock_sparse_pc)
+            and has_reduced_modes
+            and int(op.rhs_mode) == 1
+            and (not bool(op.include_phi1))
+            and (
+                sparse_pc_active_forced_on
+                or (
+                    sparse_pc_active_auto
+                    and (tokamak_pas_er_pc or tokamak_pas_noer_pc)
+                )
+            )
+            and (not sparse_pc_active_forced_off)
+        )
+        if use_active_dof_mode and not sparse_pc_use_active_dof:
+            raise NotImplementedError(
+                "solve_method='sparse_pc_gmres'/'xblock_sparse_pc_gmres' active-DOF mode is only implemented "
+                "for the generic sparse_pc_gmres branch. Set SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF=1 "
+                "or SFINCS_JAX_ACTIVE_DOF=0."
+            )
         fp_dense_velocity_env = os.environ.get(
             "SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK",
             "",
@@ -11497,6 +11576,7 @@ def solve_v3_full_system_linear_gmres(
             sparse_pc_fp_dense_velocity_block = None
 
         sparse_timer = Timer()
+        pc_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "").strip()
         pc_restart, pc_maxiter = rhs1_parse_polish_gmres_config(
             restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
             maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
@@ -11536,7 +11616,10 @@ def solve_v3_full_system_linear_gmres(
                     and (not bool(op.include_phi1))
                     and op.fblock.fp is not None
                     and op.fblock.pas is None
-                    and int(preconditioner_species) != 0
+                    and _rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+                        op=op,
+                        preconditioner_species=preconditioner_species,
+                    )
                     and int(xblock_preconditioner_xi) == 1
                     and (not bool(op.point_at_x0))
                 )
@@ -11591,8 +11674,14 @@ def solve_v3_full_system_linear_gmres(
                         1,
                         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                         f"ignoring unknown SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV={xblock_krylov_env!r}",
-                    )
+                )
                 xblock_krylov_method = "gmres"
+            pc_restart, xblock_default_restart_capped = _rhs1_xblock_gmres_restart(
+                requested_restart=int(pc_restart),
+                restart_env_value=pc_restart_env,
+                krylov_method=str(xblock_krylov_method),
+                default_right_preconditioned=bool(xblock_default_right_pc),
+            )
             progress_every_env = os.environ.get("SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY", "").strip()
             try:
                 progress_every = int(progress_every_env) if progress_every_env else 25
@@ -11761,6 +11850,7 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     "precondition_side": str(precondition_side),
                     "default_right_preconditioned": bool(xblock_default_right_pc),
+                    "default_short_restart_capped": bool(xblock_default_restart_capped),
                     "gmres_restart": int(pc_restart),
                     "gmres_maxiter": int(pc_maxiter),
                     "setup_s": float(setup_s),
@@ -11772,13 +11862,54 @@ def solve_v3_full_system_linear_gmres(
                 },
             )
 
+        sparse_pc_active_idx_np: np.ndarray | None = None
+        sparse_pc_active_idx_jnp: jnp.ndarray | None = None
+        sparse_pc_full_to_active_jnp: jnp.ndarray | None = None
+        sparse_pc_rhs = rhs
+        sparse_pc_linear_size = int(op.total_size)
+        if sparse_pc_use_active_dof:
+            sparse_pc_active_idx_np = _transport_active_dof_indices(op)
+            sparse_pc_active_idx_jnp = jnp.asarray(sparse_pc_active_idx_np, dtype=jnp.int32)
+            sparse_pc_full_to_active_np = np.zeros((int(op.total_size),), dtype=np.int32)
+            sparse_pc_full_to_active_np[np.asarray(sparse_pc_active_idx_np, dtype=np.int32)] = np.arange(
+                1, int(sparse_pc_active_idx_np.shape[0]) + 1, dtype=np.int32
+            )
+            sparse_pc_full_to_active_jnp = jnp.asarray(sparse_pc_full_to_active_np, dtype=jnp.int32)
+            sparse_pc_rhs = rhs[sparse_pc_active_idx_jnp]
+            sparse_pc_linear_size = int(sparse_pc_active_idx_np.shape[0])
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres active-DOF reduction "
+                    f"enabled (size={int(sparse_pc_linear_size)}/{int(op.total_size)})",
+                )
+
+        def _sparse_pc_reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
+            if not sparse_pc_use_active_dof:
+                return v_full
+            assert sparse_pc_active_idx_jnp is not None
+            return v_full[sparse_pc_active_idx_jnp]
+
+        def _sparse_pc_expand_reduced(v_vec: jnp.ndarray) -> jnp.ndarray:
+            if not sparse_pc_use_active_dof:
+                return v_vec
+            assert sparse_pc_full_to_active_jnp is not None
+            z0 = jnp.zeros((1,), dtype=v_vec.dtype)
+            padded = jnp.concatenate([z0, v_vec], axis=0)
+            return padded[sparse_pc_full_to_active_jnp]
+
         pattern_start_s = sparse_timer.elapsed_s()
         if emit is not None:
             emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern")
-        pattern = v3_full_system_conservative_sparsity_pattern(
+        pattern_full = v3_full_system_conservative_sparsity_pattern(
             op,
             fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
         )
+        if sparse_pc_use_active_dof:
+            assert sparse_pc_active_idx_np is not None
+            pattern = pattern_full[np.asarray(sparse_pc_active_idx_np), :][:, np.asarray(sparse_pc_active_idx_np)].tocsr()
+        else:
+            pattern = pattern_full
         pattern_build_s = sparse_timer.elapsed_s() - pattern_start_s
         summary = summarize_v3_sparse_pattern(op, pattern)
         if emit is not None:
@@ -11793,6 +11924,46 @@ def solve_v3_full_system_linear_gmres(
             pc_shift = float(pc_shift_env) if pc_shift_env else (1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0)
         except ValueError:
             pc_shift = 1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0
+        factor_kind_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "").strip().lower()
+        sparse_pc_factorization = "ilu" if factor_kind_env in {"ilu", "spilu"} else "lu"
+        sparse_pc_dtype_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE", "").strip().lower()
+        if sparse_pc_dtype_env in {"float32", "fp32", "32"}:
+            sparse_pc_factor_dtype_initial = np.dtype(np.float32)
+        elif sparse_pc_dtype_env in {"float64", "fp64", "64"}:
+            sparse_pc_factor_dtype_initial = np.dtype(np.float64)
+        elif os.environ.get("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", "").strip():
+            sparse_pc_factor_dtype_initial = _host_sparse_factor_dtype(
+                size=int(sparse_pc_linear_size),
+                factorization=sparse_pc_factorization,
+                use_implicit=False,
+            )
+        else:
+            # Unlike direct-solve fallbacks, sparse-PC GMRES is very sensitive to
+            # preconditioner quality. Single-precision SuperLU can reduce factor
+            # storage but has caused thousands of extra Krylov matvecs on
+            # production PAS+Er systems, so keep this path FP64 unless explicitly
+            # requested for a memory experiment.
+            sparse_pc_factor_dtype_initial = np.dtype(np.float64)
+        sparse_pc_factor_dtype_used = sparse_pc_factor_dtype_initial
+        sparse_pc_factor_dtype_retry: str | None = None
+        sparse_pc_default_permc_spec = "MMD_ATA" if constrained_pas_pc else "COLAMD"
+        sparse_pc_permc_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC", "").strip().upper()
+        sparse_pc_permc_spec = (
+            sparse_pc_permc_env
+            if sparse_pc_permc_env in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}
+            else sparse_pc_default_permc_spec
+        )
+        fp32_probe_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FP32_PROBE_MAXITER", "").strip()
+        try:
+            fp32_probe_maxiter = int(fp32_probe_maxiter_env) if fp32_probe_maxiter_env else 2
+        except ValueError:
+            fp32_probe_maxiter = 2
+        fp32_probe_maxiter = max(1, int(fp32_probe_maxiter))
+        sparse_pc_first_attempt_maxiter = (
+            min(int(pc_maxiter), int(fp32_probe_maxiter))
+            if sparse_pc_factor_dtype_initial == np.dtype(np.float32)
+            else int(pc_maxiter)
+        )
         budget_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB", "").strip()
         if budget_env:
             try:
@@ -11806,10 +11977,10 @@ def solve_v3_full_system_linear_gmres(
                 except ValueError:
                     fill_estimate = 8.0
                 memory_estimate = estimate_sparse_pc_memory(
-                    unknowns=int(op.total_size),
+                    unknowns=int(sparse_pc_linear_size),
                     gmres_restart=int(pc_restart),
                     csr_nnz=int(summary.nnz),
-                    dtype=np.float64,
+                    dtype=sparse_pc_factor_dtype_initial,
                     factor_fill_estimate=float(fill_estimate),
                     device_count=max(1, int(jax.device_count())),
                 )
@@ -11822,30 +11993,36 @@ def solve_v3_full_system_linear_gmres(
                         "sparse_pc_gmres memory preflight exceeds "
                         "SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB: "
                         f"estimated={estimated_mb:.3f} MB budget={float(budget_mb):.3f} MB "
-                        f"unknowns={int(op.total_size)} csr_nnz={int(summary.nnz)} "
+                        f"unknowns={int(sparse_pc_linear_size)} csr_nnz={int(summary.nnz)} "
                         f"restart={int(pc_restart)} factor_fill_estimate={float(fill_estimate):.3g}. "
                         "Raise the budget, lower the resolution, or use a lower-memory matrix-free route."
                     )
 
         def _sparse_pc_factor_mv(x_np: np.ndarray) -> jnp.ndarray:
-            x_jnp = jnp.asarray(x_np, dtype=rhs.dtype)
+            x_jnp = _sparse_pc_expand_reduced(jnp.asarray(x_np, dtype=rhs.dtype))
             y_jnp = apply_v3_full_system_operator_cached(op_pc, x_jnp)
             if pc_shift != 0.0:
                 y_jnp = y_jnp + jnp.asarray(pc_shift, dtype=rhs.dtype) * x_jnp
-            return y_jnp
+            return _sparse_pc_reduce_full(y_jnp)
 
         if emit is not None:
             shift_note = f" shift={pc_shift:.1e}" if pc_shift != 0.0 else ""
-            emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres factoring RHSMode=1 preconditioner" + shift_note)
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres factoring RHSMode=1 preconditioner"
+                f"{shift_note} factor_dtype={sparse_pc_factor_dtype_initial.name} "
+                f"permc={sparse_pc_permc_spec}",
+            )
         factor_start_s = sparse_timer.elapsed_s()
         _operator_bundle_pc, factor_bundle_pc = _build_host_sparse_direct_factor_from_matvec(
             matvec=_sparse_pc_factor_mv,
-            n=int(op.total_size),
+            n=int(sparse_pc_linear_size),
             dtype=rhs.dtype,
-            factor_dtype=np.dtype(np.float64),
+            factor_dtype=sparse_pc_factor_dtype_initial,
             pattern=pattern,
             emit=emit,
             default_diag_pivot_thresh=0.0 if (constrained_pas_pc or tokamak_fp_pc) else 1.0,
+            default_permc_spec=sparse_pc_default_permc_spec,
         )
         pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
         setup_s = sparse_timer.elapsed_s()
@@ -11873,68 +12050,114 @@ def solve_v3_full_system_linear_gmres(
                     "solve_v3_full_system_linear_gmres: sparse_pc_gmres "
                     f"matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
                 )
-            return apply_v3_full_system_operator_cached(op, jnp.asarray(v, dtype=rhs.dtype))
+            x_full = _sparse_pc_expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
+            y_full = apply_v3_full_system_operator_cached(op, x_full)
+            return _sparse_pc_reduce_full(y_full)
 
         def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
             v_np = np.asarray(v, dtype=np.float64).reshape((-1,))
             y_np = factor_bundle_pc.solve(v_np)
             return jnp.asarray(y_np, dtype=jnp.float64)
 
-        x0_full = None
+        x0_sparse = None
         if x0 is not None:
             x0_arr = jnp.asarray(x0, dtype=jnp.float64)
-            if x0_arr.shape == rhs.shape:
-                x0_full = x0_arr
+            if x0_arr.shape == sparse_pc_rhs.shape:
+                x0_sparse = x0_arr
+            elif x0_arr.shape == rhs.shape:
+                x0_sparse = _sparse_pc_reduce_full(x0_arr)
             elif emit is not None:
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: sparse_pc_gmres ignoring incompatible x0 "
-                    f"shape={tuple(x0_arr.shape)} expected={tuple(rhs.shape)}",
+                    f"shape={tuple(x0_arr.shape)} expected={tuple(sparse_pc_rhs.shape)} or {tuple(rhs.shape)}",
                 )
 
+        sparse_pc_rhs_norm = jnp.linalg.norm(sparse_pc_rhs)
+        target = max(float(atol), float(tol) * float(sparse_pc_rhs_norm))
+
+        def _run_sparse_pc_gmres_once(x0_arg, *, maxiter_arg: int):
+            if emit is not None:
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres solve start "
+                    f"form={pc_form} restart={int(pc_restart)} maxiter={int(maxiter_arg)} "
+                    f"precondition_side={precondition_side} "
+                    f"factor_dtype={np.dtype(sparse_pc_factor_dtype_used).name}",
+                )
+            rn_pc_local = float("nan")
+            solve_start_s_local = sparse_timer.elapsed_s()
+            if pc_form in {"explicit_left", "petsc_left"}:
+                x_np_local, residual_norm_local, rn_pc_local, history_local = explicit_left_preconditioned_gmres_scipy(
+                    matvec=_mv_true,
+                    b=sparse_pc_rhs,
+                    preconditioner=_precond_sparse,
+                    x0=x0_arg,
+                    tol=tol,
+                    atol=atol,
+                    restart=pc_restart,
+                    maxiter=maxiter_arg,
+                )
+            else:
+                x_np_local, residual_norm_local, history_local = gmres_solve_with_history_scipy(
+                    matvec=_mv_true,
+                    b=sparse_pc_rhs,
+                    preconditioner=_precond_sparse if precondition_side != "none" else None,
+                    x0=x0_arg,
+                    tol=tol,
+                    atol=atol,
+                    restart=pc_restart,
+                    maxiter=maxiter_arg,
+                    precondition_side=precondition_side,
+                )
+            solve_s_local = sparse_timer.elapsed_s() - solve_start_s_local
+            try:
+                residual_true = np.asarray(sparse_pc_rhs, dtype=np.float64) - np.asarray(
+                    jax.device_get(_mv_true(jnp.asarray(x_np_local, dtype=jnp.float64))),
+                    dtype=np.float64,
+                )
+                residual_norm_local = float(np.linalg.norm(residual_true))
+            except Exception:
+                residual_norm_local = float(residual_norm_local)
+            return x_np_local, float(residual_norm_local), rn_pc_local, history_local, float(solve_s_local)
+
+        x_np, residual_norm_sparse_pc, rn_pc, history, solve_s = _run_sparse_pc_gmres_once(
+            x0_sparse,
+            maxiter_arg=sparse_pc_first_attempt_maxiter,
+        )
+        if (
+            sparse_pc_factor_dtype_used == np.dtype(np.float32)
+            and (not np.isfinite(residual_norm_sparse_pc) or float(residual_norm_sparse_pc) > float(target))
+        ):
+            sparse_pc_factor_dtype_retry = "float64"
+            sparse_pc_factor_dtype_used = np.dtype(np.float64)
+            if emit is not None:
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres retrying preconditioner "
+                    f"with factor_dtype={sparse_pc_factor_dtype_used.name} "
+                    f"after residual={float(residual_norm_sparse_pc):.6e} target={float(target):.6e}",
+                )
+            retry_factor_start_s = sparse_timer.elapsed_s()
+            _operator_bundle_pc, factor_bundle_pc = _build_host_sparse_direct_factor_from_matvec(
+                matvec=_sparse_pc_factor_mv,
+                n=int(sparse_pc_linear_size),
+                dtype=rhs.dtype,
+                factor_dtype=sparse_pc_factor_dtype_used,
+                pattern=pattern,
+                emit=emit,
+                default_diag_pivot_thresh=0.0 if (constrained_pas_pc or tokamak_fp_pc) else 1.0,
+                default_permc_spec=sparse_pc_default_permc_spec,
+            )
+            pc_factor_s += sparse_timer.elapsed_s() - retry_factor_start_s
+            setup_s = sparse_timer.elapsed_s()
+            x0_retry = jnp.asarray(x_np, dtype=jnp.float64) if np.all(np.isfinite(x_np)) else x0_sparse
+            x_np, residual_norm_sparse_pc, rn_pc, history, solve_s_retry = _run_sparse_pc_gmres_once(
+                x0_retry,
+                maxiter_arg=int(pc_maxiter),
+            )
+            solve_s += solve_s_retry
         if emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres solve start "
-                f"form={pc_form} restart={int(pc_restart)} maxiter={int(pc_maxiter)} "
-                f"precondition_side={precondition_side}",
-            )
-        rn_pc = float("nan")
-        solve_start_s = sparse_timer.elapsed_s()
-        if pc_form in {"explicit_left", "petsc_left"}:
-            x_np, residual_norm_sparse_pc, rn_pc, history = explicit_left_preconditioned_gmres_scipy(
-                matvec=_mv_true,
-                b=rhs,
-                preconditioner=_precond_sparse,
-                x0=x0_full,
-                tol=tol,
-                atol=atol,
-                restart=pc_restart,
-                maxiter=pc_maxiter,
-            )
-        else:
-            x_np, residual_norm_sparse_pc, history = gmres_solve_with_history_scipy(
-                matvec=_mv_true,
-                b=rhs,
-                preconditioner=_precond_sparse if precondition_side != "none" else None,
-                x0=x0_full,
-                tol=tol,
-                atol=atol,
-                restart=pc_restart,
-                maxiter=pc_maxiter,
-                precondition_side=precondition_side,
-            )
-        solve_s = sparse_timer.elapsed_s() - solve_start_s
-        try:
-            residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
-                jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
-                dtype=np.float64,
-            )
-            residual_norm_sparse_pc = float(np.linalg.norm(residual_true))
-        except Exception:
-            residual_norm_sparse_pc = float(residual_norm_sparse_pc)
-        if emit is not None:
-            target = max(float(atol), float(tol) * float(rhs_norm))
             pc_suffix = f" preconditioned_residual={float(rn_pc):.6e}" if np.isfinite(rn_pc) else ""
             if history:
                 pc_suffix = f"{pc_suffix} ksp_residual={float(history[-1]):.6e}"
@@ -11949,7 +12172,7 @@ def solve_v3_full_system_linear_gmres(
             op=op,
             rhs=rhs,
             gmres=GMRESSolveResult(
-                x=jnp.asarray(x_np, dtype=jnp.float64),
+                x=_sparse_pc_expand_reduced(jnp.asarray(x_np, dtype=jnp.float64)),
                 residual_norm=jnp.asarray(residual_norm_sparse_pc, dtype=jnp.float64),
             ),
             metadata={
@@ -11961,7 +12184,16 @@ def solve_v3_full_system_linear_gmres(
                 "matvecs": int(mv_count),
                 "gmres_restart": int(pc_restart),
                 "gmres_maxiter": int(pc_maxiter),
+                "sparse_pc_first_attempt_maxiter": int(sparse_pc_first_attempt_maxiter),
                 "sparse_pc_shift": float(pc_shift),
+                "sparse_pc_factor_dtype": np.dtype(sparse_pc_factor_dtype_used).name,
+                "sparse_pc_initial_factor_dtype": np.dtype(sparse_pc_factor_dtype_initial).name,
+                "sparse_pc_factor_dtype_retry": sparse_pc_factor_dtype_retry,
+                "sparse_pc_permc_spec": sparse_pc_permc_spec,
+                "sparse_pc_default_permc_spec": sparse_pc_default_permc_spec,
+                "sparse_pc_active_dof": bool(sparse_pc_use_active_dof),
+                "sparse_pc_linear_size": int(sparse_pc_linear_size),
+                "sparse_pc_full_size": int(op.total_size),
                 "sparse_pc_fp_dense_velocity_block": (
                     None
                     if sparse_pc_fp_dense_velocity_block is None

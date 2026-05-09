@@ -304,6 +304,55 @@ def rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
     return int(active_size) >= max(0, int(min_size))
 
 
+def rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    er_abs: float,
+) -> bool:
+    """Return whether tokamak PAS no-Er should start the host sparse-PC lane.
+
+    The measured production-floor ``tokamak_*species_PASCollisions_noEr`` cases
+    at ``25 x 1 x (4|8) x 100`` spend most of their default matrix-free memory
+    or GPU wall time inside the Krylov solve even though a host sparse-PC solve
+    reaches the same Fortran output. Keep this policy scoped to the validated
+    non-differentiable axisymmetric no-Er PAS window so geometry-rich and Phi1
+    systems continue to use their own policies.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC")
+    if env is False:
+        return False
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in {"cpu", "gpu", "cuda"}:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 2:
+        return False
+    if op.fblock.fp is not None or op.fblock.pas is None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    if abs(float(er_abs)) > 0.0:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC_MIN", 5_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC_MAX", 60_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
 def rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
     *,
     op: Any,
@@ -318,19 +367,18 @@ def rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
 ) -> bool:
     """Return whether tokamak full-FP + Er should start sparse-PC GMRES.
 
-    Production-floor GPU probes at ``25 x 1 x 8 x 100`` show the matrix-free
-    FP+Er routes can either stall before the strong fallback or build very large
-    XLA executables. The sparse-PC route is slower than the fastest theta-line
-    full-trajectory solve, but it is parity-clean and materially lowers peak
-    memory on the memory-limited GPU lane. Keep the default promotion GPU-only
-    until the same window is rebenchmarked on CPU.
+    Production-floor CPU/GPU probes at ``25 x 1 x 8 x 100`` show the
+    matrix-free FP+Er routes can either stall before the strong fallback or pay
+    for large generic XLA solves. The x-block sparse-PC route is parity-clean
+    and materially faster in this measured axisymmetric window, so it is the
+    default for both CPU and GPU non-differentiable output/CLI lanes.
     """
 
     env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC")
     if env is False:
         return False
     backend_norm = str(backend).strip().lower()
-    allowed_backends = {"gpu", "cuda"} if env is not True else {"cpu", "gpu", "cuda"}
+    allowed_backends = {"cpu", "gpu", "cuda"}
     if backend_norm not in allowed_backends:
         return False
     if bool(use_implicit):
@@ -586,5 +634,6 @@ __all__ = [
     "rhs1_tokamak_fp_er_sparse_pc_auto_allowed",
     "rhs1_tokamak_fp_noer_sparse_pc_auto_allowed",
     "rhs1_tokamak_pas_er_sparse_pc_auto_allowed",
+    "rhs1_tokamak_pas_noer_sparse_pc_auto_allowed",
     "rhs1_sparse_operator_preconditioned_rescue_allowed",
 ]

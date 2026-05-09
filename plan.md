@@ -8599,3 +8599,268 @@ Next concrete actions after right-PC promotion:
 3. Keep LGMRES and BiCGStab as explicit experiment knobs only; do not promote
    them unless a production-floor row shows a measured runtime/memory win with
    clean residual and parity.
+
+Progress update (2026-05-09): formal right-PC short-restart GPU full-FP lane
+
+- Ran the accepted right-preconditioned full-trajectory row through the formal
+  `run_scaled_example_suite.py` harness on `office` against the staged
+  same-resolution Fortran v3 reference. The case remained `parity_ok` with
+  `0/214` practical mismatches, `0/214` strict mismatches, and no missing
+  Fortran output keys.
+- Swept x-block right-PC GMRES restarts on the production-floor GPU row:
+  default `80` restart was strict-clean but about `38.7 s` logged / `187`
+  matvecs; restart `40` was strict-clean at about `16.2 s` logged / `99`
+  matvecs; restart `30` was strict-clean at about `12.9 s` logged / `86`
+  matvecs; restart `20` was strict-clean at about `10.5-11.3 s` logged / `106`
+  matvecs. Restart `10` was rejected because it was already slower than the
+  accepted candidates after more than a minute.
+- Landed a narrow automatic restart cap of `20` only when the code also
+  auto-selects the measured right-preconditioned tokamak full-FP Er
+  full-trajectory x-block policy. Explicit
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART` overrides and the neighboring
+  DKES/no-Er branches are unchanged.
+- Verified the new default, with no restart environment variable, through the
+  same formal GPU harness: residual/parity stayed clean, `gmres_restart=20`,
+  `default_short_restart_capped=true`, `106` matvecs, about `12.6 s` logged and
+  about `14.0 s` subprocess wall time. The merged GPU report fixture was
+  refreshed with this trace-backed row.
+- Local validation after landing the narrow policy: focused x-block/report tests
+  passed, docs built successfully with Sphinx, and the full local suite passed
+  with `1106 passed in 567.89 s`.
+
+Next concrete actions after short-restart promotion:
+
+1. Keep the public benchmark plot unchanged unless a future same-resolution
+   report includes this row in the public runtime floor; the current row remains
+   below the `10 s` Fortran-reference plotting threshold.
+2. Run the same formal harness for a small neighboring row only if a future
+   heuristic widens beyond the current full-trajectory-only gate. The current
+   tests and office probes intentionally keep the cap narrow.
+3. Move back to the remaining true memory-ratio offenders; this x-block lane is
+   now runtime-dominated by the unavoidable matrix-free matvec work rather than
+   by solver-path selection.
+
+Progress update (2026-05-09): CPU full-FP Er x-block auto-selection
+
+- Re-ranked the current trace-backed CPU/GPU reports after the GPU
+  short-restart change. The stale CPU top offenders were the one-species
+  full-FP tokamak Er rows, still routed through generic `auto` at about
+  `56.9-66.5 s` logged and `3.1-3.9 GB` RSS.
+- Reran those two CPU production-floor rows against the staged Fortran v3
+  reference before changing policy. Current default remained `parity_ok` and
+  strict-clean, confirming the problem was performance/route selection rather
+  than correctness.
+- Forced `SFINCS_JAX_RHSMODE1_SOLVE_METHOD=xblock_sparse_pc_gmres` on the same
+  CPU rows. Both were strict-clean with `0/214` mismatches: DKES trajectories
+  ran in about `3.31 s` logged with `145` matvecs; full trajectories ran in
+  about `4.10 s` logged with `105` matvecs and the right-PC short-restart cap.
+- Widened `rhs1_tokamak_fp_er_sparse_pc_auto_allowed(...)` from GPU-only to
+  CPU+GPU for the same measured non-differentiable, axisymmetric,
+  full-FP+Er, production-size window. The no-Er and PAS policies remain
+  unchanged.
+- Verified the new default without any solve-method environment override:
+  DKES trajectories selected `xblock_sparse_pc_gmres`, stayed strict-clean, and
+  dropped from `56.95 s` to `3.44 s` logged; full trajectories selected
+  `xblock_sparse_pc_gmres`, stayed strict-clean, and dropped from `66.48 s` to
+  `4.15 s` logged. The tracked CPU report fixture was refreshed with these
+  rows. The public top plot remains unchanged because both rows are below the
+  current `10 s` Fortran-reference plotting floor.
+- Validation after landing: targeted policy/report tests passed, docs built
+  successfully with Sphinx, and the full suite passed with
+  `1107 passed in 511.65 s`.
+
+Next concrete actions after CPU x-block promotion:
+
+1. Re-rank memory offenders from the refreshed reports; the remaining true
+   memory targets are now PAS-heavy two-species tokamak and 3D geometry/HSX
+   rows rather than one-species FP Er route selection.
+2. For the next code change, target memory-ratio reduction, not another blanket
+   Krylov selector. Candidate routes are PAS diagnostics/output chunking and
+   lower-retention sparse/preconditioner lifetimes.
+
+Progress update (2026-05-09): constrained-PAS sparse-PC fill reduction
+
+- Re-ranked the current production reports after the CPU x-block promotion. The
+  highest remaining trace-backed sparse-PC offender was
+  `tokamak_2species_PASCollisions_withEr_fullTrajectories`: about `40.0 s`
+  logged, `4.0 GB` RSS, `sparse_pc_factor_s=34.2 s`, and an estimated
+  `821.9 MB` SuperLU factor. The Krylov solve itself was already cheap
+  (`5` matvecs), so the bottleneck was sparse factor fill/setup.
+- Tested CPU single-precision sparse-PC factorization. It reduced factor
+  storage but failed the performance gate: GMRES exceeded `4600` matvecs and
+  hit the `180 s` timeout. The code now keeps sparse-PC factorization `float64`
+  by default; `SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE=32` remains an
+  explicit memory experiment, guarded by true-residual metadata, a capped
+  first-attempt probe (`SFINCS_JAX_RHSMODE1_SPARSE_PC_FP32_PROBE_MAXITER`,
+  default `2`), and float64 retry logic.
+- Tested SuperLU column orderings on the same production row. `MMD_AT_PLUS_A`
+  was fast and lower-memory but introduced four current-related strict
+  mismatches (`max_abs≈1.64e-6`), so it was rejected. `MMD_ATA` was strict-clean
+  and lower-fill.
+- Landed `MMD_ATA` as the scoped default only for constrained-PAS sparse-PC
+  GMRES. `COLAMD` remains the global explicit-sparse default and can still be
+  forced with `SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC=COLAMD`.
+- Validation:
+  - CPU production-floor PAS+Er one-/two-species rows, no solver env overrides:
+    both `parity_ok`, strict `0/212`; logged times `6.231 s` / `11.848 s`;
+    RSS `1319.5 MB` / `2262.5 MB`.
+  - Clean `office` RTX A4000 GPU clone, no solver env overrides:
+    both `parity_ok`, strict `0/212`; logged times `13.193 s` / `25.021 s`;
+    RSS `1572.1 MB` / `2322.5 MB`.
+  - Focused tests: sparse-helper metadata and tiny sparse-PC solve checks
+    passed (`4 passed`); changed test files pass `ruff`.
+- Refreshed the tracked CPU/GPU benchmark reports, README benchmark table,
+  benchmark summary JSON/PNG/PDF, and performance/outputs documentation with
+  the new trace-backed values and the new sparse-PC ordering metadata.
+
+Next concrete actions after constrained-PAS fill reduction:
+
+1. Run the focused validation-artifact tests and Sphinx docs build to catch any
+   benchmark-summary or documentation drift.
+2. Re-rank the refreshed reports again. If the tokamak PAS+Er rows are no
+   longer top memory offenders, move to the geometry-rich PAS/HSX rows where
+   memory is dominated by diagnostics/output retention rather than sparse-PC
+   factor fill.
+
+Progress update (2026-05-09): one-species full-FP Er x-block host assembly
+
+- Root cause: one-species full-FP Er rows with the Fortran-style
+  `preconditioner_species=0` flag were blocked from the compact host-assembled
+  x-block path. For a one-species system this flag is algebraically equivalent
+  to per-species x-block preconditioning, since there is no inter-species
+  coupling to preserve. The old guard forced dense matvec probing/assembly and
+  caused the apparent memory cliff.
+- Landed a scoped policy helper that allows host-assembled x-block factors for
+  `preconditioner_species=0` only when `n_species == 1`; multi-species systems
+  retain the previous coupling-preserving guard.
+- CPU validation against the staged Fortran v3 production-floor references:
+  `tokamak_1species_FPCollisions_withEr_DKESTrajectories` and
+  `tokamak_1species_FPCollisions_withEr_fullTrajectories` are both
+  `parity_ok`, strict `0/214`, with logged times about `1.06 s` / `0.96 s`,
+  cold external JAX times about `1.86 s` / `1.71 s`, and peak RSS about
+  `440 MB` / `419 MB`.
+- GPU validation on `office` RTX A4000 with profiling marks:
+  DKES/full are residual-clean with host-assembled x-blocks. The DKES row uses
+  `145` matvecs, about `23.3 s`, and `1094 MB` active RSS delta; the full row
+  uses right-preconditioned short-restart GMRES, `133` matvecs, about `11.0 s`,
+  and `1104 MB` active RSS delta.
+- Refreshed the tracked CPU/GPU benchmark report rows, README text, and
+  performance documentation. The two rows remain below the README public
+  Fortran-runtime threshold in the existing MPI-reference report, so they stay
+  out of the top public plot/table unless rerun at a larger reference floor.
+- Validation after landing: focused policy/report tests passed, Sphinx docs
+  built successfully, and the full local test suite passed with
+  `1109 passed in 502.34 s`.
+
+Next concrete actions after one-species x-block host assembly:
+
+1. Commit and push the closed one-species x-block host-assembly lane.
+2. Start the next bounded memory lane from the refreshed ranking: PAS-heavy
+   tokamak no-Er/Er rows first, then geometry-rich PAS/HSX diagnostics/output
+   retention. Keep the same gates: strict parity, residual-clean solve,
+   active/device memory reduction on the same metric, and no runtime regression
+   beyond the documented tradeoff threshold.
+
+Progress update (2026-05-09): active-DOF sparse-PC for tokamak PAS+Er
+
+- Rejected lower GMRES restart as a default for
+  `tokamak_2species_PASCollisions_noEr`: restart `20`/`40` lowered active RSS
+  by only about `17-20%` while slowing the run from about `2.9 s` to about
+  `5.0 s`, so it remains an explicit memory-pressure knob rather than a default.
+- Profiled the current two-species tokamak PAS+Er sparse-PC row. The Krylov
+  solve was already cheap (`5` matvecs); setup dominated through sparse pattern
+  probing and SuperLU factorization. The old sparse-PC path factored the padded
+  `40016 x 40016` system even though the active `Nxi_for_x` system has `25466`
+  unknowns.
+- Landed a scoped active-DOF sparse-PC route for the measured
+  non-differentiable, axisymmetric, constrained-PAS, PAS+Er window. The branch
+  reduces/expands through the same active-DOF index map used by the matrix-free
+  solver, returns a full-size solution vector with inactive modes zeroed, and
+  records `sparse_pc_active_dof`, `sparse_pc_linear_size`, and
+  `sparse_pc_full_size` in solver metadata. Other sparse-PC cases can opt in
+  with `SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF=1`; the default remains
+  narrow until each geometry family is validated.
+- CPU validation on
+  `tokamak_2species_PASCollisions_withEr_fullTrajectories`:
+  active sparse-PC reduced sparse pattern nnz from `7.90M` to `3.51M`, factor
+  storage estimate from `419.5 MB` to `296.5 MB`, external wall time from
+  `12.46 s` to `9.75 s`, and active RSS from `2071 MB` to `1585 MB`.
+  The residual was `2.32e-09` against target `1.21e-08`, and practical
+  Fortran comparison remained `0/212` mismatches.
+- GPU validation on `office` RTX A4000:
+  the same row completed in `22.16 s` with residual `1.43e-09` against target
+  `1.21e-08`, active RSS `2124 MB`, pattern nnz `3.51M`, and practical
+  Fortran comparison `0/212` mismatches. CPU-vs-GPU differences were limited
+  to solver timing diagnostics.
+- Added a focused regression test for the active sparse-PC path using a tiny
+  truncated PAS system. The test verifies that the reduced linear size is
+  smaller than the full padded size, inactive modes remain zero in the returned
+  full vector, and the active residual satisfies the requested tolerance.
+- Refreshed the tracked CPU/GPU benchmark rows, README benchmark table, and
+  benchmark summary JSON/PNG/PDF with the new trace-backed numbers.
+
+Next concrete actions after active sparse-PC:
+
+1. Run focused tests, validation-artifact tests, Sphinx, and a lint safety
+   subset for the changed files.
+2. Re-rank the refreshed reports. The remaining memory lane should move away
+   from tokamak PAS+Er sparse-PC setup and toward geometry-rich PAS/HSX
+   diagnostics/output retention and larger-resolution research workloads.
+
+Progress update (2026-05-09): active-DOF sparse-PC for tokamak PAS no-Er
+
+- Profiled the public production-floor
+  `tokamak_2species_PASCollisions_noEr` row at `25 x 1 x 8 x 100`. The current
+  default matrix-free Krylov path was already fast on CPU (`2.14 s` external,
+  residual `2.30e-18`) but spent most active memory inside the solve, peaking at
+  about `1.74 GB` active RSS. A forced active-DOF sparse-PC run reached the same
+  Fortran outputs with `0/212` mismatches, residual `3.53e-10` against target
+  `6.14e-10`, and active RSS about `0.44 GB`.
+- Validated the same sparse-PC route on `office` RTX A4000. The default GPU
+  matrix-free report row was `14.7 s` cold / `13.2 s` logged; the active
+  sparse-PC route completed in `5.24 s` cold / `5.21 s` logged with residual
+  `2.23e-10` against target `6.14e-10`. GPU-vs-Fortran comparison stayed
+  `0/212` mismatches; CPU-vs-GPU differences were only solver timing metadata.
+- Landed a scoped `SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC` policy for
+  non-differentiable, axisymmetric, no-Phi1, constrained-PAS RHSMode=1 systems
+  in the measured active-size window. The existing
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF=auto` path now covers the validated
+  no-Er window as well as the PAS+Er window.
+- Refreshed tracked CPU/GPU benchmark reports, README benchmark table, benchmark
+  summary JSON/PNG/PDF, and performance documentation. The README-facing row now
+  reports CPU `2.033 s` / `393.5 MB`, GPU `5.243 s` / `1168.7 MB`, and zero
+  CPU/GPU Fortran mismatches.
+
+Next concrete actions after tokamak PAS no-Er sparse-PC:
+
+1. Run focused policy, sparse-PC, validation-artifact, docs, and a bounded full
+   local test pass.
+2. Re-rank the benchmark reports again. If no tokamak PAS sparse-PC rows remain
+   as dominant CPU memory offenders, move to geometry-rich PAS/HSX diagnostics
+   and output-retention memory, where the likely fix is reducing retained
+   diagnostic arrays rather than changing the linear solver.
+
+Follow-up update (2026-05-09): one-species PAS no-Er threshold closure
+
+- Checked the same no-Er sparse-PC policy on the public one-species PAS no-Er
+  rows. The `Nx=8` row auto-selected active sparse-PC after the first no-Er
+  policy change and remained `0/212` against Fortran. CPU active RSS dropped
+  from the public report's `696 MB` to `336 MB`; the RTX A4000 runtime dropped
+  from `14.2 s` to `3.6 s`.
+- The `Nx=4` row was below the original `10000` active-unknown floor and stayed
+  on the matrix-free path. A forced sparse-PC probe was `0/212` against Fortran,
+  reduced CPU active RSS from `525 MB` to `309 MB` in the local profile, and
+  reduced RTX A4000 runtime from the public `28.8 s` row to `3.0 s`. GPU process
+  peak RSS increased modestly (`~1.17 GB` to `~1.28 GB`), so this is a deliberate
+  runtime-offender closure rather than a GPU memory win.
+- Lowered the no-Er tokamak PAS sparse-PC active-size floor to `5000`, preserving
+  the upper bound and all geometry/Phi1/RHSMode guards. Refreshed the CPU/GPU
+  benchmark reports, README table, benchmark summary JSON/PNG/PDF, and
+  performance documentation for the one-species no-Er rows.
+
+Next concrete actions after no-Er tokamak PAS closure:
+
+1. Run the full focused validation stack again after the threshold change.
+2. Re-rank remaining CPU/GPU offenders. Expect the remaining dominant cases to
+   be PAS+Er GPU memory/runtime and full-FP no-Er Phi1/QN rows, then
+   geometry-rich PAS/HSX diagnostics/output retention.
