@@ -97,9 +97,10 @@ short restart.
 Large constrained-PAS profile-current decks also auto-select sparse-PC GMRES
 when the problem size is in the validated production window. Tokamak PAS+Er
 production-floor sparse-PC runs use the measured `MMD_ATA` SuperLU ordering by
-default, which cuts sparse-factor fill while preserving strict Fortran parity on
-the audited CPU and RTX A4000 GPU rows. Explicit sparse-host LU and x-block
-sparse PC remain available:
+default and now factor only the active `Nxi_for_x` degrees of freedom, which
+cuts sparse-factor fill while preserving strict Fortran parity on the audited
+CPU and RTX A4000 GPU rows. Explicit sparse-host LU and x-block sparse PC remain
+available:
 
 ```bash
 sfincs_jax write-output \
@@ -556,7 +557,7 @@ Full per-case runtime / memory table:
 | `tokamak_1species_PASCollisions_noEr_withQN` | 75.242 | 5.147 | 0.07x | 5.147 | 0.07x | 11.444 | 0.15x | 10.019 | 0.13x | 165.0 | 612.3 | 3.71x | 459.5 | 2.78x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 75.698 | 7.049 | 0.09x | 6.231 | 0.08x | 14.423 | 0.19x | 13.193 | 0.17x | 248.9 | 1319.5 | 5.30x | 1572.1 | 6.32x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_noEr` | 75.362 | 2.855 | 0.04x | 2.855 | 0.04x | 14.717 | 0.20x | 13.226 | 0.18x | 215.3 | 1753.0 | 8.14x | 1112.0 | 5.17x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 12.716 | 0.17x | 11.848 | 0.15x | 26.411 | 0.35x | 25.021 | 0.33x | 386.6 | 2262.5 | 5.85x | 2322.5 | 6.01x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
+| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 9.753 | 0.13x | 9.743 | 0.13x | 22.165 | 0.29x | 22.158 | 0.29x | 386.6 | 1585.2 | 4.10x | 2124.0 | 5.49x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 
 Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
 - `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.9s (delta=1.1s)
