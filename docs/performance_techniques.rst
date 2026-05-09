@@ -1386,13 +1386,25 @@ Controls:
   constrained PAS systems,
   ``SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT=1e-8`` and
   ``SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH=0`` for constrained PAS unless
-  the user overrides those values. Measured default auto-selection runtimes are
-  about ``6.2 s``/``11.8 s`` logged on CPU for one-/two-species and
-  ``13.2 s``/``25.0 s`` logged on an RTX A4000 GPU for the same one-/two-species
-  production-floor cases, all with zero strict Fortran output mismatches. The
-  older ``COLAMD`` ordering remains available through
+  the user overrides those values. In the same measured tokamak PAS+Er window,
+  sparse-PC GMRES also factors the active ``Nxi_for_x`` degrees of freedom by
+  default rather than the padded full Legendre grid. The active sparse-PC route
+  reduces the two-species production row from ``40016`` to ``25466`` linear
+  unknowns, from ``7.90M`` to ``3.51M`` probed sparse entries, and from about
+  ``11.8 s`` logged / ``2.26 GB`` RSS to about ``9.7 s`` logged /
+  ``1.59 GB`` active RSS on CPU. On the audited RTX A4000 row, the same active
+  route is strict-clean and reduces the logged time from about ``25.0 s`` to
+  ``22.2 s`` with active RSS about ``2.12 GB``. All quoted rows have zero
+  practical and strict Fortran output mismatches. The older ``COLAMD`` ordering
+  remains available through
   ``SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC=COLAMD``; it is higher-fill on these
   cases and is retained as an explicit reproducibility knob.
+- ``SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF`` (default: auto for the measured
+  tokamak PAS+Er constrained-PAS sparse-PC window). Set to ``0`` to factor the
+  padded full system for reproducibility experiments, or ``1`` to force the
+  active-DOF sparse-PC reduction on another RHSMode=1 sparse-PC case. Forced use
+  outside the measured window should be treated as an experiment until the
+  output is compared against the Fortran reference for that geometry.
 - ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE`` (default: ``float64`` for
   sparse-PC GMRES). Set to ``32`` only for controlled memory experiments. When
   single-precision factors are requested, the first Krylov attempt is capped by

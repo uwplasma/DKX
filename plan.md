@@ -8760,3 +8760,49 @@ Next concrete actions after one-species x-block host assembly:
    retention. Keep the same gates: strict parity, residual-clean solve,
    active/device memory reduction on the same metric, and no runtime regression
    beyond the documented tradeoff threshold.
+
+Progress update (2026-05-09): active-DOF sparse-PC for tokamak PAS+Er
+
+- Rejected lower GMRES restart as a default for
+  `tokamak_2species_PASCollisions_noEr`: restart `20`/`40` lowered active RSS
+  by only about `17-20%` while slowing the run from about `2.9 s` to about
+  `5.0 s`, so it remains an explicit memory-pressure knob rather than a default.
+- Profiled the current two-species tokamak PAS+Er sparse-PC row. The Krylov
+  solve was already cheap (`5` matvecs); setup dominated through sparse pattern
+  probing and SuperLU factorization. The old sparse-PC path factored the padded
+  `40016 x 40016` system even though the active `Nxi_for_x` system has `25466`
+  unknowns.
+- Landed a scoped active-DOF sparse-PC route for the measured
+  non-differentiable, axisymmetric, constrained-PAS, PAS+Er window. The branch
+  reduces/expands through the same active-DOF index map used by the matrix-free
+  solver, returns a full-size solution vector with inactive modes zeroed, and
+  records `sparse_pc_active_dof`, `sparse_pc_linear_size`, and
+  `sparse_pc_full_size` in solver metadata. Other sparse-PC cases can opt in
+  with `SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF=1`; the default remains
+  narrow until each geometry family is validated.
+- CPU validation on
+  `tokamak_2species_PASCollisions_withEr_fullTrajectories`:
+  active sparse-PC reduced sparse pattern nnz from `7.90M` to `3.51M`, factor
+  storage estimate from `419.5 MB` to `296.5 MB`, external wall time from
+  `12.46 s` to `9.75 s`, and active RSS from `2071 MB` to `1585 MB`.
+  The residual was `2.32e-09` against target `1.21e-08`, and practical
+  Fortran comparison remained `0/212` mismatches.
+- GPU validation on `office` RTX A4000:
+  the same row completed in `22.16 s` with residual `1.43e-09` against target
+  `1.21e-08`, active RSS `2124 MB`, pattern nnz `3.51M`, and practical
+  Fortran comparison `0/212` mismatches. CPU-vs-GPU differences were limited
+  to solver timing diagnostics.
+- Added a focused regression test for the active sparse-PC path using a tiny
+  truncated PAS system. The test verifies that the reduced linear size is
+  smaller than the full padded size, inactive modes remain zero in the returned
+  full vector, and the active residual satisfies the requested tolerance.
+- Refreshed the tracked CPU/GPU benchmark rows, README benchmark table, and
+  benchmark summary JSON/PNG/PDF with the new trace-backed numbers.
+
+Next concrete actions after active sparse-PC:
+
+1. Run focused tests, validation-artifact tests, Sphinx, and a lint safety
+   subset for the changed files.
+2. Re-rank the refreshed reports. The remaining memory lane should move away
+   from tokamak PAS+Er sparse-PC setup and toward geometry-rich PAS/HSX
+   diagnostics/output retention and larger-resolution research workloads.
