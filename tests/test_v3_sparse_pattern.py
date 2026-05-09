@@ -211,6 +211,12 @@ def test_sparse_pc_gmres_solve_method_solves_tiny_rhs1_system(monkeypatch) -> No
     assert result.metadata["setup_s"] >= 0.0
     assert result.metadata["solve_s"] >= 0.0
     assert result.metadata["elapsed_s"] >= result.metadata["setup_s"]
+    assert result.metadata["sparse_pc_factor_dtype"] == "float64"
+    assert result.metadata["sparse_pc_initial_factor_dtype"] == "float64"
+    assert result.metadata["sparse_pc_factor_dtype_retry"] is None
+    assert result.metadata["sparse_pc_first_attempt_maxiter"] == result.metadata["gmres_maxiter"]
+    assert result.metadata["sparse_pc_permc_spec"] in {"COLAMD", "MMD_ATA"}
+    assert result.metadata["sparse_pc_default_permc_spec"] in {"COLAMD", "MMD_ATA"}
     assert result.metadata["sparse_pattern_nnz"] > 0
     assert result.metadata["sparse_pattern_max_row_nnz"] > 0
     assert any("sparse_pc_gmres complete" in msg for msg in messages)
