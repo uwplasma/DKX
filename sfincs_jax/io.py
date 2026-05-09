@@ -42,6 +42,7 @@ from .rhs1_host_policy import (
     rhs1_tokamak_fp_er_sparse_pc_auto_allowed,
     rhs1_tokamak_fp_noer_sparse_pc_auto_allowed,
     rhs1_tokamak_pas_er_sparse_pc_auto_allowed,
+    rhs1_tokamak_pas_noer_sparse_pc_auto_allowed,
 )
 from .solver_trace import SolverTrace, write_solver_trace_h5, write_solver_trace_json
 from .solver_progress import format_duration, runtime_scale_hint
@@ -3435,6 +3436,24 @@ def write_sfincs_jax_output_h5(
                     1,
                     "write_sfincs_jax_output_h5: bounded tokamak Er RHSMode=1 "
                     "-> using dense CPU solve",
+                )
+        elif (
+            (not force_krylov)
+            and rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(
+                op=op0,
+                active_size=int(active_total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind=solve_method,
+                backend=str(dense_auto_backend),
+                er_abs=float(er_abs),
+            )
+        ):
+            solve_method = "sparse_pc_gmres"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: tokamak PAS no-Er RHSMode=1 "
+                    "-> using sparse-PC GMRES host solve",
                 )
         elif (
             (not force_krylov)

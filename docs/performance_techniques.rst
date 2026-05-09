@@ -1377,25 +1377,71 @@ Controls:
   preconditioner probe (one matvec) and, if the residual ratio still exceeds
   ``SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO``, skip stage-2/strong Krylov attempts
   and proceed directly to the dense fallback.
+- ``SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC`` (default: auto). On CPU/GPU,
+  non-differentiable tokamak PAS no-Er RHSMode=1 runs in the measured
+  production-floor window use the host sparse-PC GMRES route. This avoids the
+  matrix-free Krylov memory cliff for the audited two-species ``25 x 1 x 8 x
+  100`` row and the GPU runtime cliff for the one-species ``25 x 1 x 4 x 100``
+  row while preserving Fortran parity. The default route factors the active
+  ``Nxi_for_x`` degrees of freedom rather than the padded full Legendre grid:
+  the public two-species CPU row drops from about ``1.75 GB`` active RSS on the
+  matrix-free path to about ``0.39 GB`` with sparse-PC GMRES, the two-species
+  RTX A4000 row drops from about ``14.7 s`` to about ``5.2 s``, and the
+  one-species ``Nx=4`` RTX A4000 row drops from about ``28.8 s`` to about
+  ``3.0 s``. Set this variable to ``0`` to force the older matrix-free path, or
+  to ``1`` to force the route while retaining the remaining guards.
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC`` (default: auto). On CPU/GPU,
   non-differentiable tokamak PAS+Er full-trajectory RHSMode=1 runs in the
   measured production-floor window use the host sparse-PC GMRES route. This
   avoids the PAS-ILU/Schur stage-2 stall while preserving Fortran parity for the
   audited one- and two-species ``25 x 1 x 8 x 100`` CPU and RTX A4000 GPU cases.
-  The route defaults to
+  The route defaults to the lower-fill ``MMD_ATA`` SuperLU column ordering for
+  constrained PAS systems,
   ``SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT=1e-8`` and
   ``SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH=0`` for constrained PAS unless
-  the user overrides those values. Measured default auto-selection runtimes are
-  about ``23 s``/``45 s`` on CPU for one-/two-species and ``44 s``/``86 s`` on an
-  RTX A4000 GPU for the same one-/two-species production-floor cases, all with
-  zero Fortran output mismatches.
+  the user overrides those values. In the same measured tokamak PAS+Er window,
+  sparse-PC GMRES also factors the active ``Nxi_for_x`` degrees of freedom by
+  default rather than the padded full Legendre grid. The active sparse-PC route
+  reduces the two-species production row from ``40016`` to ``25466`` linear
+  unknowns, from ``7.90M`` to ``3.51M`` probed sparse entries, and from about
+  ``11.8 s`` logged / ``2.26 GB`` RSS to about ``9.7 s`` logged /
+  ``1.59 GB`` active RSS on CPU. On the audited RTX A4000 row, the same active
+  route is strict-clean and reduces the logged time from about ``25.0 s`` to
+  ``22.2 s`` with active RSS about ``2.12 GB``. All quoted rows have zero
+  practical and strict Fortran output mismatches. The older ``COLAMD`` ordering
+  remains available through
+  ``SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC=COLAMD``; it is higher-fill on these
+  cases and is retained as an explicit reproducibility knob.
+- ``SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF`` (default: auto for the measured
+  tokamak PAS no-Er/PAS+Er constrained-PAS sparse-PC windows). Set to ``0`` to
+  factor the padded full system for reproducibility experiments, or ``1`` to
+  force the active-DOF sparse-PC reduction on another RHSMode=1 sparse-PC case.
+  Forced use outside the measured window should be treated as an experiment
+  until the output is compared against the Fortran reference for that geometry.
+- ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE`` (default: ``float64`` for
+  sparse-PC GMRES). Set to ``32`` only for controlled memory experiments. When
+  single-precision factors are requested, the first Krylov attempt is capped by
+  ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FP32_PROBE_MAXITER`` (default: ``2``) before
+  falling back to ``float64`` if the true residual target is not met. This
+  prevents weak low-precision preconditioners from consuming the full run
+  timeout.
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` and
-  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC`` (default: auto). On GPU/CUDA,
-  non-differentiable tokamak full-FP RHSMode=1 rows in the measured
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC`` (default: auto). On CPU and
+  GPU/CUDA, non-differentiable tokamak full-FP RHSMode=1 rows in the measured
   production-floor ``N_zeta=1`` window use the host sparse-PC GMRES route when
   the default matrix-free route is not residual/parity-clean or when theta-line
   is parity-clean but memory-heavy. Set either variable to ``0`` to force the
-  older policy, or to ``1`` to include CPU while retaining the remaining guards.
+  older policy, or to ``1`` to force the sparse-PC route while retaining the
+  remaining guards. For one-species full-FP Er decks, the Fortran-style
+  ``preconditioner_species = 0`` flag is algebraically equivalent to the compact
+  per-species x-block because there is no inter-species collision coupling to
+  preserve. The host-assembled x-block path is therefore allowed for one species
+  and still rejected for coupled multi-species systems. On the audited
+  ``25 x 1 x 8 x 100`` CPU rows, this reduces the one-species Er cases from
+  multi-GB dense-assembly setup to about ``0.42-0.44 GB`` RSS and ``1 s`` logged
+  solve/write time while preserving strict Fortran output parity. On the RTX
+  A4000 GPU audit, the same rows are residual-clean at about ``23.3 s`` (DKES)
+  and ``11.0 s`` (full trajectories), with active RSS deltas near ``1.1 GB``.
   The default active-size bounds are
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN/MAX=10000/60000`` and
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN/MAX=10000/60000``.
