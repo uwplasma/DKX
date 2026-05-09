@@ -1960,13 +1960,13 @@
     "fortran_runtime_s": 76.5304662080016,
     "input_path": "tests/production_floor_cpu_bounded_xblock_2026-05-08/tokamak_2species_PASCollisions_withEr_fullTrajectories/input.namelist",
     "jax_h5": "tests/production_floor_cpu_bounded_xblock_2026-05-08/tokamak_2species_PASCollisions_withEr_fullTrajectories/sfincsOutput_jax.h5",
-    "jax_incremental_max_rss_mb": 1585.1875,
-    "jax_logged_elapsed_s": 9.742888457956724,
-    "jax_max_rss_mb": 1832.894464,
+    "jax_incremental_max_rss_mb": 1389.855036,
+    "jax_logged_elapsed_s": 8.669,
+    "jax_max_rss_mb": 1637.562,
     "jax_memory_metric_source": "dpeak_rss_mb",
     "jax_rss_baseline_mb": 247.706964,
-    "jax_runtime_s": 9.752777707995847,
-    "jax_runtime_s_cold": 9.752777707995847,
+    "jax_runtime_s": 9.435,
+    "jax_runtime_s_cold": 9.435,
     "jax_runtime_s_warm": null,
     "jax_solver_iters_detail": [
       5
