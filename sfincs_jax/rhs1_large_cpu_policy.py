@@ -201,7 +201,13 @@ def rhs1_fp_xblock_assembled_host_allowed(
         return False
     if not _is_explicit_rhs1_fp_only(op):
         return False
-    if int(preconditioner_species) == 0:
+    # In Fortran decks, preconditioner_species=0 means "keep species coupling".
+    # For a one-species full-FP system this is algebraically identical to the
+    # per-species x-block used by the host-assembled sparse path, and it avoids
+    # expensive dense matvec probing.  Multi-species systems must keep the old
+    # guard because dropping inter-species coupling changes the preconditioner.
+    n_species = int(getattr(op, "n_species", 0) or 0)
+    if int(preconditioner_species) == 0 and n_species != 1:
         return False
     if int(preconditioner_xi) != 1:
         return False

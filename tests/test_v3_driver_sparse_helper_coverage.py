@@ -26,6 +26,24 @@ def test_rhsmode1_xblock_sparse_lu_default_max_targets_full_fp_host_path() -> No
     assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(generic_op, build_jax_factors=False) == 2000
 
 
+def test_rhsmode1_fp_xblock_host_species_decoupling_equivalence() -> None:
+    one_species = SimpleNamespace(n_species=1)
+    two_species = SimpleNamespace(n_species=2)
+
+    assert v3_driver._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+        op=one_species,
+        preconditioner_species=0,
+    )
+    assert v3_driver._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+        op=two_species,
+        preconditioner_species=1,
+    )
+    assert not v3_driver._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+        op=two_species,
+        preconditioner_species=0,
+    )
+
+
 def test_host_sparse_direct_allowed_and_sparse_pc_rescue_policy(monkeypatch) -> None:
     assert not v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=False)
     assert not v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=True)

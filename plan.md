@@ -8721,3 +8721,42 @@ Next concrete actions after constrained-PAS fill reduction:
    longer top memory offenders, move to the geometry-rich PAS/HSX rows where
    memory is dominated by diagnostics/output retention rather than sparse-PC
    factor fill.
+
+Progress update (2026-05-09): one-species full-FP Er x-block host assembly
+
+- Root cause: one-species full-FP Er rows with the Fortran-style
+  `preconditioner_species=0` flag were blocked from the compact host-assembled
+  x-block path. For a one-species system this flag is algebraically equivalent
+  to per-species x-block preconditioning, since there is no inter-species
+  coupling to preserve. The old guard forced dense matvec probing/assembly and
+  caused the apparent memory cliff.
+- Landed a scoped policy helper that allows host-assembled x-block factors for
+  `preconditioner_species=0` only when `n_species == 1`; multi-species systems
+  retain the previous coupling-preserving guard.
+- CPU validation against the staged Fortran v3 production-floor references:
+  `tokamak_1species_FPCollisions_withEr_DKESTrajectories` and
+  `tokamak_1species_FPCollisions_withEr_fullTrajectories` are both
+  `parity_ok`, strict `0/214`, with logged times about `1.06 s` / `0.96 s`,
+  cold external JAX times about `1.86 s` / `1.71 s`, and peak RSS about
+  `440 MB` / `419 MB`.
+- GPU validation on `office` RTX A4000 with profiling marks:
+  DKES/full are residual-clean with host-assembled x-blocks. The DKES row uses
+  `145` matvecs, about `23.3 s`, and `1094 MB` active RSS delta; the full row
+  uses right-preconditioned short-restart GMRES, `133` matvecs, about `11.0 s`,
+  and `1104 MB` active RSS delta.
+- Refreshed the tracked CPU/GPU benchmark report rows, README text, and
+  performance documentation. The two rows remain below the README public
+  Fortran-runtime threshold in the existing MPI-reference report, so they stay
+  out of the top public plot/table unless rerun at a larger reference floor.
+- Validation after landing: focused policy/report tests passed, Sphinx docs
+  built successfully, and the full local test suite passed with
+  `1109 passed in 502.34 s`.
+
+Next concrete actions after one-species x-block host assembly:
+
+1. Commit and push the closed one-species x-block host-assembly lane.
+2. Start the next bounded memory lane from the refreshed ranking: PAS-heavy
+   tokamak no-Er/Er rows first, then geometry-rich PAS/HSX diagnostics/output
+   retention. Keep the same gates: strict parity, residual-clean solve,
+   active/device memory reduction on the same metric, and no runtime regression
+   beyond the documented tradeoff threshold.

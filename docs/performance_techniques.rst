@@ -1401,12 +1401,22 @@ Controls:
   prevents weak low-precision preconditioners from consuming the full run
   timeout.
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` and
-  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC`` (default: auto). On GPU/CUDA,
-  non-differentiable tokamak full-FP RHSMode=1 rows in the measured
+  ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC`` (default: auto). On CPU and
+  GPU/CUDA, non-differentiable tokamak full-FP RHSMode=1 rows in the measured
   production-floor ``N_zeta=1`` window use the host sparse-PC GMRES route when
   the default matrix-free route is not residual/parity-clean or when theta-line
   is parity-clean but memory-heavy. Set either variable to ``0`` to force the
-  older policy, or to ``1`` to include CPU while retaining the remaining guards.
+  older policy, or to ``1`` to force the sparse-PC route while retaining the
+  remaining guards. For one-species full-FP Er decks, the Fortran-style
+  ``preconditioner_species = 0`` flag is algebraically equivalent to the compact
+  per-species x-block because there is no inter-species collision coupling to
+  preserve. The host-assembled x-block path is therefore allowed for one species
+  and still rejected for coupled multi-species systems. On the audited
+  ``25 x 1 x 8 x 100`` CPU rows, this reduces the one-species Er cases from
+  multi-GB dense-assembly setup to about ``0.42-0.44 GB`` RSS and ``1 s`` logged
+  solve/write time while preserving strict Fortran output parity. On the RTX
+  A4000 GPU audit, the same rows are residual-clean at about ``23.3 s`` (DKES)
+  and ``11.0 s`` (full trajectories), with active RSS deltas near ``1.1 GB``.
   The default active-size bounds are
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN/MAX=10000/60000`` and
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN/MAX=10000/60000``.
