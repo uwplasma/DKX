@@ -208,6 +208,20 @@ def test_fp_xblock_host_assembly_and_primary_skip(monkeypatch) -> None:
         use_implicit=False,
         backend="cpu",
     )
+    assert rhs1_fp_xblock_assembled_host_allowed(
+        op=_op(n_species=1),
+        preconditioner_species=0,
+        preconditioner_xi=1,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not rhs1_fp_xblock_assembled_host_allowed(
+        op=_op(n_species=2),
+        preconditioner_species=0,
+        preconditioner_xi=1,
+        use_implicit=False,
+        backend="cpu",
+    )
     assert not rhs1_fp_xblock_assembled_host_allowed(
         op=_op(point_at_x0=True),
         preconditioner_species=1,
