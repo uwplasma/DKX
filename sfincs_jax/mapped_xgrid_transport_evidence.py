@@ -32,7 +32,12 @@ class TransportSolveSummary:
     max_relative_residual_norm: float
     total_elapsed_time_s: float
     total_size: int
+    active_size: int
+    active_fraction: float
     n_x: int
+    use_active_dof_mode: bool | None
+    solver_kinds: tuple[str, ...]
+    solve_methods: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -58,7 +63,12 @@ class MappedTransportEvidenceRow:
     max_relative_residual_norm: float
     total_elapsed_time_s: float
     total_size: int
+    active_size: int
+    active_fraction: float
     n_x: int
+    use_active_dof_mode: bool | None
+    solver_kinds: tuple[str, ...]
+    solve_methods: tuple[str, ...]
     min_dx: float
     width_ratio: float
     smoothness: float
@@ -197,13 +207,27 @@ def transport_solve_summary(result: V3TransportMatrixSolveResult) -> TransportSo
 
     elapsed = float(np.sum(np.asarray(result.elapsed_time_s, dtype=np.float64)))
     total_size = int(getattr(result.op0, "total_size", np.asarray(result.transport_matrix).shape[0]))
+    active_size_raw = getattr(result, "active_size", None)
+    active_size = total_size if active_size_raw is None else int(active_size_raw)
+    active_fraction = float(active_size / max(total_size, 1))
     n_x = int(getattr(result.op0, "n_x", 0))
+    solver_kinds_by_rhs = getattr(result, "solver_kinds_by_rhs", None) or {}
+    solve_methods_by_rhs = getattr(result, "solve_methods_by_rhs", None) or {}
+    solver_kinds = tuple(sorted({str(value) for value in solver_kinds_by_rhs.values()}))
+    solve_methods = tuple(sorted({str(value) for value in solve_methods_by_rhs.values()}))
+    use_active = getattr(result, "use_active_dof_mode", None)
+    use_active_dof_mode = None if use_active is None else bool(use_active)
     return TransportSolveSummary(
         max_residual_norm=max_residual,
         max_relative_residual_norm=max_relative,
         total_elapsed_time_s=elapsed,
         total_size=total_size,
+        active_size=active_size,
+        active_fraction=active_fraction,
         n_x=n_x,
+        use_active_dof_mode=use_active_dof_mode,
+        solver_kinds=solver_kinds,
+        solve_methods=solve_methods,
     )
 
 
@@ -265,7 +289,12 @@ def _candidate_row(
         max_relative_residual_norm=summary.max_relative_residual_norm,
         total_elapsed_time_s=summary.total_elapsed_time_s,
         total_size=summary.total_size,
+        active_size=summary.active_size,
+        active_fraction=summary.active_fraction,
         n_x=summary.n_x,
+        use_active_dof_mode=summary.use_active_dof_mode,
+        solver_kinds=summary.solver_kinds,
+        solve_methods=summary.solve_methods,
         min_dx=diag["min_dx"],
         width_ratio=diag["width_ratio"],
         smoothness=diag["smoothness"],

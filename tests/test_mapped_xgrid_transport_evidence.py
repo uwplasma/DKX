@@ -69,6 +69,10 @@ def _fake_transport_solve(*, nml: Namelist, **_kwargs):
         heat_flux_vm_psi_hat=np.zeros((1, 2)),
         elapsed_time_s=np.asarray([0.01, 0.02]) * scale,
         transport_output_fields=None,
+        active_size=8,
+        use_active_dof_mode=True,
+        solver_kinds_by_rhs={1: "sparse_lu", 2: "gmres"},
+        solve_methods_by_rhs={1: "sparse_lu", 2: "incremental"},
     )
 
 
@@ -131,7 +135,12 @@ def test_transport_solve_summary_handles_absolute_and_relative_residuals():
     np.testing.assert_allclose(summary.max_relative_residual_norm, 1.0e-10)
     np.testing.assert_allclose(summary.total_elapsed_time_s, 0.03)
     assert summary.total_size == 12
+    assert summary.active_size == 8
+    np.testing.assert_allclose(summary.active_fraction, 8.0 / 12.0)
     assert summary.n_x == 5
+    assert summary.use_active_dof_mode is True
+    assert summary.solver_kinds == ("gmres", "sparse_lu")
+    assert summary.solve_methods == ("incremental", "sparse_lu")
 
 
 def test_transport_solve_summary_without_rhs_norms_reports_nan_relative_residual():
@@ -142,6 +151,7 @@ def test_transport_solve_summary_without_rhs_norms_reports_nan_relative_residual
 
     assert summary.max_residual_norm == 0.0
     assert np.isnan(summary.max_relative_residual_norm)
+    assert summary.active_size == 8
 
 
 def test_transport_matrix_error_reports_frobenius_and_shape_mismatch():
@@ -177,7 +187,11 @@ def test_run_rational_tail_transport_comparison_with_fake_solver():
     assert report.best_by_moment in report.rows
     for row in report.rows:
         assert row.total_size == 12
+        assert row.active_size == 8
+        np.testing.assert_allclose(row.active_fraction, 8.0 / 12.0)
         assert row.n_x == 5
+        assert row.use_active_dof_mode is True
+        assert row.solver_kinds == ("gmres", "sparse_lu")
         assert row.min_dx > 0.0
         assert row.width_ratio > 1.0
         assert row.moment_objective >= 0.0
