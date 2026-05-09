@@ -25,6 +25,10 @@ def _tokamak_er_dense_probe() -> dict[str, object]:
     return _load_json(FIXTURES / "production_tokamak_er_dense_probe_2026-05-03.json")
 
 
+def _geometry4_large_pas_closeout() -> dict[str, object]:
+    return _load_json(FIXTURES / "geometry4_large_pas_closeout_2026-05-09.json")
+
+
 def test_cpu_solver_path_audit_stays_parity_clean() -> None:
     report = _load_json(FIXTURES / "cpu_audit_snapshot.json")["strict_report"]
 
@@ -224,6 +228,25 @@ def test_pas_offender_timed_out_variants_are_not_release_candidates() -> None:
             assert row["elapsed_s"] is None
             assert row["ru_maxrss_mb"] is None
             assert row["rhs1_preconditioner"] is None
+
+
+def test_geometry4_large_pas_closeout_does_not_promote_timeout_candidates() -> None:
+    closeout = _geometry4_large_pas_closeout()
+
+    assert closeout["decision"] == "no_default_promotion"
+    assert closeout["system_size"]["active_size"] == 744610
+    assert closeout["system_size"]["total_size"] == 1275010
+    assert closeout["bounded_gate_s"] == 300
+
+    cpu_candidates = closeout["cpu_candidates"]
+    gpu_candidates = closeout["gpu_candidates"]
+    assert {row["status"] for row in cpu_candidates} == {"timeout"}
+    assert {row["status"] for row in gpu_candidates} == {"timeout"}
+    assert {row["preconditioner"] for row in cpu_candidates if "preconditioner" in row}.issuperset(
+        {"schur", "sparse_pc_gmres", "pas_tz", "xmg", "pas_hybrid"}
+    )
+    assert all(float(row["wall_s"]) >= 300.0 for row in [*cpu_candidates, *gpu_candidates])
+    assert "structured/chunked geometry-aware PAS preconditioner" in closeout["required_future_algorithm"]
 
 
 def test_fp3d_sparse_pc_probe_beats_dense_default_without_parity_loss() -> None:
