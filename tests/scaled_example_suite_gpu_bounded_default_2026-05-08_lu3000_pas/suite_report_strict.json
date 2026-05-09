@@ -1870,22 +1870,22 @@
     "compare_mode": "strict",
     "final_resolution": {
       "NTHETA": 25,
+      "NZETA": 1,
       "NX": 8,
-      "NXI": 100,
-      "NZETA": 1
+      "NXI": 100
     },
     "fortran_h5": "tests/production_floor_gpu_tokamak_pas_2026-05-08/tokamak_1species_PASCollisions_withEr_fullTrajectories/fortran_run/sfincsOutput.h5",
     "fortran_max_rss_mb": 248.90625,
     "fortran_runtime_s": 75.69800899992697,
     "input_path": "tests/production_floor_gpu_tokamak_pas_2026-05-08/tokamak_1species_PASCollisions_withEr_fullTrajectories/input.namelist",
     "jax_h5": "tests/production_floor_gpu_tokamak_pas_2026-05-08/tokamak_1species_PASCollisions_withEr_fullTrajectories/sfincsOutput_jax.h5",
-    "jax_incremental_max_rss_mb": 1633.3,
-    "jax_logged_elapsed_s": 44.905157992150635,
-    "jax_max_rss_mb": 2185.1328125,
-    "jax_memory_metric_source": "dpeak_rss_mb",
-    "jax_rss_baseline_mb": 551.8,
-    "jax_runtime_s": 46.297357336152345,
-    "jax_runtime_s_cold": 46.297357336152345,
+    "jax_incremental_max_rss_mb": null,
+    "jax_logged_elapsed_s": 13.19260879792273,
+    "jax_max_rss_mb": 1572.1328125,
+    "jax_memory_metric_source": null,
+    "jax_rss_baseline_mb": null,
+    "jax_runtime_s": 14.423370212782174,
+    "jax_runtime_s_cold": 14.423370212782174,
     "jax_runtime_s_warm": null,
     "jax_solver_iters_detail": [
       4
@@ -1986,22 +1986,22 @@
     "compare_mode": "strict",
     "final_resolution": {
       "NTHETA": 25,
+      "NZETA": 1,
       "NX": 8,
-      "NXI": 100,
-      "NZETA": 1
+      "NXI": 100
     },
     "fortran_h5": "tests/production_floor_gpu_tokamak_pas_2026-05-08/tokamak_2species_PASCollisions_withEr_fullTrajectories/fortran_run/sfincsOutput.h5",
     "fortran_max_rss_mb": 386.5625,
     "fortran_runtime_s": 76.5304662080016,
     "input_path": "tests/production_floor_gpu_tokamak_pas_2026-05-08/tokamak_2species_PASCollisions_withEr_fullTrajectories/input.namelist",
     "jax_h5": "tests/production_floor_gpu_tokamak_pas_2026-05-08/tokamak_2species_PASCollisions_withEr_fullTrajectories/sfincsOutput_jax.h5",
-    "jax_incremental_max_rss_mb": 2941.5,
-    "jax_logged_elapsed_s": 91.13867055438459,
-    "jax_max_rss_mb": 3493.8,
-    "jax_memory_metric_source": "dpeak_rss_mb",
-    "jax_rss_baseline_mb": 552.3000000000002,
-    "jax_runtime_s": 92.590343745891,
-    "jax_runtime_s_cold": 92.590343745891,
+    "jax_incremental_max_rss_mb": null,
+    "jax_logged_elapsed_s": 25.020552514120936,
+    "jax_max_rss_mb": 2322.5078125,
+    "jax_memory_metric_source": null,
+    "jax_rss_baseline_mb": null,
+    "jax_runtime_s": 26.410913058090955,
+    "jax_runtime_s_cold": 26.410913058090955,
     "jax_runtime_s_warm": null,
     "jax_solver_iters_detail": [
       5
