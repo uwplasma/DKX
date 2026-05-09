@@ -32,12 +32,20 @@ from sfincs_jax.v3_driver import (
 )
 
 
-def _op(*, constraint_scheme: int, has_fp: bool = True, has_phi1: bool = False, rhs_mode: int = 1):
+def _op(
+    *,
+    constraint_scheme: int,
+    has_fp: bool = True,
+    has_phi1: bool = False,
+    rhs_mode: int = 1,
+    n_species: int = 1,
+):
     return SimpleNamespace(
         rhs_mode=rhs_mode,
         include_phi1=has_phi1,
         constraint_scheme=constraint_scheme,
         point_at_x0=False,
+        n_species=n_species,
         fblock=SimpleNamespace(fp=object() if has_fp else None, pas=None),
     )
 
@@ -1351,7 +1359,7 @@ def test_fp_xblock_assembled_host_respects_guards(monkeypatch) -> None:
         use_implicit=False,
     )
     assert not _rhsmode1_fp_xblock_assembled_host_allowed(
-        op=_op(constraint_scheme=1),
+        op=_op(constraint_scheme=1, n_species=2),
         preconditioner_species=0,
         preconditioner_xi=1,
         use_implicit=False,
@@ -1373,6 +1381,17 @@ def test_fp_xblock_assembled_host_respects_guards(monkeypatch) -> None:
     assert not _rhsmode1_fp_xblock_assembled_host_allowed(
         op=op_x0,
         preconditioner_species=1,
+        preconditioner_xi=1,
+        use_implicit=False,
+    )
+
+
+def test_fp_xblock_assembled_host_allows_fortran_species_coupling_flag_for_one_species(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    assert _rhsmode1_fp_xblock_assembled_host_allowed(
+        op=_op(constraint_scheme=1, n_species=1),
+        preconditioner_species=0,
         preconditioner_xi=1,
         use_implicit=False,
     )
