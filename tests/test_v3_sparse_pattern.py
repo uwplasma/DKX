@@ -222,6 +222,39 @@ def test_sparse_pc_gmres_solve_method_solves_tiny_rhs1_system(monkeypatch) -> No
     assert any("sparse_pc_gmres complete" in msg for msg in messages)
 
 
+def test_sparse_pc_gmres_active_dof_reduces_truncated_pas_system(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist")
+    nml.group("resolutionParameters")["NTHETA"] = 5
+    nml.group("resolutionParameters")["NXI"] = 8
+    nml.group("resolutionParameters")["NL"] = 4
+    nml.group("resolutionParameters")["NX"] = 4
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    nml.group("physicsParameters")["ER"] = 0.1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF", "1")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert result.x.shape == (result.op.total_size,)
+    assert result.metadata is not None
+    assert result.metadata["sparse_pc_active_dof"] is True
+    assert result.metadata["sparse_pc_linear_size"] < result.metadata["sparse_pc_full_size"]
+    active_idx = v3_driver_module._transport_active_dof_indices(result.op)
+    inactive_idx = np.setdiff1d(np.arange(int(result.op.total_size), dtype=np.int32), active_idx)
+    assert np.allclose(np.asarray(result.x)[inactive_idx], 0.0)
+    residual = result.rhs[active_idx] - apply_v3_full_system_operator(result.op, result.x)[active_idx]
+    target = 1.0e-8 * float(jnp.linalg.norm(result.rhs[active_idx]))
+    assert float(jnp.linalg.norm(residual)) <= target
+    assert any("active-DOF reduction enabled" in msg for msg in messages)
+
+
 def test_xblock_sparse_pc_gmres_solve_method_solves_fp_rhs1_system(monkeypatch) -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
