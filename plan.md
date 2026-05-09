@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-08 (Europe/Lisbon)
+Last updated: 2026-05-09 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -8864,3 +8864,42 @@ Next concrete actions after no-Er tokamak PAS closure:
 2. Re-rank remaining CPU/GPU offenders. Expect the remaining dominant cases to
    be PAS+Er GPU memory/runtime and full-FP no-Er Phi1/QN rows, then
    geometry-rich PAS/HSX diagnostics/output retention.
+
+Follow-up update (2026-05-09): PAS+Er sparse-PC ordering and Phi1 audit
+
+- Re-ranked the refreshed CPU/GPU benchmark artifacts after the no-Er sparse-PC
+  closure. The remaining default-change candidates were the full-trajectory
+  tokamak PAS+Er rows and the full-FP no-Er Phi1/QN rows.
+- Profiled SuperLU ordering variants on the one- and two-species PAS+Er
+  production rows. `NATURAL` ordering was rejected immediately because it
+  inflated runtime and memory by several factors. `COLAMD` and explicit FP32
+  factor-probe variants did not beat the measured defaults.
+- Promoted only the validated multi-species PAS+Er sparse-PC ordering:
+  `MMD_AT_PLUS_A` replaces `MMD_ATA` when the row is constrained PAS+Er and has
+  more than one species. CPU validation for
+  `tokamak_2species_PASCollisions_withEr_fullTrajectories` improved from
+  `9.283 s` / `1744 MB` with `MMD_ATA` to `8.669 s` logged / `1638 MB`
+  process RSS with `MMD_AT_PLUS_A`, with non-solver output comparisons still
+  exact. One-GPU validation on `office` improved from `25.394 s` / `2279 MB` to
+  `22.264 s` / `2174 MB`, also without output mismatches.
+- Deliberately kept one-species PAS+Er on `MMD_ATA`: the measured RTX A4000
+  row slowed from `11.989 s` to `13.188 s` with `MMD_AT_PLUS_A`, even though
+  memory fell modestly. This failed the runtime gate, so it remains an explicit
+  user override rather than a default.
+- Audited linear Phi1/QN active-DOF and nonlinear Phi1InDKE restart/factor-dtype
+  variants. The linear active-DOF policy was not robust enough across clean
+  repeats, and nonlinear restart/FP32 variants were small or inconsistent wins.
+  No Phi1/QN default was promoted in this pass.
+- Refreshed the tracked CPU/GPU suite-report rows and regenerated the
+  README/docs benchmark summary JSON/PNG/PDF from those reports. The top
+  two-species PAS+Er active-memory ratios now improve on both backends while
+  preserving `parity_ok`.
+
+Next concrete actions after the PAS+Er ordering audit:
+
+1. Run focused policy/unit tests, report-generation tests, docs checks, and
+   `git diff --check`.
+2. Treat this performance/memory pass as closed for safe default-policy wins if
+   validation is clean. Remaining large improvements are algorithmic lanes:
+   full-FP Phi1/QN memory/runtime, one-species PAS+Er GPU memory/runtime, and
+   geometry-rich 3D diagnostics/output retention.
