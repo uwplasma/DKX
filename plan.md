@@ -8639,3 +8639,41 @@ Next concrete actions after short-restart promotion:
 3. Move back to the remaining true memory-ratio offenders; this x-block lane is
    now runtime-dominated by the unavoidable matrix-free matvec work rather than
    by solver-path selection.
+
+Progress update (2026-05-09): CPU full-FP Er x-block auto-selection
+
+- Re-ranked the current trace-backed CPU/GPU reports after the GPU
+  short-restart change. The stale CPU top offenders were the one-species
+  full-FP tokamak Er rows, still routed through generic `auto` at about
+  `56.9-66.5 s` logged and `3.1-3.9 GB` RSS.
+- Reran those two CPU production-floor rows against the staged Fortran v3
+  reference before changing policy. Current default remained `parity_ok` and
+  strict-clean, confirming the problem was performance/route selection rather
+  than correctness.
+- Forced `SFINCS_JAX_RHSMODE1_SOLVE_METHOD=xblock_sparse_pc_gmres` on the same
+  CPU rows. Both were strict-clean with `0/214` mismatches: DKES trajectories
+  ran in about `3.31 s` logged with `145` matvecs; full trajectories ran in
+  about `4.10 s` logged with `105` matvecs and the right-PC short-restart cap.
+- Widened `rhs1_tokamak_fp_er_sparse_pc_auto_allowed(...)` from GPU-only to
+  CPU+GPU for the same measured non-differentiable, axisymmetric,
+  full-FP+Er, production-size window. The no-Er and PAS policies remain
+  unchanged.
+- Verified the new default without any solve-method environment override:
+  DKES trajectories selected `xblock_sparse_pc_gmres`, stayed strict-clean, and
+  dropped from `56.95 s` to `3.44 s` logged; full trajectories selected
+  `xblock_sparse_pc_gmres`, stayed strict-clean, and dropped from `66.48 s` to
+  `4.15 s` logged. The tracked CPU report fixture was refreshed with these
+  rows. The public top plot remains unchanged because both rows are below the
+  current `10 s` Fortran-reference plotting floor.
+- Validation after landing: targeted policy/report tests passed, docs built
+  successfully with Sphinx, and the full suite passed with
+  `1107 passed in 511.65 s`.
+
+Next concrete actions after CPU x-block promotion:
+
+1. Re-rank memory offenders from the refreshed reports; the remaining true
+   memory targets are now PAS-heavy two-species tokamak and 3D geometry/HSX
+   rows rather than one-species FP Er route selection.
+2. For the next code change, target memory-ratio reduction, not another blanket
+   Krylov selector. Candidate routes are PAS diagnostics/output chunking and
+   lower-retention sparse/preconditioner lifetimes.

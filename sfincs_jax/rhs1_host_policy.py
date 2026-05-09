@@ -318,19 +318,18 @@ def rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
 ) -> bool:
     """Return whether tokamak full-FP + Er should start sparse-PC GMRES.
 
-    Production-floor GPU probes at ``25 x 1 x 8 x 100`` show the matrix-free
-    FP+Er routes can either stall before the strong fallback or build very large
-    XLA executables. The sparse-PC route is slower than the fastest theta-line
-    full-trajectory solve, but it is parity-clean and materially lowers peak
-    memory on the memory-limited GPU lane. Keep the default promotion GPU-only
-    until the same window is rebenchmarked on CPU.
+    Production-floor CPU/GPU probes at ``25 x 1 x 8 x 100`` show the
+    matrix-free FP+Er routes can either stall before the strong fallback or pay
+    for large generic XLA solves. The x-block sparse-PC route is parity-clean
+    and materially faster in this measured axisymmetric window, so it is the
+    default for both CPU and GPU non-differentiable output/CLI lanes.
     """
 
     env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC")
     if env is False:
         return False
     backend_norm = str(backend).strip().lower()
-    allowed_backends = {"gpu", "cuda"} if env is not True else {"cpu", "gpu", "cuda"}
+    allowed_backends = {"cpu", "gpu", "cuda"}
     if backend_norm not in allowed_backends:
         return False
     if bool(use_implicit):
