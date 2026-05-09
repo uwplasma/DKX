@@ -969,18 +969,42 @@ def _rhsmode1_sparse_pc_default_permc_spec(
 ) -> str:
     """Return the measured SuperLU column-ordering default for sparse-PC RHSMode=1.
 
-    Constrained PAS systems usually benefit from ``MMD_ATA``. The only measured
-    exception kept as a default is the multi-species tokamak PAS+Er
-    full-trajectory window, where ``MMD_AT_PLUS_A`` lowers fill and runtime on
-    both CPU and one-GPU validation runs. One-species PAS+Er stays on
-    ``MMD_ATA`` because the same ordering slowed the measured GPU row.
+    Constrained PAS systems usually benefit from ``MMD_ATA``. The measured
+    exception kept as a default is the tokamak PAS+Er full-trajectory window,
+    where ``MMD_AT_PLUS_A`` lowers fill and runtime on both CPU and one-GPU
+    validation runs.
     """
 
-    if bool(tokamak_pas_er_pc) and int(n_species) > 1:
+    del n_species
+    if bool(tokamak_pas_er_pc):
         return "MMD_AT_PLUS_A"
     if bool(constrained_pas_pc):
         return "MMD_ATA"
     return "COLAMD"
+
+
+def _rhsmode1_sparse_pc_default_restart(
+    *,
+    requested_restart: int,
+    restart_env_value: str,
+    tokamak_pas_er_pc: bool,
+    n_species: int,
+) -> int:
+    """Return the sparse-PC GMRES restart after scoped production caps.
+
+    The one-species tokamak PAS+Er production row is memory dominated on GPUs.
+    A restart cap of 40 preserved output parity in CPU/GPU sweeps while lowering
+    GPU resident memory and slightly reducing time-to-solution. Keep all other
+    sparse-PC rows on their requested restart, and always respect an explicit
+    user environment override.
+    """
+
+    requested = max(1, int(requested_restart))
+    if str(restart_env_value).strip():
+        return requested
+    if bool(tokamak_pas_er_pc) and int(n_species) == 1:
+        return min(requested, 40)
+    return requested
 
 
 def _maybe_rhsmode1_full_sparse_pattern(op: V3FullSystemOperator, emit: Callable[[int, str], None] | None = None):
@@ -11606,6 +11630,12 @@ def solve_v3_full_system_linear_gmres(
             default_maxiter=max(100, int(maxiter) if maxiter is not None else 400),
             min_restart=2,
             min_maxiter=1,
+        )
+        pc_restart = _rhsmode1_sparse_pc_default_restart(
+            requested_restart=int(pc_restart),
+            restart_env_value=pc_restart_env,
+            tokamak_pas_er_pc=bool(tokamak_pas_er_pc),
+            n_species=int(op.n_species),
         )
 
         if xblock_sparse_pc:
