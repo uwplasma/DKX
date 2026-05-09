@@ -89,10 +89,12 @@ and GPU. The production-floor CPU Er rows drop from minute-scale generic
 `auto` solves to `3-4 s` logged x-block sparse-PC solves; the GPU
 full-trajectory row uses right-preconditioned GMRES with a short restart and
 drops from `467` to `106` matvecs while staying residual-clean.
-Large constrained-PAS
-profile-current decks also auto-select sparse-PC GMRES when the problem size is
-in the validated production window. Explicit sparse-host LU and x-block sparse
-PC remain available:
+Large constrained-PAS profile-current decks also auto-select sparse-PC GMRES
+when the problem size is in the validated production window. Tokamak PAS+Er
+production-floor sparse-PC runs use the measured `MMD_ATA` SuperLU ordering by
+default, which cuts sparse-factor fill while preserving strict Fortran parity on
+the audited CPU and RTX A4000 GPU rows. Explicit sparse-host LU and x-block
+sparse PC remain available:
 
 ```bash
 sfincs_jax write-output \
@@ -547,9 +549,9 @@ Full per-case runtime / memory table:
 | `tokamak_1species_PASCollisions_noEr` | 75.566 | 3.073 | 0.04x | 3.073 | 0.04x | 14.166 | 0.19x | 12.654 | 0.17x | 155.3 | 696.3 | 4.48x | 659.0 | 4.24x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_PASCollisions_noEr_Nx1` | 75.533 | 2.519 | 0.03x | 2.519 | 0.03x | 28.827 | 0.38x | 27.403 | 0.36x | 119.2 | 473.8 | 3.97x | 563.0 | 4.72x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_PASCollisions_noEr_withQN` | 75.242 | 5.147 | 0.07x | 5.147 | 0.07x | 11.444 | 0.15x | 10.019 | 0.13x | 165.0 | 612.3 | 3.71x | 459.5 | 2.78x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 75.698 | 21.970 | 0.29x | 21.970 | 0.29x | 46.297 | 0.61x | 44.905 | 0.59x | 248.9 | 1940.7 | 7.80x | 1633.3 | 6.56x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
+| `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 75.698 | 7.049 | 0.09x | 6.231 | 0.08x | 14.423 | 0.19x | 13.193 | 0.17x | 248.9 | 1319.5 | 5.30x | 1572.1 | 6.32x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_noEr` | 75.362 | 2.855 | 0.04x | 2.855 | 0.04x | 14.717 | 0.20x | 13.226 | 0.18x | 215.3 | 1753.0 | 8.14x | 1112.0 | 5.17x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 41.632 | 0.54x | 41.632 | 0.54x | 92.590 | 1.21x | 91.139 | 1.19x | 386.6 | 3828.1 | 9.90x | 2941.5 | 7.61x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
+| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 12.716 | 0.17x | 11.848 | 0.15x | 26.411 | 0.35x | 25.021 | 0.33x | 386.6 | 2262.5 | 5.85x | 2322.5 | 6.01x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 
 Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
 - `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.9s (delta=1.1s)
