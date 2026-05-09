@@ -96,6 +96,41 @@ def test_constraint0_dense_fallback_policy() -> None:
     assert not vd._rhsmode1_constraint0_dense_fallback_allowed(_rhs1_fp_op(constraint_scheme=0))
 
 
+def test_sparse_pc_default_permc_spec_targets_multispecies_pas_er_only() -> None:
+    assert (
+        vd._rhsmode1_sparse_pc_default_permc_spec(
+            constrained_pas_pc=True,
+            tokamak_pas_er_pc=True,
+            n_species=2,
+        )
+        == "MMD_AT_PLUS_A"
+    )
+    assert (
+        vd._rhsmode1_sparse_pc_default_permc_spec(
+            constrained_pas_pc=True,
+            tokamak_pas_er_pc=True,
+            n_species=1,
+        )
+        == "MMD_ATA"
+    )
+    assert (
+        vd._rhsmode1_sparse_pc_default_permc_spec(
+            constrained_pas_pc=True,
+            tokamak_pas_er_pc=False,
+            n_species=2,
+        )
+        == "MMD_ATA"
+    )
+    assert (
+        vd._rhsmode1_sparse_pc_default_permc_spec(
+            constrained_pas_pc=False,
+            tokamak_pas_er_pc=False,
+            n_species=2,
+        )
+        == "COLAMD"
+    )
+
+
 def test_sparse_exact_lu_requested_covers_pas_full_and_accelerator_small_case(monkeypatch) -> None:
     monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_EXACT_LU", raising=False)
