@@ -1395,8 +1395,9 @@ Controls:
   measured production-floor window use the host sparse-PC GMRES route. This
   avoids the PAS-ILU/Schur stage-2 stall while preserving Fortran parity for the
   audited one- and two-species ``25 x 1 x 8 x 100`` CPU and RTX A4000 GPU cases.
-  The route defaults to the lower-fill ``MMD_ATA`` SuperLU column ordering for
-  constrained PAS systems,
+  The route defaults to the lower-fill measured ``MMD_AT_PLUS_A`` SuperLU
+  column ordering for the multi-species tokamak PAS+Er full-trajectory
+  sparse-PC window,
   ``SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT=1e-8`` and
   ``SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH=0`` for constrained PAS unless
   the user overrides those values. In the same measured tokamak PAS+Er window,
@@ -1408,8 +1409,9 @@ Controls:
   ``1.59 GB`` active RSS on CPU. On the audited RTX A4000 row, the same active
   route is strict-clean and reduces the logged time from about ``25.0 s`` to
   ``22.2 s`` with active RSS about ``2.12 GB``. All quoted rows have zero
-  practical and strict Fortran output mismatches. The older ``COLAMD`` ordering
-  remains available through
+  practical and strict Fortran output mismatches. The no-Er sparse-PC window
+  and the one-species PAS+Er row keep ``MMD_ATA`` as their measured default.
+  The older ``COLAMD`` ordering remains available through
   ``SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC=COLAMD``; it is higher-fill on these
   cases and is retained as an explicit reproducibility knob.
 - ``SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF`` (default: auto for the measured
