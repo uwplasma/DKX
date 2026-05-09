@@ -26,6 +26,24 @@ def test_rhsmode1_xblock_sparse_lu_default_max_targets_full_fp_host_path() -> No
     assert v3_driver._rhsmode1_xblock_sparse_lu_default_max(generic_op, build_jax_factors=False) == 2000
 
 
+def test_rhsmode1_fp_xblock_host_species_decoupling_equivalence() -> None:
+    one_species = SimpleNamespace(n_species=1)
+    two_species = SimpleNamespace(n_species=2)
+
+    assert v3_driver._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+        op=one_species,
+        preconditioner_species=0,
+    )
+    assert v3_driver._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+        op=two_species,
+        preconditioner_species=1,
+    )
+    assert not v3_driver._rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+        op=two_species,
+        preconditioner_species=0,
+    )
+
+
 def test_host_sparse_direct_allowed_and_sparse_pc_rescue_policy(monkeypatch) -> None:
     assert not v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=False)
     assert not v3_driver._rhsmode1_host_sparse_direct_allowed(sparse_exact_lu=True, use_implicit=True)
@@ -221,13 +239,20 @@ def test_build_host_sparse_direct_factor_from_matvec_falls_back_on_invalid_env(m
     assert factor_kwargs_seen["permc_spec"] == "COLAMD"
     assert factor_kwargs_seen["diag_pivot_thresh"] == pytest.approx(1.0)
     kwargs = seen["kwargs"]
+    assert kwargs["dtype"] == np.dtype(np.float64)
     assert kwargs["block_cols"] == 32
     assert kwargs["dense_max_mb"] == pytest.approx(128.0)
     assert kwargs["csr_max_mb"] == pytest.approx(512.0)
     assert kwargs["drop_tol"] == pytest.approx(0.0)
     assert kwargs["prefer_sparse_on_gpu"] is True
     assert kwargs["allow_operator_only"] is False
-    assert messages == [(1, "explicit_sparse: storage=csr reason=fallback factor_kind=lu permc=COLAMD diag_pivot=1")]
+    assert messages == [
+        (
+            1,
+            "explicit_sparse: storage=csr reason=fallback factor_kind=lu "
+            "factor_dtype=float64 permc=COLAMD diag_pivot=1",
+        )
+    ]
 
 
 def test_build_host_sparse_direct_factor_from_matvec_respects_env_overrides(monkeypatch) -> None:
@@ -258,6 +283,7 @@ def test_build_host_sparse_direct_factor_from_matvec_respects_env_overrides(monk
     )
 
     kwargs = seen["kwargs"]
+    assert kwargs["dtype"] == np.dtype(np.float32)
     assert kwargs["backend"] == "gpu"
     assert kwargs["block_cols"] == 7
     assert kwargs["dense_max_mb"] == pytest.approx(3.5)
@@ -275,11 +301,11 @@ def test_build_host_sparse_direct_factor_from_matvec_can_use_pattern_probe(monke
         return SimpleNamespace(metadata=SimpleNamespace(storage_kind="csr", reason="pattern"))
 
     monkeypatch.setattr(v3_driver, "build_operator_from_pattern", fake_build_operator_from_pattern)
-    monkeypatch.setattr(
-        v3_driver,
-        "factorize_host_sparse_operator",
-        lambda bundle, *, kind, **kwargs: SimpleNamespace(bundle=bundle, kind=kind, kwargs=kwargs),
-    )
+    def fake_factorize_host_sparse_operator(bundle, *, kind, **kwargs):
+        seen["factor_kwargs"] = kwargs
+        return SimpleNamespace(bundle=bundle, kind=kind, kwargs=kwargs)
+
+    monkeypatch.setattr(v3_driver, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
     monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
 
     v3_driver._build_host_sparse_direct_factor_from_matvec(
@@ -288,9 +314,12 @@ def test_build_host_sparse_direct_factor_from_matvec_can_use_pattern_probe(monke
         dtype=jnp.float64,
         factor_dtype=np.dtype(np.float64),
         pattern=pattern,
+        default_permc_spec="MMD_ATA",
     )
 
     kwargs = seen["kwargs"]
     assert kwargs["pattern"] is pattern
+    assert kwargs["dtype"] == np.dtype(np.float64)
     assert kwargs["backend"] == "cpu"
     assert kwargs["allow_operator_only"] is False
+    assert seen["factor_kwargs"]["permc_spec"] == "MMD_ATA"
