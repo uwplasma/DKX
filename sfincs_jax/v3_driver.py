@@ -90,6 +90,7 @@ from .rhs1_handoff import rhs1_accept_candidate
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .rhs1_strong_policy import (
     requested_rhs1_strong_preconditioner_kind,
+    rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
 )
 from .rhs1_strong_control import rhs1_resolved_strong_preconditioner_control
@@ -15366,6 +15367,52 @@ def solve_v3_full_system_linear_gmres(
                             f"accepted {len(minres_alphas)} step(s), residual="
                             f"{old_residual:.3e}->{residual_norm_true:.3e}",
                         )
+        weak_minres_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
+        weak_minres_steps = rhs1_pas_weak_minres_steps(
+            has_pas=op.fblock.pas is not None,
+            rhs1_precond_kind=rhs1_precond_kind,
+            res_ratio=float(weak_minres_ratio),
+        )
+        if (
+            (not rhs1_pas_tz_guarded_fallback)
+            and preconditioner_reduced is not None
+            and weak_minres_steps > 0
+            and float(res_reduced.residual_norm) > float(target_reduced)
+        ):
+            weak_clip_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP", "").strip()
+            weak_improve_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT", "").strip()
+            try:
+                weak_clip = float(weak_clip_env) if weak_clip_env else 10.0
+            except ValueError:
+                weak_clip = 10.0
+            try:
+                weak_improve = float(weak_improve_env) if weak_improve_env else 0.0
+            except ValueError:
+                weak_improve = 0.0
+            x_minres, residual_minres, minres_history, minres_alphas = _apply_preconditioned_minres_correction(
+                matvec=mv_reduced,
+                rhs=rhs_reduced,
+                x0=res_reduced.x,
+                preconditioner=preconditioner_reduced,
+                steps=int(weak_minres_steps),
+                alpha_clip=float(weak_clip),
+                min_improvement=float(weak_improve),
+            )
+            if minres_history and float(minres_history[-1]) < float(res_reduced.residual_norm):
+                old_residual = float(res_reduced.residual_norm)
+                residual_norm_true = float(minres_history[-1])
+                residual_vec = residual_minres
+                res_reduced = GMRESSolveResult(
+                    x=jnp.asarray(x_minres, dtype=jnp.float64),
+                    residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64),
+                )
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: weak PAS minres correction "
+                        f"accepted {len(minres_alphas)} step(s), residual="
+                        f"{old_residual:.3e}->{residual_norm_true:.3e}",
+                    )
         res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
         stage2_trigger = rhs1_stage2_trigger(res_ratio=res_ratio, use_dkes=bool(use_dkes))
         fp_force_stage2 = rhs1_fp_force_stage2(
@@ -15390,15 +15437,10 @@ def solve_v3_full_system_linear_gmres(
         ):
             stage2_trigger = False
             if emit is not None:
-                pas_stage2_skip_env = os.environ.get("SFINCS_JAX_PAS_STAGE2_SKIP_RATIO", "").strip()
-                try:
-                    pas_stage2_skip_ratio = float(pas_stage2_skip_env) if pas_stage2_skip_env else 1.0e6
-                except ValueError:
-                    pas_stage2_skip_ratio = 1.0e6
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: PAS stage2 skipped "
-                    f"(residual ratio={res_ratio:.3e} >= {float(pas_stage2_skip_ratio):.1e})",
+                    f"(residual ratio={res_ratio:.3e}; set the relevant PAS stage2 skip ratio to 0 to retry)",
                 )
         if (
             (not early_dense_shortcut)

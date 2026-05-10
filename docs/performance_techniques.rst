@@ -1057,6 +1057,14 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO`` (default ``1e12``) skips the
   automatic strong-preconditioner retry for the same weak PAS base kinds at
   enormous residual ratios; set ``0`` to force the older retry/search behavior.
+- ``SFINCS_JAX_PAS_WEAK_MINRES_RATIO`` / ``SFINCS_JAX_PAS_WEAK_MINRES_STEPS``
+  (defaults ``1e6`` / ``2``) apply a bounded matrix-free minimal-residual
+  correction to forced weak PAS base solves before stage-2 or strong-retry
+  escalation. The correction reuses the existing weak preconditioner and is
+  accepted only when the measured residual decreases.
+- ``SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP`` /
+  ``SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT`` control the scalar line-search
+  clipping and minimum accepted improvement for that weak-PAS correction.
 - ``SFINCS_JAX_PRECOND_MAX_MB`` / ``SFINCS_JAX_PRECOND_CHUNK`` (cap memory during block assembly)
 - ``SFINCS_JAX_PRECOND_PAS_MAX_COLS`` (additional column cap for PAS block assembly;
   reduces peak RSS by chunking :math:`(\theta,\zeta)` blocks)
@@ -1521,6 +1529,10 @@ Large geometry-rich PAS closeout:
   normal stage-2 trigger so moderate residuals can still use the existing polish
   and retry machinery. Set either value to ``0`` to disable the corresponding
   guard.
+- ``SFINCS_JAX_PAS_WEAK_MINRES_*`` controls a cheap accept-only correction for
+  the same weak PAS baselines. It performs a small number of matrix-free steps
+  :math:`d=P^{-1}r`, chooses the scalar :math:`\alpha` minimizing
+  :math:`\|r-\alpha A d\|_2`, and keeps the step only if the residual improves.
 - ``SFINCS_JAX_TRANSPORT_DENSE_RETRY_MAX`` (default: ``6000`` for RHSMode=2/3).
 - ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK`` / ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK_MAX``.
 - ``SFINCS_JAX_TRANSPORT_DENSE_MAX_MB`` (default: ``128``). Disable dense transport
@@ -1649,12 +1661,15 @@ algorithmic step is a genuinely stronger matrix-free or chunked PAS correction
 that reduces the residual without constructing dense angular patch inverses.
 
 The same fail-fast rule is now applied to forced weak PAS baselines at
-astronomical residual ratios. On the geometryScheme=4 smoke deck, forced
+astronomical residual ratios, with a cheap accept-only minres correction before
+the fail-fast decision. On the geometryScheme=4 smoke deck, forced
 ``collision``, ``xmg``, and ``point`` preconditioners no longer enter minutes of
 stage-2 or strong-preconditioner retry/search after first residual ratios near
-``1e15``. They return in about ``1.2-2.6 s`` with residuals
-``1.16e6-2.53e6``; the ``point`` route also used substantially more memory than
-the collision baseline. This is retained as an auditable negative benchmark,
+``1e15``. ``collision`` returns in about ``1.2 s`` with residual improved from
+``1.58e6`` to ``1.27e6`` and about ``0.6 GB`` RSS; ``xmg`` returns in about
+``1.35 s`` with residual improved from ``2.53e6`` to ``2.44e6``; ``point``
+returns in about ``2.8 s`` and ends at the same ``1.27e6`` residual but still
+uses about ``1.9 GB`` RSS. This is retained as an auditable negative benchmark,
 not as a production recommendation.
 
 The remaining high-impact memory lanes are algorithmic:
