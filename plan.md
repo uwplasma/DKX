@@ -9221,3 +9221,52 @@ Rejected probe (2026-05-10): guarded `tzfft` restart cap
 - Decision: do not keep the restart-cap source change. It worsened both memory
   and residual on the checked smoke, so the next real lane remains a stronger
   streaming-aware preconditioner rather than restart tuning.
+
+Rejected probe (2026-05-10): guarded `tzfft` tiny subspace correction
+
+- Tested an opt-in accept-only post-Krylov subspace correction that built a
+  small basis from repeated `tzfft` preconditioner applications and solved the
+  tiny least-squares problem `min_y ||r - A P y||`. This avoided dense angular
+  inverse storage, but it did not improve the measured gate.
+- Bounded geometry4 PAS probe (`maxiter=8`, `restart=12`, `60 s` timeout):
+  `collision_tzfft_subspace` returned in `2.32 s`, used about `779 MB` RSS, and
+  ended at residual `1.335e5`. This is essentially the same residual floor as
+  the scalar `collision_tzfft_correction` probe (`1.336e5`) with more memory and
+  slightly more time. A wider requested subspace still accepted only dimension
+  `3` and remained at the same residual floor.
+- Decision: revert the subspace source change and do not add another public
+  tuning knob. The evidence points away from post-solve low-dimensional
+  correction and toward a preconditioner that is strong inside Krylov while
+  remaining streaming/chunk aware.
+
+Rejected probe (2026-05-10): direct ADI line-preconditioner fallback
+
+- Tested the existing `adi` RHSMode=1 preconditioner as a possible
+  streaming-aware low-memory fallback on the bounded geometry4 PAS deck
+  (`maxiter=8`, `restart=12`). It was still in preconditioner setup after
+  `30 s`, while the fixed fallback benchmark candidates return in about
+  `1.6-3.6 s`.
+- Decision: do not route memory-unsafe PAS-TZ fallback to the current `adi`
+  builder. The implementation is not a bounded replacement for dense PAS-TZ on
+  this target without further source-level work to make the line solves
+  genuinely streaming/chunked.
+
+Rejected probe (2026-05-10): right-preconditioned guarded `tzfft`
+
+- Tested `SFINCS_JAX_GMRES_PRECONDITION_SIDE=right` with explicit guarded
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft` on the same geometry4 PAS
+  smoke (`maxiter=8`, `restart=12`). It returned residual `1.389e-4`, elapsed
+  `4.04 s`, and about `1007 MB` RSS.
+- Decision: do not promote a right-preconditioned guarded `tzfft` policy. It
+  improves residual only modestly relative to the existing left-preconditioned
+  `tzfft` probe while increasing runtime and memory.
+
+Rejected probe (2026-05-10): truncated dense PAS-TZ `Lmax=2`
+
+- Tested `SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX=2` under the normal PAS-TZ memory cap
+  on the bounded geometry4 PAS deck. It was still running after `30 s` and had
+  already entered the strong `pas_lite` fallback from residual `6.31e-3`.
+- Decision: low-`Lmax` dense PAS-TZ truncation is not a bounded replacement for
+  the memory-unsafe PAS-TZ path on this target. It reduces the nominal dense
+  block size, but the resulting preconditioner is too weak and triggers slower
+  fallback behavior.
