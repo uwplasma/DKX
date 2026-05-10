@@ -384,7 +384,10 @@ performance without changing the input file:
     experimental matrix-free angular-streaming fallback. Guarded fallbacks skip
     stage-2 GMRES by default; set
     ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1`` only when profiling a
-    strict polish retry.
+    strict polish retry. ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft``
+    keeps the cheap fallback as the Krylov preconditioner but applies a bounded
+    matrix-free ``tzfft`` correction after Krylov; this is an experimental
+    profiling option, not a default.
   - ``pas_tokamak_theta``: tokamak‑style PAS :math:`(\theta,L)` block‑tridiagonal preconditioner
     (``N_\zeta=1`` or zeta‑invariant geometries). The optional structured
     ``L>=2`` tail is available via ``SFINCS_JAX_PAS_TOKAMAK_STRUCTURED=1`` and

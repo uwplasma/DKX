@@ -412,6 +412,24 @@ def resolve_pas_tz_cheap_fallback_kind(*, requested: str) -> str:
     return "collision"
 
 
+def resolve_pas_tz_guarded_correction_kind(*, requested: str) -> str | None:
+    """Resolve an optional matrix-free correction after guarded PAS-TZ fallback."""
+    req = str(requested or "").strip().lower().replace("-", "_")
+    if req in {"", "0", "false", "no", "off", "none"}:
+        return None
+    if req in {
+        "tzfft",
+        "pas_tzfft",
+        "pas_fft",
+        "pas_stream_fft",
+        "pas_streaming_fft",
+        "collision_tzfft",
+        "collision_tzfft_correction",
+    }:
+        return "tzfft"
+    return None
+
+
 def resolve_pas_tz_memory_fallback_axis(
     *,
     op,
@@ -452,6 +470,7 @@ __all__ = [
     "pas_tz_preconditioner_memory_safe",
     "preferred_pas_tz_schwarz_axis",
     "resolve_pas_tz_cheap_fallback_kind",
+    "resolve_pas_tz_guarded_correction_kind",
     "resolve_pas_tz_memory_fallback_axis",
     "rhs1_pas_adaptive_smoother_allowed",
     "rhs1_pas_tz_max_bytes",
