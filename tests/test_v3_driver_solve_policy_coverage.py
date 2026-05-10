@@ -96,7 +96,7 @@ def test_constraint0_dense_fallback_policy() -> None:
     assert not vd._rhsmode1_constraint0_dense_fallback_allowed(_rhs1_fp_op(constraint_scheme=0))
 
 
-def test_sparse_pc_default_permc_spec_targets_multispecies_pas_er_only() -> None:
+def test_sparse_pc_default_permc_spec_targets_pas_er_rows() -> None:
     assert (
         vd._rhsmode1_sparse_pc_default_permc_spec(
             constrained_pas_pc=True,
@@ -111,7 +111,7 @@ def test_sparse_pc_default_permc_spec_targets_multispecies_pas_er_only() -> None
             tokamak_pas_er_pc=True,
             n_species=1,
         )
-        == "MMD_ATA"
+        == "MMD_AT_PLUS_A"
     )
     assert (
         vd._rhsmode1_sparse_pc_default_permc_spec(
@@ -128,6 +128,54 @@ def test_sparse_pc_default_permc_spec_targets_multispecies_pas_er_only() -> None
             n_species=2,
         )
         == "COLAMD"
+    )
+
+
+def test_sparse_pc_default_restart_caps_one_species_pas_er_without_env() -> None:
+    assert (
+        vd._rhsmode1_sparse_pc_default_restart(
+            requested_restart=80,
+            restart_env_value="",
+            tokamak_pas_er_pc=True,
+            n_species=1,
+        )
+        == 40
+    )
+    assert (
+        vd._rhsmode1_sparse_pc_default_restart(
+            requested_restart=20,
+            restart_env_value="",
+            tokamak_pas_er_pc=True,
+            n_species=1,
+        )
+        == 20
+    )
+    assert (
+        vd._rhsmode1_sparse_pc_default_restart(
+            requested_restart=80,
+            restart_env_value="",
+            tokamak_pas_er_pc=True,
+            n_species=2,
+        )
+        == 80
+    )
+    assert (
+        vd._rhsmode1_sparse_pc_default_restart(
+            requested_restart=80,
+            restart_env_value="80",
+            tokamak_pas_er_pc=True,
+            n_species=1,
+        )
+        == 80
+    )
+    assert (
+        vd._rhsmode1_sparse_pc_default_restart(
+            requested_restart=80,
+            restart_env_value="",
+            tokamak_pas_er_pc=False,
+            n_species=1,
+        )
+        == 80
     )
 
 
