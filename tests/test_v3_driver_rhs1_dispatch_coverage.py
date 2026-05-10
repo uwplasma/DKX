@@ -131,3 +131,45 @@ def test_rhs1_dispatch_default_falls_back_to_block_preconditioner(monkeypatch) -
         is sentinel
     )
     assert seen == {"species": 2, "x": 3, "xi": 4}
+
+
+def test_rhs1_dkes_gmres_budget_respects_explicit_limits() -> None:
+    restart, maxiter, restart_defaulted, maxiter_defaulted = vd._rhs1_dkes_gmres_budget(
+        restart=20,
+        maxiter=20,
+        restart_forced=True,
+        maxiter_forced=True,
+        restart_cap_env="100",
+    )
+
+    assert (restart, maxiter) == (20, 20)
+    assert restart_defaulted is False
+    assert maxiter_defaulted is False
+
+
+def test_rhs1_dkes_gmres_budget_applies_defaults_when_unforced() -> None:
+    restart, maxiter, restart_defaulted, maxiter_defaulted = vd._rhs1_dkes_gmres_budget(
+        restart=20,
+        maxiter=20,
+        restart_forced=False,
+        maxiter_forced=False,
+        restart_cap_env="90",
+    )
+
+    assert (restart, maxiter) == (80, 600)
+    assert restart_defaulted is True
+    assert maxiter_defaulted is True
+
+
+def test_rhs1_dkes_gmres_budget_caps_unforced_restart() -> None:
+    restart, maxiter, restart_defaulted, maxiter_defaulted = vd._rhs1_dkes_gmres_budget(
+        restart=200,
+        maxiter=None,
+        restart_forced=False,
+        maxiter_forced=False,
+        restart_cap_env="100",
+    )
+
+    assert (restart, maxiter) == (100, 600)
+    assert restart_defaulted is True
+    assert maxiter_defaulted is True
