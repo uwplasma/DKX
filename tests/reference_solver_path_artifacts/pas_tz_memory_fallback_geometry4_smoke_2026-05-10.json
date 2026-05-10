@@ -9,6 +9,7 @@
     "timeout_s": 15.0,
     "tol": 1e-06,
     "variants": [
+      "collision",
       "hybrid",
       "zeta",
       "theta"
@@ -16,8 +17,38 @@
   },
   "results": [
     {
-      "elapsed_s": 2.3681913330219686,
-      "max_rss_mb": 682.4375,
+      "elapsed_s": 1.573229500092566,
+      "max_rss_mb": 599.765625,
+      "messages_tail": [
+        "solve_v3_full_system_linear_gmres: building operator",
+        "solve_v3_full_system_linear_gmres: total_size=143530",
+        "solve_v3_full_system_linear_gmres: assembling RHS",
+        "solve_v3_full_system_linear_gmres: rhs_norm=2.995744e-04",
+        "solve_v3_full_system_linear_gmres: PAS constraint projection enabled (size=83122/143530)",
+        "solve_v3_full_system_linear_gmres: GMRES tol=1e-06 atol=0.0 restart=8 maxiter=4 solve_method=incremental",
+        "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)",
+        "solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner=collision",
+        "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)",
+        " solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.",
+        "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=collision); using cheap fallback",
+        " solve_v3_full_system_linear_gmres: starting Krylov iterations.",
+        "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=1.581e+06->1.271e+06",
+        "solve_v3_full_system_linear_gmres: PAS stage2 skipped (residual ratio=4.244e+15; set the relevant PAS stage2 skip ratio to 0 to retry)",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+        "sparse_ilu: disabled (size=83122 > max=6000)",
+        "ksp_iterations=32 solver=gmres",
+        "solve_v3_full_system_linear_gmres: residual_norm=1.271415e+06",
+        "solve_v3_full_system_linear_gmres: elapsed_s=1.572"
+      ],
+      "metadata": {},
+      "residual_norm": 1271414.690870808,
+      "returncode": 0,
+      "status": "ok",
+      "variant": "collision"
+    },
+    {
+      "elapsed_s": 1.660082417074591,
+      "max_rss_mb": 655.046875,
       "messages_tail": [
         "solve_v3_full_system_linear_gmres: building operator",
         "solve_v3_full_system_linear_gmres: total_size=143530",
@@ -37,7 +68,7 @@
         "sparse_ilu: disabled (size=83122 > max=6000)",
         "ksp_iterations=32 solver=gmres",
         "solve_v3_full_system_linear_gmres: residual_norm=2.531776e+16",
-        "solve_v3_full_system_linear_gmres: elapsed_s=2.367"
+        "solve_v3_full_system_linear_gmres: elapsed_s=1.659"
       ],
       "metadata": {},
       "residual_norm": 2.531776070058068e+16,
@@ -46,8 +77,8 @@
       "variant": "hybrid"
     },
     {
-      "elapsed_s": 1.4361959589878097,
-      "max_rss_mb": 597.015625,
+      "elapsed_s": 1.4292876669205725,
+      "max_rss_mb": 595.265625,
       "messages_tail": [
         "solve_v3_full_system_linear_gmres: building operator",
         "solve_v3_full_system_linear_gmres: total_size=143530",
@@ -67,7 +98,7 @@
         "sparse_ilu: disabled (size=83122 > max=6000)",
         "ksp_iterations=32 solver=gmres",
         "solve_v3_full_system_linear_gmres: residual_norm=1.271415e+06",
-        "solve_v3_full_system_linear_gmres: elapsed_s=1.435"
+        "solve_v3_full_system_linear_gmres: elapsed_s=1.428"
       ],
       "metadata": {},
       "residual_norm": 1271414.690870808,
@@ -76,8 +107,8 @@
       "variant": "zeta"
     },
     {
-      "elapsed_s": 1.4202256249263883,
-      "max_rss_mb": 617.59375,
+      "elapsed_s": 1.4096160419285297,
+      "max_rss_mb": 605.09375,
       "messages_tail": [
         "solve_v3_full_system_linear_gmres: building operator",
         "solve_v3_full_system_linear_gmres: total_size=143530",
@@ -97,7 +128,7 @@
         "sparse_ilu: disabled (size=83122 > max=6000)",
         "ksp_iterations=32 solver=gmres",
         "solve_v3_full_system_linear_gmres: residual_norm=1.271415e+06",
-        "solve_v3_full_system_linear_gmres: elapsed_s=1.419"
+        "solve_v3_full_system_linear_gmres: elapsed_s=1.409"
       ],
       "metadata": {},
       "residual_norm": 1271414.690870808,

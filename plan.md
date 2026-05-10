@@ -9107,3 +9107,42 @@ Next concrete actions after weak PAS fail-fast:
 3. Gate any future promotion on the fixed geometry4 smoke target: under `60 s`,
    no measured memory regression, and at least `100x` residual reduction
    relative to the guarded collision fallback.
+
+Progress update (2026-05-10): memory-unsafe PAS-TZ fallback tightening
+
+- Removed a shadowed duplicate implementation block from
+  `sfincs_jax/pas_smoother.py`. The public smoother API is unchanged, but future
+  adaptive PAS work now has a single implementation of residual-trend decisions
+  and the adaptive stationary smoother.
+- Tightened `build_pas_tz_memory_fallback(...)`: when a single-device
+  memory-unsafe `pas_tz` request cannot use the dense PAS-TZ builder, the default
+  guarded fallback is now the cheap collision preconditioner when available.
+  The historical `pas_hybrid` fallback remains available explicitly with
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=hybrid`.
+- Rationale: the bounded geometry4 smoke artifact already showed that the old
+  hybrid fallback was a negative benchmark because it could spend the timeout
+  budget in setup/retry. The collision fallback is weaker, but bounded in memory
+  and setup time, and the driver still marks it as guarded, applies only
+  accept-if-improves corrections, and skips expensive strong retries unless the
+  user explicitly opts in.
+- Validation run:
+  `pytest -q tests/test_rhs1_pas_policy.py tests/test_pas_smoother.py
+  tests/test_solver_path_artifacts.py::test_pas_tz_memory_fallback_smoke_keeps_structured_fallback_opt_in`
+  (`26 passed`).
+- Refreshed the bounded geometry4 PAS fallback artifact with variants
+  `collision`, `hybrid`, `zeta`, and `theta` under the fixed `15 s` cap. All
+  rows returned quickly (`1.41-1.66 s`). The new default cheap-collision row
+  used about `600 MB` RSS and reduced the residual to `1.27e6`, matching the
+  structured-guard rows and materially improving over the explicit legacy
+  `hybrid` row residual (`2.53e16`, about `655 MB`). This remains a negative
+  benchmark because the residual is still far above the production gate.
+
+Next concrete actions after fallback tightening:
+
+1. Prototype the next real algorithmic candidate: a matrix-free line/plane or
+   chunked-Schwarz correction that captures angular streaming without storing
+   dense patch inverses.
+2. Promote nothing unless the fixed gate is met: no memory regression, bounded
+   runtime, true-residual improvement of at least `100x` relative to the guarded
+   collision fallback, and unchanged Fortran comparison behavior on the bounded
+   PAS examples.

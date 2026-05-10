@@ -7,6 +7,7 @@ from sfincs_jax.rhs1_pas_policy import (
     estimate_pas_tz_schwarz_fallback_work,
     pas_tz_schwarz_fallback_memory_safe,
     preferred_pas_tz_schwarz_axis,
+    resolve_pas_tz_cheap_fallback_kind,
     resolve_pas_tz_memory_fallback_axis,
     rhs1_pas_adaptive_smoother_allowed,
 )
@@ -137,6 +138,14 @@ def test_pas_tz_memory_fallback_axis_supports_opt_in_structured_schwarz() -> Non
     )
 
 
+def test_pas_tz_cheap_fallback_kind_defaults_to_collision_with_hybrid_override() -> None:
+    assert resolve_pas_tz_cheap_fallback_kind(requested="") == "collision"
+    assert resolve_pas_tz_cheap_fallback_kind(requested="collision") == "collision"
+    assert resolve_pas_tz_cheap_fallback_kind(requested="zeta") == "collision"
+    assert resolve_pas_tz_cheap_fallback_kind(requested="hybrid") == "hybrid"
+    assert resolve_pas_tz_cheap_fallback_kind(requested="pas-hybrid") == "hybrid"
+
+
 def test_build_pas_tz_memory_fallback_can_force_zeta_schwarz(monkeypatch) -> None:
     calls: list[tuple[str, int, int]] = []
 
@@ -216,7 +225,7 @@ def test_build_pas_tz_memory_fallback_uses_collision_when_schwarz_guard_fails(mo
     assert calls == ["collision"]
 
 
-def test_build_pas_tz_memory_fallback_defaults_to_hybrid_on_single_device(monkeypatch) -> None:
+def test_build_pas_tz_memory_fallback_defaults_to_collision_on_single_device(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", raising=False)
     calls: list[str] = []
 
@@ -228,6 +237,10 @@ def test_build_pas_tz_memory_fallback_defaults_to_hybrid_on_single_device(monkey
         calls.append("hybrid")
         return "hybrid-preconditioner"
 
+    def collision_builder(**_kwargs):
+        calls.append("collision")
+        return "collision-preconditioner"
+
     result = build_pas_tz_memory_fallback(
         op=_op(),
         matvec_shard_axis=lambda _op: None,
@@ -235,18 +248,51 @@ def test_build_pas_tz_memory_fallback_defaults_to_hybrid_on_single_device(monkey
         theta_schwarz_builder=unused_builder,
         zeta_schwarz_builder=unused_builder,
         hybrid_builder=hybrid_builder,
+        collision_builder=collision_builder,
+    )
+    assert result == "collision-preconditioner"
+    assert calls == ["collision"]
+
+
+def test_build_pas_tz_memory_fallback_can_force_legacy_hybrid(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "hybrid")
+    calls: list[str] = []
+
+    def unused_builder(**_kwargs):
+        calls.append("schwarz")
+        return "schwarz-preconditioner"
+
+    def hybrid_builder(**_kwargs):
+        calls.append("hybrid")
+        return "hybrid-preconditioner"
+
+    def collision_builder(**_kwargs):
+        calls.append("collision")
+        return "collision-preconditioner"
+
+    result = build_pas_tz_memory_fallback(
+        op=_op(),
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=unused_builder,
+        zeta_schwarz_builder=unused_builder,
+        hybrid_builder=hybrid_builder,
+        collision_builder=collision_builder,
     )
     assert result == "hybrid-preconditioner"
     assert calls == ["hybrid"]
 
 
-def test_build_pas_tz_memory_fallback_marks_default_hybrid_guarded(monkeypatch) -> None:
+def test_build_pas_tz_memory_fallback_marks_default_collision_guarded(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", raising=False)
 
     def unused_builder(**_kwargs):
         raise AssertionError("single-device default must not build structured Schwarz")
 
     def hybrid_builder(**_kwargs):
+        raise AssertionError("single-device default must prefer cheap collision when available")
+
+    def collision_builder(**_kwargs):
         def _apply(value):
             return value
 
@@ -259,7 +305,8 @@ def test_build_pas_tz_memory_fallback_marks_default_hybrid_guarded(monkeypatch) 
         theta_schwarz_builder=unused_builder,
         zeta_schwarz_builder=unused_builder,
         hybrid_builder=hybrid_builder,
+        collision_builder=collision_builder,
     )
 
     assert getattr(result, "_sfincs_jax_pas_tz_guarded_fallback") is True
-    assert getattr(result, "_sfincs_jax_pas_tz_guarded_axis") == "hybrid"
+    assert getattr(result, "_sfincs_jax_pas_tz_guarded_axis") == "collision"

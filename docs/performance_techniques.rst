@@ -1023,10 +1023,12 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_XMG_STRIDE`` (coarse‑x stride for the PAS x‑multigrid preconditioner)
 - ``SFINCS_JAX_RHSMODE1_PAS_XDIAG_MIN`` (auto switch to point‑block x‑diagonal preconditioner for large PAS runs; default disabled)
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX`` (truncate L in PAS x‑block :math:`(\theta,\zeta)` preconditioning)
-- ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK`` (opt-in route for memory-unsafe
-  ``pas_tz`` builds; default keeps the historical ``pas_hybrid`` fallback on a
-  single device, while ``theta``, ``zeta``, or ``schwarz`` force a structured
-  additive-Schwarz fallback for bounded geometry-rich PAS experiments)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK`` (route for memory-unsafe
+  ``pas_tz`` builds; default uses the cheap collision fallback when available
+  so rejected ``pas_tz`` attempts fail fast, ``hybrid`` restores the historical
+  ``pas_hybrid`` fallback for A/B profiling, and ``theta``, ``zeta``, or
+  ``schwarz`` force a structured additive-Schwarz fallback for bounded
+  geometry-rich PAS experiments)
 - ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK`` /
   ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP`` (shared block and overlap used
   by the opt-in structured PAS-TZ Schwarz fallback when axis-specific
