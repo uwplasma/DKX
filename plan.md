@@ -43,6 +43,40 @@ Immediate priorities:
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
 
+Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
+- [x] Add bounded resolution overrides to
+  `scripts/benchmark_pas_tz_memory_fallback.py` so PAS memory/runtime probes can
+  run the collaborator floor directly (`Ntheta=25, Nzeta=51, Nxi=100, Nx=4`)
+  without editing checked-in example inputs. The JSON plan now records the
+  exact `input_overrides` used for each probe.
+- [x] Reproduce the large geometry-rich PAS stall class on CPU using the forced
+  PAS-TZ memory-fallback harness. At `25 x 51 x 100 x 4`, the cheap collision
+  fallback avoids the dense allocation and returns in `2.00 s` / `1.56 GB`, but
+  the true residual is unusable (`4.71e6`), so it remains a stall-avoidance
+  diagnostic only, not a solver policy.
+- [x] Validate the stronger low-memory `tzfft` fallback at the same
+  production-floor resolution. CPU converged with `restart=20`, `maxiter=20` in
+  `40.85 s` / `2.97 GB`, residual `5.87e-8`. Office GPU 0 converged the same
+  case in `47.54 s` / `1.31 GB` host RSS, residual `5.88e-8`; sampled GPU
+  memory stayed near `1.23 GB` with XLA preallocation disabled.
+- [x] Record artifacts:
+  `examples/performance/output/pas_tz_prod_floor_cpu_collision_25x51x100x4.json`,
+  `examples/performance/output/pas_tz_prod_floor_cpu_tzfft_25x51x100x4.json`,
+  and
+  `examples/performance/output/pas_tz_prod_floor_gpu_tzfft_25x51x100x4.json`.
+- [x] Reject the opt-in matrix-free Jacobi defect-smoother probe before merging
+  it. It was disabled by the safety guard on the representative case
+  (`active_size=83122 > 50000`), and enabling it at production-floor sizes would
+  require O(active_size) matrix-free diagonal probes. This is not a credible
+  memory/runtime path compared with the measured `tzfft` fallback.
+- [ ] Next targeted work: use the new resolution-aware harness to run the same
+  `25 x 51 x 100 x 4` floor on HSX and geometry11 PAS examples, then only
+  promote a policy change if it is residual-clean, faster than the incumbent,
+  and lower memory on both CPU and GPU. The explorer-recommended host-side
+  PAS x-block sparse-PC route remains the main source-level candidate, but it
+  should be implemented only behind explicit gates because current global
+  sparse-PC attempts have already failed memory/time gates.
+
 Current active lane (2026-05-08, production-floor FP memory audit):
 - [x] Verify `office` is reachable and run the latest clean local `main` source
   from an isolated remote scratch tree instead of mutating stale remote artifacts.
