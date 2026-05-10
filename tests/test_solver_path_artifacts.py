@@ -259,11 +259,11 @@ def test_pas_tz_memory_fallback_smoke_keeps_structured_fallback_opt_in() -> None
     assert smoke["kind"] == "pas_tz_memory_fallback_benchmark"
     assert smoke["plan"]["input"] == "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist"
     assert smoke["plan"]["timeout_s"] == 15.0
-    assert smoke["plan"]["variants"] == ["hybrid", "zeta", "theta"]
+    assert smoke["plan"]["variants"] == ["collision", "hybrid", "zeta", "theta"]
 
     rows = {row["variant"]: row for row in smoke["results"]}
-    assert set(rows) == {"hybrid", "zeta", "theta"}
-    for variant in ("hybrid", "zeta", "theta"):
+    assert set(rows) == {"collision", "hybrid", "zeta", "theta"}
+    for variant in ("collision", "hybrid", "zeta", "theta"):
         row = rows[variant]
         assert row["status"] == "ok"
         assert float(row["elapsed_s"]) < 5.0
@@ -271,6 +271,8 @@ def test_pas_tz_memory_fallback_smoke_keeps_structured_fallback_opt_in() -> None
         messages = "\n".join(row["messages_tail"])
         assert f"guarded out (axis={variant})" in messages
         assert "skipping strong preconditioner after guarded PAS-TZ fallback" in messages
+    assert float(rows["collision"]["residual_norm"]) < float(rows["hybrid"]["residual_norm"])
+    assert float(rows["collision"]["max_rss_mb"]) <= float(rows["hybrid"]["max_rss_mb"])
 
 
 def test_fp3d_sparse_pc_probe_beats_dense_default_without_parity_loss() -> None:
