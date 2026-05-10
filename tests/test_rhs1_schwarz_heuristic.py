@@ -213,3 +213,27 @@ def test_compose_multilevel_residual_correction_preconditioner_applies_levels_in
     )
     out = precond(np.array([4.0]))
     assert np.allclose(np.asarray(out), np.array([1.25]))
+
+
+def test_preconditioned_minres_correction_accepts_only_residual_improvement() -> None:
+    def matvec(v):
+        return jnp.asarray([2.0 * v[0], 4.0 * v[1]], dtype=jnp.float64)
+
+    def preconditioner(v):
+        return jnp.asarray(v, dtype=jnp.float64)
+
+    rhs = jnp.asarray([2.0, 4.0], dtype=jnp.float64)
+    x0 = jnp.zeros((2,), dtype=jnp.float64)
+
+    x, residual, history, alphas = vd._apply_preconditioned_minres_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        preconditioner=preconditioner,
+        steps=2,
+    )
+
+    assert len(alphas) >= 1
+    assert float(history[-1]) < float(history[0])
+    assert float(jnp.linalg.norm(residual)) == pytest.approx(float(history[-1]))
+    assert float(jnp.linalg.norm(rhs - matvec(x))) == pytest.approx(float(history[-1]))

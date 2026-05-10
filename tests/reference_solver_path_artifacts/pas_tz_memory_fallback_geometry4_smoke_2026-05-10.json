@@ -16,7 +16,7 @@
   },
   "results": [
     {
-      "elapsed_s": 15.015704666962847,
+      "elapsed_s": 15.015691541950218,
       "status": "timeout",
       "stderr_tail": "",
       "stdout_tail": "solve_v3_full_system_linear_gmres: GMRES tol=1e-06 atol=0.0 restart=8 maxiter=4 solve_method=incremental\nsolve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner=collision\nsolve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)\n solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.\nsolve_v3_full_system_linear_gmres: strong preconditioner fallback kind=pas_lite (residual=2.544e+16 > target=2.996e-10)\n",
@@ -24,8 +24,8 @@
       "variant": "hybrid"
     },
     {
-      "elapsed_s": 1.5198447500588372,
-      "max_rss_mb": 586.140625,
+      "elapsed_s": 1.50612141599413,
+      "max_rss_mb": 605.859375,
       "messages_tail": [
         "solve_v3_full_system_linear_gmres: building operator",
         "solve_v3_full_system_linear_gmres: total_size=143530",
@@ -39,22 +39,23 @@
         " solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.",
         "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=zeta); using cheap fallback",
         " solve_v3_full_system_linear_gmres: starting Krylov iterations.",
-        "solve_v3_full_system_linear_gmres: PAS stage2 skipped (residual ratio=5.277e+15 >= 1.0e+06)",
+        "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=1.581e+06->1.271e+06",
+        "solve_v3_full_system_linear_gmres: PAS stage2 skipped (residual ratio=4.244e+15 >= 1.0e+06)",
         "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
         "sparse_ilu: disabled (size=83122 > max=6000)",
         "ksp_iterations=32 solver=gmres",
-        "solve_v3_full_system_linear_gmres: residual_norm=1.580838e+06",
-        "solve_v3_full_system_linear_gmres: elapsed_s=1.519"
+        "solve_v3_full_system_linear_gmres: residual_norm=1.271415e+06",
+        "solve_v3_full_system_linear_gmres: elapsed_s=1.505"
       ],
       "metadata": {},
-      "residual_norm": 1580837.570618601,
+      "residual_norm": 1271414.690870808,
       "returncode": 0,
       "status": "ok",
       "variant": "zeta"
     },
     {
-      "elapsed_s": 1.4516176250763237,
-      "max_rss_mb": 596.6875,
+      "elapsed_s": 1.4373135840287432,
+      "max_rss_mb": 602.125,
       "messages_tail": [
         "solve_v3_full_system_linear_gmres: building operator",
         "solve_v3_full_system_linear_gmres: total_size=143530",
@@ -68,15 +69,16 @@
         " solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.",
         "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=theta); using cheap fallback",
         " solve_v3_full_system_linear_gmres: starting Krylov iterations.",
-        "solve_v3_full_system_linear_gmres: PAS stage2 skipped (residual ratio=5.277e+15 >= 1.0e+06)",
+        "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=1.581e+06->1.271e+06",
+        "solve_v3_full_system_linear_gmres: PAS stage2 skipped (residual ratio=4.244e+15 >= 1.0e+06)",
         "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
         "sparse_ilu: disabled (size=83122 > max=6000)",
         "ksp_iterations=32 solver=gmres",
-        "solve_v3_full_system_linear_gmres: residual_norm=1.580838e+06",
-        "solve_v3_full_system_linear_gmres: elapsed_s=1.451"
+        "solve_v3_full_system_linear_gmres: residual_norm=1.271415e+06",
+        "solve_v3_full_system_linear_gmres: elapsed_s=1.437"
       ],
       "metadata": {},
-      "residual_norm": 1580837.570618601,
+      "residual_norm": 1271414.690870808,
       "returncode": 0,
       "status": "ok",
       "variant": "theta"
