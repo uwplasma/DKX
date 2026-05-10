@@ -1,0 +1,44 @@
+{
+  "kind": "pas_tz_memory_fallback_benchmark",
+  "plan": {
+    "block": 3,
+    "input": "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+    "maxiter": 4,
+    "overlap": 1,
+    "restart": 8,
+    "timeout_s": 15.0,
+    "tol": 1e-06,
+    "variants": [
+      "hybrid",
+      "zeta",
+      "theta"
+    ]
+  },
+  "results": [
+    {
+      "elapsed_s": 15.024663999909535,
+      "status": "timeout",
+      "stderr_tail": "",
+      "stdout_tail": "solve_v3_full_system_linear_gmres: GMRES tol=1e-06 atol=0.0 restart=8 maxiter=4 solve_method=incremental\nsolve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner=collision\nsolve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)\n solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.\nsolve_v3_full_system_linear_gmres: strong preconditioner fallback kind=pas_lite (residual=2.544e+16 > target=2.996e-10)\n",
+      "timeout_s": 15.0,
+      "variant": "hybrid"
+    },
+    {
+      "elapsed_s": 15.080646167043597,
+      "status": "timeout",
+      "stderr_tail": "",
+      "stdout_tail": "solve_v3_full_system_linear_gmres: GMRES tol=1e-06 atol=0.0 restart=8 maxiter=4 solve_method=incremental\nsolve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner=collision\nsolve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)\n solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.\n",
+      "timeout_s": 15.0,
+      "variant": "zeta"
+    },
+    {
+      "elapsed_s": 15.083650166052394,
+      "status": "timeout",
+      "stderr_tail": "",
+      "stdout_tail": "solve_v3_full_system_linear_gmres: GMRES tol=1e-06 atol=0.0 restart=8 maxiter=4 solve_method=incremental\nsolve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner=collision\nsolve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)\n solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.\n",
+      "timeout_s": 15.0,
+      "variant": "theta"
+    }
+  ],
+  "schema_version": 1
+}
