@@ -1,6 +1,47 @@
 Release notes
 =============
 
+v1.1.1
+------
+
+This patch release ships the final PAS/full-FP performance and memory closeout
+after the v1.1.0 validation release.
+
+Highlights
+~~~~~~~~~~
+
+- One-species PAS+Er sparse-PC defaults now use the measured
+  ``MMD_AT_PLUS_A`` ordering and a bounded GMRES restart policy unless the user
+  explicitly overrides the restart environment variable.
+- Phi1 fast-explicit solves use a production-size restart helper that preserves
+  output parity while reducing wasted Krylov storage on larger active systems.
+- RHSMode 1 no-Phi1 single-state output avoids retaining an unnecessary stacked
+  solved-distribution copy before diagnostic writeout.
+- The README-facing runtime/memory and W7-X high-``nu`` performance figures were
+  regenerated from the checked-in release artifacts.
+- The production-resolution ``geometryScheme4_2species_PAS_noEr`` stress case is
+  now explicitly closed for this release as ``no safe existing default
+  promotion``. CPU and GPU candidate routes all hit the bounded 300 s gate, so no
+  unsafe solver-path default is promoted.
+
+Validation
+~~~~~~~~~~
+
+- Local full suite: ``1115 passed in 498.10 s``.
+- GitHub Actions for the closeout commit: CI and Docs both passed.
+- The large geometry-rich PAS closeout artifact is checked in at
+  ``tests/reference_solver_path_artifacts/geometry4_large_pas_closeout_2026-05-09.json``
+  and guarded by ``tests/test_solver_path_artifacts.py``.
+
+Remaining research lane
+~~~~~~~~~~~~~~~~~~~~~~~
+
+No release blocker remains. The next research optimization target is a
+structured/chunked geometry-aware PAS preconditioner for production-resolution
+geometry-rich 3D cases; heuristic promotion of existing Schur, sparse-PC, or
+PAS-lite paths is intentionally blocked until a measured route clears the
+runtime, memory, residual, and Fortran-comparison gates.
+
 v1.1.0
 ------
 
