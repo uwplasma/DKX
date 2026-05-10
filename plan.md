@@ -104,6 +104,13 @@ Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
   exposing a public solve-method alias that fails the medium gate. Any future
   host-side PAS route should first fix factor stability/normalization on this
   medium gate before attempting HSX/geometry11 production-floor runs.
+- [x] Reject the existing guarded stage-2 retry as a HSX floor fix. With
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1` on the same
+  `25 x 51 x 100 x 4` HSX PAS-DKES floor, runtime increased from `58.25 s` to
+  `155.05 s` and peak RSS increased from `2.69 GB` to `2.94 GB`, while the true
+  residual stayed unchanged at `1.60e-4`. Artifact:
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_stage2_m20_25x51x100x4.json`.
+  Do not use stage-2 retry as the default answer to this lane.
 
 Current active lane (2026-05-08, production-floor FP memory audit):
 - [x] Verify `office` is reachable and run the latest clean local `main` source
