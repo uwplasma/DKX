@@ -438,6 +438,16 @@ python examples/performance/benchmark_transport_parallel_scaling.py \
   --workers 1 2
 ```
 
+To regenerate only the checked-in figure from the saved JSON payload without
+rerunning the multi-minute GPU benchmark:
+
+```bash
+python examples/performance/benchmark_transport_parallel_scaling.py \
+  --from-json examples/performance/output/transport_parallel_scaling_gpu.json \
+  --out-dir docs/_static/figures/parallel \
+  --figure-name transport_parallel_scaling_gpu.png
+```
+
 ![GPU transport scaling](docs/_static/figures/parallel/transport_parallel_scaling_gpu.png)
 
 Compare two outputs:

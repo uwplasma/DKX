@@ -8980,6 +8980,11 @@ Progress update (2026-05-10): v1.1.1 release and structured PAS kickoff
   PAS experiments. Shared `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK` and
   `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP` controls make the benchmark lane
   reproducible before any future default promotion.
+- Added a plot-only mode to
+  `examples/performance/benchmark_transport_parallel_scaling.py` and regenerated
+  the README GPU transport-worker scaling figure from the checked-in
+  `examples/performance/output/transport_parallel_scaling_gpu.json` payload
+  without rerunning the multi-minute office benchmark.
 
 Next concrete actions after the structured PAS kickoff:
 
