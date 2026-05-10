@@ -9152,3 +9152,38 @@ Next concrete actions after fallback tightening:
    runtime, true-residual improvement of at least `100x` relative to the guarded
    collision fallback, and unchanged Fortran comparison behavior on the bounded
    PAS examples.
+
+Progress update (2026-05-10): experimental PAS-TZ FFT fallback
+
+- Wired the existing JAX-native angular streaming FFT/L-tridiagonal
+  preconditioner into RHSMode=1 as explicit `pas_tzfft` / `pas_fft` aliases and
+  as `SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft` for memory-unsafe
+  `pas_tz` experiments.
+- Added a guarded stage-2 policy:
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1` is now required before a
+  guarded PAS-TZ fallback enters strict stage-2 GMRES. This fixed the observed
+  `tzfft` smoke stall: before the guard, `tzfft` lowered the residual to about
+  `1.9e-4` and then hit the `60 s` stage-2 ceiling; after the guard it returns
+  cleanly.
+- Refreshed
+  `tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json`
+  with variants `collision`, `hybrid`, `zeta`, `theta`, and `tzfft` under the
+  fixed `15 s` cap:
+  - `collision`: `1.62 s`, `617 MB`, residual `6.414e5`;
+  - `hybrid`: `2.32 s`, `859 MB`, residual `2.529e16`;
+  - `zeta`: `1.63 s`, `683 MB`, residual `6.414e5`;
+  - `theta`: `1.62 s`, `617 MB`, residual `6.414e5`;
+  - `tzfft`: `3.33 s`, `944 MB`, residual `1.877e-4`.
+- Additional bounded probes:
+  - `tzfft` with `maxiter=20,restart=8`: `4.95 s`, `1093 MB`, residual
+    `1.333e-4`;
+  - `tzfft` with `maxiter=20,restart=20`: `9.97 s`, `1511 MB`, residual
+    `1.210e-5`;
+  - the same `maxiter=20,restart=20` plus a capped stage-2 retry: `13.65 s`,
+    `1602 MB`, residual unchanged at `1.210e-5`.
+- Decision: keep `tzfft` as an explicit experimental residual-improvement
+  candidate, but do not promote it to the default fallback. It meets the
+  residual-improvement part of the gate but fails the no-memory-regression and
+  strict-residual parts of the gate. The next real algorithmic lane remains a
+  stronger chunked/matrix-free PAS correction that retains the `tzfft` residual
+  gain without the GMRES-basis memory growth.

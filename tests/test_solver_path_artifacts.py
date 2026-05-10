@@ -259,10 +259,10 @@ def test_pas_tz_memory_fallback_smoke_keeps_structured_fallback_opt_in() -> None
     assert smoke["kind"] == "pas_tz_memory_fallback_benchmark"
     assert smoke["plan"]["input"] == "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist"
     assert smoke["plan"]["timeout_s"] == 15.0
-    assert smoke["plan"]["variants"] == ["collision", "hybrid", "zeta", "theta"]
+    assert smoke["plan"]["variants"] == ["collision", "hybrid", "zeta", "theta", "tzfft"]
 
     rows = {row["variant"]: row for row in smoke["results"]}
-    assert set(rows) == {"collision", "hybrid", "zeta", "theta"}
+    assert set(rows) == {"collision", "hybrid", "zeta", "theta", "tzfft"}
     for variant in ("collision", "hybrid", "zeta", "theta"):
         row = rows[variant]
         assert row["status"] == "ok"
@@ -271,6 +271,15 @@ def test_pas_tz_memory_fallback_smoke_keeps_structured_fallback_opt_in() -> None
         messages = "\n".join(row["messages_tail"])
         assert f"guarded out (axis={variant})" in messages
         assert "skipping strong preconditioner after guarded PAS-TZ fallback" in messages
+    tzfft = rows["tzfft"]
+    assert tzfft["status"] == "ok"
+    assert float(tzfft["elapsed_s"]) < 5.0
+    assert float(tzfft["residual_norm"]) < 1.0e-2
+    assert float(tzfft["residual_norm"]) < float(rows["collision"]["residual_norm"]) / 1.0e6
+    tzfft_messages = "\n".join(tzfft["messages_tail"])
+    assert "guarded out (axis=tzfft)" in tzfft_messages
+    assert "stage2 reduced GMRES skipped after guarded PAS-TZ fallback" in tzfft_messages
+    assert "skipping strong preconditioner after guarded PAS-TZ fallback" in tzfft_messages
     assert float(rows["collision"]["residual_norm"]) < float(rows["hybrid"]["residual_norm"])
     assert float(rows["collision"]["max_rss_mb"]) <= float(rows["hybrid"]["max_rss_mb"])
 
