@@ -88,7 +88,10 @@ from .rhs1_preconditioner_auto_policy import (
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .rhs1_handoff import rhs1_accept_candidate
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
-from .rhs1_strong_policy import requested_rhs1_strong_preconditioner_kind
+from .rhs1_strong_policy import (
+    requested_rhs1_strong_preconditioner_kind,
+    rhs1_pas_weak_strong_retry_skip,
+)
 from .rhs1_strong_control import rhs1_resolved_strong_preconditioner_control
 from .rhs1_strong_auto_kind import (
     adjust_rhs1_reduced_auto_kind,
@@ -15900,6 +15903,21 @@ def solve_v3_full_system_linear_gmres(
             nxi_for_x_sum=int(np.sum(nxi_for_x)) if nxi_for_x.size else 0,
         )
         strong_precond_kind = auto_sel.kind
+
+        if rhs1_pas_weak_strong_retry_skip(
+            has_pas=op.fblock.pas is not None,
+            rhs1_precond_kind=rhs1_precond_kind,
+            res_ratio=float(res_ratio),
+        ):
+            if emit is not None and strong_precond_kind is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+                    "after weak PAS base residual exceeded skip threshold; set "
+                    "SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO=0 to retry",
+                )
+            strong_precond_kind = None
+            strong_precond_trigger = False
 
         if rhs1_pas_tz_guarded_fallback:
             guarded_retry_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", "").strip().lower()

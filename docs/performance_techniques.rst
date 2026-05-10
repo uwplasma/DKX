@@ -1049,6 +1049,14 @@ so scan points can reuse the same preconditioner blocks. Controls:
   ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_DAMPING`` (opt-in polynomial
   preconditioner experiment for guarded PAS-TZ fallback; default off because
   the geometry4 smoke probe showed residual growth)
+- ``SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO`` (default ``1e12``) skips stage-2
+  for forced weak PAS base preconditioners (``collision``, ``point``, and
+  ``xmg``) only when the first residual ratio is so large that the follow-on
+  polish solve has been measured to stall; set ``0`` to disable this guard for
+  profiling.
+- ``SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO`` (default ``1e12``) skips the
+  automatic strong-preconditioner retry for the same weak PAS base kinds at
+  enormous residual ratios; set ``0`` to force the older retry/search behavior.
 - ``SFINCS_JAX_PRECOND_MAX_MB`` / ``SFINCS_JAX_PRECOND_CHUNK`` (cap memory during block assembly)
 - ``SFINCS_JAX_PRECOND_PAS_MAX_COLS`` (additional column cap for PAS block assembly;
   reduces peak RSS by chunking :math:`(\theta,\zeta)` blocks)
@@ -1506,6 +1514,13 @@ Large geometry-rich PAS closeout:
   diagnostic skip to ``pas_ilu``, ``schur``, and ``xblock_tz`` routes, but this
   is not a production default because the production-floor tokamak PAS+Er audit
   showed faster completed outputs that were not parity-clean.
+- ``SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO`` and
+  ``SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO`` (defaults: ``1e12``) make forced
+  weak PAS baselines fail fast when ``collision``, ``point``, or ``xmg`` returns
+  an enormous first residual. These guards are deliberately much looser than the
+  normal stage-2 trigger so moderate residuals can still use the existing polish
+  and retry machinery. Set either value to ``0`` to disable the corresponding
+  guard.
 - ``SFINCS_JAX_TRANSPORT_DENSE_RETRY_MAX`` (default: ``6000`` for RHSMode=2/3).
 - ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK`` / ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK_MAX``.
 - ``SFINCS_JAX_TRANSPORT_DENSE_MAX_MB`` (default: ``128``). Disable dense transport
@@ -1632,6 +1647,15 @@ minres correction improves the checked smoke residual from about ``1.58e6`` to
 gate. This is a useful fail-fast result, not a promoted solver path. The next
 algorithmic step is a genuinely stronger matrix-free or chunked PAS correction
 that reduces the residual without constructing dense angular patch inverses.
+
+The same fail-fast rule is now applied to forced weak PAS baselines at
+astronomical residual ratios. On the geometryScheme=4 smoke deck, forced
+``collision``, ``xmg``, and ``point`` preconditioners no longer enter minutes of
+stage-2 or strong-preconditioner retry/search after first residual ratios near
+``1e15``. They return in about ``1.2-2.6 s`` with residuals
+``1.16e6-2.53e6``; the ``point`` route also used substantially more memory than
+the collision baseline. This is retained as an auditable negative benchmark,
+not as a production recommendation.
 
 The remaining high-impact memory lanes are algorithmic:
 

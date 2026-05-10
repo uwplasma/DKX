@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from sfincs_jax.rhs1_strong_policy import requested_rhs1_strong_preconditioner_kind
+from sfincs_jax.rhs1_strong_policy import (
+    requested_rhs1_strong_preconditioner_kind,
+    rhs1_pas_weak_strong_retry_skip,
+)
 
 
 def test_requested_rhs1_strong_preconditioner_kind_reduced_mode_extended_aliases() -> None:
@@ -21,3 +24,19 @@ def test_requested_rhs1_strong_preconditioner_kind_full_mode_preserves_existing_
     assert requested_rhs1_strong_preconditioner_kind("pas_tz", mode="full") is None
     assert requested_rhs1_strong_preconditioner_kind("auto", mode="full") is None
     assert requested_rhs1_strong_preconditioner_kind("unknown", mode="full") is None
+
+
+def test_rhs1_pas_weak_strong_retry_skip_only_for_huge_ratios(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO", raising=False)
+    for kind in ("collision", "point", "xmg"):
+        assert not rhs1_pas_weak_strong_retry_skip(has_pas=True, rhs1_precond_kind=kind, res_ratio=1.0e7)
+        assert rhs1_pas_weak_strong_retry_skip(has_pas=True, rhs1_precond_kind=kind, res_ratio=1.0e13)
+
+    assert not rhs1_pas_weak_strong_retry_skip(has_pas=False, rhs1_precond_kind="collision", res_ratio=1.0e99)
+    assert not rhs1_pas_weak_strong_retry_skip(has_pas=True, rhs1_precond_kind="pas_lite", res_ratio=1.0e99)
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO", "0")
+    assert not rhs1_pas_weak_strong_retry_skip(has_pas=True, rhs1_precond_kind="collision", res_ratio=1.0e99)
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO", "bad")
+    assert rhs1_pas_weak_strong_retry_skip(has_pas=True, rhs1_precond_kind="xmg", res_ratio=1.0e13)
