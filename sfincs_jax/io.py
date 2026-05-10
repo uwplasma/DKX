@@ -453,6 +453,12 @@ def _output_cache_enabled() -> bool:
     return True
 
 
+def _phi1_fast_explicit_gmres_restart_default(active_total_size: int) -> int:
+    """Return the profiled GMRES restart for fast explicit-Phi1 Newton steps."""
+
+    return 120 if int(active_total_size) >= 8000 else 80
+
+
 def _select_phi1_newton_linear_solve_method(
     *,
     active_total_size: int,
@@ -3734,7 +3740,7 @@ def write_sfincs_jax_output_h5(
                 except ValueError:
                     gmres_restart = 2000
             elif fast_explicit_phi1:
-                gmres_restart = 120 if int(active_total_size) >= 20000 else 80
+                gmres_restart = _phi1_fast_explicit_gmres_restart_default(active_total_size)
             if emit is not None:
                 emit(1, f"write_sfincs_jax_output_h5: includePhi1 GMRES tol={gmres_tol:.3e}")
                 emit(1, f"write_sfincs_jax_output_h5: includePhi1 GMRES restart={gmres_restart}")
@@ -4096,7 +4102,10 @@ def write_sfincs_jax_output_h5(
             data[base.replace("_psiHat", "_rN")] = _fortran_h5_layout(v * float(conv["ddrN2ddpsiHat"]))
 
         # Compute vm-only diagnostics per iteration, with Phi1 used as Maxwellian base if present.
-        x_stack = jnp.stack([jnp.asarray(x_full, dtype=jnp.float64) for x_full in xs], axis=0)
+        # Linear no-Phi1 solves commonly have a single state vector. Use the single-state
+        # diagnostic kernel in that case so geometry-rich 3D output does not retain an
+        # extra stacked copy of the solved distribution.
+        x_stack: jnp.ndarray | None = None
         diag_arrays: dict[str, np.ndarray]
         phi1_list: list[np.ndarray] = []
         dphi1_dtheta_list: list[np.ndarray] = []
@@ -4107,6 +4116,7 @@ def write_sfincs_jax_output_h5(
         qn_diag_list: list[np.ndarray] = []
 
         if include_phi1:
+            x_stack = jnp.stack([jnp.asarray(x_full, dtype=jnp.float64) for x_full in xs], axis=0)
             for iter_idx, x_full in enumerate(x_stack, start=1):
                 op_use = result.op
                 if bool(op_use.include_phi1):
@@ -4180,10 +4190,20 @@ def write_sfincs_jax_output_h5(
                 ).items()
             }
         else:
-            diag_arrays = {
-                key: np.asarray(val, dtype=np.float64)
-                for key, val in v3_rhsmode1_output_fields_vm_only_batch_jit(result.op, x_full_stack=x_stack).items()
-            }
+            if len(xs) == 1:
+                diag_arrays = {
+                    key: np.expand_dims(np.asarray(val, dtype=np.float64), axis=0)
+                    for key, val in v3_rhsmode1_output_fields_vm_only_jit(
+                        result.op,
+                        x_full=jnp.asarray(xs[0], dtype=jnp.float64),
+                    ).items()
+                }
+            else:
+                x_stack = jnp.stack([jnp.asarray(x_full, dtype=jnp.float64) for x_full in xs], axis=0)
+                diag_arrays = {
+                    key: np.asarray(val, dtype=np.float64)
+                    for key, val in v3_rhsmode1_output_fields_vm_only_batch_jit(result.op, x_full_stack=x_stack).items()
+                }
 
         def _maybe_align_pas_no_phi1_flow_diagnostics_to_fortran(
             arrays: dict[str, np.ndarray],
@@ -4496,10 +4516,21 @@ def write_sfincs_jax_output_h5(
         ntv_before_nstz: jnp.ndarray
         ntv_n_s: jnp.ndarray
         if compute_ntv and int(result.op.n_xi) > 2:
-            f_delta_stack = jnp.asarray(x_stack[:, : result.op.f_size], dtype=jnp.float64).reshape(
-                (n_iter, int(result.op.n_species), int(result.op.n_x), int(result.op.n_xi), int(result.op.n_theta), int(result.op.n_zeta))
-            )
-            sum_ntv_nstz = jnp.einsum("x,nsxtz->nstz", w_ntv, f_delta_stack[:, :, :, 2, :, :])
+            if x_stack is None:
+                f_delta = jnp.asarray(xs[0][: result.op.f_size], dtype=jnp.float64).reshape(result.op.fblock.f_shape)
+                sum_ntv_nstz = jnp.einsum("x,sxtz->stz", w_ntv, f_delta[:, :, 2, :, :])[None, :, :, :]
+            else:
+                f_delta_stack = jnp.asarray(x_stack[:, : result.op.f_size], dtype=jnp.float64).reshape(
+                    (
+                        n_iter,
+                        int(result.op.n_species),
+                        int(result.op.n_x),
+                        int(result.op.n_xi),
+                        int(result.op.n_theta),
+                        int(result.op.n_zeta),
+                    )
+                )
+                sum_ntv_nstz = jnp.einsum("x,nsxtz->nstz", w_ntv, f_delta_stack[:, :, :, 2, :, :])
             ntv_before_nstz = (
                 (4.0 * jnp.pi * (t_hat * t_hat) * sqrt_t / (m_hat * sqrt_m * vprime_hat))[None, :, None, None]
                 * ntv_kernel[None, None, :, :]
