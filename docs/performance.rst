@@ -211,9 +211,11 @@ Recent production-floor tokamak PAS sparse-PC fill reduction:
 
 - Constrained tokamak PAS sparse-PC GMRES now defaults to active
   ``Nxi_for_x`` factorization in the measured production-floor window. The no-Er
-  rows and one-species PAS+Er row use measured ``MMD_ATA`` SuperLU ordering,
-  while the multi-species PAS+Er full-trajectory row uses the lower-fill
-  measured ``MMD_AT_PLUS_A`` ordering.
+  rows use measured ``MMD_ATA`` SuperLU ordering, while PAS+Er
+  full-trajectory rows use the lower-fill measured ``MMD_AT_PLUS_A`` ordering.
+  The one-species PAS+Er row also caps the default sparse-PC GMRES restart at
+  ``40`` unless ``SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART`` is explicitly
+  set.
   On the two-species no-Er ``25 x 1 x 8 x
   100`` row, the CPU default is strict-clean at about ``2.0 s`` logged and
   ``0.39 GB`` active RSS, while the RTX A4000 default is strict-clean at about
@@ -225,6 +227,16 @@ Recent production-floor tokamak PAS sparse-PC fill reduction:
   / ``9.7 s`` with active RSS about ``1.3 GB`` / ``1.6 GB``. The previous
   ``COLAMD`` ordering remains an explicit override, but it is higher-fill on
   these audited constrained-PAS rows.
+
+Large geometry-rich PAS closeout:
+
+- The ``geometryScheme4_2species_PAS_noEr`` production-resolution stress deck
+  (``25 x 51 x 100``, ``Nx=5``) is not promoted to a public performance claim.
+  Existing general routes on CPU and one RTX A4000 GPU hit the bounded
+  ``300 s`` gate before writing a converged output. The checked-in closeout
+  artifact records the rejected candidates and keeps this as a future
+  structured/chunked PAS-preconditioner lane instead of a hidden default-policy
+  change.
 
 Recent production-resolution CPU tokamak Er fix:
 
