@@ -382,6 +382,40 @@ def _rhs1_xblock_gmres_restart(
     return capped, bool(capped != restart_use)
 
 
+def _rhs1_dkes_gmres_budget(
+    *,
+    restart: int,
+    maxiter: int | None,
+    restart_forced: bool,
+    maxiter_forced: bool,
+    restart_cap_env: str,
+) -> tuple[int, int | None, bool, bool]:
+    """Apply PAS/FP DKES GMRES defaults without overriding explicit budgets."""
+    restart_use = max(1, int(restart))
+    maxiter_use = None if maxiter is None else max(1, int(maxiter))
+    restart_defaulted = False
+    maxiter_defaulted = False
+
+    if not bool(restart_forced):
+        restart_use = max(int(restart_use), 80)
+        try:
+            restart_cap = int(str(restart_cap_env).strip()) if str(restart_cap_env).strip() else 100
+        except ValueError:
+            restart_cap = 100
+        if restart_cap > 0:
+            restart_use = min(int(restart_use), int(restart_cap))
+        restart_defaulted = True
+
+    if not bool(maxiter_forced):
+        if maxiter_use is None:
+            maxiter_use = 600
+        else:
+            maxiter_use = max(int(maxiter_use), 600)
+        maxiter_defaulted = True
+
+    return int(restart_use), maxiter_use, bool(restart_defaulted), bool(maxiter_defaulted)
+
+
 def _use_solver_jit(size_hint: int | None = None) -> bool:
     env = os.environ.get("SFINCS_JAX_SOLVER_JIT", "").strip().lower()
     if env in {"1", "true", "yes", "on"}:
@@ -11041,15 +11075,19 @@ def solve_v3_full_system_linear_gmres(
             finite=finite,
         )
     restart_env = os.environ.get("SFINCS_JAX_GMRES_RESTART", "").strip()
+    restart_env_forced = False
     if restart_env:
         try:
             restart = int(restart_env)
+            restart_env_forced = True
         except ValueError:
             pass
     maxiter_env = os.environ.get("SFINCS_JAX_GMRES_MAXITER", "").strip()
+    maxiter_env_forced = False
     if maxiter_env:
         try:
             maxiter = int(maxiter_env)
+            maxiter_env_forced = True
         except ValueError:
             pass
     geom_params_hint = nml.group("geometryParameters")
@@ -11268,23 +11306,28 @@ def solve_v3_full_system_linear_gmres(
     if op.fblock.pas is not None and use_dkes:
         # DKES trajectory runs can be stiff, but very large GMRES restart/maxiter
         # values are expensive in JAX (memory + orthogonalization cost). Prefer
-        # moderate defaults and let stage2/strong-preconditioner fallbacks handle
-        # the truly difficult cases.
-        restart = max(int(restart), 80)
-        # Cap restart to keep the (N x restart) Krylov basis manageable on CPU.
-        # Upstream v3 can afford larger restart sizes due to optimized BLAS/PETSc paths,
-        # while JAX's orthogonalization can become a dominant cost.
-        restart_cap_env = os.environ.get("SFINCS_JAX_RHSMODE1_DKES_RESTART_CAP", "").strip()
-        try:
-            restart_cap = int(restart_cap_env) if restart_cap_env else 100
-        except ValueError:
-            restart_cap = 100
-        if restart_cap > 0:
-            restart = min(int(restart), int(restart_cap))
-        if maxiter is None:
-            maxiter = 600
-        else:
-            maxiter = max(int(maxiter), 600)
+        # moderate defaults and let stage2/strong-preconditioner fallbacks handle the
+        # truly difficult cases. Explicit GMRES env/CLI budgets are respected so
+        # profiling and bounded production probes cannot be silently escalated.
+        restart, maxiter, restart_defaulted, maxiter_defaulted = _rhs1_dkes_gmres_budget(
+            restart=int(restart),
+            maxiter=maxiter,
+            restart_forced=bool(restart_env_forced),
+            maxiter_forced=bool(maxiter_env_forced),
+            restart_cap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DKES_RESTART_CAP", "").strip(),
+        )
+        if emit is not None and (restart_env_forced or maxiter_env_forced):
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: PAS DKES respecting explicit GMRES budget "
+                f"restart={int(restart)} maxiter={maxiter}",
+            )
+        elif emit is not None and (restart_defaulted or maxiter_defaulted):
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: PAS DKES default GMRES budget "
+                f"restart={int(restart)} maxiter={maxiter}",
+            )
     use_active_dof_mode = False
     if active_env in {"1", "true", "yes", "on"}:
         use_active_dof_mode = True

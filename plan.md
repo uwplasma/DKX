@@ -69,13 +69,31 @@ Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
   (`active_size=83122 > 50000`), and enabling it at production-floor sizes would
   require O(active_size) matrix-free diagonal probes. This is not a credible
   memory/runtime path compared with the measured `tzfft` fallback.
-- [ ] Next targeted work: use the new resolution-aware harness to run the same
-  `25 x 51 x 100 x 4` floor on HSX and geometry11 PAS examples, then only
-  promote a policy change if it is residual-clean, faster than the incumbent,
-  and lower memory on both CPU and GPU. The explorer-recommended host-side
-  PAS x-block sparse-PC route remains the main source-level candidate, but it
-  should be implemented only behind explicit gates because current global
-  sparse-PC attempts have already failed memory/time gates.
+- [x] Fix an over-aggressive PAS-DKES solver-budget policy: explicit
+  `SFINCS_JAX_GMRES_RESTART` / `SFINCS_JAX_GMRES_MAXITER` budgets are now
+  respected instead of being silently raised to `restart >= 80` and
+  `maxiter >= 600`. DKES default floors still apply when the user does not
+  force a budget. This directly addresses the collaborator-reported class of
+  "small resolution change selects a much slower path" failures and keeps
+  bounded profiling honest.
+- [x] Run the same `25 x 51 x 100 x 4` floor on the first HSX and geometry11
+  PAS-DKES cases. With explicit `restart=20`, `maxiter=20`, HSX DKES completed
+  in `58.25 s` / `2.69 GB`, residual `1.60e-4`; geometry11 DKES completed in
+  `57.72 s` / `2.94 GB`, residual `2.61e-2`. A moderate HSX budget
+  (`restart=40`, `maxiter=80`) took `211.26 s` / `1.93 GB`, residual
+  `1.80e-5`. These are bounded, reproducible diagnostics, not promotion
+  candidates.
+- [x] Record additional artifacts:
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_explicit_m20_25x51x100x4.json`,
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_m80r40_25x51x100x4.json`,
+  and
+  `examples/performance/output/pas_tz_floor_geom11_dkes_cpu_explicit_m20_25x51x100x4.json`.
+- [ ] Next targeted work: implement the explorer-recommended host-side PAS
+  x-block sparse-PC route behind an explicit solve-method/env gate, then test it
+  only on the bounded HSX/geometry11 PAS-DKES floor cases. Keep/reject gates:
+  true residual clean, wall time below the current `tzfft` bounded budget,
+  lower peak memory than dense/JAX-factor routes, CPU and GPU parity agreement,
+  and no default promotion without full example-suite parity.
 
 Current active lane (2026-05-08, production-floor FP memory audit):
 - [x] Verify `office` is reachable and run the latest clean local `main` source
