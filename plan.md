@@ -9209,3 +9209,15 @@ Progress update (2026-05-10): cheap-base plus `tzfft` correction probe
   The remaining algorithmic target is a real streaming-aware preconditioner that
   is strong during Krylov without storing a large basis or dense angular patch
   inverses.
+
+Rejected probe (2026-05-10): guarded `tzfft` restart cap
+
+- Tested a source-level cap on GMRES restart for explicit guarded `tzfft`
+  fallback. The cap did emit the right progress line and improved elapsed time
+  slightly on the bounded geometry4 smoke, but the A/B was not favorable:
+  capped `restart=1` returned in `2.94 s` with `965 MB` RSS and residual
+  `1.00e-3`, while cap-disabled `restart=12` returned in `3.37 s` with
+  `899 MB` RSS and residual `1.88e-4`.
+- Decision: do not keep the restart-cap source change. It worsened both memory
+  and residual on the checked smoke, so the next real lane remains a stronger
+  streaming-aware preconditioner rather than restart tuning.
