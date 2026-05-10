@@ -21932,6 +21932,8 @@ def solve_v3_transport_matrix_linear_gmres(
                 if stream_diagnostics:
                     _collect_transport_outputs(int(which_rhs), x_col)
                 residual_norms[which_rhs] = res_norms[idx]
+                solver_kinds_by_rhs[which_rhs] = "dense"
+                solve_methods_by_rhs[which_rhs] = "dense"
                 elapsed_s[int(which_rhs) - 1] = float(t_dense.elapsed_s() / float(n))
                 if emit is not None:
                     rhs_norm_val = float(rhs_norms[int(which_rhs)])
@@ -21983,6 +21985,8 @@ def solve_v3_transport_matrix_linear_gmres(
             if stream_diagnostics:
                 _collect_transport_outputs(int(which_rhs), x_col)
             residual_norms[which_rhs] = res_norms[idx]
+            solver_kinds_by_rhs[which_rhs] = "dense"
+            solve_methods_by_rhs[which_rhs] = "dense"
             elapsed_s[int(which_rhs) - 1] = float(t_dense.elapsed_s() / float(n))
             if emit is not None:
                 rhs_norm_val = float(rhs_norms[int(which_rhs)])
