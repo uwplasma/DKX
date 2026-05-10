@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
+
+_PAS_WEAK_STRONG_SKIP_KINDS = frozenset({"collision", "point", "xmg"})
+
 
 def requested_rhs1_strong_preconditioner_kind(
     strong_precond_env: str,
@@ -58,4 +63,33 @@ def requested_rhs1_strong_preconditioner_kind(
     return None
 
 
-__all__ = ["requested_rhs1_strong_preconditioner_kind"]
+def rhs1_pas_weak_strong_retry_skip(
+    *,
+    has_pas: bool,
+    rhs1_precond_kind: str | None,
+    res_ratio: float,
+) -> bool:
+    """Return whether a weak PAS base should skip expensive strong retries.
+
+    Collision/point/xmg preconditioners are useful bounded baselines, but when
+    their first residual ratio is astronomically large, the automatic strong
+    retry tends to spend minutes in setup without producing a releasable solve.
+    The high default threshold keeps normal polish behavior intact while making
+    known-bad forced paths fail fast and auditable.
+    """
+    if not bool(has_pas) or rhs1_precond_kind not in _PAS_WEAK_STRONG_SKIP_KINDS:
+        return False
+    env = os.environ.get("SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO", "").strip()
+    try:
+        threshold = float(env) if env else 1.0e12
+    except ValueError:
+        threshold = 1.0e12
+    if threshold <= 0.0:
+        return False
+    return float(res_ratio) >= float(threshold)
+
+
+__all__ = [
+    "requested_rhs1_strong_preconditioner_kind",
+    "rhs1_pas_weak_strong_retry_skip",
+]

@@ -9072,3 +9072,32 @@ Next concrete actions after guarded minres:
 3. Keep the geometry4 smoke gate fixed: under `60 s`, no memory regression, and
    at least `100x` residual reduction relative to the guarded collision fallback
    before any auto-policy promotion.
+
+Progress update (2026-05-10): weak PAS retry fail-fast guard
+
+- Forced weak PAS routes (`collision`, `xmg`, and `point`) were still able to
+  spend minutes in stage-2 polish or strong-preconditioner retry/search after
+  first residual ratios near `1e15`. This was a stall-prevention bug in the
+  profiling lanes, not a production solver-quality win.
+- Added `SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO` and
+  `SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO`, both defaulting to `1e12`; setting
+  either value to `0` disables that specific guard for explicit profiling.
+- GeometryScheme=4 PAS smoke probes with `maxiter=4`, `restart=8`, and bounded
+  subprocess timeouts now return instead of stalling: `collision` in `1.23 s`
+  with residual `1.58e6` and `587 MB` RSS, `xmg` in `1.35 s` with residual
+  `2.53e6` and `628 MB` RSS, and `point` in `2.64 s` with residual `1.16e6`
+  and `1.91 GB` RSS.
+- No weak route is promoted. The result closes the forced-path stall lane and
+  keeps those paths as auditable negative baselines.
+
+Next concrete actions after weak PAS fail-fast:
+
+1. Keep the fail-fast guards narrow: they only apply to PAS weak base kinds at
+   enormous residual ratios, and they must not change moderate-residual polish
+   behavior.
+2. Continue the real solver work with a stronger matrix-free line/plane
+   smoother or iterative chunked Schwarz correction that avoids dense angular
+   inverse storage.
+3. Gate any future promotion on the fixed geometry4 smoke target: under `60 s`,
+   no measured memory regression, and at least `100x` residual reduction
+   relative to the guarded collision fallback.

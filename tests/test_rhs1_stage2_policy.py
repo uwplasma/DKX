@@ -55,3 +55,16 @@ def test_rhs1_pas_stage2_skip_extended_is_opt_in(monkeypatch) -> None:
     assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="xblock_tz", res_ratio=1.0e7)
     assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="xblock_tz_lmax", res_ratio=1.0e7)
     assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="theta_line", res_ratio=1.0e7)
+
+
+def test_rhs1_pas_stage2_skip_weak_preconditioners_only_for_huge_ratios(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO", raising=False)
+    for kind in ("collision", "point", "xmg"):
+        assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind=kind, res_ratio=1.0e7)
+        assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind=kind, res_ratio=1.0e13)
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO", "0")
+    assert not rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="collision", res_ratio=1.0e99)
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO", "bad")
+    assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="xmg", res_ratio=1.0e13)
