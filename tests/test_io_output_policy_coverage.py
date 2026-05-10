@@ -15,6 +15,7 @@ from sfincs_jax.io import (
     _legendre_matrix,
     _output_cache_dir,
     _output_cache_path,
+    _phi1_fast_explicit_gmres_restart_default,
     _select_phi1_newton_linear_solve_method,
     read_sfincs_h5,
     write_sfincs_h5,
@@ -112,6 +113,13 @@ def test_select_phi1_newton_linear_solve_method_env_override_wins() -> None:
         emit=None,
     )
     assert method == "batched"
+
+
+def test_phi1_fast_explicit_gmres_restart_default_targets_production_size() -> None:
+    assert _phi1_fast_explicit_gmres_restart_default(7999) == 80
+    assert _phi1_fast_explicit_gmres_restart_default(8000) == 120
+    assert _phi1_fast_explicit_gmres_restart_default(12753) == 120
+    assert _phi1_fast_explicit_gmres_restart_default(25000) == 120
 
 
 def test_export_f_config_returns_none_without_export_request() -> None:
