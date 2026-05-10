@@ -1,6 +1,23 @@
 Release notes
 =============
 
+Unreleased
+----------
+
+- Added an explicit ``pas_tzfft`` / ``pas_fft`` RHSMode=1 PAS preconditioner
+  candidate and a guarded ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft``
+  route for memory-unsafe PAS-TZ experiments.
+- Guarded PAS-TZ fallbacks now skip stage-2 GMRES by default unless
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1`` is set. This keeps
+  experimental memory fallback probes bounded when a candidate lowers the
+  residual enough to avoid the generic high-ratio stage-2 skip but still misses
+  the strict solve target.
+- The bounded geometryScheme=4 PAS fallback smoke artifact now includes
+  ``tzfft``. It improves the residual from the cheap-collision fallback
+  (``~6.4e5``) to ``~1.9e-4`` in about ``3.3 s`` on the checked local smoke,
+  but remains opt-in because it increases RSS and still misses the strict
+  residual target.
+
 v1.1.2
 ------
 
