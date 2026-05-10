@@ -9136,6 +9136,12 @@ Progress update (2026-05-10): memory-unsafe PAS-TZ fallback tightening
   structured-guard rows and materially improving over the explicit legacy
   `hybrid` row residual (`2.53e16`, about `655 MB`). This remains a negative
   benchmark because the residual is still far above the production gate.
+- Follow-up release-hygiene pass: GitHub CI and Docs passed for commit
+  `abd9d65` (`coverage`, `examples-smoke`, optional ecosystem gates, and all
+  three test shards). The `v1.1.2` release notes were corrected to state the
+  actual current default: memory-unsafe `pas_tz` falls back to guarded
+  `collision` when available, while guarded `hybrid` remains an explicit
+  A/B-profiling override.
 
 Next concrete actions after fallback tightening:
 
