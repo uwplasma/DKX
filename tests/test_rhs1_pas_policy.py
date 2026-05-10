@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.rhs1_pas_policy import rhs1_pas_adaptive_smoother_allowed
+from sfincs_jax.rhs1_pas_policy import (
+    build_pas_tz_memory_fallback,
+    preferred_pas_tz_schwarz_axis,
+    resolve_pas_tz_memory_fallback_axis,
+    rhs1_pas_adaptive_smoother_allowed,
+)
 
 
 def _op(*, has_pas: bool = True, has_phi1: bool = False):
     return SimpleNamespace(
         include_phi1=has_phi1,
+        n_theta=25,
+        n_zeta=51,
         fblock=SimpleNamespace(pas=object() if has_pas else None),
     )
 
@@ -59,3 +66,109 @@ def test_pas_adaptive_smoother_env_controls_and_invalid_min(monkeypatch) -> None
         target=1.0e-8,
         use_implicit=False,
     )
+
+
+def test_pas_tz_memory_fallback_axis_preserves_default_behavior() -> None:
+    assert preferred_pas_tz_schwarz_axis(_op()) == "zeta"
+    assert (
+        resolve_pas_tz_memory_fallback_axis(
+            op=_op(),
+            requested="",
+            shard_axis=None,
+            n_devices=1,
+        )
+        is None
+    )
+    assert (
+        resolve_pas_tz_memory_fallback_axis(
+            op=_op(),
+            requested="",
+            shard_axis="theta",
+            n_devices=2,
+        )
+        == "theta"
+    )
+
+
+def test_pas_tz_memory_fallback_axis_supports_opt_in_structured_schwarz() -> None:
+    assert (
+        resolve_pas_tz_memory_fallback_axis(
+            op=_op(),
+            requested="schwarz",
+            shard_axis=None,
+            n_devices=1,
+        )
+        == "zeta"
+    )
+    assert (
+        resolve_pas_tz_memory_fallback_axis(
+            op=SimpleNamespace(n_theta=64, n_zeta=8),
+            requested="structured",
+            shard_axis=None,
+            n_devices=1,
+        )
+        == "theta"
+    )
+    assert (
+        resolve_pas_tz_memory_fallback_axis(
+            op=_op(),
+            requested="hybrid",
+            shard_axis="zeta",
+            n_devices=8,
+        )
+        is None
+    )
+
+
+def test_build_pas_tz_memory_fallback_can_force_zeta_schwarz(monkeypatch) -> None:
+    calls: list[tuple[str, int, int]] = []
+
+    def theta_builder(**kwargs):
+        calls.append(("theta", int(kwargs["block"]), int(kwargs["overlap"])))
+        return "theta-preconditioner"
+
+    def zeta_builder(**kwargs):
+        calls.append(("zeta", int(kwargs["block"]), int(kwargs["overlap"])))
+        return "zeta-preconditioner"
+
+    def hybrid_builder(**_kwargs):
+        calls.append(("hybrid", 0, 0))
+        return "hybrid-preconditioner"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "zeta")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK", "7")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP", "2")
+    result = build_pas_tz_memory_fallback(
+        op=_op(),
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=theta_builder,
+        zeta_schwarz_builder=zeta_builder,
+        hybrid_builder=hybrid_builder,
+    )
+    assert result == "zeta-preconditioner"
+    assert calls == [("zeta", 7, 2)]
+
+
+def test_build_pas_tz_memory_fallback_defaults_to_hybrid_on_single_device(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", raising=False)
+    calls: list[str] = []
+
+    def unused_builder(**_kwargs):
+        calls.append("schwarz")
+        return "schwarz-preconditioner"
+
+    def hybrid_builder(**_kwargs):
+        calls.append("hybrid")
+        return "hybrid-preconditioner"
+
+    result = build_pas_tz_memory_fallback(
+        op=_op(),
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=unused_builder,
+        zeta_schwarz_builder=unused_builder,
+        hybrid_builder=hybrid_builder,
+    )
+    assert result == "hybrid-preconditioner"
+    assert calls == ["hybrid"]
