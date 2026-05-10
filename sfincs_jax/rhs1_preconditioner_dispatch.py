@@ -38,6 +38,7 @@ class RHS1PreconditionerDispatchBuilders:
     pas_hybrid_builder: Builder
     pas_schur_builder: Builder
     pas_tz_builder: Builder
+    pas_tzfft_builder: Builder
     pas_tokamak_theta_builder: Builder
     pas_ilu_builder: Builder
     zeta_line_builder: Builder
@@ -163,6 +164,10 @@ def build_rhs1_preconditioner_from_kind(
         )
     if rhs1_precond_kind == "pas_tz":
         return builders.pas_tz_builder(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "pas_tzfft":
+        return builders.pas_tzfft_builder(
             op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
         )
     if rhs1_precond_kind == "pas_tokamak_theta":

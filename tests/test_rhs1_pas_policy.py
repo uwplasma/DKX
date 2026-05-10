@@ -144,6 +144,8 @@ def test_pas_tz_cheap_fallback_kind_defaults_to_collision_with_hybrid_override()
     assert resolve_pas_tz_cheap_fallback_kind(requested="zeta") == "collision"
     assert resolve_pas_tz_cheap_fallback_kind(requested="hybrid") == "hybrid"
     assert resolve_pas_tz_cheap_fallback_kind(requested="pas-hybrid") == "hybrid"
+    assert resolve_pas_tz_cheap_fallback_kind(requested="tzfft") == "tzfft"
+    assert resolve_pas_tz_cheap_fallback_kind(requested="pas-stream-fft") == "tzfft"
 
 
 def test_build_pas_tz_memory_fallback_can_force_zeta_schwarz(monkeypatch) -> None:
@@ -281,6 +283,44 @@ def test_build_pas_tz_memory_fallback_can_force_legacy_hybrid(monkeypatch) -> No
     )
     assert result == "hybrid-preconditioner"
     assert calls == ["hybrid"]
+
+
+def test_build_pas_tz_memory_fallback_can_force_tzfft_candidate(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "tzfft")
+    calls: list[str] = []
+
+    def unused_builder(**_kwargs):
+        raise AssertionError("tzfft request must not build structured Schwarz")
+
+    def hybrid_builder(**_kwargs):
+        calls.append("hybrid")
+        return "hybrid-preconditioner"
+
+    def collision_builder(**_kwargs):
+        calls.append("collision")
+        return "collision-preconditioner"
+
+    def tzfft_builder(**_kwargs):
+        calls.append("tzfft")
+
+        def _apply(value):
+            return value
+
+        return _apply
+
+    result = build_pas_tz_memory_fallback(
+        op=_op(),
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=unused_builder,
+        zeta_schwarz_builder=unused_builder,
+        hybrid_builder=hybrid_builder,
+        collision_builder=collision_builder,
+        tzfft_builder=tzfft_builder,
+    )
+    assert calls == ["tzfft"]
+    assert getattr(result, "_sfincs_jax_pas_tz_guarded_fallback") is True
+    assert getattr(result, "_sfincs_jax_pas_tz_guarded_axis") == "tzfft"
 
 
 def test_build_pas_tz_memory_fallback_marks_default_collision_guarded(monkeypatch) -> None:

@@ -197,6 +197,7 @@ def build_pas_tz_memory_fallback(
     zeta_schwarz_builder: Callable[..., Callable],
     hybrid_builder: Callable[..., Callable],
     collision_builder: Callable[..., Callable] | None = None,
+    tzfft_builder: Callable[..., Callable] | None = None,
     reduce_full=None,
     expand_reduced=None,
 ) -> Callable:
@@ -206,6 +207,8 @@ def build_pas_tz_memory_fallback(
     Otherwise we default to the cheap collision fallback when available. The
     older PAS-hybrid fallback remains available with
     ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=hybrid`` for A/B profiling.
+    ``tzfft`` is an opt-in matrix-free angular-streaming candidate that avoids
+    dense patch inverses; it is not selected by default until benchmarked.
     This keeps memory-unsafe PAS-TZ attempts fail-fast instead of spending the
     wall-time budget in a second dense-ish fallback. Structured Schwarz builders
     still allocate dense patch inverses, so they are guarded by an explicit
@@ -251,7 +254,12 @@ def build_pas_tz_memory_fallback(
             reduce_full=reduce_full,
             expand_reduced=expand_reduced,
         )
-    if resolve_pas_tz_cheap_fallback_kind(requested=requested) == "collision" and collision_builder is not None:
+    cheap_kind = resolve_pas_tz_cheap_fallback_kind(requested=requested)
+    if cheap_kind == "tzfft" and tzfft_builder is not None:
+        precond = tzfft_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        _mark_pas_tz_guarded_fallback(precond, axis="tzfft")
+        return precond
+    if cheap_kind == "collision" and collision_builder is not None:
         precond = collision_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
         _mark_pas_tz_guarded_fallback(precond, axis="collision")
         return precond
@@ -394,10 +402,13 @@ def resolve_pas_tz_cheap_fallback_kind(*, requested: str) -> str:
 
     ``collision`` is the default because it is bounded in memory and setup time.
     ``hybrid`` is kept as an explicit compatibility/profiling override.
+    ``tzfft`` is an explicit experimental matrix-free angular-streaming route.
     """
     req = str(requested or "").strip().lower().replace("-", "_")
     if req in {"hybrid", "pas_hybrid", "old", "legacy"}:
         return "hybrid"
+    if req in {"tzfft", "pas_tzfft", "pas_fft", "pas_stream_fft", "pas_streaming_fft"}:
+        return "tzfft"
     return "collision"
 
 

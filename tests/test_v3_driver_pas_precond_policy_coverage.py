@@ -167,6 +167,17 @@ def test_pas_tz_builder_legacy_hybrid_memory_fallback_is_explicit(monkeypatch) -
     assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
 
 
+def test_pas_tz_builder_tzfft_memory_fallback_is_explicit(monkeypatch) -> None:
+    sentinel = object()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "tzfft")
+    monkeypatch.setattr(vd, "_build_rhsmode23_tzfft_preconditioner", lambda **kwargs: sentinel)
+    monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
+    monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
+    monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: None)
+    monkeypatch.setattr(vd.jax, "device_count", lambda: 1)
+    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
+
+
 def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe_and_theta_sharded(monkeypatch) -> None:
     sentinel = object()
     seen: dict[str, int] = {}

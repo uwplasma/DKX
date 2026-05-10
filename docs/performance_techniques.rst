@@ -1028,7 +1028,9 @@ so scan points can reuse the same preconditioner blocks. Controls:
   so rejected ``pas_tz`` attempts fail fast, ``hybrid`` restores the historical
   ``pas_hybrid`` fallback for A/B profiling, and ``theta``, ``zeta``, or
   ``schwarz`` force a structured additive-Schwarz fallback for bounded
-  geometry-rich PAS experiments)
+  geometry-rich PAS experiments; ``tzfft`` selects an experimental matrix-free
+  angular-streaming fallback that improves the smoke residual but is not yet a
+  promoted production route)
 - ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK`` /
   ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP`` (shared block and overlap used
   by the opt-in structured PAS-TZ Schwarz fallback when axis-specific
@@ -1041,6 +1043,9 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY`` (default off; set to ``1``
   only when profiling the expensive strong retry after a guarded structured
   PAS-TZ fallback)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY`` (default off; set to
+  ``1`` only when profiling stage-2 GMRES after a guarded PAS-TZ fallback; the
+  default skip keeps memory-unsafe fallback benchmarks bounded)
 - ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS`` /
   ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP`` /
   ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT`` (bounded
@@ -1647,20 +1652,21 @@ reduce the estimated dominant storage term.
 
 The structured PAS-TZ memory fallback remains benchmark-only until a bounded
 route clears both runtime and residual gates. Use
-``scripts/benchmark_pas_tz_memory_fallback.py`` to run forced ``hybrid``,
-``theta``, and ``zeta`` fallback variants in subprocesses with hard timeouts.
+``scripts/benchmark_pas_tz_memory_fallback.py`` to run forced ``collision``,
+``hybrid``, ``theta``, ``zeta``, and ``tzfft`` fallback variants in subprocesses
+with hard timeouts.
 The checked smoke artifact
 ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
-now records the intended guard behavior on the geometryScheme=4 PAS deck:
-``hybrid`` still enters the old expensive retry path and times out under the
-short local gate, while forced ``theta`` and ``zeta`` reject unsafe dense
-Schwarz patches, apply an accept-only matrix-free minres correction, skip the
-strong retry, and return in about 1.5 s with a still-large residual. The
-minres correction improves the checked smoke residual from about ``1.58e6`` to
-``1.27e6`` without increasing memory, but this remains far from the residual
-gate. This is a useful fail-fast result, not a promoted solver path. The next
-algorithmic step is a genuinely stronger matrix-free or chunked PAS correction
-that reduces the residual without constructing dense angular patch inverses.
+records the intended guard behavior on the geometryScheme=4 PAS deck. The
+cheap collision and guarded structured rows return in about ``1.6 s`` with
+residual ``6.4e5``; the explicit legacy ``hybrid`` row returns in about
+``2.3 s`` but with residual ``2.5e16``. The experimental ``tzfft`` row returns
+in about ``3.3 s`` with residual ``1.9e-4`` and a higher RSS footprint
+(``~944 MB`` in the checked smoke). This is a useful matrix-free residual
+improvement, but it still misses the strict residual target and is not promoted
+to a default solver path. The next algorithmic step is a genuinely stronger
+matrix-free or chunked PAS correction that reduces the residual without
+constructing dense angular patch inverses.
 
 The same fail-fast rule is now applied to forced weak PAS baselines at
 astronomical residual ratios, with a cheap accept-only minres correction before

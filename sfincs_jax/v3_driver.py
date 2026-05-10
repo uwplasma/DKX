@@ -142,6 +142,7 @@ from .rhs1_acceptance_policy import (
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
+    rhs1_pas_tz_guarded_stage2_retry,
     rhs1_stage2_trigger,
 )
 from .solver_selection_policy import SolverCandidateMetrics
@@ -4875,6 +4876,7 @@ def _build_rhsmode1_pas_tz_preconditioner(
             zeta_schwarz_builder=_build_rhsmode1_zeta_schwarz_preconditioner,
             hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
             collision_builder=_build_rhsmode1_collision_preconditioner,
+            tzfft_builder=_build_rhsmode23_tzfft_preconditioner,
             reduce_full=reduce_full,
             expand_reduced=expand_reduced,
         )
@@ -10927,6 +10929,7 @@ def _build_rhs1_preconditioner_from_kind(
             pas_hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
             pas_schur_builder=_build_rhsmode1_pas_schur_preconditioner,
             pas_tz_builder=_build_rhsmode1_pas_tz_preconditioner,
+            pas_tzfft_builder=_build_rhsmode23_tzfft_preconditioner,
             pas_tokamak_theta_builder=_build_rhsmode1_pas_tokamak_theta_preconditioner,
             pas_ilu_builder=_build_rhsmode1_pas_xblock_ilu_preconditioner,
             zeta_line_builder=_build_rhsmode1_zeta_line_preconditioner,
@@ -15441,6 +15444,15 @@ def solve_v3_full_system_linear_gmres(
                     1,
                     "solve_v3_full_system_linear_gmres: PAS stage2 skipped "
                     f"(residual ratio={res_ratio:.3e}; set the relevant PAS stage2 skip ratio to 0 to retry)",
+                )
+        if rhs1_pas_tz_guarded_fallback and stage2_trigger and not rhs1_pas_tz_guarded_stage2_retry():
+            stage2_trigger = False
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
+                    "after guarded PAS-TZ fallback; set "
+                    "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
                 )
         if (
             (not early_dense_shortcut)

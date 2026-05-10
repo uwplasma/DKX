@@ -3,6 +3,7 @@ from __future__ import annotations
 from sfincs_jax.rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
+    rhs1_pas_tz_guarded_stage2_retry,
     rhs1_stage2_ratio,
     rhs1_stage2_trigger,
 )
@@ -68,3 +69,14 @@ def test_rhs1_pas_stage2_skip_weak_preconditioners_only_for_huge_ratios(monkeypa
 
     monkeypatch.setenv("SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO", "bad")
     assert rhs1_pas_stage2_skip(has_pas=True, rhs1_precond_kind="xmg", res_ratio=1.0e13)
+
+
+def test_rhs1_pas_tz_guarded_stage2_retry_is_explicit(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY", raising=False)
+    assert not rhs1_pas_tz_guarded_stage2_retry()
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY", "1")
+    assert rhs1_pas_tz_guarded_stage2_retry()
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY", "false")
+    assert not rhs1_pas_tz_guarded_stage2_retry()
