@@ -4,18 +4,35 @@ from types import SimpleNamespace
 
 from sfincs_jax.rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
+    estimate_pas_tz_schwarz_fallback_work,
+    pas_tz_schwarz_fallback_memory_safe,
     preferred_pas_tz_schwarz_axis,
     resolve_pas_tz_memory_fallback_axis,
     rhs1_pas_adaptive_smoother_allowed,
 )
 
 
-def _op(*, has_pas: bool = True, has_phi1: bool = False):
+def _op(
+    *,
+    has_pas: bool = True,
+    has_phi1: bool = False,
+    n_species: int = 1,
+    n_theta: int = 25,
+    n_zeta: int = 51,
+    n_x: int = 2,
+    n_xi: int = 6,
+):
     return SimpleNamespace(
         include_phi1=has_phi1,
-        n_theta=25,
-        n_zeta=51,
-        fblock=SimpleNamespace(pas=object() if has_pas else None),
+        n_species=n_species,
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        n_x=n_x,
+        n_xi=n_xi,
+        fblock=SimpleNamespace(
+            collisionless=SimpleNamespace(n_xi_for_x=tuple([int(n_xi)] * int(n_x))),
+            pas=object() if has_pas else None,
+        ),
     )
 
 
@@ -148,6 +165,55 @@ def test_build_pas_tz_memory_fallback_can_force_zeta_schwarz(monkeypatch) -> Non
     )
     assert result == "zeta-preconditioner"
     assert calls == [("zeta", 7, 2)]
+
+
+def test_pas_tz_schwarz_fallback_work_estimate_flags_research_grid() -> None:
+    work = estimate_pas_tz_schwarz_fallback_work(
+        _op(n_species=2, n_theta=25, n_zeta=51, n_x=4, n_xi=100),
+        axis="zeta",
+        block=3,
+        overlap=1,
+    )
+    assert work["patch_count"] == 850
+    assert work["max_patch_unknowns"] == 2000
+    assert work["inverse_entries"] == 3_400_000_000
+    assert not pas_tz_schwarz_fallback_memory_safe(
+        _op(n_species=2, n_theta=25, n_zeta=51, n_x=4, n_xi=100),
+        axis="zeta",
+        block=3,
+        overlap=1,
+    )
+
+
+def test_build_pas_tz_memory_fallback_uses_collision_when_schwarz_guard_fails(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def unused_builder(**_kwargs):
+        calls.append("schwarz")
+        return "schwarz-preconditioner"
+
+    def hybrid_builder(**_kwargs):
+        calls.append("hybrid")
+        return "hybrid-preconditioner"
+
+    def collision_builder(**_kwargs):
+        calls.append("collision")
+        return "collision-preconditioner"
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "zeta")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK", "3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP", "1")
+    result = build_pas_tz_memory_fallback(
+        op=_op(n_species=2, n_theta=25, n_zeta=51, n_x=4, n_xi=100),
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=unused_builder,
+        zeta_schwarz_builder=unused_builder,
+        hybrid_builder=hybrid_builder,
+        collision_builder=collision_builder,
+    )
+    assert result == "collision-preconditioner"
+    assert calls == ["collision"]
 
 
 def test_build_pas_tz_memory_fallback_defaults_to_hybrid_on_single_device(monkeypatch) -> None:

@@ -9004,3 +9004,39 @@ Next concrete actions after the structured PAS kickoff:
 4. If all structured fallback probes still stall, move to a genuinely new
    matrix-free coarse correction rather than widening existing Schur/sparse-PC
    heuristics.
+
+Progress update (2026-05-10): guarded PAS-TZ fallback closeout
+
+- Added a source-level work estimator for opt-in PAS-TZ theta/zeta Schwarz
+  fallback builds. It estimates patch count, largest patch unknown count, and
+  dense inverse entries before entering the expensive builder.
+- Added guardrails
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS` and
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES`; the default caps
+  reject production-resolution grids that would allocate many dense local
+  inverses, while `0` disables each cap for explicit unsafe profiling.
+- Guarded structured fallback now returns a cheap collision fallback and marks
+  the callable. The driver uses that marker to skip the expensive strong retry
+  unless `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1` is set. This keeps
+  the path fail-fast instead of spending minutes searching solver paths after
+  an already-rejected dense Schwarz route.
+- Regenerated
+  `tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json`:
+  the old `hybrid` route still times out at the 15 s cap, while forced `zeta`
+  and `theta` now finish in about `1.5 s` and report the expected large
+  residual (`1.58e6`). This is not a promoted solver path, but it closes the
+  stall/hang behavior for this bounded benchmark lane.
+- Fixed the PAS fallback harness RSS conversion to use the package
+  platform-aware `ru_maxrss` conversion, avoiding macOS/Linux unit mismatches.
+
+Next concrete actions after guarded PAS-TZ fallback:
+
+1. Keep this guarded behavior as a negative benchmark gate: structured fallback
+   is safe to test but still fails the residual gate, so defaults should remain
+   unchanged.
+2. Start the real algorithmic path with a matrix-free angular/radial correction
+   that does not store dense per-patch inverses. The gate is: under 60 s on the
+   geometry4 smoke deck, residual at least two orders of magnitude below the
+   guarded collision fallback, and no memory regression.
+3. Re-run the focused PAS policy/artifact tests and docs build, then full local
+   pytest if CI stays green.

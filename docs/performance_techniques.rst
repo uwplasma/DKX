@@ -1032,6 +1032,13 @@ so scan points can reuse the same preconditioner blocks. Controls:
   by the opt-in structured PAS-TZ Schwarz fallback when axis-specific
   ``SFINCS_JAX_RHSMODE1_THETA_DD_*`` or ``SFINCS_JAX_RHSMODE1_ZETA_DD_*`` values
   are not set)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES`` (guardrails for the
+  opt-in structured fallback; default values reject production grids that would
+  allocate too many dense Schwarz inverse entries, and ``0`` disables each cap)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY`` (default off; set to ``1``
+  only when profiling the expensive strong retry after a guarded structured
+  PAS-TZ fallback)
 - ``SFINCS_JAX_PRECOND_MAX_MB`` / ``SFINCS_JAX_PRECOND_CHUNK`` (cap memory during block assembly)
 - ``SFINCS_JAX_PRECOND_PAS_MAX_COLS`` (additional column cap for PAS block assembly;
   reduces peak RSS by chunking :math:`(\theta,\zeta)` blocks)
@@ -1599,15 +1606,19 @@ factor storage estimates. This makes the next optimization pass auditable: a
 claimed memory win must reduce the measured active/device metric and should also
 reduce the estimated dominant storage term.
 
-The structured PAS-TZ memory fallback is intentionally benchmark-only until a
-bounded route clears the release gates. Use
+The structured PAS-TZ memory fallback remains benchmark-only until a bounded
+route clears both runtime and residual gates. Use
 ``scripts/benchmark_pas_tz_memory_fallback.py`` to run forced ``hybrid``,
-``theta``, and ``zeta`` fallback variants in subprocesses with hard timeouts. The
-checked smoke artifact
+``theta``, and ``zeta`` fallback variants in subprocesses with hard timeouts.
+The checked smoke artifact
 ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
-records that the current forced structured variants still time out on the
-geometryScheme=4 PAS deck under a short local gate, so no default promotion is
-justified yet.
+now records the intended guard behavior on the geometryScheme=4 PAS deck:
+``hybrid`` still enters the old expensive retry path and times out under the
+short local gate, while forced ``theta`` and ``zeta`` reject unsafe dense
+Schwarz patches, skip the strong retry, and return in about 1.5 s with a large
+residual. This is a useful fail-fast result, not a promoted solver path. The
+next algorithmic step is a genuinely matrix-free or chunked PAS correction that
+reduces the residual without constructing dense angular patch inverses.
 
 The remaining high-impact memory lanes are algorithmic:
 
