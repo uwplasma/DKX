@@ -263,9 +263,19 @@ def test_pas_tz_memory_fallback_smoke_keeps_structured_fallback_opt_in() -> None
 
     rows = {row["variant"]: row for row in smoke["results"]}
     assert set(rows) == {"hybrid", "zeta", "theta"}
-    assert {row["status"] for row in rows.values()} == {"timeout"}
-    assert all(float(row["elapsed_s"]) >= 15.0 for row in rows.values())
-    assert all("building RHSMode=1 preconditioner=pas_tz" in row["stdout_tail"] for row in rows.values())
+    assert rows["hybrid"]["status"] == "timeout"
+    assert float(rows["hybrid"]["elapsed_s"]) >= 15.0
+    assert "building RHSMode=1 preconditioner=pas_tz" in rows["hybrid"]["stdout_tail"]
+    assert "strong preconditioner fallback" in rows["hybrid"]["stdout_tail"]
+
+    for variant in ("zeta", "theta"):
+        row = rows[variant]
+        assert row["status"] == "ok"
+        assert float(row["elapsed_s"]) < 5.0
+        assert float(row["residual_norm"]) > 1.0e3
+        messages = "\n".join(row["messages_tail"])
+        assert f"guarded out (axis={variant})" in messages
+        assert "skipping strong preconditioner after guarded PAS-TZ fallback" in messages
 
 
 def test_fp3d_sparse_pc_probe_beats_dense_default_without_parity_loss() -> None:
