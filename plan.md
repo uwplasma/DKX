@@ -8964,3 +8964,30 @@ Next concrete actions after the final FP/PAS/output-retention push:
 2. Treat production-resolution geometry-rich PAS as the next algorithmic lane:
    replace the conservative global sparse pattern with a structured/chunked
    geometry-aware preconditioner before attempting another public default.
+
+Progress update (2026-05-10): v1.1.1 release and structured PAS kickoff
+
+- Released `v1.1.1` from `main` after regenerating the README-facing
+  Fortran/JAX runtime-memory plot and W7-X high-`nu` performance figure from
+  checked-in artifacts.
+- Release validation passed locally: docs with warnings as errors, package
+  build, focused figure/package tests, and full pytest (`1115 passed in
+  498.10 s`). The `v1.1.1` tag push triggered the PyPI, CI, and Docs workflows.
+- Started the next technical push without changing release defaults. Memory-
+  unsafe `pas_tz` builds still fall back to `pas_hybrid` on one device by
+  default, but `SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=theta|zeta|schwarz`
+  now exposes a structured additive-Schwarz fallback for bounded geometry-rich
+  PAS experiments. Shared `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK` and
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP` controls make the benchmark lane
+  reproducible before any future default promotion.
+
+Next concrete actions after the structured PAS kickoff:
+
+1. Run bounded CPU geometry-rich PAS probes with the new opt-in fallback:
+   `zeta` first for `N_zeta >= N_theta`, then `theta`, using small block/overlap
+   ladders and the same residual/output gates as the release closeout artifact.
+2. If a structured Schwarz route clears the bounded runtime and residual gate,
+   add a trace artifact and only then consider a narrow auto-policy window.
+3. If all structured fallback probes still stall, move to a genuinely new
+   matrix-free coarse correction rather than widening existing Schur/sparse-PC
+   heuristics.

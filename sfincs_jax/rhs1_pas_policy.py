@@ -201,21 +201,31 @@ def build_pas_tz_memory_fallback(
     """Build the fallback preconditioner for memory-unsafe PAS-TZ requests.
 
     On multi-device sharded runs we use the shard-axis-specific Schwarz builder.
-    Otherwise we fall back to the lighter PAS hybrid preconditioner.
+    Otherwise we fall back to the lighter PAS hybrid preconditioner unless the
+    user explicitly requests a structured Schwarz fallback with
+    ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK``. This keeps release defaults
+    unchanged while giving the next geometry-rich PAS optimization lane a
+    measured, opt-in benchmark hook.
     """
     shard_axis = matvec_shard_axis(op)
-    if shard_axis in {"theta", "zeta"} and device_count() > 1:
-        dd_block_env = os.environ.get(f"SFINCS_JAX_RHSMODE1_{shard_axis.upper()}_DD_BLOCK", "").strip()
-        dd_overlap_env = os.environ.get(f"SFINCS_JAX_RHSMODE1_{shard_axis.upper()}_DD_OVERLAP", "").strip()
-        try:
-            dd_block = int(dd_block_env) if dd_block_env else 64
-        except ValueError:
-            dd_block = 64
-        try:
-            dd_overlap = int(dd_overlap_env) if dd_overlap_env else 1
-        except ValueError:
-            dd_overlap = 1
-        schwarz_builder = theta_schwarz_builder if shard_axis == "theta" else zeta_schwarz_builder
+    axis = resolve_pas_tz_memory_fallback_axis(
+        op=op,
+        requested=os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", ""),
+        shard_axis=shard_axis,
+        n_devices=device_count(),
+    )
+    if axis in {"theta", "zeta"}:
+        dd_block = _parse_pas_tz_fallback_int(
+            f"SFINCS_JAX_RHSMODE1_{axis.upper()}_DD_BLOCK",
+            fallback_name="SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK",
+            default=64,
+        )
+        dd_overlap = _parse_pas_tz_fallback_int(
+            f"SFINCS_JAX_RHSMODE1_{axis.upper()}_DD_OVERLAP",
+            fallback_name="SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP",
+            default=1,
+        )
+        schwarz_builder = theta_schwarz_builder if axis == "theta" else zeta_schwarz_builder
         return schwarz_builder(
             op=op,
             block=dd_block,
@@ -226,12 +236,68 @@ def build_pas_tz_memory_fallback(
     return hybrid_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
 
 
+def _parse_pas_tz_fallback_int(name: str, *, fallback_name: str, default: int) -> int:
+    """Parse a structured PAS fallback integer env var with a shared fallback."""
+    for env_name in (name, fallback_name):
+        raw = os.environ.get(env_name, "").strip()
+        if raw:
+            try:
+                value = int(raw)
+            except ValueError:
+                continue
+            if value > 0:
+                return value
+    return int(default)
+
+
+def preferred_pas_tz_schwarz_axis(op) -> str:
+    """Choose the structured Schwarz axis with the richer angular direction."""
+    try:
+        n_theta = int(op.n_theta)
+        n_zeta = int(op.n_zeta)
+    except Exception:
+        return "theta"
+    return "zeta" if n_zeta >= n_theta else "theta"
+
+
+def resolve_pas_tz_memory_fallback_axis(
+    *,
+    op,
+    requested: str,
+    shard_axis: str | None,
+    n_devices: int,
+) -> str | None:
+    """Resolve the memory-unsafe PAS-TZ fallback axis.
+
+    Empty/default requests preserve the historical behavior: only already-sharded
+    multi-device runs select a Schwarz fallback automatically. Explicit
+    ``theta``, ``zeta``, or ``schwarz`` requests enable the structured route for
+    bounded single-device experiments without widening production defaults.
+    """
+    req = str(requested or "").strip().lower().replace("-", "_")
+    if req in {"hybrid", "pas_hybrid", "off", "0", "false", "no"}:
+        return None
+    if req in {"theta", "theta_schwarz"}:
+        return "theta"
+    if req in {"zeta", "zeta_schwarz"}:
+        return "zeta"
+    if req in {"schwarz", "structured", "structured_schwarz", "auto_schwarz"}:
+        return preferred_pas_tz_schwarz_axis(op)
+    if req:
+        return None
+    if shard_axis in {"theta", "zeta"} and int(n_devices) > 1:
+        return str(shard_axis)
+    return None
+
+
 __all__ = [
     "build_pas_tz_memory_fallback",
     "estimate_rhs1_pas_tz_build_bytes",
     "pas_tokamak_theta_preconditioner_applicable",
     "pas_tz_preconditioner_applicable",
     "pas_tz_preconditioner_memory_safe",
+    "preferred_pas_tz_schwarz_axis",
+    "resolve_pas_tz_memory_fallback_axis",
     "rhs1_pas_adaptive_smoother_allowed",
     "rhs1_pas_tz_max_bytes",
 ]
