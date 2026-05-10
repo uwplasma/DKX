@@ -14,9 +14,11 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import resource
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Any
 
@@ -25,6 +27,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = _REPO_ROOT / "examples" / "sfincs_examples" / "geometryScheme4_2species_PAS_noEr" / "input.namelist"
 DEFAULT_OUT = _REPO_ROOT / "examples" / "performance" / "output" / "pas_tz_memory_fallback_benchmark.json"
 RESULT_MARKER = "__SFINCS_JAX_PAS_TZ_RESULT__="
+GRID_OVERRIDE_KEYS = ("Ntheta", "Nzeta", "Nxi", "Nx")
 
 
 def _tail_text(value: str | bytes | None, n: int = 4000) -> str:
@@ -49,9 +52,53 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tol", type=float, default=1.0e-6)
     parser.add_argument("--block", type=int, default=3)
     parser.add_argument("--overlap", type=int, default=1)
+    parser.add_argument("--Ntheta", "--ntheta", dest="Ntheta", type=int, help="Override resolutionParameters.Ntheta.")
+    parser.add_argument("--Nzeta", "--nzeta", dest="Nzeta", type=int, help="Override resolutionParameters.Nzeta.")
+    parser.add_argument("--Nxi", "--nxi", dest="Nxi", type=int, help="Override resolutionParameters.Nxi.")
+    parser.add_argument("--Nx", "--nx", dest="Nx", type=int, help="Override resolutionParameters.Nx.")
     parser.add_argument("--dry-run", action="store_true", help="Write planned variants without running subprocesses.")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     return parser
+
+
+def _grid_overrides(args: argparse.Namespace) -> dict[str, int]:
+    """Return requested positive grid overrides keyed by namelist variable."""
+    overrides: dict[str, int] = {}
+    for key in GRID_OVERRIDE_KEYS:
+        value = getattr(args, key, None)
+        if value is None:
+            continue
+        value_i = int(value)
+        if value_i <= 0:
+            raise ValueError(f"{key} override must be positive, got {value_i}")
+        overrides[key] = value_i
+    return overrides
+
+
+def _input_record(input_path: Path) -> str:
+    try:
+        return str(input_path.resolve().relative_to(_REPO_ROOT))
+    except ValueError:
+        return str(input_path)
+
+
+def _override_namelist_text(text: str, overrides: dict[str, int]) -> str:
+    """Apply simple scalar grid overrides to an existing SFINCS namelist."""
+    updated = text
+    for key, value in overrides.items():
+        pattern = re.compile(rf"^(\s*{re.escape(key)}\s*=\s*)[^\n!]*?(\s*(?:!.*)?)$", re.MULTILINE)
+        updated, count = pattern.subn(rf"\g<1>{value}\2", updated, count=1)
+        if count != 1:
+            raise ValueError(f"Could not find active namelist assignment for {key}")
+    return updated
+
+
+def _write_child_input(input_path: Path, work_dir: Path, overrides: dict[str, int]) -> Path:
+    """Write a temporary child input namelist with requested grid overrides."""
+    child_input = work_dir / "input.namelist"
+    text = input_path.read_text()
+    child_input.write_text(_override_namelist_text(text, overrides))
+    return child_input
 
 
 def _variant_env(variant: str, *, block: int, overlap: int, maxiter: int, restart: int) -> dict[str, str]:
@@ -124,37 +171,46 @@ def _run_child(args: argparse.Namespace, variant: str) -> dict[str, Any]:
             restart=int(args.restart),
         )
     )
-    cmd = [
-        sys.executable,
-        str(Path(__file__).resolve()),
-        "--child",
-        "--input",
-        str(args.input),
-        "--tol",
-        str(args.tol),
-        "--maxiter",
-        str(args.maxiter),
-        "--restart",
-        str(args.restart),
-    ]
+    input_path = Path(args.input)
+    overrides = _grid_overrides(args)
+    tmp_ctx = tempfile.TemporaryDirectory(prefix="sfincs-jax-pas-tz-") if overrides else None
     t0 = time.perf_counter()
     try:
-        completed = subprocess.run(
-            cmd,
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=float(args.timeout_s),
-        )
-    except subprocess.TimeoutExpired as exc:
-        return {
-            "variant": str(variant),
-            "status": "timeout",
-            "elapsed_s": float(time.perf_counter() - t0),
-            "timeout_s": float(args.timeout_s),
-            "stdout_tail": _tail_text(exc.stdout),
-            "stderr_tail": _tail_text(exc.stderr),
-        }
+        if tmp_ctx is not None:
+            input_path = _write_child_input(input_path, Path(tmp_ctx.name), overrides)
+        cmd = [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--child",
+            "--input",
+            str(input_path),
+            "--tol",
+            str(args.tol),
+            "--maxiter",
+            str(args.maxiter),
+            "--restart",
+            str(args.restart),
+        ]
+        try:
+            completed = subprocess.run(
+                cmd,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=float(args.timeout_s),
+            )
+        except subprocess.TimeoutExpired as exc:
+            return {
+                "variant": str(variant),
+                "status": "timeout",
+                "elapsed_s": float(time.perf_counter() - t0),
+                "timeout_s": float(args.timeout_s),
+                "stdout_tail": _tail_text(exc.stdout),
+                "stderr_tail": _tail_text(exc.stderr),
+            }
+    finally:
+        if tmp_ctx is not None:
+            tmp_ctx.cleanup()
 
     payload: dict[str, Any] | None = None
     for line in completed.stdout.splitlines()[::-1]:
@@ -179,12 +235,10 @@ def _run_child(args: argparse.Namespace, variant: str) -> dict[str, Any]:
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     """Build the benchmark plan payload."""
     input_path = Path(args.input)
-    try:
-        input_record = str(input_path.resolve().relative_to(_REPO_ROOT))
-    except ValueError:
-        input_record = str(input_path)
+    overrides = _grid_overrides(args)
     return {
-        "input": input_record,
+        "input": _input_record(input_path),
+        "input_overrides": overrides,
         "timeout_s": float(args.timeout_s),
         "tol": float(args.tol),
         "maxiter": int(args.maxiter),
