@@ -203,19 +203,20 @@ def build_pas_tz_memory_fallback(
     """Build the fallback preconditioner for memory-unsafe PAS-TZ requests.
 
     On multi-device sharded runs we use the shard-axis-specific Schwarz builder.
-    Otherwise we fall back to the lighter PAS hybrid preconditioner unless the
-    user explicitly requests a structured Schwarz fallback with
-    ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK``. This keeps release defaults
-    unchanged while giving the next geometry-rich PAS optimization lane a
-    measured, opt-in benchmark hook. Structured Schwarz builders still allocate
-    dense patch inverses, so they are guarded by an explicit patch-work estimate;
-    unsafe requests fall back to the cheap collision preconditioner when it is
-    available, or to the historical hybrid fallback otherwise.
+    Otherwise we default to the cheap collision fallback when available. The
+    older PAS-hybrid fallback remains available with
+    ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=hybrid`` for A/B profiling.
+    This keeps memory-unsafe PAS-TZ attempts fail-fast instead of spending the
+    wall-time budget in a second dense-ish fallback. Structured Schwarz builders
+    still allocate dense patch inverses, so they are guarded by an explicit
+    patch-work estimate; unsafe structured requests also fall back to the cheap
+    collision preconditioner when it is available.
     """
+    requested = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "")
     shard_axis = matvec_shard_axis(op)
     axis = resolve_pas_tz_memory_fallback_axis(
         op=op,
-        requested=os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", ""),
+        requested=requested,
         shard_axis=shard_axis,
         n_devices=device_count(),
     )
@@ -250,6 +251,10 @@ def build_pas_tz_memory_fallback(
             reduce_full=reduce_full,
             expand_reduced=expand_reduced,
         )
+    if resolve_pas_tz_cheap_fallback_kind(requested=requested) == "collision" and collision_builder is not None:
+        precond = collision_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        _mark_pas_tz_guarded_fallback(precond, axis="collision")
+        return precond
     precond = hybrid_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
     _mark_pas_tz_guarded_fallback(precond, axis="hybrid")
     return precond
@@ -384,6 +389,18 @@ def preferred_pas_tz_schwarz_axis(op) -> str:
     return "zeta" if n_zeta >= n_theta else "theta"
 
 
+def resolve_pas_tz_cheap_fallback_kind(*, requested: str) -> str:
+    """Resolve the cheap single-device fallback used after a rejected PAS-TZ build.
+
+    ``collision`` is the default because it is bounded in memory and setup time.
+    ``hybrid`` is kept as an explicit compatibility/profiling override.
+    """
+    req = str(requested or "").strip().lower().replace("-", "_")
+    if req in {"hybrid", "pas_hybrid", "old", "legacy"}:
+        return "hybrid"
+    return "collision"
+
+
 def resolve_pas_tz_memory_fallback_axis(
     *,
     op,
@@ -423,6 +440,7 @@ __all__ = [
     "pas_tz_schwarz_fallback_memory_safe",
     "pas_tz_preconditioner_memory_safe",
     "preferred_pas_tz_schwarz_axis",
+    "resolve_pas_tz_cheap_fallback_kind",
     "resolve_pas_tz_memory_fallback_axis",
     "rhs1_pas_adaptive_smoother_allowed",
     "rhs1_pas_tz_max_bytes",

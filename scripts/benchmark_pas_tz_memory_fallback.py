@@ -42,7 +42,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Benchmark forced PAS-TZ memory fallback variants with hard timeouts.")
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    parser.add_argument("--variants", nargs="+", default=["hybrid", "zeta", "theta"])
+    parser.add_argument("--variants", nargs="+", default=["collision", "hybrid", "zeta", "theta"])
     parser.add_argument("--timeout-s", type=float, default=60.0)
     parser.add_argument("--maxiter", type=int, default=8)
     parser.add_argument("--restart", type=int, default=12)
