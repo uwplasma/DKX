@@ -8903,3 +8903,64 @@ Next concrete actions after the PAS+Er ordering audit:
    validation is clean. Remaining large improvements are algorithmic lanes:
    full-FP Phi1/QN memory/runtime, one-species PAS+Er GPU memory/runtime, and
    geometry-rich 3D diagnostics/output retention.
+
+Progress update (2026-05-09): final FP/PAS/output-retention push
+
+- Re-ranked the current production-floor CPU/GPU artifacts for the requested
+  lanes. Full-FP Phi1/QN is dominated by the nonlinear Phi1InDKE row, while QN
+  already kept the best measured default. The one-species PAS+Er GPU row is a
+  sparse-PC memory/runtime target. The geometry-rich 3D row is large enough that
+  the production-resolution solve, not HDF5 writeout, is the current blocker.
+- Audited QN full-FP variants on CPU. `host_dense`, active-DOF, generic
+  sparse-PC, no-solver-JIT, and dense-cutoff overrides all preserved outputs but
+  were slower and/or higher-memory than the existing default. No QN default was
+  promoted.
+- Audited nonlinear Phi1InDKE variants. A fast-explicit Phi1 GMRES restart of
+  `120` for active systems above `8000` unknowns preserved outputs and improved
+  isolated CPU/GPU sweeps modestly, so this scoped default is now guarded by
+  `tests/test_io_output_policy_coverage.py`.
+- Re-audited one-species tokamak PAS+Er. The new measured default uses
+  `MMD_AT_PLUS_A` SuperLU ordering for PAS+Er sparse-PC rows and caps the
+  one-species PAS+Er sparse-PC GMRES restart at `40` unless the user sets
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART`. CPU/GPU benchmark harness
+  reruns preserved output parity; the `office` RTX A4000 default completed in
+  `15.10 s` wall / `13.92 s` logged with peak RSS about `1.41 GB`.
+- Reduced geometry-rich RHSMode=1 output retention for linear no-Phi1 solves:
+  a single-state solve now calls the single-state vm-diagnostic kernel instead
+  of retaining an extra stacked solved-distribution copy, and the NTV diagnostic
+  path avoids constructing an `NIteration` stack when only one state exists.
+- Production-resolution `geometryScheme4_2species_PAS_noEr` at active size
+  `744610` / total size `1275010` timed out at the bounded `300 s` CPU ceiling
+  before diagnostics. The trace reached a Schur active-DOF preconditioner build
+  in `8.59 s` and then stalled in Krylov. This confirms the remaining
+  geometry-rich 3D work is a solver/preconditioner lane, not an output-retention
+  lane. A forced sparse-PC probe with active-DOF reduction also timed out at the
+  same `300 s` ceiling after constructing a `32.8M`-nonzero conservative sparse
+  pattern for `744610` active unknowns, so no geometry-rich sparse-PC default is
+  promoted from this pass.
+- Final bounded closeout probes for the same production-resolution geometry4
+  PAS case all failed the release gate: forced `pas_tz`, `pas_tz` with
+  `Lmax=4`, `xmg`, `pas_hybrid`, `bicgstab`, and `lgmres` each hit the
+  `300 s` timeout. The `office` RTX A4000 default route also hit the same
+  timeout after spending `87.3 s` in Schur preconditioner setup. These results
+  are now captured in
+  `tests/reference_solver_path_artifacts/geometry4_large_pas_closeout_2026-05-09.json`
+  and guarded by `tests/test_solver_path_artifacts.py`. Decision: this lane is
+  closed for release as "no safe existing default promotion"; it remains a
+  future algorithmic preconditioner project, not a hidden unresolved benchmark
+  claim.
+- Validation so far: syntax checks passed, `git diff --check` passed, focused
+  policy tests passed, RHSMode=1 no-Phi1/Phi1 output end-to-end tests plus the
+  relevant policy tests passed (`39 passed`), and the expanded focused
+  sparse-pattern/report stack passed (`61 passed`). The Sphinx docs build with
+  warnings-as-errors also passed. Full local pytest passed:
+  `1115 passed in 491.95 s`.
+
+Next concrete actions after the final FP/PAS/output-retention push:
+
+1. Refresh public runtime/memory artifacts only from a consistent suite harness
+   rerun; do not mix local CPU and remote GPU one-off RSS values into the README
+   plot.
+2. Treat production-resolution geometry-rich PAS as the next algorithmic lane:
+   replace the conservative global sparse pattern with a structured/chunked
+   geometry-aware preconditioner before attempting another public default.

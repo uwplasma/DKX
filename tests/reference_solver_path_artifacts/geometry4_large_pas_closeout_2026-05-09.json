@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "case": "geometryScheme4_2species_PAS_noEr",
+  "input": "benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_PAS_noEr/input.namelist",
+  "resolution": {
+    "Ntheta": 25,
+    "Nzeta": 51,
+    "Nxi": 100,
+    "Nx": 5
+  },
+  "system_size": {
+    "active_size": 744610,
+    "total_size": 1275010
+  },
+  "bounded_gate_s": 300,
+  "decision": "no_default_promotion",
+  "reason": "All general existing solver/preconditioner candidates timed out before producing a converged output. The lane needs a new structured/chunked geometry-aware preconditioner rather than a threshold-only policy change.",
+  "cpu_candidates": [
+    {
+      "variant": "default_schur",
+      "status": "timeout",
+      "wall_s": 300.076,
+      "preconditioner": "schur",
+      "preconditioner_build_s": 8.591,
+      "rss_after_preconditioner_mb": 4415.3
+    },
+    {
+      "variant": "sparse_pc_gmres",
+      "status": "timeout",
+      "wall_s": 300.216,
+      "preconditioner": "sparse_pc_gmres",
+      "sparse_pattern_nnz": 32844000
+    },
+    {
+      "variant": "pas_tz",
+      "status": "timeout",
+      "wall_s": 300.082,
+      "preconditioner": "pas_tz",
+      "preconditioner_build_s": 5.296,
+      "rss_after_preconditioner_mb": 2937.7
+    },
+    {
+      "variant": "pas_tz_lmax4",
+      "status": "timeout",
+      "wall_s": 300.064,
+      "preconditioner": "pas_tz",
+      "preconditioner_build_s": 4.328,
+      "rss_after_preconditioner_mb": 2410.8
+    },
+    {
+      "variant": "xmg",
+      "status": "timeout",
+      "wall_s": 300.034,
+      "preconditioner": "xmg",
+      "preconditioner_build_s": 0.005,
+      "rss_after_preconditioner_mb": 508.9
+    },
+    {
+      "variant": "pas_hybrid",
+      "status": "timeout",
+      "wall_s": 300.036,
+      "preconditioner": "pas_hybrid",
+      "preconditioner_build_s": 0.005,
+      "rss_after_preconditioner_mb": 760.8
+    },
+    {
+      "variant": "bicgstab",
+      "status": "timeout",
+      "wall_s": 300.054,
+      "solve_method": "bicgstab"
+    },
+    {
+      "variant": "lgmres",
+      "status": "timeout",
+      "wall_s": 300.164,
+      "solve_method": "lgmres",
+      "preconditioner": "schur",
+      "preconditioner_build_s": 6.135,
+      "rss_after_preconditioner_mb": 4378.1
+    }
+  ],
+  "gpu_candidates": [
+    {
+      "variant": "default_schur_gpu0",
+      "status": "timeout",
+      "wall_s": 300.46,
+      "preconditioner": "schur",
+      "preconditioner_build_s": 87.287,
+      "rss_after_preconditioner_mb": 5512.3,
+      "hardware": "office RTX A4000 GPU 0"
+    }
+  ],
+  "required_future_algorithm": [
+    "structured/chunked geometry-aware PAS preconditioner",
+    "avoid global conservative sparse patterns for geometry-rich PAS",
+    "avoid dense angular block storage for Ntheta*Nzeta=1275",
+    "validate against Fortran v3 before public benchmark promotion"
+  ]
+}
