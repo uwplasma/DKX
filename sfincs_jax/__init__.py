@@ -168,4 +168,4 @@ __all__ = [
     "initialize_distributed_runtime_from_env",
 ]
 
-__version__ = "1.1.1"
+__version__ = "1.1.2"
