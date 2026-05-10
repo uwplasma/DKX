@@ -1,6 +1,56 @@
 Release notes
 =============
 
+v1.1.2
+------
+
+This patch release closes the post-v1.1.1 structured-PAS fallback push and
+hardens the release workflow.
+
+Highlights
+~~~~~~~~~~
+
+- Memory-unsafe PAS-TZ fallback routes are now bounded uniformly. The default
+  ``hybrid`` fallback is marked with the same guarded metadata as opt-in
+  ``theta``/``zeta`` structured fallbacks, so it skips the expensive automatic
+  strong-preconditioner retry unless
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1`` is set.
+- Guarded PAS-TZ and weak PAS forced/probe paths use accept-only matrix-free
+  minimal-residual corrections before fail-fast classification. These
+  corrections reuse the already-built preconditioner, store no dense angular
+  patch inverses, and are kept only when the measured residual decreases.
+- Forced weak PAS paths (``collision``, ``xmg``, and ``point``) now skip
+  stage-2/strong retry only at enormous residual ratios by default, preventing
+  minutes-long profiling stalls without changing moderate-residual polish
+  behavior.
+- Release metadata, production-benchmark workflow checks, and public
+  runtime/validation figures were refreshed for the current ``main`` artifacts.
+- The PyPI workflow now validates that ``pyproject.toml``,
+  ``sfincs_jax.__version__``, and pushed release tags agree before publishing.
+
+Validation
+~~~~~~~~~~
+
+- Current release-facing CPU/GPU suite artifacts remain ``39/39 parity_ok`` with
+  zero strict mismatches, no ``jax_error``, and no ``max_attempts``.
+- Bounded PAS-TZ fallback smoke now returns for ``hybrid``, ``zeta``, and
+  ``theta`` under the 15 s local gate. These rows are intentionally documented as
+  negative, non-promoted baselines because their residuals remain large.
+- The bounded artifact is checked in at
+  ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
+  and guarded by ``tests/test_solver_path_artifacts.py``.
+- Local release validation passed with ``1131 passed in 506.22 s``.
+
+Remaining research lane
+~~~~~~~~~~~~~~~~~~~~~~~
+
+No release blocker remains in the documented workflows. The remaining
+publication-scale optimization lane is still algorithmic: a genuinely stronger
+matrix-free line/plane smoother or iterative chunked Schwarz correction for
+geometry-rich PAS systems that clears the fixed gate of under 60 s, no measured
+memory regression, and at least 100x residual reduction before any default
+promotion.
+
 v1.1.1
 ------
 

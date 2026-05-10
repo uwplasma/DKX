@@ -263,12 +263,7 @@ def test_pas_tz_memory_fallback_smoke_keeps_structured_fallback_opt_in() -> None
 
     rows = {row["variant"]: row for row in smoke["results"]}
     assert set(rows) == {"hybrid", "zeta", "theta"}
-    assert rows["hybrid"]["status"] == "timeout"
-    assert float(rows["hybrid"]["elapsed_s"]) >= 15.0
-    assert "building RHSMode=1 preconditioner=pas_tz" in rows["hybrid"]["stdout_tail"]
-    assert "strong preconditioner fallback" in rows["hybrid"]["stdout_tail"]
-
-    for variant in ("zeta", "theta"):
+    for variant in ("hybrid", "zeta", "theta"):
         row = rows[variant]
         assert row["status"] == "ok"
         assert float(row["elapsed_s"]) < 5.0

@@ -250,7 +250,9 @@ def build_pas_tz_memory_fallback(
             reduce_full=reduce_full,
             expand_reduced=expand_reduced,
         )
-    return hybrid_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    precond = hybrid_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    _mark_pas_tz_guarded_fallback(precond, axis="hybrid")
+    return precond
 
 
 def _mark_pas_tz_guarded_fallback(precond: Callable, *, axis: str) -> None:

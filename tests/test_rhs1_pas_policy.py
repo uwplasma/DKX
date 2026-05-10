@@ -238,3 +238,28 @@ def test_build_pas_tz_memory_fallback_defaults_to_hybrid_on_single_device(monkey
     )
     assert result == "hybrid-preconditioner"
     assert calls == ["hybrid"]
+
+
+def test_build_pas_tz_memory_fallback_marks_default_hybrid_guarded(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", raising=False)
+
+    def unused_builder(**_kwargs):
+        raise AssertionError("single-device default must not build structured Schwarz")
+
+    def hybrid_builder(**_kwargs):
+        def _apply(value):
+            return value
+
+        return _apply
+
+    result = build_pas_tz_memory_fallback(
+        op=_op(),
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=unused_builder,
+        zeta_schwarz_builder=unused_builder,
+        hybrid_builder=hybrid_builder,
+    )
+
+    assert getattr(result, "_sfincs_jax_pas_tz_guarded_fallback") is True
+    assert getattr(result, "_sfincs_jax_pas_tz_guarded_axis") == "hybrid"
