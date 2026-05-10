@@ -1,0 +1,121 @@
+{
+  "best_by_moment_log_length": 0.0,
+  "best_by_transport_error_log_length": 0.0,
+  "kind": "mapped_xgrid_transport_evidence",
+  "metadata": {
+    "atol": 0.0,
+    "derivative": "barycentric",
+    "eps": 1e-06,
+    "eta_kind": "gauss",
+    "input_namelist": "tests/ref/transportMatrix_PAS_tiny_rhsMode2_scheme2.input.namelist",
+    "log_lengths": [
+      -0.5,
+      0.0,
+      0.5
+    ],
+    "maxiter": 200,
+    "reference_namelist": null,
+    "reference_nx": 5,
+    "restart": 80,
+    "tol": 1e-09
+  },
+  "reference_summary": {
+    "active_fraction": 1.0,
+    "active_size": 2435,
+    "max_relative_residual_norm": 1.7430130344196438e-12,
+    "max_residual_norm": 1.6094253419066994e-14,
+    "n_x": 5,
+    "solve_methods": [
+      "dense"
+    ],
+    "solver_kinds": [
+      "dense"
+    ],
+    "total_elapsed_time_s": 0.28079099976457655,
+    "total_size": 2435,
+    "use_active_dof_mode": false
+  },
+  "rows": [
+    {
+      "active_fraction": 1.0,
+      "active_size": 1461,
+      "jac_roughness": 10.194636561628366,
+      "log_length": -0.5,
+      "matrix_max_abs_error": 3.2253426097546374,
+      "matrix_relative_frobenius_error": 0.9838523947028721,
+      "max_relative_residual_norm": 2.3060335844587235e-11,
+      "max_residual_norm": 1.0822729267132629e-14,
+      "min_dx": 0.5294900386591294,
+      "moment_loss": 0.6057947510338996,
+      "moment_objective": 0.6057947510338996,
+      "n_x": 3,
+      "regularization_loss": 0.0,
+      "smoothness": 0.0,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "tail_mass_proxy": 1.250652368150188e-10,
+      "total_elapsed_time_s": 0.21070555535455546,
+      "total_size": 1461,
+      "use_active_dof_mode": false,
+      "width_ratio": 7.872922362881753
+    },
+    {
+      "active_fraction": 1.0,
+      "active_size": 1461,
+      "jac_roughness": 10.194636561628366,
+      "log_length": 0.0,
+      "matrix_max_abs_error": 2.27111628619444,
+      "matrix_relative_frobenius_error": 0.6942275967706594,
+      "max_relative_residual_norm": 3.6852296144703905e-12,
+      "max_residual_norm": 8.002073884900729e-15,
+      "min_dx": 0.8729814893611396,
+      "moment_loss": 0.20223421847942613,
+      "moment_objective": 0.20223421847942613,
+      "n_x": 3,
+      "regularization_loss": 0.0,
+      "smoothness": 0.0,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "tail_mass_proxy": 1.2056642865304208e-27,
+      "total_elapsed_time_s": 0.10217829196092981,
+      "total_size": 1461,
+      "use_active_dof_mode": false,
+      "width_ratio": 7.872922362881752
+    },
+    {
+      "active_fraction": 1.0,
+      "active_size": 1461,
+      "jac_roughness": 10.194636561628366,
+      "log_length": 0.5,
+      "matrix_max_abs_error": 3.9519883370068145,
+      "matrix_relative_frobenius_error": 1.2016796533590057,
+      "max_relative_residual_norm": 3.9102857740216104e-12,
+      "max_residual_norm": 1.2934351887081523e-14,
+      "min_dx": 1.4393031504371887,
+      "moment_loss": 1.058338858329175,
+      "moment_objective": 1.058338858329175,
+      "n_x": 3,
+      "regularization_loss": 0.0,
+      "smoothness": 0.0,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "tail_mass_proxy": 6.717178197989793e-74,
+      "total_elapsed_time_s": 0.09366445864240329,
+      "total_size": 1461,
+      "use_active_dof_mode": false,
+      "width_ratio": 7.872922362881752
+    }
+  ]
+}
