@@ -8985,14 +8985,22 @@ Progress update (2026-05-10): v1.1.1 release and structured PAS kickoff
   the README GPU transport-worker scaling figure from the checked-in
   `examples/performance/output/transport_parallel_scaling_gpu.json` payload
   without rerunning the multi-minute office benchmark.
+- Added `scripts/benchmark_pas_tz_memory_fallback.py`, a subprocess-bounded
+  harness for forced `pas_tz` memory-fallback variants. The first local
+  geometry4 PAS smoke used a 15 s cap with `maxiter=4`, `restart=8`,
+  `block=3`, and `overlap=1`; `hybrid`, `zeta`, and `theta` all timed out while
+  building or retrying the `pas_tz` path. The checked artifact is
+  `tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json`.
 
 Next concrete actions after the structured PAS kickoff:
 
-1. Run bounded CPU geometry-rich PAS probes with the new opt-in fallback:
-   `zeta` first for `N_zeta >= N_theta`, then `theta`, using small block/overlap
-   ladders and the same residual/output gates as the release closeout artifact.
-2. If a structured Schwarz route clears the bounded runtime and residual gate,
+1. Replace the current Schwarz fallback build strategy with a genuinely chunked
+   or matrix-free patch apply; the naive forced `hybrid`/`zeta`/`theta` fallback
+   still stalls before the Krylov phase on the geometry4 PAS smoke gate.
+2. Re-run the bounded CPU geometry-rich PAS probe ladder only after the patch
+   build is lazy/chunked enough to pass the 15-60 s smoke gate.
+3. If a structured Schwarz route clears the bounded runtime and residual gate,
    add a trace artifact and only then consider a narrow auto-policy window.
-3. If all structured fallback probes still stall, move to a genuinely new
+4. If all structured fallback probes still stall, move to a genuinely new
    matrix-free coarse correction rather than widening existing Schur/sparse-PC
    heuristics.

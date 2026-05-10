@@ -1599,6 +1599,16 @@ factor storage estimates. This makes the next optimization pass auditable: a
 claimed memory win must reduce the measured active/device metric and should also
 reduce the estimated dominant storage term.
 
+The structured PAS-TZ memory fallback is intentionally benchmark-only until a
+bounded route clears the release gates. Use
+``scripts/benchmark_pas_tz_memory_fallback.py`` to run forced ``hybrid``,
+``theta``, and ``zeta`` fallback variants in subprocesses with hard timeouts. The
+checked smoke artifact
+``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
+records that the current forced structured variants still time out on the
+geometryScheme=4 PAS deck under a short local gate, so no default promotion is
+justified yet.
+
 The remaining high-impact memory lanes are algorithmic:
 
 - prefer matrix-free operators with structured preconditioners for production
