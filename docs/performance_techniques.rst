@@ -1396,8 +1396,7 @@ Controls:
   avoids the PAS-ILU/Schur stage-2 stall while preserving Fortran parity for the
   audited one- and two-species ``25 x 1 x 8 x 100`` CPU and RTX A4000 GPU cases.
   The route defaults to the lower-fill measured ``MMD_AT_PLUS_A`` SuperLU
-  column ordering for the multi-species tokamak PAS+Er full-trajectory
-  sparse-PC window,
+  column ordering for the tokamak PAS+Er full-trajectory sparse-PC window,
   ``SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT=1e-8`` and
   ``SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH=0`` for constrained PAS unless
   the user overrides those values. In the same measured tokamak PAS+Er window,
@@ -1409,8 +1408,12 @@ Controls:
   ``1.59 GB`` active RSS on CPU. On the audited RTX A4000 row, the same active
   route is strict-clean and reduces the logged time from about ``25.0 s`` to
   ``22.2 s`` with active RSS about ``2.12 GB``. All quoted rows have zero
-  practical and strict Fortran output mismatches. The no-Er sparse-PC window
-  and the one-species PAS+Er row keep ``MMD_ATA`` as their measured default.
+  practical and strict Fortran output mismatches. The one-species PAS+Er row
+  additionally caps the default sparse-PC GMRES restart at ``40`` unless the
+  user explicitly sets ``SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART``; bounded
+  CPU and RTX A4000 sweeps preserved output parity while slightly reducing
+  time-to-solution and peak memory. The no-Er sparse-PC window keeps
+  ``MMD_ATA`` as its measured default.
   The older ``COLAMD`` ordering remains available through
   ``SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC=COLAMD``; it is higher-fill on these
   cases and is retained as an explicit reproducibility knob.
@@ -1427,6 +1430,21 @@ Controls:
   falling back to ``float64`` if the true residual target is not met. This
   prevents weak low-precision preconditioners from consuming the full run
   timeout.
+
+Large geometry-rich PAS closeout:
+
+- The production-resolution ``geometryScheme4_2species_PAS_noEr`` deck
+  (``25 x 51 x 100``, ``Nx=5``) has active size ``744610`` and total size
+  ``1275010``. Bounded CPU probes of the current default Schur route, generic
+  sparse-PC GMRES, ``pas_tz``, ``pas_tz`` with ``Lmax=4``, ``xmg``,
+  ``pas_hybrid``, BiCGStab, and LGMRES all hit the ``300 s`` gate before a
+  converged output was written. A one-GPU RTX A4000 default probe also hit the
+  same gate. These results are checked in as
+  ``tests/reference_solver_path_artifacts/geometry4_large_pas_closeout_2026-05-09.json``.
+  No threshold-only default promotion is made for this lane; the next valid
+  implementation needs a new structured/chunked geometry-aware PAS
+  preconditioner that avoids both global conservative sparse patterns and dense
+  angular-block storage at ``Ntheta*Nzeta=1275``.
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` and
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC`` (default: auto). On CPU and
   GPU/CUDA, non-differentiable tokamak full-FP RHSMode=1 rows in the measured
