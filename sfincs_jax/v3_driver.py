@@ -8374,6 +8374,62 @@ def _safe_preconditioner(
     return _apply
 
 
+def _apply_preconditioned_minres_correction(
+    *,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs: jnp.ndarray,
+    x0: jnp.ndarray,
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    steps: int,
+    alpha_clip: float = 10.0,
+    min_improvement: float = 0.0,
+) -> tuple[jnp.ndarray, jnp.ndarray, tuple[float, ...], tuple[float, ...]]:
+    """Apply accepted matrix-free minimal-residual corrections.
+
+    Each step computes ``d = M^{-1} r`` and chooses the scalar ``alpha`` that
+    minimizes ``||r - alpha A d||_2``. The correction is accepted only when the
+    measured residual decreases, so this is safe as a bounded post-Krylov rescue
+    for weak preconditioners and does not require storing dense operator blocks.
+    """
+    x = jnp.asarray(x0, dtype=jnp.float64)
+    rhs = jnp.asarray(rhs, dtype=jnp.float64)
+    residual = rhs - jnp.asarray(matvec(x), dtype=jnp.float64)
+    residual_norm = float(jnp.linalg.norm(residual))
+    history: list[float] = [residual_norm]
+    alphas: list[float] = []
+    steps_use = max(0, int(steps))
+    alpha_clip_use = max(0.0, float(alpha_clip))
+    min_improvement_use = max(0.0, float(min_improvement))
+
+    for _ in range(steps_use):
+        direction = jnp.asarray(preconditioner(residual), dtype=jnp.float64)
+        if not bool(jnp.all(jnp.isfinite(direction))):
+            break
+        a_direction = jnp.asarray(matvec(direction), dtype=jnp.float64)
+        if not bool(jnp.all(jnp.isfinite(a_direction))):
+            break
+        denom = float(jnp.real(jnp.vdot(a_direction, a_direction)))
+        if (not np.isfinite(denom)) or denom <= 1.0e-300:
+            break
+        numer = float(jnp.real(jnp.vdot(a_direction, residual)))
+        alpha = numer / denom
+        if alpha_clip_use > 0.0:
+            alpha = max(-alpha_clip_use, min(alpha_clip_use, float(alpha)))
+        if not np.isfinite(alpha) or alpha == 0.0:
+            break
+        trial_residual = residual - float(alpha) * a_direction
+        trial_norm = float(jnp.linalg.norm(trial_residual))
+        if (not np.isfinite(trial_norm)) or trial_norm >= residual_norm * (1.0 - min_improvement_use):
+            break
+        x = x + float(alpha) * direction
+        residual = trial_residual
+        residual_norm = trial_norm
+        history.append(residual_norm)
+        alphas.append(float(alpha))
+
+    return x, residual, tuple(history), tuple(alphas)
+
+
 def _build_rhsmode1_pas_lite_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -14557,6 +14613,31 @@ def solve_v3_full_system_linear_gmres(
                     f"guarded out (axis={guarded_axis}); using cheap fallback",
                 )
             precond = _wrap_pas_precond(precond) if use_pas_projection else precond
+            if rhs1_pas_tz_guarded_fallback:
+                poly_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_STEPS", "").strip()
+                poly_damping_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_DAMPING", "").strip()
+                try:
+                    poly_steps = int(poly_steps_env) if poly_steps_env else 0
+                except ValueError:
+                    poly_steps = 0
+                try:
+                    poly_damping = float(poly_damping_env) if poly_damping_env else 0.5
+                except ValueError:
+                    poly_damping = 0.5
+                if poly_steps > 0:
+                    precond = _compose_residual_correction_preconditioner(
+                        base=precond,
+                        coarse=precond,
+                        matvec=mv_reduced,
+                        damping=float(poly_damping),
+                        steps=int(poly_steps),
+                    )
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded matrix-free "
+                            f"polynomial correction steps={int(poly_steps)} damping={float(poly_damping):.3g}",
+                        )
             _mark("rhs1_precond_build_done")
             return precond
 
@@ -15237,6 +15318,51 @@ def solve_v3_full_system_linear_gmres(
             res_reduced = GMRESSolveResult(
                 x=res_reduced.x, residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64)
             )
+        if (
+            rhs1_pas_tz_guarded_fallback
+            and preconditioner_reduced is not None
+            and float(res_reduced.residual_norm) > float(target_reduced)
+        ):
+            minres_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS", "").strip()
+            minres_clip_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP", "").strip()
+            minres_improve_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT", "").strip()
+            try:
+                minres_steps = int(minres_steps_env) if minres_steps_env else 2
+            except ValueError:
+                minres_steps = 2
+            try:
+                minres_clip = float(minres_clip_env) if minres_clip_env else 10.0
+            except ValueError:
+                minres_clip = 10.0
+            try:
+                minres_improve = float(minres_improve_env) if minres_improve_env else 0.0
+            except ValueError:
+                minres_improve = 0.0
+            if minres_steps > 0:
+                x_minres, residual_minres, minres_history, minres_alphas = _apply_preconditioned_minres_correction(
+                    matvec=mv_reduced,
+                    rhs=rhs_reduced,
+                    x0=res_reduced.x,
+                    preconditioner=preconditioner_reduced,
+                    steps=int(minres_steps),
+                    alpha_clip=float(minres_clip),
+                    min_improvement=float(minres_improve),
+                )
+                if minres_history and float(minres_history[-1]) < float(res_reduced.residual_norm):
+                    old_residual = float(res_reduced.residual_norm)
+                    residual_norm_true = float(minres_history[-1])
+                    residual_vec = residual_minres
+                    res_reduced = GMRESSolveResult(
+                        x=jnp.asarray(x_minres, dtype=jnp.float64),
+                        residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64),
+                    )
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction "
+                            f"accepted {len(minres_alphas)} step(s), residual="
+                            f"{old_residual:.3e}->{residual_norm_true:.3e}",
+                        )
         res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
         stage2_trigger = rhs1_stage2_trigger(res_ratio=res_ratio, use_dkes=bool(use_dkes))
         fp_force_stage2 = rhs1_fp_force_stage2(

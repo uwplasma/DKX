@@ -1039,6 +1039,16 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY`` (default off; set to ``1``
   only when profiling the expensive strong retry after a guarded structured
   PAS-TZ fallback)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT`` (bounded
+  matrix-free post-Krylov correction for guarded PAS-TZ fallback; it uses only
+  extra matvecs and accepts a correction only when the measured residual
+  decreases)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_STEPS`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_DAMPING`` (opt-in polynomial
+  preconditioner experiment for guarded PAS-TZ fallback; default off because
+  the geometry4 smoke probe showed residual growth)
 - ``SFINCS_JAX_PRECOND_MAX_MB`` / ``SFINCS_JAX_PRECOND_CHUNK`` (cap memory during block assembly)
 - ``SFINCS_JAX_PRECOND_PAS_MAX_COLS`` (additional column cap for PAS block assembly;
   reduces peak RSS by chunking :math:`(\theta,\zeta)` blocks)
@@ -1615,10 +1625,13 @@ The checked smoke artifact
 now records the intended guard behavior on the geometryScheme=4 PAS deck:
 ``hybrid`` still enters the old expensive retry path and times out under the
 short local gate, while forced ``theta`` and ``zeta`` reject unsafe dense
-Schwarz patches, skip the strong retry, and return in about 1.5 s with a large
-residual. This is a useful fail-fast result, not a promoted solver path. The
-next algorithmic step is a genuinely matrix-free or chunked PAS correction that
-reduces the residual without constructing dense angular patch inverses.
+Schwarz patches, apply an accept-only matrix-free minres correction, skip the
+strong retry, and return in about 1.5 s with a still-large residual. The
+minres correction improves the checked smoke residual from about ``1.58e6`` to
+``1.27e6`` without increasing memory, but this remains far from the residual
+gate. This is a useful fail-fast result, not a promoted solver path. The next
+algorithmic step is a genuinely stronger matrix-free or chunked PAS correction
+that reduces the residual without constructing dense angular patch inverses.
 
 The remaining high-impact memory lanes are algorithmic:
 

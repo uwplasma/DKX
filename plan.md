@@ -9040,3 +9040,35 @@ Next concrete actions after guarded PAS-TZ fallback:
    guarded collision fallback, and no memory regression.
 3. Re-run the focused PAS policy/artifact tests and docs build, then full local
    pytest if CI stays green.
+
+Progress update (2026-05-10): guarded matrix-free PAS correction probe
+
+- Added an accept-only matrix-free minres correction for guarded PAS-TZ
+  fallback. After the weak Krylov solve, it computes `d = M^{-1} r`, chooses
+  the scalar step that minimizes `||r - alpha A d||_2`, and accepts only if the
+  measured residual decreases. This uses extra matvecs but stores no dense
+  angular patch inverses.
+- Added controls
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS`,
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP`, and
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT`.
+- Tried a polynomial guarded preconditioner (`SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_*`).
+  The geometry4 smoke probe showed residual growth for tested dampings, so the
+  polynomial path remains opt-in and default-off.
+- Regenerated the bounded geometry4 PAS smoke artifact. Forced `zeta` and
+  `theta` still finish in about `1.4-1.5 s`; the accepted minres correction
+  reduces residual from `1.58e6` to `1.27e6`. This is a safe memory-neutral
+  improvement, but it does not clear the two-orders-of-magnitude gate.
+
+Next concrete actions after guarded minres:
+
+1. Do not promote the guarded PAS-TZ fallback as a production solver; it remains
+   a bounded negative benchmark with a modest accept-only correction.
+2. Implement a stronger structured correction that captures angular streaming
+   without dense patch inverses. The leading candidates are a matrix-free
+   line/plane smoother with local diagonal solves, or a chunked additive
+   Schwarz apply that solves patches iteratively instead of materializing dense
+   inverses.
+3. Keep the geometry4 smoke gate fixed: under `60 s`, no memory regression, and
+   at least `100x` residual reduction relative to the guarded collision fallback
+   before any auto-policy promotion.
