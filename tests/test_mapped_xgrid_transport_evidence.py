@@ -20,6 +20,7 @@ from sfincs_jax.mapped_xgrid_transport_evidence import (
 )
 from sfincs_jax.namelist import Namelist, read_sfincs_input
 from sfincs_jax.v3 import grids_from_namelist
+from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
 
 
 def _nml() -> Namelist:
@@ -130,6 +131,27 @@ def test_copy_namelist_mapped_options_build_v3_speed_grid():
     assert x.shape == (int(nml.group("resolutionParameters")["NX"]),)
     assert np.all(np.diff(x) > 0.0)
     assert np.all(weights > 0.0)
+
+
+def test_dense_transport_solve_records_solver_path_metadata(monkeypatch):
+    fixture = Path(__file__).parent / "ref" / "transportMatrix_PAS_tiny_rhsMode2_scheme2.input.namelist"
+    nml = read_sfincs_input(fixture)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "off")
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+
+    result = solve_v3_transport_matrix_linear_gmres(
+        nml=nml,
+        tol=1.0e-10,
+        maxiter=100,
+        solve_method="dense",
+        which_rhs_values=[1],
+        collect_transport_output_fields=False,
+        emit=None,
+    )
+
+    assert result.solver_kinds_by_rhs == {1: "dense"}
+    assert result.solve_methods_by_rhs == {1: "dense"}
 
 
 def test_transport_solve_summary_handles_absolute_and_relative_residuals():
