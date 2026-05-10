@@ -9082,11 +9082,17 @@ Progress update (2026-05-10): weak PAS retry fail-fast guard
 - Added `SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO` and
   `SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO`, both defaulting to `1e12`; setting
   either value to `0` disables that specific guard for explicit profiling.
+- Added a bounded weak-PAS minres correction controlled by
+  `SFINCS_JAX_PAS_WEAK_MINRES_RATIO`, `SFINCS_JAX_PAS_WEAK_MINRES_STEPS`,
+  `SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP`, and
+  `SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT`. It reuses the already-built
+  weak preconditioner, chooses the scalar step that minimizes the residual, and
+  accepts only if the measured residual drops.
 - GeometryScheme=4 PAS smoke probes with `maxiter=4`, `restart=8`, and bounded
   subprocess timeouts now return instead of stalling: `collision` in `1.23 s`
-  with residual `1.58e6` and `587 MB` RSS, `xmg` in `1.35 s` with residual
-  `2.53e6` and `628 MB` RSS, and `point` in `2.64 s` with residual `1.16e6`
-  and `1.91 GB` RSS.
+  with residual improved from `1.58e6` to `1.27e6` and `595 MB` RSS, `xmg` in
+  `1.35 s` with residual improved from `2.53e6` to `2.44e6` and `645 MB` RSS,
+  and `point` in `2.80 s` with residual `1.27e6` and `1.90 GB` RSS.
 - No weak route is promoted. The result closes the forced-path stall lane and
   keeps those paths as auditable negative baselines.
 
