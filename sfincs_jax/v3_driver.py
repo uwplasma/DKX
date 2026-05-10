@@ -4870,6 +4870,7 @@ def _build_rhsmode1_pas_tz_preconditioner(
             theta_schwarz_builder=_build_rhsmode1_theta_schwarz_preconditioner,
             zeta_schwarz_builder=_build_rhsmode1_zeta_schwarz_preconditioner,
             hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
+            collision_builder=_build_rhsmode1_collision_preconditioner,
             reduce_full=reduce_full,
             expand_reduced=expand_reduced,
         )
@@ -14346,6 +14347,7 @@ def solve_v3_full_system_linear_gmres(
         strong_preconditioner_reduced = None
         bicgstab_preconditioner_reduced = None
         pas_precond_force_collision = False
+        rhs1_pas_tz_guarded_fallback = False
         dense_matrix_cache: np.ndarray | None = None
         host_dense_shortcut = _rhsmode1_host_dense_shortcut_allowed(
             op=op,
@@ -14509,6 +14511,7 @@ def solve_v3_full_system_linear_gmres(
                     bicgstab_preconditioner_reduced = preconditioner_reduced
 
         def _build_rhs1_preconditioner_reduced():
+            nonlocal rhs1_pas_tz_guarded_fallback
             _mark("rhs1_precond_build_start")
             if emit is not None:
                 emit(
@@ -14545,6 +14548,14 @@ def solve_v3_full_system_linear_gmres(
                 adi_sweeps=max(1, sweeps),
                 emit=emit,
             )
+            rhs1_pas_tz_guarded_fallback = bool(getattr(precond, "_sfincs_jax_pas_tz_guarded_fallback", False))
+            if rhs1_pas_tz_guarded_fallback and emit is not None:
+                guarded_axis = getattr(precond, "_sfincs_jax_pas_tz_guarded_axis", "unknown")
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback "
+                    f"guarded out (axis={guarded_axis}); using cheap fallback",
+                )
             precond = _wrap_pas_precond(precond) if use_pas_projection else precond
             _mark("rhs1_precond_build_done")
             return precond
@@ -15763,6 +15774,20 @@ def solve_v3_full_system_linear_gmres(
             nxi_for_x_sum=int(np.sum(nxi_for_x)) if nxi_for_x.size else 0,
         )
         strong_precond_kind = auto_sel.kind
+
+        if rhs1_pas_tz_guarded_fallback:
+            guarded_retry_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", "").strip().lower()
+            guarded_retry = guarded_retry_env in {"1", "true", "yes", "on"}
+            if not guarded_retry:
+                if emit is not None and strong_precond_kind is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+                        "after guarded PAS-TZ fallback; set "
+                        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+                    )
+                strong_precond_kind = None
+                strong_precond_trigger = False
 
         if (
             strong_precond_kind is not None

@@ -74,6 +74,7 @@ def _variant_env(variant: str, *, block: int, overlap: int, maxiter: int, restar
 def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
     """Run one forced fallback solve in the current process and return metrics."""
     from sfincs_jax.namelist import read_sfincs_input
+    from sfincs_jax.profiling import _resource_maxrss_to_mb
     from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
 
     messages: list[str] = []
@@ -96,7 +97,7 @@ def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
     )
     elapsed_s = time.perf_counter() - t0
     usage = resource.getrusage(resource.RUSAGE_SELF)
-    max_rss_mb = float(usage.ru_maxrss) / 1024.0
+    max_rss_mb = _resource_maxrss_to_mb(float(usage.ru_maxrss))
     metadata = dict(result.metadata or {})
     return {
         "status": "ok",

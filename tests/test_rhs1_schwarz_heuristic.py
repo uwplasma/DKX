@@ -33,6 +33,8 @@ def test_rhs1_auto_prefers_theta_schwarz_when_sharded(monkeypatch: pytest.Monkey
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_COLLISION_PRECOND_MIN", "1000000000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
     monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
 
     res = vd.solve_v3_full_system_linear_gmres(nml=nml, tol=1e-8, emit=emit)
@@ -133,6 +135,8 @@ def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe(monkeypat
     monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
     monkeypatch.setenv("SFINCS_JAX_MATVEC_SHARD_AXIS", "theta")
     monkeypatch.setenv("SFINCS_JAX_AUTO_SHARD", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
     monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
     monkeypatch.setattr(vd, "_estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(vd, "_rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)

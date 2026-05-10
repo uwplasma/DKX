@@ -189,6 +189,8 @@ def test_pas_tz_builder_falls_back_to_zeta_schwarz_when_memory_unsafe_and_zeta_s
     monkeypatch.setattr(vd, "_build_rhsmode1_zeta_schwarz_preconditioner", _zeta_builder)
     monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
     monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: "zeta")
     monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ZETA_DD_BLOCK", "bad")
