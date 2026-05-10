@@ -948,6 +948,16 @@ not from single-case sharding. On office we reran:
      --global-warmup 1 \
      --precond xmg
 
+To regenerate the checked-in figure from the saved payload without rerunning the
+multi-minute GPU benchmark:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_transport_parallel_scaling.py \
+     --from-json examples/performance/output/transport_parallel_scaling_gpu.json \
+     --out-dir docs/_static/figures/parallel \
+     --figure-name transport_parallel_scaling_gpu.png
+
 Measured result on current ``main``:
 
 - `1` GPU worker: ``351.05 s``
