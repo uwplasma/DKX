@@ -94,6 +94,16 @@ Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
   true residual clean, wall time below the current `tzfft` bounded budget,
   lower peak memory than dense/JAX-factor routes, CPU and GPU parity agreement,
   and no default promotion without full example-suite parity.
+- [x] Prototype/reject the first host-side PAS x-block sparse-PC route before
+  shipping it. The explicit `pas_xblock_sparse_pc_gmres` prototype avoided
+  padded JAX factor arrays, but on the medium geometry4 PAS case the default
+  ILU settings rejected nearly all block factors as unstable and stopped at
+  residual `2.44e-4` after `96` bounded matvecs (`11.37 s`, `0.93 GB`). A
+  stronger ILU probe (`drop_tol=1e-8`, `fill_factor=50`) was worse
+  (`6.58e-4`, `14.74 s`, `1.31 GB`). The prototype was removed rather than
+  exposing a public solve-method alias that fails the medium gate. Any future
+  host-side PAS route should first fix factor stability/normalization on this
+  medium gate before attempting HSX/geometry11 production-floor runs.
 
 Current active lane (2026-05-08, production-floor FP memory audit):
 - [x] Verify `office` is reachable and run the latest clean local `main` source
