@@ -111,6 +111,13 @@ Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
   residual stayed unchanged at `1.60e-4`. Artifact:
   `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_stage2_m20_25x51x100x4.json`.
   Do not use stage-2 retry as the default answer to this lane.
+- [x] Reject the existing guarded strong retry as a HSX floor fix. With
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1`, the same bounded HSX
+  floor timed out at `240 s` after entering `strong preconditioner fallback
+  kind=pas_lite`, without producing a residual-clean result. Artifact:
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_strong_m20_25x51x100x4.json`.
+  The remaining HSX/geometry11 PAS-DKES floor work requires a new structured
+  preconditioner/formulation, not larger default retry ladders.
 
 Current active lane (2026-05-08, production-floor FP memory audit):
 - [x] Verify `office` is reachable and run the latest clean local `main` source
