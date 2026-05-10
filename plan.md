@@ -9270,3 +9270,38 @@ Rejected probe (2026-05-10): truncated dense PAS-TZ `Lmax=2`
   the memory-unsafe PAS-TZ path on this target. It reduces the nominal dense
   block size, but the resulting preconditioner is too weak and triggers slower
   fallback behavior.
+
+Rejected probe (2026-05-10): chunked `tzfft` apply
+
+- Tested an opt-in chunked `tzfft` preconditioner apply that solved the
+  Fourier-space tridiagonal systems by radial/speed chunks, and then by both
+  species and radial/speed chunks. The goal was to keep the strong matrix-free
+  `tzfft` residual behavior while lowering peak FFT/tridiagonal intermediates.
+- Bounded geometry4 PAS smoke (`maxiter=8`, `restart=12`, `60 s` timeout):
+  unchunked `tzfft` returned in `3.76 s`, used about `944 MB` RSS, and reached
+  residual `1.877e-4`; `tzfft_xchunk1` returned in `4.02 s`, used about
+  `886 MB` RSS, and reached the same residual; species chunking increased RSS
+  or runtime further.
+- Production-size geometry4 PAS probe (`25 x 51 x 100 x 4`, `maxiter=2`,
+  `restart=8`, `180 s` timeout): unchunked `tzfft` returned in `5.53 s`, used
+  about `1849 MB` RSS, and reached residual `1.518e-3`; `tzfft_xchunk1`
+  returned in `5.02 s`, but RSS increased to about `2037 MB` with the same
+  residual.
+- Decision: revert the chunked apply source change. XLA did not realize the
+  intended peak-memory reduction on the production-sized gate, so adding a
+  public chunking knob would be misleading. The remaining memory lane needs a
+  different algorithmic preconditioner or a host/device solve split rather than
+  chunking the current `tzfft` apply graph.
+
+Rejected probe (2026-05-10): production-size PAS sparse-PC default
+
+- Tested the existing `solve_method="sparse_pc_gmres"` route on the same
+  geometry4 PAS production-size deck used for memory-gate decisions
+  (`25 x 51 x 100 x 4`, `maxiter=2`, `restart=8`, `120 s` timeout).
+- The run reached conservative sparse-pattern materialization with
+  `45,369,600` nonzeros (`avg_row_nnz=44.5`, `max_row_nnz=1275`) and started
+  exact sparse-LU factorization, but timed out before producing a solve result.
+- Decision: do not promote sparse-PC/sparse-LU as the default memory fix for
+  large geometry-rich PAS decks. It remains useful for the already documented
+  constrained-PAS profile-current niche, but this production-size geometry4
+  gate needs a stronger matrix-free or lower-memory approximate factor path.
