@@ -8,6 +8,7 @@ from sfincs_jax.rhs1_pas_policy import (
     pas_tz_schwarz_fallback_memory_safe,
     preferred_pas_tz_schwarz_axis,
     resolve_pas_tz_cheap_fallback_kind,
+    resolve_pas_tz_guarded_correction_kind,
     resolve_pas_tz_memory_fallback_axis,
     rhs1_pas_adaptive_smoother_allowed,
 )
@@ -146,6 +147,14 @@ def test_pas_tz_cheap_fallback_kind_defaults_to_collision_with_hybrid_override()
     assert resolve_pas_tz_cheap_fallback_kind(requested="pas-hybrid") == "hybrid"
     assert resolve_pas_tz_cheap_fallback_kind(requested="tzfft") == "tzfft"
     assert resolve_pas_tz_cheap_fallback_kind(requested="pas-stream-fft") == "tzfft"
+
+
+def test_pas_tz_guarded_correction_kind_is_explicit() -> None:
+    assert resolve_pas_tz_guarded_correction_kind(requested="") is None
+    assert resolve_pas_tz_guarded_correction_kind(requested="off") is None
+    assert resolve_pas_tz_guarded_correction_kind(requested="tzfft") == "tzfft"
+    assert resolve_pas_tz_guarded_correction_kind(requested="collision-tzfft-correction") == "tzfft"
+    assert resolve_pas_tz_guarded_correction_kind(requested="unknown") is None
 
 
 def test_build_pas_tz_memory_fallback_can_force_zeta_schwarz(monkeypatch) -> None:

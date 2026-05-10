@@ -56,6 +56,7 @@ from .rhs1_pas_policy import (
     pas_tokamak_theta_preconditioner_applicable as _pas_tokamak_theta_preconditioner_applicable,
     pas_tz_preconditioner_applicable as _pas_tz_preconditioner_applicable,
     pas_tz_preconditioner_memory_safe as _pas_tz_preconditioner_memory_safe,
+    resolve_pas_tz_guarded_correction_kind,
     rhs1_pas_adaptive_smoother_allowed as _rhs1_pas_adaptive_smoother_allowed_impl,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
@@ -14411,6 +14412,7 @@ def solve_v3_full_system_linear_gmres(
         bicgstab_preconditioner_reduced = None
         pas_precond_force_collision = False
         rhs1_pas_tz_guarded_fallback = False
+        rhs1_pas_tz_guarded_axis: str | None = None
         dense_matrix_cache: np.ndarray | None = None
         host_dense_shortcut = _rhsmode1_host_dense_shortcut_allowed(
             op=op,
@@ -14574,7 +14576,7 @@ def solve_v3_full_system_linear_gmres(
                     bicgstab_preconditioner_reduced = preconditioner_reduced
 
         def _build_rhs1_preconditioner_reduced():
-            nonlocal rhs1_pas_tz_guarded_fallback
+            nonlocal rhs1_pas_tz_guarded_axis, rhs1_pas_tz_guarded_fallback
             _mark("rhs1_precond_build_start")
             if emit is not None:
                 emit(
@@ -14612,12 +14614,13 @@ def solve_v3_full_system_linear_gmres(
                 emit=emit,
             )
             rhs1_pas_tz_guarded_fallback = bool(getattr(precond, "_sfincs_jax_pas_tz_guarded_fallback", False))
+            if rhs1_pas_tz_guarded_fallback:
+                rhs1_pas_tz_guarded_axis = str(getattr(precond, "_sfincs_jax_pas_tz_guarded_axis", "unknown"))
             if rhs1_pas_tz_guarded_fallback and emit is not None:
-                guarded_axis = getattr(precond, "_sfincs_jax_pas_tz_guarded_axis", "unknown")
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback "
-                    f"guarded out (axis={guarded_axis}); using cheap fallback",
+                    f"guarded out (axis={rhs1_pas_tz_guarded_axis}); using cheap fallback",
                 )
             precond = _wrap_pas_precond(precond) if use_pas_projection else precond
             if rhs1_pas_tz_guarded_fallback:
@@ -15330,6 +15333,32 @@ def solve_v3_full_system_linear_gmres(
             and preconditioner_reduced is not None
             and float(res_reduced.residual_norm) > float(target_reduced)
         ):
+            correction_preconditioner = preconditioner_reduced
+            correction_kind = resolve_pas_tz_guarded_correction_kind(
+                requested=os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION", "")
+            )
+            if correction_kind == "tzfft" and rhs1_pas_tz_guarded_axis != "tzfft":
+                try:
+                    correction_preconditioner = _build_rhsmode23_tzfft_preconditioner(
+                        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                    )
+                    if use_pas_projection:
+                        correction_preconditioner = _wrap_pas_precond(correction_preconditioner)
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded "
+                            "matrix-free correction=tzfft",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    correction_preconditioner = preconditioner_reduced
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded "
+                            f"matrix-free correction=tzfft unavailable ({type(exc).__name__}); "
+                            "using base fallback",
+                        )
             minres_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS", "").strip()
             minres_clip_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP", "").strip()
             minres_improve_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT", "").strip()
@@ -15350,7 +15379,7 @@ def solve_v3_full_system_linear_gmres(
                     matvec=mv_reduced,
                     rhs=rhs_reduced,
                     x0=res_reduced.x,
-                    preconditioner=preconditioner_reduced,
+                    preconditioner=correction_preconditioner,
                     steps=int(minres_steps),
                     alpha_clip=float(minres_clip),
                     min_improvement=float(minres_improve),

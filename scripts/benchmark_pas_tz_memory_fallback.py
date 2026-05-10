@@ -57,17 +57,20 @@ def _build_parser() -> argparse.ArgumentParser:
 def _variant_env(variant: str, *, block: int, overlap: int, maxiter: int, restart: int) -> dict[str, str]:
     """Return environment overrides for one forced PAS-TZ fallback variant."""
     variant_l = str(variant).strip().lower().replace("-", "_")
+    fallback_variant = "collision" if variant_l in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"} else variant_l
     env = {
         "SFINCS_JAX_FORTRAN_STDOUT": "0",
         "SFINCS_JAX_SOLVER_ITER_STATS": "1",
         "SFINCS_JAX_RHSMODE1_PRECONDITIONER": "pas_tz",
         "SFINCS_JAX_RHSMODE1_PAS_TZ_MAX_BYTES": "1",
-        "SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK": variant_l,
+        "SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK": fallback_variant,
         "SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK": str(int(block)),
         "SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP": str(int(overlap)),
         "SFINCS_JAX_GMRES_MAXITER": str(int(maxiter)),
         "SFINCS_JAX_GMRES_RESTART": str(int(restart)),
     }
+    if variant_l in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"}:
+        env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION"] = "tzfft"
     return env
 
 

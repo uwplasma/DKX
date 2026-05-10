@@ -17,6 +17,10 @@ Unreleased
   (``~6.4e5``) to ``~1.9e-4`` in about ``3.3 s`` on the checked local smoke,
   but remains opt-in because it increases RSS and still misses the strict
   residual target.
+- Added ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft`` as an opt-in
+  cheap-base plus matrix-free streaming-correction probe. It is bounded and
+  modestly improves the cheap collision fallback, but the checked geometry4
+  smoke does not meet the promotion gate.
 
 v1.1.2
 ------

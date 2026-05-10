@@ -17,6 +17,13 @@ def test_variant_env_forces_bounded_pas_tz_memory_fallback() -> None:
     assert env["SFINCS_JAX_GMRES_RESTART"] == "11"
 
 
+def test_variant_env_supports_collision_tzfft_correction() -> None:
+    env = _variant_env("collision-tzfft-correction", block=7, overlap=2, maxiter=5, restart=11)
+
+    assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK"] == "collision"
+    assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION"] == "tzfft"
+
+
 def test_dry_run_writes_reproducible_plan(tmp_path: Path) -> None:
     out = tmp_path / "pas_tz_plan.json"
 

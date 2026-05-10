@@ -9187,3 +9187,25 @@ Progress update (2026-05-10): experimental PAS-TZ FFT fallback
   strict-residual parts of the gate. The next real algorithmic lane remains a
   stronger chunked/matrix-free PAS correction that retains the `tzfft` residual
   gain without the GMRES-basis memory growth.
+
+Progress update (2026-05-10): cheap-base plus `tzfft` correction probe
+
+- Added an opt-in guarded correction path:
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft`. This keeps the
+  memory-safe fallback (`collision`, unless otherwise requested) as the Krylov
+  preconditioner and uses the JAX-native `tzfft` operator only for the bounded
+  post-Krylov minimal-residual correction. The benchmark harness can run this
+  route with the variant name `collision_tzfft_correction`.
+- Bounded geometry4 PAS probe (`maxiter=8`, `restart=12`, `60 s` timeout):
+  - `collision`: `1.83 s`, `675 MB`, residual `6.414e5`;
+  - `collision_tzfft_correction`: `1.98 s`, `728 MB`, residual `1.336e5`;
+  - `tzfft`: `3.54 s`, `979 MB`, residual `1.877e-4`.
+- Increasing `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS` to `10` for the
+  cheap-base correction gave `2.19 s`, `776 MB`, residual `1.336e5`, so the
+  residual floor is not a lack of scalar correction steps.
+- Decision: keep the cheap-base correction as an explicit profiling option, but
+  do not promote it. It is bounded and modestly improves the collision fallback,
+  but it fails the `100x` residual-improvement gate and still increases RSS.
+  The remaining algorithmic target is a real streaming-aware preconditioner that
+  is strong during Krylov without storing a large basis or dense angular patch
+  inverses.

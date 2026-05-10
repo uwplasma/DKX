@@ -1046,6 +1046,10 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY`` (default off; set to
   ``1`` only when profiling stage-2 GMRES after a guarded PAS-TZ fallback; the
   default skip keeps memory-unsafe fallback benchmarks bounded)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION`` (default off; set to
+  ``tzfft`` to keep the cheap fallback as the Krylov preconditioner and apply a
+  bounded matrix-free angular-streaming correction after Krylov; benchmark-only
+  until it clears the residual and memory gates)
 - ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS`` /
   ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP`` /
   ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT`` (bounded
@@ -1667,6 +1671,14 @@ improvement, but it still misses the strict residual target and is not promoted
 to a default solver path. The next algorithmic step is a genuinely stronger
 matrix-free or chunked PAS correction that reduces the residual without
 constructing dense angular patch inverses.
+
+A follow-on cheap-base correction probe is also available with
+``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=collision`` and
+``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft``. On the same bounded
+geometryScheme=4 smoke it returned in about ``2.0 s`` and lowered the residual
+from ``6.4e5`` to ``1.3e5`` with RSS about ``728 MB``. Increasing the correction
+steps to ``10`` did not materially improve the residual. This is therefore kept
+as an explicit profiling tool, not as a promoted default.
 
 The same fail-fast rule is now applied to forced weak PAS baselines at
 astronomical residual ratios, with a cheap accept-only minres correction before
