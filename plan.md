@@ -88,12 +88,12 @@ Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
   `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_m80r40_25x51x100x4.json`,
   and
   `examples/performance/output/pas_tz_floor_geom11_dkes_cpu_explicit_m20_25x51x100x4.json`.
-- [ ] Next targeted work: implement the explorer-recommended host-side PAS
-  x-block sparse-PC route behind an explicit solve-method/env gate, then test it
-  only on the bounded HSX/geometry11 PAS-DKES floor cases. Keep/reject gates:
-  true residual clean, wall time below the current `tzfft` bounded budget,
-  lower peak memory than dense/JAX-factor routes, CPU and GPU parity agreement,
-  and no default promotion without full example-suite parity.
+- [x] Complete the explorer-recommended host-side PAS x-block sparse-PC probe
+  behind an explicit solve-method/env gate, then remove it after the bounded
+  medium gate failed the residual and memory/runtime gates below. Keep/reject
+  gates remain: true residual clean, wall time below the current `tzfft`
+  bounded budget, lower peak memory than dense/JAX-factor routes, CPU and GPU
+  parity agreement, and no default promotion without full example-suite parity.
 - [x] Prototype/reject the first host-side PAS x-block sparse-PC route before
   shipping it. The explicit `pas_xblock_sparse_pc_gmres` prototype avoided
   padded JAX factor arrays, but on the medium geometry4 PAS case the default
@@ -118,6 +118,20 @@ Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
   `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_strong_m20_25x51x100x4.json`.
   The remaining HSX/geometry11 PAS-DKES floor work requires a new structured
   preconditioner/formulation, not larger default retry ladders.
+- [x] Prototype/reject the first guarded structured residual-correction route.
+  The implementation is opt-in only via
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS` and uses accepted
+  local minimum-residual coarse corrections (`xmg`, `collision`) to avoid the
+  unstable fixed-damping correction. It still failed the promotion gates. On
+  the medium geometry4 PAS gate, baseline `tzfft` took `3.56 s` / `0.93 GB`,
+  residual `1.88e-4`; structured variants took `5.23-6.24 s` / `1.15-1.37 GB`
+  with no residual improvement. On the HSX `25 x 51 x 100 x 4` floor,
+  baseline `tzfft` took `58.16 s` / `2.83 GB`, residual `1.60e-4`;
+  `tzfft_structured` took `98.87 s` / `2.95 GB`, residual `1.63e-4`. Artifacts:
+  `examples/performance/output/pas_tz_structured_medium_geometry4_probe.json`
+  and
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_structured_m20_25x51x100x4.json`.
+  Do not promote this route to defaults.
 
 Current active lane (2026-05-08, production-floor FP memory audit):
 - [x] Verify `office` is reachable and run the latest clean local `main` source

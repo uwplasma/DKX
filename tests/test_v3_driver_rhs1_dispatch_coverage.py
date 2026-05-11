@@ -173,3 +173,11 @@ def test_rhs1_dkes_gmres_budget_caps_unforced_restart() -> None:
     assert (restart, maxiter) == (100, 600)
     assert restart_defaulted is True
     assert maxiter_defaulted is True
+
+
+def test_rhs1_pas_tz_guarded_structured_levels_parse_aliases() -> None:
+    assert vd._rhs1_pas_tz_guarded_structured_levels("") == ()
+    assert vd._rhs1_pas_tz_guarded_structured_levels("off") == ()
+    assert vd._rhs1_pas_tz_guarded_structured_levels("structured") == ("xmg", "collision")
+    assert vd._rhs1_pas_tz_guarded_structured_levels("x+coll+x") == ("xmg", "collision")
+    assert vd._rhs1_pas_tz_guarded_structured_levels("unknown,collision_diag") == ("collision",)
