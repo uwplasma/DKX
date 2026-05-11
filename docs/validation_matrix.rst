@@ -320,6 +320,7 @@ Current script and tests:
 Current smoke artifact:
 
 - ``docs/_static/qi_seed_robustness_smoke.json``
+- ``docs/_static/qi_seed_robustness_multiseed.json``
 
 Scope and status:
 
@@ -329,17 +330,18 @@ Scope and status:
   ``input.namelist`` and records seed-specific ``nu_n`` / ``Er`` perturbations.
 - Optional ``--execute`` mode runs ``sfincs_jax write-output`` and records stdout,
   stderr, output, and solver-trace paths.
-- The checked smoke summary records one bounded default-CLI execute pass:
-  ``passed=1``, ``failed=0``, solver trace readable, selected method ``dense``,
-  and residual ratio below ``1``. Treat it as runner and default-solver-policy
-  evidence only, not a production-resolution multi-seed robustness claim.
+- The checked multi-seed summary records three bounded default-CLI execute
+  passes at ``7 x 13 x 25 x 4``: process failures ``0``, solver traces readable,
+  public method ``auto``, all seeds ``converged=true``, and maximum residual
+  ratio below ``1e-6``. Treat it as runner and default-solver-policy evidence
+  only, not a production-resolution robustness claim.
 
 Promotion gates:
 
-- keep at least one bounded passing ``--execute`` QI seed artifact with solver
-  traces,
+- keep at least one bounded passing multi-seed ``--execute`` QI artifact with
+  solver traces,
 - record residual/output gates for the passing artifact,
-- run more than one seed before claiming seed robustness,
+- run production-resolution CPU/GPU ladders before claiming full QI robustness,
 - and add the lane to the manifest only after the evidence is closed enough to
   assign a nonblocking ``release_gate`` status.
 
