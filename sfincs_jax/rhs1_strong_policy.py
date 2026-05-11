@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
+
+_PAS_WEAK_STRONG_SKIP_KINDS = frozenset({"collision", "point", "xmg"})
+
 
 def requested_rhs1_strong_preconditioner_kind(
     strong_precond_env: str,
@@ -58,4 +63,65 @@ def requested_rhs1_strong_preconditioner_kind(
     return None
 
 
-__all__ = ["requested_rhs1_strong_preconditioner_kind"]
+def rhs1_pas_weak_strong_retry_skip(
+    *,
+    has_pas: bool,
+    rhs1_precond_kind: str | None,
+    res_ratio: float,
+) -> bool:
+    """Return whether a weak PAS base should skip expensive strong retries.
+
+    Collision/point/xmg preconditioners are useful bounded baselines, but when
+    their first residual ratio is astronomically large, the automatic strong
+    retry tends to spend minutes in setup without producing a releasable solve.
+    The high default threshold keeps normal polish behavior intact while making
+    known-bad forced paths fail fast and auditable.
+    """
+    if not bool(has_pas) or rhs1_precond_kind not in _PAS_WEAK_STRONG_SKIP_KINDS:
+        return False
+    env = os.environ.get("SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO", "").strip()
+    try:
+        threshold = float(env) if env else 1.0e12
+    except ValueError:
+        threshold = 1.0e12
+    if threshold <= 0.0:
+        return False
+    return float(res_ratio) >= float(threshold)
+
+
+def rhs1_pas_weak_minres_steps(
+    *,
+    has_pas: bool,
+    rhs1_precond_kind: str | None,
+    res_ratio: float,
+) -> int:
+    """Return bounded minres correction steps for weak PAS base solves.
+
+    This is intentionally limited to the same weak forced/probe paths guarded by
+    ``rhs1_pas_weak_strong_retry_skip``. The correction is later accepted only
+    if the measured residual improves, so the policy here only controls whether
+    the driver should spend a few extra matrix-free matvecs before giving up on
+    a weak baseline.
+    """
+    if not bool(has_pas) or rhs1_precond_kind not in _PAS_WEAK_STRONG_SKIP_KINDS:
+        return 0
+    ratio_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_RATIO", "").strip()
+    try:
+        ratio = float(ratio_env) if ratio_env else 1.0e6
+    except ValueError:
+        ratio = 1.0e6
+    if ratio <= 0.0 or float(res_ratio) < float(ratio):
+        return 0
+    steps_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_STEPS", "").strip()
+    try:
+        steps = int(steps_env) if steps_env else 2
+    except ValueError:
+        steps = 2
+    return max(0, int(steps))
+
+
+__all__ = [
+    "requested_rhs1_strong_preconditioner_kind",
+    "rhs1_pas_weak_minres_steps",
+    "rhs1_pas_weak_strong_retry_skip",
+]

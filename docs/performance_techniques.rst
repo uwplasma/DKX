@@ -1023,6 +1023,59 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_XMG_STRIDE`` (coarse‑x stride for the PAS x‑multigrid preconditioner)
 - ``SFINCS_JAX_RHSMODE1_PAS_XDIAG_MIN`` (auto switch to point‑block x‑diagonal preconditioner for large PAS runs; default disabled)
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX`` (truncate L in PAS x‑block :math:`(\theta,\zeta)` preconditioning)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK`` (route for memory-unsafe
+  ``pas_tz`` builds; default uses the cheap collision fallback when available
+  so rejected ``pas_tz`` attempts fail fast, ``hybrid`` restores the historical
+  ``pas_hybrid`` fallback for A/B profiling, and ``theta``, ``zeta``, or
+  ``schwarz`` force a structured additive-Schwarz fallback for bounded
+  geometry-rich PAS experiments; ``tzfft`` selects an experimental matrix-free
+  angular-streaming fallback that improves the smoke residual but is not yet a
+  promoted production route)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP`` (shared block and overlap used
+  by the opt-in structured PAS-TZ Schwarz fallback when axis-specific
+  ``SFINCS_JAX_RHSMODE1_THETA_DD_*`` or ``SFINCS_JAX_RHSMODE1_ZETA_DD_*`` values
+  are not set)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES`` (guardrails for the
+  opt-in structured fallback; default values reject production grids that would
+  allocate too many dense Schwarz inverse entries, and ``0`` disables each cap)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY`` (default off; set to ``1``
+  only when profiling the expensive strong retry after a guarded structured
+  PAS-TZ fallback)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY`` (default off; set to
+  ``1`` only when profiling stage-2 GMRES after a guarded PAS-TZ fallback; the
+  default skip keeps memory-unsafe fallback benchmarks bounded)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION`` (default off; set to
+  ``tzfft`` to keep the cheap fallback as the Krylov preconditioner and apply a
+  bounded matrix-free angular-streaming correction after Krylov; benchmark-only
+  until it clears the residual and memory gates)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT`` (bounded
+  matrix-free post-Krylov correction for guarded PAS-TZ fallback; it uses only
+  extra matvecs and accepts a correction only when the measured residual
+  decreases)
+- ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_STEPS`` /
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_DAMPING`` (opt-in polynomial
+  preconditioner experiment for guarded PAS-TZ fallback; default off because
+  the geometry4 smoke probe showed residual growth)
+- ``SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO`` (default ``1e12``) skips stage-2
+  for forced weak PAS base preconditioners (``collision``, ``point``, and
+  ``xmg``) only when the first residual ratio is so large that the follow-on
+  polish solve has been measured to stall; set ``0`` to disable this guard for
+  profiling.
+- ``SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO`` (default ``1e12``) skips the
+  automatic strong-preconditioner retry for the same weak PAS base kinds at
+  enormous residual ratios; set ``0`` to force the older retry/search behavior.
+- ``SFINCS_JAX_PAS_WEAK_MINRES_RATIO`` / ``SFINCS_JAX_PAS_WEAK_MINRES_STEPS``
+  (defaults ``1e6`` / ``2``) apply a bounded matrix-free minimal-residual
+  correction to forced weak PAS base solves before stage-2 or strong-retry
+  escalation. The correction reuses the existing weak preconditioner and is
+  accepted only when the measured residual decreases.
+- ``SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP`` /
+  ``SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT`` control the scalar line-search
+  clipping and minimum accepted improvement for that weak-PAS correction.
 - ``SFINCS_JAX_PRECOND_MAX_MB`` / ``SFINCS_JAX_PRECOND_CHUNK`` (cap memory during block assembly)
 - ``SFINCS_JAX_PRECOND_PAS_MAX_COLS`` (additional column cap for PAS block assembly;
   reduces peak RSS by chunking :math:`(\theta,\zeta)` blocks)
@@ -1480,6 +1533,17 @@ Large geometry-rich PAS closeout:
   diagnostic skip to ``pas_ilu``, ``schur``, and ``xblock_tz`` routes, but this
   is not a production default because the production-floor tokamak PAS+Er audit
   showed faster completed outputs that were not parity-clean.
+- ``SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO`` and
+  ``SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO`` (defaults: ``1e12``) make forced
+  weak PAS baselines fail fast when ``collision``, ``point``, or ``xmg`` returns
+  an enormous first residual. These guards are deliberately much looser than the
+  normal stage-2 trigger so moderate residuals can still use the existing polish
+  and retry machinery. Set either value to ``0`` to disable the corresponding
+  guard.
+- ``SFINCS_JAX_PAS_WEAK_MINRES_*`` controls a cheap accept-only correction for
+  the same weak PAS baselines. It performs a small number of matrix-free steps
+  :math:`d=P^{-1}r`, chooses the scalar :math:`\alpha` minimizing
+  :math:`\|r-\alpha A d\|_2`, and keeps the step only if the residual improves.
 - ``SFINCS_JAX_TRANSPORT_DENSE_RETRY_MAX`` (default: ``6000`` for RHSMode=2/3).
 - ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK`` / ``SFINCS_JAX_TRANSPORT_DENSE_FALLBACK_MAX``.
 - ``SFINCS_JAX_TRANSPORT_DENSE_MAX_MB`` (default: ``128``). Disable dense transport
@@ -1589,6 +1653,44 @@ nonzeros, pattern-build time, preconditioner-factor time, and SuperLU ``L``/``U`
 factor storage estimates. This makes the next optimization pass auditable: a
 claimed memory win must reduce the measured active/device metric and should also
 reduce the estimated dominant storage term.
+
+The structured PAS-TZ memory fallback remains benchmark-only until a bounded
+route clears both runtime and residual gates. Use
+``scripts/benchmark_pas_tz_memory_fallback.py`` to run forced ``collision``,
+``hybrid``, ``theta``, ``zeta``, and ``tzfft`` fallback variants in subprocesses
+with hard timeouts.
+The checked smoke artifact
+``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
+records the intended guard behavior on the geometryScheme=4 PAS deck. The
+cheap collision and guarded structured rows return in about ``1.6 s`` with
+residual ``6.4e5``; the explicit legacy ``hybrid`` row returns in about
+``2.3 s`` but with residual ``2.5e16``. The experimental ``tzfft`` row returns
+in about ``3.3 s`` with residual ``1.9e-4`` and a higher RSS footprint
+(``~944 MB`` in the checked smoke). This is a useful matrix-free residual
+improvement, but it still misses the strict residual target and is not promoted
+to a default solver path. The next algorithmic step is a genuinely stronger
+matrix-free or chunked PAS correction that reduces the residual without
+constructing dense angular patch inverses.
+
+A follow-on cheap-base correction probe is also available with
+``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=collision`` and
+``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft``. On the same bounded
+geometryScheme=4 smoke it returned in about ``2.0 s`` and lowered the residual
+from ``6.4e5`` to ``1.3e5`` with RSS about ``728 MB``. Increasing the correction
+steps to ``10`` did not materially improve the residual. This is therefore kept
+as an explicit profiling tool, not as a promoted default.
+
+The same fail-fast rule is now applied to forced weak PAS baselines at
+astronomical residual ratios, with a cheap accept-only minres correction before
+the fail-fast decision. On the geometryScheme=4 smoke deck, forced
+``collision``, ``xmg``, and ``point`` preconditioners no longer enter minutes of
+stage-2 or strong-preconditioner retry/search after first residual ratios near
+``1e15``. ``collision`` returns in about ``1.2 s`` with residual improved from
+``1.58e6`` to ``1.27e6`` and about ``0.6 GB`` RSS; ``xmg`` returns in about
+``1.35 s`` with residual improved from ``2.53e6`` to ``2.44e6``; ``point``
+returns in about ``2.8 s`` and ends at the same ``1.27e6`` residual but still
+uses about ``1.9 GB`` RSS. This is retained as an auditable negative benchmark,
+not as a production recommendation.
 
 The remaining high-impact memory lanes are algorithmic:
 

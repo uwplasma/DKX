@@ -5,7 +5,9 @@ from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 import numpy as np
+import pytest
 
+from sfincs_jax.transport_parallel_policy import audit_transport_parallel_scaling_summary
 from sfincs_jax.transport_parallel_execution import (
     build_transport_parallel_payloads,
     run_transport_parallel_payloads,
@@ -58,6 +60,85 @@ def test_build_transport_parallel_payloads_preserves_solver_inputs(tmp_path: Pat
     np.testing.assert_allclose(payloads[0]["phi1_hat_base"], np.array([1.0, 2.0]))
 
 
+def test_audit_transport_parallel_scaling_summary_accepts_release_grade_gpu_worker_claim() -> None:
+    audit = audit_transport_parallel_scaling_summary(
+        {
+            "backend": "gpu",
+            "rhs_count": 3,
+            "gpu_device_count": 2,
+            "workers": [1, 2],
+            "ideal_speedup_finite_rhs": [1.0, 1.5],
+            "payloads": [
+                {"which_rhs_values": [1, 3]},
+                {"which_rhs_values": [2]},
+            ],
+            "results": [
+                {"workers": 1, "mean_s": 351.05, "speedup": 1.0},
+                {"workers": 2, "mean_s": 237.75, "speedup": 1.4766},
+            ],
+        }
+    )
+
+    assert audit.release_scaling_claim
+    assert audit.backend == "gpu"
+    assert audit.task_count == 3
+    assert audit.device_count == 2
+    assert audit.claim_workers == 2
+    assert audit.claim_speedup == pytest.approx(1.4766)
+    assert audit.claim_efficiency == pytest.approx(0.7383)
+    assert audit.claim_finite_task_ideal_speedup == pytest.approx(1.5)
+    assert audit.deterministic_payload_coverage
+    assert audit.failures == ()
+
+
+def test_audit_transport_parallel_scaling_summary_reports_weak_claim_gates() -> None:
+    audit = audit_transport_parallel_scaling_summary(
+        {
+            "backend": "gpu",
+            "rhs_count": 3,
+            "gpu_device_count": 1,
+            "payloads": [
+                {"which_rhs_values": [1, 1]},
+                {"which_rhs_values": [2]},
+            ],
+            "results": [
+                {"workers": 1, "mean_s": 100.0},
+                {"workers": 2, "mean_s": 120.0},
+            ],
+        }
+    )
+
+    assert not audit.release_scaling_claim
+    assert audit.claim_speedup == pytest.approx(100.0 / 120.0)
+    assert not audit.deterministic_payload_coverage
+    assert any("GPU devices" in failure for failure in audit.failures)
+    assert any("speedup" in failure for failure in audit.failures)
+    assert any("efficiency" in failure for failure in audit.failures)
+    assert any("deterministic payload coverage" in failure for failure in audit.failures)
+    assert any("payload RHS coverage" in note for note in audit.notes)
+
+
+def test_audit_transport_parallel_scaling_summary_rejects_malformed_summaries() -> None:
+    with pytest.raises(ValueError, match="1-worker baseline"):
+        audit_transport_parallel_scaling_summary(
+            {
+                "rhs_count": 3,
+                "results": [{"workers": 2, "mean_s": 10.0}],
+            }
+        )
+
+    with pytest.raises(ValueError, match=r"results\[1\]\.mean_s"):
+        audit_transport_parallel_scaling_summary(
+            {
+                "rhs_count": 3,
+                "results": [
+                    {"workers": 1, "mean_s": 10.0},
+                    {"workers": 2, "mean_s": 0.0},
+                ],
+            }
+        )
+
+
 def test_run_transport_parallel_payloads_uses_gpu_runner() -> None:
     payloads = [{"which_rhs_values": [1]}]
 
@@ -80,6 +161,24 @@ def test_run_transport_parallel_payloads_uses_gpu_runner() -> None:
         emit=None,
     )
     assert results[0]["which_rhs_values"] == [1]
+
+
+def test_run_transport_parallel_payloads_rejects_invalid_worker_count() -> None:
+    with pytest.raises(ValueError, match="transport parallel worker count must be >= 1; got 0"):
+        run_transport_parallel_payloads(
+            payloads=[{"which_rhs_values": [1]}],
+            parallel_workers=0,
+            parallel_backend="cpu",
+            run_gpu_subprocesses=lambda **_kwargs: [],
+            persistent_pool_enabled=False,
+            get_pool=lambda **_kwargs: None,
+            shutdown_pool=lambda: None,
+            worker=lambda payload: payload,
+            worker_env=lambda _n: None,
+            executor_class=None,
+            executor_kwargs=lambda **_kwargs: {},
+            emit=None,
+        )
 
 
 class _DummyPool:
@@ -119,6 +218,38 @@ def test_run_transport_parallel_payloads_retries_broken_pool_then_falls_back() -
     )
     assert shutdown_calls == ["x"]
     assert [res["which_rhs_values"] for res in results] == [[1], [2]]
+
+
+def test_run_transport_parallel_payloads_preserves_payload_order_when_cpu_futures_finish_out_of_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads = [
+        {"which_rhs_values": [1]},
+        {"which_rhs_values": [2]},
+        {"which_rhs_values": [3]},
+    ]
+
+    monkeypatch.setattr(
+        "sfincs_jax.transport_parallel_execution.concurrent.futures.as_completed",
+        lambda futures: reversed(list(futures)),
+    )
+
+    results = run_transport_parallel_payloads(
+        payloads=payloads,
+        parallel_workers=3,
+        parallel_backend="cpu",
+        run_gpu_subprocesses=lambda **_kwargs: [],
+        persistent_pool_enabled=True,
+        get_pool=lambda **_kwargs: _DummyPool(payloads),
+        shutdown_pool=lambda: None,
+        worker=lambda payload: {"which_rhs_values": payload["which_rhs_values"]},
+        worker_env=lambda _n: _DummyEnv(),
+        executor_class=None,
+        executor_kwargs=lambda **_kwargs: {},
+        emit=None,
+    )
+
+    assert [res["which_rhs_values"] for res in results] == [[1], [2], [3]]
 
 
 class _DummyContextPool(_DummyPool):
