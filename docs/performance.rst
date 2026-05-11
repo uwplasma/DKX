@@ -18,8 +18,8 @@ Current release snapshot
 
 The current ``main`` branch release artifacts are:
 
-- CPU: ``tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106``
-- GPU: ``tests/scaled_example_suite_gpu_bounded_default_2026-04-28``
+- CPU: ``tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak``
+- GPU: ``tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas``
 
 These report:
 
@@ -39,10 +39,10 @@ The same reports are summarized by the checked-in publication benchmark artifact
   ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
 
 That artifact records median cold JAX/Fortran wall-clock ratios of about
-``0.012x`` on CPU and ``0.021x`` on GPU for the plotted production-scale subset,
-with median active-memory ratios of about ``2.79x`` on CPU and ``3.61x`` on GPU.
+``0.021x`` on CPU and ``0.037x`` on GPU for the plotted reference-runtime subset,
+with median active-memory ratios of about ``2.89x`` on CPU and ``3.71x`` on GPU.
 The full process maximum-RSS ratios remain in the JSON reports for audit and are
-about ``4.72x`` on CPU and ``9.16x`` on GPU; the public plot subtracts fixed
+about ``4.75x`` on CPU and ``8.80x`` on GPU; the public plot subtracts fixed
 Python/JAX/XLA runtime baseline memory using profiler ``dpeak_rss_mb``/``drss_mb``
 deltas.
 The full 39-case suite remains the parity audit, but sub-``10 s`` Fortran rows

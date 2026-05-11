@@ -48,11 +48,14 @@ def _write_input(
 
 
 def test_checked_in_production_manifest_is_sfincs_jax_only() -> None:
-    manifest_path = REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-04-30" / "manifest.json"
+    manifest_path = REPO_ROOT / "benchmarks" / "production_resolution_inputs_2026-05-04" / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     cases = manifest["cases"]
 
     assert manifest["case_count"] == 39
+    assert manifest["minimum_3d_resolution"] == MIN_3D
+    assert manifest["minimum_tokamak_resolution"] == MIN_TOKAMAK
+    assert manifest["target_fortran_min_runtime_s"] == 10.0
     assert {case["source_group"] for case in cases} == {"examples"}
     assert not any("ntx" in str(case["case"]).lower() for case in cases)
     assert not any("ntx" in str(case["source_input"]).lower() for case in cases)
