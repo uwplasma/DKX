@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .transport_parallel_policy import validate_transport_parallel_worker_count
+
 
 def should_run_transport_parallel(
     *,
@@ -59,11 +61,16 @@ def build_transport_parallel_payloads(
 
 
 def _collect_pool_results(*, pool, payloads, worker) -> list[dict[str, object]]:
-    futures = [pool.submit(worker, payload) for payload in payloads]
-    results: list[dict[str, object]] = []
-    for fut in concurrent.futures.as_completed(futures):
-        results.append(fut.result())
-    return results
+    future_to_index = {pool.submit(worker, payload): i for i, payload in enumerate(payloads)}
+    results: list[dict[str, object] | None] = [None] * len(future_to_index)
+    for fut in concurrent.futures.as_completed(future_to_index):
+        results[future_to_index[fut]] = fut.result()
+    ordered: list[dict[str, object]] = []
+    for res in results:
+        if res is None:
+            raise RuntimeError("transport parallel worker result was not collected")
+        ordered.append(res)
+    return ordered
 
 
 def run_transport_parallel_payloads(
@@ -81,16 +88,17 @@ def run_transport_parallel_payloads(
     executor_kwargs: Callable[..., dict[str, object]],
     emit: Callable[[int, str], None] | None = None,
 ) -> list[dict[str, object]]:
+    worker_count = validate_transport_parallel_worker_count(parallel_workers)
     if str(parallel_backend) == "gpu":
         return run_gpu_subprocesses(
             payloads=payloads,
-            parallel_workers=int(parallel_workers),
+            parallel_workers=worker_count,
             emit=emit,
         )
 
     if bool(persistent_pool_enabled):
         try:
-            pool = get_pool(parallel_workers=int(parallel_workers), emit=emit)
+            pool = get_pool(parallel_workers=worker_count, emit=emit)
             return _collect_pool_results(pool=pool, payloads=payloads, worker=worker)
         except BrokenProcessPool as exc:
             if emit is not None:
@@ -101,7 +109,7 @@ def run_transport_parallel_payloads(
                 )
             shutdown_pool()
             try:
-                pool = get_pool(parallel_workers=int(parallel_workers), emit=emit)
+                pool = get_pool(parallel_workers=worker_count, emit=emit)
                 return _collect_pool_results(pool=pool, payloads=payloads, worker=worker)
             except Exception as retry_exc:
                 if emit is not None:
@@ -120,9 +128,9 @@ def run_transport_parallel_payloads(
                 )
             return [worker(payload) for payload in payloads]
 
-    with worker_env(int(parallel_workers)):
+    with worker_env(worker_count):
         try:
-            with executor_class(**executor_kwargs(parallel_workers=int(parallel_workers), emit=emit)) as pool:
+            with executor_class(**executor_kwargs(parallel_workers=worker_count, emit=emit)) as pool:
                 return _collect_pool_results(pool=pool, payloads=payloads, worker=worker)
         except (PermissionError, NotImplementedError, OSError) as exc:
             if emit is not None:
