@@ -167,18 +167,71 @@ The public optional JAX-native handoff example is:
 
 .. code-block:: bash
 
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --check-backends
+
+That command only reports importability of ``vmec_jax`` and ``booz_xform_jax``
+and prints the current differentiability boundary.  It does not import either
+optional backend and should run in a normal ``sfincs_jax`` development
+environment.
+
+For automation, dashboards, and lab notebooks that should record the same boundary
+without parsing human-readable text, use the JSON status mode:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --check-backends --json
+
+The JSON report includes shallow backend importability, runnable setup paths,
+gradient-availability labels for each stage, the differentiated graph, and the
+explicit non-claim that this is a geometry-proxy gradient gate rather than a full
+transport-gradient workflow.
+
+Runs that need provenance for publication artifacts can write a reusable workflow
+summary:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
+     --check-backends \
+     --summary-json workflow-summary.json
+
+The same ``--summary-json`` option works for the full geometry-proxy run.  The
+summary records stage names, optional dependency importability, the precise
+differentiability status of each stage, the numerical gradient-gate status when
+the proxy objective is evaluated, and the explicit non-claim that full kinetic
+transport gradients are not covered by this lane.
+
+When both optional packages are installed, run the file-backed VMEC setup path
+with an explicit ``wout`` file:
+
+.. code-block:: bash
+
    python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
      --wout /path/to/wout_circular_tokamak.nc \
      --mboz 3 \
      --nboz 3 \
-     --surface 0.5
+     --surface 0.5 \
+     --steps 0
+
+The same file can be supplied with
+``SFINCS_JAX_VMEC_JAX_WOUT=/path/to/wout.nc``.  If ``vmec_jax`` example decks are
+available locally, the script can also build the VMEC-like object before the
+Boozer transform:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
+     --vmec-case circular_tokamak \
+     --vmec-max-iter 1 \
+     --steps 0
 
 This script uses ``vmec_jax`` provenance for a VMEC ``wout`` object,
 ``booz_xform_jax`` for the Boozer transform, and
 ``sfincs_jax.jax_geometry_adapters.boozer_spectrum_geometry_proxy_objective``
 for a differentiable scalar objective.  It reports the objective, the JAX
 gradient with respect to a VMEC magnetic-spectrum scale parameter, a centered
-finite-difference check, and a few gradient-descent steps.
+finite-difference check, a pass/fail numerical gradient gate for that proxy
+path, and a few gradient-descent steps.
 
 The current example validates the differentiable
 ``VMEC-like spectral arrays -> booz_xform_jax -> sfincs_jax Boozer-spectrum
@@ -186,6 +239,31 @@ objective`` graph.  File I/O and the default ``vmec_geometry_from_wout`` file
 adapter remain outside the differentiable graph.  Full VMEC-boundary-to-kinetic
 transport optimization is still a larger research workflow, but the public handoff
 now has a fast, tested gradient gate.
+
+Current differentiability boundary
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The optional ``vmec_jax`` / ``booz_xform_jax`` lane should currently be read as a
+geometry-handoff and objective-gradient lane, not as a complete transport
+optimization workflow.  The supported public pieces are:
+
+- shallow optional-backend discovery through
+  ``optional_jax_geometry_backend_status()``, which checks importability without
+  importing either optional package,
+- structural conversion of VMEC-like ``wout`` objects into the internal
+  ``VmecWout`` representation,
+- scheme-5 geometry evaluation from a preloaded ``VmecWout`` object, with the
+  same formulas as the file-backed VMEC path,
+- a Boozer-spectrum proxy objective that is pure JAX and fast enough for a
+  finite-difference gradient gate.
+
+The remaining limitations are deliberate.  Reading or writing equilibrium files is
+outside the differentiable graph, the scheme-5 VMEC evaluator is still primarily a
+NumPy parity implementation, and the public Boozer-spectrum objective is a
+geometry proxy rather than a SFINCS kinetic solve.  The next integration steps are
+to keep the adapter contract stable, extend pure-JAX geometry evaluation where it
+is useful, and only then wire those arrays into transport objectives with explicit
+gradient checks.
 
 A separate finite-beta end-to-end user example uses the direct VMEC ``wout`` lane:
 
