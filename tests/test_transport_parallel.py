@@ -121,6 +121,10 @@ def test_transport_parallel_gpu_backend_merges_subset_elapsed(monkeypatch: pytes
                 1: float(np.asarray(seq.residual_norms_by_rhs[1])),
                 3: float(np.asarray(seq.residual_norms_by_rhs[3])),
             },
+            "rhs_norms_by_rhs": {
+                1: float(np.asarray(seq.rhs_norms_by_rhs[1])),
+                3: float(np.asarray(seq.rhs_norms_by_rhs[3])),
+            },
             "elapsed_time_s": np.asarray(
                 [
                     float(np.asarray(seq.elapsed_time_s[0])),
@@ -133,6 +137,7 @@ def test_transport_parallel_gpu_backend_merges_subset_elapsed(monkeypatch: pytes
             "which_rhs_values": [2],
             "state_vectors_by_rhs": {2: np.asarray(seq.state_vectors_by_rhs[2])},
             "residual_norms_by_rhs": {2: float(np.asarray(seq.residual_norms_by_rhs[2]))},
+            "rhs_norms_by_rhs": {2: float(np.asarray(seq.rhs_norms_by_rhs[2]))},
             "elapsed_time_s": np.asarray([float(np.asarray(seq.elapsed_time_s[1]))], dtype=np.float64),
         },
     ]
@@ -470,7 +475,7 @@ def test_transport_parallel_pool_rebuilds_on_worker_change(monkeypatch: pytest.M
 
 def test_transport_parallel_backend_gpu_visible_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5,3,,5")
     assert v3_driver._transport_parallel_backend() == "gpu"
     assert v3_driver._transport_parallel_visible_gpu_ids(4) == ["3", "5"]
 
