@@ -542,6 +542,23 @@ Appendix-B comparison and that ``FSABHat2`` is reproduced from ``BHat`` and ``DH
 It intentionally does not close the full analytic-limit reproduction, because the
 current audited collisionality scans stop near ``nu'=10``.
 
+The deferred Simakov-Helander panel-data scaffold is also executable in
+``sfincs_jax.validation_figures`` and guarded by
+``tests/test_validation_figures.py``. It consumes a compact payload of
+``nuprime``, computed value, and analytic-limit rows, then records:
+
+- sorted panel data and normalized distance to the analytic limit,
+- tail log-log slope and monotonic approach metadata,
+- high-``nu`` range gates for threshold, point count, and decade span,
+- provenance completeness scores,
+- matching checked-in source-artifact status,
+- and explicit ``deferred_reasons``.
+
+The scaffold only marks a panel as literature-ready when all numerical,
+high-``nu`` range, provenance, and checked-in-artifact gates pass. Otherwise it
+keeps the label as a deferred scaffold and reports whether the blocker is the
+scan range, the asymptotic trend, provenance, or source-artifact status.
+
 The W7-X ambipolar literature lane has an executable scaffold as well:
 
 - script: ``examples/publication_figures/generate_w7x_ambipolar_validation.py``

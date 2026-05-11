@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 import json
 from pathlib import Path
 
@@ -9,6 +10,17 @@ OK_RESULT_STATUSES = frozenset({"ok"})
 TAIL_RESULT_STATUSES = frozenset({"ok", "timeout", "error"})
 ErrorSink = Callable[[str], None]
 
+ARTIFACT_CLASS_SCHEMA_V2 = "schema-v2-compliant"
+ARTIFACT_CLASS_LEGACY = "legacy-schema-v1-historical"
+ARTIFACT_CLASS_NON_PAS = "non-pas-unrelated"
+ARTIFACT_CLASS_RELEASE_BLOCKING = "release-blocking"
+ARTIFACT_CLASSES = (
+    ARTIFACT_CLASS_SCHEMA_V2,
+    ARTIFACT_CLASS_LEGACY,
+    ARTIFACT_CLASS_NON_PAS,
+    ARTIFACT_CLASS_RELEASE_BLOCKING,
+)
+
 
 class BenchmarkArtifactPolicyError(ValueError):
     """Raised when a benchmark artifact violates the reproducibility policy."""
@@ -16,6 +28,37 @@ class BenchmarkArtifactPolicyError(ValueError):
     def __init__(self, errors: Iterable[str]) -> None:
         self.errors = tuple(errors)
         super().__init__("\n".join(self.errors))
+
+
+@dataclass(frozen=True)
+class BenchmarkArtifactIndexEntry:
+    """Release-gating classification for one selected JSON artifact."""
+
+    path: Path
+    classification: str
+    errors: tuple[str, ...] = ()
+
+    @property
+    def release_blocking(self) -> bool:
+        return self.classification == ARTIFACT_CLASS_RELEASE_BLOCKING
+
+
+@dataclass(frozen=True)
+class BenchmarkArtifactIndex:
+    """Summary of benchmark artifact classifications."""
+
+    entries: tuple[BenchmarkArtifactIndexEntry, ...]
+
+    @property
+    def counts(self) -> dict[str, int]:
+        counts = dict.fromkeys(ARTIFACT_CLASSES, 0)
+        for entry in self.entries:
+            counts[entry.classification] += 1
+        return counts
+
+    @property
+    def release_blocking(self) -> tuple[BenchmarkArtifactIndexEntry, ...]:
+        return tuple(entry for entry in self.entries if entry.release_blocking)
 
 
 def benchmark_artifact_policy_errors(
@@ -89,6 +132,55 @@ def validate_benchmark_artifact_file(path: str | Path) -> None:
         raise BenchmarkArtifactPolicyError(errors)
 
 
+def classify_benchmark_artifact_file(path: str | Path) -> BenchmarkArtifactIndexEntry:
+    """Classify one selected JSON file for release benchmark gating.
+
+    Historical schema-v1 artifacts are indexed but excluded from release
+    blocking so checked-in benchmark history can coexist with v2 release
+    artifacts. Malformed JSON and schema-v2 PAS artifacts that fail the policy
+    are release-blocking.
+    """
+
+    path = Path(path)
+    try:
+        payload = json.loads(path.read_text())
+    except OSError as exc:
+        return BenchmarkArtifactIndexEntry(
+            path,
+            ARTIFACT_CLASS_RELEASE_BLOCKING,
+            (f"{path}: could not read JSON file: {exc}",),
+        )
+    except json.JSONDecodeError as exc:
+        return BenchmarkArtifactIndexEntry(
+            path,
+            ARTIFACT_CLASS_RELEASE_BLOCKING,
+            (f"{path}: invalid JSON: {exc.msg} at line {exc.lineno} column {exc.colno}",),
+        )
+
+    if not isinstance(payload, Mapping):
+        return BenchmarkArtifactIndexEntry(path, ARTIFACT_CLASS_NON_PAS)
+
+    schema_version = payload.get("schema_version")
+    if _is_legacy_schema_version(schema_version):
+        return BenchmarkArtifactIndexEntry(path, ARTIFACT_CLASS_LEGACY)
+
+    if not _looks_like_pas_benchmark_artifact(payload):
+        return BenchmarkArtifactIndexEntry(path, ARTIFACT_CLASS_NON_PAS)
+
+    errors = tuple(benchmark_artifact_policy_errors(payload, source=path))
+    if errors:
+        return BenchmarkArtifactIndexEntry(path, ARTIFACT_CLASS_RELEASE_BLOCKING, errors)
+    return BenchmarkArtifactIndexEntry(path, ARTIFACT_CLASS_SCHEMA_V2)
+
+
+def index_benchmark_artifact_files(paths: Iterable[str | Path]) -> BenchmarkArtifactIndex:
+    """Classify selected JSON files for release benchmark gating."""
+
+    return BenchmarkArtifactIndex(
+        tuple(classify_benchmark_artifact_file(path) for path in paths)
+    )
+
+
 def _check_schema_version(payload: Mapping[object, object], add: ErrorSink) -> None:
     if "schema_version" not in payload:
         add("missing field schema_version")
@@ -100,6 +192,23 @@ def _check_schema_version(payload: Mapping[object, object], add: ErrorSink) -> N
         return
     if schema_version < 2:
         add(f"field schema_version must be >= 2, got {schema_version!r}")
+
+
+def _is_legacy_schema_version(schema_version: object) -> bool:
+    return (
+        not isinstance(schema_version, bool)
+        and isinstance(schema_version, int | float)
+        and schema_version < 2
+    )
+
+
+def _looks_like_pas_benchmark_artifact(payload: Mapping[object, object]) -> bool:
+    kind = payload.get("kind")
+    if isinstance(kind, str) and kind.startswith("pas_") and "benchmark" in kind:
+        return True
+
+    plan = payload.get("plan")
+    return isinstance(plan, Mapping) and "variant_methods" in plan and "results" in payload
 
 
 def _check_plan(payload: Mapping[object, object], add: ErrorSink) -> None:

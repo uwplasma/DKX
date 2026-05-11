@@ -9652,3 +9652,107 @@ Next concrete actions:
    bounded residual/runtime/memory win.
 4. Continue the refactor lane with small pure solver-policy and validation
    modules before attempting high-risk `v3_driver.py` surgery.
+
+Progress update (2026-05-11): large open-lane push toward release closure
+
+- Added a release benchmark artifact indexer:
+  `scripts/benchmark_artifact_index.py`. It scans selected JSON files or
+  directories and classifies artifacts as schema-v2 compliant, historical
+  legacy schema-v1, unrelated non-PAS, or release-blocking. This lets release
+  gates fail malformed or policy-invalid v2 PAS artifacts without rewriting
+  historical PAS benchmark records that are intentionally kept as provenance.
+- Expanded the RHSMode=1 PAS matrix-free harness from a small synthetic probe
+  into a production-floor preflight layer. It now inspects checked-in PAS
+  benchmark artifacts, tags synthetic versus production-floor geometry metadata
+  cases, applies readiness gates for geometry4 / HSX / geometry11, and emits a
+  compact `next_real_solve_recommendation`. This is still opt-in harness logic
+  only; no production solver defaults changed.
+- Extracted transport-worker payload/result validation into
+  `sfincs_jax/transport_parallel_validation.py`, keeping the runtime behavior
+  and error classes compatible while making duplicate RHS, missing mapping
+  entries, out-of-range RHS values, GPU coverage, and GPU array-length checks
+  directly testable.
+- Added a pure transport-worker scaling audit policy in
+  `sfincs_jax.transport_parallel_policy.audit_transport_parallel_scaling_summary`.
+  It checks baseline presence, task/device counts, speedup, efficiency,
+  finite-task ideal consistency, and deterministic payload coverage before a
+  benchmark summary can support a release-facing scaling claim. This formalizes
+  the transport-worker scaling story and keeps single-case multi-GPU sharding
+  separate and experimental.
+- Added a reusable `vmec_jax` / `booz_xform_jax` / `sfincs_jax` geometry-proxy
+  workflow summary builder and wired it to
+  `examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --summary-json`.
+  The summary records stage provenance, optional dependency status,
+  differentiability labels, numerical gradient-gate status, and the explicit
+  non-claim that full kinetic-transport gradients are not covered by this lane.
+- Added a Simakov-Helander high-collisionality panel-data scaffold in
+  `sfincs_jax.validation_figures`. It validates sorted high-`nu` scan data,
+  normalized analytic-limit distance, tail log-log slope, monotonic approach,
+  high-`nu` threshold/point/span gates, provenance completeness, checked-in
+  artifact status, and explicit deferred reasons. It does not close the full
+  analytic-limit literature claim without artifact-backed high-`nu` scans.
+- Documentation updates:
+  - geometry docs now describe the workflow summary JSON and proxy-only
+    gradient gate;
+  - parallelism docs now document the transport-worker scaling audit and the
+    separation from single-case multi-GPU sharding;
+  - testing docs now describe the Simakov-Helander scaffold gates.
+- Verification:
+  - focused integrated lane suite:
+    `93 passed in 3.93 s`;
+  - full local suite:
+    `1245 passed in 486.72 s`;
+  - `ruff check` on changed Python source/tests:
+    passed;
+  - `python -m py_compile` on changed Python modules/scripts:
+    passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`:
+    passed;
+  - `git diff --check`:
+    passed;
+  - benchmark artifact index smoke:
+    legacy PAS artifact + non-PAS artifact classified with `release_blocking=0`;
+  - PAS matrix-free dry-run and bounded harness:
+    preflight ready for geometry4 / HSX / geometry11 and `7` bounded rows met
+    expected keep/reject gates;
+  - geometry workflow summary smoke:
+    `--check-backends --json --summary-json` produced a valid proxy summary.
+
+Updated lane status after this large push:
+
+- PAS-heavy memory/runtime: `91%`. The next short real-solve probe is now
+  explicitly gated by production-floor metadata and checked-in artifact
+  evidence. A default solver change still requires a real residual/runtime/memory
+  win on geometry4/HSX/geometry11.
+- Benchmark artifact reproducibility gates: `98%`. Release-facing artifact
+  selection can now be indexed and gated without contaminating historical
+  schema-v1 provenance.
+- FP production-floor memory/runtime: `95%`. No production solve behavior
+  changed in this pass.
+- CPU/GPU parity for documented workflows: `100%` for touched lanes; no
+  parity-sensitive solver path changed.
+- CI/docs health: `100%` locally for the gates listed above; remote CI still
+  needs post-push confirmation.
+- Coverage/refactor path: `70%`. Transport parallel validation is now a focused
+  pure module with isolated tests; further movement still requires additional
+  policy extraction before deep `v3_driver.py` work.
+- Parallel transport workers: `85%`. Scaling claims now have a release audit
+  policy. This does not change the existing measured scaling numbers or promote
+  single-case multi-GPU sharding.
+- `vmec_jax` / `booz_xform_jax` workflow: `69%` for public status,
+  provenance, and proxy-gradient summary artifacts; full differentiable kinetic
+  transport remains about `38%`.
+- Deferred manuscript physics lanes: `55%`. W7-X and Simakov-Helander scaffolds
+  now have explicit provenance/numerical gates, but artifact-backed W7-X
+  ambipolar and full high-`nu` literature claims remain deferred.
+
+Next concrete actions:
+
+1. Push this large integration and check remote CI/docs.
+2. Run the first short real-solve PAS production-floor probe selected by the
+   preflight (`geometry4`, `HSX`, `geometry11`) and require an actual
+   residual/runtime/memory improvement before changing defaults.
+3. Add the benchmark artifact indexer to release CI once the release-facing
+   artifact selection is finalized.
+4. Continue extracting pure policy/validation modules before any broad
+   `v3_driver.py` refactor.

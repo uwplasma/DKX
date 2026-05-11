@@ -12,6 +12,11 @@ import time
 import numpy as np
 
 from .transport_parallel_policy import validate_transport_parallel_worker_count
+from .transport_parallel_validation import (
+    validate_distinct_transport_worker_rhs,
+    validate_gpu_transport_worker_arrays,
+    validate_transport_worker_result_payload,
+)
 from .transport_residual_quality import (
     transport_residual_gate_failures_from_arrays,
     transport_residual_gate_thresholds_from_env,
@@ -145,71 +150,6 @@ def _coalesce_transport_payloads(
         extra_rhs = [int(v) for v in payload.get("which_rhs_values", [])]
         scheduled[target]["which_rhs_values"] = [*existing_rhs, *extra_rhs]
     return scheduled
-
-
-def _format_rhs_list(values: list[int]) -> str:
-    return "[" + ", ".join(str(v) for v in values) + "]"
-
-
-def _validate_worker_result_payload(
-    *,
-    rhs_values: list[int],
-    result: dict[str, object],
-    n_rhs: int | None,
-) -> None:
-    if any(rhs < 1 for rhs in rhs_values):
-        invalid = [rhs for rhs in rhs_values if rhs < 1]
-        raise ValueError(f"transport parallel worker reported invalid whichRHS values {_format_rhs_list(invalid)}")
-    if n_rhs is not None and any(rhs > int(n_rhs) for rhs in rhs_values):
-        invalid = [rhs for rhs in rhs_values if rhs > int(n_rhs)]
-        raise ValueError(
-            "transport parallel worker reported out-of-range whichRHS values "
-            f"{_format_rhs_list(invalid)} for n_rhs={int(n_rhs)}"
-        )
-
-    required_maps = ("state_vectors_by_rhs", "residual_norms_by_rhs", "rhs_norms_by_rhs")
-    for key in required_maps:
-        value = result.get(key, {})
-        if not isinstance(value, dict):
-            raise ValueError(f"transport parallel worker result field {key!r} must be a mapping")
-        present = {int(k) for k in value}
-        missing = [rhs for rhs in rhs_values if rhs not in present]
-        if missing:
-            raise ValueError(
-                "transport parallel worker result is missing "
-                f"{key} entries for whichRHS={_format_rhs_list(missing)}"
-            )
-
-
-def _validate_gpu_worker_arrays(
-    *,
-    requested_rhs_values: list[int],
-    output_rhs_values: list[int],
-    state_vectors: np.ndarray,
-    residual_norms: np.ndarray,
-    rhs_norms: np.ndarray,
-    elapsed_time_s: np.ndarray,
-    gpu_id: str,
-) -> None:
-    if output_rhs_values != requested_rhs_values:
-        raise RuntimeError(
-            "GPU transport worker returned unexpected whichRHS coverage "
-            f"(gpu={gpu_id} requested={requested_rhs_values} returned={output_rhs_values})"
-        )
-    expected = len(output_rhs_values)
-    lengths = {
-        "state_vectors": int(state_vectors.shape[0]) if state_vectors.ndim > 0 else 0,
-        "residual_norms": int(residual_norms.shape[0]) if residual_norms.ndim > 0 else 0,
-        "rhs_norms": int(rhs_norms.shape[0]) if rhs_norms.ndim > 0 else 0,
-        "elapsed_time_s": int(elapsed_time_s.shape[0]) if elapsed_time_s.ndim > 0 else 0,
-    }
-    bad_lengths = {key: length for key, length in lengths.items() if length != expected}
-    if bad_lengths:
-        details = ", ".join(f"{key}={length}" for key, length in sorted(bad_lengths.items()))
-        raise RuntimeError(
-            "GPU transport worker returned inconsistent result array lengths "
-            f"(gpu={gpu_id} whichRHS={output_rhs_values} expected={expected}; {details})"
-        )
 
 
 def run_transport_parallel_gpu_subprocesses(
@@ -361,7 +301,7 @@ def run_transport_parallel_gpu_subprocesses(
                 else:
                     rhs_norms = np.full_like(residual_norms, np.nan, dtype=np.float64)
                 elapsed_time_s = np.asarray(data["elapsed_time_s"], dtype=np.float64)
-            _validate_gpu_worker_arrays(
+            validate_gpu_transport_worker_arrays(
                 requested_rhs_values=rhs_vals,
                 output_rhs_values=rhs_values,
                 state_vectors=state_vectors,
@@ -426,13 +366,8 @@ def merge_transport_parallel_results(
     seen_rhs: set[int] = set()
     for res in results:
         rhs_vals = [int(v) for v in res.get("which_rhs_values", [])]
-        duplicate_rhs = [rhs for rhs in rhs_vals if rhs in seen_rhs]
-        if duplicate_rhs:
-            raise ValueError(
-                "transport parallel worker results contain duplicate whichRHS values "
-                f"{_format_rhs_list(duplicate_rhs)}"
-            )
-        _validate_worker_result_payload(rhs_values=rhs_vals, result=res, n_rhs=int(n_rhs))
+        validate_distinct_transport_worker_rhs(rhs_values=rhs_vals, seen_rhs=seen_rhs)
+        validate_transport_worker_result_payload(rhs_values=rhs_vals, result=res, n_rhs=int(n_rhs))
         seen_rhs.update(rhs_vals)
         idxs = [v - 1 for v in rhs_vals]
         elapsed_chunk = np.asarray(res.get("elapsed_time_s", np.zeros((n_rhs,))), dtype=np.float64)

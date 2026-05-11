@@ -68,6 +68,118 @@ def optional_jax_geometry_backend_report() -> dict[str, Any]:
     }
 
 
+def geometry_proxy_workflow_summary(
+    *,
+    provenance: str | None = None,
+    requested_surface: float | None = None,
+    selected_surface: float | None = None,
+    boozer_resolution: dict[str, int] | None = None,
+    grid_shape: dict[str, int] | None = None,
+    scale: float | None = None,
+    proxy_objective: float | None = None,
+    autodiff_gradient: float | None = None,
+    finite_difference_gradient: float | None = None,
+    finite_difference_step: float | None = None,
+    gradient_rtol: float = 5.0e-3,
+    gradient_atol: float = 1.0e-7,
+    backend_status: dict[str, bool] | None = None,
+) -> dict[str, Any]:
+    """Build a reusable provenance summary for the geometry-proxy workflow.
+
+    The summary is intentionally conservative: it records the stages that are
+    differentiable in the public vmec_jax/booz_xform_jax handoff, the optional
+    packages needed to run that handoff, and a numerical gradient gate for the
+    scalar geometry proxy when both autodiff and finite-difference gradients are
+    supplied.  It never claims gradients through the SFINCS kinetic transport
+    solve.
+    """
+    status = optional_jax_geometry_backend_status() if backend_status is None else dict(backend_status)
+    gate: dict[str, Any] = {
+        "status": "not_run",
+        "autodiff_gradient": None,
+        "finite_difference_gradient": None,
+        "finite_difference_step": finite_difference_step,
+        "absolute_error": None,
+        "rtol": float(gradient_rtol),
+        "atol": float(gradient_atol),
+        "claim": "geometry_proxy_gradient_gate_only",
+    }
+    if autodiff_gradient is not None and finite_difference_gradient is not None:
+        autodiff_value = float(autodiff_gradient)
+        fd_value = float(finite_difference_gradient)
+        abs_error = abs(autodiff_value - fd_value)
+        tolerance = float(gradient_atol) + float(gradient_rtol) * abs(fd_value)
+        gate.update(
+            {
+                "status": "pass" if abs_error <= tolerance else "fail",
+                "autodiff_gradient": autodiff_value,
+                "finite_difference_gradient": fd_value,
+                "absolute_error": abs_error,
+                "tolerance": tolerance,
+            }
+        )
+
+    return {
+        "workflow": "vmec_jax_to_boozer_sfincs_geometry_proxy",
+        "provenance": {
+            "source": provenance,
+            "requested_surface": requested_surface,
+            "selected_surface": selected_surface,
+            "boozer_resolution": boozer_resolution,
+            "grid_shape": grid_shape,
+            "scale": scale,
+        },
+        "required_optional_dependencies": {
+            "vmec_jax": {
+                "importable": bool(status.get("vmec_jax", False)),
+                "used_for": "VMEC-like wout provenance and optional fixed-boundary setup",
+            },
+            "booz_xform_jax": {
+                "importable": bool(status.get("booz_xform_jax", False)),
+                "used_for": "Boozer transform in the differentiable geometry-proxy path",
+            },
+        },
+        "stages": [
+            {
+                "name": "vmec_provenance",
+                "component": "vmec_jax or VMEC wout input",
+                "differentiability": "setup_only_not_differentiated",
+            },
+            {
+                "name": "spectral_scale",
+                "component": "in-memory VMEC-like magnetic spectrum",
+                "differentiability": "differentiated",
+            },
+            {
+                "name": "boozer_transform",
+                "component": "booz_xform_jax",
+                "differentiability": "differentiated_for_geometry_proxy_gate",
+            },
+            {
+                "name": "sfincs_geometry_proxy",
+                "component": "sfincs_jax Boozer-spectrum proxy objective",
+                "differentiability": "differentiated",
+            },
+            {
+                "name": "sfincs_kinetic_transport_solve",
+                "component": "full kinetic transport solver",
+                "differentiability": "not_claimed_not_covered_by_this_lane",
+            },
+        ],
+        "numerical_gradient_gate": gate,
+        "results": {
+            "proxy_objective": proxy_objective,
+        },
+        "claims": {
+            "differentiable": (
+                "scaled spectral arrays -> booz_xform_jax -> sfincs_jax "
+                "Boozer-spectrum proxy objective"
+            ),
+            "not_claimed": "full VMEC-boundary-to-SFINCS kinetic transport gradients",
+        },
+    }
+
+
 def _attr(obj: Any, *names: str, default: Any = None, required: bool = True) -> Any:
     for name in names:
         if hasattr(obj, name):
@@ -279,6 +391,8 @@ def boozer_spectrum_geometry_proxy_objective(
 __all__ = [
     "boozer_bhat_from_spectrum",
     "boozer_spectrum_geometry_proxy_objective",
+    "geometry_proxy_workflow_summary",
+    "optional_jax_geometry_backend_report",
     "optional_jax_geometry_backend_status",
     "vmec_wout_from_wout_like",
 ]

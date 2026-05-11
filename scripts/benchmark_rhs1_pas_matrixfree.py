@@ -33,6 +33,12 @@ DEFAULT_METADATA_INPUTS = (
     / "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories"
     / "input.namelist",
 )
+DEFAULT_ARTIFACT_INPUTS = (
+    _REPO_ROOT / "examples" / "performance" / "output" / "pas_tz_lgmres_medium_geometry4_probe.json",
+    _REPO_ROOT / "examples" / "performance" / "output" / "pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json",
+    _REPO_ROOT / "examples" / "performance" / "output" / "pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json",
+)
+PRODUCTION_FLOOR_TARGETS = ("geometry4", "hsx", "geometry11")
 RESULT_MARKER = "__SFINCS_JAX_RHS1_PAS_MATRIXFREE_RESULT__="
 DEFAULT_SYSTEMS = (
     "diagonal_keep",
@@ -69,6 +75,13 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=list(DEFAULT_METADATA_INPUTS),
         help="Optional PAS namelists used only for metadata-parameterized capped synthetic probes.",
+    )
+    parser.add_argument(
+        "--artifact-inputs",
+        nargs="*",
+        type=Path,
+        default=list(DEFAULT_ARTIFACT_INPUTS),
+        help="Checked-in PAS benchmark JSON artifacts to inspect for production-floor dry-run evidence.",
     )
     parser.add_argument("--timeout-s", type=_positive_float, default=5.0)
     parser.add_argument("--max-size", type=_positive_int, default=128)
@@ -119,7 +132,26 @@ def _scalar_bool(group: dict[str, Any], key: str, default: bool) -> bool:
     value = group.get(key.upper(), default)
     if isinstance(value, list):
         value = value[0] if value else default
+    if isinstance(value, str):
+        normalized = value.strip().strip(".").lower()
+        if normalized in {"t", "true", "1"}:
+            return True
+        if normalized in {"f", "false", "0"}:
+            return False
     return bool(value)
+
+
+def _scalar_float(group: dict[str, Any], key: str, default: float) -> float:
+    value = group.get(key.upper(), default)
+    if isinstance(value, list):
+        value = value[0] if value else default
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if not math.isfinite(parsed):
+        return float(default)
+    return parsed
 
 
 def _species_count(group: dict[str, Any]) -> int:
@@ -150,12 +182,25 @@ def _read_input_metadata(path: Path) -> dict[str, Any]:
     equilibrium_file = geometry.get("EQUILIBRIUMFILE")
     if equilibrium_file is not None:
         equilibrium_file = str(equilibrium_file).strip("\"'")
+    target = _production_floor_target(
+        case=input_path.parent.name,
+        geometry_scheme=geometry_scheme,
+        equilibrium_file=equilibrium_file,
+    )
     return {
         "input": _input_record(input_path),
         "case": input_path.parent.name,
+        "source_type": "production_floor_geometry_metadata",
+        "production_floor_target": target,
         "geometry_scheme": geometry_scheme,
         "collision_operator": collision_operator,
         "include_phi1": _scalar_bool(physics, "INCLUDEPHI1", False),
+        "include_x_dot_term": _scalar_bool(physics, "INCLUDEXDOTTERM", False),
+        "include_electric_field_term_in_xi_dot": _scalar_bool(
+            physics, "INCLUDEELECTRICFIELDTERMINXIDOT", False
+        ),
+        "use_dkes_exb_drift": _scalar_bool(physics, "USEDKESEXBDRIFT", False),
+        "er": _scalar_float(physics, "ER", 0.0),
         "equilibrium_file": equilibrium_file,
         "resolution": {
             "Ntheta": ntheta,
@@ -194,6 +239,7 @@ def _deterministic_case(system: str, args: argparse.Namespace) -> dict[str, Any]
     if system == "diagonal_keep":
         return {
             "case_id": "diagonal_keep",
+            "source_type": "synthetic",
             "system_kind": "diagonal",
             "size": max(4, min(size, 16)),
             "expected_gate": "keep",
@@ -203,6 +249,7 @@ def _deterministic_case(system: str, args: argparse.Namespace) -> dict[str, Any]
     if system == "coupled_jacobi_keep":
         return {
             "case_id": "coupled_jacobi_keep",
+            "source_type": "synthetic",
             "system_kind": "coupled_jacobi",
             "size": max(4, size),
             "coupling": 0.03,
@@ -214,6 +261,7 @@ def _deterministic_case(system: str, args: argparse.Namespace) -> dict[str, Any]
     if system == "zero_update_reject":
         return {
             "case_id": "zero_update_reject",
+            "source_type": "synthetic",
             "system_kind": "zero_update",
             "size": max(4, min(size, 16)),
             "expected_gate": "reject",
@@ -223,6 +271,7 @@ def _deterministic_case(system: str, args: argparse.Namespace) -> dict[str, Any]
     if system == "nonfinite_candidate_reject":
         return {
             "case_id": "nonfinite_candidate_reject",
+            "source_type": "synthetic",
             "system_kind": "nonfinite_candidate",
             "size": max(4, min(size, 16)),
             "expected_gate": "reject",
@@ -232,6 +281,7 @@ def _deterministic_case(system: str, args: argparse.Namespace) -> dict[str, Any]
     if system == "timeout_sleep":
         return {
             "case_id": "timeout_sleep",
+            "source_type": "synthetic",
             "system_kind": "timeout_sleep",
             "size": 1,
             "sleep_s": max(1.0, float(args.timeout_s) * 2.0),
@@ -262,6 +312,8 @@ def build_probe_cases(args: argparse.Namespace) -> list[dict[str, Any]]:
         cases.append(
             {
                 "case_id": f"metadata_{label}",
+                "source_type": "production_floor_geometry_metadata",
+                "production_floor_target": metadata["production_floor_target"],
                 "system_kind": "metadata_coupled_jacobi",
                 "size": _bounded_metadata_size(metadata, int(args.max_size)),
                 "coupling": 0.01 + 0.002 * (abs(int(metadata["geometry_scheme"])) % 5),
@@ -277,12 +329,17 @@ def build_probe_cases(args: argparse.Namespace) -> list[dict[str, Any]]:
 
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     cases = build_probe_cases(args)
+    artifact_probe = build_artifact_probe(args.artifact_inputs)
+    preflight = build_production_floor_preflight(cases=cases, artifacts=artifact_probe["artifacts"])
     return {
         "timeout_s": float(args.timeout_s),
         "dry_run": bool(args.dry_run),
         "max_size": int(args.max_size),
         "systems": list(args.systems),
         "metadata_inputs": [_input_record(Path(path)) for path in args.metadata_inputs],
+        "artifact_inputs": [_input_record(Path(path)) for path in args.artifact_inputs],
+        "artifact_probe": artifact_probe,
+        "production_floor_preflight": preflight,
         "gates": {
             "keep": {
                 "requires": [
@@ -303,6 +360,207 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             },
         },
         "cases": cases,
+    }
+
+
+def _production_floor_target(
+    *,
+    case: str | None = None,
+    geometry_scheme: int | None = None,
+    equilibrium_file: str | None = None,
+    text: str | None = None,
+) -> str:
+    haystack = " ".join(str(item or "") for item in (case, equilibrium_file, text)).lower()
+    if "hsx" in haystack:
+        return "hsx"
+    if geometry_scheme == 4 or "geometryscheme4" in haystack or "geometry4" in haystack:
+        return "geometry4"
+    if geometry_scheme == 11 or "geometryscheme11" in haystack or "geom11" in haystack:
+        return "geometry11"
+    return "unknown"
+
+
+def _extract_message_float(pattern: str, messages: list[str]) -> float | None:
+    compiled = re.compile(pattern)
+    for message in messages:
+        match = compiled.search(str(message))
+        if match:
+            return _json_float(match.group(1))
+    return None
+
+
+def _read_artifact_probe(path: Path) -> dict[str, Any]:
+    input_path = Path(path)
+    record: dict[str, Any] = {
+        "path": _input_record(input_path),
+        "status": "missing",
+        "target": _production_floor_target(text=str(input_path)),
+        "ready_evidence": False,
+    }
+    if not input_path.exists():
+        return record
+    try:
+        payload = json.loads(input_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        record.update({"status": "error", "error": type(exc).__name__})
+        return record
+    if not isinstance(payload, dict):
+        record.update({"status": "error", "error": "artifact-root-not-object"})
+        return record
+
+    plan = payload.get("plan", {})
+    results = payload.get("results", [])
+    if not isinstance(plan, dict):
+        plan = {}
+    if not isinstance(results, list):
+        results = []
+    plan_input = str(plan.get("input", ""))
+    target = _production_floor_target(text=f"{input_path} {plan_input}")
+    ok_results = [row for row in results if isinstance(row, dict) and row.get("status") == "ok"]
+    residual_norms = [_json_float(row.get("residual_norm")) for row in ok_results]
+    finite_residual_norms = [value for value in residual_norms if value is not None]
+    messages = [
+        str(message)
+        for row in ok_results
+        for message in row.get("messages_tail", [])
+        if isinstance(row.get("messages_tail", []), list)
+    ]
+    guarded_pas_tz_seen = any("PAS-TZ guarded" in message for message in messages)
+    total_size_max = max(
+        (
+            value
+            for value in (
+                _extract_message_float(r"total_size=([0-9.eE+-]+)", [message]) for message in messages
+            )
+            if value is not None
+        ),
+        default=None,
+    )
+    pas_constraint_size_max = max(
+        (
+            value
+            for value in (
+                _extract_message_float(r"PAS constraint projection enabled \(size=([0-9.eE+-]+)", [message])
+                for message in messages
+            )
+            if value is not None
+        ),
+        default=None,
+    )
+    max_rss_values = [_json_float(row.get("max_rss_mb")) for row in ok_results]
+    elapsed_values = [_json_float(row.get("elapsed_s")) for row in ok_results]
+    record.update(
+        {
+            "status": "ok",
+            "kind": str(payload.get("kind", "")),
+            "target": target,
+            "plan_input": plan_input,
+            "variants": list(plan.get("variants", [])) if isinstance(plan.get("variants", []), list) else [],
+            "result_count": len(results),
+            "ok_result_count": len(ok_results),
+            "finite_residual_count": len(finite_residual_norms),
+            "best_residual_norm": min(finite_residual_norms) if finite_residual_norms else None,
+            "max_rss_mb_peak": max((value for value in max_rss_values if value is not None), default=None),
+            "elapsed_s_max": max((value for value in elapsed_values if value is not None), default=None),
+            "guarded_pas_tz_seen": guarded_pas_tz_seen,
+            "total_size_max": total_size_max,
+            "pas_constraint_size_max": pas_constraint_size_max,
+            "ready_evidence": bool(ok_results and finite_residual_norms and guarded_pas_tz_seen),
+        }
+    )
+    return _json_safe_metadata(record)
+
+
+def build_artifact_probe(paths: list[Path]) -> dict[str, Any]:
+    artifacts = [_read_artifact_probe(Path(path)) for path in paths]
+    by_target = {target: 0 for target in PRODUCTION_FLOOR_TARGETS}
+    for artifact in artifacts:
+        target = str(artifact.get("target", "unknown"))
+        if target in by_target and artifact.get("ready_evidence") is True:
+            by_target[target] += 1
+    return {
+        "mode": "checked_in_artifact_dry_run",
+        "description": "Inspects existing PAS benchmark JSON; does not launch production solves.",
+        "artifacts": artifacts,
+        "ready_evidence_by_target": by_target,
+    }
+
+
+def _gate(status: str, reason: str, **extra: Any) -> dict[str, Any]:
+    payload = {"status": status, "reason": reason}
+    payload.update(extra)
+    return _json_safe_metadata(payload)
+
+
+def _metadata_matches(cases: list[dict[str, Any]], target: str) -> list[dict[str, Any]]:
+    return [
+        case
+        for case in cases
+        if case.get("source_type") == "production_floor_geometry_metadata"
+        and case.get("production_floor_target") == target
+    ]
+
+
+def _artifact_matches(artifacts: list[dict[str, Any]], target: str) -> list[dict[str, Any]]:
+    return [artifact for artifact in artifacts if artifact.get("target") == target]
+
+
+def build_production_floor_preflight(
+    *, cases: list[dict[str, Any]], artifacts: list[dict[str, Any]]
+) -> dict[str, Any]:
+    targets: dict[str, Any] = {}
+    for target in PRODUCTION_FLOOR_TARGETS:
+        target_cases = _metadata_matches(cases, target)
+        target_artifacts = _artifact_matches(artifacts, target)
+        metadata = [case["source_metadata"] for case in target_cases if "source_metadata" in case]
+        artifact_ready = [artifact for artifact in target_artifacts if artifact.get("ready_evidence") is True]
+        gates = {
+            "metadata_present": _gate(
+                "pass" if metadata else "fail",
+                "production-floor namelist metadata found" if metadata else "no matching production-floor metadata",
+                count=len(metadata),
+            ),
+            "pas_collision_operator": _gate(
+                "pass" if metadata and all(item.get("collision_operator") == 1 for item in metadata) else "fail",
+                "all matching metadata uses PAS collisions"
+                if metadata and all(item.get("collision_operator") == 1 for item in metadata)
+                else "missing metadata or non-PAS collision operator",
+                observed=[item.get("collision_operator") for item in metadata],
+            ),
+            "bounded_matrixfree_case": _gate(
+                "pass" if target_cases and all(int(case.get("size", 0)) >= 4 for case in target_cases) else "fail",
+                "bounded metadata-parameterized matrix-free probe case planned"
+                if target_cases
+                else "no bounded metadata-parameterized probe case planned",
+                planned_case_ids=[case.get("case_id") for case in target_cases],
+                planned_sizes=[case.get("size") for case in target_cases],
+            ),
+            "checked_artifact_evidence": _gate(
+                "pass" if artifact_ready else "fail",
+                "checked-in PAS benchmark artifact has ok finite guarded PAS-TZ evidence"
+                if artifact_ready
+                else "no checked-in artifact with ok finite guarded PAS-TZ evidence",
+                artifact_paths=[artifact.get("path") for artifact in target_artifacts],
+                ready_artifact_paths=[artifact.get("path") for artifact in artifact_ready],
+            ),
+            "long_solve_avoidance": _gate(
+                "pass",
+                "preflight inspects metadata and checked-in artifacts only; production solves are not launched",
+            ),
+        }
+        ready = all(gate["status"] == "pass" for gate in gates.values())
+        targets[target] = {
+            "ready": ready,
+            "gates": gates,
+            "next_solve_recommendation": "proceed_to_short_real_solve_probe" if ready else "hold_for_missing_evidence",
+        }
+    ready_targets = [target for target, record in targets.items() if record["ready"]]
+    return {
+        "mode": "production_floor_preflight",
+        "required_targets": list(PRODUCTION_FLOOR_TARGETS),
+        "ready_targets": ready_targets,
+        "all_required_targets_ready": len(ready_targets) == len(PRODUCTION_FLOOR_TARGETS),
+        "targets": targets,
     }
 
 
@@ -483,6 +741,8 @@ def _child_payload(case: dict[str, Any]) -> dict[str, Any]:
     expected_reason = str(case.get("expected_reason", ""))
     return {
         "case_id": str(case["case_id"]),
+        "source_type": str(case.get("source_type", "synthetic")),
+        "production_floor_target": str(case.get("production_floor_target", "")),
         "system_kind": str(case["system_kind"]),
         "status": "ok",
         "gate": gate,
@@ -527,6 +787,8 @@ def _run_child(args: argparse.Namespace, case: dict[str, Any]) -> dict[str, Any]
     except subprocess.TimeoutExpired as exc:
         return {
             "case_id": str(case["case_id"]),
+            "source_type": str(case.get("source_type", "synthetic")),
+            "production_floor_target": str(case.get("production_floor_target", "")),
             "system_kind": str(case["system_kind"]),
             "status": "timeout",
             "gate": "reject",
@@ -554,6 +816,8 @@ def _run_child(args: argparse.Namespace, case: dict[str, Any]) -> dict[str, Any]
     if payload is None:
         payload = {
             "case_id": str(case["case_id"]),
+            "source_type": str(case.get("source_type", "synthetic")),
+            "production_floor_target": str(case.get("production_floor_target", "")),
             "system_kind": str(case["system_kind"]),
             "status": "error",
             "gate": "reject",
@@ -582,7 +846,9 @@ def _run_child(args: argparse.Namespace, case: dict[str, Any]) -> dict[str, Any]
     return payload
 
 
-def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+def summarize_results(
+    results: list[dict[str, Any]], preflight: dict[str, Any] | None = None
+) -> dict[str, Any]:
     by_gate = {"keep": 0, "reject": 0}
     by_status: dict[str, int] = {}
     unexpected: list[str] = []
@@ -593,13 +859,17 @@ def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         by_status[status] = by_status.get(status, 0) + 1
         if row.get("meets_expected_gate") is False:
             unexpected.append(str(row.get("case_id", "unknown")))
+    preflight_ready = bool(preflight and preflight.get("all_required_targets_ready") is True)
     return {
         "by_gate": by_gate,
         "by_status": by_status,
         "unexpected_cases": unexpected,
         "all_expected_gates_met": not unexpected,
         "lane_state": "harness_only_no_solver_default_change",
-        "production_floor_probe_ready": False,
+        "production_floor_probe_ready": preflight_ready and (not results or not unexpected),
+        "next_real_solve_recommendation": "proceed_to_short_real_solve_probe"
+        if preflight_ready and (not results or not unexpected)
+        else "hold_for_missing_or_unexpected_probe_evidence",
     }
 
 
@@ -628,7 +898,7 @@ def main(argv: list[str] | None = None) -> int:
         "kind": "rhs1_pas_matrixfree_probe",
         "plan": plan,
         "results": results,
-        "summary": summarize_results(results),
+        "summary": summarize_results(results, plan["production_floor_preflight"]),
     }
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
