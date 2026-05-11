@@ -29,6 +29,7 @@ PAS_AUTO_STRONG_BASE_KINDS = frozenset(
         "pas_hybrid",
         "pas_schur",
         "pas_tz",
+        "pas_tzfft",
         "pas_tokamak_theta",
     }
 )
@@ -118,6 +119,10 @@ _RHS1_PRECONDITIONER_KIND_ALIASES = {
     "pas_tz": "pas_tz",
     "pas_3d": "pas_tz",
     "pas_tz_l": "pas_tz",
+    "pas_tzfft": "pas_tzfft",
+    "pas_fft": "pas_tzfft",
+    "pas_stream_fft": "pas_tzfft",
+    "pas_streaming_fft": "pas_tzfft",
     "pas_ilu": "pas_ilu",
     "pas_block_ilu": "pas_ilu",
     "pas_xblock_ilu": "pas_ilu",

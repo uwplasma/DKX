@@ -33,6 +33,8 @@ def test_rhs1_auto_prefers_theta_schwarz_when_sharded(monkeypatch: pytest.Monkey
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_TZ_PRECOND_MAX", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_COLLISION_PRECOND_MIN", "1000000000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
     monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
 
     res = vd.solve_v3_full_system_linear_gmres(nml=nml, tol=1e-8, emit=emit)
@@ -133,6 +135,8 @@ def test_pas_tz_builder_falls_back_to_theta_schwarz_when_memory_unsafe(monkeypat
     monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
     monkeypatch.setenv("SFINCS_JAX_MATVEC_SHARD_AXIS", "theta")
     monkeypatch.setenv("SFINCS_JAX_AUTO_SHARD", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES", "0")
     monkeypatch.setattr(vd.jax, "device_count", lambda: 2)
     monkeypatch.setattr(vd, "_estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(vd, "_rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
@@ -181,9 +185,15 @@ def test_rhs1_dd_coarse_block_sizes_build_multiple_levels() -> None:
 
 
 def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
-    base = lambda v: 0.5 * v
-    coarse = lambda v: 0.25 * v
-    matvec = lambda v: 2.0 * v
+    def base(v):
+        return 0.5 * v
+
+    def coarse(v):
+        return 0.25 * v
+
+    def matvec(v):
+        return 2.0 * v
+
     precond = vd._compose_residual_correction_preconditioner(
         base=base,
         coarse=coarse,
@@ -196,10 +206,18 @@ def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
 
 
 def test_compose_multilevel_residual_correction_preconditioner_applies_levels_in_order() -> None:
-    base = lambda v: jnp.zeros_like(v)
-    coarse_1 = lambda v: 0.25 * v
-    coarse_2 = lambda v: 0.125 * v
-    matvec = lambda v: 2.0 * v
+    def base(v):
+        return jnp.zeros_like(v)
+
+    def coarse_1(v):
+        return 0.25 * v
+
+    def coarse_2(v):
+        return 0.125 * v
+
+    def matvec(v):
+        return 2.0 * v
+
     precond = vd._compose_multilevel_residual_correction_preconditioner(
         base=base,
         coarse_levels=(coarse_1, coarse_2),
@@ -209,3 +227,69 @@ def test_compose_multilevel_residual_correction_preconditioner_applies_levels_in
     )
     out = precond(np.array([4.0]))
     assert np.allclose(np.asarray(out), np.array([1.25]))
+
+
+def test_compose_multilevel_minres_correction_rejects_zero_direction() -> None:
+    def base(v):
+        return jnp.zeros_like(v)
+
+    def bad_coarse(v):
+        return jnp.zeros_like(v)
+
+    def matvec(v):
+        return 2.0 * v
+
+    precond = vd._compose_multilevel_minres_correction_preconditioner(
+        base=base,
+        coarse_levels=(bad_coarse,),
+        matvec=matvec,
+        alpha_clip=1.0,
+        steps=1,
+    )
+    out = precond(np.array([4.0]))
+    assert np.allclose(np.asarray(out), np.array([0.0]))
+
+
+def test_compose_multilevel_minres_correction_accepts_better_direction() -> None:
+    def base(v):
+        return jnp.zeros_like(v)
+
+    def coarse(v):
+        return v
+
+    def matvec(v):
+        return 2.0 * v
+
+    precond = vd._compose_multilevel_minres_correction_preconditioner(
+        base=base,
+        coarse_levels=(coarse,),
+        matvec=matvec,
+        alpha_clip=1.0,
+        steps=1,
+    )
+    out = precond(np.array([4.0]))
+    assert np.allclose(np.asarray(out), np.array([2.0]))
+
+
+def test_preconditioned_minres_correction_accepts_only_residual_improvement() -> None:
+    def matvec(v):
+        return jnp.asarray([2.0 * v[0], 4.0 * v[1]], dtype=jnp.float64)
+
+    def preconditioner(v):
+        return jnp.asarray(v, dtype=jnp.float64)
+
+    rhs = jnp.asarray([2.0, 4.0], dtype=jnp.float64)
+    x0 = jnp.zeros((2,), dtype=jnp.float64)
+
+    x, residual, history, alphas = vd._apply_preconditioned_minres_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        preconditioner=preconditioner,
+        steps=2,
+    )
+
+    assert len(alphas) >= 1
+    assert float(history[-1]) < float(history[0])
+    assert float(jnp.linalg.norm(residual)) == pytest.approx(float(history[-1]))
+    assert float(jnp.linalg.norm(rhs - matvec(x))) == pytest.approx(float(history[-1]))
