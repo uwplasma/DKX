@@ -1,0 +1,55 @@
+{
+  "kind": "pas_tz_memory_fallback_benchmark",
+  "plan": {
+    "block": 3,
+    "input": "examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
+    "input_overrides": {
+      "Ntheta": 25,
+      "Nx": 4,
+      "Nxi": 100,
+      "Nzeta": 51
+    },
+    "maxiter": 80,
+    "overlap": 1,
+    "restart": 40,
+    "timeout_s": 300.0,
+    "tol": 1e-06,
+    "variants": [
+      "tzfft"
+    ]
+  },
+  "results": [
+    {
+      "elapsed_s": 211.26271458307747,
+      "max_rss_mb": 1934.828125,
+      "messages_tail": [
+        "solve_v3_full_system_linear_gmres: building operator",
+        "solve_v3_full_system_linear_gmres: total_size=1020008",
+        "solve_v3_full_system_linear_gmres: assembling RHS",
+        "solve_v3_full_system_linear_gmres: rhs_norm=4.871862e-03",
+        "solve_v3_full_system_linear_gmres: PAS DKES respecting explicit GMRES budget restart=40 maxiter=80",
+        "solve_v3_full_system_linear_gmres: PAS constraint projection enabled (size=571200/1020008)",
+        "solve_v3_full_system_linear_gmres: GMRES tol=1e-06 atol=0.0 restart=40 maxiter=80 solve_method=incremental",
+        "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)",
+        "solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner=rhs1",
+        "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)",
+        " solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.",
+        "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
+        " solve_v3_full_system_linear_gmres: starting Krylov iterations.",
+        "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=2.003e-05->1.798e-05",
+        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+        "sparse_ilu: disabled (size=571200 > max=60000)",
+        "ksp_iterations skipped (estimated_iters=3200 > max=2000)",
+        "solve_v3_full_system_linear_gmres: residual_norm=1.797957e-05",
+        "solve_v3_full_system_linear_gmres: elapsed_s=211.260"
+      ],
+      "metadata": {},
+      "residual_norm": 1.7979566668107076e-05,
+      "returncode": 0,
+      "status": "ok",
+      "variant": "tzfft"
+    }
+  ],
+  "schema_version": 1
+}

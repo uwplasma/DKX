@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from sfincs_jax.transport_parallel_runtime import (
     merge_transport_parallel_results,
@@ -17,6 +18,11 @@ from sfincs_jax.transport_parallel_runtime import (
 def test_partition_transport_rhs_round_robin() -> None:
     chunks = partition_transport_rhs([1, 2, 3, 4, 5], 3)
     assert chunks == [[1, 4], [2, 5], [3]]
+
+
+def test_partition_transport_rhs_rejects_invalid_worker_count() -> None:
+    with pytest.raises(ValueError, match="transport parallel worker count must be >= 1; got 0"):
+        partition_transport_rhs([1, 2], 0)
 
 
 def test_merge_transport_parallel_results_handles_subset_elapsed_layouts() -> None:
@@ -65,6 +71,40 @@ def test_merge_transport_parallel_results_handles_indexed_elapsed_layout() -> No
     assert set(residual_norms) == {2, 4}
     assert rhs_norms == {2: 2.0, 4: 4.0}
     np.testing.assert_allclose(elapsed_s, np.array([0.0, 0.2, 0.0, 0.4]))
+
+
+def test_merge_transport_parallel_results_rejects_duplicate_rhs_coverage() -> None:
+    results = [
+        {
+            "which_rhs_values": [1],
+            "state_vectors_by_rhs": {1: np.array([1.0])},
+            "residual_norms_by_rhs": {1: 1.0e-8},
+            "rhs_norms_by_rhs": {1: 1.0},
+        },
+        {
+            "which_rhs_values": [1],
+            "state_vectors_by_rhs": {1: np.array([2.0])},
+            "residual_norms_by_rhs": {1: 2.0e-8},
+            "rhs_norms_by_rhs": {1: 2.0},
+        },
+    ]
+
+    with pytest.raises(ValueError, match=r"duplicate whichRHS values \[1\]"):
+        merge_transport_parallel_results(n_rhs=2, results=results)
+
+
+def test_merge_transport_parallel_results_rejects_missing_payload_entries() -> None:
+    results = [
+        {
+            "which_rhs_values": [1, 2],
+            "state_vectors_by_rhs": {1: np.array([1.0])},
+            "residual_norms_by_rhs": {1: 1.0e-8, 2: 2.0e-8},
+            "rhs_norms_by_rhs": {1: 1.0, 2: 2.0},
+        },
+    ]
+
+    with pytest.raises(ValueError, match=r"missing state_vectors_by_rhs entries for whichRHS=\[2\]"):
+        merge_transport_parallel_results(n_rhs=2, results=results)
 
 
 def test_run_transport_parallel_gpu_subprocesses_collects_completed_workers(
@@ -116,6 +156,142 @@ def test_run_transport_parallel_gpu_subprocesses_collects_completed_workers(
     assert any("GPU transport worker log" in msg and "rhs_norm=1.000000e+00" in msg for msg in messages)
     assert any("GPU transport worker result" in msg and "relative_residual=1.000000e-12" in msg for msg in messages)
     assert all("sfincs_jax" in env["PYTHONPATH"] for env in launched_envs)
+
+
+def test_run_transport_parallel_gpu_subprocesses_rejects_mismatched_worker_rhs(
+    monkeypatch,
+) -> None:
+    class _FakeProc:
+        returncode = 0
+
+        def __init__(self, cmd, **_kwargs):
+            output_path = Path(cmd[cmd.index("--output") + 1])
+            np.savez(
+                output_path,
+                which_rhs_values=np.asarray([2], dtype=np.int32),
+                state_vectors=np.ones((1, 2), dtype=np.float64),
+                residual_norms=np.full((1,), 1.0e-12, dtype=np.float64),
+                rhs_norms=np.ones((1,), dtype=np.float64),
+                elapsed_time_s=np.full((1,), 0.25, dtype=np.float64),
+            )
+
+        def poll(self):
+            return self.returncode
+
+        def communicate(self):
+            return "", ""
+
+    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+
+    with pytest.raises(RuntimeError, match=r"unexpected whichRHS coverage .*requested=\[1\] returned=\[2\]"):
+        run_transport_parallel_gpu_subprocesses(
+            payloads=[{"which_rhs_values": [1]}],
+            parallel_workers=1,
+            visible_gpu_ids=lambda _workers: ["0"],
+            gpu_worker_env=lambda gpu_id: {"CUDA_VISIBLE_DEVICES": str(gpu_id)},
+        )
+
+
+def test_run_transport_parallel_gpu_subprocesses_rejects_short_worker_arrays(
+    monkeypatch,
+) -> None:
+    class _FakeProc:
+        returncode = 0
+
+        def __init__(self, cmd, **_kwargs):
+            output_path = Path(cmd[cmd.index("--output") + 1])
+            np.savez(
+                output_path,
+                which_rhs_values=np.asarray([1, 2], dtype=np.int32),
+                state_vectors=np.ones((2, 2), dtype=np.float64),
+                residual_norms=np.full((1,), 1.0e-12, dtype=np.float64),
+                rhs_norms=np.ones((2,), dtype=np.float64),
+                elapsed_time_s=np.full((2,), 0.25, dtype=np.float64),
+            )
+
+        def poll(self):
+            return self.returncode
+
+        def communicate(self):
+            return "", ""
+
+    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+
+    with pytest.raises(RuntimeError, match=r"inconsistent result array lengths .*residual_norms=1"):
+        run_transport_parallel_gpu_subprocesses(
+            payloads=[{"which_rhs_values": [1, 2]}],
+            parallel_workers=1,
+            visible_gpu_ids=lambda _workers: ["0"],
+            gpu_worker_env=lambda gpu_id: {"CUDA_VISIBLE_DEVICES": str(gpu_id)},
+        )
+
+
+def test_run_transport_parallel_gpu_subprocesses_rejects_invalid_worker_count() -> None:
+    with pytest.raises(ValueError, match="GPU transport worker count must be >= 1; got 0"):
+        run_transport_parallel_gpu_subprocesses(
+            payloads=[{"which_rhs_values": [1]}],
+            parallel_workers=0,
+            visible_gpu_ids=lambda _workers: ["0"],
+            gpu_worker_env=lambda gpu_id: {"CUDA_VISIBLE_DEVICES": str(gpu_id)},
+        )
+
+
+def test_gpu_subprocesses_deduplicates_visible_ids_and_reports_plan_cap(
+    monkeypatch,
+) -> None:
+    messages: list[str] = []
+    launched_envs: list[dict[str, str]] = []
+
+    class _FakeProc:
+        returncode = 0
+
+        def __init__(self, cmd, **_kwargs):
+            launched_envs.append(dict(_kwargs["env"]))
+            payload_path = Path(cmd[cmd.index("--payload") + 1])
+            output_path = Path(cmd[cmd.index("--output") + 1])
+            payload = json.loads(payload_path.read_text())
+            rhs_values = np.asarray(payload["which_rhs_values"], dtype=np.int32)
+            np.savez(
+                output_path,
+                which_rhs_values=rhs_values,
+                state_vectors=np.ones((len(rhs_values), 2), dtype=np.float64),
+                residual_norms=np.full((len(rhs_values),), 1.0e-12, dtype=np.float64),
+                rhs_norms=np.ones((len(rhs_values),), dtype=np.float64),
+                elapsed_time_s=np.full((len(rhs_values),), 0.25, dtype=np.float64),
+            )
+
+        def poll(self):
+            return self.returncode
+
+        def communicate(self):
+            return "", ""
+
+    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+
+    results = run_transport_parallel_gpu_subprocesses(
+        payloads=[{"which_rhs_values": [1]}, {"which_rhs_values": [2]}, {"which_rhs_values": [3]}],
+        parallel_workers=3,
+        visible_gpu_ids=lambda _workers: ["0", "0", "1"],
+        gpu_worker_env=lambda gpu_id: {"CUDA_VISIBLE_DEVICES": str(gpu_id)},
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert [res["which_rhs_values"] for res in results] == [[1, 3], [2]]
+    state_vectors, residual_norms, rhs_norms, elapsed_s = merge_transport_parallel_results(
+        n_rhs=3,
+        results=results,
+    )
+    assert set(state_vectors) == {1, 2, 3}
+    assert set(residual_norms) == {1, 2, 3}
+    assert set(rhs_norms) == {1, 2, 3}
+    np.testing.assert_allclose(elapsed_s, np.asarray([0.25, 0.25, 0.25]))
+    assert [env["CUDA_VISIBLE_DEVICES"] for env in launched_envs] == ["0", "1"]
+    assert any(
+        "GPU transport worker plan capped" in msg
+        and "active=2 requested=3" in msg
+        and "unique visible GPU ids=2" in msg
+        for msg in messages
+    )
 
 
 def test_transport_worker_subprocess_env_prepends_repo_root() -> None:

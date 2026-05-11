@@ -56,6 +56,7 @@ from .rhs1_pas_policy import (
     pas_tokamak_theta_preconditioner_applicable as _pas_tokamak_theta_preconditioner_applicable,
     pas_tz_preconditioner_applicable as _pas_tz_preconditioner_applicable,
     pas_tz_preconditioner_memory_safe as _pas_tz_preconditioner_memory_safe,
+    resolve_pas_tz_guarded_correction_kind,
     rhs1_pas_adaptive_smoother_allowed as _rhs1_pas_adaptive_smoother_allowed_impl,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
@@ -88,7 +89,11 @@ from .rhs1_preconditioner_auto_policy import (
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .rhs1_handoff import rhs1_accept_candidate
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
-from .rhs1_strong_policy import requested_rhs1_strong_preconditioner_kind
+from .rhs1_strong_policy import (
+    requested_rhs1_strong_preconditioner_kind,
+    rhs1_pas_weak_minres_steps,
+    rhs1_pas_weak_strong_retry_skip,
+)
 from .rhs1_strong_control import rhs1_resolved_strong_preconditioner_control
 from .rhs1_strong_auto_kind import (
     adjust_rhs1_reduced_auto_kind,
@@ -138,6 +143,7 @@ from .rhs1_acceptance_policy import (
 from .rhs1_stage2_policy import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
+    rhs1_pas_tz_guarded_stage2_retry,
     rhs1_stage2_trigger,
 )
 from .solver_selection_policy import SolverCandidateMetrics
@@ -374,6 +380,40 @@ def _rhs1_xblock_gmres_restart(
         return restart_use, False
     capped = min(restart_use, 20)
     return capped, bool(capped != restart_use)
+
+
+def _rhs1_dkes_gmres_budget(
+    *,
+    restart: int,
+    maxiter: int | None,
+    restart_forced: bool,
+    maxiter_forced: bool,
+    restart_cap_env: str,
+) -> tuple[int, int | None, bool, bool]:
+    """Apply PAS/FP DKES GMRES defaults without overriding explicit budgets."""
+    restart_use = max(1, int(restart))
+    maxiter_use = None if maxiter is None else max(1, int(maxiter))
+    restart_defaulted = False
+    maxiter_defaulted = False
+
+    if not bool(restart_forced):
+        restart_use = max(int(restart_use), 80)
+        try:
+            restart_cap = int(str(restart_cap_env).strip()) if str(restart_cap_env).strip() else 100
+        except ValueError:
+            restart_cap = 100
+        if restart_cap > 0:
+            restart_use = min(int(restart_use), int(restart_cap))
+        restart_defaulted = True
+
+    if not bool(maxiter_forced):
+        if maxiter_use is None:
+            maxiter_use = 600
+        else:
+            maxiter_use = max(int(maxiter_use), 600)
+        maxiter_defaulted = True
+
+    return int(restart_use), maxiter_use, bool(restart_defaulted), bool(maxiter_defaulted)
 
 
 def _use_solver_jit(size_hint: int | None = None) -> bool:
@@ -1528,6 +1568,30 @@ def _rhs_krylov_method_for_context(
     if method in {"lgmres", "lgmres_scipy"} and (bool(use_implicit) or distributed_axis is not None or bool(solver_jit)):
         return "incremental"
     return method
+
+
+def _ksp_iteration_solver_label(*, solver_kind: str, solve_method: str) -> str:
+    """Return the concrete Krylov label used for iteration-history replay."""
+    solver_kind_l = str(solver_kind or "").strip().lower()
+    if solver_kind_l == "gmres":
+        _kind, gmres_method = _solver_kind_for_label(str(solve_method))
+        method_l = str(gmres_method).strip().lower()
+        if method_l in _HOST_SCIPY_KRYLOV_METHODS:
+            return "lgmres"
+        if method_l in {"incremental", "batched", "auto", "default", ""}:
+            return "gmres"
+        return method_l
+    return solver_kind_l
+
+
+def _solver_kind_for_label(method: str) -> tuple[str, str]:
+    """Small top-level mirror of RHSMode=1 solver-kind labels for diagnostics."""
+    method_l = str(method).strip().lower()
+    if method_l in {"bicgstab", "bicgstab_jax"}:
+        return "bicgstab", "batched"
+    if method_l in {"auto", "default", ""}:
+        return "gmres", "incremental"
+    return "gmres", method_l
 
 
 def _resolve_distributed_gmres_axis(
@@ -4870,6 +4934,8 @@ def _build_rhsmode1_pas_tz_preconditioner(
             theta_schwarz_builder=_build_rhsmode1_theta_schwarz_preconditioner,
             zeta_schwarz_builder=_build_rhsmode1_zeta_schwarz_preconditioner,
             hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
+            collision_builder=_build_rhsmode1_collision_preconditioner,
+            tzfft_builder=_build_rhsmode23_tzfft_preconditioner,
             reduce_full=reduce_full,
             expand_reduced=expand_reduced,
         )
@@ -8356,6 +8422,91 @@ def _compose_multilevel_residual_correction_preconditioner(
     return _apply
 
 
+def _compose_multilevel_minres_correction_preconditioner(
+    *,
+    base: Callable[[jnp.ndarray], jnp.ndarray],
+    coarse_levels: Sequence[Callable[[jnp.ndarray], jnp.ndarray]],
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    alpha_clip: float = 1.0,
+    min_improvement: float = 0.0,
+    steps: int = 1,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Apply accepted coarse corrections with a local minimum-residual step."""
+    steps = max(0, int(steps))
+    coarse_levels = tuple(coarse_levels)
+    if steps <= 0 or not coarse_levels:
+        return base
+    alpha_clip = float(alpha_clip)
+    min_improvement = max(0.0, float(min_improvement))
+    improvement_factor = max(0.0, 1.0 - min_improvement) ** 2
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        z = base(v)
+        residual = v - matvec(z)
+        residual_norm_sq = jnp.real(jnp.vdot(residual, residual))
+        for _ in range(steps):
+            for coarse in coarse_levels:
+                direction = coarse(residual)
+                a_direction = matvec(direction)
+                denom = jnp.real(jnp.vdot(a_direction, a_direction))
+                numer = jnp.real(jnp.vdot(residual, a_direction))
+                alpha = jnp.where(denom > 0.0, numer / denom, 0.0)
+                alpha = jnp.nan_to_num(alpha, nan=0.0, posinf=0.0, neginf=0.0)
+                if alpha_clip > 0.0:
+                    alpha = jnp.clip(alpha, -alpha_clip, alpha_clip)
+                trial_residual = residual - alpha * a_direction
+                trial_norm_sq = jnp.real(jnp.vdot(trial_residual, trial_residual))
+                accept = jnp.logical_and(
+                    jnp.isfinite(trial_norm_sq),
+                    trial_norm_sq < residual_norm_sq * improvement_factor,
+                )
+                z = jnp.where(accept, z + alpha * direction, z)
+                residual = jnp.where(accept, trial_residual, residual)
+                residual_norm_sq = jnp.where(accept, trial_norm_sq, residual_norm_sq)
+        return z
+
+    return _apply
+
+
+def _rhs1_pas_tz_guarded_structured_levels(raw: str) -> tuple[str, ...]:
+    """Parse opt-in low-memory coarse levels for guarded PAS-TZ fallback trials."""
+    normalized = str(raw or "").strip().lower().replace("-", "_")
+    if normalized in {"", "0", "false", "no", "off", "none"}:
+        return ()
+    for sep in ("+", ";", ":", "|"):
+        normalized = normalized.replace(sep, ",")
+    aliases = {
+        "x": "xmg",
+        "x_grid": "xmg",
+        "xmultigrid": "xmg",
+        "x_mg": "xmg",
+        "coll": "collision",
+        "collisions": "collision",
+        "collision_diag": "collision",
+        "collision_diagonal": "collision",
+        "diag": "collision",
+        "xmg_collision": "xmg,collision",
+        "collision_xmg": "collision,xmg",
+        "structured": "xmg,collision",
+        "default": "xmg,collision",
+    }
+    expanded_tokens: list[str] = []
+    for token in normalized.replace(" ", ",").split(","):
+        token = token.strip("_ ")
+        if not token:
+            continue
+        expanded = aliases.get(token, token)
+        expanded_tokens.extend(part.strip("_ ") for part in expanded.split(",") if part.strip("_ "))
+
+    levels: list[str] = []
+    for token in expanded_tokens:
+        if token not in {"xmg", "collision"}:
+            continue
+        if token not in levels:
+            levels.append(token)
+    return tuple(levels)
+
+
 def _safe_preconditioner(
     precond: Callable[[jnp.ndarray], jnp.ndarray],
     *,
@@ -8371,6 +8522,62 @@ def _safe_preconditioner(
         return out
 
     return _apply
+
+
+def _apply_preconditioned_minres_correction(
+    *,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs: jnp.ndarray,
+    x0: jnp.ndarray,
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    steps: int,
+    alpha_clip: float = 10.0,
+    min_improvement: float = 0.0,
+) -> tuple[jnp.ndarray, jnp.ndarray, tuple[float, ...], tuple[float, ...]]:
+    """Apply accepted matrix-free minimal-residual corrections.
+
+    Each step computes ``d = M^{-1} r`` and chooses the scalar ``alpha`` that
+    minimizes ``||r - alpha A d||_2``. The correction is accepted only when the
+    measured residual decreases, so this is safe as a bounded post-Krylov rescue
+    for weak preconditioners and does not require storing dense operator blocks.
+    """
+    x = jnp.asarray(x0, dtype=jnp.float64)
+    rhs = jnp.asarray(rhs, dtype=jnp.float64)
+    residual = rhs - jnp.asarray(matvec(x), dtype=jnp.float64)
+    residual_norm = float(jnp.linalg.norm(residual))
+    history: list[float] = [residual_norm]
+    alphas: list[float] = []
+    steps_use = max(0, int(steps))
+    alpha_clip_use = max(0.0, float(alpha_clip))
+    min_improvement_use = max(0.0, float(min_improvement))
+
+    for _ in range(steps_use):
+        direction = jnp.asarray(preconditioner(residual), dtype=jnp.float64)
+        if not bool(jnp.all(jnp.isfinite(direction))):
+            break
+        a_direction = jnp.asarray(matvec(direction), dtype=jnp.float64)
+        if not bool(jnp.all(jnp.isfinite(a_direction))):
+            break
+        denom = float(jnp.real(jnp.vdot(a_direction, a_direction)))
+        if (not np.isfinite(denom)) or denom <= 1.0e-300:
+            break
+        numer = float(jnp.real(jnp.vdot(a_direction, residual)))
+        alpha = numer / denom
+        if alpha_clip_use > 0.0:
+            alpha = max(-alpha_clip_use, min(alpha_clip_use, float(alpha)))
+        if not np.isfinite(alpha) or alpha == 0.0:
+            break
+        trial_residual = residual - float(alpha) * a_direction
+        trial_norm = float(jnp.linalg.norm(trial_residual))
+        if (not np.isfinite(trial_norm)) or trial_norm >= residual_norm * (1.0 - min_improvement_use):
+            break
+        x = x + float(alpha) * direction
+        residual = trial_residual
+        residual_norm = trial_norm
+        history.append(residual_norm)
+        alphas.append(float(alpha))
+
+    return x, residual, tuple(history), tuple(alphas)
 
 
 def _build_rhsmode1_pas_lite_preconditioner(
@@ -10866,6 +11073,7 @@ def _build_rhs1_preconditioner_from_kind(
             pas_hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
             pas_schur_builder=_build_rhsmode1_pas_schur_preconditioner,
             pas_tz_builder=_build_rhsmode1_pas_tz_preconditioner,
+            pas_tzfft_builder=_build_rhsmode23_tzfft_preconditioner,
             pas_tokamak_theta_builder=_build_rhsmode1_pas_tokamak_theta_preconditioner,
             pas_ilu_builder=_build_rhsmode1_pas_xblock_ilu_preconditioner,
             zeta_line_builder=_build_rhsmode1_zeta_line_preconditioner,
@@ -10976,15 +11184,19 @@ def solve_v3_full_system_linear_gmres(
             finite=finite,
         )
     restart_env = os.environ.get("SFINCS_JAX_GMRES_RESTART", "").strip()
+    restart_env_forced = False
     if restart_env:
         try:
             restart = int(restart_env)
+            restart_env_forced = True
         except ValueError:
             pass
     maxiter_env = os.environ.get("SFINCS_JAX_GMRES_MAXITER", "").strip()
+    maxiter_env_forced = False
     if maxiter_env:
         try:
             maxiter = int(maxiter_env)
+            maxiter_env_forced = True
         except ValueError:
             pass
     geom_params_hint = nml.group("geometryParameters")
@@ -11203,23 +11415,28 @@ def solve_v3_full_system_linear_gmres(
     if op.fblock.pas is not None and use_dkes:
         # DKES trajectory runs can be stiff, but very large GMRES restart/maxiter
         # values are expensive in JAX (memory + orthogonalization cost). Prefer
-        # moderate defaults and let stage2/strong-preconditioner fallbacks handle
-        # the truly difficult cases.
-        restart = max(int(restart), 80)
-        # Cap restart to keep the (N x restart) Krylov basis manageable on CPU.
-        # Upstream v3 can afford larger restart sizes due to optimized BLAS/PETSc paths,
-        # while JAX's orthogonalization can become a dominant cost.
-        restart_cap_env = os.environ.get("SFINCS_JAX_RHSMODE1_DKES_RESTART_CAP", "").strip()
-        try:
-            restart_cap = int(restart_cap_env) if restart_cap_env else 100
-        except ValueError:
-            restart_cap = 100
-        if restart_cap > 0:
-            restart = min(int(restart), int(restart_cap))
-        if maxiter is None:
-            maxiter = 600
-        else:
-            maxiter = max(int(maxiter), 600)
+        # moderate defaults and let stage2/strong-preconditioner fallbacks handle the
+        # truly difficult cases. Explicit GMRES env/CLI budgets are respected so
+        # profiling and bounded production probes cannot be silently escalated.
+        restart, maxiter, restart_defaulted, maxiter_defaulted = _rhs1_dkes_gmres_budget(
+            restart=int(restart),
+            maxiter=maxiter,
+            restart_forced=bool(restart_env_forced),
+            maxiter_forced=bool(maxiter_env_forced),
+            restart_cap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DKES_RESTART_CAP", "").strip(),
+        )
+        if emit is not None and (restart_env_forced or maxiter_env_forced):
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: PAS DKES respecting explicit GMRES budget "
+                f"restart={int(restart)} maxiter={maxiter}",
+            )
+        elif emit is not None and (restart_defaulted or maxiter_defaulted):
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: PAS DKES default GMRES budget "
+                f"restart={int(restart)} maxiter={maxiter}",
+            )
     use_active_dof_mode = False
     if active_env in {"1", "true", "yes", "on"}:
         use_active_dof_mode = True
@@ -14018,7 +14235,8 @@ def solve_v3_full_system_linear_gmres(
     ) -> list[float] | None:
         if emit is None or not fortran_stdout:
             return None
-        if str(solver_kind).strip().lower() != "gmres":
+        solver_label = _ksp_iteration_solver_label(solver_kind=solver_kind, solve_method=solve_method_val)
+        if solver_label not in {"gmres", "lgmres"}:
             return None
         size = int(b_vec.size)
         if ksp_history_max_size is not None and size > int(ksp_history_max_size):
@@ -14026,7 +14244,7 @@ def solve_v3_full_system_linear_gmres(
             return None
         if maxiter_val is not None and ksp_history_max_iter is not None:
             est_iters = int(maxiter_val)
-            if str(solver_kind).strip().lower() == "gmres":
+            if solver_label == "gmres":
                 est_iters *= max(1, int(restart_val))
             if est_iters > int(ksp_history_max_iter):
                 emit(
@@ -14036,17 +14254,30 @@ def solve_v3_full_system_linear_gmres(
                 )
                 return None
         try:
-            _x_hist, _rn, history = gmres_solve_with_history_scipy(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=precond_fn,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                restart=restart_val,
-                maxiter=maxiter_val,
-                precondition_side=precond_side,
-            )
+            if solver_label == "lgmres":
+                _x_hist, _rn, history = lgmres_solve_with_history_scipy(
+                    matvec=matvec_fn,
+                    b=b_vec,
+                    preconditioner=precond_fn,
+                    x0=x0_vec,
+                    tol=tol_val,
+                    atol=atol_val,
+                    restart=restart_val,
+                    maxiter=maxiter_val,
+                    precondition_side=precond_side,
+                )
+            else:
+                _x_hist, _rn, history = gmres_solve_with_history_scipy(
+                    matvec=matvec_fn,
+                    b=b_vec,
+                    preconditioner=precond_fn,
+                    x0=x0_vec,
+                    tol=tol_val,
+                    atol=atol_val,
+                    restart=restart_val,
+                    maxiter=maxiter_val,
+                    precondition_side=precond_side,
+                )
         except Exception as exc:  # noqa: BLE001
             emit(1, f"fortran-stdout: KSP history unavailable ({type(exc).__name__}: {exc})")
             return None
@@ -14079,6 +14310,7 @@ def solve_v3_full_system_linear_gmres(
             emit(1, f"ksp_iterations skipped (size={size} > max={int(iter_stats_max_size)})")
             return
         solver_kind_l = str(solver_kind).strip().lower()
+        solver_label = _ksp_iteration_solver_label(solver_kind=solver_kind_l, solve_method=solve_method_val)
         iter_stats_max_iter_env = os.environ.get("SFINCS_JAX_SOLVER_ITER_STATS_MAX_ITER", "").strip()
         try:
             iter_stats_max_iter = int(iter_stats_max_iter_env) if iter_stats_max_iter_env else 2000
@@ -14086,7 +14318,7 @@ def solve_v3_full_system_linear_gmres(
             iter_stats_max_iter = 2000
         if maxiter_val is not None and iter_stats_max_iter is not None:
             est_iters = int(maxiter_val)
-            if solver_kind_l == "gmres":
+            if solver_label == "gmres":
                 est_iters *= max(1, int(restart_val))
             if est_iters > int(iter_stats_max_iter):
                 emit(
@@ -14096,9 +14328,23 @@ def solve_v3_full_system_linear_gmres(
                 )
                 return
         try:
-            if solver_kind_l == "gmres":
+            if solver_label == "gmres":
                 if history is None:
                     _x_hist, _rn, history = gmres_solve_with_history_scipy(
+                        matvec=matvec_fn,
+                        b=b_vec,
+                        preconditioner=precond_fn,
+                        x0=x0_vec,
+                        tol=tol_val,
+                        atol=atol_val,
+                        restart=restart_val,
+                        maxiter=maxiter_val,
+                        precondition_side=precond_side,
+                    )
+                iters = len(history or [])
+            elif solver_label == "lgmres":
+                if history is None:
+                    _x_hist, _rn, history = lgmres_solve_with_history_scipy(
                         matvec=matvec_fn,
                         b=b_vec,
                         preconditioner=precond_fn,
@@ -14127,7 +14373,7 @@ def solve_v3_full_system_linear_gmres(
         except Exception as exc:  # noqa: BLE001
             emit(1, f"ksp_iterations unavailable ({type(exc).__name__}: {exc})")
             return
-        emit(0, f"ksp_iterations={iters} solver={solver_kind_l}")
+        emit(0, f"ksp_iterations={iters} solver={solver_label}")
     if use_active_dof_mode:
         assert active_idx_jnp is not None
         assert full_to_active_jnp is not None
@@ -14346,6 +14592,8 @@ def solve_v3_full_system_linear_gmres(
         strong_preconditioner_reduced = None
         bicgstab_preconditioner_reduced = None
         pas_precond_force_collision = False
+        rhs1_pas_tz_guarded_fallback = False
+        rhs1_pas_tz_guarded_axis: str | None = None
         dense_matrix_cache: np.ndarray | None = None
         host_dense_shortcut = _rhsmode1_host_dense_shortcut_allowed(
             op=op,
@@ -14509,6 +14757,7 @@ def solve_v3_full_system_linear_gmres(
                     bicgstab_preconditioner_reduced = preconditioner_reduced
 
         def _build_rhs1_preconditioner_reduced():
+            nonlocal rhs1_pas_tz_guarded_axis, rhs1_pas_tz_guarded_fallback
             _mark("rhs1_precond_build_start")
             if emit is not None:
                 emit(
@@ -14545,7 +14794,123 @@ def solve_v3_full_system_linear_gmres(
                 adi_sweeps=max(1, sweeps),
                 emit=emit,
             )
+            rhs1_pas_tz_guarded_fallback = bool(getattr(precond, "_sfincs_jax_pas_tz_guarded_fallback", False))
+            if rhs1_pas_tz_guarded_fallback:
+                rhs1_pas_tz_guarded_axis = str(getattr(precond, "_sfincs_jax_pas_tz_guarded_axis", "unknown"))
+            if rhs1_pas_tz_guarded_fallback and emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback "
+                    f"guarded out (axis={rhs1_pas_tz_guarded_axis}); using cheap fallback",
+                )
             precond = _wrap_pas_precond(precond) if use_pas_projection else precond
+            if rhs1_pas_tz_guarded_fallback:
+                poly_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_STEPS", "").strip()
+                poly_damping_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_DAMPING", "").strip()
+                try:
+                    poly_steps = int(poly_steps_env) if poly_steps_env else 0
+                except ValueError:
+                    poly_steps = 0
+                try:
+                    poly_damping = float(poly_damping_env) if poly_damping_env else 0.5
+                except ValueError:
+                    poly_damping = 0.5
+                if poly_steps > 0:
+                    precond = _compose_residual_correction_preconditioner(
+                        base=precond,
+                        coarse=precond,
+                        matvec=mv_reduced,
+                        damping=float(poly_damping),
+                        steps=int(poly_steps),
+                    )
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded matrix-free "
+                            f"polynomial correction steps={int(poly_steps)} damping={float(poly_damping):.3g}",
+                        )
+                structured_levels = _rhs1_pas_tz_guarded_structured_levels(
+                    os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS", "")
+                )
+                if structured_levels:
+                    coarse_preconditioners: list[Callable[[jnp.ndarray], jnp.ndarray]] = []
+                    for level in structured_levels:
+                        if level == "xmg":
+                            coarse = _build_rhsmode1_xmg_preconditioner(
+                                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                            )
+                        elif level == "collision":
+                            coarse = _build_rhsmode1_collision_preconditioner(
+                                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                            )
+                        else:
+                            continue
+                        coarse_preconditioners.append(_wrap_pas_precond(coarse) if use_pas_projection else coarse)
+                    structured_steps_env = os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_STEPS", ""
+                    ).strip()
+                    structured_damping_env = os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_DAMPING", ""
+                    ).strip()
+                    structured_mode = (
+                        os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_MODE", "")
+                        .strip()
+                        .lower()
+                        .replace("-", "_")
+                    )
+                    try:
+                        structured_steps = int(structured_steps_env) if structured_steps_env else 1
+                    except ValueError:
+                        structured_steps = 1
+                    try:
+                        structured_damping = float(structured_damping_env) if structured_damping_env else 0.7
+                    except ValueError:
+                        structured_damping = 0.7
+                    if coarse_preconditioners and structured_steps > 0:
+                        if structured_mode in {"fixed", "damped", "residual"}:
+                            precond = _compose_multilevel_residual_correction_preconditioner(
+                                base=precond,
+                                coarse_levels=tuple(coarse_preconditioners),
+                                matvec=mv_reduced,
+                                damping=float(structured_damping),
+                                steps=int(structured_steps),
+                            )
+                            structured_mode_label = f"fixed damping={float(structured_damping):.3g}"
+                        else:
+                            alpha_clip_env = os.environ.get(
+                                "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_ALPHA_CLIP", ""
+                            ).strip()
+                            min_improve_env = os.environ.get(
+                                "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_MIN_IMPROVEMENT", ""
+                            ).strip()
+                            try:
+                                alpha_clip = float(alpha_clip_env) if alpha_clip_env else 1.0
+                            except ValueError:
+                                alpha_clip = 1.0
+                            try:
+                                min_improve = float(min_improve_env) if min_improve_env else 0.0
+                            except ValueError:
+                                min_improve = 0.0
+                            precond = _compose_multilevel_minres_correction_preconditioner(
+                                base=precond,
+                                coarse_levels=tuple(coarse_preconditioners),
+                                matvec=mv_reduced,
+                                alpha_clip=float(alpha_clip),
+                                min_improvement=float(min_improve),
+                                steps=int(structured_steps),
+                            )
+                            structured_mode_label = (
+                                f"minres alpha_clip={float(alpha_clip):.3g} "
+                                f"min_improvement={float(min_improve):.3g}"
+                            )
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: PAS-TZ guarded structured "
+                                "residual correction levels="
+                                f"{','.join(structured_levels)} steps={int(structured_steps)} "
+                                f"mode={structured_mode_label}",
+                            )
             _mark("rhs1_precond_build_done")
             return precond
 
@@ -15226,6 +15591,123 @@ def solve_v3_full_system_linear_gmres(
             res_reduced = GMRESSolveResult(
                 x=res_reduced.x, residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64)
             )
+        if (
+            rhs1_pas_tz_guarded_fallback
+            and preconditioner_reduced is not None
+            and float(res_reduced.residual_norm) > float(target_reduced)
+        ):
+            correction_preconditioner = preconditioner_reduced
+            correction_kind = resolve_pas_tz_guarded_correction_kind(
+                requested=os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION", "")
+            )
+            if correction_kind == "tzfft" and rhs1_pas_tz_guarded_axis != "tzfft":
+                try:
+                    correction_preconditioner = _build_rhsmode23_tzfft_preconditioner(
+                        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                    )
+                    if use_pas_projection:
+                        correction_preconditioner = _wrap_pas_precond(correction_preconditioner)
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded "
+                            "matrix-free correction=tzfft",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    correction_preconditioner = preconditioner_reduced
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded "
+                            f"matrix-free correction=tzfft unavailable ({type(exc).__name__}); "
+                            "using base fallback",
+                        )
+            minres_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS", "").strip()
+            minres_clip_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP", "").strip()
+            minres_improve_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT", "").strip()
+            try:
+                minres_steps = int(minres_steps_env) if minres_steps_env else 2
+            except ValueError:
+                minres_steps = 2
+            try:
+                minres_clip = float(minres_clip_env) if minres_clip_env else 10.0
+            except ValueError:
+                minres_clip = 10.0
+            try:
+                minres_improve = float(minres_improve_env) if minres_improve_env else 0.0
+            except ValueError:
+                minres_improve = 0.0
+            if minres_steps > 0:
+                x_minres, residual_minres, minres_history, minres_alphas = _apply_preconditioned_minres_correction(
+                    matvec=mv_reduced,
+                    rhs=rhs_reduced,
+                    x0=res_reduced.x,
+                    preconditioner=correction_preconditioner,
+                    steps=int(minres_steps),
+                    alpha_clip=float(minres_clip),
+                    min_improvement=float(minres_improve),
+                )
+                if minres_history and float(minres_history[-1]) < float(res_reduced.residual_norm):
+                    old_residual = float(res_reduced.residual_norm)
+                    residual_norm_true = float(minres_history[-1])
+                    residual_vec = residual_minres
+                    res_reduced = GMRESSolveResult(
+                        x=jnp.asarray(x_minres, dtype=jnp.float64),
+                        residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64),
+                    )
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction "
+                            f"accepted {len(minres_alphas)} step(s), residual="
+                            f"{old_residual:.3e}->{residual_norm_true:.3e}",
+                        )
+        weak_minres_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
+        weak_minres_steps = rhs1_pas_weak_minres_steps(
+            has_pas=op.fblock.pas is not None,
+            rhs1_precond_kind=rhs1_precond_kind,
+            res_ratio=float(weak_minres_ratio),
+        )
+        if (
+            (not rhs1_pas_tz_guarded_fallback)
+            and preconditioner_reduced is not None
+            and weak_minres_steps > 0
+            and float(res_reduced.residual_norm) > float(target_reduced)
+        ):
+            weak_clip_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP", "").strip()
+            weak_improve_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT", "").strip()
+            try:
+                weak_clip = float(weak_clip_env) if weak_clip_env else 10.0
+            except ValueError:
+                weak_clip = 10.0
+            try:
+                weak_improve = float(weak_improve_env) if weak_improve_env else 0.0
+            except ValueError:
+                weak_improve = 0.0
+            x_minres, residual_minres, minres_history, minres_alphas = _apply_preconditioned_minres_correction(
+                matvec=mv_reduced,
+                rhs=rhs_reduced,
+                x0=res_reduced.x,
+                preconditioner=preconditioner_reduced,
+                steps=int(weak_minres_steps),
+                alpha_clip=float(weak_clip),
+                min_improvement=float(weak_improve),
+            )
+            if minres_history and float(minres_history[-1]) < float(res_reduced.residual_norm):
+                old_residual = float(res_reduced.residual_norm)
+                residual_norm_true = float(minres_history[-1])
+                residual_vec = residual_minres
+                res_reduced = GMRESSolveResult(
+                    x=jnp.asarray(x_minres, dtype=jnp.float64),
+                    residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64),
+                )
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: weak PAS minres correction "
+                        f"accepted {len(minres_alphas)} step(s), residual="
+                        f"{old_residual:.3e}->{residual_norm_true:.3e}",
+                    )
         res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
         stage2_trigger = rhs1_stage2_trigger(res_ratio=res_ratio, use_dkes=bool(use_dkes))
         fp_force_stage2 = rhs1_fp_force_stage2(
@@ -15250,15 +15732,19 @@ def solve_v3_full_system_linear_gmres(
         ):
             stage2_trigger = False
             if emit is not None:
-                pas_stage2_skip_env = os.environ.get("SFINCS_JAX_PAS_STAGE2_SKIP_RATIO", "").strip()
-                try:
-                    pas_stage2_skip_ratio = float(pas_stage2_skip_env) if pas_stage2_skip_env else 1.0e6
-                except ValueError:
-                    pas_stage2_skip_ratio = 1.0e6
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: PAS stage2 skipped "
-                    f"(residual ratio={res_ratio:.3e} >= {float(pas_stage2_skip_ratio):.1e})",
+                    f"(residual ratio={res_ratio:.3e}; set the relevant PAS stage2 skip ratio to 0 to retry)",
+                )
+        if rhs1_pas_tz_guarded_fallback and stage2_trigger and not rhs1_pas_tz_guarded_stage2_retry():
+            stage2_trigger = False
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
+                    "after guarded PAS-TZ fallback; set "
+                    "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
                 )
         if (
             (not early_dense_shortcut)
@@ -15763,6 +16249,35 @@ def solve_v3_full_system_linear_gmres(
             nxi_for_x_sum=int(np.sum(nxi_for_x)) if nxi_for_x.size else 0,
         )
         strong_precond_kind = auto_sel.kind
+
+        if rhs1_pas_weak_strong_retry_skip(
+            has_pas=op.fblock.pas is not None,
+            rhs1_precond_kind=rhs1_precond_kind,
+            res_ratio=float(res_ratio),
+        ):
+            if emit is not None and strong_precond_kind is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+                    "after weak PAS base residual exceeded skip threshold; set "
+                    "SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO=0 to retry",
+                )
+            strong_precond_kind = None
+            strong_precond_trigger = False
+
+        if rhs1_pas_tz_guarded_fallback:
+            guarded_retry_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", "").strip().lower()
+            guarded_retry = guarded_retry_env in {"1", "true", "yes", "on"}
+            if not guarded_retry:
+                if emit is not None and strong_precond_kind is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+                        "after guarded PAS-TZ fallback; set "
+                        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+                    )
+                strong_precond_kind = None
+                strong_precond_trigger = False
 
         if (
             strong_precond_kind is not None
