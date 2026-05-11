@@ -127,6 +127,11 @@ def test_streaming_l2_norm_matches_dense_norm() -> None:
     )
 
 
+def test_streaming_l2_norm_preserves_nonfinite_with_blocks() -> None:
+    assert math.isnan(streaming_l2_norm(jnp.asarray([1.0, jnp.nan]), block_size=1))
+    assert math.isinf(streaming_l2_norm(jnp.asarray([1.0, jnp.inf]), block_size=1))
+
+
 def test_matrixfree_config_validation() -> None:
     with pytest.raises(ValueError):
         Rhs1PasMatrixFreeConfig(max_steps=0)

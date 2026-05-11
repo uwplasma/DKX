@@ -9488,3 +9488,82 @@ Next concrete actions:
    coverage materially.
 4. After pushing this pass, check remote CI and update release notes only if
    the remote gates stay green.
+
+Progress update (2026-05-11): open-lane subagent push
+
+- Added a bounded opt-in PAS matrix-free probe harness:
+  `scripts/benchmark_rhs1_pas_matrixfree.py`. It probes deterministic
+  matrix-free systems and capped geometry-metadata-derived systems in
+  short-lived subprocesses, records explicit keep/reject gates, and writes JSON
+  without touching the production solver path.
+- Tightened the PAS matrix-free norm helper so chunked norms preserve `NaN` and
+  `Inf` instead of masking non-finite residuals.
+- Added a benchmark artifact policy checker:
+  `sfincs_jax/benchmark_artifact_policy.py` plus
+  `scripts/check_benchmark_artifacts.py`. The checker enforces schema-version
+  and solver-provenance metadata on new PAS benchmark artifacts. It intentionally
+  rejects historical schema-v1 artifacts; those remain legacy reference outputs
+  until explicitly refreshed.
+- Split pure collisionality validation math into
+  `sfincs_jax/validation_math.py` while preserving imports from
+  `sfincs_jax.validation_artifacts`. This moves another small cluster out of the
+  large validation module without changing public behavior.
+- Added `sfincs_jax/validation_figures.py` with a W7-X ambipolar-root
+  provenance panel data builder. It remains labelled `scaffold_deferred` unless
+  a complete, checked-in W7-X ambipolar artifact backs the claim.
+- Improved transport-worker safety: invalid worker counts now fail fast, CPU
+  worker results are collected in payload order even when futures complete out
+  of order, and GPU worker count validation stays explicit.
+- Expanded the optional `vmec_jax` / `booz_xform_jax` public example with
+  `--check-backends`, runnable docs commands, and explicit printed
+  differentiability boundaries.
+- Verification:
+  - focused integrated lane suite:
+    `61 passed in 2.89 s`;
+  - PAS matrix-free harness smoke:
+    `7` bounded rows, all expected keep/reject gates met;
+  - schema-v2 PAS artifact dry-run plus checker:
+    passed;
+  - full local suite:
+    `1195 passed in 521.49 s`;
+  - `ruff check` on changed source/tests:
+    passed;
+  - `python -m py_compile` on changed scripts/modules:
+    passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`:
+    passed;
+  - `git diff --check`:
+    passed.
+
+Updated lane status after this pass:
+
+- PAS-heavy memory/runtime: `88%`. The next algorithmic probe infrastructure is
+  now in place and guarded, but no production default changes are justified yet.
+- Benchmark artifact reproducibility gates: `95%`. New artifacts can be checked
+  automatically; legacy schema-v1 artifacts still need explicit refresh if they
+  become release-facing.
+- FP production-floor memory/runtime: `95%`. No regression was introduced.
+- CPU/GPU parity for documented workflows: `100%` for the tested lanes.
+- CI/docs health: `100%` locally for the gates listed above; remote CI still
+  needs post-push confirmation.
+- Coverage/refactor path: `65%`. A pure validation-math module is split out;
+  meaningful movement toward `95%` still requires more driver/policy extraction.
+- Parallel transport workers: `80%` for release-facing multi-case/RHS
+  throughput. Single-case multi-GPU RHSMode=1 remains experimental.
+- `vmec_jax` / `booz_xform_jax` workflow: `63%` for public handoff/status
+  documentation and optional-backend example UX; full differentiable kinetic
+  transport remains about `35%`.
+- Deferred manuscript physics lanes: `48%`; W7-X ambipolar panel scaffolding is
+  stronger, but the real artifact-backed validation claim remains open.
+
+Next concrete actions:
+
+1. Use `scripts/benchmark_rhs1_pas_matrixfree.py` as the cheap preflight before
+   any production-floor PAS experiments, then add a real opt-in geometry4/HSX
+   production-floor probe only if the synthetic gates remain stable.
+2. Refresh any release-facing PAS benchmark artifacts to schema version `2`, or
+   keep historical schema-v1 artifacts out of automated release gates.
+3. Continue extracting small validation/benchmark/solver-policy helpers before
+   attempting high-coverage work on `v3_driver.py`.
+4. Keep the W7-X ambipolar lane marked deferred until a complete checked-in
+   W7-X equilibrium/profile/provenance artifact exists.

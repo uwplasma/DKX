@@ -11,6 +11,7 @@ import time
 
 import numpy as np
 
+from .transport_parallel_policy import validate_transport_parallel_worker_count
 from .transport_residual_quality import (
     transport_residual_gate_failures_from_arrays,
     transport_residual_gate_thresholds_from_env,
@@ -113,7 +114,8 @@ def _terminate_pending_workers(
 
 
 def partition_transport_rhs(values: list[int], workers: int) -> list[list[int]]:
-    chunks: list[list[int]] = [[] for _ in range(max(1, int(workers)))]
+    worker_count = validate_transport_parallel_worker_count(workers)
+    chunks: list[list[int]] = [[] for _ in range(worker_count)]
     for i, val in enumerate(values):
         chunks[i % len(chunks)].append(int(val))
     return [chunk for chunk in chunks if chunk]
@@ -153,7 +155,12 @@ def run_transport_parallel_gpu_subprocesses(
     gpu_worker_env: Callable[..., dict[str, str]],
     emit: Callable[[int, str], None] | None = None,
 ) -> list[dict[str, object]]:
-    requested_workers = int(parallel_workers)
+    requested_workers = validate_transport_parallel_worker_count(
+        parallel_workers,
+        context="GPU transport",
+    )
+    if not payloads:
+        return []
     gpu_ids = _unique_gpu_ids(visible_gpu_ids(requested_workers))
     if not gpu_ids:
         raise RuntimeError("GPU transport parallel backend requested but no visible GPU ids were found.")

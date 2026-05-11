@@ -5,6 +5,21 @@ import contextlib
 import os
 
 
+def validate_transport_parallel_worker_count(
+    parallel_workers: int,
+    *,
+    context: str = "transport parallel",
+) -> int:
+    """Return a validated positive transport worker count."""
+    try:
+        workers = int(parallel_workers)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{context} worker count must be an integer >= 1; got {parallel_workers!r}") from exc
+    if workers < 1:
+        raise ValueError(f"{context} worker count must be >= 1; got {workers}")
+    return workers
+
+
 @contextlib.contextmanager
 def transport_parallel_worker_env(
     *,
@@ -12,6 +27,7 @@ def transport_parallel_worker_env(
     rewrite_xla_flags: Callable[[str, int | None, int | None], str],
 ) -> Iterator[None]:
     """Cap XLA threads + disable sharding in transport worker processes."""
+    workers = validate_transport_parallel_worker_count(parallel_workers)
     saved: dict[str, str | None] = {}
 
     def _set(key: str, value: str | None) -> None:
@@ -28,7 +44,7 @@ def transport_parallel_worker_env(
         total_cores = 0
     if total_cores <= 0:
         total_cores = os.cpu_count() or 1
-    threads = max(1, int(total_cores) // max(1, int(parallel_workers)))
+    threads = max(1, int(total_cores) // workers)
 
     _set("SFINCS_JAX_SHARD", "0")
     _set("SFINCS_JAX_MATVEC_SHARD_AXIS", "off")
@@ -79,7 +95,7 @@ def transport_parallel_persistent_pool_enabled() -> bool:
 
 def transport_parallel_pool_key(parallel_workers: int) -> tuple[object, ...]:
     return (
-        int(parallel_workers),
+        validate_transport_parallel_worker_count(parallel_workers),
         transport_parallel_backend(),
         transport_parallel_start_method(),
         os.environ.get("SFINCS_JAX_TRANSPORT_PIN_THREADS", "").strip().lower(),
@@ -88,6 +104,7 @@ def transport_parallel_pool_key(parallel_workers: int) -> tuple[object, ...]:
 
 
 def transport_parallel_visible_gpu_ids(parallel_workers: int) -> list[str]:
+    workers = validate_transport_parallel_worker_count(parallel_workers, context="GPU transport")
     visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
     if visible:
         ids: list[str] = []
@@ -98,7 +115,7 @@ def transport_parallel_visible_gpu_ids(parallel_workers: int) -> list[str]:
                 ids.append(gpu_id)
                 seen.add(gpu_id)
         return ids
-    return [str(i) for i in range(max(1, int(parallel_workers)))]
+    return [str(i) for i in range(workers)]
 
 
 def transport_parallel_gpu_worker_env(*, gpu_id: str) -> dict[str, str]:
@@ -121,7 +138,8 @@ def transport_parallel_pool_executor_kwargs(
     get_context: Callable[[str], object],
     emit: Callable[[int, str], None] | None = None,
 ) -> dict[str, object]:
-    kwargs: dict[str, object] = {"max_workers": int(parallel_workers)}
+    workers = validate_transport_parallel_worker_count(parallel_workers)
+    kwargs: dict[str, object] = {"max_workers": workers}
     start_method = transport_parallel_start_method()
     try:
         kwargs["mp_context"] = get_context(start_method)

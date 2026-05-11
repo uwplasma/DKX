@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from sfincs_jax.transport_parallel_runtime import (
     merge_transport_parallel_results,
@@ -17,6 +18,11 @@ from sfincs_jax.transport_parallel_runtime import (
 def test_partition_transport_rhs_round_robin() -> None:
     chunks = partition_transport_rhs([1, 2, 3, 4, 5], 3)
     assert chunks == [[1, 4], [2, 5], [3]]
+
+
+def test_partition_transport_rhs_rejects_invalid_worker_count() -> None:
+    with pytest.raises(ValueError, match="transport parallel worker count must be >= 1; got 0"):
+        partition_transport_rhs([1, 2], 0)
 
 
 def test_merge_transport_parallel_results_handles_subset_elapsed_layouts() -> None:
@@ -116,6 +122,16 @@ def test_run_transport_parallel_gpu_subprocesses_collects_completed_workers(
     assert any("GPU transport worker log" in msg and "rhs_norm=1.000000e+00" in msg for msg in messages)
     assert any("GPU transport worker result" in msg and "relative_residual=1.000000e-12" in msg for msg in messages)
     assert all("sfincs_jax" in env["PYTHONPATH"] for env in launched_envs)
+
+
+def test_run_transport_parallel_gpu_subprocesses_rejects_invalid_worker_count() -> None:
+    with pytest.raises(ValueError, match="GPU transport worker count must be >= 1; got 0"):
+        run_transport_parallel_gpu_subprocesses(
+            payloads=[{"which_rhs_values": [1]}],
+            parallel_workers=0,
+            visible_gpu_ids=lambda _workers: ["0"],
+            gpu_worker_env=lambda gpu_id: {"CUDA_VISIBLE_DEVICES": str(gpu_id)},
+        )
 
 
 def test_gpu_subprocesses_deduplicates_visible_ids_and_reports_plan_cap(
