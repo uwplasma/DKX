@@ -62,6 +62,51 @@ def _run_once(
     return time.perf_counter() - t0
 
 
+def _write_scaling_figure(
+    payload: dict,
+    out_dir: Path,
+    *,
+    figure_name: str = "transport_parallel_scaling.png",
+) -> Path | None:
+    """Write the transport-worker scaling figure from a benchmark payload."""
+    try:
+        import matplotlib.pyplot as plt  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001
+        print(f"Matplotlib unavailable: {exc}")
+        return None
+
+    results = payload["results"]
+    w = np.array([r["workers"] for r in results], dtype=int)
+    mean_s = np.array([r["mean_s"] for r in results], dtype=float)
+    speedup = np.array([r.get("speedup", np.nan) for r in results], dtype=float)
+    ideal = np.asarray(payload.get("ideal_speedup_finite_rhs", w), dtype=float)
+    if ideal.shape != w.shape:
+        ideal = w.astype(float)
+
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.2))
+    axes[0].plot(w, mean_s, "o-", label="measured")
+    axes[0].set_xlabel("workers")
+    axes[0].set_ylabel("time (s)")
+    axes[0].set_title("Runtime vs workers")
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].plot(w, speedup, "o-", label="measured")
+    axes[1].plot(w, ideal, "--", label="ideal")
+    axes[1].set_xlabel("workers")
+    axes[1].set_ylabel("speedup")
+    axes[1].set_title("Speedup vs workers")
+    axes[1].grid(True, alpha=0.3)
+    axes[1].legend(frameon=False)
+
+    fig.suptitle(f"Parallel whichRHS scaling ({payload.get('backend', 'unknown')}): {payload['case']}", y=1.02)
+    fig.tight_layout()
+    fig_path = Path(out_dir) / str(figure_name)
+    fig.savefig(fig_path, dpi=200)
+    plt.close(fig)
+    print(f"Saved figure -> {fig_path}")
+    return fig_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark parallel whichRHS scaling.")
     repo_root = Path(__file__).resolve().parents[2]
@@ -115,14 +160,31 @@ def main() -> None:
         default=default_cache,
         help="Persistent JAX cache directory.",
     )
+    parser.add_argument(
+        "--from-json",
+        type=Path,
+        default=None,
+        help="Regenerate JSON and figure from an existing benchmark payload without rerunning solves.",
+    )
+    parser.add_argument(
+        "--figure-name",
+        default="transport_parallel_scaling.png",
+        help="Figure filename to write inside --out-dir.",
+    )
     args = parser.parse_args()
+
+    out_dir = args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.from_json is not None:
+        payload = json.loads(Path(args.from_json).read_text())
+        _write_scaling_figure(payload, out_dir, figure_name=str(args.figure_name))
+        return
 
     input_path = args.input
     if not input_path.exists():
         raise FileNotFoundError(str(input_path))
 
-    out_dir = args.out_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = args.cache_dir
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -185,35 +247,7 @@ def main() -> None:
     json_path = out_dir / "transport_parallel_scaling.json"
     json_path.write_text(json.dumps(payload, indent=2))
 
-    try:
-        import matplotlib.pyplot as plt  # noqa: PLC0415
-
-        w = np.array([r["workers"] for r in results], dtype=int)
-        mean_s = np.array([r["mean_s"] for r in results], dtype=float)
-        speedup = np.array([r.get("speedup", np.nan) for r in results], dtype=float)
-
-        fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.2))
-        axes[0].plot(w, mean_s, "o-", label="measured")
-        axes[0].set_xlabel("workers")
-        axes[0].set_ylabel("time (s)")
-        axes[0].set_title("Runtime vs workers")
-        axes[0].grid(True, alpha=0.3)
-
-        axes[1].plot(w, speedup, "o-", label="measured")
-        axes[1].plot(w, w, "--", label="ideal")
-        axes[1].set_xlabel("workers")
-        axes[1].set_ylabel("speedup")
-        axes[1].set_title("Speedup vs workers")
-        axes[1].grid(True, alpha=0.3)
-        axes[1].legend(frameon=False)
-
-        fig.suptitle(f"Parallel whichRHS scaling ({args.backend}): {payload['case']}", y=1.02)
-        fig.tight_layout()
-        fig_path = out_dir / "transport_parallel_scaling.png"
-        fig.savefig(fig_path, dpi=200)
-        print(f"Saved figure -> {fig_path}")
-    except Exception as exc:  # noqa: BLE001
-        print(f"Matplotlib unavailable: {exc}")
+    _write_scaling_figure(payload, out_dir, figure_name=str(args.figure_name))
 
 
 if __name__ == "__main__":

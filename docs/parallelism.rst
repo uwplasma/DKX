@@ -203,6 +203,30 @@ multi-device sharding as an advanced path for very large RHSMode=1 solves.
 Note: RHSMode=2 has only **3** right-hand sides, so speedup naturally
 saturates once there are more workers than independent ``whichRHS`` solves.
 
+Transport-worker scaling audit
+------------------------------
+
+Saved transport-worker benchmark summaries can be checked with the pure policy
+helper ``sfincs_jax.transport_parallel_policy.audit_transport_parallel_scaling_summary``.
+The helper does not launch workers or inspect hardware. It only audits the
+saved payload:
+
+- the summary has a valid one-worker baseline and a parallel worker point;
+- there are enough independent transport tasks for a parallel scaling claim;
+- GPU summaries record enough visible devices for the audited worker count;
+- measured speedup and worker efficiency pass the release gates;
+- speedup stays within the finite-task ideal for the recorded ``rhs_count``;
+- payload chunks cover each ``whichRHS`` exactly once, or the summary explicitly
+  records deterministic payload coverage.
+
+The returned ``TransportParallelScalingAudit`` includes ``release_scaling_claim``,
+``failures``, and ``notes`` so benchmark scripts can separate malformed payloads
+from valid-but-weak measurements. This gate is intentionally scoped to
+transport-worker scaling: it supports claims such as "two GPU workers solve
+three independent transport RHS tasks with about 1.48x speedup." It does not
+upgrade single-case multi-GPU or sharded RHSMode=1 benchmarks into release-facing
+strong-scaling claims; those remain a separate experimental lane below.
+
 Earlier runs (smaller grids)
 ----------------------------
 
@@ -947,6 +971,16 @@ not from single-case sharding. On office we reran:
      --warmup 0 \
      --global-warmup 1 \
      --precond xmg
+
+To regenerate the checked-in figure from the saved payload without rerunning the
+multi-minute GPU benchmark:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_transport_parallel_scaling.py \
+     --from-json examples/performance/output/transport_parallel_scaling_gpu.json \
+     --out-dir docs/_static/figures/parallel \
+     --figure-name transport_parallel_scaling_gpu.png
 
 Measured result on current ``main``:
 

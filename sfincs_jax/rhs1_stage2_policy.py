@@ -24,6 +24,8 @@ _PAS_STAGE2_EXTENDED_SKIP_BASE_KINDS = frozenset(
     }
 )
 
+_PAS_STAGE2_WEAK_SKIP_KINDS = frozenset({"collision", "point", "xmg"})
+
 
 def rhs1_stage2_ratio(*, use_dkes: bool) -> float:
     """Return the stage-2 residual-ratio trigger with DKES tightening."""
@@ -74,6 +76,15 @@ def rhs1_pas_stage2_skip(
     if not has_pas:
         return False
     if rhs1_precond_kind not in _PAS_STAGE2_SKIP_BASE_KINDS:
+        if rhs1_precond_kind in _PAS_STAGE2_WEAK_SKIP_KINDS:
+            weak_skip_env = os.environ.get("SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO", "").strip()
+            try:
+                weak_skip_ratio = float(weak_skip_env) if weak_skip_env else 1.0e12
+            except ValueError:
+                weak_skip_ratio = 1.0e12
+            if weak_skip_ratio <= 0.0:
+                return False
+            return float(res_ratio) >= float(weak_skip_ratio)
         extended_env = os.environ.get("SFINCS_JAX_PAS_STAGE2_SKIP_EXTENDED", "").strip().lower()
         if extended_env not in {"1", "true", "yes", "on"}:
             return False
@@ -87,9 +98,23 @@ def rhs1_pas_stage2_skip(
     return float(res_ratio) >= float(pas_stage2_skip_ratio)
 
 
+def rhs1_pas_tz_guarded_stage2_retry() -> bool:
+    """Return whether guarded PAS-TZ fallbacks should attempt stage-2 GMRES.
+
+    Guarded PAS-TZ fallbacks are selected after the dense structured PAS-TZ
+    builder is rejected by the memory gate. Their purpose is to keep the run
+    bounded and diagnostic-rich; strict stage-2 retries can turn an otherwise
+    bounded fallback into the same long-running solver-path problem the guard is
+    meant to avoid. Users can still opt in when profiling a candidate fallback.
+    """
+    env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY", "").strip().lower()
+    return env in {"1", "true", "yes", "on"}
+
+
 __all__ = [
     "rhs1_fp_force_stage2",
     "rhs1_pas_stage2_skip",
+    "rhs1_pas_tz_guarded_stage2_retry",
     "rhs1_stage2_ratio",
     "rhs1_stage2_trigger",
 ]

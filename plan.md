@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-09 (Europe/Lisbon)
+Last updated: 2026-05-11 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -42,6 +42,116 @@ Immediate priorities:
 - Eliminate remaining solver branch fragility while preserving differentiability,
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
+
+Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
+- [x] Add bounded resolution overrides to
+  `scripts/benchmark_pas_tz_memory_fallback.py` so PAS memory/runtime probes can
+  run the collaborator floor directly (`Ntheta=25, Nzeta=51, Nxi=100, Nx=4`)
+  without editing checked-in example inputs. The JSON plan now records the
+  exact `input_overrides` used for each probe.
+- [x] Reproduce the large geometry-rich PAS stall class on CPU using the forced
+  PAS-TZ memory-fallback harness. At `25 x 51 x 100 x 4`, the cheap collision
+  fallback avoids the dense allocation and returns in `2.00 s` / `1.56 GB`, but
+  the true residual is unusable (`4.71e6`), so it remains a stall-avoidance
+  diagnostic only, not a solver policy.
+- [x] Validate the stronger low-memory `tzfft` fallback at the same
+  production-floor resolution. CPU converged with `restart=20`, `maxiter=20` in
+  `40.85 s` / `2.97 GB`, residual `5.87e-8`. Office GPU 0 converged the same
+  case in `47.54 s` / `1.31 GB` host RSS, residual `5.88e-8`; sampled GPU
+  memory stayed near `1.23 GB` with XLA preallocation disabled.
+- [x] Record artifacts:
+  `examples/performance/output/pas_tz_prod_floor_cpu_collision_25x51x100x4.json`,
+  `examples/performance/output/pas_tz_prod_floor_cpu_tzfft_25x51x100x4.json`,
+  and
+  `examples/performance/output/pas_tz_prod_floor_gpu_tzfft_25x51x100x4.json`.
+- [x] Reject the opt-in matrix-free Jacobi defect-smoother probe before merging
+  it. It was disabled by the safety guard on the representative case
+  (`active_size=83122 > 50000`), and enabling it at production-floor sizes would
+  require O(active_size) matrix-free diagonal probes. This is not a credible
+  memory/runtime path compared with the measured `tzfft` fallback.
+- [x] Fix an over-aggressive PAS-DKES solver-budget policy: explicit
+  `SFINCS_JAX_GMRES_RESTART` / `SFINCS_JAX_GMRES_MAXITER` budgets are now
+  respected instead of being silently raised to `restart >= 80` and
+  `maxiter >= 600`. DKES default floors still apply when the user does not
+  force a budget. This directly addresses the collaborator-reported class of
+  "small resolution change selects a much slower path" failures and keeps
+  bounded profiling honest.
+- [x] Run the same `25 x 51 x 100 x 4` floor on the first HSX and geometry11
+  PAS-DKES cases. With explicit `restart=20`, `maxiter=20`, HSX DKES completed
+  in `58.25 s` / `2.69 GB`, residual `1.60e-4`; geometry11 DKES completed in
+  `57.72 s` / `2.94 GB`, residual `2.61e-2`. A moderate HSX budget
+  (`restart=40`, `maxiter=80`) took `211.26 s` / `1.93 GB`, residual
+  `1.80e-5`. These are bounded, reproducible diagnostics, not promotion
+  candidates.
+- [x] Record additional artifacts:
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_explicit_m20_25x51x100x4.json`,
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_m80r40_25x51x100x4.json`,
+  and
+  `examples/performance/output/pas_tz_floor_geom11_dkes_cpu_explicit_m20_25x51x100x4.json`.
+- [x] Complete the explorer-recommended host-side PAS x-block sparse-PC probe
+  behind an explicit solve-method/env gate, then remove it after the bounded
+  medium gate failed the residual and memory/runtime gates below. Keep/reject
+  gates remain: true residual clean, wall time below the current `tzfft`
+  bounded budget, lower peak memory than dense/JAX-factor routes, CPU and GPU
+  parity agreement, and no default promotion without full example-suite parity.
+- [x] Prototype/reject the first host-side PAS x-block sparse-PC route before
+  shipping it. The explicit `pas_xblock_sparse_pc_gmres` prototype avoided
+  padded JAX factor arrays, but on the medium geometry4 PAS case the default
+  ILU settings rejected nearly all block factors as unstable and stopped at
+  residual `2.44e-4` after `96` bounded matvecs (`11.37 s`, `0.93 GB`). A
+  stronger ILU probe (`drop_tol=1e-8`, `fill_factor=50`) was worse
+  (`6.58e-4`, `14.74 s`, `1.31 GB`). The prototype was removed rather than
+  exposing a public solve-method alias that fails the medium gate. Any future
+  host-side PAS route should first fix factor stability/normalization on this
+  medium gate before attempting HSX/geometry11 production-floor runs.
+- [x] Reject the existing guarded stage-2 retry as a HSX floor fix. With
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1` on the same
+  `25 x 51 x 100 x 4` HSX PAS-DKES floor, runtime increased from `58.25 s` to
+  `155.05 s` and peak RSS increased from `2.69 GB` to `2.94 GB`, while the true
+  residual stayed unchanged at `1.60e-4`. Artifact:
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_stage2_m20_25x51x100x4.json`.
+  Do not use stage-2 retry as the default answer to this lane.
+- [x] Reject the existing guarded strong retry as a HSX floor fix. With
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1`, the same bounded HSX
+  floor timed out at `240 s` after entering `strong preconditioner fallback
+  kind=pas_lite`, without producing a residual-clean result. Artifact:
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_strong_m20_25x51x100x4.json`.
+  The remaining HSX/geometry11 PAS-DKES floor work requires a new structured
+  preconditioner/formulation, not larger default retry ladders.
+- [x] Prototype/reject the first guarded structured residual-correction route.
+  The implementation is opt-in only via
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS` and uses accepted
+  local minimum-residual coarse corrections (`xmg`, `collision`) to avoid the
+  unstable fixed-damping correction. It still failed the promotion gates. On
+  the medium geometry4 PAS gate, baseline `tzfft` took `3.56 s` / `0.93 GB`,
+  residual `1.88e-4`; structured variants took `5.23-6.24 s` / `1.15-1.37 GB`
+  with no residual improvement. On the HSX `25 x 51 x 100 x 4` floor,
+  baseline `tzfft` took `58.16 s` / `2.83 GB`, residual `1.60e-4`;
+  `tzfft_structured` took `98.87 s` / `2.95 GB`, residual `1.63e-4`. Artifacts:
+  `examples/performance/output/pas_tz_structured_medium_geometry4_probe.json`
+  and
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_structured_m20_25x51x100x4.json`.
+  Do not promote this route to defaults.
+- [x] Fix solver-path provenance for host Krylov A/B probes. Before this pass,
+  `solve_method=lgmres` could still replay GMRES for
+  `SFINCS_JAX_SOLVER_ITER_STATS=1` and report `solver=gmres`, which polluted
+  profiling and could add hidden iteration-stat overhead. Iteration replay now
+  labels and replays LGMRES as `solver=lgmres`, and the PAS fallback benchmark
+  accepts `--solve-method` plus `_lgmres` variant suffixes.
+- [x] Prototype/reject LGMRES as a PAS-TZ `tzfft` production-floor default.
+  It is useful as an opt-in A/B route and now has reproducible artifacts, but it
+  fails the promotion gates because the memory win is not robust. Medium
+  geometry4: `tzfft` `3.72 s` / `0.97 GB`, residual `1.88e-4`;
+  `tzfft_lgmres` `3.66 s` / `0.91 GB`, same residual. HSX
+  `25 x 51 x 100 x 4`: `tzfft` `58.12 s` / `2.92 GB`, residual `1.60e-4`;
+  `tzfft_lgmres` `55.63 s` / `2.97 GB`, same residual. Geometry11
+  `25 x 51 x 100 x 4`: `tzfft` `62.01 s` / `3.22 GB`, residual `1.90e-2`;
+  `tzfft_lgmres` `61.25 s` / `3.32 GB`, same residual. Artifacts:
+  `examples/performance/output/pas_tz_lgmres_medium_geometry4_probe.json`,
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json`,
+  and
+  `examples/performance/output/pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json`.
+  Do not promote LGMRES by default for guarded PAS-TZ.
 
 Current active lane (2026-05-08, production-floor FP memory audit):
 - [x] Verify `office` is reachable and run the latest clean local `main` source
@@ -8964,3 +9074,685 @@ Next concrete actions after the final FP/PAS/output-retention push:
 2. Treat production-resolution geometry-rich PAS as the next algorithmic lane:
    replace the conservative global sparse pattern with a structured/chunked
    geometry-aware preconditioner before attempting another public default.
+
+Progress update (2026-05-10): v1.1.1 release and structured PAS kickoff
+
+- Released `v1.1.1` from `main` after regenerating the README-facing
+  Fortran/JAX runtime-memory plot and W7-X high-`nu` performance figure from
+  checked-in artifacts.
+- Release validation passed locally: docs with warnings as errors, package
+  build, focused figure/package tests, and full pytest (`1115 passed in
+  498.10 s`). The `v1.1.1` tag push triggered the PyPI, CI, and Docs workflows.
+- Started the next technical push without changing release defaults. Memory-
+  unsafe `pas_tz` builds still fall back to `pas_hybrid` on one device by
+  default, but `SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=theta|zeta|schwarz`
+  now exposes a structured additive-Schwarz fallback for bounded geometry-rich
+  PAS experiments. Shared `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK` and
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP` controls make the benchmark lane
+  reproducible before any future default promotion.
+- Added a plot-only mode to
+  `examples/performance/benchmark_transport_parallel_scaling.py` and regenerated
+  the README GPU transport-worker scaling figure from the checked-in
+  `examples/performance/output/transport_parallel_scaling_gpu.json` payload
+  without rerunning the multi-minute office benchmark.
+- Added `scripts/benchmark_pas_tz_memory_fallback.py`, a subprocess-bounded
+  harness for forced `pas_tz` memory-fallback variants. The first local
+  geometry4 PAS smoke used a 15 s cap with `maxiter=4`, `restart=8`,
+  `block=3`, and `overlap=1`; `hybrid`, `zeta`, and `theta` all timed out while
+  building or retrying the `pas_tz` path. The checked artifact is
+  `tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json`.
+
+Next concrete actions after the structured PAS kickoff:
+
+1. Replace the current Schwarz fallback build strategy with a genuinely chunked
+   or matrix-free patch apply; the naive forced `hybrid`/`zeta`/`theta` fallback
+   still stalls before the Krylov phase on the geometry4 PAS smoke gate.
+2. Re-run the bounded CPU geometry-rich PAS probe ladder only after the patch
+   build is lazy/chunked enough to pass the 15-60 s smoke gate.
+3. If a structured Schwarz route clears the bounded runtime and residual gate,
+   add a trace artifact and only then consider a narrow auto-policy window.
+4. If all structured fallback probes still stall, move to a genuinely new
+   matrix-free coarse correction rather than widening existing Schur/sparse-PC
+   heuristics.
+
+Progress update (2026-05-10): guarded PAS-TZ fallback closeout
+
+- Added a source-level work estimator for opt-in PAS-TZ theta/zeta Schwarz
+  fallback builds. It estimates patch count, largest patch unknown count, and
+  dense inverse entries before entering the expensive builder.
+- Added guardrails
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS` and
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES`; the default caps
+  reject production-resolution grids that would allocate many dense local
+  inverses, while `0` disables each cap for explicit unsafe profiling.
+- Guarded structured fallback now returns a cheap collision fallback and marks
+  the callable. The driver uses that marker to skip the expensive strong retry
+  unless `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1` is set. This keeps
+  the path fail-fast instead of spending minutes searching solver paths after
+  an already-rejected dense Schwarz route.
+- Regenerated
+  `tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json`:
+  the old `hybrid` route still times out at the 15 s cap, while forced `zeta`
+  and `theta` now finish in about `1.5 s` and report the expected large
+  residual (`1.58e6`). This is not a promoted solver path, but it closes the
+  stall/hang behavior for this bounded benchmark lane.
+- Fixed the PAS fallback harness RSS conversion to use the package
+  platform-aware `ru_maxrss` conversion, avoiding macOS/Linux unit mismatches.
+
+Next concrete actions after guarded PAS-TZ fallback:
+
+1. Keep this guarded behavior as a negative benchmark gate: structured fallback
+   is safe to test but still fails the residual gate, so defaults should remain
+   unchanged.
+2. Start the real algorithmic path with a matrix-free angular/radial correction
+   that does not store dense per-patch inverses. The gate is: under 60 s on the
+   geometry4 smoke deck, residual at least two orders of magnitude below the
+   guarded collision fallback, and no memory regression.
+3. Re-run the focused PAS policy/artifact tests and docs build, then full local
+   pytest if CI stays green.
+
+Progress update (2026-05-10): guarded matrix-free PAS correction probe
+
+- Added an accept-only matrix-free minres correction for guarded PAS-TZ
+  fallback. After the weak Krylov solve, it computes `d = M^{-1} r`, chooses
+  the scalar step that minimizes `||r - alpha A d||_2`, and accepts only if the
+  measured residual decreases. This uses extra matvecs but stores no dense
+  angular patch inverses.
+- Added controls
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS`,
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP`, and
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT`.
+- Tried a polynomial guarded preconditioner (`SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_*`).
+  The geometry4 smoke probe showed residual growth for tested dampings, so the
+  polynomial path remains opt-in and default-off.
+- Regenerated the bounded geometry4 PAS smoke artifact. Forced `zeta` and
+  `theta` still finish in about `1.4-1.5 s`; the accepted minres correction
+  reduces residual from `1.58e6` to `1.27e6`. This is a safe memory-neutral
+  improvement, but it does not clear the two-orders-of-magnitude gate.
+
+Next concrete actions after guarded minres:
+
+1. Do not promote the guarded PAS-TZ fallback as a production solver; it remains
+   a bounded negative benchmark with a modest accept-only correction.
+2. Implement a stronger structured correction that captures angular streaming
+   without dense patch inverses. The leading candidates are a matrix-free
+   line/plane smoother with local diagonal solves, or a chunked additive
+   Schwarz apply that solves patches iteratively instead of materializing dense
+   inverses.
+3. Keep the geometry4 smoke gate fixed: under `60 s`, no memory regression, and
+   at least `100x` residual reduction relative to the guarded collision fallback
+   before any auto-policy promotion.
+
+Progress update (2026-05-10): weak PAS retry fail-fast guard
+
+- Forced weak PAS routes (`collision`, `xmg`, and `point`) were still able to
+  spend minutes in stage-2 polish or strong-preconditioner retry/search after
+  first residual ratios near `1e15`. This was a stall-prevention bug in the
+  profiling lanes, not a production solver-quality win.
+- Added `SFINCS_JAX_PAS_STAGE2_WEAK_SKIP_RATIO` and
+  `SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO`, both defaulting to `1e12`; setting
+  either value to `0` disables that specific guard for explicit profiling.
+- Added a bounded weak-PAS minres correction controlled by
+  `SFINCS_JAX_PAS_WEAK_MINRES_RATIO`, `SFINCS_JAX_PAS_WEAK_MINRES_STEPS`,
+  `SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP`, and
+  `SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT`. It reuses the already-built
+  weak preconditioner, chooses the scalar step that minimizes the residual, and
+  accepts only if the measured residual drops.
+- GeometryScheme=4 PAS smoke probes with `maxiter=4`, `restart=8`, and bounded
+  subprocess timeouts now return instead of stalling: `collision` in `1.23 s`
+  with residual improved from `1.58e6` to `1.27e6` and `595 MB` RSS, `xmg` in
+  `1.35 s` with residual improved from `2.53e6` to `2.44e6` and `645 MB` RSS,
+  and `point` in `2.80 s` with residual `1.27e6` and `1.90 GB` RSS.
+- No weak route is promoted. The result closes the forced-path stall lane and
+  keeps those paths as auditable negative baselines.
+
+Next concrete actions after weak PAS fail-fast:
+
+1. Keep the fail-fast guards narrow: they only apply to PAS weak base kinds at
+   enormous residual ratios, and they must not change moderate-residual polish
+   behavior.
+2. Continue the real solver work with a stronger matrix-free line/plane
+   smoother or iterative chunked Schwarz correction that avoids dense angular
+   inverse storage.
+3. Gate any future promotion on the fixed geometry4 smoke target: under `60 s`,
+   no measured memory regression, and at least `100x` residual reduction
+   relative to the guarded collision fallback.
+
+Progress update (2026-05-10): memory-unsafe PAS-TZ fallback tightening
+
+- Removed a shadowed duplicate implementation block from
+  `sfincs_jax/pas_smoother.py`. The public smoother API is unchanged, but future
+  adaptive PAS work now has a single implementation of residual-trend decisions
+  and the adaptive stationary smoother.
+- Tightened `build_pas_tz_memory_fallback(...)`: when a single-device
+  memory-unsafe `pas_tz` request cannot use the dense PAS-TZ builder, the default
+  guarded fallback is now the cheap collision preconditioner when available.
+  The historical `pas_hybrid` fallback remains available explicitly with
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=hybrid`.
+- Rationale: the bounded geometry4 smoke artifact already showed that the old
+  hybrid fallback was a negative benchmark because it could spend the timeout
+  budget in setup/retry. The collision fallback is weaker, but bounded in memory
+  and setup time, and the driver still marks it as guarded, applies only
+  accept-if-improves corrections, and skips expensive strong retries unless the
+  user explicitly opts in.
+- Validation run:
+  `pytest -q tests/test_rhs1_pas_policy.py tests/test_pas_smoother.py
+  tests/test_solver_path_artifacts.py::test_pas_tz_memory_fallback_smoke_keeps_structured_fallback_opt_in`
+  (`26 passed`).
+- Refreshed the bounded geometry4 PAS fallback artifact with variants
+  `collision`, `hybrid`, `zeta`, and `theta` under the fixed `15 s` cap. All
+  rows returned quickly (`1.41-1.66 s`). The new default cheap-collision row
+  used about `600 MB` RSS and reduced the residual to `1.27e6`, matching the
+  structured-guard rows and materially improving over the explicit legacy
+  `hybrid` row residual (`2.53e16`, about `655 MB`). This remains a negative
+  benchmark because the residual is still far above the production gate.
+- Follow-up release-hygiene pass: GitHub CI and Docs passed for commit
+  `abd9d65` (`coverage`, `examples-smoke`, optional ecosystem gates, and all
+  three test shards). The `v1.1.2` release notes were corrected to state the
+  actual current default: memory-unsafe `pas_tz` falls back to guarded
+  `collision` when available, while guarded `hybrid` remains an explicit
+  A/B-profiling override.
+
+Next concrete actions after fallback tightening:
+
+1. Prototype the next real algorithmic candidate: a matrix-free line/plane or
+   chunked-Schwarz correction that captures angular streaming without storing
+   dense patch inverses.
+2. Promote nothing unless the fixed gate is met: no memory regression, bounded
+   runtime, true-residual improvement of at least `100x` relative to the guarded
+   collision fallback, and unchanged Fortran comparison behavior on the bounded
+   PAS examples.
+
+Progress update (2026-05-10): experimental PAS-TZ FFT fallback
+
+- Wired the existing JAX-native angular streaming FFT/L-tridiagonal
+  preconditioner into RHSMode=1 as explicit `pas_tzfft` / `pas_fft` aliases and
+  as `SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft` for memory-unsafe
+  `pas_tz` experiments.
+- Added a guarded stage-2 policy:
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1` is now required before a
+  guarded PAS-TZ fallback enters strict stage-2 GMRES. This fixed the observed
+  `tzfft` smoke stall: before the guard, `tzfft` lowered the residual to about
+  `1.9e-4` and then hit the `60 s` stage-2 ceiling; after the guard it returns
+  cleanly.
+- Refreshed
+  `tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json`
+  with variants `collision`, `hybrid`, `zeta`, `theta`, and `tzfft` under the
+  fixed `15 s` cap:
+  - `collision`: `1.62 s`, `617 MB`, residual `6.414e5`;
+  - `hybrid`: `2.32 s`, `859 MB`, residual `2.529e16`;
+  - `zeta`: `1.63 s`, `683 MB`, residual `6.414e5`;
+  - `theta`: `1.62 s`, `617 MB`, residual `6.414e5`;
+  - `tzfft`: `3.33 s`, `944 MB`, residual `1.877e-4`.
+- Additional bounded probes:
+  - `tzfft` with `maxiter=20,restart=8`: `4.95 s`, `1093 MB`, residual
+    `1.333e-4`;
+  - `tzfft` with `maxiter=20,restart=20`: `9.97 s`, `1511 MB`, residual
+    `1.210e-5`;
+  - the same `maxiter=20,restart=20` plus a capped stage-2 retry: `13.65 s`,
+    `1602 MB`, residual unchanged at `1.210e-5`.
+- Decision: keep `tzfft` as an explicit experimental residual-improvement
+  candidate, but do not promote it to the default fallback. It meets the
+  residual-improvement part of the gate but fails the no-memory-regression and
+  strict-residual parts of the gate. The next real algorithmic lane remains a
+  stronger chunked/matrix-free PAS correction that retains the `tzfft` residual
+  gain without the GMRES-basis memory growth.
+
+Progress update (2026-05-10): cheap-base plus `tzfft` correction probe
+
+- Added an opt-in guarded correction path:
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft`. This keeps the
+  memory-safe fallback (`collision`, unless otherwise requested) as the Krylov
+  preconditioner and uses the JAX-native `tzfft` operator only for the bounded
+  post-Krylov minimal-residual correction. The benchmark harness can run this
+  route with the variant name `collision_tzfft_correction`.
+- Bounded geometry4 PAS probe (`maxiter=8`, `restart=12`, `60 s` timeout):
+  - `collision`: `1.83 s`, `675 MB`, residual `6.414e5`;
+  - `collision_tzfft_correction`: `1.98 s`, `728 MB`, residual `1.336e5`;
+  - `tzfft`: `3.54 s`, `979 MB`, residual `1.877e-4`.
+- Increasing `SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS` to `10` for the
+  cheap-base correction gave `2.19 s`, `776 MB`, residual `1.336e5`, so the
+  residual floor is not a lack of scalar correction steps.
+- Decision: keep the cheap-base correction as an explicit profiling option, but
+  do not promote it. It is bounded and modestly improves the collision fallback,
+  but it fails the `100x` residual-improvement gate and still increases RSS.
+  The remaining algorithmic target is a real streaming-aware preconditioner that
+  is strong during Krylov without storing a large basis or dense angular patch
+  inverses.
+
+Rejected probe (2026-05-10): guarded `tzfft` restart cap
+
+- Tested a source-level cap on GMRES restart for explicit guarded `tzfft`
+  fallback. The cap did emit the right progress line and improved elapsed time
+  slightly on the bounded geometry4 smoke, but the A/B was not favorable:
+  capped `restart=1` returned in `2.94 s` with `965 MB` RSS and residual
+  `1.00e-3`, while cap-disabled `restart=12` returned in `3.37 s` with
+  `899 MB` RSS and residual `1.88e-4`.
+- Decision: do not keep the restart-cap source change. It worsened both memory
+  and residual on the checked smoke, so the next real lane remains a stronger
+  streaming-aware preconditioner rather than restart tuning.
+
+Rejected probe (2026-05-10): guarded `tzfft` tiny subspace correction
+
+- Tested an opt-in accept-only post-Krylov subspace correction that built a
+  small basis from repeated `tzfft` preconditioner applications and solved the
+  tiny least-squares problem `min_y ||r - A P y||`. This avoided dense angular
+  inverse storage, but it did not improve the measured gate.
+- Bounded geometry4 PAS probe (`maxiter=8`, `restart=12`, `60 s` timeout):
+  `collision_tzfft_subspace` returned in `2.32 s`, used about `779 MB` RSS, and
+  ended at residual `1.335e5`. This is essentially the same residual floor as
+  the scalar `collision_tzfft_correction` probe (`1.336e5`) with more memory and
+  slightly more time. A wider requested subspace still accepted only dimension
+  `3` and remained at the same residual floor.
+- Decision: revert the subspace source change and do not add another public
+  tuning knob. The evidence points away from post-solve low-dimensional
+  correction and toward a preconditioner that is strong inside Krylov while
+  remaining streaming/chunk aware.
+
+Rejected probe (2026-05-10): direct ADI line-preconditioner fallback
+
+- Tested the existing `adi` RHSMode=1 preconditioner as a possible
+  streaming-aware low-memory fallback on the bounded geometry4 PAS deck
+  (`maxiter=8`, `restart=12`). It was still in preconditioner setup after
+  `30 s`, while the fixed fallback benchmark candidates return in about
+  `1.6-3.6 s`.
+- Decision: do not route memory-unsafe PAS-TZ fallback to the current `adi`
+  builder. The implementation is not a bounded replacement for dense PAS-TZ on
+  this target without further source-level work to make the line solves
+  genuinely streaming/chunked.
+
+Rejected probe (2026-05-10): right-preconditioned guarded `tzfft`
+
+- Tested `SFINCS_JAX_GMRES_PRECONDITION_SIDE=right` with explicit guarded
+  `SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft` on the same geometry4 PAS
+  smoke (`maxiter=8`, `restart=12`). It returned residual `1.389e-4`, elapsed
+  `4.04 s`, and about `1007 MB` RSS.
+- Decision: do not promote a right-preconditioned guarded `tzfft` policy. It
+  improves residual only modestly relative to the existing left-preconditioned
+  `tzfft` probe while increasing runtime and memory.
+
+Rejected probe (2026-05-10): truncated dense PAS-TZ `Lmax=2`
+
+- Tested `SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX=2` under the normal PAS-TZ memory cap
+  on the bounded geometry4 PAS deck. It was still running after `30 s` and had
+  already entered the strong `pas_lite` fallback from residual `6.31e-3`.
+- Decision: low-`Lmax` dense PAS-TZ truncation is not a bounded replacement for
+  the memory-unsafe PAS-TZ path on this target. It reduces the nominal dense
+  block size, but the resulting preconditioner is too weak and triggers slower
+  fallback behavior.
+
+Rejected probe (2026-05-10): chunked `tzfft` apply
+
+- Tested an opt-in chunked `tzfft` preconditioner apply that solved the
+  Fourier-space tridiagonal systems by radial/speed chunks, and then by both
+  species and radial/speed chunks. The goal was to keep the strong matrix-free
+  `tzfft` residual behavior while lowering peak FFT/tridiagonal intermediates.
+- Bounded geometry4 PAS smoke (`maxiter=8`, `restart=12`, `60 s` timeout):
+  unchunked `tzfft` returned in `3.76 s`, used about `944 MB` RSS, and reached
+  residual `1.877e-4`; `tzfft_xchunk1` returned in `4.02 s`, used about
+  `886 MB` RSS, and reached the same residual; species chunking increased RSS
+  or runtime further.
+- Production-size geometry4 PAS probe (`25 x 51 x 100 x 4`, `maxiter=2`,
+  `restart=8`, `180 s` timeout): unchunked `tzfft` returned in `5.53 s`, used
+  about `1849 MB` RSS, and reached residual `1.518e-3`; `tzfft_xchunk1`
+  returned in `5.02 s`, but RSS increased to about `2037 MB` with the same
+  residual.
+- Decision: revert the chunked apply source change. XLA did not realize the
+  intended peak-memory reduction on the production-sized gate, so adding a
+  public chunking knob would be misleading. The remaining memory lane needs a
+  different algorithmic preconditioner or a host/device solve split rather than
+  chunking the current `tzfft` apply graph.
+
+Rejected probe (2026-05-10): production-size PAS sparse-PC default
+
+- Tested the existing `solve_method="sparse_pc_gmres"` route on the same
+  geometry4 PAS production-size deck used for memory-gate decisions
+  (`25 x 51 x 100 x 4`, `maxiter=2`, `restart=8`, `120 s` timeout).
+- The run reached conservative sparse-pattern materialization with
+  `45,369,600` nonzeros (`avg_row_nnz=44.5`, `max_row_nnz=1275`) and started
+  exact sparse-LU factorization, but timed out before producing a solve result.
+- Decision: do not promote sparse-PC/sparse-LU as the default memory fix for
+  large geometry-rich PAS decks. It remains useful for the already documented
+  constrained-PAS profile-current niche, but this production-size geometry4
+  gate needs a stronger matrix-free or lower-memory approximate factor path.
+
+Progress update (2026-05-11): multi-lane safety and observability pass
+
+- Added a new opt-in matrix-free RHSMode=1 PAS correction helper in
+  `sfincs_jax/rhs1_pas_matrixfree.py`. This is deliberately not wired into the
+  default solve path. It provides bounded streaming-norm residual checks,
+  explicit keep/reject reasons, update-size guards, and shape/dtype stability
+  for the next PAS preconditioner experiments.
+- Upgraded the PAS-TZ fallback benchmark JSON to `schema_version=2`. Benchmark
+  artifacts now record `variant_methods`, per-row `variant_provenance`,
+  `solver_provenance`, compact `phase_metadata`, and tail limits. This closes
+  the immediate ambiguity around whether `_lgmres` rows were default behavior
+  or explicit opt-in probes.
+- Tightened GPU transport-worker planning. Duplicate `CUDA_VISIBLE_DEVICES`
+  entries are de-duplicated, worker caps now report the exact reason, and extra
+  RHS payloads are coalesced onto active workers instead of being silently
+  dropped when requested workers exceed unique visible GPUs.
+- Added fast validation-policy tests for benchmark filtering, warm/logged
+  runtime selection, autodiff gate closure, collisionality slope behavior,
+  FP/PAS separation scaling, and malformed suite reports.
+- Documented the current `vmec_jax` / `booz_xform_jax` differentiability
+  boundary in `docs/geometry.rst`: optional backend probing and geometry proxy
+  gates are supported, but file I/O, the NumPy scheme-5 evaluator, and full
+  VMEC-boundary-to-kinetic-transport optimization remain future work.
+- Verification:
+  - focused modified-lane suite:
+    `75 passed in 1.98 s`;
+  - full local suite:
+    `1165 passed in 512.03 s`;
+  - `ruff check` on changed source/tests:
+    passed;
+  - `python -m py_compile` on changed modules:
+    passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`:
+    passed;
+  - `git diff --check`:
+    passed.
+
+Updated lane status after this pass:
+
+- PAS-heavy memory/runtime: `86%`. The code now has a safe matrix-free
+  correction primitive and better benchmark provenance, but it still needs a
+  production-floor HSX/geometry11 residual and memory win before any default
+  policy change.
+- FP production-floor memory/runtime: `95%`. No regression was introduced in
+  this pass.
+- CPU/GPU parity for documented workflows: `100%` for the tested lanes.
+- CI/docs health: `100%` locally for the gates listed above; remote CI should
+  still be checked after push.
+- Coverage/refactor path: `62%`. The new tests improve meaningful policy and
+  validation coverage without adding slow solves, but the dominant future gain
+  still requires splitting more logic out of `v3_driver.py`.
+- Parallel transport workers: `78%` for release-facing multi-case/RHS
+  throughput. Single-case multi-GPU RHSMode=1 remains experimental and should
+  not be marketed as production strong scaling.
+- `vmec_jax` / `booz_xform_jax` workflow: `60%` for public handoff/status
+  documentation and shallow gates; full differentiable transport optimization
+  remains about `35%`.
+- Deferred manuscript physics lanes: `45%`; no new claim was made in this
+  implementation pass.
+
+Next concrete actions:
+
+1. Run the new matrix-free PAS helper against bounded geometry4/HSX/geometry11
+   production-floor probes as an explicit opt-in only. Keep it only if it
+   improves true residuals without memory/runtime regression.
+2. Add a small artifact checker that rejects PAS benchmark JSON missing
+   `schema_version >= 2`, `variant_methods`, or per-row solver provenance.
+3. Continue the coverage/refactor lane by extracting validation and benchmark
+   policy helpers from large modules before attempting to move `v3_driver.py`
+   coverage materially.
+4. After pushing this pass, check remote CI and update release notes only if
+   the remote gates stay green.
+
+Progress update (2026-05-11): open-lane subagent push
+
+- Added a bounded opt-in PAS matrix-free probe harness:
+  `scripts/benchmark_rhs1_pas_matrixfree.py`. It probes deterministic
+  matrix-free systems and capped geometry-metadata-derived systems in
+  short-lived subprocesses, records explicit keep/reject gates, and writes JSON
+  without touching the production solver path.
+- Tightened the PAS matrix-free norm helper so chunked norms preserve `NaN` and
+  `Inf` instead of masking non-finite residuals.
+- Added a benchmark artifact policy checker:
+  `sfincs_jax/benchmark_artifact_policy.py` plus
+  `scripts/check_benchmark_artifacts.py`. The checker enforces schema-version
+  and solver-provenance metadata on new PAS benchmark artifacts. It intentionally
+  rejects historical schema-v1 artifacts; those remain legacy reference outputs
+  until explicitly refreshed.
+- Split pure collisionality validation math into
+  `sfincs_jax/validation_math.py` while preserving imports from
+  `sfincs_jax.validation_artifacts`. This moves another small cluster out of the
+  large validation module without changing public behavior.
+- Added `sfincs_jax/validation_figures.py` with a W7-X ambipolar-root
+  provenance panel data builder. It remains labelled `scaffold_deferred` unless
+  a complete, checked-in W7-X ambipolar artifact backs the claim.
+- Improved transport-worker safety: invalid worker counts now fail fast, CPU
+  worker results are collected in payload order even when futures complete out
+  of order, and GPU worker count validation stays explicit.
+- Expanded the optional `vmec_jax` / `booz_xform_jax` public example with
+  `--check-backends`, runnable docs commands, and explicit printed
+  differentiability boundaries.
+- Verification:
+  - focused integrated lane suite:
+    `61 passed in 2.89 s`;
+  - PAS matrix-free harness smoke:
+    `7` bounded rows, all expected keep/reject gates met;
+  - schema-v2 PAS artifact dry-run plus checker:
+    passed;
+  - full local suite:
+    `1195 passed in 521.49 s`;
+  - `ruff check` on changed source/tests:
+    passed;
+  - `python -m py_compile` on changed scripts/modules:
+    passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`:
+    passed;
+  - `git diff --check`:
+    passed.
+
+Updated lane status after this pass:
+
+- PAS-heavy memory/runtime: `88%`. The next algorithmic probe infrastructure is
+  now in place and guarded, but no production default changes are justified yet.
+- Benchmark artifact reproducibility gates: `95%`. New artifacts can be checked
+  automatically; legacy schema-v1 artifacts still need explicit refresh if they
+  become release-facing.
+- FP production-floor memory/runtime: `95%`. No regression was introduced.
+- CPU/GPU parity for documented workflows: `100%` for the tested lanes.
+- CI/docs health: `100%` locally for the gates listed above; remote CI still
+  needs post-push confirmation.
+- Coverage/refactor path: `65%`. A pure validation-math module is split out;
+  meaningful movement toward `95%` still requires more driver/policy extraction.
+- Parallel transport workers: `80%` for release-facing multi-case/RHS
+  throughput. Single-case multi-GPU RHSMode=1 remains experimental.
+- `vmec_jax` / `booz_xform_jax` workflow: `63%` for public handoff/status
+  documentation and optional-backend example UX; full differentiable kinetic
+  transport remains about `35%`.
+- Deferred manuscript physics lanes: `48%`; W7-X ambipolar panel scaffolding is
+  stronger, but the real artifact-backed validation claim remains open.
+
+Next concrete actions:
+
+1. Use `scripts/benchmark_rhs1_pas_matrixfree.py` as the cheap preflight before
+   any production-floor PAS experiments, then add a real opt-in geometry4/HSX
+   production-floor probe only if the synthetic gates remain stable.
+2. Refresh any release-facing PAS benchmark artifacts to schema version `2`, or
+   keep historical schema-v1 artifacts out of automated release gates.
+3. Continue extracting small validation/benchmark/solver-policy helpers before
+   attempting high-coverage work on `v3_driver.py`.
+4. Keep the W7-X ambipolar lane marked deferred until a complete checked-in
+   W7-X equilibrium/profile/provenance artifact exists.
+
+Progress update (2026-05-11): second open-lane subagent integration
+
+- Added JSON-safe gate diagnostics to the opt-in RHSMode=1 PAS matrix-free
+  helper and benchmark harness. Rejected probes now report the concrete gate
+  failure (`nonfinite-candidate-residual`, `update-norm-too-large`, insufficient
+  residual improvement, shape mismatch) with finite JSON metadata. This changes
+  only the probe/harness layer, not production solver dispatch or defaults.
+- Tightened benchmark artifact reproducibility policy by rejecting malformed or
+  duplicate variant labels in both `plan.variant_methods` and `results`. New
+  schema-v2 artifacts therefore cannot silently contain ambiguous duplicate
+  rows. Historical schema-v1 artifacts remain outside release gates unless they
+  are explicitly refreshed.
+- Extracted pure solver-progress policy helpers to
+  `sfincs_jax/solver_progress_policy.py` while re-exporting the same names from
+  `sfincs_jax.solver_progress`. This keeps CLI/progress behavior stable and
+  makes the runtime-hint threshold logic directly unit-testable.
+- Added transport-parallel result integrity checks before merging worker
+  results: duplicate RHS coverage, missing per-RHS payload entries,
+  out-of-range RHS values, and inconsistent GPU worker array lengths now fail
+  explicitly instead of producing ambiguous merged results.
+- Extended the optional `vmec_jax` / `booz_xform_jax` workflow with
+  `--check-backends --json`, producing backend importability, runnable setup
+  paths, gradient-availability labels, and the explicit non-claim that this is
+  a geometry-proxy gate rather than full end-to-end kinetic-transport
+  differentiation.
+- Added W7-X ambipolar validation scaffold metadata: provenance completeness
+  scores and structured `deferred_reasons` / `deferred_reason_codes`. This keeps
+  manuscript-facing figures conservative until complete checked-in W7-X
+  provenance and numerical root gates exist.
+- Verification:
+  - focused integrated lane suite:
+    `95 passed in 12.24 s`;
+  - PAS matrix-free harness smoke:
+    `7` bounded rows, all expected keep/reject gates met, diagnostics present;
+  - schema-v2 PAS artifact dry-run plus checker:
+    passed;
+  - `ruff check` on changed Python source/tests:
+    passed;
+  - `python -m py_compile` on changed Python modules/scripts:
+    passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`:
+    passed;
+  - `git diff --check`:
+    passed;
+  - full local suite:
+    `1217 passed in 514.97 s`.
+
+Updated lane status after this pass:
+
+- PAS-heavy memory/runtime: `89%`. Probe observability is stronger and safer,
+  but no production default change is justified without a real geometry4/HSX
+  production-floor residual and memory win.
+- Benchmark artifact reproducibility gates: `96%`. Duplicate/malformed variants
+  are now blocked; release-facing historical artifacts still need schema-v2
+  refresh if promoted.
+- FP production-floor memory/runtime: `95%`. No production solve behavior
+  changed.
+- CPU/GPU parity for documented workflows: `100%` for the touched lanes; no
+  parity-sensitive solver path changed in this pass.
+- CI/docs health: `100%` locally for the gates listed above; remote CI still
+  needs post-push confirmation.
+- Coverage/refactor path: `67%`. Solver progress policy is now split and
+  directly tested; further progress still requires more driver/policy extraction
+  before broad `v3_driver.py` coverage can move materially.
+- Parallel transport workers: `82%` for release-facing multi-case/RHS
+  throughput. This pass improves safety and diagnostics, not single-case
+  multi-GPU strong scaling.
+- `vmec_jax` / `booz_xform_jax` workflow: `65%` for public status/reporting and
+  optional-backend UX; full differentiable kinetic transport remains about
+  `36%`.
+- Deferred manuscript physics lanes: `50%`. The W7-X scaffold is more
+  reviewer-proof, but W7-X ambipolar and full high-`nu` analytic-limit claims
+  remain deferred until artifact-backed validation exists.
+
+Next concrete actions:
+
+1. Check remote CI after pushing this integration.
+2. Refresh any benchmark artifacts that are intended for release-facing claims
+   to schema version `2`.
+3. Use the PAS matrix-free harness diagnostics to choose the next real
+   production-floor geometry4/HSX probe; do not change defaults without a
+   bounded residual/runtime/memory win.
+4. Continue the refactor lane with small pure solver-policy and validation
+   modules before attempting high-risk `v3_driver.py` surgery.
+
+Progress update (2026-05-11): large open-lane push toward release closure
+
+- Added a release benchmark artifact indexer:
+  `scripts/benchmark_artifact_index.py`. It scans selected JSON files or
+  directories and classifies artifacts as schema-v2 compliant, historical
+  legacy schema-v1, unrelated non-PAS, or release-blocking. This lets release
+  gates fail malformed or policy-invalid v2 PAS artifacts without rewriting
+  historical PAS benchmark records that are intentionally kept as provenance.
+- Expanded the RHSMode=1 PAS matrix-free harness from a small synthetic probe
+  into a production-floor preflight layer. It now inspects checked-in PAS
+  benchmark artifacts, tags synthetic versus production-floor geometry metadata
+  cases, applies readiness gates for geometry4 / HSX / geometry11, and emits a
+  compact `next_real_solve_recommendation`. This is still opt-in harness logic
+  only; no production solver defaults changed.
+- Extracted transport-worker payload/result validation into
+  `sfincs_jax/transport_parallel_validation.py`, keeping the runtime behavior
+  and error classes compatible while making duplicate RHS, missing mapping
+  entries, out-of-range RHS values, GPU coverage, and GPU array-length checks
+  directly testable.
+- Added a pure transport-worker scaling audit policy in
+  `sfincs_jax.transport_parallel_policy.audit_transport_parallel_scaling_summary`.
+  It checks baseline presence, task/device counts, speedup, efficiency,
+  finite-task ideal consistency, and deterministic payload coverage before a
+  benchmark summary can support a release-facing scaling claim. This formalizes
+  the transport-worker scaling story and keeps single-case multi-GPU sharding
+  separate and experimental.
+- Added a reusable `vmec_jax` / `booz_xform_jax` / `sfincs_jax` geometry-proxy
+  workflow summary builder and wired it to
+  `examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --summary-json`.
+  The summary records stage provenance, optional dependency status,
+  differentiability labels, numerical gradient-gate status, and the explicit
+  non-claim that full kinetic-transport gradients are not covered by this lane.
+- Added a Simakov-Helander high-collisionality panel-data scaffold in
+  `sfincs_jax.validation_figures`. It validates sorted high-`nu` scan data,
+  normalized analytic-limit distance, tail log-log slope, monotonic approach,
+  high-`nu` threshold/point/span gates, provenance completeness, checked-in
+  artifact status, and explicit deferred reasons. It does not close the full
+  analytic-limit literature claim without artifact-backed high-`nu` scans.
+- Documentation updates:
+  - geometry docs now describe the workflow summary JSON and proxy-only
+    gradient gate;
+  - parallelism docs now document the transport-worker scaling audit and the
+    separation from single-case multi-GPU sharding;
+  - testing docs now describe the Simakov-Helander scaffold gates.
+- Verification:
+  - focused integrated lane suite:
+    `93 passed in 3.93 s`;
+  - full local suite:
+    `1245 passed in 486.72 s`;
+  - `ruff check` on changed Python source/tests:
+    passed;
+  - `python -m py_compile` on changed Python modules/scripts:
+    passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`:
+    passed;
+  - `git diff --check`:
+    passed;
+  - benchmark artifact index smoke:
+    legacy PAS artifact + non-PAS artifact classified with `release_blocking=0`;
+  - PAS matrix-free dry-run and bounded harness:
+    preflight ready for geometry4 / HSX / geometry11 and `7` bounded rows met
+    expected keep/reject gates;
+  - geometry workflow summary smoke:
+    `--check-backends --json --summary-json` produced a valid proxy summary.
+
+Updated lane status after this large push:
+
+- PAS-heavy memory/runtime: `91%`. The next short real-solve probe is now
+  explicitly gated by production-floor metadata and checked-in artifact
+  evidence. A default solver change still requires a real residual/runtime/memory
+  win on geometry4/HSX/geometry11.
+- Benchmark artifact reproducibility gates: `98%`. Release-facing artifact
+  selection can now be indexed and gated without contaminating historical
+  schema-v1 provenance.
+- FP production-floor memory/runtime: `95%`. No production solve behavior
+  changed in this pass.
+- CPU/GPU parity for documented workflows: `100%` for touched lanes; no
+  parity-sensitive solver path changed.
+- CI/docs health: `100%` locally for the gates listed above; remote CI still
+  needs post-push confirmation.
+- Coverage/refactor path: `70%`. Transport parallel validation is now a focused
+  pure module with isolated tests; further movement still requires additional
+  policy extraction before deep `v3_driver.py` work.
+- Parallel transport workers: `85%`. Scaling claims now have a release audit
+  policy. This does not change the existing measured scaling numbers or promote
+  single-case multi-GPU sharding.
+- `vmec_jax` / `booz_xform_jax` workflow: `69%` for public status,
+  provenance, and proxy-gradient summary artifacts; full differentiable kinetic
+  transport remains about `38%`.
+- Deferred manuscript physics lanes: `55%`. W7-X and Simakov-Helander scaffolds
+  now have explicit provenance/numerical gates, but artifact-backed W7-X
+  ambipolar and full high-`nu` literature claims remain deferred.
+
+Next concrete actions:
+
+1. Push this large integration and check remote CI/docs.
+2. Run the first short real-solve PAS production-floor probe selected by the
+   preflight (`geometry4`, `HSX`, `geometry11`) and require an actual
+   residual/runtime/memory improvement before changing defaults.
+3. Add the benchmark artifact indexer to release CI once the release-facing
+   artifact selection is finalized.
+4. Continue extracting pure policy/validation modules before any broad
+   `v3_driver.py` refactor.
