@@ -107,6 +107,7 @@ from .rhs1_sparse_rescue_policy import (
     rhs1_sparse_kind_use,
 )
 from . import rhs1_xblock_policy as _rhs1_xblock_policy
+from . import rhs1_xblock_sparse_host_policy as _rhs1_xblock_sparse_host_policy
 from .rhs1_xblock_policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
 )
@@ -151,6 +152,7 @@ from .rhs1_stage2_policy import (
     rhs1_stage2_trigger,
 )
 from .solver_selection_policy import SolverCandidateMetrics
+from . import solver_path_policy as _solver_path_policy
 from .rhs1_host_policy import (
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
     host_sparse_factor_dtype as _host_sparse_factor_dtype_impl,
@@ -376,45 +378,20 @@ def _rhs1_dkes_gmres_budget(
     restart_cap_env: str,
 ) -> tuple[int, int | None, bool, bool]:
     """Apply PAS/FP DKES GMRES defaults without overriding explicit budgets."""
-    restart_use = max(1, int(restart))
-    maxiter_use = None if maxiter is None else max(1, int(maxiter))
-    restart_defaulted = False
-    maxiter_defaulted = False
-
-    if not bool(restart_forced):
-        restart_use = max(int(restart_use), 80)
-        try:
-            restart_cap = int(str(restart_cap_env).strip()) if str(restart_cap_env).strip() else 100
-        except ValueError:
-            restart_cap = 100
-        if restart_cap > 0:
-            restart_use = min(int(restart_use), int(restart_cap))
-        restart_defaulted = True
-
-    if not bool(maxiter_forced):
-        if maxiter_use is None:
-            maxiter_use = 600
-        else:
-            maxiter_use = max(int(maxiter_use), 600)
-        maxiter_defaulted = True
-
-    return int(restart_use), maxiter_use, bool(restart_defaulted), bool(maxiter_defaulted)
+    return _solver_path_policy.rhs1_dkes_gmres_budget(
+        restart=restart,
+        maxiter=maxiter,
+        restart_forced=restart_forced,
+        maxiter_forced=maxiter_forced,
+        restart_cap_env=restart_cap_env,
+    )
 
 
 def _use_solver_jit(size_hint: int | None = None) -> bool:
-    env = os.environ.get("SFINCS_JAX_SOLVER_JIT", "").strip().lower()
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if size_hint is None:
-        size_hint = _PRECOND_SIZE_HINT or 0
-    thresh_env = os.environ.get("SFINCS_JAX_SOLVER_JIT_MAX_SIZE", "").strip()
-    try:
-        thresh = int(thresh_env) if thresh_env else 100000
-    except ValueError:
-        thresh = 100000
-    return int(size_hint) <= thresh
+    return _solver_path_policy.use_solver_jit(
+        size_hint=size_hint,
+        precond_size_hint=_PRECOND_SIZE_HINT,
+    )
 
 
 def _rhs1_residual_needs_rescue(residual_norm: float, target: float, *, force: bool = False) -> bool:
@@ -426,21 +403,11 @@ def _rhs1_residual_needs_rescue(residual_norm: float, target: float, *, force: b
     relative slack by default, with an env override for audit runs.
     """
 
-    if bool(force):
-        return True
-    residual = float(residual_norm)
-    target_value = float(target)
-    if not np.isfinite(residual):
-        return True
-    if target_value <= 0.0 or not np.isfinite(target_value):
-        return residual > target_value
-    slack_env = os.environ.get("SFINCS_JAX_RHSMODE1_RESCUE_TARGET_SLACK", "").strip()
-    try:
-        slack = float(slack_env) if slack_env else 1.0e-2
-    except ValueError:
-        slack = 1.0e-2
-    slack = max(0.0, float(slack))
-    return residual > target_value * (1.0 + slack)
+    return _solver_path_policy.rhs1_residual_needs_rescue(
+        residual_norm,
+        target,
+        force=force,
+    )
 
 
 def _rhs1_gpu_sparse_fallback_skip_allowed(
@@ -464,19 +431,7 @@ def _rhs1_gpu_sparse_fallback_skip_allowed(
 
 
 def _is_resource_exhausted_error(exc: Exception) -> bool:
-    text = f"{type(exc).__name__}: {exc}"
-    cause = getattr(exc, "__cause__", None)
-    if cause is not None:
-        text += f" | cause={type(cause).__name__}: {cause}"
-    text = text.lower()
-    markers = (
-        "resource_exhausted",
-        "out of memory",
-        "allocator",
-        "memory allocation",
-        "cudaerrormemoryallocation",
-    )
-    return any(marker in text for marker in markers)
+    return _solver_path_policy.is_resource_exhausted_error(exc)
 
 
 _PRECOND_SIZE_HINT: int | None = None
@@ -527,79 +482,39 @@ def _set_precond_policy_hints(
     _PRECOND_ER_ABS_HINT = None if er_abs is None else float(er_abs)
 
 
+def _precond_policy_hints() -> _solver_path_policy.PreconditionerPolicyHints:
+    return _solver_path_policy.PreconditionerPolicyHints(
+        size_hint=_PRECOND_SIZE_HINT,
+        geom_scheme=_PRECOND_GEOM_SCHEME_HINT,
+        use_dkes=_PRECOND_USE_DKES_HINT,
+        rhs1_precond_kind=_PRECOND_RHS1_PRECOND_KIND_HINT,
+        has_pas=_PRECOND_HAS_PAS_HINT,
+        has_fp=_PRECOND_HAS_FP_HINT,
+        include_phi1=_PRECOND_INCLUDE_PHI1_HINT,
+        rhs_mode=_PRECOND_RHS_MODE_HINT,
+        er_abs=_PRECOND_ER_ABS_HINT,
+    )
+
+
 def _auto_pas_geom4_fp32_precond_allowed(*, size_hint: int) -> bool:
-    env = os.environ.get("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if jax.default_backend() != "cpu":
-        return False
-    if _PRECOND_GEOM_SCHEME_HINT != 4:
-        return False
-    if _PRECOND_RHS_MODE_HINT != 1:
-        return False
-    if not bool(_PRECOND_HAS_PAS_HINT) or bool(_PRECOND_HAS_FP_HINT):
-        return False
-    if bool(_PRECOND_INCLUDE_PHI1_HINT) or bool(_PRECOND_USE_DKES_HINT):
-        return False
-    if str(_PRECOND_RHS1_PRECOND_KIND_HINT or "").strip().lower() not in {"schur", "pas_schur"}:
-        return False
-    er_abs = abs(float(_PRECOND_ER_ABS_HINT or 0.0))
-    er_max_env = os.environ.get("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_ER_MAX", "").strip()
-    try:
-        er_max = float(er_max_env) if er_max_env else 1.0e-12
-    except ValueError:
-        er_max = 1.0e-12
-    if er_abs > max(0.0, float(er_max)):
-        return False
-    policy_size = int(_PRECOND_SIZE_HINT or size_hint)
-    min_env = os.environ.get("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_MIN_SIZE", "").strip()
-    try:
-        min_size = int(min_env) if min_env else 15000
-    except ValueError:
-        min_size = 15000
-    return policy_size >= max(1, int(min_size))
+    return _solver_path_policy.auto_pas_geom4_fp32_precond_allowed(
+        size_hint=int(size_hint),
+        hints=_precond_policy_hints(),
+        backend=jax.default_backend(),
+    )
 
 
 def _sparse_structural_tol() -> float:
-    env = os.environ.get("SFINCS_JAX_SPARSE_STRUCTURAL_TOL", "").strip()
-    try:
-        tol = float(env) if env else float(_THRESHOLD_FOR_INCLUSION)
-    except ValueError:
-        tol = float(_THRESHOLD_FOR_INCLUSION)
-    return max(0.0, float(tol))
+    return _solver_path_policy.sparse_structural_tol(default_tol=float(_THRESHOLD_FOR_INCLUSION))
 
 
 def _precond_dtype(size_hint: int | None = None) -> jnp.dtype:
-    env = os.environ.get("SFINCS_JAX_PRECOND_DTYPE", "").strip().lower()
-    if env in {"", "auto", "mixed"}:
-        if size_hint is None:
-            size_hint = _PRECOND_SIZE_HINT or 0
-            if _auto_pas_geom4_fp32_precond_allowed(size_hint=int(size_hint)):
-                return jnp.float32
-            thresh_env = os.environ.get("SFINCS_JAX_PRECOND_FP32_MIN_SIZE", "").strip()
-            # Parity/stability-first: fp32 preconditioner factors can break convergence for
-            # stiff PAS/constraint systems (notably when L=0 PAS diagonals are near-singular).
-            # Keep fp64 factors by default for all reduced-suite sizes; allow fp32 only for
-            # truly enormous systems or when explicitly requested via env vars.
-            thresh_default = 5_000_000
-        else:
-            if _auto_pas_geom4_fp32_precond_allowed(size_hint=int(size_hint)):
-                return jnp.float32
-            thresh_env = os.environ.get("SFINCS_JAX_PRECOND_FP32_MIN_BLOCK", "").strip()
-            # Default parity-first: keep block preconditioner factors in float64 unless
-            # they are truly huge. Using fp32 factors can break convergence in stiff
-            # PAS/DKES systems.
-            thresh_default = 5000000
-        try:
-            thresh = int(thresh_env) if thresh_env else thresh_default
-        except ValueError:
-            thresh = thresh_default
-        return jnp.float32 if size_hint >= thresh else jnp.float64
-    if env in {"float32", "fp32", "f32", "32"}:
-        return jnp.float32
-    if env in {"float64", "fp64", "f64", "64"}:
-        return jnp.float64
-    return jnp.float64
+    dtype_name = _solver_path_policy.precond_dtype_name(
+        size_hint=size_hint,
+        hints=_precond_policy_hints(),
+        backend=jax.default_backend(),
+    )
+    return jnp.float32 if dtype_name == "float32" else jnp.float64
 
 
 def _resolve_use_implicit(*, differentiable: bool | None = None) -> bool:
@@ -999,13 +914,11 @@ def _rhsmode1_sparse_pc_default_permc_spec(
     where ``MMD_AT_PLUS_A`` lowers fill and runtime on both CPU and one-GPU
     validation runs.
     """
-
-    del n_species
-    if bool(tokamak_pas_er_pc):
-        return "MMD_AT_PLUS_A"
-    if bool(constrained_pas_pc):
-        return "MMD_ATA"
-    return "COLAMD"
+    return _solver_path_policy.rhsmode1_sparse_pc_default_permc_spec(
+        constrained_pas_pc=constrained_pas_pc,
+        tokamak_pas_er_pc=tokamak_pas_er_pc,
+        n_species=n_species,
+    )
 
 
 def _rhsmode1_sparse_pc_default_restart(
@@ -1023,13 +936,12 @@ def _rhsmode1_sparse_pc_default_restart(
     sparse-PC rows on their requested restart, and always respect an explicit
     user environment override.
     """
-
-    requested = max(1, int(requested_restart))
-    if str(restart_env_value).strip():
-        return requested
-    if bool(tokamak_pas_er_pc) and int(n_species) == 1:
-        return min(requested, 40)
-    return requested
+    return _solver_path_policy.rhsmode1_sparse_pc_default_restart(
+        requested_restart=requested_restart,
+        restart_env_value=restart_env_value,
+        tokamak_pas_er_pc=tokamak_pas_er_pc,
+        n_species=n_species,
+    )
 
 
 def _maybe_rhsmode1_full_sparse_pattern(op: V3FullSystemOperator, emit: Callable[[int, str], None] | None = None):
@@ -1273,9 +1185,10 @@ def _rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
 ) -> bool:
     """Return whether x-block host assembly preserves the requested species coupling."""
 
-    if int(preconditioner_species) != 0:
-        return True
-    return int(getattr(op, "n_species", 0) or 0) == 1
+    return _rhs1_xblock_sparse_host_policy.rhs1_fp_xblock_species_decoupled_for_host_assembly(
+        n_species=int(getattr(op, "n_species", 0) or 0),
+        preconditioner_species=int(preconditioner_species),
+    )
 
 
 def _rhsmode1_large_cpu_xblock_skip_primary_allowed(
@@ -9299,13 +9212,11 @@ def _build_rhsmode1_xblock_tz_lmax_preconditioner(
 def _rhsmode1_xblock_sparse_lu_default_max(op: object, *, build_jax_factors: bool) -> int:
     """Default exact-LU cap for RHSMode=1 x-block sparse preconditioners."""
     fblock = getattr(op, "fblock", None)
-    if (
-        (not bool(build_jax_factors))
-        and getattr(fblock, "fp", None) is not None
-        and getattr(fblock, "pas", None) is None
-    ):
-        return 3000
-    return 2000
+    return _rhs1_xblock_sparse_host_policy.rhs1_xblock_sparse_lu_default_max(
+        has_fp=getattr(fblock, "fp", None) is not None,
+        has_pas=getattr(fblock, "pas", None) is not None,
+        build_jax_factors=bool(build_jax_factors),
+    )
 
 
 def _build_rhsmode1_xblock_tz_sparse_preconditioner(
@@ -20529,6 +20440,10 @@ class V3TransportMatrixSolveResult:
     elapsed_time_s: jnp.ndarray  # (N,)
     transport_output_fields: dict[str, np.ndarray] | None = None
     rhs_norms_by_rhs: dict[int, jnp.ndarray] | None = None
+    active_size: int | None = None
+    use_active_dof_mode: bool | None = None
+    solver_kinds_by_rhs: dict[int, str] | None = None
+    solve_methods_by_rhs: dict[int, str] | None = None
 
 
 def _rewrite_xla_flags(flags: str, *, cpu_threads: int | None, host_devices: int | None) -> str:
@@ -21839,6 +21754,8 @@ def solve_v3_transport_matrix_linear_gmres(
 
     state_vectors: dict[int, jnp.ndarray] = {}
     residual_norms: dict[int, jnp.ndarray] = {}
+    solver_kinds_by_rhs: dict[int, str] = {}
+    solve_methods_by_rhs: dict[int, str] = {}
     elapsed_s = np.zeros((n,), dtype=np.float64)
     elapsed_history_transport: list[float] = []
     op_rhs_by_index = [with_transport_rhs_settings(op0, which_rhs=which_rhs) for which_rhs in which_rhs_values]
@@ -22420,6 +22337,8 @@ def solve_v3_transport_matrix_linear_gmres(
                 if stream_diagnostics:
                     _collect_transport_outputs(int(which_rhs), x_col)
                 residual_norms[which_rhs] = res_norms[idx]
+                solver_kinds_by_rhs[which_rhs] = "dense"
+                solve_methods_by_rhs[which_rhs] = "dense"
                 elapsed_s[int(which_rhs) - 1] = float(t_dense.elapsed_s() / float(n))
                 if emit is not None:
                     rhs_norm_val = float(rhs_norms[int(which_rhs)])
@@ -22471,6 +22390,8 @@ def solve_v3_transport_matrix_linear_gmres(
             if stream_diagnostics:
                 _collect_transport_outputs(int(which_rhs), x_col)
             residual_norms[which_rhs] = res_norms[idx]
+            solver_kinds_by_rhs[which_rhs] = "dense"
+            solve_methods_by_rhs[which_rhs] = "dense"
             elapsed_s[int(which_rhs) - 1] = float(t_dense.elapsed_s() / float(n))
             if emit is not None:
                 rhs_norm_val = float(rhs_norms[int(which_rhs)])
@@ -22928,6 +22849,8 @@ def solve_v3_transport_matrix_linear_gmres(
                 if store_state_vectors:
                     state_vectors[which_rhs] = x_full
                 residual_norms[which_rhs] = res_norm_full
+                solver_kinds_by_rhs[which_rhs] = str(solver_kind_used)
+                solve_methods_by_rhs[which_rhs] = str(solve_method_used)
                 if stream_diagnostics:
                     _collect_transport_outputs(int(which_rhs), x_full)
                 if recycle_k > 0:
@@ -23323,6 +23246,8 @@ def solve_v3_transport_matrix_linear_gmres(
                     ax_full = apply_v3_full_system_operator_cached(op_matvec, x_full)
                     residual_vec = ax_full - rhs
                     residual_norms[which_rhs] = jnp.linalg.norm(residual_vec)
+                solver_kinds_by_rhs[which_rhs] = str(solver_kind_used)
+                solve_methods_by_rhs[which_rhs] = str(solve_method_used)
                 if stream_diagnostics:
                     _collect_transport_outputs(int(which_rhs), x_full)
                 if recycle_k > 0:
@@ -23592,4 +23517,8 @@ def solve_v3_transport_matrix_linear_gmres(
         elapsed_time_s=jnp.asarray(elapsed_s, dtype=jnp.float64),
         transport_output_fields=transport_output_fields,
         rhs_norms_by_rhs=rhs_norms,
+        active_size=int(active_size),
+        use_active_dof_mode=bool(use_active_dof_mode),
+        solver_kinds_by_rhs=solver_kinds_by_rhs,
+        solve_methods_by_rhs=solve_methods_by_rhs,
     )

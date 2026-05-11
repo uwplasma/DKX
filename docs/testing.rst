@@ -261,8 +261,8 @@ tree moved to ``596 tests collected`` and ``596 passed``, package coverage staye
 at about ``55%``, and ``v3_driver.py`` itself moved from about ``37%`` to about
 ``38%``.
 
-The current refactor branch extends that strategy in two directions. First, it splits
-RHSMode=1 preconditioner policy into directly tested helper modules, covering alias
+The large refactor closure gate extends that strategy in two directions. First, it
+splits RHSMode=1 preconditioner policy into directly tested helper modules, covering alias
 canonicalization, PAS weak-default promotion, PAS-family refinement, FP/DKES routing,
 GPU sparse fallback skipping, and sharded-line override safety without constructing
 large operators. Second, it adds an explicit PAS physics gate: the pitch-angle
@@ -379,6 +379,16 @@ Those tests keep the PAS smoother activation threshold and
 ``SFINCS_JAX_IMPLICIT_SOLVE`` / differentiability precedence rules explicit while
 the driver wrappers remain stable for compatibility tests.
 
+The solver-path refactor continues this policy-first testing style in
+``sfincs_jax/solver_path_policy.py`` and ``tests/test_solver_path_policy.py``.
+The direct tests cover JIT eligibility, preconditioner dtype selection, the narrow
+automatic FP32 PAS geometry-4 preconditioner gate, residual-rescue slack,
+DKES GMRES budget preservation for explicit user budgets, sparse-PC default
+permutation/restart choices, sparse structural tolerance parsing, and
+resource-exhaustion error classification. These tests do not prove convergence of
+new large cases; they keep solver-path decisions reproducible and inspectable so a
+future performance promotion is not hidden inside driver control flow.
+
 The output/helper layer is kept under small, direct tests rather than only
 end-to-end HDF5 comparisons. ``tests/test_io_export_and_h5_coverage.py`` covers
 Fortran-layout HDF5 round trips, export-``f`` identity, nearest-neighbor, periodic
@@ -461,6 +471,11 @@ unit/regression suite:
 - :doc:`validation_matrix` is the corresponding human-facing documentation page.
 - ``tests/test_validation_manifest_schema.py`` enforces that every lane has explicit
   source-code anchors, protecting tests, and acceptance gates.
+- ``scripts/check_release_gates.py`` and ``tests/test_release_gate_metadata.py`` add a
+  CI-fast release gate over the manifest's ``release_gate`` metadata. Each lane must be
+  ``release_ready``, ``regression_scaffold``, ``bounded_proxy``, or
+  ``closed_deferred``; none may block the current release without being explicitly
+  closed or removed from the release manifest.
 
 The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep family:
 
@@ -529,6 +544,45 @@ top-level metadata that records the case, fast/full-resolution mode, scan ladder
 source input, and collision-operator labeling. That keeps future release reruns aligned
 with the manifest's provenance and acceptance-gate expectations instead of relying on
 plots alone.
+
+Mapped x-grid and QI integration smoke gates
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The mapped speed-grid work is intentionally split between cheap primitive tests and
+bounded solve-facing evidence. The primitive and objective tests are:
+
+- ``tests/test_adaptive_maps.py``
+- ``tests/test_mapped_xgrid_objectives.py``
+- ``tests/test_mapped_xgrid_v3.py``
+- ``tests/test_mapped_xgrid_transport_evidence.py``
+- ``tests/test_run_mapped_xgrid_transport_evidence.py``
+
+The checked reviewer artifacts are bounded PAS RHSMode=2 comparisons, not default
+production claims:
+
+- ``docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.json``
+- ``docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.csv``
+- ``docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json``
+- ``docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.csv``
+
+The reduced PAS tokamak artifact compares mapped ``Nx=7`` candidates against an
+``Nx=13`` reference with active-DOF reduction. It is useful evidence that the
+mapped-grid machinery can run through a real transport-matrix solve, but it is not
+evidence for full-FP compatibility, a default-grid replacement, or a
+production-resolution speedup.
+
+The QI seed-robustness runner is guarded by
+``tests/test_run_qi_seed_robustness.py``. It materializes deterministic
+neighboring cases, localizes the VMEC equilibrium beside each generated
+``input.namelist``, perturbs ``nu_n`` and ``Er`` by seed, and can optionally run
+``sfincs_jax write-output`` while recording stdout, stderr, and solver-trace paths.
+The current checked smoke summary in
+``docs/_static/qi_seed_robustness_smoke.json`` records one low-resolution seed on
+the default CLI path: ``passed=1``, ``failed=0``, selected solver method
+``dense``, and residual ratio below ``1``. Treat this as bounded runner and
+solver-policy evidence, not as a production-resolution multi-seed robustness
+claim. Promote QI robustness only after a wider seed ladder is checked with
+solver traces and release-manifest gates.
 
 The high-collisionality Simakov-Helander lane now has a bounded normalization audit:
 

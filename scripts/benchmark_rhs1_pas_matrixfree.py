@@ -126,6 +126,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="PAS-TZ fallback variants for the opt-in real-solve layer.",
     )
     parser.add_argument(
+        "--production-solve-targets",
+        nargs="+",
+        default=list(PRODUCTION_FLOOR_TARGETS),
+        help=(
+            "Ready production-floor targets to consider for the opt-in real-solve layer. "
+            "Accepted case-insensitive names: geometry4, hsx, geometry11."
+        ),
+    )
+    parser.add_argument(
+        "--production-solve-total-timeout-s",
+        type=_positive_float,
+        default=MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S,
+        help="Total parent wall-time budget for all opt-in real-solve targets.",
+    )
+    parser.add_argument(
         "--production-solve-max-rss-mb",
         type=_nonnegative_float,
         default=DEFAULT_PRODUCTION_SOLVE_MAX_RSS_MB,
@@ -403,7 +418,50 @@ def _production_solve_wall_timeout_s(args: argparse.Namespace) -> float:
     return min(MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S, planned)
 
 
+def _production_solve_total_timeout_s(args: argparse.Namespace) -> float:
+    total_timeout_s = float(args.production_solve_total_timeout_s)
+    if bool(args.allow_long_production_solve):
+        return total_timeout_s
+    return min(MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S, total_timeout_s)
+
+
+def _normalize_production_solve_target(raw_target: Any) -> str | None:
+    target = str(raw_target).strip().lower().replace("-", "_")
+    aliases = {
+        "geom4": "geometry4",
+        "geometry4": "geometry4",
+        "geometry_scheme4": "geometry4",
+        "geometryscheme4": "geometry4",
+        "hsx": "hsx",
+        "geom11": "geometry11",
+        "geometry11": "geometry11",
+        "geometry_scheme11": "geometry11",
+        "geometryscheme11": "geometry11",
+    }
+    return aliases.get(target)
+
+
+def _requested_production_solve_targets(args: argparse.Namespace) -> list[str]:
+    requested: list[str] = []
+    seen: set[str] = set()
+    invalid: list[str] = []
+    for raw_target in getattr(args, "production_solve_targets", PRODUCTION_FLOOR_TARGETS):
+        target = _normalize_production_solve_target(raw_target)
+        if target is None:
+            invalid.append(str(raw_target))
+            continue
+        if target in seen:
+            continue
+        requested.append(target)
+        seen.add(target)
+    if invalid:
+        valid = ", ".join(PRODUCTION_FLOOR_TARGETS)
+        raise ValueError(f"unknown production solve target(s): {', '.join(invalid)}; expected one of {valid}")
+    return requested or list(PRODUCTION_FLOOR_TARGETS)
+
+
 def _validate_production_solve_bounds(args: argparse.Namespace) -> None:
+    _requested_production_solve_targets(args)
     if bool(args.allow_long_production_solve):
         return
     timeout_s = float(args.production_solve_timeout_s)
@@ -411,6 +469,12 @@ def _validate_production_solve_bounds(args: argparse.Namespace) -> None:
         raise ValueError(
             "default production real-solve probes are capped at 600s; "
             "pass --allow-long-production-solve for explicit longer probes"
+        )
+    total_timeout_s = float(args.production_solve_total_timeout_s)
+    if total_timeout_s > MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S:
+        raise ValueError(
+            "default production real-solve probe batches are capped at 600s total; "
+            "pass --allow-long-production-solve for explicit longer batches"
         )
 
 
@@ -426,6 +490,11 @@ def build_bounded_real_solve_probe(
         for target in PRODUCTION_FLOOR_TARGETS
     }
     targets: dict[str, Any] = {}
+    requested_targets = _requested_production_solve_targets(args)
+    per_target_timeout_s = _production_solve_wall_timeout_s(args)
+    total_timeout_s = _production_solve_total_timeout_s(args)
+    planned_wall_timeout_s = 0.0
+    selected_targets: list[str] = []
     for target in PRODUCTION_FLOOR_TARGETS:
         preflight_target = dict(preflight.get("targets", {}).get(target, {}))
         metadata_cases = target_cases[target]
@@ -471,12 +540,29 @@ def build_bounded_real_solve_probe(
             ]
             if bool(args.allow_long_production_solve):
                 command.append("--allow-long-run")
+        requested = target in requested_targets
+        budget_fit = planned_wall_timeout_s + per_target_timeout_s <= total_timeout_s
+        selected_by_budget = bool(ready and requested and budget_fit)
+        if selected_by_budget:
+            planned_wall_timeout_s += per_target_timeout_s
+            selected_targets.append(target)
+        if not ready:
+            skip_reason = preflight_target.get("next_solve_recommendation", "preflight-not-ready")
+        elif not requested:
+            skip_reason = "not-requested"
+        elif not budget_fit:
+            skip_reason = "production-solve-total-timeout-budget-exhausted"
+        else:
+            skip_reason = None
         targets[target] = {
             "ready": ready,
-            "will_run": bool(args.run_production_solve_probe and (not args.dry_run) and ready),
-            "skip_reason": None
-            if ready
-            else preflight_target.get("next_solve_recommendation", "preflight-not-ready"),
+            "requested": requested,
+            "budget_fit": budget_fit,
+            "planned_parent_timeout_s": per_target_timeout_s,
+            "total_wall_timeout_budget_s": total_timeout_s,
+            "selected_by_budget": selected_by_budget,
+            "will_run": bool(args.run_production_solve_probe and (not args.dry_run) and selected_by_budget),
+            "skip_reason": skip_reason,
             "input": str(_metadata_input_path(metadata)) if metadata else None,
             "out": str(out_path),
             "command": command,
@@ -488,7 +574,18 @@ def build_bounded_real_solve_probe(
         "dry_run": bool(args.dry_run),
         "max_default_runtime_s": MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S,
         "timeout_s": float(args.production_solve_timeout_s),
-        "parent_wall_timeout_s": _production_solve_wall_timeout_s(args),
+        "parent_wall_timeout_s": per_target_timeout_s,
+        "total_wall_timeout_budget_s": total_timeout_s,
+        "planned_wall_timeout_s": planned_wall_timeout_s,
+        "selected_targets": selected_targets,
+        "requested_targets": requested_targets,
+        "selection_policy": "ready requested targets in production-floor order until the total wall-time budget is exhausted",
+        "safety_policy": {
+            "requires_explicit_run_flag": True,
+            "dry_run_launches_subprocesses": False,
+            "default_batch_cap_s": MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S,
+            "invalid_targets_fail_closed": True,
+        },
         "allow_long_run": bool(args.allow_long_production_solve),
         "variants": list(args.production_solve_variants),
         "grid_overrides": dict(DEFAULT_PRODUCTION_SOLVE_GRID),
@@ -627,6 +724,66 @@ def _read_artifact_probe(path: Path) -> dict[str, Any]:
     )
     max_rss_values = [_json_float(row.get("max_rss_mb")) for row in ok_results]
     elapsed_values = [_json_float(row.get("elapsed_s")) for row in ok_results]
+    best_residual_norm = min(finite_residual_norms) if finite_residual_norms else None
+    max_rss_mb_peak = max((value for value in max_rss_values if value is not None), default=None)
+    elapsed_s_max = max((value for value in elapsed_values if value is not None), default=None)
+    summary = payload.get("summary", {})
+    if not isinstance(summary, dict):
+        summary = {}
+    artifact_gates = {
+        "guarded_pas_tz": _gate(
+            "pass" if guarded_pas_tz_seen else "fail",
+            "guarded PAS-TZ evidence recorded" if guarded_pas_tz_seen else "missing guarded PAS-TZ evidence",
+        ),
+        "residual": _gate(
+            "pass"
+            if best_residual_norm is not None
+            and best_residual_norm <= DEFAULT_PRODUCTION_SOLVE_MAX_RESIDUAL_NORM
+            else "fail",
+            "residual-clean"
+            if best_residual_norm is not None
+            and best_residual_norm <= DEFAULT_PRODUCTION_SOLVE_MAX_RESIDUAL_NORM
+            else "missing-or-high-residual",
+            best_residual_norm=best_residual_norm,
+            max_residual_norm=DEFAULT_PRODUCTION_SOLVE_MAX_RESIDUAL_NORM,
+        ),
+        "runtime": _gate(
+            "pass"
+            if elapsed_s_max is not None
+            and elapsed_s_max <= DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S
+            else "fail",
+            "runtime-within-short-probe-bound"
+            if elapsed_s_max is not None
+            and elapsed_s_max <= DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S
+            else "missing-or-slow-runtime",
+            elapsed_s_max=elapsed_s_max,
+            limit_s=DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S,
+        ),
+        "memory": _gate(
+            "pass"
+            if max_rss_mb_peak is not None
+            and max_rss_mb_peak <= DEFAULT_PRODUCTION_SOLVE_MAX_RSS_MB
+            else "fail",
+            "rss-within-short-probe-bound"
+            if max_rss_mb_peak is not None
+            and max_rss_mb_peak <= DEFAULT_PRODUCTION_SOLVE_MAX_RSS_MB
+            else "missing-or-high-rss",
+            max_rss_mb_peak=max_rss_mb_peak,
+            limit_mb=DEFAULT_PRODUCTION_SOLVE_MAX_RSS_MB,
+        ),
+        "row_gates": _gate(
+            "pass"
+            if summary.get("all_gates_passed") is True or "all_gates_passed" not in summary
+            else "fail",
+            "artifact row gates passed"
+            if summary.get("all_gates_passed") is True
+            else "legacy artifact without row-gate summary"
+            if "all_gates_passed" not in summary
+            else "artifact row gates failed",
+            all_gates_passed=summary.get("all_gates_passed"),
+        ),
+    }
+    artifact_gates_passed = all(gate["status"] == "pass" for gate in artifact_gates.values())
     record.update(
         {
             "status": "ok",
@@ -637,13 +794,15 @@ def _read_artifact_probe(path: Path) -> dict[str, Any]:
             "result_count": len(results),
             "ok_result_count": len(ok_results),
             "finite_residual_count": len(finite_residual_norms),
-            "best_residual_norm": min(finite_residual_norms) if finite_residual_norms else None,
-            "max_rss_mb_peak": max((value for value in max_rss_values if value is not None), default=None),
-            "elapsed_s_max": max((value for value in elapsed_values if value is not None), default=None),
+            "best_residual_norm": best_residual_norm,
+            "max_rss_mb_peak": max_rss_mb_peak,
+            "elapsed_s_max": elapsed_s_max,
             "guarded_pas_tz_seen": guarded_pas_tz_seen,
             "total_size_max": total_size_max,
             "pas_constraint_size_max": pas_constraint_size_max,
-            "ready_evidence": bool(ok_results and finite_residual_norms and guarded_pas_tz_seen),
+            "artifact_gates": artifact_gates,
+            "artifact_gates_passed": artifact_gates_passed,
+            "ready_evidence": bool(ok_results and artifact_gates_passed),
         }
     )
     return _json_safe_metadata(record)
@@ -715,9 +874,9 @@ def build_production_floor_preflight(
             ),
             "checked_artifact_evidence": _gate(
                 "pass" if artifact_ready else "fail",
-                "checked-in PAS benchmark artifact has ok finite guarded PAS-TZ evidence"
+                "checked-in PAS benchmark artifact has guarded residual/runtime/memory evidence"
                 if artifact_ready
-                else "no checked-in artifact with ok finite guarded PAS-TZ evidence",
+                else "no checked-in artifact with guarded residual/runtime/memory evidence",
                 artifact_paths=[artifact.get("path") for artifact in target_artifacts],
                 ready_artifact_paths=[artifact.get("path") for artifact in artifact_ready],
             ),
@@ -1042,6 +1201,8 @@ def run_bounded_real_solve_probe(
     """Run ready opt-in production-floor real-solve probes as bounded subprocesses."""
     results: list[dict[str, Any]] = []
     wall_timeout_s = float(probe_plan["parent_wall_timeout_s"])
+    batch_timeout_s = float(probe_plan.get("total_wall_timeout_budget_s", wall_timeout_s))
+    batch_deadline = time.perf_counter() + batch_timeout_s
     targets = probe_plan.get("targets", {})
     if not isinstance(targets, dict):
         return results
@@ -1052,13 +1213,26 @@ def run_bounded_real_solve_probe(
         if not isinstance(command, list) or not command:
             results.append({"target": str(target), "status": "error", "reason": "missing-command"})
             continue
+        remaining_batch_s = batch_deadline - time.perf_counter()
+        if remaining_batch_s <= 0.0:
+            results.append(
+                {
+                    "target": str(target),
+                    "status": "skipped",
+                    "reason": "production-solve-total-timeout-budget-exhausted",
+                    "timeout_s": 0.0,
+                    "out": record.get("out"),
+                }
+            )
+            continue
+        target_timeout_s = min(wall_timeout_s, remaining_batch_s)
         t0 = time.perf_counter()
         try:
             completed = subprocess.run(
                 [str(item) for item in command],
                 text=True,
                 capture_output=True,
-                timeout=wall_timeout_s,
+                timeout=target_timeout_s,
             )
         except subprocess.TimeoutExpired as exc:
             results.append(
@@ -1066,7 +1240,8 @@ def run_bounded_real_solve_probe(
                     "target": str(target),
                     "status": "timeout",
                     "elapsed_s": float(time.perf_counter() - t0),
-                    "timeout_s": wall_timeout_s,
+                    "timeout_s": target_timeout_s,
+                    "batch_timeout_s": batch_timeout_s,
                     "out": record.get("out"),
                     "stdout_tail": _tail_text(exc.stdout),
                     "stderr_tail": _tail_text(exc.stderr),
@@ -1081,7 +1256,8 @@ def run_bounded_real_solve_probe(
                 "status": "ok" if completed.returncode == 0 else "error",
                 "returncode": int(completed.returncode),
                 "elapsed_s": float(time.perf_counter() - t0),
-                "timeout_s": wall_timeout_s,
+                "timeout_s": target_timeout_s,
+                "batch_timeout_s": batch_timeout_s,
                 "out": str(out_path),
                 "summary": summary,
                 "all_gates_passed": bool(summary and summary.get("all_gates_passed") is True),

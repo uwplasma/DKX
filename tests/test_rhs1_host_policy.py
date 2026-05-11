@@ -244,9 +244,16 @@ def test_rhs1_fp_3d_sparse_pc_auto_targets_measured_cpu_fp_window(monkeypatch) -
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX", raising=False)
 
-    assert rhs1_fp_3d_sparse_pc_auto_allowed(
+    assert not rhs1_fp_3d_sparse_pc_auto_allowed(
         op=_op(has_fp=True, constraint_scheme=1),
         active_size=404,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1),
+        active_size=6516,
         use_implicit=False,
         solve_method_kind="auto",
         backend="cpu",

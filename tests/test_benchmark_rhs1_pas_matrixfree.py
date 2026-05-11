@@ -56,7 +56,14 @@ def _write_input(
     return input_path
 
 
-def _write_artifact(path: Path, *, target_input: str, residual_norm: object = 1.0e-4) -> Path:
+def _write_artifact(
+    path: Path,
+    *,
+    target_input: str,
+    residual_norm: object = 1.0e-4,
+    elapsed_s: float = 4.5,
+    max_rss_mb: float = 123.0,
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
@@ -69,8 +76,8 @@ def _write_artifact(path: Path, *, target_input: str, residual_norm: object = 1.
                         "status": "ok",
                         "variant": "tzfft_lgmres",
                         "residual_norm": residual_norm,
-                        "max_rss_mb": 123.0,
-                        "elapsed_s": 4.5,
+                        "max_rss_mb": max_rss_mb,
+                        "elapsed_s": elapsed_s,
                         "messages_tail": [
                             "solve_v3_full_system_linear_gmres: total_size=1024",
                             "solve_v3_full_system_linear_gmres: PAS constraint projection enabled (size=512/1024)",
@@ -119,7 +126,9 @@ def test_dry_run_writes_json_schema_without_subprocess(
     assert payload["plan"]["production_floor_preflight"]["all_required_targets_ready"] is False
     assert payload["plan"]["bounded_real_solve_probe"]["run_requested"] is False
     assert payload["plan"]["bounded_real_solve_probe"]["parent_wall_timeout_s"] <= 600.0
+    assert payload["plan"]["bounded_real_solve_probe"]["total_wall_timeout_budget_s"] <= 600.0
     assert payload["plan"]["bounded_real_solve_probe"]["gates"]["max_rss_mb"] == 4096.0
+    assert payload["plan"]["bounded_real_solve_probe"]["safety_policy"]["invalid_targets_fail_closed"] is True
     assert set(payload["plan"]["gates"]) == {"keep", "reject"}
     assert payload["plan"]["cases"][0]["case_id"] == "diagonal_keep"
     assert payload["plan"]["cases"][0]["source_type"] == "synthetic"
@@ -313,6 +322,9 @@ def test_production_floor_preflight_ready_from_metadata_and_checked_in_artifacts
     assert set(real_solve["targets"]) == {"geometry4", "hsx", "geometry11"}
     assert all(target["ready"] is True for target in real_solve["targets"].values())
     assert all(target["will_run"] is False for target in real_solve["targets"].values())
+    assert real_solve["selected_targets"] == ["geometry4"]
+    assert real_solve["targets"]["geometry4"]["selected_by_budget"] is True
+    assert real_solve["targets"]["hsx"]["skip_reason"] == "production-solve-total-timeout-budget-exhausted"
     assert real_solve["targets"]["geometry4"]["command"][1].endswith(
         "scripts/benchmark_pas_tz_memory_fallback.py"
     )
@@ -350,6 +362,38 @@ def test_production_floor_preflight_fails_non_pas_metadata(tmp_path: Path) -> No
     assert geom4_preflight["gates"]["pas_collision_operator"]["status"] == "fail"
     assert geom4_preflight["gates"]["checked_artifact_evidence"]["status"] == "pass"
     assert plan["production_floor_preflight"]["targets"]["hsx"]["gates"]["metadata_present"]["status"] == "fail"
+
+
+def test_production_floor_preflight_requires_residual_runtime_memory_artifact_gates(
+    tmp_path: Path,
+) -> None:
+    geom4 = _write_input(tmp_path, geometry_scheme=4, case_name="geometryScheme4_2species_PAS_noEr")
+    artifact = _write_artifact(
+        tmp_path / "artifacts" / "geometry4_high_residual.json",
+        target_input=str(geom4),
+        residual_norm=2.0e-2,
+    )
+    args = _parse_args(
+        [
+            "--dry-run",
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+            str(geom4),
+            "--artifact-inputs",
+            str(artifact),
+        ]
+    )
+
+    plan = build_plan(args)
+
+    artifact_record = plan["artifact_probe"]["artifacts"][0]
+    assert artifact_record["artifact_gates"]["residual"]["status"] == "fail"
+    assert artifact_record["artifact_gates_passed"] is False
+    assert artifact_record["ready_evidence"] is False
+    geom4_preflight = plan["production_floor_preflight"]["targets"]["geometry4"]
+    assert geom4_preflight["ready"] is False
+    assert geom4_preflight["gates"]["checked_artifact_evidence"]["status"] == "fail"
 
 
 def test_artifact_probe_is_json_safe_for_nonfinite_residual(tmp_path: Path) -> None:
@@ -403,6 +447,8 @@ def test_opt_in_production_real_solve_probe_runs_ready_targets_with_parent_bound
             str(geom11),
             "--artifact-inputs",
             *(str(path) for path in artifacts),
+            "--production-solve-timeout-s",
+            "30",
         ]
     )
     plan = build_plan(args)
@@ -427,6 +473,118 @@ def test_opt_in_production_real_solve_probe_runs_ready_targets_with_parent_bound
     assert all("--timeout-s" in cmd for cmd, _ in captured)
     assert captured[0][0][captured[0][0].index("--maxiter") + 1] == "20"
     assert captured[0][0][captured[0][0].index("--restart") + 1] == "20"
+
+
+def test_opt_in_production_real_solve_probe_caps_selected_targets_to_total_budget(
+    tmp_path: Path,
+) -> None:
+    geom4 = _write_input(tmp_path, geometry_scheme=4, case_name="geometryScheme4_2species_PAS_noEr")
+    hsx = _write_input(
+        tmp_path,
+        geometry_scheme=11,
+        case_name="HSX_PASCollisions_DKESTrajectories",
+        equilibrium_file="hsx3free.bc",
+    )
+    artifacts = [
+        _write_artifact(tmp_path / "artifacts" / "geometry4.json", target_input=str(geom4)),
+        _write_artifact(tmp_path / "artifacts" / "hsx.json", target_input=str(hsx)),
+    ]
+    args = _parse_args(
+        [
+            "--run-production-solve-probe",
+            "--out",
+            str(tmp_path / "probe.json"),
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+            str(geom4),
+            str(hsx),
+            "--artifact-inputs",
+            *(str(path) for path in artifacts),
+        ]
+    )
+
+    plan = build_plan(args)
+    real_solve = plan["bounded_real_solve_probe"]
+
+    assert real_solve["parent_wall_timeout_s"] == 510.0
+    assert real_solve["total_wall_timeout_budget_s"] == 600.0
+    assert real_solve["planned_wall_timeout_s"] == 510.0
+    assert real_solve["selected_targets"] == ["geometry4"]
+    assert real_solve["targets"]["geometry4"]["will_run"] is True
+    assert real_solve["targets"]["hsx"]["will_run"] is False
+    assert real_solve["targets"]["hsx"]["skip_reason"] == "production-solve-total-timeout-budget-exhausted"
+
+
+def test_opt_in_production_real_solve_probe_selects_requested_target_aliases(
+    tmp_path: Path,
+) -> None:
+    geom4 = _write_input(tmp_path, geometry_scheme=4, case_name="geometryScheme4_2species_PAS_noEr")
+    hsx = _write_input(
+        tmp_path,
+        geometry_scheme=11,
+        case_name="HSX_PASCollisions_DKESTrajectories",
+        equilibrium_file="hsx3free.bc",
+    )
+    geom11 = _write_input(
+        tmp_path,
+        geometry_scheme=11,
+        case_name="sfincsPaperFigure3_geometryScheme11_PASCollisions",
+        equilibrium_file="w7x-sc1.bc",
+    )
+    artifacts = [
+        _write_artifact(tmp_path / "artifacts" / "geometry4.json", target_input=str(geom4)),
+        _write_artifact(tmp_path / "artifacts" / "hsx.json", target_input=str(hsx)),
+        _write_artifact(tmp_path / "artifacts" / "geom11.json", target_input=str(geom11)),
+    ]
+
+    for requested, selected in (("geometry4", "geometry4"), ("HSX", "hsx"), ("geom11", "geometry11")):
+        args = _parse_args(
+            [
+                "--run-production-solve-probe",
+                "--out",
+                str(tmp_path / f"{selected}.json"),
+                "--systems",
+                "diagonal_keep",
+                "--metadata-inputs",
+                str(geom4),
+                str(hsx),
+                str(geom11),
+                "--artifact-inputs",
+                *(str(path) for path in artifacts),
+                "--production-solve-targets",
+                requested,
+            ]
+        )
+
+        plan = build_plan(args)
+        real_solve = plan["bounded_real_solve_probe"]
+
+        assert real_solve["requested_targets"] == [selected]
+        assert real_solve["selected_targets"] == [selected]
+        assert real_solve["planned_wall_timeout_s"] <= 600.0
+        assert real_solve["targets"][selected]["will_run"] is True
+        assert all(
+            record["will_run"] is (target == selected)
+            for target, record in real_solve["targets"].items()
+        )
+        assert all(
+            record["skip_reason"] in {None, "not-requested"}
+            for record in real_solve["targets"].values()
+        )
+
+
+def test_production_real_solve_probe_rejects_unknown_target_without_fallback(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "probe.json"
+
+    try:
+        main(["--dry-run", "--out", str(out), "--production-solve-targets", "hxs"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected parser failure for unknown production solve target")
 
 
 def test_production_real_solve_probe_rejects_long_timeout_without_opt_in(tmp_path: Path) -> None:

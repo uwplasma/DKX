@@ -1,0 +1,241 @@
+{
+  "best_by_moment": {
+    "active_fraction": 0.6743886743886743,
+    "active_size": 524,
+    "jac_roughness": 15.116678089167381,
+    "log_length": 0.0,
+    "matrix_max_abs_error": 4.67919366551066,
+    "matrix_relative_frobenius_error": 0.10656835632299136,
+    "max_relative_residual_norm": 2.305062405971944e-13,
+    "max_residual_norm": 9.557692697922994e-15,
+    "min_dx": 0.12230409676025972,
+    "moment_loss": 0.008677023500930917,
+    "moment_objective": 0.008677023500930917,
+    "n_x": 7,
+    "regularization_loss": 0.0,
+    "smoothness": 0.770578058197132,
+    "solve_methods": [
+      "dense"
+    ],
+    "solver_kinds": [
+      "dense"
+    ],
+    "tail_mass_proxy": 0.0,
+    "total_elapsed_time_s": 0.33096030595091486,
+    "total_size": 777,
+    "use_active_dof_mode": true,
+    "width_ratio": 258.04131115437633
+  },
+  "best_by_moment_log_length": 0.0,
+  "best_by_transport_error": {
+    "active_fraction": 0.7168597168597168,
+    "active_size": 557,
+    "jac_roughness": 15.11667808916738,
+    "log_length": 0.5,
+    "matrix_max_abs_error": 2.435482537280663,
+    "matrix_relative_frobenius_error": 0.05547580228546948,
+    "max_relative_residual_norm": 1.0064074846169359e-13,
+    "max_residual_norm": 1.4430589562365452e-14,
+    "min_dx": 0.20164536582240683,
+    "moment_loss": 0.013406278188822876,
+    "moment_objective": 0.013406278188822876,
+    "n_x": 7,
+    "regularization_loss": 0.0,
+    "smoothness": 0.770578058197132,
+    "solve_methods": [
+      "dense"
+    ],
+    "solver_kinds": [
+      "dense"
+    ],
+    "tail_mass_proxy": 0.0,
+    "total_elapsed_time_s": 0.3124839721713215,
+    "total_size": 777,
+    "use_active_dof_mode": true,
+    "width_ratio": 258.0413111543764
+  },
+  "best_by_transport_error_log_length": 0.5,
+  "kind": "mapped_xgrid_transport_evidence",
+  "metadata": {
+    "atol": 0.0,
+    "candidate_resolution": {
+      "nl": 3,
+      "ntheta": 11,
+      "nx": 7,
+      "nxi": 10,
+      "nzeta": 1
+    },
+    "case": "reduced_pas_tokamak_rhsmode2",
+    "case_description": "Small real PAS transport-matrix case derived from the reduced tokamak PAS fixture by switching to RHSMode=2 and using DKES trajectories. The preset runs mapped candidates at Nx=7 against an Nx=13 reference with active-DOF reduction, leaving the full reduced Nx=50 case easy to request explicitly.",
+    "derivative": "barycentric",
+    "eps": 1e-06,
+    "eta_kind": "gauss",
+    "input_namelist": "tests/reduced_inputs/tokamak_1species_PASCollisions_noEr.input.namelist",
+    "log_lengths": [
+      -1.0,
+      -0.5,
+      0.0,
+      0.5,
+      1.0
+    ],
+    "maxiter": 300,
+    "reference_namelist": null,
+    "reference_nx": 13,
+    "restart": 80,
+    "solve_method": null,
+    "tol": 1e-09
+  },
+  "reference_summary": {
+    "active_fraction": 0.7331947331947332,
+    "active_size": 1058,
+    "max_relative_residual_norm": 2.1702130821430237e-13,
+    "max_residual_norm": 1.4440285168296266e-14,
+    "n_x": 13,
+    "solve_methods": [
+      "dense"
+    ],
+    "solver_kinds": [
+      "dense"
+    ],
+    "total_elapsed_time_s": 0.47154298587702215,
+    "total_size": 1443,
+    "use_active_dof_mode": true
+  },
+  "rows": [
+    {
+      "active_fraction": 0.5752895752895753,
+      "active_size": 447,
+      "jac_roughness": 15.116678089167381,
+      "log_length": -1.0,
+      "matrix_max_abs_error": 8.376538552400888,
+      "matrix_relative_frobenius_error": 0.1907474779667895,
+      "max_relative_residual_norm": 9.080589297166532e-13,
+      "max_residual_norm": 4.972607126742237e-15,
+      "min_dx": 0.04499316276914234,
+      "moment_loss": 0.039961807656956734,
+      "moment_objective": 0.039961807656956734,
+      "n_x": 7,
+      "regularization_loss": 0.0,
+      "smoothness": 0.7705780581971322,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "tail_mass_proxy": 6.237367346376464e-87,
+      "total_elapsed_time_s": 0.4348028200523307,
+      "total_size": 777,
+      "use_active_dof_mode": true,
+      "width_ratio": 258.0413111543764
+    },
+    {
+      "active_fraction": 0.6177606177606177,
+      "active_size": 480,
+      "jac_roughness": 15.11667808916738,
+      "log_length": -0.5,
+      "matrix_max_abs_error": 16.506930010014692,
+      "matrix_relative_frobenius_error": 0.3758777670085721,
+      "max_relative_residual_norm": 5.136932880686615e-13,
+      "max_residual_norm": 8.614041321391698e-15,
+      "min_dx": 0.07418118449355807,
+      "moment_loss": 0.014137932837331958,
+      "moment_objective": 0.014137932837331958,
+      "n_x": 7,
+      "regularization_loss": 0.0,
+      "smoothness": 0.770578058197132,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "tail_mass_proxy": 4.6829397709013504e-235,
+      "total_elapsed_time_s": 0.33668198638285196,
+      "total_size": 777,
+      "use_active_dof_mode": true,
+      "width_ratio": 258.0413111543764
+    },
+    {
+      "active_fraction": 0.6743886743886743,
+      "active_size": 524,
+      "jac_roughness": 15.116678089167381,
+      "log_length": 0.0,
+      "matrix_max_abs_error": 4.67919366551066,
+      "matrix_relative_frobenius_error": 0.10656835632299136,
+      "max_relative_residual_norm": 2.305062405971944e-13,
+      "max_residual_norm": 9.557692697922994e-15,
+      "min_dx": 0.12230409676025972,
+      "moment_loss": 0.008677023500930917,
+      "moment_objective": 0.008677023500930917,
+      "n_x": 7,
+      "regularization_loss": 0.0,
+      "smoothness": 0.770578058197132,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "tail_mass_proxy": 0.0,
+      "total_elapsed_time_s": 0.33096030595091486,
+      "total_size": 777,
+      "use_active_dof_mode": true,
+      "width_ratio": 258.04131115437633
+    },
+    {
+      "active_fraction": 0.7168597168597168,
+      "active_size": 557,
+      "jac_roughness": 15.11667808916738,
+      "log_length": 0.5,
+      "matrix_max_abs_error": 2.435482537280663,
+      "matrix_relative_frobenius_error": 0.05547580228546948,
+      "max_relative_residual_norm": 1.0064074846169359e-13,
+      "max_residual_norm": 1.4430589562365452e-14,
+      "min_dx": 0.20164536582240683,
+      "moment_loss": 0.013406278188822876,
+      "moment_objective": 0.013406278188822876,
+      "n_x": 7,
+      "regularization_loss": 0.0,
+      "smoothness": 0.770578058197132,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "tail_mass_proxy": 0.0,
+      "total_elapsed_time_s": 0.3124839721713215,
+      "total_size": 777,
+      "use_active_dof_mode": true,
+      "width_ratio": 258.0413111543764
+    },
+    {
+      "active_fraction": 0.7734877734877735,
+      "active_size": 601,
+      "jac_roughness": 15.116678089167387,
+      "log_length": 1.0,
+      "matrix_max_abs_error": 9.679286809455014,
+      "matrix_relative_frobenius_error": 0.22042167914786137,
+      "max_relative_residual_norm": 3.579297337193842e-14,
+      "max_residual_norm": 9.43444474177021e-15,
+      "min_dx": 0.33245700376951076,
+      "moment_loss": 0.03018153416331547,
+      "moment_objective": 0.03018153416331547,
+      "n_x": 7,
+      "regularization_loss": 0.0,
+      "smoothness": 0.7705780581971323,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "tail_mass_proxy": 0.0,
+      "total_elapsed_time_s": 0.27713051345199347,
+      "total_size": 777,
+      "use_active_dof_mode": true,
+      "width_ratio": 258.04131115437644
+    }
+  ]
+}

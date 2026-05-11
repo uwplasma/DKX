@@ -20,6 +20,7 @@ POLICY_MODULES = (
     "sfincs_jax.rhs1_strong_control",
     "sfincs_jax.rhs1_strong_fallback",
     "sfincs_jax.rhs1_strong_policy",
+    "sfincs_jax.rhs1_xblock_sparse_host_policy",
     "sfincs_jax.solve_mode_policy",
     "sfincs_jax.transport_dense_lu",
     "sfincs_jax.transport_handoff_policy",

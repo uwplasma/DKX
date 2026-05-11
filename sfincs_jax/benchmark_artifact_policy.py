@@ -609,6 +609,29 @@ def _check_plan(payload: Mapping[object, object], add: ErrorSink) -> None:
             continue
         seen_variants[variant] = idx
 
+    _check_default_promotion_plan(plan, add)
+
+
+def _check_default_promotion_plan(plan: Mapping[object, object], add: ErrorSink) -> None:
+    gates = plan.get("gates", {})
+    if not isinstance(gates, Mapping):
+        return
+    if gates.get("default_promotion_required") is not True:
+        return
+
+    baseline_elapsed = _finite_number(gates.get("baseline_elapsed_s"))
+    if baseline_elapsed is None or baseline_elapsed <= 0.0:
+        add("field plan.gates.baseline_elapsed_s must be a positive finite number when default promotion is required")
+    baseline_rss = _finite_number(gates.get("baseline_rss_mb"))
+    if baseline_rss is None or baseline_rss <= 0.0:
+        add("field plan.gates.baseline_rss_mb must be a positive finite number when default promotion is required")
+    min_runtime_speedup = _finite_number(gates.get("min_runtime_speedup"))
+    if min_runtime_speedup is None or min_runtime_speedup < 1.0:
+        add("field plan.gates.min_runtime_speedup must be a finite number >= 1 when default promotion is required")
+    min_memory_reduction = _finite_number(gates.get("min_memory_reduction"))
+    if min_memory_reduction is None or min_memory_reduction < 1.0:
+        add("field plan.gates.min_memory_reduction must be a finite number >= 1 when default promotion is required")
+
 
 def _check_results(payload: Mapping[object, object], add: ErrorSink) -> None:
     if "results" not in payload:
@@ -636,6 +659,43 @@ def _check_results(payload: Mapping[object, object], add: ErrorSink) -> None:
             )
             continue
         seen_variants[variant] = idx
+
+    _check_default_promotion_results(payload, results, add)
+
+
+def _default_promotion_required(payload: Mapping[object, object]) -> bool:
+    plan = payload.get("plan")
+    if not isinstance(plan, Mapping):
+        return False
+    gates = plan.get("gates")
+    return isinstance(gates, Mapping) and gates.get("default_promotion_required") is True
+
+
+def _check_default_promotion_results(
+    payload: Mapping[object, object],
+    results: list[object],
+    add: ErrorSink,
+) -> None:
+    if not _default_promotion_required(payload):
+        return
+    summary = payload.get("summary", {})
+    if isinstance(summary, Mapping) and summary.get("all_gates_passed") is not True:
+        add("field summary.all_gates_passed must be true when default promotion is required")
+    for idx, row in enumerate(results):
+        if not isinstance(row, Mapping) or row.get("status") not in OK_RESULT_STATUSES:
+            continue
+        row_path = f"results[{idx}]"
+        gates = row.get("gates")
+        if not isinstance(gates, Mapping):
+            add(f"missing field {row_path}.gates")
+            continue
+        for gate_name in ("stall", "residual", "memory", "solver_path", "default_promotion"):
+            gate = gates.get(gate_name)
+            if not isinstance(gate, Mapping):
+                add(f"missing field {row_path}.gates.{gate_name}")
+                continue
+            if gate.get("status") != "pass":
+                add(f"field {row_path}.gates.{gate_name}.status must be 'pass' when default promotion is required")
 
 
 def _check_result_row(idx: int, row: object, add: ErrorSink) -> None:

@@ -43,6 +43,65 @@ Immediate priorities:
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
 
+Current active lane (2026-05-11, validation/docs/release integration):
+- [x] Keep this pass write-scoped to validation, documentation, planning, and
+  release gates. Do not edit `v3_driver.py`, QI/mapped-grid implementation code,
+  or performance kernels from this lane.
+- [x] Fetched `origin` and confirmed local `main` / `origin/main` are aligned at
+  `04e2dd233340b66c7d59ec8d6053356fb45cf3cf`.
+- [x] Add explicit release-gate metadata to the validation manifest. Every
+  publication-facing lane must now be one of `release_ready`,
+  `regression_scaffold`, `bounded_proxy`, or `closed_deferred`, and no lane may
+  silently block the current release.
+- [x] Add a CI-fast release check (`scripts/check_release_gates.py` plus
+  `tests/test_release_gate_metadata.py`) so closed-vs-deferred claim metadata is
+  tested without launching expensive solves.
+- Local integrated evidence status: the dirty worktree now contains the mapped
+  x-grid primitives, opt-in `xGridScheme = 50` construction, transport-objective
+  helpers, solve-facing mapped transport evidence, QI seed materialization
+  runner, and `solver_path_policy.py` extraction. This docs lane records that
+  state without editing source, tests, or scripts.
+- Seed-robust QI status: `scripts/run_qi_seed_robustness.py` and
+  `tests/test_run_qi_seed_robustness.py` now provide deterministic neighboring
+  smoke decks around `examples/additional_examples/input.namelist`, localize the
+  QI VMEC equilibrium per seed, perturb `nu_n` / `Er`, and can optionally
+  execute each seed through `sfincs_jax write-output`. The checked smoke summary
+  at `docs/_static/qi_seed_robustness_smoke.json` records one default-CLI pass
+  (`passed=1`, `failed=0`, selected dense solve, residual ratio below `1`) after
+  narrowing the 3D full-FP sparse-PC auto gate. This closes the immediate
+  runnable QI-smoke gap, but it is not yet a production-resolution multi-seed QI
+  robustness claim.
+- Mapped x-grid status: checked JSON/CSV artifacts under `docs/_static/` now
+  exercise tiny and reduced PAS RHSMode=2 transport-matrix comparisons. The
+  reduced PAS tokamak artifact compares mapped `Nx=7` candidates against an
+  `Nx=13` reference and identifies the best transport-error log length, but this
+  remains bounded PAS evidence. Do not claim full-FP compatibility,
+  production-resolution speedup, or default-grid replacement.
+- Solver-path refactor status: `solver_path_policy.py` centralizes budget,
+  JIT, dtype, sparse-PC default, structural-tolerance, residual-rescue, and
+  resource-exhaustion decisions with direct tests. This is a policy-surface
+  hardening lane, not a new numerical solver claim.
+- Large refactor closure status: the mapped-x-grid / QI / solver-path sequence
+  is locally integrated in this worktree, but promotion should still be staged
+  by feature area: adaptive speed-map primitives, mapped x-grid construction,
+  transport objectives, transport evidence, solver-path policy extraction, then
+  QI evidence. Re-run release-gate metadata, mapped-grid tests, solver-path
+  tests, docs, and the QI manifest/execute smoke at each promotion point.
+- GitHub/remote status after `git fetch --prune origin`: open PRs #2-#6 are all
+  draft. #2 targets `main` and GitHub reports `mergeStateStatus=CLEAN`; #3, #4,
+  and #6 are also `CLEAN` against their stacked bases. #5 reports
+  `mergeStateStatus=UNSTABLE` because a stale coverage check was still in
+  progress even though the newer run was green. All branch heads are one commit
+  behind current `origin/main` (`04e2dd2`) and should be rebased before merge.
+  `git merge-tree --write-tree origin/main <branch>` reported clean trees for
+  each remote branch, so the main risk is semantic/test integration, not text
+  conflict.
+- Remaining release decision: current release claims remain clean after this
+  docs/gate pass; mapped-grid, QI, and solver-path refactor evidence should stay
+  bounded integration lanes until their artifacts are promoted through the
+  manifest with explicit `release_gate` metadata and the QI execute smoke is
+  passing.
+
 Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
 - [x] Add bounded resolution overrides to
   `scripts/benchmark_pas_tz_memory_fallback.py` so PAS memory/runtime probes can

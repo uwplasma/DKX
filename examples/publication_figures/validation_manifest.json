@@ -2,6 +2,12 @@
   {
     "id": "sfincs2014_fig1_lhd_collisionality",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked-in full-resolution LHD summary and figure artifacts",
+      "promotion_gate": "Keep the fixed scan-input writer, seven-point FP/PAS ladder, and FP/PAS separation assertions green before using this as release evidence"
+    },
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -33,6 +39,12 @@
   {
     "id": "sfincs2014_fig1_lhd_collisionality_reaudit_fast",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked-in bounded LHD fast rerun artifacts",
+      "promotion_gate": "Superseded by the full LHD collisionality lane for release claims; keep as a cheap branch regression scaffold"
+    },
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -65,6 +77,12 @@
   {
     "id": "sfincs2014_fig2_w7x_collisionality",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked-in full-resolution W7-X summary and figure artifacts",
+      "promotion_gate": "Keep the fixed scan-input writer, seven-point FP/PAS ladder, and FP/PAS separation assertions green before using this as release evidence"
+    },
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -96,6 +114,12 @@
   {
     "id": "sfincs2014_fig2_w7x_collisionality_reaudit_fast",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked-in bounded W7-X fast rerun artifacts",
+      "promotion_gate": "Superseded by the full W7-X collisionality lane for release claims; keep as a cheap branch regression scaffold"
+    },
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -128,6 +152,13 @@
   {
     "id": "sfincs2014_fig3_high_collisionality_limit",
     "status": "deferred_post_release",
+    "release_gate": {
+      "claim_status": "closed_deferred",
+      "blocks_current_release": false,
+      "evidence": "checked-in normalization audit and executable high-nu run plan, not completed high-nu scan evidence",
+      "closed_or_deferred_reason": "Closed for the current release as post-release research until wider high-nu LHD and W7-X scans are pinned",
+      "promotion_gate": "Promote only after completed high-nu scan artifacts satisfy the Simakov-Helander readiness gates"
+    },
     "kind": "literature_reproduction",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -165,6 +196,12 @@
   {
     "id": "sfincs2014_high_collisionality_trend_proxy",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "bounded_proxy",
+      "blocks_current_release": false,
+      "evidence": "checked-in high-collisionality tail-slope proxy summary and figures",
+      "promotion_gate": "Do not relabel as the full analytic-limit reproduction until the parent high-nu scan gate is closed"
+    },
     "kind": "literature_validation",
     "literature": [
       "https://doi.org/10.1063/1.4870077",
@@ -200,6 +237,12 @@
   {
     "id": "sfincs2014_simakov_helander_limit_audit",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "bounded_proxy",
+      "blocks_current_release": false,
+      "evidence": "checked-in Appendix-B geometry and normalization audit summary",
+      "promotion_gate": "Keep ready_for_literature_claim false until both LHD and W7-X collisionality scans extend to the configured high-nu threshold"
+    },
     "kind": "literature_validation",
     "literature": [
       "https://doi.org/10.1063/1.4870077",
@@ -236,6 +279,12 @@
   {
     "id": "sfincs2014_er_sweep_tokamak_reference",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked-in tokamak-like Er sweep summary and figure artifacts",
+      "promotion_gate": "Keep zero-field model agreement and finite-field model-separation assertions green"
+    },
     "kind": "literature_validation",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -268,6 +317,12 @@
   {
     "id": "sfincs2014_er_sweep_stellarator_fast_scaffold",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked-in bounded stellarator-like Er sweep summary and figure artifacts",
+      "promotion_gate": "Promote only after a full-resolution stellarator sweep is runtime-acceptable and checked in with complete provenance"
+    },
     "kind": "literature_validation",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
@@ -300,6 +355,12 @@
   {
     "id": "publication_validation_dashboard",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked-in dashboard summary and figure generated from other validation artifacts",
+      "promotion_gate": "Regenerate only from gated source artifacts; do not hand-edit dashboard data"
+    },
     "kind": "literature_validation",
     "literature": [
       "https://doi.org/10.1063/1.4870077",
@@ -335,6 +396,12 @@
   {
     "id": "fortran_v3_cpu_gpu_suite_benchmark_summary",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked-in CPU/GPU 39-case frozen suite benchmark summary and figures",
+      "promotion_gate": "Require 39/39 parity_ok on CPU and GPU, zero strict mismatches, zero jax_error, and zero max_attempts before regenerating public benchmark figures"
+    },
     "kind": "cross_code_validation",
     "literature": [
       "https://doi.org/10.1063/1.4870077",
@@ -373,6 +440,13 @@
   {
     "id": "w7x_ambipolar_er_validation",
     "status": "deferred_post_release",
+    "release_gate": {
+      "claim_status": "closed_deferred",
+      "blocks_current_release": false,
+      "evidence": "checked-in scaffold script and incomplete provenance template only",
+      "closed_or_deferred_reason": "Closed for the current release as post-release profile validation until defensible W7-X equilibrium/profile provenance is supplied",
+      "promotion_gate": "Promote only after complete provenance, bracketed ambipolar roots, checked-in source artifacts, and ready_for_literature_claim=true"
+    },
     "kind": "profile_validation",
     "literature": [
       "https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf",
@@ -408,6 +482,13 @@
   {
     "id": "monkes_monoenergetic_overlap",
     "status": "deferred_post_release",
+    "release_gate": {
+      "claim_status": "closed_deferred",
+      "blocks_current_release": false,
+      "evidence": "documented target with no checked-in cross-code comparison artifact",
+      "closed_or_deferred_reason": "Closed for the current release as post-release cross-code validation until shared-model normalizations and artifacts are pinned",
+      "promotion_gate": "Promote only after exact shared-model comparisons and qualitative trend checks are separated in machine-readable artifacts"
+    },
     "kind": "cross_code_validation",
     "literature": [
       "https://arxiv.org/abs/2312.12248",
@@ -437,6 +518,12 @@
   {
     "id": "adjoint_sensitivity_gradient_checks",
     "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked-in autodiff sensitivity summary and gradient/sensitivity figures",
+      "promotion_gate": "Keep finite-difference gradient, primal residual, and adjoint residual gates below the pinned summary thresholds"
+    },
     "kind": "autodiff_validation",
     "literature": [
       "https://arxiv.org/abs/1904.06430",

@@ -15,6 +15,7 @@ Also included:
 
 - `examples/sfincs_examples/`: a vendored copy of the upstream v3 example suite + helper scripts.
 - `examples/upstream/`: curated upstream inputs used in tests and docs.
+- `examples/additional_examples/`: the checked-in quasi-isodynamic VMEC deck used by the extra example lane.
 
 ### Setup
 
@@ -164,3 +165,38 @@ solver-branch fragility. They preserve the upstream resolution ratios, but they
 can still shift conditioning enough to expose branch-sensitive mismatches that
 do not appear at the original example resolution. The release gate remains the
 standard reduced-suite comparisons plus targeted original-resolution examples.
+
+### QI Seed Robustness Lane
+
+The quasi-isodynamic VMEC deck in `examples/additional_examples/input.namelist`
+can be expanded into a deterministic multi-seed smoke lane without editing the
+source example:
+
+```bash
+python scripts/run_qi_seed_robustness.py \
+  --out-root tests/qi_seed_robustness \
+  --seeds 0 1 2 \
+  --clean
+```
+
+This writes per-seed `input.namelist` files, localizes the QI VMEC equilibrium
+next to each case, applies deterministic `nu_n` and `Er` perturbations, and
+records the commands in `manifest.json`. Add `--execute` to run each seed
+through `sfincs_jax write-output` and record stdout/stderr, return codes,
+output presence, and solver-trace residual metadata in the same manifest.
+
+The execute smoke defaults to the public `auto` CLI solver policy. The bounded
+checked smoke now selects the robust dense path and converges below the requested
+residual target. Check `execution.results[].solver_trace_summary.converged` and
+the residual ratio before treating any new result as converged evidence. To probe
+another solver path explicitly, override the method:
+
+```bash
+python scripts/run_qi_seed_robustness.py \
+  --out-root tests/qi_seed_robustness \
+  --seeds 0 \
+  --execute \
+  --solve-method dense \
+  --timeout-s 300 \
+  --clean
+```
