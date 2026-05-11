@@ -41,6 +41,8 @@ def test_matrixfree_correction_accepts_residual_improvement() -> None:
     assert result.accepted_steps == 1
     assert result.reason == "accepted"
     assert result.residual_norm < result.initial_residual_norm
+    assert result.diagnostics["reason"] == "accepted"
+    assert result.diagnostics["residual_reduction"] == pytest.approx(1.0)
     np.testing.assert_allclose(np.asarray(result.x), np.asarray([1.0, 2.0], dtype=np.float32))
 
 
@@ -69,6 +71,34 @@ def test_matrixfree_correction_rejects_nonfinite_candidate_residual() -> None:
     assert result.reason == "nonfinite-candidate-residual"
     np.testing.assert_array_equal(np.asarray(result.x), np.asarray(x0))
     assert math.isnan(result.residual_history[-1])
+    assert result.diagnostics["reason"] == "nonfinite-candidate-residual"
+    assert result.diagnostics["candidate_residual_norm"] is None
+    assert result.diagnostics["candidate_residual_finite"] is False
+
+
+def test_matrixfree_correction_reports_update_norm_limit_reject() -> None:
+    rhs = jnp.asarray([1.0, 2.0], dtype=jnp.float32)
+    x0 = jnp.zeros_like(rhs)
+
+    def matvec(x):
+        return x
+
+    def oversized_correction(residual):
+        return 100.0 * residual
+
+    result = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        correction=oversized_correction,
+        config=Rhs1PasMatrixFreeConfig(max_update_norm_ratio=1.5),
+    )
+
+    assert not result.accepted
+    assert result.reason == "update-norm-too-large"
+    assert result.diagnostics["update_norm"] == pytest.approx(math.sqrt(50000.0))
+    assert result.diagnostics["update_norm_limit"] == pytest.approx(1.5)
+    assert result.diagnostics["max_update_norm_ratio"] == pytest.approx(1.5)
 
 
 def test_matrixfree_correction_preserves_shape_and_dtype() -> None:

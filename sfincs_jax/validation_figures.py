@@ -109,6 +109,11 @@ def build_w7x_ambipolar_root_provenance_panel(
     )
     gates["ready_for_literature_claim"] = ready
     validation_state = "artifact_backed_literature_ready" if ready else "scaffold_deferred"
+    deferred_reasons = _deferred_reasons(
+        gates=gates,
+        provenance=provenance,
+        source_artifact=artifact,
+    )
 
     source_metadata = payload.get("metadata", {})
     if not isinstance(source_metadata, Mapping):
@@ -130,6 +135,9 @@ def build_w7x_ambipolar_root_provenance_panel(
                 "This panel is a provenance and numerical-gate scaffold unless ready_for_literature_claim is true.",
                 "A literature-ready label requires complete W7-X provenance and a matching Git-tracked W7-X ambipolar JSON artifact.",
             ],
+            "deferred_reason_codes": [
+                str(reason["code"]) for reason in deferred_reasons
+            ],
         },
         "scan": {
             "er": [float(value) for value in er.tolist()],
@@ -142,6 +150,7 @@ def build_w7x_ambipolar_root_provenance_panel(
         "provenance": provenance,
         "source_artifact": artifact,
         "gates": gates,
+        "deferred_reasons": deferred_reasons,
     }
 
 
@@ -321,12 +330,105 @@ def _provenance_summary(
         raw_provenance = {}
     fields = {str(key): raw_provenance.get(str(key), "") for key in required_fields}
     missing = [key for key, value in fields.items() if not str(value).strip()]
+    total = len(fields)
+    present = total - len(missing)
     return {
         "required_fields": [str(key) for key in required_fields],
         "fields": fields,
         "missing_fields": missing,
+        "present_required_fields": int(present),
+        "total_required_fields": int(total),
+        "completeness_score": float(1.0 if total == 0 else present / total),
         "complete": bool(not missing),
     }
+
+
+def _deferred_reasons(
+    *,
+    gates: Mapping[str, object],
+    provenance: Mapping[str, object],
+    source_artifact: Mapping[str, object],
+) -> list[dict[str, object]]:
+    if bool(gates.get("ready_for_literature_claim")):
+        return []
+
+    reasons: list[dict[str, object]] = []
+    if not bool(gates.get("finite_er_current_series")):
+        reasons.append(
+            {
+                "code": "nonfinite_or_underresolved_scan",
+                "gate": "finite_er_current_series",
+                "message": "The Er/current scan must contain at least two finite points.",
+            }
+        )
+    if not bool(gates.get("radial_current_brackets_zero")):
+        reasons.append(
+            {
+                "code": "missing_zero_current_bracket",
+                "gate": "radial_current_brackets_zero",
+                "message": "The radial-current scan does not bracket an ambipolar root.",
+            }
+        )
+    if not bool(gates.get("finite_ambipolar_roots")):
+        reasons.append(
+            {
+                "code": "missing_finite_ambipolar_root",
+                "gate": "finite_ambipolar_roots",
+                "message": "The ambipolar postprocessing did not report a finite root.",
+            }
+        )
+    if not bool(gates.get("root_inside_scanned_er_range")):
+        reasons.append(
+            {
+                "code": "root_outside_scanned_er_range",
+                "gate": "root_inside_scanned_er_range",
+                "message": "At least one reported root lies outside the scanned Er range.",
+            }
+        )
+    if not bool(gates.get("root_consistent_with_sign_change")):
+        reasons.append(
+            {
+                "code": "root_not_supported_by_sign_change",
+                "gate": "root_consistent_with_sign_change",
+                "message": "At least one reported root is not supported by a current sign-change bracket.",
+            }
+        )
+    if not bool(gates.get("ambipolar_root_slope_resolved")):
+        reasons.append(
+            {
+                "code": "ambipolar_root_slope_unresolved",
+                "gate": "ambipolar_root_slope_resolved",
+                "message": "The local radial-current slope at the accepted root is absent or too small.",
+            }
+        )
+    if not bool(gates.get("ion_root_candidate")):
+        reasons.append(
+            {
+                "code": "ion_root_candidate_missing",
+                "gate": "ion_root_candidate",
+                "message": "The reported roots do not identify an ion-root candidate.",
+            }
+        )
+    if not bool(gates.get("provenance_complete")):
+        reasons.append(
+            {
+                "code": "incomplete_provenance",
+                "gate": "provenance_complete",
+                "missing_fields": list(provenance.get("missing_fields", [])),
+                "completeness_score": float(provenance.get("completeness_score", 0.0)),
+                "message": "Required W7-X provenance fields are incomplete.",
+            }
+        )
+    if not bool(gates.get("source_artifact_checked_in")):
+        reasons.append(
+            {
+                "code": "source_artifact_not_checked_in",
+                "gate": "source_artifact_checked_in",
+                "artifact_status": source_artifact.get("status", "unknown"),
+                "message": "The source JSON is not a matching Git-tracked W7-X ambipolar artifact.",
+            }
+        )
+    return reasons
 
 
 def _artifact_summary(source_artifact: str | Path | None, *, payload: Mapping[str, object]) -> dict[str, object]:

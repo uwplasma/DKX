@@ -19,6 +19,7 @@ outside this example's differentiated graph.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -37,9 +38,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.jax_geometry_adapters import (
+from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
     boozer_spectrum_geometry_proxy_objective,
-    optional_jax_geometry_backend_status,
+    optional_jax_geometry_backend_report,
 )
 
 
@@ -70,7 +71,8 @@ def _find_default_wout() -> Path:
 
 
 def _print_backend_status() -> None:
-    status = optional_jax_geometry_backend_status()
+    report = optional_jax_geometry_backend_report()
+    status = report["backends"]
     print("Optional JAX geometry backend status:")
     for name in ("vmec_jax", "booz_xform_jax"):
         availability = "available" if status[name] else "missing"
@@ -92,6 +94,8 @@ def _print_backend_status() -> None:
         "and sfincs_jax VMEC file adapters"
     )
     print("  not claimed: full VMEC-boundary-to-SFINCS-transport gradients")
+    print("Machine-readable report:")
+    print("  pass --json with --check-backends for backend and gradient-availability metadata")
 
 
 def _load_wout_from_vmec_case(args: argparse.Namespace):
@@ -171,6 +175,11 @@ def main() -> int:
         help="Print optional backend status and the current differentiability boundary, then exit.",
     )
     parser.add_argument(
+        "--json",
+        action="store_true",
+        help="With --check-backends, emit backend and gradient-boundary metadata as JSON.",
+    )
+    parser.add_argument(
         "--vmec-case",
         default=None,
         help="Optional vmec_jax example case to solve first, e.g. circular_tokamak.",
@@ -191,7 +200,10 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.check_backends:
-        _print_backend_status()
+        if args.json:
+            print(json.dumps(optional_jax_geometry_backend_report(), indent=2, sort_keys=True))
+        else:
+            _print_backend_status()
         return 0
 
     if args.vmec_case:

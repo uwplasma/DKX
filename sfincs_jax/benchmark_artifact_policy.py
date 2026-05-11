@@ -119,6 +119,25 @@ def _check_plan(payload: Mapping[object, object], add: ErrorSink) -> None:
     variant_methods = plan["variant_methods"]
     if not isinstance(variant_methods, list):
         add("field plan.variant_methods must be a list")
+        return
+
+    seen_variants: dict[str, int] = {}
+    for idx, method in enumerate(variant_methods):
+        method_path = f"plan.variant_methods[{idx}]"
+        if not isinstance(method, Mapping):
+            add(f"{method_path} must be a JSON object")
+            continue
+        variant = method.get("variant")
+        if not isinstance(variant, str) or not variant:
+            add(f"field {method_path}.variant must be a non-empty string")
+            continue
+        if variant in seen_variants:
+            add(
+                f"duplicate variant {variant!r} in plan.variant_methods "
+                f"at indexes {seen_variants[variant]} and {idx}"
+            )
+            continue
+        seen_variants[variant] = idx
 
 
 def _check_results(payload: Mapping[object, object], add: ErrorSink) -> None:
@@ -131,8 +150,22 @@ def _check_results(payload: Mapping[object, object], add: ErrorSink) -> None:
         add("field results must be a list")
         return
 
+    seen_variants: dict[str, int] = {}
     for idx, row in enumerate(results):
         _check_result_row(idx, row, add)
+        if not isinstance(row, Mapping):
+            continue
+        variant = row.get("variant")
+        if not isinstance(variant, str) or not variant:
+            add(f"field results[{idx}].variant must be a non-empty string")
+            continue
+        if variant in seen_variants:
+            add(
+                f"duplicate variant {variant!r} in results "
+                f"at indexes {seen_variants[variant]} and {idx}"
+            )
+            continue
+        seen_variants[variant] = idx
 
 
 def _check_result_row(idx: int, row: object, add: ErrorSink) -> None:

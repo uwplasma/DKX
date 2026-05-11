@@ -320,6 +320,16 @@ def _json_float_history(values: tuple[float, ...]) -> list[float | None]:
     return [_json_float(value) for value in values]
 
 
+def _json_safe_metadata(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_safe_metadata(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_safe_metadata(item) for item in value]
+    if isinstance(value, float):
+        return _json_float(value)
+    return value
+
+
 def _residual_reduction(initial: float, residual: float) -> float | None:
     initial_f = _json_float(initial)
     residual_f = _json_float(residual)
@@ -487,6 +497,7 @@ def _child_payload(case: dict[str, Any]) -> dict[str, Any]:
         "residual_reduction": reduction,
         "residual_history": _json_float_history(result.residual_history),
         "residual_history_nonfinite_count": sum(value is None for value in _json_float_history(result.residual_history)),
+        "gate_diagnostics": _json_safe_metadata(result.diagnostics),
         "elapsed_s": float(elapsed_s),
         "max_rss_mb": _resource_maxrss_mb(),
         "metrics": {
