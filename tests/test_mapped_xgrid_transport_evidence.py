@@ -256,6 +256,8 @@ def test_transport_evidence_report_artifacts_roundtrip(tmp_path: Path):
     assert payload["metadata"]["case"] == "tiny_pas"
     assert payload["reference_summary"]["n_x"] == 9
     assert payload["rows"][0]["solver_kinds"] == ["gmres", "sparse_lu"]
+    assert payload["best_by_transport_error"]["log_length"] == -0.5
+    assert payload["best_by_transport_error"]["matrix_relative_frobenius_error"] == 0.0
 
     json_path = tmp_path / "evidence.json"
     csv_path = tmp_path / "evidence.csv"
@@ -280,3 +282,29 @@ def test_run_rational_tail_transport_comparison_rejects_empty_scan():
             log_length_values=(),
             solve_fn=_fake_transport_solve,
         )
+
+
+def test_reduced_pas_tokamak_artifact_records_non_degenerate_scan():
+    artifact = (
+        Path(__file__).resolve().parents[1]
+        / "docs"
+        / "_static"
+        / "mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json"
+    )
+
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    rows = payload["rows"]
+    reference = payload["reference_summary"]
+
+    assert payload["metadata"]["case"] == "reduced_pas_tokamak_rhsmode2"
+    assert payload["metadata"]["input_namelist"] == "tests/reduced_inputs/tokamak_1species_PASCollisions_noEr.input.namelist"
+    assert payload["metadata"]["candidate_resolution"]["nx"] == 7
+    assert reference["n_x"] == 13
+    assert len(rows) == 5
+    assert {row["log_length"] for row in rows} == {-1.0, -0.5, 0.0, 0.5, 1.0}
+    assert all(row["n_x"] == 7 for row in rows)
+    assert all(row["use_active_dof_mode"] is True for row in rows)
+    assert all(0 < row["active_size"] < row["total_size"] for row in rows)
+    assert reference["active_size"] < reference["total_size"]
+    assert payload["best_by_transport_error"]["log_length"] == 0.5
+    assert payload["best_by_transport_error"]["matrix_relative_frobenius_error"] < 0.06

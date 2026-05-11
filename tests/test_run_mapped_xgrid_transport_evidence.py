@@ -4,6 +4,7 @@ import csv
 import importlib.util
 import json
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -14,6 +15,7 @@ SCRIPT = ROOT / "scripts" / "run_mapped_xgrid_transport_evidence.py"
 spec = importlib.util.spec_from_file_location("run_mapped_xgrid_transport_evidence", SCRIPT)
 mod = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
+sys.modules[spec.name] = mod
 spec.loader.exec_module(mod)
 
 
@@ -83,3 +85,44 @@ def test_main_writes_json_and_csv_artifacts(tmp_path: Path):
     assert len(rows) == 2
     assert rows[0]["reference_n_x"] == "9"
     assert rows[0]["solve_methods"] == "incremental;sparse_lu"
+
+
+def test_main_writes_case_preset_artifacts(tmp_path: Path):
+    json_path = tmp_path / "mapped_evidence.json"
+    csv_path = tmp_path / "mapped_evidence.csv"
+
+    rc = mod.main(
+        [
+            "--case",
+            "reduced_pas_tokamak_rhsmode2",
+            "--json-out",
+            str(json_path),
+            "--csv-out",
+            str(csv_path),
+            "--log-lengths=-1.0,0.5",
+            "--candidate-nx",
+            "6",
+            "--reference-nx",
+            "10",
+        ],
+        solve_fn=_fake_transport_solve,
+    )
+
+    assert rc == 0
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["metadata"]["case"] == "reduced_pas_tokamak_rhsmode2"
+    assert payload["metadata"]["candidate_resolution"]["nx"] == 6
+    assert payload["metadata"]["reference_nx"] == 10
+    assert payload["metadata"]["log_lengths"] == [-1.0, 0.5]
+    assert payload["reference_summary"]["n_x"] == 10
+    assert [row["n_x"] for row in payload["rows"]] == [6, 6]
+    assert payload["best_by_transport_error"]["log_length"] == -1.0
+
+
+def test_list_cases_prints_presets(capsys):
+    rc = mod.main(["--list-cases"], solve_fn=_fake_transport_solve)
+
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "tiny_pas_rhsmode2_scheme2" in captured.out
+    assert "reduced_pas_tokamak_rhsmode2" in captured.out
