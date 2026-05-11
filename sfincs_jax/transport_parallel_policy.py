@@ -24,6 +24,32 @@ class TransportParallelScalingAudit:
     release_scaling_claim: bool
     failures: tuple[str, ...]
     notes: tuple[str, ...]
+    benchmark_kind: str = "transport_worker_scaling"
+    timing_semantics: str | None = None
+    deterministic_output_check: bool = False
+    min_speedup: float = 1.2
+    min_efficiency: float = 0.50
+    min_parallel_workers: int = 2
+
+
+@dataclass(frozen=True)
+class ShardedSolveScalingAudit:
+    """Pure audit result for single-case sharded-solve benchmark summaries."""
+
+    backend: str
+    device_counts: tuple[int, ...]
+    baseline_s: float
+    claim_devices: int
+    claim_speedup: float
+    claim_efficiency: float
+    release_scaling_claim: bool
+    experimental_single_case_scaling: bool
+    ci_gate_pass: bool
+    failures: tuple[str, ...]
+    notes: tuple[str, ...]
+    benchmark_kind: str = "single_case_sharded_solve"
+    timing_semantics: str | None = None
+    deterministic_output_check: bool = False
 
 
 def validate_transport_parallel_worker_count(
@@ -63,6 +89,82 @@ def _optional_positive_int(value: object, *, name: str) -> int | None:
     return numeric
 
 
+def _optional_nonnegative_int(value: object, *, name: str) -> int | None:
+    if value is None:
+        return None
+    try:
+        numeric = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a non-negative integer; got {value!r}") from exc
+    if numeric < 0:
+        raise ValueError(f"{name} must be a non-negative integer; got {numeric}")
+    return numeric
+
+
+def _optional_bool(value: object, *, name: str) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"{name} must be a boolean; got {value!r}")
+
+
+def _speedup_threshold(value: object, *, name: str) -> float:
+    threshold = _finite_positive_float(value, name=name)
+    if threshold < 1.0:
+        raise ValueError(f"{name} must be >= 1.0; got {threshold!r}")
+    return threshold
+
+
+def _efficiency_threshold(value: object, *, name: str) -> float:
+    threshold = _finite_positive_float(value, name=name)
+    if threshold > 1.0:
+        raise ValueError(f"{name} must be <= 1.0; got {threshold!r}")
+    return threshold
+
+
+def _normalized_benchmark_kind(summary: dict[str, object], *, default: str) -> str:
+    return str(summary.get("benchmark_kind", default)).strip().lower().replace("-", "_")
+
+
+def _timing_semantics(summary: dict[str, object]) -> tuple[str | None, str | None]:
+    raw = summary.get("timing_semantics", summary.get("timing_mode", summary.get("cache_state")))
+    if raw is not None:
+        normalized = str(raw).strip().lower().replace("-", "_")
+        if normalized in {"warm", "cache_warm", "warm_cache", "hot", "hot_solve", "hot_run"}:
+            return normalized, None
+        if normalized in {"cold", "cold_start", "cold_cache"}:
+            return normalized, None
+        if normalized in {"mixed", "mixed_warm_cold"}:
+            return normalized, None
+        return None, f"unrecognized timing semantics {raw!r}"
+
+    warm_keys = (
+        "global_warmup",
+        "warmup",
+        "per_worker_warmup",
+        "per_device_warmup",
+        "inner_warmup_solves",
+    )
+    warmups: list[int] = []
+    for key in warm_keys:
+        if key in summary:
+            value = _optional_nonnegative_int(summary[key], name=key)
+            if value is not None:
+                warmups.append(value)
+    if any(value > 0 for value in warmups):
+        return "cache_warm", "timing semantics inferred from recorded warmup counts"
+    if warmups:
+        return "cold_start", "timing semantics inferred from zero warmup counts"
+    return None, "timing semantics were not recorded"
+
+
 def _scaling_task_count(summary: dict[str, object]) -> int:
     for key in ("rhs_count", "task_count", "which_rhs_count", "n_rhs"):
         if key in summary:
@@ -79,27 +181,73 @@ def _scaling_task_count(summary: dict[str, object]) -> int:
 
 
 def _scaling_device_count(summary: dict[str, object], *, backend: str) -> tuple[int | None, str | None]:
-    for key in ("device_count", "devices", "gpu_count", "gpu_device_count"):
+    for key in ("device_count", "gpu_device_count", "gpu_count", "devices"):
         if key in summary:
-            return _optional_positive_int(summary[key], name=key), None
-    visible_gpu_ids = summary.get("visible_gpu_ids")
+            try:
+                return _optional_positive_int(summary[key], name=key), None
+            except ValueError:
+                if key != "devices":
+                    raise
+                try:
+                    values = tuple(int(value) for value in summary[key])  # type: ignore[index]
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"{key} must be a positive integer or device-count list") from exc
+                if not values or any(value < 1 for value in values):
+                    raise ValueError(f"{key} must contain positive device counts")
+                return max(values), None
+    visible_gpu_ids = summary.get("visible_gpu_ids", summary.get("device_ids"))
     if visible_gpu_ids is not None:
         try:
-            return len(tuple(visible_gpu_ids)), None  # type: ignore[arg-type]
+            ids = tuple(str(value).strip() for value in visible_gpu_ids)  # type: ignore[arg-type]
         except TypeError as exc:
             raise ValueError("visible_gpu_ids must be an iterable of device ids") from exc
+        unique_count = len({gpu_id for gpu_id in ids if gpu_id})
+        if unique_count < 1:
+            return None, "visible_gpu_ids did not contain any device ids"
+        return unique_count, None
     if backend == "cpu":
         return None, "device count not required for CPU process-worker scaling"
     return None, "GPU device count was not recorded; audit cannot prove one worker per device"
 
 
-def _deterministic_payload_coverage(summary: dict[str, object], *, task_count: int) -> tuple[bool, str | None]:
-    explicit = summary.get("deterministic_payload_coverage")
-    if explicit is not None:
-        return bool(explicit), None
+def _payloads_for_claim(
+    summary: dict[str, object],
+    *,
+    claim_workers: int,
+) -> object:
+    payloads_by_workers = summary.get("payloads_by_workers")
+    if isinstance(payloads_by_workers, dict):
+        for key in (claim_workers, str(claim_workers)):
+            if key in payloads_by_workers:
+                return payloads_by_workers[key]
 
-    payloads = summary.get("payloads")
+    raw_results = summary.get("results")
+    if isinstance(raw_results, list):
+        for result in raw_results:
+            if not isinstance(result, dict):
+                continue
+            try:
+                workers = validate_transport_parallel_worker_count(result.get("workers"), context="results")
+            except ValueError:
+                continue
+            if workers == int(claim_workers) and "payloads" in result:
+                return result["payloads"]
+
+    return summary.get("payloads")
+
+
+def _deterministic_payload_coverage(
+    summary: dict[str, object],
+    *,
+    task_count: int,
+    claim_workers: int,
+) -> tuple[bool, str | None]:
+    explicit = _optional_bool(summary.get("deterministic_payload_coverage"), name="deterministic_payload_coverage")
+
+    payloads = _payloads_for_claim(summary, claim_workers=claim_workers)
     if payloads is None:
+        if explicit:
+            return False, "deterministic payload coverage was asserted but payload chunks were not recorded"
         return False, "deterministic payload coverage was not recorded"
 
     expected_values = summary.get("which_rhs_values")
@@ -128,9 +276,26 @@ def _deterministic_payload_coverage(summary: dict[str, object], *, task_count: i
             raise ValueError(f"payloads[{i}].which_rhs_values must contain integer RHS indices") from exc
 
     coverage_ok = len(seen) == len(set(seen)) and set(seen) == expected
-    if coverage_ok:
+    if coverage_ok and explicit is not False:
         return True, None
+    if coverage_ok:
+        return False, "deterministic payload coverage was explicitly marked false"
     return False, f"payload RHS coverage must be deterministic and exact; expected {sorted(expected)}, got {seen}"
+
+
+def _deterministic_output_check(
+    summary: dict[str, object],
+    *,
+    deterministic_payload_coverage: bool,
+) -> tuple[bool, str | None]:
+    explicit = _optional_bool(summary.get("deterministic_output_check"), name="deterministic_output_check")
+    if explicit is not None:
+        if explicit:
+            return True, None
+        return False, "deterministic output check was explicitly marked false"
+    if deterministic_payload_coverage:
+        return True, "deterministic output check inferred from exact payload coverage"
+    return False, "deterministic output check was not recorded"
 
 
 def audit_transport_parallel_scaling_summary(
@@ -148,9 +313,26 @@ def audit_transport_parallel_scaling_summary(
     if not isinstance(summary, dict):
         raise ValueError("transport-worker scaling summary must be a dictionary")
 
+    min_speedup_value = _speedup_threshold(min_speedup, name="min_speedup")
+    min_efficiency_value = _efficiency_threshold(min_efficiency, name="min_efficiency")
+    min_parallel_workers_value = validate_transport_parallel_worker_count(
+        min_parallel_workers,
+        context="minimum parallel",
+    )
+
+    benchmark_kind = _normalized_benchmark_kind(summary, default="transport_worker_scaling")
+    if benchmark_kind in {"single_case_sharded_solve", "sharded_solve_scaling", "sharded_solve"}:
+        raise ValueError(
+            "single-case sharded-solve summaries must use audit_sharded_solve_scaling_summary; "
+            "they are not transport-worker scaling claims"
+        )
+    if benchmark_kind not in {"transport_worker_scaling", "transport_parallel_scaling", "whichrhs_worker_scaling"}:
+        raise ValueError(f"unsupported transport-worker benchmark_kind={benchmark_kind!r}")
+
     backend = str(summary.get("backend", "cpu")).strip().lower() or "cpu"
     task_count = _scaling_task_count(summary)
     device_count, device_note = _scaling_device_count(summary, backend=backend)
+    timing_semantics, timing_note = _timing_semantics(summary)
 
     raw_results = summary.get("results")
     if not isinstance(raw_results, list) or not raw_results:
@@ -191,24 +373,46 @@ def audit_transport_parallel_scaling_summary(
     else:
         claim_finite_task_ideal_speedup = float(task_count) / float(math.ceil(task_count / claim_workers))
 
-    deterministic_payload_coverage, coverage_note = _deterministic_payload_coverage(summary, task_count=task_count)
+    deterministic_payload_coverage, coverage_note = _deterministic_payload_coverage(
+        summary,
+        task_count=task_count,
+        claim_workers=claim_workers,
+    )
+    deterministic_output_check, output_note = _deterministic_output_check(
+        summary,
+        deterministic_payload_coverage=deterministic_payload_coverage,
+    )
 
     failures: list[str] = []
     notes: list[str] = []
-    if task_count < min_parallel_workers:
-        failures.append(f"only {task_count} independent transport tasks; need at least {min_parallel_workers}")
-    if claim_workers < min_parallel_workers:
-        failures.append(f"only {claim_workers} worker count audited; need at least {min_parallel_workers}")
+    if task_count < min_parallel_workers_value:
+        failures.append(
+            f"only {task_count} independent transport tasks; need at least {min_parallel_workers_value}"
+        )
+    if claim_workers < min_parallel_workers_value:
+        failures.append(
+            f"only {claim_workers} worker count audited; need at least {min_parallel_workers_value}"
+        )
+    if claim_workers > task_count:
+        failures.append(f"{claim_workers} workers cannot be claimed for only {task_count} independent transport tasks")
     if backend == "gpu" and device_count is None:
         failures.append("GPU device count was not recorded")
     if backend == "gpu" and device_count is not None and device_count < claim_workers:
         failures.append(f"only {device_count} GPU devices recorded for {claim_workers} workers")
-    if claim_speedup < float(min_speedup):
-        failures.append(f"speedup {claim_speedup:.3g}x is below release gate {float(min_speedup):.3g}x")
-    if claim_efficiency < float(min_efficiency):
-        failures.append(f"efficiency {claim_efficiency:.3g} is below release gate {float(min_efficiency):.3g}")
+    if timing_semantics is None:
+        failures.append("timing semantics were not recorded")
+    elif timing_semantics in {"cold", "cold_start", "cold_cache"}:
+        failures.append(f"timing semantics {timing_semantics!r} include cold setup and cannot support a warm scaling claim")
+    elif timing_semantics in {"mixed", "mixed_warm_cold"}:
+        failures.append("mixed warm/cold timing semantics cannot support a release scaling claim")
+    if claim_speedup < min_speedup_value:
+        failures.append(f"speedup {claim_speedup:.3g}x is below release gate {min_speedup_value:.3g}x")
+    if claim_efficiency < min_efficiency_value:
+        failures.append(f"efficiency {claim_efficiency:.3g} is below release gate {min_efficiency_value:.3g}")
     if not deterministic_payload_coverage:
         failures.append("deterministic payload coverage was not proven")
+    if not deterministic_output_check:
+        failures.append("deterministic output check was not proven")
     if claim_speedup > claim_finite_task_ideal_speedup * 1.05:
         failures.append(
             f"speedup {claim_speedup:.3g}x exceeds finite-task ideal {claim_finite_task_ideal_speedup:.3g}x by more than 5%"
@@ -216,8 +420,12 @@ def audit_transport_parallel_scaling_summary(
 
     if device_note is not None:
         notes.append(device_note)
+    if timing_note is not None:
+        notes.append(timing_note)
     if coverage_note is not None:
         notes.append(coverage_note)
+    if output_note is not None:
+        notes.append(output_note)
     if task_count < claim_workers:
         notes.append(f"{task_count} transport tasks cannot keep {claim_workers} workers fully occupied")
 
@@ -235,6 +443,126 @@ def audit_transport_parallel_scaling_summary(
         release_scaling_claim=not failures,
         failures=tuple(failures),
         notes=tuple(notes),
+        benchmark_kind=benchmark_kind,
+        timing_semantics=timing_semantics,
+        deterministic_output_check=deterministic_output_check,
+        min_speedup=min_speedup_value,
+        min_efficiency=min_efficiency_value,
+        min_parallel_workers=min_parallel_workers_value,
+    )
+
+
+def audit_sharded_solve_scaling_summary(
+    summary: dict[str, object],
+    *,
+    min_parallel_devices: int = 2,
+) -> ShardedSolveScalingAudit:
+    """Audit a single-case sharded-solve benchmark for schema honesty.
+
+    This intentionally does not mint a release scaling claim. A sharded
+    RHSMode=1 benchmark is one coupled solve spread across devices, so it is a
+    different class from independent transport-worker throughput.
+    """
+    if not isinstance(summary, dict):
+        raise ValueError("sharded-solve scaling summary must be a dictionary")
+
+    min_parallel_devices_value = validate_transport_parallel_worker_count(
+        min_parallel_devices,
+        context="minimum parallel device",
+    )
+    benchmark_kind = _normalized_benchmark_kind(summary, default="single_case_sharded_solve")
+    if benchmark_kind in {"transport_worker_scaling", "transport_parallel_scaling", "whichrhs_worker_scaling"}:
+        raise ValueError(
+            "transport-worker summaries must use audit_transport_parallel_scaling_summary; "
+            "they are not single-case sharded-solve scaling claims"
+        )
+    if benchmark_kind not in {"single_case_sharded_solve", "sharded_solve_scaling", "sharded_solve"}:
+        raise ValueError(f"unsupported sharded-solve benchmark_kind={benchmark_kind!r}")
+
+    backend = str(summary.get("backend", "cpu")).strip().lower() or "cpu"
+    timing_semantics, timing_note = _timing_semantics(summary)
+    deterministic_output_check = bool(
+        _optional_bool(summary.get("deterministic_output_check"), name="deterministic_output_check") or False
+    )
+    requested_release = bool(_optional_bool(summary.get("release_scaling_claim"), name="release_scaling_claim") or False)
+
+    raw_results = summary.get("results")
+    if not isinstance(raw_results, list) or not raw_results:
+        raise ValueError("sharded-solve scaling summary must include a non-empty results list")
+
+    results: dict[int, dict[str, float]] = {}
+    for i, result in enumerate(raw_results):
+        if not isinstance(result, dict):
+            raise ValueError(f"results[{i}] must be a dictionary")
+        devices = validate_transport_parallel_worker_count(result.get("devices"), context=f"results[{i}]")
+        mean_s = _finite_positive_float(result.get("mean_s"), name=f"results[{i}].mean_s")
+        speedup_raw = result.get("speedup")
+        speedup = _finite_positive_float(speedup_raw, name=f"results[{i}].speedup") if speedup_raw is not None else math.nan
+        results[devices] = {"mean_s": mean_s, "speedup": speedup}
+
+    if 1 not in results:
+        raise ValueError("sharded-solve scaling summary must include a 1-device baseline")
+    baseline_s = results[1]["mean_s"]
+    for devices, result in results.items():
+        if math.isnan(result["speedup"]):
+            result["speedup"] = baseline_s / result["mean_s"]
+
+    device_counts = tuple(sorted(results))
+    claim_devices = max(device_counts)
+    claim_speedup = results[claim_devices]["speedup"]
+    claim_efficiency = claim_speedup / float(claim_devices)
+
+    experimental_marker = _optional_bool(
+        summary.get("experimental_single_case_scaling"),
+        name="experimental_single_case_scaling",
+    )
+    scaling_status = str(summary.get("scaling_status", "")).strip().lower().replace("-", "_")
+    experimental_single_case_scaling = bool(experimental_marker) or scaling_status in {
+        "experimental",
+        "experimental_single_case_sharding",
+        "regression_snapshot",
+        "non_release_snapshot",
+    }
+
+    failures: list[str] = []
+    notes: list[str] = []
+    if claim_devices < min_parallel_devices_value:
+        failures.append(f"only {claim_devices} device count audited; need at least {min_parallel_devices_value}")
+    if requested_release:
+        failures.append("single-case sharded-solve summaries must not set release_scaling_claim=true")
+    if not experimental_single_case_scaling:
+        failures.append("single-case sharded-solve summary must be marked experimental/non-release")
+    if timing_semantics is None:
+        failures.append("timing semantics were not recorded")
+    elif timing_semantics in {"cold", "cold_start", "cold_cache"}:
+        notes.append(f"timing semantics {timing_semantics!r} include cold setup")
+    if backend == "gpu":
+        device_count, device_note = _scaling_device_count(summary, backend=backend)
+        if device_note is not None:
+            notes.append(device_note)
+        if device_count is not None and device_count < claim_devices:
+            failures.append(f"only {device_count} GPU devices recorded for {claim_devices} sharded devices")
+    if not deterministic_output_check:
+        notes.append("deterministic output parity was not recorded for this timing-only sharded benchmark")
+    if timing_note is not None:
+        notes.append(timing_note)
+    notes.append("single-case sharded solve remains experimental and is not a release scaling claim")
+
+    return ShardedSolveScalingAudit(
+        backend=backend,
+        device_counts=device_counts,
+        baseline_s=baseline_s,
+        claim_devices=claim_devices,
+        claim_speedup=claim_speedup,
+        claim_efficiency=claim_efficiency,
+        release_scaling_claim=False,
+        experimental_single_case_scaling=experimental_single_case_scaling,
+        ci_gate_pass=not failures,
+        failures=tuple(failures),
+        notes=tuple(notes),
+        benchmark_kind=benchmark_kind,
+        timing_semantics=timing_semantics,
+        deterministic_output_check=deterministic_output_check,
     )
 
 

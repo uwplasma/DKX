@@ -47,6 +47,17 @@ DEFAULT_SYSTEMS = (
     "nonfinite_candidate_reject",
 )
 SYSTEMS = DEFAULT_SYSTEMS + ("timeout_sleep",)
+MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S = 600.0
+DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S = 240.0
+DEFAULT_PRODUCTION_SOLVE_VARIANTS = ("tzfft", "tzfft_lgmres")
+DEFAULT_PRODUCTION_SOLVE_GRID = {
+    "Ntheta": 25,
+    "Nzeta": 51,
+    "Nxi": 100,
+    "Nx": 4,
+}
+DEFAULT_PRODUCTION_SOLVE_MAX_RSS_MB = 4096.0
+DEFAULT_PRODUCTION_SOLVE_MAX_RESIDUAL_NORM = 1.0e-3
 
 
 def _positive_float(value: str) -> float:
@@ -60,6 +71,13 @@ def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
+
+
+def _nonnegative_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0.0:
+        raise argparse.ArgumentTypeError("must be finite and >= 0")
     return parsed
 
 
@@ -90,6 +108,46 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-residual-reduction", type=float, default=1.0e-3)
     parser.add_argument("--block-size", type=_positive_int, default=64)
     parser.add_argument("--max-update-norm-ratio", type=float, default=10.0)
+    parser.add_argument(
+        "--run-production-solve-probe",
+        action="store_true",
+        help="Opt in to bounded production-floor real-solve probes after preflight passes.",
+    )
+    parser.add_argument(
+        "--production-solve-timeout-s",
+        type=_positive_float,
+        default=DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S,
+        help="Per-target real-solve timeout; defaults below the 10 minute safety cap.",
+    )
+    parser.add_argument(
+        "--production-solve-variants",
+        nargs="+",
+        default=list(DEFAULT_PRODUCTION_SOLVE_VARIANTS),
+        help="PAS-TZ fallback variants for the opt-in real-solve layer.",
+    )
+    parser.add_argument(
+        "--production-solve-max-rss-mb",
+        type=_nonnegative_float,
+        default=DEFAULT_PRODUCTION_SOLVE_MAX_RSS_MB,
+        help="Opt-in real-solve RSS gate; 0 records memory without thresholding.",
+    )
+    parser.add_argument(
+        "--production-solve-max-residual-norm",
+        type=_nonnegative_float,
+        default=DEFAULT_PRODUCTION_SOLVE_MAX_RESIDUAL_NORM,
+        help="Opt-in real-solve residual gate.",
+    )
+    parser.add_argument(
+        "--production-solve-expected-backend",
+        choices=("auto", "cpu", "gpu"),
+        default="auto",
+        help="Optional CPU/GPU backend gate passed to the real-solve harness.",
+    )
+    parser.add_argument(
+        "--allow-long-production-solve",
+        action="store_true",
+        help="Allow opt-in production real-solve timeouts above 600s.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Write the planned probes without running them.")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--case-json", default="", help=argparse.SUPPRESS)
@@ -327,10 +385,129 @@ def build_probe_cases(args: argparse.Namespace) -> list[dict[str, Any]]:
     return cases
 
 
+def _metadata_input_path(metadata: dict[str, Any]) -> Path:
+    raw = Path(str(metadata["input"]))
+    return raw if raw.is_absolute() else _REPO_ROOT / raw
+
+
+def _production_solve_output_path(args: argparse.Namespace, target: str) -> Path:
+    return Path(args.out).parent / f"rhs1_pas_production_solve_{target}.json"
+
+
+def _production_solve_wall_timeout_s(args: argparse.Namespace) -> float:
+    timeout_s = float(args.production_solve_timeout_s)
+    variant_count = max(1, len(list(args.production_solve_variants)))
+    planned = timeout_s * variant_count + 30.0
+    if bool(args.allow_long_production_solve):
+        return planned
+    return min(MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S, planned)
+
+
+def _validate_production_solve_bounds(args: argparse.Namespace) -> None:
+    if bool(args.allow_long_production_solve):
+        return
+    timeout_s = float(args.production_solve_timeout_s)
+    if timeout_s > MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S:
+        raise ValueError(
+            "default production real-solve probes are capped at 600s; "
+            "pass --allow-long-production-solve for explicit longer probes"
+        )
+
+
+def build_bounded_real_solve_probe(
+    args: argparse.Namespace,
+    *,
+    cases: list[dict[str, Any]],
+    preflight: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the opt-in production-floor real-solve probe plan."""
+    target_cases = {
+        target: _metadata_matches(cases, target)
+        for target in PRODUCTION_FLOOR_TARGETS
+    }
+    targets: dict[str, Any] = {}
+    for target in PRODUCTION_FLOOR_TARGETS:
+        preflight_target = dict(preflight.get("targets", {}).get(target, {}))
+        metadata_cases = target_cases[target]
+        metadata = metadata_cases[0].get("source_metadata") if metadata_cases else None
+        ready = bool(preflight_target.get("ready") is True and metadata)
+        out_path = _production_solve_output_path(args, target)
+        command: list[str] = []
+        if metadata:
+            input_path = _metadata_input_path(metadata)
+            command = [
+                sys.executable,
+                str(_REPO_ROOT / "scripts" / "benchmark_pas_tz_memory_fallback.py"),
+                "--input",
+                str(input_path),
+                "--out",
+                str(out_path),
+                "--variants",
+                *(str(variant) for variant in args.production_solve_variants),
+                "--timeout-s",
+                str(float(args.production_solve_timeout_s)),
+                "--stall-s",
+                str(float(args.production_solve_timeout_s)),
+                "--maxiter",
+                "20",
+                "--restart",
+                "20",
+                "--solve-method",
+                "incremental",
+                "--Ntheta",
+                str(DEFAULT_PRODUCTION_SOLVE_GRID["Ntheta"]),
+                "--Nzeta",
+                str(DEFAULT_PRODUCTION_SOLVE_GRID["Nzeta"]),
+                "--Nxi",
+                str(DEFAULT_PRODUCTION_SOLVE_GRID["Nxi"]),
+                "--Nx",
+                str(DEFAULT_PRODUCTION_SOLVE_GRID["Nx"]),
+                "--max-rss-mb",
+                str(float(args.production_solve_max_rss_mb)),
+                "--max-residual-norm",
+                str(float(args.production_solve_max_residual_norm)),
+                "--expected-backend",
+                str(args.production_solve_expected_backend),
+            ]
+            if bool(args.allow_long_production_solve):
+                command.append("--allow-long-run")
+        targets[target] = {
+            "ready": ready,
+            "will_run": bool(args.run_production_solve_probe and (not args.dry_run) and ready),
+            "skip_reason": None
+            if ready
+            else preflight_target.get("next_solve_recommendation", "preflight-not-ready"),
+            "input": str(_metadata_input_path(metadata)) if metadata else None,
+            "out": str(out_path),
+            "command": command,
+        }
+    return {
+        "mode": "bounded_real_solve_probe",
+        "description": "Opt-in subprocess layer using benchmark_pas_tz_memory_fallback.py; default planning launches no solves.",
+        "run_requested": bool(args.run_production_solve_probe),
+        "dry_run": bool(args.dry_run),
+        "max_default_runtime_s": MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S,
+        "timeout_s": float(args.production_solve_timeout_s),
+        "parent_wall_timeout_s": _production_solve_wall_timeout_s(args),
+        "allow_long_run": bool(args.allow_long_production_solve),
+        "variants": list(args.production_solve_variants),
+        "grid_overrides": dict(DEFAULT_PRODUCTION_SOLVE_GRID),
+        "gates": {
+            "stall_s": float(args.production_solve_timeout_s),
+            "max_rss_mb": float(args.production_solve_max_rss_mb),
+            "max_residual_norm": float(args.production_solve_max_residual_norm),
+            "expected_backend": str(args.production_solve_expected_backend),
+            "solver_path_churn_allowed": False,
+        },
+        "targets": targets,
+    }
+
+
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     cases = build_probe_cases(args)
     artifact_probe = build_artifact_probe(args.artifact_inputs)
     preflight = build_production_floor_preflight(cases=cases, artifacts=artifact_probe["artifacts"])
+    real_solve_probe = build_bounded_real_solve_probe(args, cases=cases, preflight=preflight)
     return {
         "timeout_s": float(args.timeout_s),
         "dry_run": bool(args.dry_run),
@@ -340,6 +517,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "artifact_inputs": [_input_record(Path(path)) for path in args.artifact_inputs],
         "artifact_probe": artifact_probe,
         "production_floor_preflight": preflight,
+        "bounded_real_solve_probe": real_solve_probe,
         "gates": {
             "keep": {
                 "requires": [
@@ -846,8 +1024,78 @@ def _run_child(args: argparse.Namespace, case: dict[str, Any]) -> dict[str, Any]
     return payload
 
 
+def _load_probe_summary(out_path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(out_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    summary = payload.get("summary")
+    return summary if isinstance(summary, dict) else None
+
+
+def run_bounded_real_solve_probe(
+    args: argparse.Namespace,
+    probe_plan: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Run ready opt-in production-floor real-solve probes as bounded subprocesses."""
+    results: list[dict[str, Any]] = []
+    wall_timeout_s = float(probe_plan["parent_wall_timeout_s"])
+    targets = probe_plan.get("targets", {})
+    if not isinstance(targets, dict):
+        return results
+    for target, record in targets.items():
+        if not isinstance(record, dict) or not record.get("will_run"):
+            continue
+        command = record.get("command", [])
+        if not isinstance(command, list) or not command:
+            results.append({"target": str(target), "status": "error", "reason": "missing-command"})
+            continue
+        t0 = time.perf_counter()
+        try:
+            completed = subprocess.run(
+                [str(item) for item in command],
+                text=True,
+                capture_output=True,
+                timeout=wall_timeout_s,
+            )
+        except subprocess.TimeoutExpired as exc:
+            results.append(
+                {
+                    "target": str(target),
+                    "status": "timeout",
+                    "elapsed_s": float(time.perf_counter() - t0),
+                    "timeout_s": wall_timeout_s,
+                    "out": record.get("out"),
+                    "stdout_tail": _tail_text(exc.stdout),
+                    "stderr_tail": _tail_text(exc.stderr),
+                }
+            )
+            continue
+        out_path = Path(str(record.get("out", "")))
+        summary = _load_probe_summary(out_path)
+        results.append(
+            {
+                "target": str(target),
+                "status": "ok" if completed.returncode == 0 else "error",
+                "returncode": int(completed.returncode),
+                "elapsed_s": float(time.perf_counter() - t0),
+                "timeout_s": wall_timeout_s,
+                "out": str(out_path),
+                "summary": summary,
+                "all_gates_passed": bool(summary and summary.get("all_gates_passed") is True),
+                "stdout_tail": _tail_text(completed.stdout),
+                "stderr_tail": _tail_text(completed.stderr),
+            }
+        )
+    return results
+
+
 def summarize_results(
-    results: list[dict[str, Any]], preflight: dict[str, Any] | None = None
+    results: list[dict[str, Any]],
+    preflight: dict[str, Any] | None = None,
+    production_solve_results: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     by_gate = {"keep": 0, "reject": 0}
     by_status: dict[str, int] = {}
@@ -860,6 +1108,12 @@ def summarize_results(
         if row.get("meets_expected_gate") is False:
             unexpected.append(str(row.get("case_id", "unknown")))
     preflight_ready = bool(preflight and preflight.get("all_required_targets_ready") is True)
+    solve_results = production_solve_results or []
+    solve_failures = [
+        str(row.get("target", "unknown"))
+        for row in solve_results
+        if row.get("status") != "ok" or row.get("all_gates_passed") is False
+    ]
     return {
         "by_gate": by_gate,
         "by_status": by_status,
@@ -867,6 +1121,9 @@ def summarize_results(
         "all_expected_gates_met": not unexpected,
         "lane_state": "harness_only_no_solver_default_change",
         "production_floor_probe_ready": preflight_ready and (not results or not unexpected),
+        "production_real_solve_result_count": len(solve_results),
+        "production_real_solve_failures": solve_failures,
+        "production_real_solve_all_gates_passed": bool(solve_results) and not solve_failures,
         "next_real_solve_recommendation": "proceed_to_short_real_solve_probe"
         if preflight_ready and (not results or not unexpected)
         else "hold_for_missing_or_unexpected_probe_evidence",
@@ -874,7 +1131,12 @@ def summarize_results(
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    try:
+        _validate_production_solve_bounds(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.child:
         if not args.case_json:
             raise ValueError("--case-json is required in child mode")
@@ -884,6 +1146,7 @@ def main(argv: list[str] | None = None) -> int:
 
     plan = build_plan(args)
     results: list[dict[str, Any]] = []
+    production_solve_results: list[dict[str, Any]] = []
     if not args.dry_run:
         for case in plan["cases"]:
             row = _run_child(args, case)
@@ -892,13 +1155,15 @@ def main(argv: list[str] | None = None) -> int:
                 f"{case['case_id']}: {row.get('status')} gate={row.get('gate')} reason={row.get('gate_reason')}",
                 flush=True,
             )
+        production_solve_results = run_bounded_real_solve_probe(args, plan["bounded_real_solve_probe"])
 
     payload = {
         "schema_version": 1,
         "kind": "rhs1_pas_matrixfree_probe",
         "plan": plan,
         "results": results,
-        "summary": summarize_results(results, plan["production_floor_preflight"]),
+        "production_solve_results": production_solve_results,
+        "summary": summarize_results(results, plan["production_floor_preflight"], production_solve_results),
     }
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

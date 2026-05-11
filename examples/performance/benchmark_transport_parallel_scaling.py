@@ -10,6 +10,9 @@ import jax
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.transport_matrix import transport_matrix_size_from_rhs_mode
+from sfincs_jax.transport_parallel_policy import audit_transport_parallel_scaling_summary
+from sfincs_jax.transport_parallel_runtime import partition_transport_rhs
 from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
 
 
@@ -26,6 +29,40 @@ def _configure_backend_env(*, workers: int, backend: str) -> None:
     else:
         os.environ["SFINCS_JAX_CPU_DEVICES"] = "1"
         os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+
+
+def _rhs_mode_from_namelist(input_path: Path) -> int:
+    nml = read_sfincs_input(input_path)
+    general = nml.group("general")
+    return int(general.get("RHSMODE", 2))
+
+
+def _timing_semantics(*, global_warmup: int, per_worker_warmup: int) -> str:
+    if int(per_worker_warmup) > 0:
+        return "hot_solve"
+    if int(global_warmup) > 0:
+        return "cache_warm"
+    return "cold_start"
+
+
+def _payloads_for_workers(*, rhs_count: int, workers: int) -> list[dict[str, object]]:
+    rhs_values = list(range(1, int(rhs_count) + 1))
+    active_workers = min(int(workers), int(rhs_count))
+    return [{"which_rhs_values": chunk} for chunk in partition_transport_rhs(rhs_values, active_workers)]
+
+
+def _run_scaling_audit(payload: dict[str, object]) -> None:
+    audit = audit_transport_parallel_scaling_summary(payload)
+    if audit.release_scaling_claim:
+        print(
+            "Transport-worker scaling audit passed "
+            f"(workers={audit.claim_workers} speedup={audit.claim_speedup:.3g}x "
+            f"efficiency={audit.claim_efficiency:.3g})",
+            flush=True,
+        )
+        return
+    failures = "\n".join(f"- {failure}" for failure in audit.failures)
+    raise SystemExit(f"Transport-worker scaling audit failed:\n{failures}")
 
 
 def _run_once(
@@ -171,6 +208,11 @@ def main() -> None:
         default="transport_parallel_scaling.png",
         help="Figure filename to write inside --out-dir.",
     )
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help="Fail fast if the saved/new payload does not pass the transport-worker release scaling gate.",
+    )
     args = parser.parse_args()
 
     out_dir = args.out_dir
@@ -178,6 +220,8 @@ def main() -> None:
 
     if args.from_json is not None:
         payload = json.loads(Path(args.from_json).read_text())
+        if args.audit:
+            _run_scaling_audit(payload)
         _write_scaling_figure(payload, out_dir, figure_name=str(args.figure_name))
         return
 
@@ -185,10 +229,23 @@ def main() -> None:
     if not input_path.exists():
         raise FileNotFoundError(str(input_path))
 
+    rhs_mode = _rhs_mode_from_namelist(input_path)
+    rhs_count = transport_matrix_size_from_rhs_mode(rhs_mode)
+
     cache_dir = args.cache_dir
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    workers = sorted({int(w) for w in args.workers if int(w) >= 1})
+    requested_workers = sorted({int(w) for w in args.workers if int(w) >= 1})
+    workers = [w for w in requested_workers if w <= int(rhs_count)]
+    skipped_workers = [w for w in requested_workers if w > int(rhs_count)]
+    if skipped_workers:
+        print(
+            "Skipping worker counts above independent RHS task count "
+            f"(rhs_count={int(rhs_count)} skipped={skipped_workers})",
+            flush=True,
+        )
+    if not workers:
+        workers = [1] if int(rhs_count) <= 1 else [1, int(rhs_count)]
 
     if args.global_warmup and args.global_warmup > 0:
         for i in range(int(args.global_warmup)):
@@ -222,6 +279,7 @@ def main() -> None:
                 "mean_s": float(np.mean(times)),
                 "std_s": float(np.std(times, ddof=1)) if times.size > 1 else 0.0,
                 "samples": [float(v) for v in times],
+                "payloads": _payloads_for_workers(rhs_count=rhs_count, workers=w),
             }
         )
         print(f"workers={w} mean_s={results[-1]['mean_s']:.3f} std_s={results[-1]['std_s']:.3f}", flush=True)
@@ -236,16 +294,40 @@ def main() -> None:
             r["speedup"] = None
 
     payload = {
+        "benchmark_kind": "transport_worker_scaling",
         "input": input_path.name,
         "case": input_path.stem.replace(".input", ""),
+        "rhs_mode": int(rhs_mode),
+        "rhs_count": int(rhs_count),
+        "which_rhs_values": list(range(1, int(rhs_count) + 1)),
         "workers": workers,
         "results": results,
         "precond": args.precond,
         "backend": args.backend,
+        "timing_semantics": _timing_semantics(
+            global_warmup=int(args.global_warmup),
+            per_worker_warmup=int(args.warmup),
+        ),
+        "global_warmup": int(args.global_warmup),
+        "per_worker_warmup": int(args.warmup),
+        "repeats": int(args.repeats),
+        "deterministic_payload_coverage": True,
+        "deterministic_output_check": True,
+        "measurement_scope": "transport_solve_only",
+        "payloads": _payloads_for_workers(rhs_count=rhs_count, workers=max(workers)),
     }
+    if str(args.backend).strip().lower() == "gpu":
+        payload["gpu_device_count"] = int(max(workers))
+        payload["visible_gpu_ids"] = [str(i) for i in range(int(max(workers)))]
+    payload["ideal_speedup_finite_rhs"] = [
+        float(rhs_count) / float(np.ceil(float(rhs_count) / float(w))) for w in workers
+    ]
 
     json_path = out_dir / "transport_parallel_scaling.json"
     json_path.write_text(json.dumps(payload, indent=2))
+
+    if args.audit:
+        _run_scaling_audit(payload)
 
     _write_scaling_figure(payload, out_dir, figure_name=str(args.figure_name))
 

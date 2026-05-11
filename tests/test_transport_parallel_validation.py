@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from sfincs_jax.transport_parallel_validation import (
+    validate_complete_transport_worker_rhs_coverage,
     validate_distinct_transport_worker_rhs,
     validate_gpu_transport_worker_arrays,
     validate_transport_worker_result_payload,
@@ -55,6 +56,16 @@ def test_validate_transport_worker_result_payload_rejects_zero_rhs() -> None:
             result=_complete_worker_result(),
             n_rhs=2,
         )
+
+
+def test_validate_complete_transport_worker_rhs_coverage_rejects_missing_rhs() -> None:
+    with pytest.raises(ValueError, match=r"missing whichRHS values \[2\]"):
+        validate_complete_transport_worker_rhs_coverage(seen_rhs={1, 3}, n_rhs=3)
+
+
+def test_validate_complete_transport_worker_rhs_coverage_rejects_extra_rhs() -> None:
+    with pytest.raises(ValueError, match=r"out-of-range whichRHS values \[4\] for n_rhs=3"):
+        validate_complete_transport_worker_rhs_coverage(seen_rhs={1, 2, 3, 4}, n_rhs=3)
 
 
 def test_validate_gpu_transport_worker_arrays_rejects_rhs_coverage_mismatch() -> None:

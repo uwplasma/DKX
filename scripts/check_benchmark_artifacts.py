@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Check PAS benchmark JSON artifacts for reproducibility metadata."""
+"""Check benchmark JSON artifacts for reproducibility metadata."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from sfincs_jax.benchmark_artifact_policy import check_benchmark_artifact_files
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate PAS benchmark JSON artifacts against the reproducibility policy."
+        description="Validate benchmark JSON artifacts against the reproducibility policy."
     )
     parser.add_argument("paths", nargs="+", type=Path, help="Benchmark JSON artifact path(s) to check.")
     return parser

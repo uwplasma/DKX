@@ -12,6 +12,7 @@ from scripts.benchmark_rhs1_pas_matrixfree import (
     build_plan,
     build_probe_cases,
     main,
+    run_bounded_real_solve_probe,
 )
 
 
@@ -116,6 +117,9 @@ def test_dry_run_writes_json_schema_without_subprocess(
     assert payload["summary"]["next_real_solve_recommendation"] == "hold_for_missing_or_unexpected_probe_evidence"
     assert payload["plan"]["artifact_probe"]["mode"] == "checked_in_artifact_dry_run"
     assert payload["plan"]["production_floor_preflight"]["all_required_targets_ready"] is False
+    assert payload["plan"]["bounded_real_solve_probe"]["run_requested"] is False
+    assert payload["plan"]["bounded_real_solve_probe"]["parent_wall_timeout_s"] <= 600.0
+    assert payload["plan"]["bounded_real_solve_probe"]["gates"]["max_rss_mb"] == 4096.0
     assert set(payload["plan"]["gates"]) == {"keep", "reject"}
     assert payload["plan"]["cases"][0]["case_id"] == "diagonal_keep"
     assert payload["plan"]["cases"][0]["source_type"] == "synthetic"
@@ -304,6 +308,15 @@ def test_production_floor_preflight_ready_from_metadata_and_checked_in_artifacts
     assert set(preflight["ready_targets"]) == {"geometry4", "hsx", "geometry11"}
     assert payload["summary"]["production_floor_probe_ready"] is True
     assert payload["summary"]["next_real_solve_recommendation"] == "proceed_to_short_real_solve_probe"
+    real_solve = payload["plan"]["bounded_real_solve_probe"]
+    assert real_solve["run_requested"] is False
+    assert set(real_solve["targets"]) == {"geometry4", "hsx", "geometry11"}
+    assert all(target["ready"] is True for target in real_solve["targets"].values())
+    assert all(target["will_run"] is False for target in real_solve["targets"].values())
+    assert real_solve["targets"]["geometry4"]["command"][1].endswith(
+        "scripts/benchmark_pas_tz_memory_fallback.py"
+    )
+    assert "--max-residual-norm" in real_solve["targets"]["geometry4"]["command"]
     assert {case["source_type"] for case in payload["plan"]["cases"]} == {
         "synthetic",
         "production_floor_geometry_metadata",
@@ -354,3 +367,103 @@ def test_artifact_probe_is_json_safe_for_nonfinite_residual(tmp_path: Path) -> N
     assert row["best_residual_norm"] is None
     assert row["guarded_pas_tz_seen"] is True
     json.dumps(probe, allow_nan=False)
+
+
+def test_opt_in_production_real_solve_probe_runs_ready_targets_with_parent_bound(
+    tmp_path: Path, monkeypatch
+) -> None:
+    geom4 = _write_input(tmp_path, geometry_scheme=4, case_name="geometryScheme4_2species_PAS_noEr")
+    hsx = _write_input(
+        tmp_path,
+        geometry_scheme=11,
+        case_name="HSX_PASCollisions_DKESTrajectories",
+        equilibrium_file="hsx3free.bc",
+    )
+    geom11 = _write_input(
+        tmp_path,
+        geometry_scheme=11,
+        case_name="sfincsPaperFigure3_geometryScheme11_PASCollisions",
+        equilibrium_file="w7x-sc1.bc",
+    )
+    artifacts = [
+        _write_artifact(tmp_path / "artifacts" / "geometry4.json", target_input=str(geom4)),
+        _write_artifact(tmp_path / "artifacts" / "hsx.json", target_input=str(hsx)),
+        _write_artifact(tmp_path / "artifacts" / "geom11.json", target_input=str(geom11)),
+    ]
+    args = _parse_args(
+        [
+            "--run-production-solve-probe",
+            "--out",
+            str(tmp_path / "probe.json"),
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+            str(geom4),
+            str(hsx),
+            str(geom11),
+            "--artifact-inputs",
+            *(str(path) for path in artifacts),
+        ]
+    )
+    plan = build_plan(args)
+    captured: list[tuple[list[str], float]] = []
+
+    def fake_run(cmd: list[str], *, text: bool, capture_output: bool, timeout: float):
+        assert text is True
+        assert capture_output is True
+        out_path = Path(cmd[cmd.index("--out") + 1])
+        out_path.write_text(json.dumps({"summary": {"all_gates_passed": True}}) + "\n")
+        captured.append((cmd, timeout))
+        return subprocess.CompletedProcess(cmd, 0, stdout="wrote\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    rows = run_bounded_real_solve_probe(args, plan["bounded_real_solve_probe"])
+
+    assert len(rows) == 3
+    assert {row["target"] for row in rows} == {"geometry4", "hsx", "geometry11"}
+    assert all(row["all_gates_passed"] is True for row in rows)
+    assert all(timeout <= 600.0 for _, timeout in captured)
+    assert all("--timeout-s" in cmd for cmd, _ in captured)
+    assert captured[0][0][captured[0][0].index("--maxiter") + 1] == "20"
+    assert captured[0][0][captured[0][0].index("--restart") + 1] == "20"
+
+
+def test_production_real_solve_probe_rejects_long_timeout_without_opt_in(tmp_path: Path) -> None:
+    out = tmp_path / "probe.json"
+
+    try:
+        main(["--dry-run", "--out", str(out), "--production-solve-timeout-s", "601"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected parser failure for unbounded production solve timeout")
+
+
+def test_dry_run_never_launches_opt_in_production_real_solve(tmp_path: Path, monkeypatch) -> None:
+    out = tmp_path / "probe.json"
+
+    def fail_run(*_args, **_kwargs):
+        raise AssertionError("dry-run must not launch production real-solve subprocesses")
+
+    monkeypatch.setattr(subprocess, "run", fail_run)
+
+    rc = main(
+        [
+            "--dry-run",
+            "--run-production-solve-probe",
+            "--out",
+            str(out),
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(out.read_text())
+    assert payload["plan"]["bounded_real_solve_probe"]["run_requested"] is True
+    assert all(
+        target["will_run"] is False
+        for target in payload["plan"]["bounded_real_solve_probe"]["targets"].values()
+    )

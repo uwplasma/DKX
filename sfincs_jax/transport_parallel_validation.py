@@ -56,6 +56,26 @@ def validate_transport_worker_result_payload(
             )
 
 
+def validate_complete_transport_worker_rhs_coverage(
+    *,
+    seen_rhs: set[int],
+    n_rhs: int,
+) -> None:
+    expected = set(range(1, int(n_rhs) + 1))
+    missing = sorted(expected - set(seen_rhs))
+    extra = sorted(set(seen_rhs) - expected)
+    if missing:
+        raise ValueError(
+            "transport parallel worker results are missing whichRHS values "
+            f"{format_transport_rhs_list(missing)}"
+        )
+    if extra:
+        raise ValueError(
+            "transport parallel worker results contain out-of-range whichRHS values "
+            f"{format_transport_rhs_list(extra)} for n_rhs={int(n_rhs)}"
+        )
+
+
 def validate_gpu_transport_worker_arrays(
     *,
     requested_rhs_values: Sequence[int],
@@ -90,6 +110,7 @@ def validate_gpu_transport_worker_arrays(
 
 
 __all__ = [
+    "validate_complete_transport_worker_rhs_coverage",
     "format_transport_rhs_list",
     "validate_distinct_transport_worker_rhs",
     "validate_gpu_transport_worker_arrays",

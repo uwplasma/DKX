@@ -15,6 +15,7 @@ from scripts.benchmark_pas_tz_memory_fallback import (
     _variant_solve_method,
     build_plan,
     main,
+    summarize_results,
 )
 
 
@@ -129,6 +130,11 @@ def test_dry_run_writes_reproducible_plan(tmp_path: Path) -> None:
         "Nxi": 51,
         "Nx": 7,
     }
+    assert payload["plan"]["gates"]["timeout_s"] == 12.0
+    assert payload["plan"]["gates"]["stall_s"] == 12.0
+    assert payload["plan"]["gates"]["max_default_runtime_s"] == 600.0
+    assert payload["plan"]["gates"]["max_residual_norm"] == 1.0e-3
+    assert payload["summary"]["result_count"] == 0
     assert payload["results"] == []
 
 
@@ -169,6 +175,8 @@ def test_build_plan_records_solver_limits() -> None:
     assert plan["block"] == 4
     assert plan["overlap"] == 2
     assert plan["variants"] == ["theta"]
+    assert plan["gates"]["expected_backend"] == "auto"
+    assert plan["gates"]["allow_solver_churn"] is False
 
 
 def test_override_namelist_text_updates_grid_scalars_only() -> None:
@@ -365,3 +373,91 @@ def test_run_child_lgmres_variant_records_variant_method_without_changing_plan_d
         "solve_method_source": "variant_suffix",
         "lgmres_opt_in": True,
     }
+
+
+def test_run_child_gates_stalls_churn_backend_memory_and_residual(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.input.namelist"
+    source.write_text("&resolutionParameters\n  Ntheta = 13\n/\n")
+
+    def fake_run(
+        cmd: list[str],
+        *,
+        env: dict[str, str],
+        text: bool,
+        capture_output: bool,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[str]:
+        del env, text, capture_output, timeout
+        payload = {
+            "status": "ok",
+            "elapsed_s": 2.5,
+            "max_rss_mb": 512.0,
+            "residual_norm": 1.0e-2,
+            "phase_metadata": [{"name": "solve", "status": "ok", "elapsed_s": 2.5}],
+            "solver_provenance": {
+                "requested_solve_method": "incremental",
+                "realized_solve_method": "lgmres",
+            },
+            "runtime_metadata": {"jax_default_backend": "gpu"},
+            "metadata": {"accepted_converged": True},
+        }
+        stdout = "__SFINCS_JAX_PAS_TZ_RESULT__=" + json.dumps(payload) + "\n"
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    args = type(
+        "Args",
+        (),
+        {
+            "input": source,
+            "timeout_s": 9.0,
+            "stall_s": 1.0,
+            "tol": 1.0e-7,
+            "solve_method": "incremental",
+            "maxiter": 6,
+            "restart": 8,
+            "block": 4,
+            "overlap": 2,
+            "variants": ["tzfft"],
+            "Ntheta": None,
+            "Nzeta": None,
+            "Nxi": None,
+            "Nx": None,
+            "max_rss_mb": 100.0,
+            "max_residual_norm": 1.0e-3,
+            "expected_backend": "cpu",
+            "allow_solver_churn": False,
+        },
+    )()
+
+    row = _run_child(args, "tzfft")
+
+    assert row["gate"] == "fail"
+    assert row["gates"]["stall"]["reason"] == "stall-threshold-exceeded"
+    assert row["gates"]["solver_path"]["reason"] == "solver-path-mismatch"
+    assert row["gates"]["backend"]["reason"] == "backend-mismatch"
+    assert row["gates"]["memory"]["reason"] == "rss-threshold-exceeded"
+    assert row["gates"]["residual"]["reason"] == "residual-threshold-exceeded"
+    assert summarize_results([row])["all_gates_passed"] is False
+
+
+def test_main_rejects_long_timeout_without_explicit_opt_in(tmp_path: Path) -> None:
+    out = tmp_path / "plan.json"
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--dry-run", "--out", str(out), "--timeout-s", "601"])
+
+    assert exc.value.code == 2
+
+
+def test_main_allows_long_timeout_with_explicit_opt_in(tmp_path: Path) -> None:
+    out = tmp_path / "plan.json"
+
+    rc = main(["--dry-run", "--out", str(out), "--timeout-s", "601", "--allow-long-run"])
+
+    assert rc == 0
+    payload = json.loads(out.read_text())
+    assert payload["plan"]["gates"]["timeout_s"] == 601.0
+    assert payload["plan"]["gates"]["long_run_opt_in"] is True

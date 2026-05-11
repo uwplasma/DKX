@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -13,9 +14,11 @@ import pytest
 import jax
 import jax.numpy as jnp
 
+import sfincs_jax.jax_geometry_adapters as jga
 from sfincs_jax.jax_geometry_adapters import (
     boozer_bhat_from_spectrum,
     boozer_spectrum_geometry_proxy_objective,
+    geometry_proxy_workflow_contract,
     geometry_proxy_workflow_summary,
     optional_jax_geometry_backend_report,
     optional_jax_geometry_backend_status,
@@ -70,10 +73,27 @@ def test_optional_jax_geometry_backend_status_is_structural() -> None:
     assert all(isinstance(value, bool) for value in status.values())
 
 
+def test_optional_jax_geometry_backend_status_uses_shallow_find_spec(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_find_spec(name: str):
+        calls.append(name)
+        return object() if name == "vmec_jax" else None
+
+    monkeypatch.setattr(jga, "find_spec", fake_find_spec)
+
+    assert optional_jax_geometry_backend_status() == {
+        "vmec_jax": True,
+        "booz_xform_jax": False,
+    }
+    assert calls == ["vmec_jax", "booz_xform_jax"]
+
+
 def test_optional_jax_geometry_backend_report_marks_gradient_boundary() -> None:
     report = optional_jax_geometry_backend_report()
 
     assert report["backends"] == optional_jax_geometry_backend_status()
+    assert report["workflow_contract"]["workflow"] == "vmec_jax_to_boozer_sfincs_geometry_proxy"
     assert report["gradient_availability"]["spectral_scale_to_boozer_proxy"] == (
         "available_when_optional_backends_installed"
     )
@@ -83,7 +103,29 @@ def test_optional_jax_geometry_backend_report_marks_gradient_boundary() -> None:
     )
     assert "booz_xform_jax" in report["differentiated_graph"]
     assert "SFINCS kinetic transport solve" in report["outside_differentiated_graph"]
+    assert report["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
     assert report["claim"] == "geometry_proxy_gradient_gate_not_full_transport_gradient"
+
+
+def test_geometry_proxy_workflow_contract_records_ci_and_differentiability_policy() -> None:
+    contract = geometry_proxy_workflow_contract(
+        backend_status={"vmec_jax": False, "booz_xform_jax": True}
+    )
+
+    assert contract["contract_version"] >= 1
+    assert contract["optional_backends"] == {"vmec_jax": False, "booz_xform_jax": True}
+    assert contract["ci_dependency_policy"]["default_ci_requires_vmec_jax"] is False
+    assert contract["ci_dependency_policy"]["default_ci_requires_booz_xform_jax"] is False
+    assert contract["ci_dependency_policy"]["backend_check_imports_optional_packages"] is False
+    assert contract["differentiability_labels"]["differentiated"].startswith("covered by JAX")
+    assert "SFINCS kinetic transport solve" in contract["outside_differentiated_graph"]
+    assert contract["no_overclaim_gate"] == {
+        "status": "pass",
+        "claim_scope": "geometry_proxy_gradient_only",
+        "full_transport_gradients_claimed": False,
+        "forbidden_gradient_claim": "full VMEC-boundary-to-SFINCS kinetic transport gradients",
+        "kinetic_gradient_status": "deferred_not_covered_by_this_lane",
+    }
 
 
 def test_geometry_proxy_workflow_summary_records_stage_claims_and_gate() -> None:
@@ -102,6 +144,7 @@ def test_geometry_proxy_workflow_summary_records_stage_claims_and_gate() -> None
     )
 
     assert summary["workflow"] == "vmec_jax_to_boozer_sfincs_geometry_proxy"
+    assert summary["workflow_contract"]["ci_dependency_policy"]["default_ci_requires_vmec_jax"] is False
     assert summary["provenance"]["source"] == "unit-test wout"
     assert summary["required_optional_dependencies"]["vmec_jax"]["importable"] is True
     assert summary["required_optional_dependencies"]["booz_xform_jax"]["importable"] is False
@@ -114,6 +157,7 @@ def test_geometry_proxy_workflow_summary_records_stage_claims_and_gate() -> None
     assert summary["claims"]["not_claimed"] == (
         "full VMEC-boundary-to-SFINCS kinetic transport gradients"
     )
+    assert summary["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
 
 
 def test_geometry_proxy_workflow_summary_marks_failed_gradient_gate() -> None:
@@ -127,6 +171,22 @@ def test_geometry_proxy_workflow_summary_marks_failed_gradient_gate() -> None:
 
     assert summary["numerical_gradient_gate"]["status"] == "fail"
     assert summary["numerical_gradient_gate"]["absolute_error"] == pytest.approx(1.0)
+
+
+def test_geometry_proxy_workflow_summary_labels_all_stage_claims() -> None:
+    summary = geometry_proxy_workflow_summary(
+        autodiff_gradient=0.25,
+        finite_difference_gradient=0.25,
+        backend_status={"vmec_jax": False, "booz_xform_jax": False},
+    )
+    labels = set(summary["differentiability_labels"])
+
+    assert {stage["differentiability"] for stage in summary["stages"]} <= labels
+    assert summary["numerical_gradient_gate"]["claim"] == "geometry_proxy_gradient_gate_only"
+    assert "transport" not in summary["claims"]["differentiable"].lower()
+    assert summary["no_overclaim_gate"]["forbidden_gradient_claim"] == (
+        "full VMEC-boundary-to-SFINCS kinetic transport gradients"
+    )
 
 
 def test_vmec_wout_from_wout_like_transposes_vmec_jax_radius_mode_arrays() -> None:
@@ -253,6 +313,10 @@ def test_public_vmec_jax_boozer_example_backend_check_is_runnable() -> None:
     assert "booz_xform_jax:" in result.stdout
     assert "file-backed/setup only:" in result.stdout
     assert "not claimed: full VMEC-boundary-to-SFINCS-transport gradients" in result.stdout
+    assert "Public workflow contract:" in result.stdout
+    assert "default CI requires vmec_jax: false" in result.stdout
+    assert "default CI requires booz_xform_jax: false" in result.stdout
+    assert "no-overclaim gate: pass" in result.stdout
     assert "numerical gradient gate: not_run" in result.stdout
     assert "pass --json with --check-backends" in result.stdout
     assert "pass --summary-json PATH" in result.stdout
@@ -274,8 +338,10 @@ def test_public_vmec_jax_boozer_example_backend_check_json_is_runnable() -> None
 
     report = json.loads(result.stdout)
     assert set(report["backends"]) == {"vmec_jax", "booz_xform_jax"}
+    assert report["workflow_contract"]["ci_dependency_policy"]["default_ci_requires_vmec_jax"] is False
     assert report["gradient_availability"]["vmec_file_io"] == "setup_only_not_differentiated"
     assert report["gradient_availability"]["sfincs_kinetic_transport_solve"] == "not_covered_by_this_lane"
+    assert report["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
 
 
 def test_public_vmec_jax_boozer_example_backend_check_writes_summary_json(tmp_path: Path) -> None:
@@ -296,10 +362,121 @@ def test_public_vmec_jax_boozer_example_backend_check_writes_summary_json(tmp_pa
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert "pass --summary-json PATH" in result.stdout
     assert summary["workflow"] == "vmec_jax_to_boozer_sfincs_geometry_proxy"
+    assert summary["workflow_contract"]["contract_version"] >= 1
     assert summary["numerical_gradient_gate"]["status"] == "not_run"
     assert summary["claims"]["not_claimed"] == (
         "full VMEC-boundary-to-SFINCS kinetic transport gradients"
     )
+    assert summary["no_overclaim_gate"]["kinetic_gradient_status"] == "deferred_not_covered_by_this_lane"
+
+
+def _load_finite_beta_example_module() -> ModuleType:
+    script = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "vmec_jax_finite_beta"
+        / "finite_beta_vmec_to_sfincs.py"
+    )
+    spec = importlib.util.spec_from_file_location("finite_beta_vmec_to_sfincs_contract_test", script)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_finite_beta_summary_records_radial_profile_provenance(tmp_path: Path) -> None:
+    mod = _load_finite_beta_example_module()
+    records = [
+        mod.RunRecord(
+            r_n=0.5,
+            er=-1.0,
+            radial_current=-0.2,
+            bootstrap_current=-0.03,
+            ion_particle_flux_rhat=0.0,
+            electron_particle_flux_rhat=0.0,
+            ion_heat_flux_rhat=0.0,
+            electron_heat_flux_rhat=0.0,
+            output_h5=str(tmp_path / "minus.h5"),
+        ),
+        mod.RunRecord(
+            r_n=0.5,
+            er=1.0,
+            radial_current=0.2,
+            bootstrap_current=-0.031,
+            ion_particle_flux_rhat=0.0,
+            electron_particle_flux_rhat=0.0,
+            ion_heat_flux_rhat=0.0,
+            electron_heat_flux_rhat=0.0,
+            output_h5=str(tmp_path / "plus.h5"),
+        ),
+    ]
+    profile = [
+        mod.SurfaceProfileRecord(
+            r_n=0.25,
+            psi_n=0.0625,
+            roots_er=[-0.5],
+            bootstrap_current_at_roots=[-0.02],
+            selected_ambipolar_er=-0.5,
+            selected_bootstrap_current=-0.02,
+            scan_dir=str(tmp_path / "rN0p25"),
+        ),
+        mod.SurfaceProfileRecord(
+            r_n=0.5,
+            psi_n=0.25,
+            roots_er=[0.1],
+            bootstrap_current_at_roots=[-0.03],
+            selected_ambipolar_er=0.1,
+            selected_bootstrap_current=-0.03,
+            scan_dir=str(tmp_path / "rN0p5"),
+        ),
+    ]
+    convergence_profile = [
+        mod.SurfaceProfileRecord(
+            r_n=0.5,
+            psi_n=0.25,
+            roots_er=[0.11],
+            bootstrap_current_at_roots=[-0.0301],
+            selected_ambipolar_er=0.11,
+            selected_bootstrap_current=-0.0301,
+            scan_dir=str(tmp_path / "conv_rN0p5"),
+        )
+    ]
+
+    summary = mod.build_summary(
+        vmec_summary={"fsq_total": 1.0e-6},
+        records=records,
+        roots=[],
+        profile=profile,
+        convergence_profile=convergence_profile,
+        accuracy={
+            "surfaces_checked": 1,
+            "max_abs_er": 0.01,
+            "max_abs_bootstrap": 1.0e-4,
+            "passed": True,
+        },
+        figure_png=tmp_path / "figure.png",
+        figure_pdf=tmp_path / "figure.pdf",
+        scan_dir=tmp_path / "scan",
+        representative_r_n=0.5,
+    )
+
+    metadata = summary["metadata"]
+    contract = metadata["workflow_contract"]
+    provenance = metadata["radial_profile_provenance"]
+    assert contract["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
+    assert contract["differentiability"]["sfincs_kinetic_transport_solve"] == (
+        "primal_solve_only_not_differentiated"
+    )
+    assert provenance["radial_coordinate_input"] == "r_N"
+    assert provenance["radial_profile_axis"] == "normalized toroidal flux psi_N"
+    assert provenance["all_bracketed_roots_preserved"] is True
+    assert [surface["psi_n"] for surface in provenance["surfaces"]] == [0.0625, 0.25]
+    assert provenance["surfaces"][1]["selected_ambipolar_er_recorded"] is True
+    assert provenance["convergence"]["profile_present"] is True
+    assert provenance["convergence"]["surfaces_checked"] == 1
+    assert provenance["convergence"]["passed"] is True
 
 
 def _optional_vmec_jax_wout_fixture(vmec_jax_module) -> Path | None:

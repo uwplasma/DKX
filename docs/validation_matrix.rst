@@ -348,6 +348,20 @@ Post-release acceptance criteria:
 - and only promote the deferred full analytic-limit reproduction after wider
   high-``nu`` LHD and W7-X scans are regenerated and the readiness gate flips true.
 
+The run-plan artifact is explicitly labelled as a deferred executable plan. Its
+machine-readable gates record that residual thresholds are wired into every command
+and that ``ready_for_literature_claim`` remains false because no completed high-``nu``
+scan artifact is present yet. Publication panel summaries use the same convention:
+``publication_figure.claim_status`` is ``proxy_or_deferred`` unless the source JSON is
+both numerically gated and checked in as a converged artifact.
+
+A separate W7-X high-``nu`` preconditioner/performance figure is available for the
+single first FP point, but it is not a physics-validation lane. Its summary gates
+only support the bounded claim that sparse-helper factor reuse is residual-clean,
+faster than no-reuse, uses fewer sparse factorizations, and rejects the failed
+bounded Krylov route. The figure metadata therefore keeps
+``ready_for_physics_validation_claim=false``.
+
 3. W7-X ambipolar-field validation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -382,15 +396,24 @@ ambipolar postprocess/figure pass.
 
 The summary JSON now includes explicit ``acceptance_gates``:
 
+- finite distinct ``E_r``/current scan points,
 - finite ambipolar roots,
 - radial-current sign bracketing,
+- roots inside the scanned ``E_r`` range,
+- root consistency with a sign-change bracket,
+- a resolved local current slope at the accepted root,
 - an ion-root candidate,
 - complete equilibrium/profile/discharge/literature provenance,
+- checked-in source-artifact status,
 - and the combined ``ready_for_literature_claim`` gate.
 
 Without a provenance JSON containing ``equilibrium_source``, ``profile_source``,
 ``configuration_or_shot``, and ``literature_reference``, generated artifacts remain
 ``w7x_like_scaffold`` rather than ``w7x_literature_validation``.
+Even with complete provenance, generated summaries remain
+``w7x_literature_candidate_deferred`` until the matching W7-X summary artifact is
+checked in; this prevents an exploratory rerun from being labelled as a closed
+literature comparison.
 Start from
 ``examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json``;
 it is intentionally incomplete and should be copied/finalized for a specific

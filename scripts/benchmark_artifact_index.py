@@ -20,7 +20,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Classify selected JSON artifacts as schema-v2 compliant, historical "
-            "legacy, unrelated non-PAS, or release-blocking."
+            "legacy, Fortran suite summary, unrelated non-PAS, or release-blocking."
         )
     )
     parser.add_argument(
