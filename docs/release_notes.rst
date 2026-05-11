@@ -1,6 +1,120 @@
 Release notes
 =============
 
+Unreleased
+----------
+
+- Added an explicit ``pas_tzfft`` / ``pas_fft`` RHSMode=1 PAS preconditioner
+  candidate and a guarded ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft``
+  route for memory-unsafe PAS-TZ experiments.
+- Guarded PAS-TZ fallbacks now skip stage-2 GMRES by default unless
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1`` is set. This keeps
+  experimental memory fallback probes bounded when a candidate lowers the
+  residual enough to avoid the generic high-ratio stage-2 skip but still misses
+  the strict solve target.
+- The bounded geometryScheme=4 PAS fallback smoke artifact now includes
+  ``tzfft``. It improves the residual from the cheap-collision fallback
+  (``~6.4e5``) to ``~1.9e-4`` in about ``3.3 s`` on the checked local smoke,
+  but remains opt-in because it increases RSS and still misses the strict
+  residual target.
+- Added ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft`` as an opt-in
+  cheap-base plus matrix-free streaming-correction probe. It is bounded and
+  modestly improves the cheap collision fallback, but the checked geometry4
+  smoke does not meet the promotion gate.
+
+v1.1.2
+------
+
+This patch release closes the post-v1.1.1 structured-PAS fallback push and
+hardens the release workflow.
+
+Highlights
+~~~~~~~~~~
+
+- Memory-unsafe PAS-TZ fallback routes are now bounded uniformly. The default
+  route is the cheap collision fallback when available; the historical
+  ``hybrid`` fallback remains available for A/B profiling with
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=hybrid``. All guarded fallback
+  routes skip the expensive automatic strong-preconditioner retry unless
+  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1`` is set.
+- Guarded PAS-TZ and weak PAS forced/probe paths use accept-only matrix-free
+  minimal-residual corrections before fail-fast classification. These
+  corrections reuse the already-built preconditioner, store no dense angular
+  patch inverses, and are kept only when the measured residual decreases.
+- Forced weak PAS paths (``collision``, ``xmg``, and ``point``) now skip
+  stage-2/strong retry only at enormous residual ratios by default, preventing
+  minutes-long profiling stalls without changing moderate-residual polish
+  behavior.
+- Release metadata, production-benchmark workflow checks, and public
+  runtime/validation figures were refreshed for the current ``main`` artifacts.
+- The PyPI workflow now validates that ``pyproject.toml``,
+  ``sfincs_jax.__version__``, and pushed release tags agree before publishing.
+
+Validation
+~~~~~~~~~~
+
+- Current release-facing CPU/GPU suite artifacts remain ``39/39 parity_ok`` with
+  zero strict mismatches, no ``jax_error``, and no ``max_attempts``.
+- Bounded PAS-TZ fallback smoke now returns for ``collision``, ``hybrid``,
+  ``zeta``, and ``theta`` under the 15 s local gate. These rows are
+  intentionally documented as negative, non-promoted baselines because their
+  residuals remain large.
+- The bounded artifact is checked in at
+  ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
+  and guarded by ``tests/test_solver_path_artifacts.py``.
+- Local release validation passed with ``1134 passed in 501.80 s``.
+
+Remaining research lane
+~~~~~~~~~~~~~~~~~~~~~~~
+
+No release blocker remains in the documented workflows. The remaining
+publication-scale optimization lane is still algorithmic: a genuinely stronger
+matrix-free line/plane smoother or iterative chunked Schwarz correction for
+geometry-rich PAS systems that clears the fixed gate of under 60 s, no measured
+memory regression, and at least 100x residual reduction before any default
+promotion.
+
+v1.1.1
+------
+
+This patch release ships the final PAS/full-FP performance and memory closeout
+after the v1.1.0 validation release.
+
+Highlights
+~~~~~~~~~~
+
+- One-species PAS+Er sparse-PC defaults now use the measured
+  ``MMD_AT_PLUS_A`` ordering and a bounded GMRES restart policy unless the user
+  explicitly overrides the restart environment variable.
+- Phi1 fast-explicit solves use a production-size restart helper that preserves
+  output parity while reducing wasted Krylov storage on larger active systems.
+- RHSMode 1 no-Phi1 single-state output avoids retaining an unnecessary stacked
+  solved-distribution copy before diagnostic writeout.
+- The README-facing runtime/memory and W7-X high-``nu`` performance figures were
+  regenerated from the checked-in release artifacts.
+- The production-resolution ``geometryScheme4_2species_PAS_noEr`` stress case is
+  now explicitly closed for this release as ``no safe existing default
+  promotion``. CPU and GPU candidate routes all hit the bounded 300 s gate, so no
+  unsafe solver-path default is promoted.
+
+Validation
+~~~~~~~~~~
+
+- Local full suite: ``1115 passed in 498.10 s``.
+- GitHub Actions for the closeout commit: CI and Docs both passed.
+- The large geometry-rich PAS closeout artifact is checked in at
+  ``tests/reference_solver_path_artifacts/geometry4_large_pas_closeout_2026-05-09.json``
+  and guarded by ``tests/test_solver_path_artifacts.py``.
+
+Remaining research lane
+~~~~~~~~~~~~~~~~~~~~~~~
+
+No release blocker remains. The next research optimization target is a
+structured/chunked geometry-aware PAS preconditioner for production-resolution
+geometry-rich 3D cases; heuristic promotion of existing Schur, sparse-PC, or
+PAS-lite paths is intentionally blocked until a measured route clears the
+runtime, memory, residual, and Fortran-comparison gates.
+
 v1.1.0
 ------
 
