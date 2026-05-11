@@ -476,10 +476,11 @@ def rhs1_fp_3d_sparse_pc_auto_allowed(
     """Return whether 3D full-FP RHSMode=1 should start sparse-PC GMRES.
 
     Bounded HSX and geometryScheme11 FP probes show that the host sparse-PC
-    branch can beat the dense FP shortcut on both runtime and memory while
-    preserving Fortran parity.  Keep the promotion narrow and CPU-only: PAS,
-    Phi1/QN, tokamak ``Nzeta=1``, E_parallel, differentiable, and explicit
-    user-selected solve methods stay on their existing paths.
+    branch can beat the dense FP shortcut on runtime and memory for some
+    geometry-rich systems while preserving Fortran parity. Keep the promotion
+    narrow and CPU-only, and do not take it for small systems by default: dense
+    LU is more robust for QI-like smoke decks and avoids sparse-factorization
+    failures before a solver trace is written.
     """
     env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC")
     if env is False:
@@ -501,7 +502,7 @@ def rhs1_fp_3d_sparse_pc_auto_allowed(
     if abs(float(eparallel_abs)) > 0.0:
         return False
 
-    min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN", 300)
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN", 5001)
     max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX", 20000)
     if env is True:
         min_size = 0

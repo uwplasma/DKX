@@ -31,6 +31,8 @@ RESULT_MARKER = "__SFINCS_JAX_PAS_TZ_RESULT__="
 GRID_OVERRIDE_KEYS = ("Ntheta", "Nzeta", "Nxi", "Nx")
 MAX_DEFAULT_RUNTIME_S = 600.0
 DEFAULT_MAX_RESIDUAL_NORM = 1.0e-3
+DEFAULT_MIN_PROMOTION_SPEEDUP = 1.05
+DEFAULT_MIN_PROMOTION_MEMORY_REDUCTION = 1.05
 BACKEND_ALIASES = {
     "cuda": "gpu",
     "gpu": "gpu",
@@ -113,6 +115,35 @@ def _build_parser() -> argparse.ArgumentParser:
         "--allow-long-run",
         action="store_true",
         help="Allow timeout/stall bounds above 600s. Defaults reject >10 minute probes.",
+    )
+    parser.add_argument(
+        "--require-default-promotion-gate",
+        action="store_true",
+        help="Require each ok row to prove residual-clean runtime/RSS improvement over a baseline.",
+    )
+    parser.add_argument(
+        "--baseline-elapsed-s",
+        type=_positive_float,
+        default=None,
+        help="Baseline elapsed time used by --require-default-promotion-gate.",
+    )
+    parser.add_argument(
+        "--baseline-rss-mb",
+        type=_positive_float,
+        default=None,
+        help="Baseline peak RSS used by --require-default-promotion-gate.",
+    )
+    parser.add_argument(
+        "--min-runtime-speedup",
+        type=_positive_float,
+        default=DEFAULT_MIN_PROMOTION_SPEEDUP,
+        help="Minimum baseline/candidate runtime speedup for default-promotion eligibility.",
+    )
+    parser.add_argument(
+        "--min-memory-reduction",
+        type=_positive_float,
+        default=DEFAULT_MIN_PROMOTION_MEMORY_REDUCTION,
+        help="Minimum baseline/candidate RSS reduction for default-promotion eligibility.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Write planned variants without running subprocesses.")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
@@ -545,12 +576,71 @@ def result_gates(args: argparse.Namespace, row: dict[str, Any], variant: str) ->
     else:
         solver_gate = _gate("pass", "solver-path-stable", expected_solver=expected_solver, observed_solver=observed_solver)
 
+    if not bool(getattr(args, "require_default_promotion_gate", False)):
+        default_promotion_gate = _gate("pass", "default-promotion-gate-not-requested")
+    elif status != "ok":
+        default_promotion_gate = _gate("fail", "non-ok-status", status=status)
+    elif residual_gate["status"] != "pass":
+        default_promotion_gate = _gate("fail", "residual-gate-failed", residual_gate=residual_gate)
+    else:
+        baseline_elapsed_s = _optional_float(getattr(args, "baseline_elapsed_s", None))
+        baseline_rss_mb = _optional_float(getattr(args, "baseline_rss_mb", None))
+        min_runtime_speedup = float(getattr(args, "min_runtime_speedup", DEFAULT_MIN_PROMOTION_SPEEDUP))
+        min_memory_reduction = float(getattr(args, "min_memory_reduction", DEFAULT_MIN_PROMOTION_MEMORY_REDUCTION))
+        runtime_speedup = (
+            baseline_elapsed_s / elapsed_max
+            if baseline_elapsed_s is not None and elapsed_max is not None and elapsed_max > 0.0
+            else None
+        )
+        memory_reduction = (
+            baseline_rss_mb / max_rss_mb
+            if baseline_rss_mb is not None and max_rss_mb is not None and max_rss_mb > 0.0
+            else None
+        )
+        runtime_win = runtime_speedup is not None and runtime_speedup >= min_runtime_speedup
+        memory_win = memory_reduction is not None and memory_reduction >= min_memory_reduction
+        if baseline_elapsed_s is None or baseline_rss_mb is None:
+            default_promotion_gate = _gate(
+                "fail",
+                "missing-promotion-baseline",
+                baseline_elapsed_s=baseline_elapsed_s,
+                baseline_rss_mb=baseline_rss_mb,
+            )
+        elif elapsed_max is None or max_rss_mb is None:
+            default_promotion_gate = _gate(
+                "fail",
+                "missing-candidate-runtime-or-rss",
+                elapsed_s=elapsed_max,
+                max_rss_mb=max_rss_mb,
+            )
+        elif not (runtime_win or memory_win):
+            default_promotion_gate = _gate(
+                "fail",
+                "no-runtime-or-memory-win",
+                runtime_speedup=runtime_speedup,
+                memory_reduction=memory_reduction,
+                min_runtime_speedup=min_runtime_speedup,
+                min_memory_reduction=min_memory_reduction,
+            )
+        else:
+            default_promotion_gate = _gate(
+                "pass",
+                "promotion-win-recorded",
+                runtime_speedup=runtime_speedup,
+                memory_reduction=memory_reduction,
+                runtime_win=runtime_win,
+                memory_win=memory_win,
+                min_runtime_speedup=min_runtime_speedup,
+                min_memory_reduction=min_memory_reduction,
+            )
+
     return {
         "stall": stall_gate,
         "residual": residual_gate,
         "memory": memory_gate,
         "backend": backend_gate,
         "solver_path": solver_gate,
+        "default_promotion": default_promotion_gate,
         "variant": _gate("pass", "variant-recorded", variant=str(variant)),
     }
 
@@ -684,6 +774,11 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "max_residual_norm": float(getattr(args, "max_residual_norm", DEFAULT_MAX_RESIDUAL_NORM)),
             "expected_backend": str(getattr(args, "expected_backend", "auto")),
             "allow_solver_churn": bool(getattr(args, "allow_solver_churn", False)),
+            "default_promotion_required": bool(getattr(args, "require_default_promotion_gate", False)),
+            "baseline_elapsed_s": _optional_float(getattr(args, "baseline_elapsed_s", None)),
+            "baseline_rss_mb": _optional_float(getattr(args, "baseline_rss_mb", None)),
+            "min_runtime_speedup": float(getattr(args, "min_runtime_speedup", DEFAULT_MIN_PROMOTION_SPEEDUP)),
+            "min_memory_reduction": float(getattr(args, "min_memory_reduction", DEFAULT_MIN_PROMOTION_MEMORY_REDUCTION)),
         },
     }
 

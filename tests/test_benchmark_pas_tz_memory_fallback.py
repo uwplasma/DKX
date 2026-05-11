@@ -15,6 +15,7 @@ from scripts.benchmark_pas_tz_memory_fallback import (
     _variant_solve_method,
     build_plan,
     main,
+    result_gates,
     summarize_results,
 )
 
@@ -441,6 +442,90 @@ def test_run_child_gates_stalls_churn_backend_memory_and_residual(
     assert row["gates"]["memory"]["reason"] == "rss-threshold-exceeded"
     assert row["gates"]["residual"]["reason"] == "residual-threshold-exceeded"
     assert summarize_results([row])["all_gates_passed"] is False
+
+
+def test_default_promotion_gate_requires_baseline_and_runtime_or_memory_win() -> None:
+    args = type(
+        "Args",
+        (),
+        {
+            "timeout_s": 9.0,
+            "stall_s": 9.0,
+            "max_rss_mb": 0.0,
+            "max_residual_norm": 1.0e-3,
+            "expected_backend": "auto",
+            "allow_solver_churn": False,
+            "solve_method": "incremental",
+            "require_default_promotion_gate": True,
+            "baseline_elapsed_s": None,
+            "baseline_rss_mb": 1000.0,
+            "min_runtime_speedup": 1.05,
+            "min_memory_reduction": 1.05,
+        },
+    )()
+    row = {
+        "status": "ok",
+        "elapsed_s": 4.0,
+        "max_rss_mb": 800.0,
+        "residual_norm": 1.0e-5,
+        "phase_metadata": [{"name": "solve", "status": "ok", "elapsed_s": 4.0}],
+        "solver_provenance": {
+            "requested_solve_method": "incremental",
+            "realized_solve_method": "incremental",
+        },
+        "metadata": {"accepted_converged": True},
+    }
+
+    gates = result_gates(args, row, "tzfft")
+
+    assert gates["default_promotion"]["status"] == "fail"
+    assert gates["default_promotion"]["reason"] == "missing-promotion-baseline"
+
+    args.baseline_elapsed_s = 10.0
+    gates = result_gates(args, row, "tzfft")
+
+    assert gates["default_promotion"]["status"] == "pass"
+    assert gates["default_promotion"]["reason"] == "promotion-win-recorded"
+    assert gates["default_promotion"]["runtime_win"] is True
+    assert gates["default_promotion"]["memory_win"] is True
+
+
+def test_default_promotion_gate_rejects_clean_candidate_without_material_win() -> None:
+    args = type(
+        "Args",
+        (),
+        {
+            "timeout_s": 9.0,
+            "stall_s": 9.0,
+            "max_rss_mb": 0.0,
+            "max_residual_norm": 1.0e-3,
+            "expected_backend": "auto",
+            "allow_solver_churn": False,
+            "solve_method": "incremental",
+            "require_default_promotion_gate": True,
+            "baseline_elapsed_s": 10.0,
+            "baseline_rss_mb": 1000.0,
+            "min_runtime_speedup": 1.05,
+            "min_memory_reduction": 1.05,
+        },
+    )()
+    row = {
+        "status": "ok",
+        "elapsed_s": 9.8,
+        "max_rss_mb": 990.0,
+        "residual_norm": 1.0e-5,
+        "phase_metadata": [{"name": "solve", "status": "ok", "elapsed_s": 9.8}],
+        "solver_provenance": {
+            "requested_solve_method": "incremental",
+            "realized_solve_method": "incremental",
+        },
+        "metadata": {"accepted_converged": True},
+    }
+
+    gates = result_gates(args, row, "tzfft")
+
+    assert gates["default_promotion"]["status"] == "fail"
+    assert gates["default_promotion"]["reason"] == "no-runtime-or-memory-win"
 
 
 def test_main_rejects_long_timeout_without_explicit_opt_in(tmp_path: Path) -> None:
