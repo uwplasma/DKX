@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -15,6 +16,7 @@ import jax.numpy as jnp
 from sfincs_jax.jax_geometry_adapters import (
     boozer_bhat_from_spectrum,
     boozer_spectrum_geometry_proxy_objective,
+    optional_jax_geometry_backend_report,
     optional_jax_geometry_backend_status,
     vmec_wout_from_wout_like,
 )
@@ -65,6 +67,22 @@ def test_optional_jax_geometry_backend_status_is_structural() -> None:
     status = optional_jax_geometry_backend_status()
     assert set(status) == {"vmec_jax", "booz_xform_jax"}
     assert all(isinstance(value, bool) for value in status.values())
+
+
+def test_optional_jax_geometry_backend_report_marks_gradient_boundary() -> None:
+    report = optional_jax_geometry_backend_report()
+
+    assert report["backends"] == optional_jax_geometry_backend_status()
+    assert report["gradient_availability"]["spectral_scale_to_boozer_proxy"] == (
+        "available_when_optional_backends_installed"
+    )
+    assert (
+        report["gradient_availability"]["sfincs_kinetic_transport_solve"]
+        == "not_covered_by_this_lane"
+    )
+    assert "booz_xform_jax" in report["differentiated_graph"]
+    assert "SFINCS kinetic transport solve" in report["outside_differentiated_graph"]
+    assert report["claim"] == "geometry_proxy_gradient_gate_not_full_transport_gradient"
 
 
 def test_vmec_wout_from_wout_like_transposes_vmec_jax_radius_mode_arrays() -> None:
@@ -191,6 +209,27 @@ def test_public_vmec_jax_boozer_example_backend_check_is_runnable() -> None:
     assert "booz_xform_jax:" in result.stdout
     assert "file-backed/setup only:" in result.stdout
     assert "not claimed: full VMEC-boundary-to-SFINCS-transport gradients" in result.stdout
+    assert "pass --json with --check-backends" in result.stdout
+
+
+def test_public_vmec_jax_boozer_example_backend_check_json_is_runnable() -> None:
+    script = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "autodiff"
+        / "vmec_jax_to_boozer_sfincs_pipeline.py"
+    )
+    result = subprocess.run(
+        [sys.executable, str(script), "--check-backends", "--json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    report = json.loads(result.stdout)
+    assert set(report["backends"]) == {"vmec_jax", "booz_xform_jax"}
+    assert report["gradient_availability"]["vmec_file_io"] == "setup_only_not_differentiated"
+    assert report["gradient_availability"]["sfincs_kinetic_transport_solve"] == "not_covered_by_this_lane"
 
 
 def _optional_vmec_jax_wout_fixture(vmec_jax_module) -> Path | None:

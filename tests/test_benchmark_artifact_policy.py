@@ -76,6 +76,32 @@ def test_missing_plan_variant_methods_is_rejected() -> None:
     assert errors == ["missing field plan.variant_methods"]
 
 
+def test_duplicate_plan_variant_methods_are_rejected() -> None:
+    payload = _valid_payload()
+    plan = payload["plan"]
+    assert isinstance(plan, dict)
+    variant_methods = plan["variant_methods"]
+    assert isinstance(variant_methods, list)
+    variant_methods.append({"variant": "zeta", "realized_solve_method": "lgmres"})
+
+    errors = benchmark_artifact_policy_errors(payload)
+
+    assert errors == ["duplicate variant 'zeta' in plan.variant_methods at indexes 0 and 2"]
+
+
+def test_plan_variant_method_requires_variant_label() -> None:
+    payload = _valid_payload()
+    plan = payload["plan"]
+    assert isinstance(plan, dict)
+    variant_methods = plan["variant_methods"]
+    assert isinstance(variant_methods, list)
+    variant_methods[1] = {"realized_solve_method": "incremental"}
+
+    errors = benchmark_artifact_policy_errors(payload)
+
+    assert errors == ["field plan.variant_methods[1].variant must be a non-empty string"]
+
+
 def test_missing_variant_provenance_names_result_index() -> None:
     payload = _valid_payload()
     results = payload["results"]
@@ -87,6 +113,34 @@ def test_missing_variant_provenance_names_result_index() -> None:
     errors = benchmark_artifact_policy_errors(payload)
 
     assert errors == ["missing field results[1].variant_provenance"]
+
+
+def test_duplicate_result_variants_are_rejected() -> None:
+    payload = _valid_payload()
+    results = payload["results"]
+    assert isinstance(results, list)
+    row = copy.deepcopy(results[1])
+    assert isinstance(row, dict)
+    row["variant"] = "zeta"
+    row["variant_provenance"] = {"variant": "zeta"}
+    results.append(row)
+
+    errors = benchmark_artifact_policy_errors(payload)
+
+    assert errors == ["duplicate variant 'zeta' in results at indexes 0 and 2"]
+
+
+def test_result_row_requires_variant_label() -> None:
+    payload = _valid_payload()
+    results = payload["results"]
+    assert isinstance(results, list)
+    row = results[1]
+    assert isinstance(row, dict)
+    del row["variant"]
+
+    errors = benchmark_artifact_policy_errors(payload)
+
+    assert errors == ["field results[1].variant must be a non-empty string"]
 
 
 def test_missing_solver_provenance_for_ok_row_names_result_index() -> None:
