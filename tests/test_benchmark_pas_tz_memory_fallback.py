@@ -29,6 +29,13 @@ def test_variant_env_supports_collision_tzfft_correction() -> None:
     assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION"] == "tzfft"
 
 
+def test_variant_env_supports_structured_tzfft_correction() -> None:
+    env = _variant_env("tzfft-structured", block=7, overlap=2, maxiter=5, restart=11)
+
+    assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK"] == "tzfft"
+    assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS"] == "xmg,collision"
+
+
 def test_dry_run_writes_reproducible_plan(tmp_path: Path) -> None:
     out = tmp_path / "pas_tz_plan.json"
 

@@ -8398,6 +8398,91 @@ def _compose_multilevel_residual_correction_preconditioner(
     return _apply
 
 
+def _compose_multilevel_minres_correction_preconditioner(
+    *,
+    base: Callable[[jnp.ndarray], jnp.ndarray],
+    coarse_levels: Sequence[Callable[[jnp.ndarray], jnp.ndarray]],
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    alpha_clip: float = 1.0,
+    min_improvement: float = 0.0,
+    steps: int = 1,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Apply accepted coarse corrections with a local minimum-residual step."""
+    steps = max(0, int(steps))
+    coarse_levels = tuple(coarse_levels)
+    if steps <= 0 or not coarse_levels:
+        return base
+    alpha_clip = float(alpha_clip)
+    min_improvement = max(0.0, float(min_improvement))
+    improvement_factor = max(0.0, 1.0 - min_improvement) ** 2
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        z = base(v)
+        residual = v - matvec(z)
+        residual_norm_sq = jnp.real(jnp.vdot(residual, residual))
+        for _ in range(steps):
+            for coarse in coarse_levels:
+                direction = coarse(residual)
+                a_direction = matvec(direction)
+                denom = jnp.real(jnp.vdot(a_direction, a_direction))
+                numer = jnp.real(jnp.vdot(residual, a_direction))
+                alpha = jnp.where(denom > 0.0, numer / denom, 0.0)
+                alpha = jnp.nan_to_num(alpha, nan=0.0, posinf=0.0, neginf=0.0)
+                if alpha_clip > 0.0:
+                    alpha = jnp.clip(alpha, -alpha_clip, alpha_clip)
+                trial_residual = residual - alpha * a_direction
+                trial_norm_sq = jnp.real(jnp.vdot(trial_residual, trial_residual))
+                accept = jnp.logical_and(
+                    jnp.isfinite(trial_norm_sq),
+                    trial_norm_sq < residual_norm_sq * improvement_factor,
+                )
+                z = jnp.where(accept, z + alpha * direction, z)
+                residual = jnp.where(accept, trial_residual, residual)
+                residual_norm_sq = jnp.where(accept, trial_norm_sq, residual_norm_sq)
+        return z
+
+    return _apply
+
+
+def _rhs1_pas_tz_guarded_structured_levels(raw: str) -> tuple[str, ...]:
+    """Parse opt-in low-memory coarse levels for guarded PAS-TZ fallback trials."""
+    normalized = str(raw or "").strip().lower().replace("-", "_")
+    if normalized in {"", "0", "false", "no", "off", "none"}:
+        return ()
+    for sep in ("+", ";", ":", "|"):
+        normalized = normalized.replace(sep, ",")
+    aliases = {
+        "x": "xmg",
+        "x_grid": "xmg",
+        "xmultigrid": "xmg",
+        "x_mg": "xmg",
+        "coll": "collision",
+        "collisions": "collision",
+        "collision_diag": "collision",
+        "collision_diagonal": "collision",
+        "diag": "collision",
+        "xmg_collision": "xmg,collision",
+        "collision_xmg": "collision,xmg",
+        "structured": "xmg,collision",
+        "default": "xmg,collision",
+    }
+    expanded_tokens: list[str] = []
+    for token in normalized.replace(" ", ",").split(","):
+        token = token.strip("_ ")
+        if not token:
+            continue
+        expanded = aliases.get(token, token)
+        expanded_tokens.extend(part.strip("_ ") for part in expanded.split(",") if part.strip("_ "))
+
+    levels: list[str] = []
+    for token in expanded_tokens:
+        if token not in {"xmg", "collision"}:
+            continue
+        if token not in levels:
+            levels.append(token)
+    return tuple(levels)
+
+
 def _safe_preconditioner(
     precond: Callable[[jnp.ndarray], jnp.ndarray],
     *,
@@ -14691,6 +14776,88 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: PAS-TZ guarded matrix-free "
                             f"polynomial correction steps={int(poly_steps)} damping={float(poly_damping):.3g}",
                         )
+                structured_levels = _rhs1_pas_tz_guarded_structured_levels(
+                    os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS", "")
+                )
+                if structured_levels:
+                    coarse_preconditioners: list[Callable[[jnp.ndarray], jnp.ndarray]] = []
+                    for level in structured_levels:
+                        if level == "xmg":
+                            coarse = _build_rhsmode1_xmg_preconditioner(
+                                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                            )
+                        elif level == "collision":
+                            coarse = _build_rhsmode1_collision_preconditioner(
+                                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                            )
+                        else:
+                            continue
+                        coarse_preconditioners.append(_wrap_pas_precond(coarse) if use_pas_projection else coarse)
+                    structured_steps_env = os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_STEPS", ""
+                    ).strip()
+                    structured_damping_env = os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_DAMPING", ""
+                    ).strip()
+                    structured_mode = (
+                        os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_MODE", "")
+                        .strip()
+                        .lower()
+                        .replace("-", "_")
+                    )
+                    try:
+                        structured_steps = int(structured_steps_env) if structured_steps_env else 1
+                    except ValueError:
+                        structured_steps = 1
+                    try:
+                        structured_damping = float(structured_damping_env) if structured_damping_env else 0.7
+                    except ValueError:
+                        structured_damping = 0.7
+                    if coarse_preconditioners and structured_steps > 0:
+                        if structured_mode in {"fixed", "damped", "residual"}:
+                            precond = _compose_multilevel_residual_correction_preconditioner(
+                                base=precond,
+                                coarse_levels=tuple(coarse_preconditioners),
+                                matvec=mv_reduced,
+                                damping=float(structured_damping),
+                                steps=int(structured_steps),
+                            )
+                            structured_mode_label = f"fixed damping={float(structured_damping):.3g}"
+                        else:
+                            alpha_clip_env = os.environ.get(
+                                "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_ALPHA_CLIP", ""
+                            ).strip()
+                            min_improve_env = os.environ.get(
+                                "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_MIN_IMPROVEMENT", ""
+                            ).strip()
+                            try:
+                                alpha_clip = float(alpha_clip_env) if alpha_clip_env else 1.0
+                            except ValueError:
+                                alpha_clip = 1.0
+                            try:
+                                min_improve = float(min_improve_env) if min_improve_env else 0.0
+                            except ValueError:
+                                min_improve = 0.0
+                            precond = _compose_multilevel_minres_correction_preconditioner(
+                                base=precond,
+                                coarse_levels=tuple(coarse_preconditioners),
+                                matvec=mv_reduced,
+                                alpha_clip=float(alpha_clip),
+                                min_improvement=float(min_improve),
+                                steps=int(structured_steps),
+                            )
+                            structured_mode_label = (
+                                f"minres alpha_clip={float(alpha_clip):.3g} "
+                                f"min_improvement={float(min_improve):.3g}"
+                            )
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: PAS-TZ guarded structured "
+                                "residual correction levels="
+                                f"{','.join(structured_levels)} steps={int(structured_steps)} "
+                                f"mode={structured_mode_label}",
+                            )
             _mark("rhs1_precond_build_done")
             return precond
 

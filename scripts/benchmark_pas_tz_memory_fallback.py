@@ -104,7 +104,19 @@ def _write_child_input(input_path: Path, work_dir: Path, overrides: dict[str, in
 def _variant_env(variant: str, *, block: int, overlap: int, maxiter: int, restart: int) -> dict[str, str]:
     """Return environment overrides for one forced PAS-TZ fallback variant."""
     variant_l = str(variant).strip().lower().replace("-", "_")
-    fallback_variant = "collision" if variant_l in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"} else variant_l
+    fallback_variant = variant_l
+    structured_levels = ""
+    if variant_l in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"}:
+        fallback_variant = "collision"
+    elif variant_l in {"tzfft_structured", "tzfft_structured_default", "tzfft_xmg_collision"}:
+        fallback_variant = "tzfft"
+        structured_levels = "xmg,collision"
+    elif variant_l in {"tzfft_xmg", "tzfft_structured_xmg"}:
+        fallback_variant = "tzfft"
+        structured_levels = "xmg"
+    elif variant_l in {"tzfft_collision", "tzfft_structured_collision"}:
+        fallback_variant = "tzfft"
+        structured_levels = "collision"
     env = {
         "SFINCS_JAX_FORTRAN_STDOUT": "0",
         "SFINCS_JAX_SOLVER_ITER_STATS": "1",
@@ -118,6 +130,8 @@ def _variant_env(variant: str, *, block: int, overlap: int, maxiter: int, restar
     }
     if variant_l in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"}:
         env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION"] = "tzfft"
+    if structured_levels:
+        env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS"] = structured_levels
     return env
 
 

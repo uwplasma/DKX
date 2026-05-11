@@ -185,9 +185,15 @@ def test_rhs1_dd_coarse_block_sizes_build_multiple_levels() -> None:
 
 
 def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
-    base = lambda v: 0.5 * v
-    coarse = lambda v: 0.25 * v
-    matvec = lambda v: 2.0 * v
+    def base(v):
+        return 0.5 * v
+
+    def coarse(v):
+        return 0.25 * v
+
+    def matvec(v):
+        return 2.0 * v
+
     precond = vd._compose_residual_correction_preconditioner(
         base=base,
         coarse=coarse,
@@ -200,10 +206,18 @@ def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
 
 
 def test_compose_multilevel_residual_correction_preconditioner_applies_levels_in_order() -> None:
-    base = lambda v: jnp.zeros_like(v)
-    coarse_1 = lambda v: 0.25 * v
-    coarse_2 = lambda v: 0.125 * v
-    matvec = lambda v: 2.0 * v
+    def base(v):
+        return jnp.zeros_like(v)
+
+    def coarse_1(v):
+        return 0.25 * v
+
+    def coarse_2(v):
+        return 0.125 * v
+
+    def matvec(v):
+        return 2.0 * v
+
     precond = vd._compose_multilevel_residual_correction_preconditioner(
         base=base,
         coarse_levels=(coarse_1, coarse_2),
@@ -213,6 +227,48 @@ def test_compose_multilevel_residual_correction_preconditioner_applies_levels_in
     )
     out = precond(np.array([4.0]))
     assert np.allclose(np.asarray(out), np.array([1.25]))
+
+
+def test_compose_multilevel_minres_correction_rejects_zero_direction() -> None:
+    def base(v):
+        return jnp.zeros_like(v)
+
+    def bad_coarse(v):
+        return jnp.zeros_like(v)
+
+    def matvec(v):
+        return 2.0 * v
+
+    precond = vd._compose_multilevel_minres_correction_preconditioner(
+        base=base,
+        coarse_levels=(bad_coarse,),
+        matvec=matvec,
+        alpha_clip=1.0,
+        steps=1,
+    )
+    out = precond(np.array([4.0]))
+    assert np.allclose(np.asarray(out), np.array([0.0]))
+
+
+def test_compose_multilevel_minres_correction_accepts_better_direction() -> None:
+    def base(v):
+        return jnp.zeros_like(v)
+
+    def coarse(v):
+        return v
+
+    def matvec(v):
+        return 2.0 * v
+
+    precond = vd._compose_multilevel_minres_correction_preconditioner(
+        base=base,
+        coarse_levels=(coarse,),
+        matvec=matvec,
+        alpha_clip=1.0,
+        steps=1,
+    )
+    out = precond(np.array([4.0]))
+    assert np.allclose(np.asarray(out), np.array([2.0]))
 
 
 def test_preconditioned_minres_correction_accepts_only_residual_improvement() -> None:
