@@ -930,6 +930,7 @@ def build_simakov_helander_limit_audit_summary(
     }
     full_ready = all(bool(case["state"] == "ready_for_full_overlay") for case in cases.values())
     geometry_ready = all(bool(case["gates"]["appendix_b_geometry_inputs_available"]) for case in cases.values())  # type: ignore[index]
+    literature_ready = bool(full_ready and geometry_ready)
     return {
         "metadata": {
             "schema_version": 1,
@@ -948,6 +949,23 @@ def build_simakov_helander_limit_audit_summary(
                 "It intentionally keeps the full reproduction gate closed until a wider nu' >> 1 scan is checked in.",
                 "The current full collisionality summaries stop near nu'=10, below the default full-limit threshold.",
             ],
+            "publication_figure": {
+                "claim_status": (
+                    "checked_in_converged_artifact" if literature_ready else "proxy_or_deferred"
+                ),
+                "artifact_class": (
+                    "checked_in_simakov_helander_full_limit_artifact"
+                    if literature_ready
+                    else "checked_in_normalization_audit_deferred_full_limit"
+                ),
+                "checked_in_converged_artifact": bool(literature_ready),
+                "ready_for_physics_validation_claim": bool(literature_ready),
+                "manuscript_label": (
+                    "checked-in Simakov-Helander full high-nu validation"
+                    if literature_ready
+                    else "normalization audit; full Simakov-Helander high-nu validation deferred"
+                ),
+            },
         },
         "configuration": {
             "n_fit": int(n_fit),
@@ -959,7 +977,10 @@ def build_simakov_helander_limit_audit_summary(
         "gates": {
             "appendix_b_geometry_inputs_available": bool(geometry_ready),
             "all_cases_ready_for_full_overlay": bool(full_ready),
-            "full_simakov_helander_reproduction_closed": bool(not full_ready),
+            "checked_in_converged_artifact": bool(literature_ready),
+            "ready_for_literature_claim": bool(literature_ready),
+            "proxy_or_deferred_only": bool(not literature_ready),
+            "full_simakov_helander_reproduction_closed": bool(not literature_ready),
         },
     }
 
@@ -1092,6 +1113,18 @@ def build_high_collisionality_trend_proxy_summary(
     artifact_dir = Path(artifact_dir)
     lhd = load_collisionality_records(artifact_dir / artifacts["lhd_collisionality"])
     w7x = load_collisionality_records(artifact_dir / artifacts["w7x_collisionality"])
+    cases = {
+        "lhd": high_collisionality_trend_summary(lhd, n_fit=n_fit),
+        "w7x": high_collisionality_trend_summary(w7x, n_fit=n_fit),
+    }
+    all_pas_positive = all(
+        bool(case["gates"]["pas_l11_l12_positive"])  # type: ignore[index]
+        for case in cases.values()
+    )
+    all_fp_inverse_like = all(
+        bool(case["gates"]["fp_l11_l12_inverse_like"])  # type: ignore[index]
+        for case in cases.values()
+    )
     return {
         "metadata": {
             "schema_version": 1,
@@ -1106,9 +1139,21 @@ def build_high_collisionality_trend_proxy_summary(
                 "Momentum-conserving FP/model-operator L11/L12 should approach inverse-nu scaling only in the nu' >> 1 limit.",
                 "The checked-in scans stop at nu'=10, so this artifact is a trend proxy, not the full Simakov-Helander analytic-limit reproduction.",
             ],
+            "publication_figure": {
+                "claim_status": "proxy_or_deferred",
+                "artifact_class": "checked_in_high_collisionality_trend_proxy",
+                "checked_in_converged_artifact": False,
+                "ready_for_physics_validation_claim": False,
+                "manuscript_label": "checked-in trend proxy; full analytic-limit validation deferred",
+            },
         },
-        "cases": {
-            "lhd": high_collisionality_trend_summary(lhd, n_fit=n_fit),
-            "w7x": high_collisionality_trend_summary(w7x, n_fit=n_fit),
+        "cases": cases,
+        "gates": {
+            "all_pas_l11_l12_positive": bool(all_pas_positive),
+            "all_fp_l11_l12_inverse_like": bool(all_fp_inverse_like),
+            "checked_in_converged_artifact": False,
+            "ready_for_literature_claim": False,
+            "full_simakov_helander_reproduction_closed": True,
+            "proxy_or_deferred_only": True,
         },
     }

@@ -18,6 +18,39 @@ import numpy as np
 from .vmec_wout import VmecWout
 
 
+GEOMETRY_PROXY_WORKFLOW = "vmec_jax_to_boozer_sfincs_geometry_proxy"
+GEOMETRY_PROXY_CONTRACT_VERSION = 1
+
+_DIFFERENTIABILITY_LABELS = {
+    "differentiated": "covered by JAX autodiff in this geometry-proxy graph",
+    "differentiated_for_geometry_proxy_gate": (
+        "differentiated only for the Boozer-spectrum proxy objective and its "
+        "finite-difference gradient gate"
+    ),
+    "setup_only_not_differentiated": (
+        "allowed as setup/provenance, but not included in the differentiated graph"
+    ),
+    "not_claimed_not_covered_by_this_lane": (
+        "explicitly outside this public lane; do not present it as a gradient claim"
+    ),
+}
+
+_DIFFERENTIATED_GRAPH = [
+    "scaled VMEC-like spectral arrays",
+    "booz_xform_jax",
+    "sfincs_jax Boozer-spectrum proxy objective",
+]
+
+_OUTSIDE_DIFFERENTIATED_GRAPH = [
+    "VMEC file I/O",
+    "vmec_jax example fixed-boundary setup",
+    "sfincs_jax VMEC file adapters",
+    "SFINCS kinetic transport solve",
+]
+
+_FORBIDDEN_GRADIENT_CLAIM = "full VMEC-boundary-to-SFINCS kinetic transport gradients"
+
+
 def optional_jax_geometry_backend_status() -> dict[str, bool]:
     """Return whether optional JAX geometry backends are importable.
 
@@ -32,6 +65,49 @@ def optional_jax_geometry_backend_status() -> dict[str, bool]:
     }
 
 
+def geometry_proxy_workflow_contract(
+    *,
+    backend_status: dict[str, bool] | None = None,
+) -> dict[str, Any]:
+    """Return the public contract for the optional JAX geometry-proxy lane.
+
+    This is the machine-readable version of the prose in the docs and example
+    CLI.  It is intentionally conservative: default CI must be able to evaluate
+    the contract without importing optional geometry packages, and the only
+    supported gradient claim is the Boozer-spectrum proxy gate.
+    """
+    status = optional_jax_geometry_backend_status() if backend_status is None else dict(backend_status)
+    return {
+        "workflow": GEOMETRY_PROXY_WORKFLOW,
+        "contract_version": GEOMETRY_PROXY_CONTRACT_VERSION,
+        "ci_dependency_policy": {
+            "default_ci_requires_vmec_jax": False,
+            "default_ci_requires_booz_xform_jax": False,
+            "backend_check_imports_optional_packages": False,
+            "optional_integration_fixture_env": "SFINCS_JAX_VMEC_JAX_WOUT",
+        },
+        "optional_backends": {
+            "vmec_jax": bool(status.get("vmec_jax", False)),
+            "booz_xform_jax": bool(status.get("booz_xform_jax", False)),
+        },
+        "differentiability_labels": dict(_DIFFERENTIABILITY_LABELS),
+        "differentiated_graph": list(_DIFFERENTIATED_GRAPH),
+        "outside_differentiated_graph": list(_OUTSIDE_DIFFERENTIATED_GRAPH),
+        "deferred_work": [
+            "VMEC boundary-shape gradients through a production equilibrium solve",
+            "pure-JAX scheme-5 VMEC geometry evaluation for kinetic operators",
+            "SFINCS kinetic transport objective gradients through radial profile scans",
+        ],
+        "no_overclaim_gate": {
+            "status": "pass",
+            "claim_scope": "geometry_proxy_gradient_only",
+            "full_transport_gradients_claimed": False,
+            "forbidden_gradient_claim": _FORBIDDEN_GRADIENT_CLAIM,
+            "kinetic_gradient_status": "deferred_not_covered_by_this_lane",
+        },
+    }
+
+
 def optional_jax_geometry_backend_report() -> dict[str, Any]:
     """Return user-facing metadata for the optional JAX geometry lane.
 
@@ -39,8 +115,11 @@ def optional_jax_geometry_backend_report() -> dict[str, Any]:
     The report clarifies the differentiability boundary without importing optional
     packages or claiming end-to-end VMEC-boundary-to-transport gradients.
     """
+    status = optional_jax_geometry_backend_status()
+    contract = geometry_proxy_workflow_contract(backend_status=status)
     return {
-        "backends": optional_jax_geometry_backend_status(),
+        "backends": status,
+        "workflow_contract": contract,
         "runnable_paths": {
             "no_optional_dependencies": "--check-backends",
             "file_backed_setup": "--wout /path/to/wout.nc",
@@ -53,17 +132,10 @@ def optional_jax_geometry_backend_report() -> dict[str, Any]:
             "sfincs_vmec_file_adapter": "setup_only_not_differentiated",
             "sfincs_kinetic_transport_solve": "not_covered_by_this_lane",
         },
-        "differentiated_graph": [
-            "scaled VMEC-like spectral arrays",
-            "booz_xform_jax",
-            "sfincs_jax Boozer-spectrum proxy objective",
-        ],
-        "outside_differentiated_graph": [
-            "VMEC file I/O",
-            "vmec_jax example fixed-boundary setup",
-            "sfincs_jax VMEC file adapters",
-            "SFINCS kinetic transport solve",
-        ],
+        "differentiability_labels": contract["differentiability_labels"],
+        "differentiated_graph": contract["differentiated_graph"],
+        "outside_differentiated_graph": contract["outside_differentiated_graph"],
+        "no_overclaim_gate": contract["no_overclaim_gate"],
         "claim": "geometry_proxy_gradient_gate_not_full_transport_gradient",
     }
 
@@ -94,6 +166,7 @@ def geometry_proxy_workflow_summary(
     solve.
     """
     status = optional_jax_geometry_backend_status() if backend_status is None else dict(backend_status)
+    contract = geometry_proxy_workflow_contract(backend_status=status)
     gate: dict[str, Any] = {
         "status": "not_run",
         "autodiff_gradient": None,
@@ -120,7 +193,8 @@ def geometry_proxy_workflow_summary(
         )
 
     return {
-        "workflow": "vmec_jax_to_boozer_sfincs_geometry_proxy",
+        "workflow": GEOMETRY_PROXY_WORKFLOW,
+        "workflow_contract": contract,
         "provenance": {
             "source": provenance,
             "requested_surface": requested_surface,
@@ -139,6 +213,7 @@ def geometry_proxy_workflow_summary(
                 "used_for": "Boozer transform in the differentiable geometry-proxy path",
             },
         },
+        "differentiability_labels": contract["differentiability_labels"],
         "stages": [
             {
                 "name": "vmec_provenance",
@@ -167,6 +242,7 @@ def geometry_proxy_workflow_summary(
             },
         ],
         "numerical_gradient_gate": gate,
+        "no_overclaim_gate": contract["no_overclaim_gate"],
         "results": {
             "proxy_objective": proxy_objective,
         },
@@ -175,7 +251,7 @@ def geometry_proxy_workflow_summary(
                 "scaled spectral arrays -> booz_xform_jax -> sfincs_jax "
                 "Boozer-spectrum proxy objective"
             ),
-            "not_claimed": "full VMEC-boundary-to-SFINCS kinetic transport gradients",
+            "not_claimed": _FORBIDDEN_GRADIENT_CLAIM,
         },
     }
 
@@ -391,6 +467,7 @@ def boozer_spectrum_geometry_proxy_objective(
 __all__ = [
     "boozer_bhat_from_spectrum",
     "boozer_spectrum_geometry_proxy_objective",
+    "geometry_proxy_workflow_contract",
     "geometry_proxy_workflow_summary",
     "optional_jax_geometry_backend_report",
     "optional_jax_geometry_backend_status",

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import os
 
-from examples.performance.benchmark_transport_parallel_scaling import _configure_backend_env, _write_scaling_figure
+from examples.performance.benchmark_transport_parallel_scaling import (
+    _configure_backend_env,
+    _payloads_for_workers,
+    _timing_semantics,
+    _write_scaling_figure,
+)
 
 
 def test_configure_backend_env_cpu() -> None:
@@ -19,6 +24,20 @@ def test_configure_backend_env_gpu() -> None:
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0,1"
     assert os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] == "false"
     assert os.environ["TF_GPU_ALLOCATOR"] == "cuda_malloc_async"
+
+
+def test_payloads_for_workers_caps_at_rhs_count() -> None:
+    assert _payloads_for_workers(rhs_count=3, workers=4) == [
+        {"which_rhs_values": [1]},
+        {"which_rhs_values": [2]},
+        {"which_rhs_values": [3]},
+    ]
+
+
+def test_timing_semantics_labels_warm_and_cold_modes() -> None:
+    assert _timing_semantics(global_warmup=1, per_worker_warmup=0) == "cache_warm"
+    assert _timing_semantics(global_warmup=0, per_worker_warmup=1) == "hot_solve"
+    assert _timing_semantics(global_warmup=0, per_worker_warmup=0) == "cold_start"
 
 
 def test_write_scaling_figure_from_payload(tmp_path) -> None:

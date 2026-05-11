@@ -48,7 +48,20 @@ def test_build_high_nu_run_plan_uses_audit_extension_grid(tmp_path: Path) -> Non
     )
 
     assert plan["metadata"]["kind"] == "simakov_helander_high_nu_run_plan"
+    assert plan["metadata"]["validation_state"] == "deferred_run_plan"
+    assert plan["metadata"]["publication_figure"]["claim_status"] == "proxy_or_deferred"
+    assert plan["metadata"]["publication_figure"]["checked_in_converged_artifact"] is False
     assert plan["ready_to_run"] is True
+    assert plan["gates"]["ready_to_run"] is True
+    assert plan["gates"]["commands_require_residual_gates"] is True
+    assert plan["gates"]["source_audit_keeps_full_reproduction_closed"] is False
+    assert plan["gates"]["run_plan_only_not_completed_validation"] is True
+    assert plan["gates"]["checked_in_converged_artifact"] is False
+    assert plan["gates"]["ready_for_literature_claim"] is False
+    assert [reason["code"] for reason in plan["deferred_reasons"]] == [
+        "run_plan_not_completed_validation",
+        "source_audit_closure_gate_missing_or_open",
+    ]
     assert len(plan["runs"]) == 1
     run = plan["runs"][0]
     assert run["case"] == "lhd"
@@ -118,3 +131,13 @@ def test_main_writes_high_nu_run_plan_from_checked_in_audit(tmp_path: Path) -> N
     assert payload["configuration"]["transport_parallel_backend"] == "gpu"
     assert payload["configuration"]["transport_sparse_direct_max"] == 30000
     assert payload["configuration"]["require_residuals"] is True
+    assert payload["gates"]["commands_require_residual_gates"] is True
+    assert payload["gates"]["source_audit_keeps_full_reproduction_closed"] is True
+    assert payload["gates"]["ready_for_literature_claim"] is False
+    assert payload["deferred_reasons"] == [
+        {
+            "code": "run_plan_not_completed_validation",
+            "gate": "run_plan_only_not_completed_validation",
+            "message": "This artifact contains commands for future scans, not checked converged scan outputs.",
+        }
+    ]

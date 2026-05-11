@@ -107,6 +107,20 @@ def test_merge_transport_parallel_results_rejects_missing_payload_entries() -> N
         merge_transport_parallel_results(n_rhs=2, results=results)
 
 
+def test_merge_transport_parallel_results_rejects_incomplete_rhs_coverage() -> None:
+    results = [
+        {
+            "which_rhs_values": [1, 3],
+            "state_vectors_by_rhs": {1: np.array([1.0]), 3: np.array([3.0])},
+            "residual_norms_by_rhs": {1: 1.0e-8, 3: 3.0e-8},
+            "rhs_norms_by_rhs": {1: 1.0, 3: 3.0},
+        },
+    ]
+
+    with pytest.raises(ValueError, match=r"missing whichRHS values \[2\]"):
+        merge_transport_parallel_results(n_rhs=3, results=results, require_complete_coverage=True)
+
+
 def test_run_transport_parallel_gpu_subprocesses_collects_completed_workers(
     monkeypatch,
 ) -> None:

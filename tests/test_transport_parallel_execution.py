@@ -7,7 +7,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.transport_parallel_policy import audit_transport_parallel_scaling_summary
+from sfincs_jax.transport_parallel_policy import (
+    audit_sharded_solve_scaling_summary,
+    audit_transport_parallel_scaling_summary,
+)
 from sfincs_jax.transport_parallel_execution import (
     build_transport_parallel_payloads,
     run_transport_parallel_payloads,
@@ -63,9 +66,12 @@ def test_build_transport_parallel_payloads_preserves_solver_inputs(tmp_path: Pat
 def test_audit_transport_parallel_scaling_summary_accepts_release_grade_gpu_worker_claim() -> None:
     audit = audit_transport_parallel_scaling_summary(
         {
+            "benchmark_kind": "transport_worker_scaling",
             "backend": "gpu",
             "rhs_count": 3,
             "gpu_device_count": 2,
+            "timing_semantics": "cache_warm",
+            "deterministic_output_check": True,
             "workers": [1, 2],
             "ideal_speedup_finite_rhs": [1.0, 1.5],
             "payloads": [
@@ -88,15 +94,19 @@ def test_audit_transport_parallel_scaling_summary_accepts_release_grade_gpu_work
     assert audit.claim_efficiency == pytest.approx(0.7383)
     assert audit.claim_finite_task_ideal_speedup == pytest.approx(1.5)
     assert audit.deterministic_payload_coverage
+    assert audit.deterministic_output_check
+    assert audit.timing_semantics == "cache_warm"
     assert audit.failures == ()
 
 
 def test_audit_transport_parallel_scaling_summary_reports_weak_claim_gates() -> None:
     audit = audit_transport_parallel_scaling_summary(
         {
+            "benchmark_kind": "transport_worker_scaling",
             "backend": "gpu",
             "rhs_count": 3,
             "gpu_device_count": 1,
+            "timing_semantics": "cache_warm",
             "payloads": [
                 {"which_rhs_values": [1, 1]},
                 {"which_rhs_values": [2]},
@@ -116,6 +126,94 @@ def test_audit_transport_parallel_scaling_summary_reports_weak_claim_gates() -> 
     assert any("efficiency" in failure for failure in audit.failures)
     assert any("deterministic payload coverage" in failure for failure in audit.failures)
     assert any("payload RHS coverage" in note for note in audit.notes)
+
+
+def test_audit_transport_parallel_scaling_summary_rejects_task_overclaim_and_cold_timing() -> None:
+    audit = audit_transport_parallel_scaling_summary(
+        {
+            "benchmark_kind": "transport_worker_scaling",
+            "backend": "cpu",
+            "rhs_count": 3,
+            "timing_semantics": "cold_start",
+            "deterministic_output_check": True,
+            "payloads": [
+                {"which_rhs_values": [1]},
+                {"which_rhs_values": [2]},
+                {"which_rhs_values": [3]},
+            ],
+            "results": [
+                {"workers": 1, "mean_s": 300.0, "speedup": 1.0},
+                {"workers": 4, "mean_s": 100.0, "speedup": 3.0},
+            ],
+        }
+    )
+
+    assert not audit.release_scaling_claim
+    assert any("4 workers cannot be claimed for only 3 independent transport tasks" in failure for failure in audit.failures)
+    assert any("cold_start" in failure for failure in audit.failures)
+
+
+def test_audit_transport_parallel_scaling_summary_rejects_sharded_solve_payload() -> None:
+    with pytest.raises(ValueError, match="single-case sharded-solve summaries must use"):
+        audit_transport_parallel_scaling_summary(
+            {
+                "benchmark_kind": "single_case_sharded_solve",
+                "task_count": 1,
+                "devices": [1, 2],
+                "results": [
+                    {"devices": 1, "mean_s": 10.0},
+                    {"devices": 2, "mean_s": 7.0},
+                ],
+            }
+        )
+
+
+def test_audit_sharded_solve_scaling_summary_accepts_honest_experimental_payload() -> None:
+    audit = audit_sharded_solve_scaling_summary(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "scaling_status": "experimental_single_case_sharding",
+            "experimental_single_case_scaling": True,
+            "release_scaling_claim": False,
+            "backend": "gpu",
+            "gpu_device_count": 2,
+            "timing_semantics": "hot_solve",
+            "deterministic_output_check": False,
+            "devices": [1, 2],
+            "results": [
+                {"devices": 1, "mean_s": 10.0, "speedup": 1.0},
+                {"devices": 2, "mean_s": 8.0, "speedup": 1.25},
+            ],
+        }
+    )
+
+    assert audit.ci_gate_pass
+    assert not audit.release_scaling_claim
+    assert audit.experimental_single_case_scaling
+    assert audit.claim_speedup == pytest.approx(1.25)
+    assert any("not a release scaling claim" in note for note in audit.notes)
+
+
+def test_audit_sharded_solve_scaling_summary_rejects_release_overclaim() -> None:
+    audit = audit_sharded_solve_scaling_summary(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "backend": "gpu",
+            "gpu_device_count": 1,
+            "timing_semantics": "cache_warm",
+            "release_scaling_claim": True,
+            "devices": [1, 2],
+            "results": [
+                {"devices": 1, "mean_s": 10.0},
+                {"devices": 2, "mean_s": 5.0},
+            ],
+        }
+    )
+
+    assert not audit.ci_gate_pass
+    assert any("must not set release_scaling_claim=true" in failure for failure in audit.failures)
+    assert any("must be marked experimental" in failure for failure in audit.failures)
+    assert any("only 1 GPU devices" in failure for failure in audit.failures)
 
 
 def test_audit_transport_parallel_scaling_summary_rejects_malformed_summaries() -> None:

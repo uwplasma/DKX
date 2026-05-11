@@ -115,6 +115,7 @@ def build_w7x_ambipolar_root_provenance_panel(
         and gates["source_artifact_checked_in"]
     )
     gates["ready_for_literature_claim"] = ready
+    gates["checked_in_converged_artifact"] = ready
     validation_state = "artifact_backed_literature_ready" if ready else "scaffold_deferred"
     deferred_reasons = _deferred_reasons(
         gates=gates,
@@ -138,6 +139,13 @@ def build_w7x_ambipolar_root_provenance_panel(
             ),
             "source_kind": source_metadata.get("kind"),
             "source_validation_scope": source_metadata.get("validation_scope"),
+            "publication_figure": _publication_figure_claim_metadata(
+                ready=ready,
+                ready_artifact_class="checked_in_w7x_ambipolar_literature_artifact",
+                deferred_artifact_class="deferred_w7x_ambipolar_scaffold",
+                closed_claim="checked-in W7-X ambipolar-root validation",
+                deferred_claim="deferred W7-X ambipolar-root scaffold",
+            ),
             "notes": [
                 "This panel is a provenance and numerical-gate scaffold unless ready_for_literature_claim is true.",
                 "A literature-ready label requires complete W7-X provenance and a matching Git-tracked W7-X ambipolar JSON artifact.",
@@ -246,6 +254,7 @@ def build_simakov_helander_high_nu_panel(
     }
     ready = bool(all(gates.values()))
     gates["ready_for_literature_claim"] = ready
+    gates["checked_in_converged_artifact"] = ready
     validation_state = "artifact_backed_literature_ready" if ready else "scaffold_deferred"
     deferred_reasons = _simakov_helander_deferred_reasons(
         gates=gates,
@@ -269,6 +278,13 @@ def build_simakov_helander_high_nu_panel(
             ),
             "source_kind": source_metadata.get("kind"),
             "source_validation_scope": source_metadata.get("validation_scope"),
+            "publication_figure": _publication_figure_claim_metadata(
+                ready=ready,
+                ready_artifact_class="checked_in_simakov_helander_high_nu_artifact",
+                deferred_artifact_class="deferred_simakov_helander_high_nu_scaffold",
+                closed_claim="checked-in Simakov-Helander high-nu analytic-limit panel",
+                deferred_claim="deferred Simakov-Helander high-nu scaffold",
+            ),
             "notes": [
                 "This panel is an analytic-limit scaffold unless ready_for_literature_claim is true.",
                 "A literature-ready label requires complete provenance, a matching Git-tracked source artifact, and a wide high-nu scan.",
@@ -369,6 +385,24 @@ def _simakov_helander_runs(payload: Mapping[str, object]) -> list[dict[str, floa
     if np.any(np.diff(nuprime_values) <= 0.0):
         raise ValueError("Simakov-Helander nuprime scan points must be distinct.")
     return runs
+
+
+def _publication_figure_claim_metadata(
+    *,
+    ready: bool,
+    ready_artifact_class: str,
+    deferred_artifact_class: str,
+    closed_claim: str,
+    deferred_claim: str,
+) -> dict[str, object]:
+    claim_status = "checked_in_converged_artifact" if bool(ready) else "proxy_or_deferred"
+    return {
+        "claim_status": claim_status,
+        "artifact_class": str(ready_artifact_class if ready else deferred_artifact_class),
+        "checked_in_converged_artifact": bool(ready),
+        "ready_for_physics_validation_claim": bool(ready),
+        "manuscript_label": str(closed_claim if ready else deferred_claim),
+    }
 
 
 def _roots(payload: Mapping[str, object]) -> np.ndarray:

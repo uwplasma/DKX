@@ -7,6 +7,7 @@ from examples.performance.benchmark_sharded_solve_scaling import (
     _configure_benchmark_subprocess_env,
     _configure_solver_env,
     _run_once_subprocess,
+    _timing_semantics,
 )
 
 
@@ -74,6 +75,12 @@ def test_configure_benchmark_subprocess_env_quiets_jax_runtime_logs() -> None:
     assert env["TF_CPP_MIN_LOG_LEVEL"] == "2"
     assert env["GLOG_minloglevel"] == "2"
     assert env["ABSL_MIN_LOG_LEVEL"] == "2"
+
+
+def test_timing_semantics_labels_sharded_hot_and_cold_modes() -> None:
+    assert _timing_semantics(global_warmup=0, per_device_warmup=0, inner_warmup_solves=1) == "hot_solve"
+    assert _timing_semantics(global_warmup=1, per_device_warmup=0, inner_warmup_solves=0) == "cache_warm"
+    assert _timing_semantics(global_warmup=0, per_device_warmup=0, inner_warmup_solves=0) == "cold_start"
 
 
 def test_run_once_subprocess_passes_recorded_solver_options(monkeypatch, tmp_path) -> None:

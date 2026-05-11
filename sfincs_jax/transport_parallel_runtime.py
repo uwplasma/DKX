@@ -13,6 +13,7 @@ import numpy as np
 
 from .transport_parallel_policy import validate_transport_parallel_worker_count
 from .transport_parallel_validation import (
+    validate_complete_transport_worker_rhs_coverage,
     validate_distinct_transport_worker_rhs,
     validate_gpu_transport_worker_arrays,
     validate_transport_worker_result_payload,
@@ -358,6 +359,7 @@ def merge_transport_parallel_results(
     *,
     n_rhs: int,
     results: list[dict[str, object]],
+    require_complete_coverage: bool = False,
 ) -> tuple[dict[int, np.ndarray], dict[int, float], dict[int, float], np.ndarray]:
     state_vectors: dict[int, np.ndarray] = {}
     residual_norms: dict[int, float] = {}
@@ -385,4 +387,6 @@ def merge_transport_parallel_results(
         residual_norms.update({int(k): float(v) for k, v in res.get("residual_norms_by_rhs", {}).items()})
         rhs_norms.update({int(k): float(v) for k, v in res.get("rhs_norms_by_rhs", {}).items()})
         state_vectors.update({int(k): np.asarray(v, dtype=np.float64) for k, v in res.get("state_vectors_by_rhs", {}).items()})
+    if require_complete_coverage:
+        validate_complete_transport_worker_rhs_coverage(seen_rhs=seen_rhs, n_rhs=int(n_rhs))
     return state_vectors, residual_norms, rhs_norms, elapsed_s

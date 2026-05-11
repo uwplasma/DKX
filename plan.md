@@ -9756,3 +9756,124 @@ Next concrete actions:
    artifact selection is finalized.
 4. Continue extracting pure policy/validation modules before any broad
    `v3_driver.py` refactor.
+
+Progress update (2026-05-11): integrated multi-lane release hardening push
+
+- Production PAS/FP memory/runtime lane:
+  - `scripts/benchmark_pas_tz_memory_fallback.py` now has CI-fast gates for
+    timeout/stall detection, solver-path churn, backend mismatch, residual
+    quality, and peak RSS. Probes above `600 s` require an explicit
+    `--allow-long-run` opt-in.
+  - `scripts/benchmark_rhs1_pas_matrixfree.py` now includes opt-in
+    production real-solve probe planning/running behind
+    `--run-production-solve-probe`, with production target metadata and the
+    same no-accidental-long-run policy.
+  - Expensive production solves are still opt-in. No production solver defaults
+    changed in this pass.
+- Solver-path refactor lane:
+  - Extracted RHSMode=1 x-block sparse-PC side / Krylov method / restart
+    decisions into `sfincs_jax/rhs1_xblock_policy.py`.
+  - `v3_driver.py` now calls the pure policy resolver, preserving behavior but
+    making collaborator-reported solver-path churn patterns directly testable.
+- Benchmark/release artifact lane:
+  - The Fortran-v3 suite benchmark summary is now a first-class release-gated
+    artifact class in `sfincs_jax.benchmark_artifact_policy`.
+  - The benchmark-summary generator emits canonical filtered rows used by both
+    the plot and README table consistency checks, so runtime/memory plot/table
+    drift is now testable.
+- Parallelism lane:
+  - Transport-worker scaling audits now require explicit benchmark kind,
+    warm/hot timing semantics, enough independent tasks for the claimed worker
+    count, GPU device coverage for GPU claims, deterministic payload coverage,
+    deterministic output checks, speedup/efficiency gates, and finite-task
+    ideal consistency.
+  - Single-case sharded-solve summaries are explicitly separated as
+    experimental artifacts and cannot be promoted into transport-worker release
+    claims.
+- `vmec_jax` / `booz_xform_jax` lane:
+  - Added a public workflow contract for the geometry-proxy differentiability
+    path and strengthened finite-beta radial profile provenance. The lane still
+    claims only geometry-proxy gradients, not VMEC-boundary-to-SFINCS kinetic
+    transport gradients.
+- Physics validation lane:
+  - Strengthened W7-X ambipolar, W7-X high-`nu`, and Simakov-Helander
+    high-collisionality figure metadata and gates so generated figures
+    distinguish proxy/deferred scaffolds from checked-in converged literature
+    artifacts.
+  - No deferred literature validation claim was closed without new
+    artifact-backed scans.
+- Documentation updates:
+  - README benchmark text now states that the summary plot and table share the
+    same canonical filtered rows.
+  - Geometry docs describe the workflow contract and no-overclaim gate.
+  - Parallelism docs describe release-grade transport-worker audits and keep
+    single-case multi-GPU sharding experimental.
+  - Testing/validation docs describe deferred manuscript-lane gates.
+- Verification:
+  - focused integrated multi-lane suite:
+    `252 passed in 22.32 s`;
+  - full local suite:
+    `1297 passed in 628.35 s`;
+  - `python -m ruff check` on changed Python modules/scripts/tests:
+    passed;
+  - `python -m ruff check --select F821 sfincs_jax/v3_driver.py`:
+    passed;
+  - `python -m py_compile` on changed Python modules/scripts:
+    passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`:
+    passed;
+  - `git diff --check`:
+    passed;
+  - benchmark artifact index and checker smokes:
+    passed for the Fortran suite summary plus representative legacy/non-PAS
+    artifacts;
+  - PAS-TZ and PAS matrix-free dry-run smokes:
+    passed with production-floor metadata and no subprocess solves;
+  - geometry workflow summary smoke:
+    passed with optional local `vmec_jax` / `booz_xform_jax` importability
+    reported;
+  - benchmark-summary generator smoke:
+    regenerated a temp plot/JSON with canonical rows;
+  - W7-X high-`nu` figure generator smoke:
+    regenerated a temp plot/JSON and kept the claim scoped as proxy/deferred.
+- Remote GPU note:
+  - `office` is reachable and JAX sees two GPUs in a clean pinned checkout.
+  - A whole-tree `rsync` of the uncommitted local worktree was canceled because
+    benchmark artifacts made it too slow. After commit, use a clean remote
+    `git pull` checkout for bounded GPU smoke instead of syncing artifacts.
+
+Updated lane status after this integrated push:
+
+- PAS-heavy memory/runtime: `93%`. The probe/gate layer is now strong enough
+  for short real production-floor probes, but a default solver change still
+  needs real geometry4/HSX/geometry11 residual/runtime/memory wins.
+- Benchmark artifact reproducibility gates: `99%`. Canonical plot/table rows
+  and Fortran-suite summary release gates are in place; remaining work is
+  release CI wiring and regeneration of any artifacts promoted beyond
+  historical provenance.
+- FP production-floor memory/runtime: `95%`. No default behavior changed.
+- CPU/GPU parity for documented workflows: `100%` for touched lanes; parity
+  remains protected by existing fixture and suite tests.
+- CI/docs health: `100%` locally; remote CI/docs still need confirmation after
+  push.
+- Coverage/refactor path: `73%`. One more policy slice is now outside
+  `v3_driver.py`; reaching much higher coverage still requires continued
+  driver decomposition, not slow full-solve tests.
+- Parallel transport workers: `88%`. Release claims are now strongly audited.
+  Single-case multi-GPU strong scaling remains experimental and unclaimed.
+- `vmec_jax` / `booz_xform_jax` workflow: `72%` for public workflow/provenance
+  and proxy-gradient UX; full differentiable kinetic transport remains deferred.
+- Deferred manuscript physics lanes: `58%`. Figure/gate metadata is stronger,
+  but W7-X ambipolar and full Simakov-Helander high-`nu` claims still require
+  checked-in converged artifacts.
+
+Next concrete actions:
+
+1. Commit, push, and verify remote CI/docs for this integrated push.
+2. On `office`, pull the committed state into a clean checkout and run a
+   bounded GPU smoke of the new probe/audit lanes.
+3. Run the first short real-solve PAS production-floor probe selected by the
+   preflight, requiring a residual/runtime/memory win before any solver-default
+   promotion.
+4. Wire the artifact indexer into release CI once the release artifact set is
+   finalized.

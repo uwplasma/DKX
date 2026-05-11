@@ -14,6 +14,14 @@ profile, representative radial-current and flux scans in `Er`, and a `jet`
 contour plot of the sampled magnetic-field strength. The radial-profile x-axis
 is normalized toroidal flux, `psi_N = r_N^2`.
 
+This is a primal finite-beta transport example. It uses `vmec_jax` to generate
+VMEC-style equilibrium data, then hands a `wout` file to `sfincs_jax`; it does
+not differentiate through VMEC-JAX setup, file I/O, scheme-5 geometry evaluation,
+the SFINCS kinetic solve, or radial-profile postprocessing. The summary JSON
+records this as a workflow contract and includes radial-profile provenance:
+requested `r_N` surfaces, plotted `psi_N = r_N^2` values, all bracketed roots,
+the selected branch, and the convergence-overlay status.
+
 The default radial scan uses `r_N = 0.15, 0.30, 0.50, 0.70, 0.85` and
 root-neighborhood `Er = -9, -7, -5, -3, -1`, avoiding the singular magnetic axis
 and exact VMEC boundary while resolving the ambipolar branch. The checked

@@ -56,10 +56,29 @@ def test_build_summary_payload_serializes_runs_and_roots(tmp_path: Path) -> None
     assert payload["metadata"]["kind"] == "w7x_ambipolar_validation_scaffold"
     assert payload["metadata"]["fast"] is True
     assert payload["metadata"]["validation_scope"] == "w7x_like_scaffold"
+    assert payload["metadata"]["validation_state"] == "scaffold_deferred"
+    assert payload["metadata"]["publication_figure"] == {
+        "claim_status": "proxy_or_deferred",
+        "artifact_class": "generated_w7x_ambipolar_scaffold",
+        "checked_in_converged_artifact": False,
+        "ready_for_physics_validation_claim": False,
+        "manuscript_label": "deferred W7-X ambipolar scaffold",
+    }
+    assert payload["metadata"]["deferred_reason_codes"] == [
+        "incomplete_provenance",
+        "source_artifact_not_checked_in",
+    ]
+    assert payload["acceptance_gates"]["finite_er_current_series"] is True
+    assert payload["acceptance_gates"]["distinct_er_scan_points"] is True
     assert payload["acceptance_gates"]["finite_ambipolar_roots"] is True
     assert payload["acceptance_gates"]["radial_current_brackets_zero"] is True
+    assert payload["acceptance_gates"]["root_inside_scanned_er_range"] is True
+    assert payload["acceptance_gates"]["root_consistent_with_sign_change"] is True
+    assert payload["acceptance_gates"]["ambipolar_root_slope_resolved"] is True
     assert payload["acceptance_gates"]["ion_root_candidate"] is True
     assert payload["acceptance_gates"]["provenance_complete"] is False
+    assert payload["acceptance_gates"]["source_artifact_checked_in"] is False
+    assert payload["acceptance_gates"]["checked_in_converged_artifact"] is False
     assert payload["acceptance_gates"]["ready_for_literature_claim"] is False
     assert len(payload["runs"]) == 3
     assert payload["runs"][0]["outputs"]["heatFlux_vm_rHat"] == 3.0
@@ -67,7 +86,9 @@ def test_build_summary_payload_serializes_runs_and_roots(tmp_path: Path) -> None
     assert payload["ambipolar"]["outputs_at_roots"]["FSABjHat"] == [-0.1]
 
 
-def test_build_summary_payload_promotes_only_with_complete_provenance(tmp_path: Path) -> None:
+def test_build_summary_payload_requires_complete_provenance_and_checked_in_artifact(
+    tmp_path: Path,
+) -> None:
     mod = _load_module()
     ambi = AmbipolarSolveResult(
         var_name="Er",
@@ -99,9 +120,74 @@ def test_build_summary_payload_promotes_only_with_complete_provenance(tmp_path: 
         provenance=provenance,
     )
 
-    assert payload["metadata"]["validation_scope"] == "w7x_literature_validation"
-    assert payload["acceptance_gates"]["ready_for_literature_claim"] is True
-    assert payload["provenance"]["profile_source"] == "published profile table"
+    assert payload["metadata"]["validation_scope"] == "w7x_literature_candidate_deferred"
+    assert payload["metadata"]["validation_state"] == "scaffold_deferred"
+    assert payload["acceptance_gates"]["provenance_complete"] is True
+    assert payload["acceptance_gates"]["source_artifact_checked_in"] is False
+    assert payload["acceptance_gates"]["numerically_ready_for_literature_artifact"] is True
+    assert payload["acceptance_gates"]["ready_for_literature_claim"] is False
+    assert payload["metadata"]["deferred_reason_codes"] == ["source_artifact_not_checked_in"]
+
+    checked_payload = mod.build_summary_payload(
+        base_input=mod.DEFAULT_W7X_INPUT,
+        scan_dir=tmp_path / "scan",
+        requested_er_values=[1.0, 0.0, -1.0],
+        ambipolar_result=ambi,
+        fast=False,
+        provenance=provenance,
+        source_artifact_checked_in=True,
+    )
+
+    assert checked_payload["metadata"]["validation_scope"] == "w7x_literature_validation"
+    assert checked_payload["metadata"]["validation_state"] == "artifact_backed_literature_ready"
+    assert checked_payload["metadata"]["publication_figure"]["claim_status"] == "checked_in_converged_artifact"
+    assert checked_payload["acceptance_gates"]["checked_in_converged_artifact"] is True
+    assert checked_payload["acceptance_gates"]["ready_for_literature_claim"] is True
+    assert checked_payload["metadata"]["deferred_reason_codes"] == []
+    assert checked_payload["deferred_reasons"] == []
+    assert checked_payload["provenance"]["profile_source"] == "published profile table"
+
+
+def test_ambipolar_acceptance_gates_reject_unbracketed_root() -> None:
+    mod = _load_module()
+    ambi = AmbipolarSolveResult(
+        var_name="Er",
+        var_values=np.asarray([-1.0, 0.0, 1.0], dtype=np.float64),
+        er_values=np.asarray([-1.0, 0.0, 1.0], dtype=np.float64),
+        radial_currents=np.asarray([1.0, 2.0, 3.0], dtype=np.float64),
+        roots_var=np.asarray([0.2], dtype=np.float64),
+        roots_er=np.asarray([0.2], dtype=np.float64),
+        root_types=["electron"],
+        outputs_labels=["heatFlux_vm_rHat"],
+        outputs_by_run=np.asarray([[3.0], [2.0], [1.0]], dtype=np.float64),
+        outputs_at_roots=[np.asarray([1.5], dtype=np.float64)],
+        radius_wish=0.5,
+        radius_actual=0.49,
+    )
+    gates = mod.ambipolar_acceptance_gates(
+        ambipolar_result=ambi,
+        provenance={
+            "equilibrium_source": "wout_reference.nc",
+            "profile_source": "published profile table",
+            "configuration_or_shot": "W7-X reference discharge",
+            "literature_reference": "https://doi.org/10.1088/1741-4326/ab6ea8",
+        },
+        source_artifact_checked_in=True,
+    )
+
+    assert gates["finite_er_current_series"] is True
+    assert gates["radial_current_brackets_zero"] is False
+    assert gates["root_inside_scanned_er_range"] is True
+    assert gates["root_consistent_with_sign_change"] is False
+    assert gates["ambipolar_root_slope_resolved"] is False
+    assert gates["ion_root_candidate"] is False
+    assert gates["ready_for_literature_claim"] is False
+    assert [reason["code"] for reason in mod.ambipolar_deferred_reasons(gates)] == [
+        "missing_zero_current_bracket",
+        "root_not_supported_by_sign_change",
+        "ambipolar_root_slope_unresolved",
+        "ion_root_candidate_missing",
+    ]
 
 
 def test_checked_in_w7x_provenance_template_is_incomplete_by_design() -> None:

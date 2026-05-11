@@ -18,6 +18,12 @@ fastest possible smoke test. Use ``--quick`` or reduce the SFINCS resolution
 flags for quick local tests; increase ``--vmec-max-iter``, ``--r-n-values``,
 ``--er-values``, and the resolution flags for production-quality studies.
 
+This is a primal finite-beta transport workflow, not an autodiff example.
+``vmec_jax`` is used to generate VMEC-style equilibrium data, but this script
+hands a ``wout`` file to ``sfincs_jax`` and runs non-differentiated kinetic
+solves.  Kinetic-gradient work is intentionally deferred to separate lanes with
+explicit gradient gates.
+
 Run from the repository root:
 
     python examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py
@@ -51,8 +57,8 @@ try:
 except Exception as exc:  # pragma: no cover - dependency error path
     raise SystemExit("This example requires matplotlib. Install sfincs_jax normally first.") from exc
 
-from sfincs_jax.ambipolar import radial_current_from_output
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.ambipolar import radial_current_from_output  # noqa: E402
+from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: E402
 
 
 DEFAULT_INPUT = Path(__file__).with_name("input.nfp2_QA_finite_beta")
@@ -710,6 +716,79 @@ def _selected_root_index(
     return int(np.argmin(np.abs(np.asarray(roots, dtype=np.float64) - target)))
 
 
+def _finite_beta_workflow_contract() -> dict[str, Any]:
+    return {
+        "workflow": "finite_beta_vmec_jax_to_sfincs_jax_bootstrap_er_profile",
+        "contract_version": 1,
+        "differentiability": {
+            "vmec_jax_fixed_boundary_run": "primal_setup_not_differentiated_by_this_example",
+            "vmec_wout_file_handoff": "file_handoff_not_differentiated",
+            "sfincs_geometry_scheme5": "primal_geometry_evaluation_not_differentiated",
+            "sfincs_kinetic_transport_solve": "primal_solve_only_not_differentiated",
+            "radial_profile_postprocessing": "postprocessing_not_differentiated",
+        },
+        "no_overclaim_gate": {
+            "status": "pass",
+            "claim_scope": "finite_beta_primal_profile_with_convergence_audit",
+            "full_transport_gradients_claimed": False,
+            "kinetic_gradient_status": "deferred_not_covered_by_this_example",
+        },
+    }
+
+
+def _radial_profile_provenance(
+    *,
+    profile: list[SurfaceProfileRecord],
+    convergence_profile: list[SurfaceProfileRecord] | None,
+    accuracy: dict[str, float | int | bool | None],
+    representative_r_n: float,
+) -> dict[str, Any]:
+    surfaces = [
+        {
+            "r_n": float(row.r_n),
+            "psi_n": float(row.psi_n),
+            "psi_n_formula": "psi_N = r_N^2",
+            "roots_recorded": len(row.roots_er),
+            "selected_ambipolar_er_recorded": row.selected_ambipolar_er is not None,
+            "selected_bootstrap_current_recorded": row.selected_bootstrap_current is not None,
+            "scan_dir": str(row.scan_dir),
+        }
+        for row in profile
+    ]
+    convergence_surfaces = [
+        {
+            "r_n": float(row.r_n),
+            "psi_n": float(row.psi_n),
+            "roots_recorded": len(row.roots_er),
+            "scan_dir": str(row.scan_dir),
+        }
+        for row in (convergence_profile or [])
+    ]
+    return {
+        "radial_coordinate_input": "r_N",
+        "radial_profile_axis": "normalized toroidal flux psi_N",
+        "psi_n_formula": "psi_N = r_N^2",
+        "representative_r_n": float(representative_r_n),
+        "branch_selection": (
+            "At the innermost requested surface, choose the root nearest "
+            "--profile-root-preference; on later surfaces, choose the root nearest "
+            "the previously selected root."
+        ),
+        "all_bracketed_roots_preserved": all(
+            len(row.roots_er) == len(row.bootstrap_current_at_roots) for row in profile
+        ),
+        "surfaces": surfaces,
+        "convergence": {
+            "profile_present": bool(convergence_profile),
+            "surfaces": convergence_surfaces,
+            "surfaces_checked": int(accuracy.get("surfaces_checked") or 0),
+            "passed": bool(accuracy.get("passed", False)),
+            "max_abs_er": accuracy.get("max_abs_er"),
+            "max_abs_bootstrap": accuracy.get("max_abs_bootstrap"),
+        },
+    }
+
+
 def build_radial_profile(
     *,
     scans_by_radius: dict[float, tuple[list[RunRecord], Path]],
@@ -1111,6 +1190,13 @@ def build_summary(
                 "on later surfaces, choose the root nearest the previously selected root."
             ),
             "radial_axis": "The radial-profile x-axis is normalized toroidal flux psi_N = r_N^2.",
+            "workflow_contract": _finite_beta_workflow_contract(),
+            "radial_profile_provenance": _radial_profile_provenance(
+                profile=profile,
+                convergence_profile=convergence_profile,
+                accuracy=accuracy,
+                representative_r_n=representative_r_n,
+            ),
         },
         "vmec_jax": vmec_summary,
         "sfincs_jax": {

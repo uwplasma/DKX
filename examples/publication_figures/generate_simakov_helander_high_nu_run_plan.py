@@ -212,11 +212,54 @@ def build_high_nu_run_plan(
             }
         )
 
+    commands = [
+        command
+        for run in runs
+        for command in (run["command"], run["pilot_command"])
+        if isinstance(command, list)
+    ]
+    commands_require_residual_gates = bool(
+        commands
+        and all(
+            "--require-residuals" in command
+            and "--max-transport-residual" in command
+            and "--max-transport-relative-residual" in command
+            for command in commands
+        )
+    )
+    source_gates = audit_payload.get("gates", {})
+    if not isinstance(source_gates, dict):
+        source_gates = {}
+    source_audit_closed = bool(source_gates.get("full_simakov_helander_reproduction_closed", False))
+    deferred_reasons = [
+        {
+            "code": "run_plan_not_completed_validation",
+            "gate": "run_plan_only_not_completed_validation",
+            "message": "This artifact contains commands for future scans, not checked converged scan outputs.",
+        }
+    ]
+    if not source_audit_closed:
+        deferred_reasons.append(
+            {
+                "code": "source_audit_closure_gate_missing_or_open",
+                "gate": "source_audit_keeps_full_reproduction_closed",
+                "message": "The parent audit did not explicitly close the full Simakov-Helander reproduction gate.",
+            }
+        )
+
     return {
         "metadata": {
             "schema_version": 1,
             "kind": "simakov_helander_high_nu_run_plan",
+            "validation_state": "deferred_run_plan",
             "source_audit": _rel(DEFAULT_AUDIT_JSON),
+            "publication_figure": {
+                "claim_status": "proxy_or_deferred",
+                "artifact_class": "executable_high_nu_run_plan",
+                "checked_in_converged_artifact": False,
+                "ready_for_physics_validation_claim": False,
+                "manuscript_label": "deferred Simakov-Helander high-nu run plan",
+            },
             "notes": [
                 "This is an executable run plan, not a completed validation artifact.",
                 "Run these scan-only commands on a workstation or nightly lane, then regenerate the Simakov-Helander audit.",
@@ -235,6 +278,16 @@ def build_high_nu_run_plan(
             "max_transport_residual": float(max_transport_residual),
             "max_transport_relative_residual": float(max_transport_relative_residual),
         },
+        "gates": {
+            "ready_to_run": bool(runs),
+            "commands_require_residual_gates": bool(commands_require_residual_gates),
+            "source_audit_keeps_full_reproduction_closed": bool(source_audit_closed),
+            "run_plan_only_not_completed_validation": True,
+            "checked_in_converged_artifact": False,
+            "ready_for_literature_claim": False,
+            "full_simakov_helander_reproduction_closed": True,
+        },
+        "deferred_reasons": deferred_reasons,
         "runs": runs,
         "ready_to_run": bool(runs),
     }

@@ -182,9 +182,21 @@ without parsing human-readable text, use the JSON status mode:
    python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --check-backends --json
 
 The JSON report includes shallow backend importability, runnable setup paths,
-gradient-availability labels for each stage, the differentiated graph, and the
-explicit non-claim that this is a geometry-proxy gradient gate rather than a full
-transport-gradient workflow.
+gradient-availability labels for each stage, a ``workflow_contract`` block, the
+differentiated graph, and the explicit non-claim that this is a geometry-proxy
+gradient gate rather than a full transport-gradient workflow.  The contract is
+also available directly from
+``sfincs_jax.jax_geometry_adapters.geometry_proxy_workflow_contract()`` and is
+kept intentionally small enough for tests and notebook provenance:
+
+- default CI does not require ``vmec_jax`` or ``booz_xform_jax``,
+- ``--check-backends`` uses shallow importability checks and does not import the
+  optional packages,
+- the only supported gradient claim is
+  ``scaled VMEC-like spectral arrays -> booz_xform_jax -> sfincs_jax
+  Boozer-spectrum proxy objective``,
+- full VMEC-boundary-to-SFINCS kinetic transport gradients are a forbidden
+  overclaim for this lane.
 
 Runs that need provenance for publication artifacts can write a reusable workflow
 summary:
@@ -287,6 +299,13 @@ but higher combined ``Nxi``/``Nx`` refinement remains a performance-limited
 research lane.  A Boozer transform is not needed for this direct VMEC workflow
 because the kinetic solve uses the VMEC geometry coefficients from the generated
 ``wout`` file.
+
+This finite-beta example is a primal transport workflow.  It records radial
+profile provenance in its summary JSON, including the requested ``r_N`` surfaces,
+the plotted :math:`\psi_N = r_N^2` values, the all-roots versus selected-branch
+policy, and the convergence-overlay status.  It does not claim gradients through
+the VMEC file handoff, scheme-5 geometry evaluation, SFINCS kinetic solve, or
+radial postprocessing.
 
 Boozer ``.bc`` workflow
 -----------------------

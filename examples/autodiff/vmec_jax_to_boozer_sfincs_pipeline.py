@@ -13,7 +13,11 @@ VMEC-boundary-to-transport-solve objective remains a larger research lane.
 Only the in-memory spectral scaling, ``booz_xform_jax`` call, and
 ``sfincs_jax`` Boozer-spectrum proxy objective are differentiated here.  VMEC
 file reads, fixed-boundary setup, and the SFINCS kinetic transport solve are
-outside this example's differentiated graph.
+outside this example's differentiated graph.  The ``--check-backends`` and
+``--summary-json`` modes expose the same machine-readable workflow contract used
+by tests and documentation: optional backend checks are shallow, default CI does
+not require ``vmec_jax`` or ``booz_xform_jax``, and full kinetic-transport
+gradients are an explicit non-claim.
 """
 
 from __future__ import annotations
@@ -74,6 +78,7 @@ def _find_default_wout() -> Path:
 def _print_backend_status() -> None:
     report = optional_jax_geometry_backend_report()
     summary = geometry_proxy_workflow_summary()
+    contract = report["workflow_contract"]
     status = report["backends"]
     print("Optional JAX geometry backend status:")
     for name in ("vmec_jax", "booz_xform_jax"):
@@ -96,6 +101,12 @@ def _print_backend_status() -> None:
         "and sfincs_jax VMEC file adapters"
     )
     print("  not claimed: full VMEC-boundary-to-SFINCS-transport gradients")
+    print("Public workflow contract:")
+    print(f"  version: {contract['contract_version']}")
+    print("  default CI requires vmec_jax: false")
+    print("  default CI requires booz_xform_jax: false")
+    print(f"  no-overclaim gate: {contract['no_overclaim_gate']['status']}")
+    print(f"  kinetic gradient status: {contract['no_overclaim_gate']['kinetic_gradient_status']}")
     print("Workflow summary:")
     print(f"  numerical gradient gate: {summary['numerical_gradient_gate']['status']}")
     print(f"  kinetic transport gradients: {summary['claims']['not_claimed']}")

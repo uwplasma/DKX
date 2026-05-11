@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -64,23 +65,200 @@ def ambipolar_acceptance_gates(
     *,
     ambipolar_result: AmbipolarSolveResult,
     provenance: dict[str, object] | None = None,
+    source_artifact_checked_in: bool = False,
+    root_er_tolerance: float = 1.0e-9,
+    min_abs_current_slope: float = 1.0e-12,
 ) -> dict[str, bool]:
     roots = np.asarray(ambipolar_result.roots_er, dtype=np.float64)
+    er = np.asarray(ambipolar_result.er_values, dtype=np.float64)
     currents = np.asarray(ambipolar_result.radial_currents, dtype=np.float64)
+    finite_series = bool(
+        er.size >= 2
+        and currents.size == er.size
+        and np.all(np.isfinite(er))
+        and np.all(np.isfinite(currents))
+    )
+    if finite_series:
+        order = np.argsort(er)
+        er_sorted = er[order]
+        currents_sorted = currents[order]
+        distinct_er = bool(np.all(np.diff(er_sorted) > 0.0))
+    else:
+        er_sorted = np.asarray([], dtype=np.float64)
+        currents_sorted = np.asarray([], dtype=np.float64)
+        distinct_er = False
+    brackets = _zero_current_brackets(er=er_sorted, radial_current=currents_sorted) if distinct_er else []
     finite_roots = bool(roots.size > 0 and np.all(np.isfinite(roots)))
-    bracketed = bool(currents.size >= 2 and np.nanmin(currents) <= 0.0 <= np.nanmax(currents))
+    root_inside_scan_range = bool(
+        finite_roots
+        and finite_series
+        and all(
+            float(np.min(er)) - float(root_er_tolerance)
+            <= float(root)
+            <= float(np.max(er)) + float(root_er_tolerance)
+            for root in roots
+        )
+    )
+    matched_brackets = [
+        _matching_zero_current_bracket(float(root), brackets=brackets, tolerance=float(root_er_tolerance))
+        for root in roots
+    ]
+    root_consistent = bool(
+        finite_roots
+        and bool(brackets)
+        and all(bracket is not None for bracket in matched_brackets)
+    )
+    root_slope_resolved = bool(
+        root_consistent
+        and all(
+            abs(float(bracket["local_radial_current_slope"])) >= float(min_abs_current_slope)
+            for bracket in matched_brackets
+            if bracket is not None
+        )
+    )
     root_types = [str(value).lower() for value in ambipolar_result.root_types]
     ion_root_candidate = bool(any("ion" in value for value in root_types) or np.any(roots < 0.0))
     provenance = dict(provenance or {})
     required = ("equilibrium_source", "profile_source", "configuration_or_shot", "literature_reference")
     provenance_complete = bool(all(str(provenance.get(key, "")).strip() for key in required))
+    numerically_ready = bool(
+        finite_series
+        and distinct_er
+        and bool(brackets)
+        and finite_roots
+        and root_inside_scan_range
+        and root_consistent
+        and root_slope_resolved
+        and ion_root_candidate
+    )
     return {
+        "finite_er_current_series": finite_series,
+        "distinct_er_scan_points": distinct_er,
         "finite_ambipolar_roots": finite_roots,
-        "radial_current_brackets_zero": bracketed,
+        "radial_current_brackets_zero": bool(brackets),
+        "root_inside_scanned_er_range": root_inside_scan_range,
+        "root_consistent_with_sign_change": root_consistent,
+        "ambipolar_root_slope_resolved": root_slope_resolved,
         "ion_root_candidate": ion_root_candidate,
         "provenance_complete": provenance_complete,
-        "ready_for_literature_claim": bool(finite_roots and bracketed and ion_root_candidate and provenance_complete),
+        "source_artifact_checked_in": bool(source_artifact_checked_in),
+        "numerically_ready_for_literature_artifact": numerically_ready,
+        "checked_in_converged_artifact": bool(
+            numerically_ready and provenance_complete and source_artifact_checked_in
+        ),
+        "ready_for_literature_claim": bool(
+            numerically_ready and provenance_complete and source_artifact_checked_in
+        ),
     }
+
+
+def ambipolar_deferred_reasons(gates: dict[str, bool]) -> list[dict[str, str]]:
+    if bool(gates.get("ready_for_literature_claim")):
+        return []
+    reason_specs = [
+        (
+            "nonfinite_or_underresolved_scan",
+            "finite_er_current_series",
+            "The Er/current scan must contain at least two finite points.",
+        ),
+        (
+            "duplicate_er_scan_points",
+            "distinct_er_scan_points",
+            "The Er scan points must be distinct before root bracketing is trusted.",
+        ),
+        (
+            "missing_zero_current_bracket",
+            "radial_current_brackets_zero",
+            "The radial-current scan does not bracket an ambipolar root.",
+        ),
+        (
+            "missing_finite_ambipolar_root",
+            "finite_ambipolar_roots",
+            "The ambipolar postprocessing did not report a finite root.",
+        ),
+        (
+            "root_outside_scanned_er_range",
+            "root_inside_scanned_er_range",
+            "At least one reported root lies outside the scanned Er range.",
+        ),
+        (
+            "root_not_supported_by_sign_change",
+            "root_consistent_with_sign_change",
+            "At least one reported root is not supported by a current sign-change bracket.",
+        ),
+        (
+            "ambipolar_root_slope_unresolved",
+            "ambipolar_root_slope_resolved",
+            "The local radial-current slope at the accepted root is absent or too small.",
+        ),
+        (
+            "ion_root_candidate_missing",
+            "ion_root_candidate",
+            "The reported roots do not identify an ion-root candidate.",
+        ),
+        (
+            "incomplete_provenance",
+            "provenance_complete",
+            "Required W7-X provenance fields are incomplete.",
+        ),
+        (
+            "source_artifact_not_checked_in",
+            "source_artifact_checked_in",
+            "The source JSON is not a matching checked-in W7-X ambipolar artifact.",
+        ),
+    ]
+    return [
+        {"code": code, "gate": gate, "message": message}
+        for code, gate, message in reason_specs
+        if not bool(gates.get(gate))
+    ]
+
+
+def _zero_current_brackets(
+    *,
+    er: np.ndarray,
+    radial_current: np.ndarray,
+) -> list[dict[str, float | int]]:
+    brackets: list[dict[str, float | int]] = []
+    for idx in range(er.size - 1):
+        left_er = float(er[idx])
+        right_er = float(er[idx + 1])
+        left_current = float(radial_current[idx])
+        right_current = float(radial_current[idx + 1])
+        crosses = (
+            left_current == 0.0
+            or right_current == 0.0
+            or (left_current < 0.0 < right_current)
+            or (right_current < 0.0 < left_current)
+        )
+        if not crosses:
+            continue
+        slope = (right_current - left_current) / (right_er - left_er)
+        brackets.append(
+            {
+                "index": int(idx),
+                "er_min": float(min(left_er, right_er)),
+                "er_max": float(max(left_er, right_er)),
+                "local_radial_current_slope": float(slope),
+            }
+        )
+    return brackets
+
+
+def _matching_zero_current_bracket(
+    root: float,
+    *,
+    brackets: list[dict[str, float | int]],
+    tolerance: float,
+) -> dict[str, float | int] | None:
+    for bracket in brackets:
+        if (
+            float(bracket["er_min"]) - float(tolerance)
+            <= float(root)
+            <= float(bracket["er_max"]) + float(tolerance)
+        ):
+            return bracket
+    return None
 
 
 def _setup_mpl() -> None:
@@ -245,9 +423,15 @@ def build_summary_payload(
     ambipolar_result: AmbipolarSolveResult,
     fast: bool,
     provenance: dict[str, object] | None = None,
+    source_artifact_checked_in: bool = False,
 ) -> dict[str, object]:
     provenance_payload = dict(provenance or {})
-    gates = ambipolar_acceptance_gates(ambipolar_result=ambipolar_result, provenance=provenance_payload)
+    gates = ambipolar_acceptance_gates(
+        ambipolar_result=ambipolar_result,
+        provenance=provenance_payload,
+        source_artifact_checked_in=bool(source_artifact_checked_in),
+    )
+    deferred_reasons = ambipolar_deferred_reasons(gates)
     run_records: list[ScanRunRecord] = []
     for idx, er in enumerate(np.asarray(ambipolar_result.er_values, dtype=np.float64), start=0):
         outputs = {
@@ -277,10 +461,42 @@ def build_summary_payload(
             "requested_er_values": [float(v) for v in requested_er_values],
             "var_name": str(ambipolar_result.var_name),
             "literature": list(W7X_LITERATURE),
-            "validation_scope": "w7x_literature_validation" if gates["ready_for_literature_claim"] else "w7x_like_scaffold",
+            "validation_scope": (
+                "w7x_literature_validation"
+                if gates["ready_for_literature_claim"]
+                else "w7x_literature_candidate_deferred"
+                if gates["provenance_complete"]
+                else "w7x_like_scaffold"
+            ),
+            "validation_state": (
+                "artifact_backed_literature_ready"
+                if gates["ready_for_literature_claim"]
+                else "scaffold_deferred"
+            ),
+            "publication_figure": {
+                "claim_status": (
+                    "checked_in_converged_artifact"
+                    if gates["ready_for_literature_claim"]
+                    else "proxy_or_deferred"
+                ),
+                "artifact_class": (
+                    "checked_in_w7x_ambipolar_literature_artifact"
+                    if gates["ready_for_literature_claim"]
+                    else "generated_w7x_ambipolar_scaffold"
+                ),
+                "checked_in_converged_artifact": bool(gates["checked_in_converged_artifact"]),
+                "ready_for_physics_validation_claim": bool(gates["ready_for_literature_claim"]),
+                "manuscript_label": (
+                    "checked-in W7-X ambipolar validation"
+                    if gates["ready_for_literature_claim"]
+                    else "deferred W7-X ambipolar scaffold"
+                ),
+            },
+            "deferred_reason_codes": [str(reason["code"]) for reason in deferred_reasons],
         },
         "provenance": provenance_payload,
         "acceptance_gates": gates,
+        "deferred_reasons": deferred_reasons,
         "runs": [asdict(record) for record in run_records],
         "ambipolar": {
             "roots_var": [float(v) for v in np.asarray(ambipolar_result.roots_var, dtype=np.float64).tolist()],

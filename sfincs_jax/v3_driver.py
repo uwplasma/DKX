@@ -106,6 +106,10 @@ from .rhs1_sparse_rescue_policy import (
     rhs1_sparse_enabled_initial,
     rhs1_sparse_kind_use,
 )
+from . import rhs1_xblock_policy as _rhs1_xblock_policy
+from .rhs1_xblock_policy import (
+    resolve_rhs1_xblock_sparse_pc_policy,
+)
 from .rhs1_sparse_polish_policy import (
     rhs1_parse_accept_ratio,
     rhs1_parse_polish_gmres_config,
@@ -337,22 +341,14 @@ def _rhs1_xblock_precondition_side(
     include_xdot: bool,
     include_electric_field_xi: bool,
 ) -> tuple[str, bool]:
-    """Return the x-block sparse-PC side and whether right-PC was auto-selected.
-
-    The measured production-floor GPU tokamak full-FP Er full-trajectory row is
-    Krylov dominated and benefits from right preconditioning.  DKES-trajectory
-    Er rows do not, so the default is deliberately narrow and remains
-    overrideable through ``SFINCS_JAX_GMRES_PRECONDITION_SIDE``.
-    """
-    env_side = str(env_value).strip().lower()
-    if env_side in {"left", "right", "none"}:
-        return env_side, False
-    default_right = bool(
-        tokamak_fp_er_pc
-        and (not bool(use_dkes))
-        and (bool(include_xdot) or bool(include_electric_field_xi))
+    """Compatibility wrapper for the extracted x-block precondition-side policy."""
+    return _rhs1_xblock_policy.rhs1_xblock_precondition_side(
+        env_value=env_value,
+        tokamak_fp_er_pc=tokamak_fp_er_pc,
+        use_dkes=use_dkes,
+        include_xdot=include_xdot,
+        include_electric_field_xi=include_electric_field_xi,
     )
-    return ("right" if default_right else "left"), default_right
 
 
 def _rhs1_xblock_gmres_restart(
@@ -362,24 +358,13 @@ def _rhs1_xblock_gmres_restart(
     krylov_method: str,
     default_right_preconditioned: bool,
 ) -> tuple[int, bool]:
-    """Return the x-block sparse-PC GMRES restart and whether it was auto-capped.
-
-    The production-floor GPU full-FP Er full-trajectory row converges faster
-    with a short restarted GMRES basis once the x-block preconditioner is applied
-    on the right. Keep this cap restricted to the measured auto-selected policy;
-    explicit user restart overrides and other trajectory branches remain
-    untouched.
-    """
-
-    restart_use = max(1, int(requested_restart))
-    if str(restart_env_value).strip():
-        return restart_use, False
-    if str(krylov_method).strip().lower() != "gmres":
-        return restart_use, False
-    if not bool(default_right_preconditioned):
-        return restart_use, False
-    capped = min(restart_use, 20)
-    return capped, bool(capped != restart_use)
+    """Compatibility wrapper for the extracted x-block restart policy."""
+    return _rhs1_xblock_policy.rhs1_xblock_gmres_restart(
+        requested_restart=requested_restart,
+        restart_env_value=restart_env_value,
+        krylov_method=krylov_method,
+        default_right_preconditioned=default_right_preconditioned,
+    )
 
 
 def _rhs1_dkes_gmres_budget(
@@ -11922,35 +11907,29 @@ def solve_v3_full_system_linear_gmres(
             setup_s = sparse_timer.elapsed_s()
 
             side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
-            precondition_side, xblock_default_right_pc = _rhs1_xblock_precondition_side(
-                env_value=side_env,
+            xblock_krylov_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "").strip().lower()
+            xblock_policy = resolve_rhs1_xblock_sparse_pc_policy(
+                precondition_side_env_value=side_env,
+                krylov_env_value=xblock_krylov_env,
+                requested_restart=int(pc_restart),
+                restart_env_value=pc_restart_env,
                 tokamak_fp_er_pc=bool(tokamak_fp_er_pc),
                 use_dkes=bool(use_dkes),
                 include_xdot=bool(include_xdot_sparse_pc),
                 include_electric_field_xi=bool(include_electric_field_xi_sparse_pc),
             )
-            xblock_krylov_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "").strip().lower()
-            xblock_krylov_method = xblock_krylov_env.replace("-", "_") if xblock_krylov_env else "gmres"
-            if xblock_krylov_method in {"default", "auto"}:
-                xblock_krylov_method = "gmres"
-            elif xblock_krylov_method in {"short_recurrence", "shortrecurrence"}:
-                xblock_krylov_method = "bicgstab"
-            elif xblock_krylov_method in {"lgmres_scipy"}:
-                xblock_krylov_method = "lgmres"
-            elif xblock_krylov_method not in {"gmres", "lgmres", "bicgstab"}:
+            precondition_side = xblock_policy.precondition_side
+            xblock_default_right_pc = xblock_policy.default_right_preconditioned
+            xblock_krylov_method = xblock_policy.krylov_method
+            pc_restart = xblock_policy.gmres_restart
+            xblock_default_restart_capped = xblock_policy.restart_capped
+            if xblock_policy.ignored_krylov_env:
                 if emit is not None:
                     emit(
                         1,
                         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                         f"ignoring unknown SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV={xblock_krylov_env!r}",
                 )
-                xblock_krylov_method = "gmres"
-            pc_restart, xblock_default_restart_capped = _rhs1_xblock_gmres_restart(
-                requested_restart=int(pc_restart),
-                restart_env_value=pc_restart_env,
-                krylov_method=str(xblock_krylov_method),
-                default_right_preconditioned=bool(xblock_default_right_pc),
-            )
             progress_every_env = os.environ.get("SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY", "").strip()
             try:
                 progress_every = int(progress_every_env) if progress_every_env else 25

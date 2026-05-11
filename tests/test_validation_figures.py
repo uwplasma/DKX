@@ -94,6 +94,13 @@ def test_w7x_ambipolar_panel_builds_sorted_zero_bracket_and_deferred_label() -> 
     assert panel["metadata"]["manuscript_lane"] == "w7x_ambipolar_er_validation"
     assert panel["metadata"]["validation_state"] == "scaffold_deferred"
     assert panel["metadata"]["figure_label"].startswith("DEFERRED SCAFFOLD")
+    assert panel["metadata"]["publication_figure"] == {
+        "claim_status": "proxy_or_deferred",
+        "artifact_class": "deferred_w7x_ambipolar_scaffold",
+        "checked_in_converged_artifact": False,
+        "ready_for_physics_validation_claim": False,
+        "manuscript_label": "deferred W7-X ambipolar-root scaffold",
+    }
     assert panel["metadata"]["deferred_reason_codes"] == [
         "incomplete_provenance",
         "source_artifact_not_checked_in",
@@ -125,6 +132,7 @@ def test_w7x_ambipolar_panel_builds_sorted_zero_bracket_and_deferred_label() -> 
     assert gates["provenance_complete"] is False
     assert gates["source_artifact_checked_in"] is False
     assert gates["ready_for_literature_claim"] is False
+    assert gates["checked_in_converged_artifact"] is False
 
     assert panel["provenance"]["present_required_fields"] == 0
     assert panel["provenance"]["total_required_fields"] == 4
@@ -227,6 +235,13 @@ def test_simakov_helander_high_nu_panel_can_be_literature_ready_with_checked_art
     assert panel["metadata"]["manuscript_lane"] == "simakov_helander_high_collisionality_limit"
     assert panel["metadata"]["validation_state"] == "artifact_backed_literature_ready"
     assert panel["metadata"]["figure_label"].startswith("ARTIFACT-BACKED")
+    assert panel["metadata"]["publication_figure"] == {
+        "claim_status": "checked_in_converged_artifact",
+        "artifact_class": "checked_in_simakov_helander_high_nu_artifact",
+        "checked_in_converged_artifact": True,
+        "ready_for_physics_validation_claim": True,
+        "manuscript_label": "checked-in Simakov-Helander high-nu analytic-limit panel",
+    }
     assert panel["metadata"]["deferred_reason_codes"] == []
     assert panel["scan"]["nuprime"] == [10.0, 30.0, 100.0, 300.0, 1000.0]
     assert panel["scan"]["relative_error"] == pytest.approx([0.5, 0.2, 0.08, 0.02, 0.004])
@@ -257,6 +272,7 @@ def test_simakov_helander_high_nu_panel_can_be_literature_ready_with_checked_art
     assert gates["provenance_complete"] is True
     assert gates["source_artifact_checked_in"] is True
     assert gates["ready_for_literature_claim"] is True
+    assert gates["checked_in_converged_artifact"] is True
     assert panel["deferred_reasons"] == []
 
 

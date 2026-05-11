@@ -558,6 +558,23 @@ The scaffold only marks a panel as literature-ready when all numerical,
 high-``nu`` range, provenance, and checked-in-artifact gates pass. Otherwise it
 keeps the label as a deferred scaffold and reports whether the blocker is the
 scan range, the asymptotic trend, provenance, or source-artifact status.
+The panel metadata now also carries a ``publication_figure`` block so downstream
+plotting code can distinguish a checked-in converged artifact from a proxy or
+deferred scaffold without inferring that status from the title text.
+
+The executable high-``nu`` run plan is also gated as a run plan, not as evidence:
+its summary records ``run_plan_only_not_completed_validation``,
+``commands_require_residual_gates``, and ``ready_for_literature_claim=false``.
+This keeps the Simakov-Helander lane closed until the generated commands produce
+checked-in converged scan artifacts and the audit gate flips.
+
+The W7-X high-``nu`` preconditioner performance figure is intentionally narrower
+than a physics-validation lane. Its summary supports a single-point performance
+claim only when the factor-reuse route is residual-clean, faster than no-reuse,
+uses fewer sparse factorizations, matches the no-reuse residual series, and the
+failed bounded Krylov route is explicitly rejected. The same metadata marks
+``ready_for_physics_validation_claim=false`` so this performance artifact cannot be
+mistaken for a closed W7-X or Simakov-Helander physics validation.
 
 The W7-X ambipolar literature lane has an executable scaffold as well:
 
@@ -574,6 +591,11 @@ The deferred panel data also records explicit ``deferred_reasons`` and provenanc
 completeness scores. This keeps manuscript-facing labels conservative: a W7-X
 ambipolar figure remains a scaffold until the numerical root gates pass and the
 matching W7-X provenance artifact is complete and checked in.
+The summary generator mirrors those gates directly: it now requires finite distinct
+``E_r`` scan points, a radial-current sign-change bracket, reported roots inside
+the scanned range, root consistency with that bracket, a resolved local current
+slope, an ion-root candidate, complete provenance, and checked-in source-artifact
+status before ``ready_for_literature_claim`` can become true.
 
 The same scaffold is now resumable for heavy runs: ``run_er_scan`` accepts
 ``skip_existing=True``, the ``sfincs_jax scan-er`` CLI exposes ``--skip-existing``,
