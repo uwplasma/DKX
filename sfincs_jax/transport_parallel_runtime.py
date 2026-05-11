@@ -11,6 +11,12 @@ import time
 
 import numpy as np
 
+from .transport_parallel_policy import validate_transport_parallel_worker_count
+from .transport_parallel_validation import (
+    validate_distinct_transport_worker_rhs,
+    validate_gpu_transport_worker_arrays,
+    validate_transport_worker_result_payload,
+)
 from .transport_residual_quality import (
     transport_residual_gate_failures_from_arrays,
     transport_residual_gate_thresholds_from_env,
@@ -113,10 +119,37 @@ def _terminate_pending_workers(
 
 
 def partition_transport_rhs(values: list[int], workers: int) -> list[list[int]]:
-    chunks: list[list[int]] = [[] for _ in range(max(1, int(workers)))]
+    worker_count = validate_transport_parallel_worker_count(workers)
+    chunks: list[list[int]] = [[] for _ in range(worker_count)]
     for i, val in enumerate(values):
         chunks[i % len(chunks)].append(int(val))
     return [chunk for chunk in chunks if chunk]
+
+
+def _unique_gpu_ids(gpu_ids: list[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for raw_id in gpu_ids:
+        gpu_id = str(raw_id).strip()
+        if gpu_id and gpu_id not in seen:
+            unique.append(gpu_id)
+            seen.add(gpu_id)
+    return unique
+
+
+def _coalesce_transport_payloads(
+    payloads: list[dict[str, object]],
+    workers: int,
+) -> list[dict[str, object]]:
+    if int(workers) <= 0:
+        return []
+    scheduled = [dict(payload) for payload in payloads[: int(workers)]]
+    for i, payload in enumerate(payloads[int(workers) :], start=int(workers)):
+        target = i % int(workers)
+        existing_rhs = [int(v) for v in scheduled[target].get("which_rhs_values", [])]
+        extra_rhs = [int(v) for v in payload.get("which_rhs_values", [])]
+        scheduled[target]["which_rhs_values"] = [*existing_rhs, *extra_rhs]
+    return scheduled
 
 
 def run_transport_parallel_gpu_subprocesses(
@@ -127,23 +160,37 @@ def run_transport_parallel_gpu_subprocesses(
     gpu_worker_env: Callable[..., dict[str, str]],
     emit: Callable[[int, str], None] | None = None,
 ) -> list[dict[str, object]]:
-    gpu_ids = visible_gpu_ids(int(parallel_workers))
+    requested_workers = validate_transport_parallel_worker_count(
+        parallel_workers,
+        context="GPU transport",
+    )
+    if not payloads:
+        return []
+    gpu_ids = _unique_gpu_ids(visible_gpu_ids(requested_workers))
     if not gpu_ids:
         raise RuntimeError("GPU transport parallel backend requested but no visible GPU ids were found.")
-    use_workers = min(int(parallel_workers), len(payloads), len(gpu_ids))
+    unique_gpu_count = len(gpu_ids)
+    use_workers = min(requested_workers, len(payloads), unique_gpu_count)
     gpu_ids = gpu_ids[:use_workers]
-    if emit is not None and use_workers < int(parallel_workers):
+    if emit is not None and use_workers < requested_workers:
+        cap_reasons: list[str] = []
+        if len(payloads) < requested_workers:
+            cap_reasons.append(f"independent RHS chunks={len(payloads)}")
+        if unique_gpu_count < requested_workers:
+            cap_reasons.append(f"unique visible GPU ids={unique_gpu_count}")
+        reason = ", ".join(cap_reasons) if cap_reasons else "available work/devices"
         emit(
             1,
-            "solve_v3_transport_matrix_linear_gmres: GPU transport workers capped by visible devices "
-            f"({use_workers}/{int(parallel_workers)})",
+            "solve_v3_transport_matrix_linear_gmres: GPU transport worker plan capped "
+            f"(active={use_workers} requested={requested_workers}; {reason})",
         )
+    scheduled_payloads = _coalesce_transport_payloads(payloads, use_workers)
 
     results: list[dict[str, object]] = []
     with tempfile.TemporaryDirectory(prefix="sfincs_jax_transport_gpu_") as tmpdir:
         tmpdir_path = Path(tmpdir)
         procs: list[tuple[subprocess.Popen[str], Path, list[int], str]] = []
-        for i, payload in enumerate(payloads[:use_workers]):
+        for i, payload in enumerate(scheduled_payloads):
             rhs_vals = [int(v) for v in payload.get("which_rhs_values", [])]
             payload_path = tmpdir_path / f"payload_{i}.json"
             output_path = tmpdir_path / f"result_{i}.npz"
@@ -254,6 +301,15 @@ def run_transport_parallel_gpu_subprocesses(
                 else:
                     rhs_norms = np.full_like(residual_norms, np.nan, dtype=np.float64)
                 elapsed_time_s = np.asarray(data["elapsed_time_s"], dtype=np.float64)
+            validate_gpu_transport_worker_arrays(
+                requested_rhs_values=rhs_vals,
+                output_rhs_values=rhs_values,
+                state_vectors=state_vectors,
+                residual_norms=residual_norms,
+                rhs_norms=rhs_norms,
+                elapsed_time_s=elapsed_time_s,
+                gpu_id=gpu_id,
+            )
             if emit is not None:
                 for line in summarize_transport_worker_output(out):
                     emit(
@@ -307,8 +363,12 @@ def merge_transport_parallel_results(
     residual_norms: dict[int, float] = {}
     rhs_norms: dict[int, float] = {}
     elapsed_s = np.zeros((int(n_rhs),), dtype=np.float64)
+    seen_rhs: set[int] = set()
     for res in results:
         rhs_vals = [int(v) for v in res.get("which_rhs_values", [])]
+        validate_distinct_transport_worker_rhs(rhs_values=rhs_vals, seen_rhs=seen_rhs)
+        validate_transport_worker_result_payload(rhs_values=rhs_vals, result=res, n_rhs=int(n_rhs))
+        seen_rhs.update(rhs_vals)
         idxs = [v - 1 for v in rhs_vals]
         elapsed_chunk = np.asarray(res.get("elapsed_time_s", np.zeros((n_rhs,))), dtype=np.float64)
         if elapsed_chunk.ndim == 0:
