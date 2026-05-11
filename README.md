@@ -161,8 +161,9 @@ first external suite command. Warm runtime
 uses `jax_runtime_s_warm` when reports were generated with `--jax-repeats >= 2`;
 for the current frozen release reports, it falls back to the CLI
 `jax_logged_elapsed_s` field. Cases are ordered by best warm `sfincs_jax` speedup
-over the Fortran v3 runtime, so the strongest JAX wins appear first. Regenerate
-the plot with
+over the Fortran v3 runtime, so the strongest JAX wins appear first. The plot
+and README runtime/memory table are checked against the same canonical filtered
+rows emitted by the benchmark-summary generator. Regenerate the plot with
 `python examples/publication_figures/generate_fortran_suite_benchmark_summary.py`.
 
 Scope note: the full 39-case frozen suite remains the parity and CI smoke audit,
@@ -545,7 +546,7 @@ Current mismatches:
 - CPU strict mismatches: none
 - GPU practical/strict mismatches: none
 
-Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the merged JSON reports.
+Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the merged JSON reports. The generator emits canonical filtered rows for the plot and the table consistency gate.
 The benchmark summary JSON records production-resolution floor violations for legacy frozen rows, so the table should be read as a reference-runtime-window comparison until every row has been rerun at the current production floor.
 README-facing runtime/memory rows are restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_FPCollisions_noEr` (7.897s), `tokamak_1species_FPCollisions_withEr_DKESTrajectories` (6.958s), `tokamak_1species_FPCollisions_withEr_fullTrajectories` (6.736s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
 
