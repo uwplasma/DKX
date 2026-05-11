@@ -155,6 +155,8 @@ def build_w7x_high_nu_performance_summary(
     records: list[dict[str, Any]],
     *,
     residual_gate: float = DEFAULT_RESIDUAL_GATE,
+    records_source: str = "in_memory_records",
+    summary_artifact_checked_in: bool = False,
 ) -> dict[str, Any]:
     """Return a summary payload with residual, runtime, and factorization gates."""
 
@@ -174,6 +176,7 @@ def build_w7x_high_nu_performance_summary(
 
     no_reuse = by_id.get("sparse_lu_no_reuse")
     factor_reuse = by_id.get("sparse_lu_factor_reuse")
+    failed_route = by_id.get("bounded_30k_krylov")
     speedup = float("nan")
     saved_s = float("nan")
     if no_reuse is not None and factor_reuse is not None:
@@ -183,6 +186,53 @@ def build_w7x_high_nu_performance_summary(
             speedup = float(no_reuse_elapsed / reuse_elapsed)
             saved_s = float(no_reuse_elapsed - reuse_elapsed)
 
+    declared_passed_routes = [
+        row
+        for row in normalized
+        if str(row.get("status", "")).lower() in {"passed", "success", "residual_clean"}
+    ]
+    declared_passed_routes_residual_clean = bool(
+        declared_passed_routes and all(bool(row.get("residual_gate_passed")) for row in declared_passed_routes)
+    )
+    failed_route_rejected = bool(
+        failed_route is not None and not bool(failed_route.get("residual_gate_passed"))
+    )
+    factor_reuse_residual_clean = bool(
+        factor_reuse is not None and bool(factor_reuse.get("residual_gate_passed"))
+    )
+    factor_reuse_fewer_factorizations = bool(
+        no_reuse is not None
+        and factor_reuse is not None
+        and int(factor_reuse.get("sparse_factorizations", 0))
+        < int(no_reuse.get("sparse_factorizations", 0))
+    )
+    factor_reuse_residuals_match_no_reuse = bool(
+        no_reuse is not None
+        and factor_reuse is not None
+        and _residual_series_match(no_reuse, factor_reuse)
+    )
+    finite_factor_reuse_measurement = bool(
+        factor_reuse is not None
+        and np.isfinite(_finite_float(factor_reuse.get("elapsed_s")))
+        and _finite_float(factor_reuse.get("elapsed_s")) > 0.0
+        and np.isfinite(_finite_float(factor_reuse.get("max_rss_mb")))
+        and _finite_float(factor_reuse.get("max_rss_mb")) > 0.0
+    )
+    single_point_performance_claim_supported = bool(
+        factor_reuse_residual_clean
+        and factor_reuse_fewer_factorizations
+        and np.isfinite(speedup)
+        and speedup > 1.0
+        and failed_route_rejected
+        and declared_passed_routes_residual_clean
+        and finite_factor_reuse_measurement
+    )
+    checked_in_converged_artifact = bool(
+        single_point_performance_claim_supported
+        and factor_reuse_residuals_match_no_reuse
+        and str(records_source) == "checked_in_default_records"
+        and bool(summary_artifact_checked_in)
+    )
     payload: dict[str, Any] = {
         "metadata": {
             "kind": "w7x_high_nu_preconditioning_performance",
@@ -190,26 +240,49 @@ def build_w7x_high_nu_performance_summary(
             "case": "W7-X FP high-nu first point",
             "nuprime": 17.78332923601508,
             "residual_gate": float(residual_gate),
+            "records_source": str(records_source),
+            "summary_artifact_checked_in": bool(summary_artifact_checked_in),
             "source_script": "examples/publication_figures/generate_w7x_high_nu_performance.py",
+            "validation_state": (
+                "checked_converged_single_point_performance"
+                if checked_in_converged_artifact
+                else "performance_claim_deferred_or_external_records"
+            ),
+            "publication_figure": {
+                "claim_status": (
+                    "checked_in_converged_artifact"
+                    if checked_in_converged_artifact
+                    else "proxy_or_deferred"
+                ),
+                "artifact_class": (
+                    "checked_in_w7x_high_nu_single_point_performance"
+                    if checked_in_converged_artifact
+                    else "external_or_incomplete_w7x_high_nu_performance"
+                ),
+                "checked_in_converged_artifact": bool(checked_in_converged_artifact),
+                "ready_for_physics_validation_claim": False,
+                "manuscript_label": "single-point W7-X high-nu preconditioner performance, not physics validation",
+            },
+            "notes": [
+                "This artifact supports a single W7-X high-nu preconditioner performance claim.",
+                "It is not a closed W7-X physics-validation or Simakov-Helander analytic-limit claim.",
+                "The rejected bounded Krylov route remains plotted only because it fails the residual gate.",
+            ],
         },
         "records": normalized,
         "gates": {
             "factor_reuse_present": factor_reuse is not None,
-            "factor_reuse_residual_clean": bool(
-                factor_reuse is not None and bool(factor_reuse.get("residual_gate_passed"))
-            ),
-            "factor_reuse_fewer_factorizations": bool(
-                no_reuse is not None
-                and factor_reuse is not None
-                and int(factor_reuse.get("sparse_factorizations", 0))
-                < int(no_reuse.get("sparse_factorizations", 0))
-            ),
+            "factor_reuse_residual_clean": bool(factor_reuse_residual_clean),
+            "factor_reuse_fewer_factorizations": bool(factor_reuse_fewer_factorizations),
+            "factor_reuse_residuals_match_no_reuse": bool(factor_reuse_residuals_match_no_reuse),
             "factor_reuse_speedup_vs_no_reuse": speedup,
             "factor_reuse_wall_time_saved_s": saved_s,
-            "failed_route_rejected": bool(
-                by_id.get("bounded_30k_krylov") is not None
-                and not bool(by_id["bounded_30k_krylov"].get("residual_gate_passed"))
-            ),
+            "failed_route_rejected": bool(failed_route_rejected),
+            "declared_passed_routes_residual_clean": bool(declared_passed_routes_residual_clean),
+            "finite_factor_reuse_measurement": bool(finite_factor_reuse_measurement),
+            "single_point_performance_claim_supported": bool(single_point_performance_claim_supported),
+            "checked_in_converged_artifact": bool(checked_in_converged_artifact),
+            "ready_for_physics_validation_claim": False,
         },
     }
     return payload
@@ -223,6 +296,16 @@ def write_summary_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _record_values(payload: dict[str, Any], key: str) -> list[float]:
     return [_finite_float(row.get(key), default=0.0) for row in payload["records"]]
+
+
+def _residual_series_match(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    left_values = [_finite_float(value) for value in left.get("relative_residuals", [])]
+    right_values = [_finite_float(value) for value in right.get("relative_residuals", [])]
+    left_values = [value for value in left_values if np.isfinite(value)]
+    right_values = [value for value in right_values if np.isfinite(value)]
+    if not left_values or len(left_values) != len(right_values):
+        return False
+    return bool(np.allclose(left_values, right_values, rtol=0.0, atol=0.0))
 
 
 def _plot_runtime_panel(ax, payload: dict[str, Any]) -> None:
@@ -311,11 +394,19 @@ def plot_w7x_high_nu_performance(*, payload: dict[str, Any], out_dir: Path, stem
 def main(argv: list[str] | None = None) -> int:
     _setup_mpl()
     args = _build_parser().parse_args(argv)
+    summary_path = Path(args.summary_json)
+    default_summary_path = DEFAULT_ARTIFACT_DIR / f"{DEFAULT_STEM}_summary.json"
     payload = build_w7x_high_nu_performance_summary(
         load_records(args.records_json),
         residual_gate=float(args.residual_gate),
+        records_source=(
+            "checked_in_default_records" if args.records_json is None else "external_records_json"
+        ),
+        summary_artifact_checked_in=bool(
+            args.records_json is None and summary_path.resolve() == default_summary_path.resolve()
+        ),
     )
-    write_summary_json(Path(args.summary_json), payload)
+    write_summary_json(summary_path, payload)
     plot_w7x_high_nu_performance(payload=payload, out_dir=Path(args.out_dir), stem=str(args.stem))
     print(f"Wrote W7-X high-nu performance summary to {Path(args.summary_json)}")
     print(f"Wrote W7-X high-nu performance figure to {Path(args.out_dir) / (str(args.stem) + '.png')}")
