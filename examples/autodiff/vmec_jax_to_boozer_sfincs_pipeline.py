@@ -40,6 +40,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
     boozer_spectrum_geometry_proxy_objective,
+    geometry_proxy_workflow_summary,
     optional_jax_geometry_backend_report,
 )
 
@@ -72,6 +73,7 @@ def _find_default_wout() -> Path:
 
 def _print_backend_status() -> None:
     report = optional_jax_geometry_backend_report()
+    summary = geometry_proxy_workflow_summary()
     status = report["backends"]
     print("Optional JAX geometry backend status:")
     for name in ("vmec_jax", "booz_xform_jax"):
@@ -94,8 +96,17 @@ def _print_backend_status() -> None:
         "and sfincs_jax VMEC file adapters"
     )
     print("  not claimed: full VMEC-boundary-to-SFINCS-transport gradients")
+    print("Workflow summary:")
+    print(f"  numerical gradient gate: {summary['numerical_gradient_gate']['status']}")
+    print(f"  kinetic transport gradients: {summary['claims']['not_claimed']}")
     print("Machine-readable report:")
     print("  pass --json with --check-backends for backend and gradient-availability metadata")
+    print("  pass --summary-json PATH to write reusable workflow provenance JSON")
+
+
+def _write_summary_json(path: Path, summary: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _load_wout_from_vmec_case(args: argparse.Namespace):
@@ -180,6 +191,12 @@ def main() -> int:
         help="With --check-backends, emit backend and gradient-boundary metadata as JSON.",
     )
     parser.add_argument(
+        "--summary-json",
+        type=Path,
+        default=None,
+        help="Write reusable workflow summary/provenance JSON to this path.",
+    )
+    parser.add_argument(
         "--vmec-case",
         default=None,
         help="Optional vmec_jax example case to solve first, e.g. circular_tokamak.",
@@ -200,6 +217,9 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.check_backends:
+        summary = geometry_proxy_workflow_summary()
+        if args.summary_json is not None:
+            _write_summary_json(args.summary_json, summary)
         if args.json:
             print(json.dumps(optional_jax_geometry_backend_report(), indent=2, sort_keys=True))
         else:
@@ -257,6 +277,19 @@ def main() -> int:
     value, gradient = jax.value_and_grad(objective)(scale0)
     step = float(args.fd_step)
     finite_difference = (objective(scale0 + step) - objective(scale0 - step)) / (2.0 * step)
+    gradient_error = abs(float(gradient - finite_difference))
+    summary = geometry_proxy_workflow_summary(
+        provenance=provenance,
+        requested_surface=float(args.surface),
+        selected_surface=selected_surface,
+        boozer_resolution={"mboz": int(bx.mboz), "nboz": int(bx.nboz)},
+        grid_shape={"n_theta": int(args.n_theta), "n_zeta": int(args.n_zeta)},
+        scale=float(scale0),
+        proxy_objective=float(value),
+        autodiff_gradient=float(gradient),
+        finite_difference_gradient=float(finite_difference),
+        finite_difference_step=step,
+    )
 
     print("Differentiable geometry workflow:")
     print(f"  VMEC provenance: {provenance}")
@@ -265,12 +298,18 @@ def main() -> int:
     print(f"  sfincs_jax proxy objective(scale={float(scale0):.6g}) = {float(value):.12e}")
     print(f"  d objective / d scale (JAX) = {float(gradient):.12e}")
     print(f"  d objective / d scale (centered FD) = {float(finite_difference):.12e}")
-    print(f"  abs gradient error = {abs(float(gradient - finite_difference)):.3e}")
+    print(f"  abs gradient error = {gradient_error:.3e}")
+    print(f"  numerical gradient gate: {summary['numerical_gradient_gate']['status']}")
     print("  differentiated graph: scaled spectral arrays -> booz_xform_jax -> sfincs_jax proxy objective")
     print(
         "  outside graph: file I/O, VMEC setup, sfincs_jax VMEC file adapters, "
         "and kinetic transport solve"
     )
+    print("  not claimed: full VMEC-boundary-to-SFINCS kinetic transport gradients")
+
+    if args.summary_json is not None:
+        _write_summary_json(args.summary_json, summary)
+        print(f"  wrote workflow summary JSON: {args.summary_json}")
 
     scale = scale0
     for k in range(max(0, int(args.steps))):

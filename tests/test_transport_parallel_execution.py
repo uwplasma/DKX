@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from sfincs_jax.transport_parallel_policy import audit_transport_parallel_scaling_summary
 from sfincs_jax.transport_parallel_execution import (
     build_transport_parallel_payloads,
     run_transport_parallel_payloads,
@@ -57,6 +58,85 @@ def test_build_transport_parallel_payloads_preserves_solver_inputs(tmp_path: Pat
     assert payloads[0]["input_path"] == str(input_path)
     assert payloads[0]["differentiable"] is False
     np.testing.assert_allclose(payloads[0]["phi1_hat_base"], np.array([1.0, 2.0]))
+
+
+def test_audit_transport_parallel_scaling_summary_accepts_release_grade_gpu_worker_claim() -> None:
+    audit = audit_transport_parallel_scaling_summary(
+        {
+            "backend": "gpu",
+            "rhs_count": 3,
+            "gpu_device_count": 2,
+            "workers": [1, 2],
+            "ideal_speedup_finite_rhs": [1.0, 1.5],
+            "payloads": [
+                {"which_rhs_values": [1, 3]},
+                {"which_rhs_values": [2]},
+            ],
+            "results": [
+                {"workers": 1, "mean_s": 351.05, "speedup": 1.0},
+                {"workers": 2, "mean_s": 237.75, "speedup": 1.4766},
+            ],
+        }
+    )
+
+    assert audit.release_scaling_claim
+    assert audit.backend == "gpu"
+    assert audit.task_count == 3
+    assert audit.device_count == 2
+    assert audit.claim_workers == 2
+    assert audit.claim_speedup == pytest.approx(1.4766)
+    assert audit.claim_efficiency == pytest.approx(0.7383)
+    assert audit.claim_finite_task_ideal_speedup == pytest.approx(1.5)
+    assert audit.deterministic_payload_coverage
+    assert audit.failures == ()
+
+
+def test_audit_transport_parallel_scaling_summary_reports_weak_claim_gates() -> None:
+    audit = audit_transport_parallel_scaling_summary(
+        {
+            "backend": "gpu",
+            "rhs_count": 3,
+            "gpu_device_count": 1,
+            "payloads": [
+                {"which_rhs_values": [1, 1]},
+                {"which_rhs_values": [2]},
+            ],
+            "results": [
+                {"workers": 1, "mean_s": 100.0},
+                {"workers": 2, "mean_s": 120.0},
+            ],
+        }
+    )
+
+    assert not audit.release_scaling_claim
+    assert audit.claim_speedup == pytest.approx(100.0 / 120.0)
+    assert not audit.deterministic_payload_coverage
+    assert any("GPU devices" in failure for failure in audit.failures)
+    assert any("speedup" in failure for failure in audit.failures)
+    assert any("efficiency" in failure for failure in audit.failures)
+    assert any("deterministic payload coverage" in failure for failure in audit.failures)
+    assert any("payload RHS coverage" in note for note in audit.notes)
+
+
+def test_audit_transport_parallel_scaling_summary_rejects_malformed_summaries() -> None:
+    with pytest.raises(ValueError, match="1-worker baseline"):
+        audit_transport_parallel_scaling_summary(
+            {
+                "rhs_count": 3,
+                "results": [{"workers": 2, "mean_s": 10.0}],
+            }
+        )
+
+    with pytest.raises(ValueError, match=r"results\[1\]\.mean_s"):
+        audit_transport_parallel_scaling_summary(
+            {
+                "rhs_count": 3,
+                "results": [
+                    {"workers": 1, "mean_s": 10.0},
+                    {"workers": 2, "mean_s": 0.0},
+                ],
+            }
+        )
 
 
 def test_run_transport_parallel_payloads_uses_gpu_runner() -> None:
