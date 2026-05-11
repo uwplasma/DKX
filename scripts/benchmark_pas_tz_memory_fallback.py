@@ -50,6 +50,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--maxiter", type=int, default=8)
     parser.add_argument("--restart", type=int, default=12)
     parser.add_argument("--tol", type=float, default=1.0e-6)
+    parser.add_argument("--solve-method", default="incremental", help="Krylov solve method passed to the child solve.")
     parser.add_argument("--block", type=int, default=3)
     parser.add_argument("--overlap", type=int, default=1)
     parser.add_argument("--Ntheta", "--ntheta", dest="Ntheta", type=int, help="Override resolutionParameters.Ntheta.")
@@ -104,17 +105,18 @@ def _write_child_input(input_path: Path, work_dir: Path, overrides: dict[str, in
 def _variant_env(variant: str, *, block: int, overlap: int, maxiter: int, restart: int) -> dict[str, str]:
     """Return environment overrides for one forced PAS-TZ fallback variant."""
     variant_l = str(variant).strip().lower().replace("-", "_")
-    fallback_variant = variant_l
+    variant_core = variant_l.removesuffix("_lgmres")
+    fallback_variant = variant_core
     structured_levels = ""
-    if variant_l in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"}:
+    if variant_core in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"}:
         fallback_variant = "collision"
-    elif variant_l in {"tzfft_structured", "tzfft_structured_default", "tzfft_xmg_collision"}:
+    elif variant_core in {"tzfft_structured", "tzfft_structured_default", "tzfft_xmg_collision"}:
         fallback_variant = "tzfft"
         structured_levels = "xmg,collision"
-    elif variant_l in {"tzfft_xmg", "tzfft_structured_xmg"}:
+    elif variant_core in {"tzfft_xmg", "tzfft_structured_xmg"}:
         fallback_variant = "tzfft"
         structured_levels = "xmg"
-    elif variant_l in {"tzfft_collision", "tzfft_structured_collision"}:
+    elif variant_core in {"tzfft_collision", "tzfft_structured_collision"}:
         fallback_variant = "tzfft"
         structured_levels = "collision"
     env = {
@@ -128,11 +130,19 @@ def _variant_env(variant: str, *, block: int, overlap: int, maxiter: int, restar
         "SFINCS_JAX_GMRES_MAXITER": str(int(maxiter)),
         "SFINCS_JAX_GMRES_RESTART": str(int(restart)),
     }
-    if variant_l in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"}:
+    if variant_core in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"}:
         env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION"] = "tzfft"
     if structured_levels:
         env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS"] = structured_levels
     return env
+
+
+def _variant_solve_method(variant: str, default: str) -> str:
+    """Return the child solve method for a variant name."""
+    variant_l = str(variant).strip().lower().replace("-", "_")
+    if variant_l.endswith("_lgmres") or variant_l == "lgmres":
+        return "lgmres"
+    return str(default)
 
 
 def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -156,7 +166,7 @@ def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
         tol=float(args.tol),
         maxiter=int(args.maxiter),
         restart=int(args.restart),
-        solve_method="incremental",
+        solve_method=str(args.solve_method),
         emit=emit,
     )
     elapsed_s = time.perf_counter() - t0
@@ -204,6 +214,8 @@ def _run_child(args: argparse.Namespace, variant: str) -> dict[str, Any]:
             str(args.maxiter),
             "--restart",
             str(args.restart),
+            "--solve-method",
+            _variant_solve_method(str(variant), str(args.solve_method)),
         ]
         try:
             completed = subprocess.run(
@@ -255,6 +267,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "input_overrides": overrides,
         "timeout_s": float(args.timeout_s),
         "tol": float(args.tol),
+        "solve_method": str(args.solve_method),
         "maxiter": int(args.maxiter),
         "restart": int(args.restart),
         "block": int(args.block),

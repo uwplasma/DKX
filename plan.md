@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-10 (Europe/Lisbon)
+Last updated: 2026-05-11 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -132,6 +132,26 @@ Current active lane (2026-05-10, production-floor PAS memory/runtime closeout):
   and
   `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_structured_m20_25x51x100x4.json`.
   Do not promote this route to defaults.
+- [x] Fix solver-path provenance for host Krylov A/B probes. Before this pass,
+  `solve_method=lgmres` could still replay GMRES for
+  `SFINCS_JAX_SOLVER_ITER_STATS=1` and report `solver=gmres`, which polluted
+  profiling and could add hidden iteration-stat overhead. Iteration replay now
+  labels and replays LGMRES as `solver=lgmres`, and the PAS fallback benchmark
+  accepts `--solve-method` plus `_lgmres` variant suffixes.
+- [x] Prototype/reject LGMRES as a PAS-TZ `tzfft` production-floor default.
+  It is useful as an opt-in A/B route and now has reproducible artifacts, but it
+  fails the promotion gates because the memory win is not robust. Medium
+  geometry4: `tzfft` `3.72 s` / `0.97 GB`, residual `1.88e-4`;
+  `tzfft_lgmres` `3.66 s` / `0.91 GB`, same residual. HSX
+  `25 x 51 x 100 x 4`: `tzfft` `58.12 s` / `2.92 GB`, residual `1.60e-4`;
+  `tzfft_lgmres` `55.63 s` / `2.97 GB`, same residual. Geometry11
+  `25 x 51 x 100 x 4`: `tzfft` `62.01 s` / `3.22 GB`, residual `1.90e-2`;
+  `tzfft_lgmres` `61.25 s` / `3.32 GB`, same residual. Artifacts:
+  `examples/performance/output/pas_tz_lgmres_medium_geometry4_probe.json`,
+  `examples/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json`,
+  and
+  `examples/performance/output/pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json`.
+  Do not promote LGMRES by default for guarded PAS-TZ.
 
 Current active lane (2026-05-08, production-floor FP memory audit):
 - [x] Verify `office` is reachable and run the latest clean local `main` source
