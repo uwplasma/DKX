@@ -29,12 +29,38 @@ Each manifest lane now also carries explicit research gates:
 - ``tests``: the tests that protect the lane or its scaffold,
 - ``acceptance_gates``: the concrete criteria required before the lane can support a
   manuscript or release claim.
+- ``release_gate``: the release-facing claim status, evidence level, nonblocking
+  release decision, and promotion gate for the lane.
 
 The schema is enforced by ``tests/test_validation_manifest_schema.py``. Implemented
 release lanes must point to existing scripts, artifacts, source files, and tests.
 Deferred post-release lanes are closed for the tagged release but retain literature
 anchors, implementation targets, tests, and acceptance criteria so follow-up research
 work is not lost.
+
+Release claim gate metadata
+---------------------------
+
+Every manifest record has a ``release_gate`` block checked by
+``scripts/check_release_gates.py`` and ``tests/test_release_gate_metadata.py``.
+The allowed ``claim_status`` values are:
+
+- ``release_ready``: checked-in artifacts support the documented current-release
+  claim, and the listed tests are the fast gate for that claim.
+- ``regression_scaffold``: checked-in bounded artifacts are useful for CI,
+  branch validation, or manuscript layout, but a broader/full-resolution claim is
+  intentionally not being made.
+- ``bounded_proxy``: checked-in artifacts support a narrower proxy or
+  normalization claim, while the corresponding full literature reproduction stays
+  closed until its promotion gate is met.
+- ``closed_deferred``: the lane is explicitly closed for the current release as
+  post-release or nightly research work.
+
+No current manifest lane may set ``blocks_current_release=true``. A future lane
+that is not ready must therefore be either absent from the release manifest or
+recorded as ``closed_deferred`` with a concrete reason and promotion gate. This
+prevents scaffold scripts, run plans, or proxy figures from being mistaken for
+closed publication evidence.
 
 Implemented literature reproductions
 ------------------------------------
@@ -224,6 +250,123 @@ Current artifacts:
    Differentiable ``geometryScheme=4`` Boozer-harmonic sensitivity maps. This
    artifact validates the public analytic-Boozer geometry path used by examples and
    optimization scaffolds; it does not claim full VMEC-boundary optimization.
+
+Bounded integration lanes
+-------------------------
+
+These lanes are useful for integration review, but they are not current-release
+publication claims unless and until they are added to
+``examples/publication_figures/validation_manifest.json`` with explicit
+``release_gate`` metadata.
+
+Mapped x-grid PAS transport evidence
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Current scripts and source anchors:
+
+- ``scripts/run_mapped_xgrid_transport_evidence.py``
+- ``sfincs_jax/adaptive_maps.py``
+- ``sfincs_jax/mapped_xgrid_objectives.py``
+- ``sfincs_jax/mapped_xgrid_transport_evidence.py``
+- opt-in ``xGridScheme = 50`` construction in ``sfincs_jax/v3.py``
+
+Current bounded artifacts:
+
+- ``docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.json``
+- ``docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.csv``
+- ``docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json``
+- ``docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.csv``
+
+Current tests:
+
+- ``tests/test_adaptive_maps.py``
+- ``tests/test_mapped_xgrid_objectives.py``
+- ``tests/test_mapped_xgrid_v3.py``
+- ``tests/test_mapped_xgrid_transport_evidence.py``
+- ``tests/test_run_mapped_xgrid_transport_evidence.py``
+
+Scope and status:
+
+- The tiny artifact is a smoke comparison against a small RHSMode=2 PAS fixture.
+- The reduced PAS tokamak artifact compares mapped ``Nx=7`` candidates against an
+  ``Nx=13`` reference and records residuals, active-DOF counts, elapsed time,
+  moment-objective diagnostics, and transport-matrix error.
+- The best reduced PAS tokamak candidate by transport error is a bounded evidence
+  point for the opt-in mapped-grid machinery, not a claim that mapped grids should
+  replace default SFINCS-v3-compatible grids.
+- Full-FP mapped-grid compatibility remains open because the current full-FP
+  collision precompute path still has assumptions that are not yet mapped-grid
+  compatible.
+
+Promotion gates:
+
+- add the lane to the manifest with ``claim_status`` no stronger than
+  ``bounded_proxy`` until production-resolution evidence exists,
+- compare against higher-resolution default-grid references, not only
+  same-resolution smoke solves,
+- demonstrate residual-clean CPU/GPU behavior on at least one representative PAS
+  transport case,
+- and keep default ``xGridScheme`` behavior unchanged unless full-suite parity and
+  runtime/memory gates justify promotion.
+
+QI seed-robustness smoke
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Current script and tests:
+
+- ``scripts/run_qi_seed_robustness.py``
+- ``tests/test_run_qi_seed_robustness.py``
+
+Current smoke artifact:
+
+- ``docs/_static/qi_seed_robustness_smoke.json``
+
+Scope and status:
+
+- The runner materializes deterministic neighboring QI cases from
+  ``examples/additional_examples/input.namelist``.
+- Each generated case localizes the VMEC equilibrium beside the generated
+  ``input.namelist`` and records seed-specific ``nu_n`` / ``Er`` perturbations.
+- Optional ``--execute`` mode runs ``sfincs_jax write-output`` and records stdout,
+  stderr, output, and solver-trace paths.
+- The checked smoke summary records one bounded default-CLI execute pass:
+  ``passed=1``, ``failed=0``, solver trace readable, selected method ``dense``,
+  and residual ratio below ``1``. Treat it as runner and default-solver-policy
+  evidence only, not a production-resolution multi-seed robustness claim.
+
+Promotion gates:
+
+- keep at least one bounded passing ``--execute`` QI seed artifact with solver
+  traces,
+- record residual/output gates for the passing artifact,
+- run more than one seed before claiming seed robustness,
+- and add the lane to the manifest only after the evidence is closed enough to
+  assign a nonblocking ``release_gate`` status.
+
+Solver-path policy refactor
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Current source and tests:
+
+- ``sfincs_jax/solver_path_policy.py``
+- ``tests/test_solver_path_policy.py``
+
+Scope and status:
+
+- The refactor centralizes directly testable policy decisions for solver JIT
+  eligibility, preconditioner dtype selection, PAS geometry-4 FP32 gating,
+  residual-rescue slack, DKES GMRES budget preservation, sparse-PC defaults,
+  structural-tolerance parsing, and resource-exhaustion classification.
+- This is a maintainability and reproducibility gate for solver-path selection.
+  It does not by itself support a new performance or physics claim.
+
+Promotion gates:
+
+- keep policy tests green alongside the driver-wrapper tests,
+- verify no solver-path branch change is promoted without residual-clean and
+  parity-clean artifacts,
+- and summarize solver-path provenance in release artifacts before using a new
+  branch as a documented default.
 
 Closed post-release research lanes
 ----------------------------------
