@@ -29,8 +29,9 @@ JAX supports two broad modes of parallelism:
   the simplest and most robust path on CPUs (and also works for GPUs if each
   process is pinned to a device).
 - **SPMD / sharding**: Use `pjit` and sharded arrays to split a *single* linear
-  system across multiple devices. This gives true per‑solve scaling but requires
-  explicit sharding rules.
+  system across multiple devices. This is the mechanism needed for per-solve
+  strong scaling, but in ``sfincs_jax`` it remains an experimental path that
+  must prove it amortizes synchronization and compilation overhead.
 
 Key tradeoffs for `sfincs_jax`:
 
@@ -78,8 +79,8 @@ preserving differentiability:
 
 3. **Sharded matvec (SPMD)**
 
-   For very large cases, a single RHS solve can be sharded across multiple
-   devices by splitting the state vector along :math:`\theta` or :math:`\zeta`.
+   For very large cases, an experimental single-RHS solve path can shard the
+   state vector across multiple devices along :math:`\theta` or :math:`\zeta`.
 
    Implementation: `apply_v3_full_system_operator_cached` in
    `sfincs_jax.v3_system` with `pjit` + `with_sharding_constraint`.
@@ -168,8 +169,13 @@ Benchmark case: `examples/performance/transport_parallel_2min.input.namelist`
 
 Benchmark preconditioner: `SFINCS_JAX_TRANSPORT_PRECOND=xmg`.
 
-Latest cache-warm sweep (1, 2, 4 workers):
+Historical cache-warm CPU sweep (1, 2, 4 requested workers):
 1 worker 252.5s, 2 workers 169.2s, 4 workers 93.7s.
+Because this RHSMode=2 case has only three independent ``whichRHS`` tasks, the
+4-worker point is a task-limited throughput snapshot rather than a release gate
+for four fully occupied workers. New benchmark JSON records ``rhs_count`` and
+payload coverage, and release-facing audits require claimed worker counts to be
+no larger than the independent task count.
 
 Process‑parallel workers automatically disable sharded matvec and cap
 XLA CPU threads per worker to avoid oversubscription when `SFINCS_JAX_CORES`
@@ -181,7 +187,7 @@ Reproduce:
 
    python examples/performance/benchmark_transport_parallel_scaling.py \
      --input examples/performance/transport_parallel_2min.input.namelist \
-     --workers 1 2 4 \
+     --workers 1 2 3 \
      --repeats 1 \
      --warmup 0 \
      --global-warmup 1
@@ -196,28 +202,36 @@ parallel behavior instead of full diagnostics/H5 field assembly.
 
    Parallel whichRHS scaling (runtime + speedup vs workers).
 
-For this larger case, scaling reaches about ``2.69x`` at ``4`` workers.
-This is the current production CPU-parallel story in ``sfincs_jax``: use
-process-parallel transport and scan workloads first, and keep single-case
-multi-device sharding as an advanced path for very large RHSMode=1 solves.
+For this larger case, the historical task-limited snapshot reached about
+``2.69x`` with a 4-worker request. The release-facing CPU-parallel story in
+``sfincs_jax`` is narrower and more defensible: use process-parallel transport
+and scan workloads first, and keep single-case multi-device sharding as an
+experimental path for very large RHSMode=1 solves.
 Note: RHSMode=2 has only **3** right-hand sides, so speedup naturally
 saturates once there are more workers than independent ``whichRHS`` solves.
 
 Transport-worker scaling audit
 ------------------------------
 
-Saved transport-worker benchmark summaries can be checked with the pure policy
-helper ``sfincs_jax.transport_parallel_policy.audit_transport_parallel_scaling_summary``.
-The helper does not launch workers or inspect hardware. It only audits the
-saved payload:
+Saved transport-worker benchmark summaries can be checked with the pure
+CI-fast policy helper
+``sfincs_jax.transport_parallel_policy.audit_transport_parallel_scaling_summary``.
+The helper does not launch workers, inspect hardware, or rerun solves. It only
+audits the saved payload:
 
+- the summary is marked as a transport-worker benchmark, not a sharded single-case
+  benchmark;
 - the summary has a valid one-worker baseline and a parallel worker point;
-- there are enough independent transport tasks for a parallel scaling claim;
-- GPU summaries record enough visible devices for the audited worker count;
+- there are enough independent transport tasks for the claimed worker count;
+- GPU summaries record enough unique visible devices for the audited worker
+  count;
+- timing semantics are explicit, and release-facing claims use warm/hot timing
+  rather than cold setup timing;
 - measured speedup and worker efficiency pass the release gates;
 - speedup stays within the finite-task ideal for the recorded ``rhs_count``;
-- payload chunks cover each ``whichRHS`` exactly once, or the summary explicitly
-  records deterministic payload coverage.
+- payload chunks for the claimed worker count cover each ``whichRHS`` exactly
+  once;
+- deterministic output/merge coverage is recorded.
 
 The returned ``TransportParallelScalingAudit`` includes ``release_scaling_claim``,
 ``failures``, and ``notes`` so benchmark scripts can separate malformed payloads
@@ -226,6 +240,19 @@ transport-worker scaling: it supports claims such as "two GPU workers solve
 three independent transport RHS tasks with about 1.48x speedup." It does not
 upgrade single-case multi-GPU or sharded RHSMode=1 benchmarks into release-facing
 strong-scaling claims; those remain a separate experimental lane below.
+
+The benchmark driver records these fields in new JSON outputs and can run the
+gate directly:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_transport_parallel_scaling.py \
+     --from-json path/to/regenerated_transport_parallel_scaling.json \
+     --audit
+
+Legacy JSON files that predate the stronger schema may still be useful for
+figures, but they should not be used as release gates until regenerated with
+explicit timing, device, task, and payload-coverage metadata.
 
 Earlier runs (smaller grids)
 ----------------------------
@@ -560,9 +587,19 @@ For A/B comparison against distributed GMRES on the same setup, run:
 
 In A/B runs, ``distributed_krylov=auto`` remains the best default on this host.
 
-This confirms parity-safe sharded execution, but not strong scaling yet.
+This confirms that the sharded execution path can run deterministically under
+controlled conditions, but it is **not** a release-facing strong-scaling claim.
 Single-RHS GMRES remains reduction-heavy, and the current implementation still
 pays substantial synchronization/compile overhead on >1 CPU device.
+
+The sharded-solve benchmark JSON is intentionally marked as
+``benchmark_kind="single_case_sharded_solve"``,
+``experimental_single_case_scaling=true``, and
+``release_scaling_claim=false``. The corresponding pure helper,
+``sfincs_jax.transport_parallel_policy.audit_sharded_solve_scaling_summary``,
+checks that the artifact is schema-valid and honestly marked as experimental;
+it does not convert a single-case sharded timing into a release transport
+throughput claim.
 
 On this host, long 8-device CPU runs still hit occasional XLA rendezvous timeouts,
 so published strong-scaling results are currently capped at 5 devices.
@@ -921,9 +958,10 @@ These results support the current deployment recommendation:
 - CPU and GPU executable paths are parallel-capable and deterministic.
 - The robust production GPU-parallel path today is **transport-worker
   parallelism**, with one worker per GPU for independent RHSMode=2/3 solves.
-- The robust production CPU-parallel path today is bounded **CPU host
-  sharding** for single-RHS solves and process-parallel transport workers for
-  RHSMode=2/3 solves.
+- The robust production CPU-parallel path today is process-parallel transport
+  workers for RHSMode=2/3 solves and parallel suite/scan throughput.
+- CPU host sharding for single-RHS solves is useful for regression experiments,
+  but it is not the release-facing strong-scaling story.
 - Multi-GPU single-case sharding remains experimental until stronger local
   domain decomposition and lower-synchronization Krylov are in place.
 

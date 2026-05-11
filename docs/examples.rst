@@ -69,7 +69,13 @@ The radial-profile x-axis is normalized toroidal flux,
 The direct VMEC path does not require a Boozer transform: ``sfincs_jax`` consumes
 the generated ``wout`` through the same scheme-5 geometry implementation used by
 file-based VMEC runs.  ``booz_xform_jax`` remains useful for the separate
-differentiable Boozer-spectrum handoff described below.
+differentiable Boozer-spectrum handoff described below.  This finite-beta script
+is a primal transport example: it does not differentiate through the VMEC-JAX
+fixed-boundary run, the ``wout`` file handoff, scheme-5 geometry evaluation, the
+SFINCS kinetic solve, or radial postprocessing.  Its summary JSON records that
+boundary in a workflow-contract block, plus radial-profile provenance for the
+``r_N`` surfaces, plotted :math:`\psi_N = r_N^2` values, selected ambipolar branch,
+all bracketed roots, and convergence-overlay status.
 
 By default the radial profile uses ``r_N = 0.15, 0.30, 0.50, 0.70, 0.85`` and
 root-neighborhood ``Er = -9, -7, -5, -3, -1``.  This spans core-to-edge behavior
@@ -211,6 +217,18 @@ The script reports a Boozer-spectrum geometry proxy, its JAX gradient, a centere
 finite-difference gradient, and a few scalar optimization steps.  It is a fast
 research workflow gate for JAX-native geometry coupling; it is not a full kinetic
 transport optimization solve.
+
+The backend-status path is safe in default CI and normal installations:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --check-backends --json
+
+That command does not import ``vmec_jax`` or ``booz_xform_jax``.  The JSON output
+contains a ``workflow_contract`` with shallow backend availability, differentiability
+labels, the exact geometry-proxy gradient claim, deferred kinetic-gradient work,
+and a no-overclaim gate that forbids presenting this lane as full
+VMEC-boundary-to-SFINCS transport differentiation.
 
 JIT-compiled optimization with implicit gradients
 --------------------------------------------------

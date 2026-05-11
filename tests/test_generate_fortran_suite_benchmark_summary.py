@@ -47,6 +47,69 @@ def _write_synthetic_report(path: Path, *, backend_scale: float) -> None:
     path.write_text(json.dumps(rows, indent=2) + "\n")
 
 
+def _suite_row(
+    case: str,
+    *,
+    fortran_runtime_s: float,
+    jax_runtime_s: float,
+    jax_runtime_s_warm: float | None,
+    jax_logged_elapsed_s: float,
+    jax_max_rss_mb: float,
+    jax_incremental_max_rss_mb: float | None,
+) -> dict[str, object]:
+    return {
+        "case": case,
+        "status": "parity_ok",
+        "blocker_type": "none",
+        "fortran_runtime_s": fortran_runtime_s,
+        "jax_runtime_s": jax_runtime_s,
+        "jax_runtime_s_cold": jax_runtime_s,
+        "jax_runtime_s_warm": jax_runtime_s_warm,
+        "jax_logged_elapsed_s": jax_logged_elapsed_s,
+        "fortran_max_rss_mb": 100.0,
+        "jax_max_rss_mb": jax_max_rss_mb,
+        "jax_incremental_max_rss_mb": jax_incremental_max_rss_mb,
+        "jax_rss_baseline_mb": 250.0,
+        "jax_memory_metric_source": "drss_mb",
+        "final_resolution": {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100},
+        "n_common_keys": 12,
+        "n_mismatch_common": 0,
+        "n_mismatch_physics": 0,
+        "n_mismatch_solver": 0,
+        "strict_n_common_keys": 12,
+        "strict_n_mismatch_common": 0,
+        "strict_n_mismatch_physics": 0,
+        "strict_n_mismatch_solver": 0,
+        "print_parity_signals": 3,
+        "print_parity_total": 3,
+    }
+
+
+def _write_rows(path: Path, rows: list[dict[str, object]]) -> None:
+    path.write_text(json.dumps(rows, indent=2) + "\n")
+
+
+def _row_map(lines: list[str]) -> dict[str, str]:
+    rows: dict[str, str] = {}
+    for line in lines:
+        if not line.startswith("| `"):
+            continue
+        case = line.split("`", maxsplit=2)[1]
+        rows[case] = line
+    return rows
+
+
+def _readme_benchmark_table_lines(readme: Path, header: str) -> list[str]:
+    lines = readme.read_text().splitlines()
+    start = lines.index(header)
+    table: list[str] = []
+    for line in lines[start:]:
+        if table and not line:
+            break
+        table.append(line)
+    return table
+
+
 def test_generate_fortran_suite_benchmark_summary_from_reports(tmp_path: Path) -> None:
     mod = _load_module()
     out_dir = tmp_path / "figures"
@@ -129,6 +192,118 @@ def test_generate_fortran_suite_benchmark_summary_filters_short_reference_runs(t
     assert payload["reports"]["gpu"]["warm_or_logged_runtime_ratio_summary"]["count"] == 38
 
 
+def test_canonical_rows_filter_reference_runtime_and_define_plot_order(tmp_path: Path) -> None:
+    mod = _load_module()
+    cpu_report = tmp_path / "cpu_suite_report.json"
+    gpu_report = tmp_path / "gpu_suite_report.json"
+    rows = [
+        _suite_row(
+            "slow_jax",
+            fortran_runtime_s=20.0,
+            jax_runtime_s=40.0,
+            jax_runtime_s_warm=None,
+            jax_logged_elapsed_s=40.0,
+            jax_max_rss_mb=500.0,
+            jax_incremental_max_rss_mb=200.0,
+        ),
+        _suite_row(
+            "largest_speedup",
+            fortran_runtime_s=30.0,
+            jax_runtime_s=4.0,
+            jax_runtime_s_warm=3.0,
+            jax_logged_elapsed_s=12.0,
+            jax_max_rss_mb=500.0,
+            jax_incremental_max_rss_mb=150.0,
+        ),
+        _suite_row(
+            "borderline_kept",
+            fortran_runtime_s=10.0,
+            jax_runtime_s=4.0,
+            jax_runtime_s_warm=None,
+            jax_logged_elapsed_s=2.0,
+            jax_max_rss_mb=500.0,
+            jax_incremental_max_rss_mb=175.0,
+        ),
+        _suite_row(
+            "short_filtered",
+            fortran_runtime_s=9.99,
+            jax_runtime_s=1.0,
+            jax_runtime_s_warm=0.5,
+            jax_logged_elapsed_s=0.8,
+            jax_max_rss_mb=500.0,
+            jax_incremental_max_rss_mb=100.0,
+        ),
+    ]
+    _write_rows(cpu_report, rows)
+    _write_rows(gpu_report, rows)
+
+    payload = mod.write_benchmark_summary(
+        cpu_report=cpu_report,
+        gpu_report=gpu_report,
+        summary_json=tmp_path / "summary.json",
+        min_fortran_runtime_s=10.0,
+    )
+
+    assert payload["metadata"]["excluded_low_fortran_runtime_cases"] == [
+        {"case": "short_filtered", "fortran_runtime_s": 9.99}
+    ]
+    assert payload["metadata"]["canonical_case_order"] == [
+        "largest_speedup",
+        "borderline_kept",
+        "slow_jax",
+    ]
+    assert [row["case"] for row in payload["canonical_rows"]["cpu"]] == [
+        "largest_speedup",
+        "borderline_kept",
+        "slow_jax",
+    ]
+    assert all(row["fortran_runtime_s"] >= 10.0 for row in payload["canonical_rows"]["gpu"])
+
+
+def test_canonical_rows_record_cold_warm_sources_and_active_memory(tmp_path: Path) -> None:
+    mod = _load_module()
+    cpu_report = tmp_path / "cpu_suite_report.json"
+    gpu_report = tmp_path / "gpu_suite_report.json"
+    rows = [
+        _suite_row(
+            "warm_repeat",
+            fortran_runtime_s=20.0,
+            jax_runtime_s=5.0,
+            jax_runtime_s_warm=1.5,
+            jax_logged_elapsed_s=9.0,
+            jax_max_rss_mb=700.0,
+            jax_incremental_max_rss_mb=222.0,
+        ),
+        _suite_row(
+            "logged_fallback",
+            fortran_runtime_s=30.0,
+            jax_runtime_s=6.0,
+            jax_runtime_s_warm=None,
+            jax_logged_elapsed_s=2.5,
+            jax_max_rss_mb=333.0,
+            jax_incremental_max_rss_mb=None,
+        ),
+    ]
+    _write_rows(cpu_report, rows)
+    _write_rows(gpu_report, rows)
+
+    payload = mod.write_benchmark_summary(
+        cpu_report=cpu_report,
+        gpu_report=gpu_report,
+        summary_json=tmp_path / "summary.json",
+        min_fortran_runtime_s=10.0,
+    )
+    by_case = {row["case"]: row for row in payload["canonical_rows"]["cpu"]}
+
+    assert by_case["warm_repeat"]["jax_runtime_s_cold"] == 5.0
+    assert by_case["warm_repeat"]["warm_or_logged_runtime_s"] == 1.5
+    assert by_case["warm_repeat"]["warm_or_logged_runtime_source"] == "jax_runtime_s_warm"
+    assert by_case["warm_repeat"]["active_jax_memory_mb"] == 222.0
+    assert by_case["logged_fallback"]["warm_or_logged_runtime_s"] == 2.5
+    assert by_case["logged_fallback"]["warm_or_logged_runtime_source"] == "jax_logged_elapsed_s"
+    assert by_case["logged_fallback"]["active_jax_memory_mb"] == 333.0
+
+
 def test_case_order_prioritizes_warm_jax_speedup() -> None:
     mod = _load_module()
 
@@ -165,3 +340,20 @@ def test_case_order_prioritizes_warm_jax_speedup() -> None:
     )
 
     assert mod._case_order(metrics, metrics) == ["largest_speedup", "medium_speedup", "slow_jax"]
+
+
+def test_checked_in_readme_table_matches_canonical_benchmark_rows(tmp_path: Path) -> None:
+    mod = _load_module()
+    repo = Path(__file__).resolve().parents[1]
+    payload = mod.write_benchmark_summary(
+        cpu_report=mod.DEFAULT_CPU_REPORT,
+        gpu_report=mod.DEFAULT_GPU_REPORT,
+        summary_json=tmp_path / "summary.json",
+        min_fortran_runtime_s=10.0,
+    )
+
+    expected = mod.readme_benchmark_table_lines_from_payload(payload)
+    actual = _readme_benchmark_table_lines(repo / "README.md", mod.README_TABLE_HEADER)
+
+    assert actual[:2] == expected[:2]
+    assert _row_map(actual[2:]) == _row_map(expected[2:])
