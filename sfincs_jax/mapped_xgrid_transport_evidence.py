@@ -162,12 +162,16 @@ def transport_evidence_report_to_dict(
 ) -> dict[str, Any]:
     """Return a JSON-serializable mapped transport evidence payload."""
 
+    best_by_moment = report.best_by_moment
+    best_by_transport_error = report.best_by_transport_error
     payload = {
         "kind": "mapped_xgrid_transport_evidence",
         "reference_summary": asdict(report.reference_summary),
         "rows": [asdict(row) for row in report.rows],
-        "best_by_moment_log_length": report.best_by_moment.log_length,
-        "best_by_transport_error_log_length": report.best_by_transport_error.log_length,
+        "best_by_moment_log_length": best_by_moment.log_length,
+        "best_by_transport_error_log_length": best_by_transport_error.log_length,
+        "best_by_moment": asdict(best_by_moment),
+        "best_by_transport_error": asdict(best_by_transport_error),
         "metadata": dict(metadata or {}),
     }
     return _json_scalar(payload)
