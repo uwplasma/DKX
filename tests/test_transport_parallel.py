@@ -470,7 +470,7 @@ def test_transport_parallel_pool_rebuilds_on_worker_change(monkeypatch: pytest.M
 
 def test_transport_parallel_backend_gpu_visible_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "gpu")
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5,3,,5")
     assert v3_driver._transport_parallel_backend() == "gpu"
     assert v3_driver._transport_parallel_visible_gpu_ids(4) == ["3", "5"]
 

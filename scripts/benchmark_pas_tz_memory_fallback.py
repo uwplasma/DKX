@@ -137,12 +137,40 @@ def _variant_env(variant: str, *, block: int, overlap: int, maxiter: int, restar
     return env
 
 
+def _variant_base(variant: str) -> str:
+    """Return the fallback variant name without solver-method suffixes."""
+    return str(variant).strip().lower().replace("-", "_").removesuffix("_lgmres")
+
+
 def _variant_solve_method(variant: str, default: str) -> str:
     """Return the child solve method for a variant name."""
     variant_l = str(variant).strip().lower().replace("-", "_")
     if variant_l.endswith("_lgmres") or variant_l == "lgmres":
         return "lgmres"
     return str(default)
+
+
+def _variant_provenance(variant: str, default_solve_method: str) -> dict[str, Any]:
+    """Return reproducibility metadata for a planned variant."""
+    solve_method = _variant_solve_method(variant, default_solve_method)
+    variant_l = str(variant).strip().lower().replace("-", "_")
+    return {
+        "variant": str(variant),
+        "base_variant": _variant_base(variant),
+        "requested_solve_method": str(default_solve_method),
+        "realized_solve_method": solve_method,
+        "solve_method_source": "variant_suffix" if variant_l.endswith("_lgmres") or variant_l == "lgmres" else "plan_default",
+        "lgmres_opt_in": solve_method == "lgmres" and str(default_solve_method) != "lgmres",
+    }
+
+
+def _phase_record(name: str, start_s: float, end_s: float, *, status: str = "ok") -> dict[str, Any]:
+    """Build a compact phase timing record for benchmark JSON."""
+    return {
+        "name": name,
+        "status": status,
+        "elapsed_s": float(max(0.0, end_s - start_s)),
+    }
 
 
 def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -159,8 +187,12 @@ def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
         if "preconditioner" in msg_s or "GMRES" in msg_s or "complete" in msg_s:
             print(msg_s, flush=True)
 
+    phases: list[dict[str, Any]] = []
     t0 = time.perf_counter()
+    phase_t0 = time.perf_counter()
     nml = read_sfincs_input(args.input)
+    phases.append(_phase_record("read_input", phase_t0, time.perf_counter()))
+    phase_t0 = time.perf_counter()
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
         tol=float(args.tol),
@@ -169,15 +201,28 @@ def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
         solve_method=str(args.solve_method),
         emit=emit,
     )
+    phases.append(_phase_record("solve", phase_t0, time.perf_counter()))
     elapsed_s = time.perf_counter() - t0
     usage = resource.getrusage(resource.RUSAGE_SELF)
     max_rss_mb = _resource_maxrss_to_mb(float(usage.ru_maxrss))
     metadata = dict(result.metadata or {})
+    realized = metadata.get("solve_method") or metadata.get("solver_kind") or args.solve_method
     return {
         "status": "ok",
         "elapsed_s": float(elapsed_s),
         "max_rss_mb": max_rss_mb,
         "residual_norm": float(result.residual_norm),
+        "phase_metadata": phases,
+        "tail_metadata": {
+            "messages_tail_count": len(messages[-40:]),
+            "messages_tail_limit": 40,
+        },
+        "solver_provenance": {
+            "requested_solve_method": str(args.solve_method),
+            "realized_solve_method": str(realized),
+            "metadata_solver_kind": metadata.get("solver_kind"),
+            "metadata_krylov_method": metadata.get("krylov_method"),
+        },
         "metadata": metadata,
         "messages_tail": messages[-40:],
     }
@@ -202,6 +247,7 @@ def _run_child(args: argparse.Namespace, variant: str) -> dict[str, Any]:
     try:
         if tmp_ctx is not None:
             input_path = _write_child_input(input_path, Path(tmp_ctx.name), overrides)
+        variant_solve_method = _variant_solve_method(str(variant), str(args.solve_method))
         cmd = [
             sys.executable,
             str(Path(__file__).resolve()),
@@ -215,7 +261,7 @@ def _run_child(args: argparse.Namespace, variant: str) -> dict[str, Any]:
             "--restart",
             str(args.restart),
             "--solve-method",
-            _variant_solve_method(str(variant), str(args.solve_method)),
+            variant_solve_method,
         ]
         try:
             completed = subprocess.run(
@@ -228,11 +274,17 @@ def _run_child(args: argparse.Namespace, variant: str) -> dict[str, Any]:
         except subprocess.TimeoutExpired as exc:
             return {
                 "variant": str(variant),
+                "variant_provenance": _variant_provenance(str(variant), str(args.solve_method)),
                 "status": "timeout",
                 "elapsed_s": float(time.perf_counter() - t0),
                 "timeout_s": float(args.timeout_s),
                 "stdout_tail": _tail_text(exc.stdout),
                 "stderr_tail": _tail_text(exc.stderr),
+                "tail_metadata": {
+                    "stdout_tail_chars": len(_tail_text(exc.stdout)),
+                    "stderr_tail_chars": len(_tail_text(exc.stderr)),
+                    "tail_limit_chars": 4000,
+                },
             }
     finally:
         if tmp_ctx is not None:
@@ -251,8 +303,17 @@ def _run_child(args: argparse.Namespace, variant: str) -> dict[str, Any]:
             "stderr_tail": completed.stderr[-4000:],
         }
     payload["variant"] = str(variant)
+    payload["variant_provenance"] = _variant_provenance(str(variant), str(args.solve_method))
     payload["returncode"] = int(completed.returncode)
     payload.setdefault("elapsed_s", float(time.perf_counter() - t0))
+    payload.setdefault(
+        "tail_metadata",
+        {
+            "stdout_tail_chars": len(_tail_text(completed.stdout)),
+            "stderr_tail_chars": len(_tail_text(completed.stderr)),
+            "tail_limit_chars": 4000,
+        },
+    )
     if completed.returncode != 0 and payload.get("status") == "ok":
         payload["status"] = "error"
     return payload
@@ -268,6 +329,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "timeout_s": float(args.timeout_s),
         "tol": float(args.tol),
         "solve_method": str(args.solve_method),
+        "variant_methods": [_variant_provenance(str(variant), str(args.solve_method)) for variant in args.variants],
         "maxiter": int(args.maxiter),
         "restart": int(args.restart),
         "block": int(args.block),
@@ -284,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     payload: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "kind": "pas_tz_memory_fallback_benchmark",
         "plan": build_plan(args),
         "results": [],

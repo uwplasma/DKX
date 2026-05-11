@@ -187,6 +187,31 @@ adapter remain outside the differentiable graph.  Full VMEC-boundary-to-kinetic
 transport optimization is still a larger research workflow, but the public handoff
 now has a fast, tested gradient gate.
 
+Current differentiability boundary
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The optional ``vmec_jax`` / ``booz_xform_jax`` lane should currently be read as a
+geometry-handoff and objective-gradient lane, not as a complete transport
+optimization workflow.  The supported public pieces are:
+
+- shallow optional-backend discovery through
+  ``optional_jax_geometry_backend_status()``, which checks importability without
+  importing either optional package,
+- structural conversion of VMEC-like ``wout`` objects into the internal
+  ``VmecWout`` representation,
+- scheme-5 geometry evaluation from a preloaded ``VmecWout`` object, with the
+  same formulas as the file-backed VMEC path,
+- a Boozer-spectrum proxy objective that is pure JAX and fast enough for a
+  finite-difference gradient gate.
+
+The remaining limitations are deliberate.  Reading or writing equilibrium files is
+outside the differentiable graph, the scheme-5 VMEC evaluator is still primarily a
+NumPy parity implementation, and the public Boozer-spectrum objective is a
+geometry proxy rather than a SFINCS kinetic solve.  The next integration steps are
+to keep the adapter contract stable, extend pure-JAX geometry evaluation where it
+is useful, and only then wire those arrays into transport objectives with explicit
+gradient checks.
+
 A separate finite-beta end-to-end user example uses the direct VMEC ``wout`` lane:
 
 .. code-block:: bash
