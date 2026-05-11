@@ -47,6 +47,8 @@ def test_canonical_rhs1_preconditioner_kind_preserves_driver_aliases() -> None:
         "pas_line_xcoarse": "pas_hybrid",
         "pas_block_schur": "pas_schur",
         "pas_3d": "pas_tz",
+        "pas_fft": "pas_tzfft",
+        "pas_streaming_fft": "pas_tzfft",
         "block_ilu": "pas_ilu",
         "tz": "theta_zeta",
         "line_zeta": "zeta_line",
