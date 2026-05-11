@@ -52,6 +52,10 @@ def test_w7x_ambipolar_panel_builds_sorted_zero_bracket_and_deferred_label() -> 
     assert panel["metadata"]["manuscript_lane"] == "w7x_ambipolar_er_validation"
     assert panel["metadata"]["validation_state"] == "scaffold_deferred"
     assert panel["metadata"]["figure_label"].startswith("DEFERRED SCAFFOLD")
+    assert panel["metadata"]["deferred_reason_codes"] == [
+        "incomplete_provenance",
+        "source_artifact_not_checked_in",
+    ]
     assert panel["scan"]["er"] == [-3.0, -2.0, -1.0, 0.0, 1.0]
 
     brackets = panel["zero_crossing_brackets"]
@@ -80,6 +84,30 @@ def test_w7x_ambipolar_panel_builds_sorted_zero_bracket_and_deferred_label() -> 
     assert gates["source_artifact_checked_in"] is False
     assert gates["ready_for_literature_claim"] is False
 
+    assert panel["provenance"]["present_required_fields"] == 0
+    assert panel["provenance"]["total_required_fields"] == 4
+    assert panel["provenance"]["completeness_score"] == 0.0
+    assert panel["deferred_reasons"] == [
+        {
+            "code": "incomplete_provenance",
+            "gate": "provenance_complete",
+            "missing_fields": [
+                "equilibrium_source",
+                "profile_source",
+                "configuration_or_shot",
+                "literature_reference",
+            ],
+            "completeness_score": 0.0,
+            "message": "Required W7-X provenance fields are incomplete.",
+        },
+        {
+            "code": "source_artifact_not_checked_in",
+            "gate": "source_artifact_checked_in",
+            "artifact_status": "missing",
+            "message": "The source JSON is not a matching Git-tracked W7-X ambipolar artifact.",
+        },
+    ]
+
 
 def test_w7x_ambipolar_panel_records_provenance_but_keeps_untracked_artifact_deferred(tmp_path: Path) -> None:
     source_artifact = tmp_path / "sfincs_jax_w7x_ambipolar_validation_summary.json"
@@ -93,6 +121,9 @@ def test_w7x_ambipolar_panel_records_provenance_but_keeps_untracked_artifact_def
 
     assert panel["provenance"]["complete"] is True
     assert panel["provenance"]["missing_fields"] == []
+    assert panel["provenance"]["present_required_fields"] == 4
+    assert panel["provenance"]["total_required_fields"] == 4
+    assert panel["provenance"]["completeness_score"] == 1.0
     assert panel["provenance"]["fields"]["profile_source"] == "published W7-X ion-root profile table"
     assert panel["source_artifact"]["exists"] is True
     assert panel["source_artifact"]["looks_like_w7x_ambipolar_artifact"] is True
@@ -103,6 +134,15 @@ def test_w7x_ambipolar_panel_records_provenance_but_keeps_untracked_artifact_def
     assert panel["gates"]["source_artifact_checked_in"] is False
     assert panel["gates"]["ready_for_literature_claim"] is False
     assert panel["metadata"]["validation_state"] == "scaffold_deferred"
+    assert panel["metadata"]["deferred_reason_codes"] == ["source_artifact_not_checked_in"]
+    assert panel["deferred_reasons"] == [
+        {
+            "code": "source_artifact_not_checked_in",
+            "gate": "source_artifact_checked_in",
+            "artifact_status": "untracked_or_outside_git",
+            "message": "The source JSON is not a matching Git-tracked W7-X ambipolar artifact.",
+        }
+    ]
 
 
 def test_w7x_ambipolar_panel_rejects_root_not_supported_by_current_bracket() -> None:
@@ -118,3 +158,13 @@ def test_w7x_ambipolar_panel_rejects_root_not_supported_by_current_bracket() -> 
     assert panel["gates"]["ambipolar_root_slope_resolved"] is False
     assert panel["gates"]["ion_root_candidate"] is False
     assert panel["gates"]["ready_for_literature_claim"] is False
+
+    reason_codes = [reason["code"] for reason in panel["deferred_reasons"]]
+    assert reason_codes == [
+        "root_not_supported_by_sign_change",
+        "ambipolar_root_slope_unresolved",
+        "ion_root_candidate_missing",
+        "incomplete_provenance",
+        "source_artifact_not_checked_in",
+    ]
+    assert panel["metadata"]["deferred_reason_codes"] == reason_codes

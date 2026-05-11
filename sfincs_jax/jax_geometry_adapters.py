@@ -32,6 +32,42 @@ def optional_jax_geometry_backend_status() -> dict[str, bool]:
     }
 
 
+def optional_jax_geometry_backend_report() -> dict[str, Any]:
+    """Return user-facing metadata for the optional JAX geometry lane.
+
+    This is intentionally static apart from shallow backend importability checks.
+    The report clarifies the differentiability boundary without importing optional
+    packages or claiming end-to-end VMEC-boundary-to-transport gradients.
+    """
+    return {
+        "backends": optional_jax_geometry_backend_status(),
+        "runnable_paths": {
+            "no_optional_dependencies": "--check-backends",
+            "file_backed_setup": "--wout /path/to/wout.nc",
+            "optional_in_memory_setup": "--vmec-case circular_tokamak",
+        },
+        "gradient_availability": {
+            "spectral_scale_to_boozer_proxy": "available_when_optional_backends_installed",
+            "vmec_file_io": "setup_only_not_differentiated",
+            "vmec_fixed_boundary_solve": "setup_only_not_differentiated",
+            "sfincs_vmec_file_adapter": "setup_only_not_differentiated",
+            "sfincs_kinetic_transport_solve": "not_covered_by_this_lane",
+        },
+        "differentiated_graph": [
+            "scaled VMEC-like spectral arrays",
+            "booz_xform_jax",
+            "sfincs_jax Boozer-spectrum proxy objective",
+        ],
+        "outside_differentiated_graph": [
+            "VMEC file I/O",
+            "vmec_jax example fixed-boundary setup",
+            "sfincs_jax VMEC file adapters",
+            "SFINCS kinetic transport solve",
+        ],
+        "claim": "geometry_proxy_gradient_gate_not_full_transport_gradient",
+    }
+
+
 def _attr(obj: Any, *names: str, default: Any = None, required: bool = True) -> Any:
     for name in names:
         if hasattr(obj, name):
@@ -168,7 +204,7 @@ def boozer_bhat_from_spectrum(
     normalize: bool = True,
     eps: float = 1.0e-14,
 ) -> jnp.ndarray:
-    """Evaluate normalized magnetic-field strength from a Boozer cosine spectrum.
+    r"""Evaluate normalized magnetic-field strength from a Boozer cosine spectrum.
 
     Parameters use the public ``booz_xform_jax`` output convention: ``bmnc_b`` is a
     one-dimensional Boozer :math:`|B|` cosine spectrum, while ``ixm_b`` and
@@ -219,7 +255,7 @@ def boozer_spectrum_geometry_proxy_objective(
     zeta: Any,
     normalize: bool = True,
 ) -> jnp.ndarray:
-    """Return a differentiable scalar proxy from a Boozer :math:`|B|` spectrum.
+    r"""Return a differentiable scalar proxy from a Boozer :math:`|B|` spectrum.
 
     This is a geometry/transport proxy, not a kinetic solve.  It measures the
     normalized field-strength variation plus a small angular-roughness penalty,

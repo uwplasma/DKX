@@ -174,6 +174,18 @@ and prints the current differentiability boundary.  It does not import either
 optional backend and should run in a normal ``sfincs_jax`` development
 environment.
 
+For automation, dashboards, and lab notebooks that should record the same boundary
+without parsing human-readable text, use the JSON status mode:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --check-backends --json
+
+The JSON report includes shallow backend importability, runnable setup paths,
+gradient-availability labels for each stage, the differentiated graph, and the
+explicit non-claim that this is a geometry-proxy gradient gate rather than a full
+transport-gradient workflow.
+
 When both optional packages are installed, run the file-backed VMEC setup path
 with an explicit ``wout`` file:
 

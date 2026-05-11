@@ -9567,3 +9567,88 @@ Next concrete actions:
    attempting high-coverage work on `v3_driver.py`.
 4. Keep the W7-X ambipolar lane marked deferred until a complete checked-in
    W7-X equilibrium/profile/provenance artifact exists.
+
+Progress update (2026-05-11): second open-lane subagent integration
+
+- Added JSON-safe gate diagnostics to the opt-in RHSMode=1 PAS matrix-free
+  helper and benchmark harness. Rejected probes now report the concrete gate
+  failure (`nonfinite-candidate-residual`, `update-norm-too-large`, insufficient
+  residual improvement, shape mismatch) with finite JSON metadata. This changes
+  only the probe/harness layer, not production solver dispatch or defaults.
+- Tightened benchmark artifact reproducibility policy by rejecting malformed or
+  duplicate variant labels in both `plan.variant_methods` and `results`. New
+  schema-v2 artifacts therefore cannot silently contain ambiguous duplicate
+  rows. Historical schema-v1 artifacts remain outside release gates unless they
+  are explicitly refreshed.
+- Extracted pure solver-progress policy helpers to
+  `sfincs_jax/solver_progress_policy.py` while re-exporting the same names from
+  `sfincs_jax.solver_progress`. This keeps CLI/progress behavior stable and
+  makes the runtime-hint threshold logic directly unit-testable.
+- Added transport-parallel result integrity checks before merging worker
+  results: duplicate RHS coverage, missing per-RHS payload entries,
+  out-of-range RHS values, and inconsistent GPU worker array lengths now fail
+  explicitly instead of producing ambiguous merged results.
+- Extended the optional `vmec_jax` / `booz_xform_jax` workflow with
+  `--check-backends --json`, producing backend importability, runnable setup
+  paths, gradient-availability labels, and the explicit non-claim that this is
+  a geometry-proxy gate rather than full end-to-end kinetic-transport
+  differentiation.
+- Added W7-X ambipolar validation scaffold metadata: provenance completeness
+  scores and structured `deferred_reasons` / `deferred_reason_codes`. This keeps
+  manuscript-facing figures conservative until complete checked-in W7-X
+  provenance and numerical root gates exist.
+- Verification:
+  - focused integrated lane suite:
+    `95 passed in 12.24 s`;
+  - PAS matrix-free harness smoke:
+    `7` bounded rows, all expected keep/reject gates met, diagnostics present;
+  - schema-v2 PAS artifact dry-run plus checker:
+    passed;
+  - `ruff check` on changed Python source/tests:
+    passed;
+  - `python -m py_compile` on changed Python modules/scripts:
+    passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`:
+    passed;
+  - `git diff --check`:
+    passed;
+  - full local suite:
+    `1217 passed in 514.97 s`.
+
+Updated lane status after this pass:
+
+- PAS-heavy memory/runtime: `89%`. Probe observability is stronger and safer,
+  but no production default change is justified without a real geometry4/HSX
+  production-floor residual and memory win.
+- Benchmark artifact reproducibility gates: `96%`. Duplicate/malformed variants
+  are now blocked; release-facing historical artifacts still need schema-v2
+  refresh if promoted.
+- FP production-floor memory/runtime: `95%`. No production solve behavior
+  changed.
+- CPU/GPU parity for documented workflows: `100%` for the touched lanes; no
+  parity-sensitive solver path changed in this pass.
+- CI/docs health: `100%` locally for the gates listed above; remote CI still
+  needs post-push confirmation.
+- Coverage/refactor path: `67%`. Solver progress policy is now split and
+  directly tested; further progress still requires more driver/policy extraction
+  before broad `v3_driver.py` coverage can move materially.
+- Parallel transport workers: `82%` for release-facing multi-case/RHS
+  throughput. This pass improves safety and diagnostics, not single-case
+  multi-GPU strong scaling.
+- `vmec_jax` / `booz_xform_jax` workflow: `65%` for public status/reporting and
+  optional-backend UX; full differentiable kinetic transport remains about
+  `36%`.
+- Deferred manuscript physics lanes: `50%`. The W7-X scaffold is more
+  reviewer-proof, but W7-X ambipolar and full high-`nu` analytic-limit claims
+  remain deferred until artifact-backed validation exists.
+
+Next concrete actions:
+
+1. Check remote CI after pushing this integration.
+2. Refresh any benchmark artifacts that are intended for release-facing claims
+   to schema version `2`.
+3. Use the PAS matrix-free harness diagnostics to choose the next real
+   production-floor geometry4/HSX probe; do not change defaults without a
+   bounded residual/runtime/memory win.
+4. Continue the refactor lane with small pure solver-policy and validation
+   modules before attempting high-risk `v3_driver.py` surgery.

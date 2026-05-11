@@ -121,6 +121,10 @@ def test_transport_parallel_gpu_backend_merges_subset_elapsed(monkeypatch: pytes
                 1: float(np.asarray(seq.residual_norms_by_rhs[1])),
                 3: float(np.asarray(seq.residual_norms_by_rhs[3])),
             },
+            "rhs_norms_by_rhs": {
+                1: float(np.asarray(seq.rhs_norms_by_rhs[1])),
+                3: float(np.asarray(seq.rhs_norms_by_rhs[3])),
+            },
             "elapsed_time_s": np.asarray(
                 [
                     float(np.asarray(seq.elapsed_time_s[0])),
@@ -133,6 +137,7 @@ def test_transport_parallel_gpu_backend_merges_subset_elapsed(monkeypatch: pytes
             "which_rhs_values": [2],
             "state_vectors_by_rhs": {2: np.asarray(seq.state_vectors_by_rhs[2])},
             "residual_norms_by_rhs": {2: float(np.asarray(seq.residual_norms_by_rhs[2]))},
+            "rhs_norms_by_rhs": {2: float(np.asarray(seq.rhs_norms_by_rhs[2]))},
             "elapsed_time_s": np.asarray([float(np.asarray(seq.elapsed_time_s[1]))], dtype=np.float64),
         },
     ]

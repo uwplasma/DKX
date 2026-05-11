@@ -69,10 +69,14 @@ def test_child_payload_covers_keep_and_reject_gates() -> None:
     assert keep["status"] == "ok"
     assert keep["gate"] == "keep"
     assert keep["gate_reason"] == "accepted"
+    assert keep["gate_diagnostics"]["reason"] == "accepted"
+    assert keep["gate_diagnostics"]["residual_reduction"] >= keep["gate_diagnostics"]["min_residual_reduction"]
     assert keep["meets_expected_gate"] is True
     assert reject["status"] == "ok"
     assert reject["gate"] == "reject"
     assert reject["gate_reason"] == "insufficient-residual-improvement"
+    assert reject["gate_diagnostics"]["reason"] == "insufficient-residual-improvement"
+    assert reject["gate_diagnostics"]["candidate_residual_norm"] > reject["gate_diagnostics"]["required_residual_norm"]
     assert reject["meets_expected_gate"] is True
     json.dumps({"results": [keep, reject]}, allow_nan=False)
 
@@ -96,6 +100,8 @@ def test_child_payload_rejects_nonfinite_candidate_with_json_safe_history() -> N
     assert row["gate_reason"] == "nonfinite-candidate-residual"
     assert row["residual_history"][-1] is None
     assert row["residual_history_nonfinite_count"] == 1
+    assert row["gate_diagnostics"]["candidate_residual_norm"] is None
+    assert row["gate_diagnostics"]["candidate_residual_finite"] is False
     assert row["meets_expected_gate"] is True
     json.dumps(row, allow_nan=False)
 

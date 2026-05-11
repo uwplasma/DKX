@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from dataclasses import field
 import math
 
 import jax.numpy as jnp
@@ -54,6 +55,40 @@ class Rhs1PasMatrixFreeResult:
     accepted_steps: int
     accepted: bool
     reason: str
+    diagnostics: dict[str, object] = field(default_factory=dict)
+
+
+def _finite_or_none(value: float) -> float | None:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def _gate_diagnostics(
+    *,
+    reason: str,
+    initial_residual_norm: float,
+    candidate_residual_norm: float | None = None,
+    min_residual_reduction: float,
+    accepted_steps: int,
+) -> dict[str, object]:
+    initial = _finite_or_none(initial_residual_norm)
+    candidate = None if candidate_residual_norm is None else _finite_or_none(candidate_residual_norm)
+    diagnostics: dict[str, object] = {
+        "reason": reason,
+        "accepted_steps": int(accepted_steps),
+        "initial_residual_norm": initial,
+        "candidate_residual_norm": candidate,
+        "min_residual_reduction": float(min_residual_reduction),
+    }
+    if initial is not None:
+        diagnostics["required_residual_norm"] = initial * max(0.0, 1.0 - float(min_residual_reduction))
+    if initial is not None and candidate is not None and initial > 0.0:
+        diagnostics["residual_reduction"] = (initial - candidate) / initial
+    diagnostics["initial_residual_finite"] = initial is not None
+    diagnostics["candidate_residual_finite"] = candidate is not None if candidate_residual_norm is not None else None
+    return diagnostics
 
 
 def streaming_l2_norm(value: ArrayLike, *, block_size: int | None = None) -> float:
@@ -136,6 +171,12 @@ def rhs1_pas_matrixfree_correction(
             accepted_steps=0,
             accepted=False,
             reason="nonfinite-initial-residual",
+            diagnostics=_gate_diagnostics(
+                reason="nonfinite-initial-residual",
+                initial_residual_norm=initial_norm,
+                min_residual_reduction=float(config.min_residual_reduction),
+                accepted_steps=0,
+            ),
         )
 
     accepted_steps = 0
@@ -152,6 +193,12 @@ def rhs1_pas_matrixfree_correction(
                 accepted_steps=accepted_steps,
                 accepted=accepted_steps > 0,
                 reason="update-shape-mismatch",
+                diagnostics={
+                    "reason": "update-shape-mismatch",
+                    "accepted_steps": int(accepted_steps),
+                    "expected_shape": tuple(int(dim) for dim in x_initial.shape),
+                    "observed_shape": tuple(int(dim) for dim in update.shape),
+                },
             )
         update_norm = streaming_l2_norm(update, block_size=config.block_size)
         if not math.isfinite(update_norm):
@@ -163,10 +210,17 @@ def rhs1_pas_matrixfree_correction(
                 accepted_steps=accepted_steps,
                 accepted=accepted_steps > 0,
                 reason="nonfinite-update",
+                diagnostics={
+                    "reason": "nonfinite-update",
+                    "accepted_steps": int(accepted_steps),
+                    "update_norm": None,
+                    "update_norm_finite": False,
+                },
             )
         if config.max_update_norm_ratio is not None:
             x_scale = max(streaming_l2_norm(x_best, block_size=config.block_size), 1.0)
             if update_norm > x_scale * float(config.max_update_norm_ratio):
+                update_limit = x_scale * float(config.max_update_norm_ratio)
                 return Rhs1PasMatrixFreeResult(
                     x=x_best,
                     residual_norm=best_norm,
@@ -175,6 +229,14 @@ def rhs1_pas_matrixfree_correction(
                     accepted_steps=accepted_steps,
                     accepted=accepted_steps > 0,
                     reason="update-norm-too-large",
+                    diagnostics={
+                        "reason": "update-norm-too-large",
+                        "accepted_steps": int(accepted_steps),
+                        "update_norm": float(update_norm),
+                        "update_norm_limit": float(update_limit),
+                        "x_scale": float(x_scale),
+                        "max_update_norm_ratio": float(config.max_update_norm_ratio),
+                    },
                 )
 
         candidate = x_best + jnp.asarray(float(config.omega) * update, dtype=x_initial.dtype)
@@ -189,6 +251,12 @@ def rhs1_pas_matrixfree_correction(
                 accepted_steps=accepted_steps,
                 accepted=accepted_steps > 0,
                 reason="candidate-residual-shape-mismatch",
+                diagnostics={
+                    "reason": "candidate-residual-shape-mismatch",
+                    "accepted_steps": int(accepted_steps),
+                    "expected_shape": tuple(int(dim) for dim in x_initial.shape),
+                    "observed_shape": tuple(int(dim) for dim in jnp.asarray(candidate_residual).shape),
+                },
             )
         candidate_norm = streaming_l2_norm(candidate_residual, block_size=config.block_size)
         history.append(candidate_norm)
@@ -206,6 +274,13 @@ def rhs1_pas_matrixfree_correction(
                 accepted_steps=accepted_steps,
                 accepted=accepted_steps > 0,
                 reason=reason,
+                diagnostics=_gate_diagnostics(
+                    reason=reason,
+                    initial_residual_norm=best_norm,
+                    candidate_residual_norm=candidate_norm,
+                    min_residual_reduction=float(config.min_residual_reduction),
+                    accepted_steps=accepted_steps,
+                ),
             )
         x_best = candidate
         current_residual = jnp.asarray(candidate_residual)
@@ -220,6 +295,13 @@ def rhs1_pas_matrixfree_correction(
         accepted_steps=accepted_steps,
         accepted=accepted_steps > 0,
         reason="accepted",
+        diagnostics=_gate_diagnostics(
+            reason="accepted",
+            initial_residual_norm=initial_norm,
+            candidate_residual_norm=best_norm,
+            min_residual_reduction=float(config.min_residual_reduction),
+            accepted_steps=accepted_steps,
+        ),
     )
 
 
