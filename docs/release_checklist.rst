@@ -84,16 +84,19 @@ For a bounded QI smoke rerun, use the default CLI solver policy first:
    python scripts/run_qi_seed_robustness.py \
      --input examples/additional_examples/input.namelist \
      --out-root tests/qi_seed_robustness_smoke \
-     --seeds 0 \
-     --resolution-scale 0.15 \
-     --min-ntheta 7 --min-nzeta 11 --min-nx 4 --min-nxi 8 \
+     --seeds 0 1 2 \
+     --resolution-scale 0.25 \
+     --min-ntheta 7 --min-nzeta 11 --min-nx 4 --min-nxi 16 \
      --execute \
+     --max-residual-ratio 1 \
+     --require-converged \
      --clean
 
-The checked summary in ``docs/_static/qi_seed_robustness_smoke.json`` records a
-single passing bounded seed. Only claim seed robustness after a wider multi-seed
-ladder records passing executions and the solver-trace/output checks needed for
-the claim.
+The checked summaries in ``docs/_static/qi_seed_robustness_smoke.json`` and
+``docs/_static/qi_seed_robustness_multiseed.json`` record bounded passing
+default-CLI seeds. Only claim production QI robustness after production-resolution
+CPU/GPU ladders record passing executions and the solver-trace/output checks
+needed for the claim.
 
 If claiming mapped x-grid transport evidence, regenerate the bounded artifacts and
 review their residuals and transport-matrix errors before updating docs:
