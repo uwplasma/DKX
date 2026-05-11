@@ -20,3 +20,21 @@ def test_qi_seed_smoke_artifact_records_passing_default_cli_run() -> None:
     assert trace["solve_method"] == "dense"
     assert trace["residual_norm"] < trace["residual_target"]
     assert trace["residual_ratio"] < 1.0
+
+
+def test_qi_seed_multiseed_artifact_records_passing_default_cli_run() -> None:
+    path = Path("docs/_static/qi_seed_robustness_multiseed.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    assert payload["lane"] == "qi_seed_robustness"
+    assert payload["case_count"] == 3
+    assert payload["public_cli_default_path"] is True
+    assert payload["gates"]["passed"] is True
+    assert payload["gates"]["max_residual_ratio"] == 1.0
+    assert payload["gates"]["require_converged"] is True
+    assert payload["execution_summary"]["process_passed"] == 3
+    assert payload["execution_summary"]["process_failed"] == 0
+    assert payload["execution_summary"]["converged"] == 3
+    assert payload["execution_summary"]["max_residual_ratio"] < 1.0
+    assert len(payload["seeds"]) == 3
+    assert {seed["seed"] for seed in payload["seeds"]} == {0, 1, 2}

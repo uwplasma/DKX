@@ -309,6 +309,101 @@ def _execute_cases(out_root: Path, cases: Iterable[dict[str, object]], *, timeou
     return results
 
 
+def _execution_summary(results: Iterable[dict[str, object]]) -> dict[str, object]:
+    """Return compact aggregate diagnostics for an executed seed ladder."""
+    result_list = list(results)
+    trace_summaries = [
+        result.get("solver_trace_summary")
+        for result in result_list
+        if isinstance(result.get("solver_trace_summary"), dict)
+    ]
+    residual_ratios = [
+        float(summary["residual_ratio"])
+        for summary in trace_summaries
+        if _finite_float_or_none(summary.get("residual_ratio")) is not None
+    ]
+    elapsed_values = [
+        float(result["elapsed_s"])
+        for result in result_list
+        if _finite_float_or_none(result.get("elapsed_s")) is not None
+    ]
+    return {
+        "attempted": len(result_list),
+        "process_passed": sum(1 for result in result_list if int(result["returncode"]) == 0),
+        "process_failed": sum(1 for result in result_list if int(result["returncode"]) != 0),
+        "timed_out": sum(1 for result in result_list if bool(result.get("timed_out"))),
+        "outputs_written": sum(1 for result in result_list if bool(result.get("output_exists"))),
+        "solver_traces_written": sum(1 for result in result_list if bool(result.get("solver_trace_exists"))),
+        "converged": sum(1 for summary in trace_summaries if summary.get("converged") is True),
+        "accepted_converged": sum(1 for summary in trace_summaries if summary.get("accepted_converged") is True),
+        "max_residual_ratio": max(residual_ratios) if residual_ratios else None,
+        "max_elapsed_s": max(elapsed_values) if elapsed_values else None,
+        "backends": sorted({str(summary.get("backend")) for summary in trace_summaries if summary.get("backend")}),
+        "solve_methods": sorted(
+            {str(summary.get("solve_method")) for summary in trace_summaries if summary.get("solve_method")}
+        ),
+        "selected_paths": sorted(
+            {str(summary.get("selected_path")) for summary in trace_summaries if summary.get("selected_path")}
+        ),
+    }
+
+
+def _evaluate_execution_gates(
+    results: Iterable[dict[str, object]],
+    *,
+    max_residual_ratio: float | None,
+    require_converged: bool,
+    require_accepted_converged: bool,
+) -> dict[str, object]:
+    """Evaluate optional seed-ladder promotion gates against executed cases."""
+    failures: list[dict[str, object]] = []
+    for result in results:
+        case_name = str(result.get("case"))
+        returncode = int(result.get("returncode", 1))
+        if returncode != 0:
+            failures.append({"case": case_name, "reason": "process_failed", "returncode": returncode})
+            continue
+
+        summary = result.get("solver_trace_summary")
+        if (max_residual_ratio is not None or require_converged or require_accepted_converged) and not isinstance(
+            summary, dict
+        ):
+            failures.append({"case": case_name, "reason": "missing_solver_trace_summary"})
+            continue
+
+        if isinstance(summary, dict) and max_residual_ratio is not None:
+            residual_ratio = _finite_float_or_none(summary.get("residual_ratio"))
+            if residual_ratio is None:
+                failures.append({"case": case_name, "reason": "missing_residual_ratio"})
+            elif residual_ratio > float(max_residual_ratio):
+                failures.append(
+                    {
+                        "case": case_name,
+                        "reason": "residual_ratio_exceeded",
+                        "residual_ratio": residual_ratio,
+                        "max_residual_ratio": float(max_residual_ratio),
+                    }
+                )
+
+        if isinstance(summary, dict) and bool(require_converged) and summary.get("converged") is not True:
+            failures.append({"case": case_name, "reason": "not_converged"})
+
+        if (
+            isinstance(summary, dict)
+            and bool(require_accepted_converged)
+            and summary.get("accepted_converged") is not True
+        ):
+            failures.append({"case": case_name, "reason": "not_accepted_converged"})
+
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "max_residual_ratio": max_residual_ratio,
+        "require_converged": bool(require_converged),
+        "require_accepted_converged": bool(require_accepted_converged),
+    }
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=DEFAULT_QI_INPUT, help="Base QI input.namelist.")
@@ -333,6 +428,22 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--execute", action="store_true", help="Run each generated seed through sfincs_jax write-output.")
     parser.add_argument("--timeout-s", type=float, default=300.0, help="Per-seed execution timeout.")
     parser.add_argument("--fail-fast", action="store_true", help="Stop executing after the first failed seed.")
+    parser.add_argument(
+        "--max-residual-ratio",
+        type=float,
+        default=None,
+        help="Optional promotion gate: every solver trace residual_norm/residual_target must be at or below this value.",
+    )
+    parser.add_argument(
+        "--require-converged",
+        action="store_true",
+        help="Optional promotion gate: require every solver trace to report converged=true.",
+    )
+    parser.add_argument(
+        "--require-accepted-converged",
+        action="store_true",
+        help="Optional promotion gate: require every solver trace metadata to report accepted_converged=true.",
+    )
     parser.add_argument("--clean", action="store_true", help="Remove --out-root before materializing cases.")
     return parser
 
@@ -384,12 +495,20 @@ def main(argv: list[str] | None = None) -> int:
     }
     if bool(args.execute):
         results = _execute_cases(out_root, cases, timeout_s=float(args.timeout_s), fail_fast=bool(args.fail_fast))
+        gates = _evaluate_execution_gates(
+            results,
+            max_residual_ratio=args.max_residual_ratio,
+            require_converged=bool(args.require_converged),
+            require_accepted_converged=bool(args.require_accepted_converged),
+        )
         manifest["execution"] = {
             "timeout_s": float(args.timeout_s),
             "fail_fast": bool(args.fail_fast),
             "results": results,
             "passed": sum(1 for result in results if int(result["returncode"]) == 0),
             "failed": sum(1 for result in results if int(result["returncode"]) != 0),
+            "summary": _execution_summary(results),
+            "gates": gates,
         }
 
     manifest_path = out_root / "manifest.json"
@@ -399,7 +518,10 @@ def main(argv: list[str] | None = None) -> int:
     if bool(args.execute):
         execution = manifest["execution"]  # type: ignore[index]
         print(f"Executed: {execution['passed']} passed, {execution['failed']} failed")
-        return 0 if int(execution["failed"]) == 0 else 1
+        gates = execution["gates"]
+        if not gates["passed"]:
+            print(f"Gates failed: {len(gates['failures'])}")
+        return 0 if int(execution["failed"]) == 0 and bool(gates["passed"]) else 1
     return 0
 
 

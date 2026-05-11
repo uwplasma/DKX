@@ -4,6 +4,7 @@ import importlib
 
 
 POLICY_MODULES = (
+    "sfincs_jax.host_refinement",
     "sfincs_jax.rhs1_acceptance_policy",
     "sfincs_jax.rhs1_handoff",
     "sfincs_jax.rhs1_constraint0_policy",
