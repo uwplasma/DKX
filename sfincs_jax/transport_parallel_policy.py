@@ -90,7 +90,14 @@ def transport_parallel_pool_key(parallel_workers: int) -> tuple[object, ...]:
 def transport_parallel_visible_gpu_ids(parallel_workers: int) -> list[str]:
     visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
     if visible:
-        return [token.strip() for token in visible.split(",") if token.strip()]
+        ids: list[str] = []
+        seen: set[str] = set()
+        for token in visible.split(","):
+            gpu_id = token.strip()
+            if gpu_id and gpu_id not in seen:
+                ids.append(gpu_id)
+                seen.add(gpu_id)
+        return ids
     return [str(i) for i in range(max(1, int(parallel_workers)))]
 
 

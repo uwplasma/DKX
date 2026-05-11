@@ -9415,3 +9415,76 @@ Rejected probe (2026-05-10): production-size PAS sparse-PC default
   large geometry-rich PAS decks. It remains useful for the already documented
   constrained-PAS profile-current niche, but this production-size geometry4
   gate needs a stronger matrix-free or lower-memory approximate factor path.
+
+Progress update (2026-05-11): multi-lane safety and observability pass
+
+- Added a new opt-in matrix-free RHSMode=1 PAS correction helper in
+  `sfincs_jax/rhs1_pas_matrixfree.py`. This is deliberately not wired into the
+  default solve path. It provides bounded streaming-norm residual checks,
+  explicit keep/reject reasons, update-size guards, and shape/dtype stability
+  for the next PAS preconditioner experiments.
+- Upgraded the PAS-TZ fallback benchmark JSON to `schema_version=2`. Benchmark
+  artifacts now record `variant_methods`, per-row `variant_provenance`,
+  `solver_provenance`, compact `phase_metadata`, and tail limits. This closes
+  the immediate ambiguity around whether `_lgmres` rows were default behavior
+  or explicit opt-in probes.
+- Tightened GPU transport-worker planning. Duplicate `CUDA_VISIBLE_DEVICES`
+  entries are de-duplicated, worker caps now report the exact reason, and extra
+  RHS payloads are coalesced onto active workers instead of being silently
+  dropped when requested workers exceed unique visible GPUs.
+- Added fast validation-policy tests for benchmark filtering, warm/logged
+  runtime selection, autodiff gate closure, collisionality slope behavior,
+  FP/PAS separation scaling, and malformed suite reports.
+- Documented the current `vmec_jax` / `booz_xform_jax` differentiability
+  boundary in `docs/geometry.rst`: optional backend probing and geometry proxy
+  gates are supported, but file I/O, the NumPy scheme-5 evaluator, and full
+  VMEC-boundary-to-kinetic-transport optimization remain future work.
+- Verification:
+  - focused modified-lane suite:
+    `75 passed in 1.98 s`;
+  - full local suite:
+    `1165 passed in 512.03 s`;
+  - `ruff check` on changed source/tests:
+    passed;
+  - `python -m py_compile` on changed modules:
+    passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`:
+    passed;
+  - `git diff --check`:
+    passed.
+
+Updated lane status after this pass:
+
+- PAS-heavy memory/runtime: `86%`. The code now has a safe matrix-free
+  correction primitive and better benchmark provenance, but it still needs a
+  production-floor HSX/geometry11 residual and memory win before any default
+  policy change.
+- FP production-floor memory/runtime: `95%`. No regression was introduced in
+  this pass.
+- CPU/GPU parity for documented workflows: `100%` for the tested lanes.
+- CI/docs health: `100%` locally for the gates listed above; remote CI should
+  still be checked after push.
+- Coverage/refactor path: `62%`. The new tests improve meaningful policy and
+  validation coverage without adding slow solves, but the dominant future gain
+  still requires splitting more logic out of `v3_driver.py`.
+- Parallel transport workers: `78%` for release-facing multi-case/RHS
+  throughput. Single-case multi-GPU RHSMode=1 remains experimental and should
+  not be marketed as production strong scaling.
+- `vmec_jax` / `booz_xform_jax` workflow: `60%` for public handoff/status
+  documentation and shallow gates; full differentiable transport optimization
+  remains about `35%`.
+- Deferred manuscript physics lanes: `45%`; no new claim was made in this
+  implementation pass.
+
+Next concrete actions:
+
+1. Run the new matrix-free PAS helper against bounded geometry4/HSX/geometry11
+   production-floor probes as an explicit opt-in only. Keep it only if it
+   improves true residuals without memory/runtime regression.
+2. Add a small artifact checker that rejects PAS benchmark JSON missing
+   `schema_version >= 2`, `variant_methods`, or per-row solver provenance.
+3. Continue the coverage/refactor lane by extracting validation and benchmark
+   policy helpers from large modules before attempting to move `v3_driver.py`
+   coverage materially.
+4. After pushing this pass, check remote CI and update release notes only if
+   the remote gates stay green.

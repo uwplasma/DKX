@@ -118,6 +118,64 @@ def test_run_transport_parallel_gpu_subprocesses_collects_completed_workers(
     assert all("sfincs_jax" in env["PYTHONPATH"] for env in launched_envs)
 
 
+def test_gpu_subprocesses_deduplicates_visible_ids_and_reports_plan_cap(
+    monkeypatch,
+) -> None:
+    messages: list[str] = []
+    launched_envs: list[dict[str, str]] = []
+
+    class _FakeProc:
+        returncode = 0
+
+        def __init__(self, cmd, **_kwargs):
+            launched_envs.append(dict(_kwargs["env"]))
+            payload_path = Path(cmd[cmd.index("--payload") + 1])
+            output_path = Path(cmd[cmd.index("--output") + 1])
+            payload = json.loads(payload_path.read_text())
+            rhs_values = np.asarray(payload["which_rhs_values"], dtype=np.int32)
+            np.savez(
+                output_path,
+                which_rhs_values=rhs_values,
+                state_vectors=np.ones((len(rhs_values), 2), dtype=np.float64),
+                residual_norms=np.full((len(rhs_values),), 1.0e-12, dtype=np.float64),
+                rhs_norms=np.ones((len(rhs_values),), dtype=np.float64),
+                elapsed_time_s=np.full((len(rhs_values),), 0.25, dtype=np.float64),
+            )
+
+        def poll(self):
+            return self.returncode
+
+        def communicate(self):
+            return "", ""
+
+    monkeypatch.setattr("sfincs_jax.transport_parallel_runtime.subprocess.Popen", _FakeProc)
+
+    results = run_transport_parallel_gpu_subprocesses(
+        payloads=[{"which_rhs_values": [1]}, {"which_rhs_values": [2]}, {"which_rhs_values": [3]}],
+        parallel_workers=3,
+        visible_gpu_ids=lambda _workers: ["0", "0", "1"],
+        gpu_worker_env=lambda gpu_id: {"CUDA_VISIBLE_DEVICES": str(gpu_id)},
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert [res["which_rhs_values"] for res in results] == [[1, 3], [2]]
+    state_vectors, residual_norms, rhs_norms, elapsed_s = merge_transport_parallel_results(
+        n_rhs=3,
+        results=results,
+    )
+    assert set(state_vectors) == {1, 2, 3}
+    assert set(residual_norms) == {1, 2, 3}
+    assert set(rhs_norms) == {1, 2, 3}
+    np.testing.assert_allclose(elapsed_s, np.asarray([0.25, 0.25, 0.25]))
+    assert [env["CUDA_VISIBLE_DEVICES"] for env in launched_envs] == ["0", "1"]
+    assert any(
+        "GPU transport worker plan capped" in msg
+        and "active=2 requested=3" in msg
+        and "unique visible GPU ids=2" in msg
+        for msg in messages
+    )
+
+
 def test_transport_worker_subprocess_env_prepends_repo_root() -> None:
     env = transport_worker_subprocess_env({"PYTHONPATH": "existing"})
 
