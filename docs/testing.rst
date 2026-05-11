@@ -542,6 +542,23 @@ Appendix-B comparison and that ``FSABHat2`` is reproduced from ``BHat`` and ``DH
 It intentionally does not close the full analytic-limit reproduction, because the
 current audited collisionality scans stop near ``nu'=10``.
 
+The deferred Simakov-Helander panel-data scaffold is also executable in
+``sfincs_jax.validation_figures`` and guarded by
+``tests/test_validation_figures.py``. It consumes a compact payload of
+``nuprime``, computed value, and analytic-limit rows, then records:
+
+- sorted panel data and normalized distance to the analytic limit,
+- tail log-log slope and monotonic approach metadata,
+- high-``nu`` range gates for threshold, point count, and decade span,
+- provenance completeness scores,
+- matching checked-in source-artifact status,
+- and explicit ``deferred_reasons``.
+
+The scaffold only marks a panel as literature-ready when all numerical,
+high-``nu`` range, provenance, and checked-in-artifact gates pass. Otherwise it
+keeps the label as a deferred scaffold and reports whether the blocker is the
+scan range, the asymptotic trend, provenance, or source-artifact status.
+
 The W7-X ambipolar literature lane has an executable scaffold as well:
 
 - script: ``examples/publication_figures/generate_w7x_ambipolar_validation.py``
@@ -552,6 +569,11 @@ the scan, ambipolar postprocessing, summary JSON, and figure generation paths ar
 covered by a bounded end-to-end test on a tiny fixture. The heavy W7-X reference
 artifact is closed in the manifest as ``deferred_post_release`` until a defensible
 profile/equilibrium reconstruction is pinned.
+
+The deferred panel data also records explicit ``deferred_reasons`` and provenance
+completeness scores. This keeps manuscript-facing labels conservative: a W7-X
+ambipolar figure remains a scaffold until the numerical root gates pass and the
+matching W7-X provenance artifact is complete and checked in.
 
 The same scaffold is now resumable for heavy runs: ``run_er_scan`` accepts
 ``skip_existing=True``, the ``sfincs_jax scan-er`` CLI exposes ``--skip-existing``,
