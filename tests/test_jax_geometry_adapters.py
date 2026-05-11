@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,6 +16,8 @@ import jax.numpy as jnp
 from sfincs_jax.jax_geometry_adapters import (
     boozer_bhat_from_spectrum,
     boozer_spectrum_geometry_proxy_objective,
+    geometry_proxy_workflow_summary,
+    optional_jax_geometry_backend_report,
     optional_jax_geometry_backend_status,
     vmec_wout_from_wout_like,
 )
@@ -63,6 +68,65 @@ def test_optional_jax_geometry_backend_status_is_structural() -> None:
     status = optional_jax_geometry_backend_status()
     assert set(status) == {"vmec_jax", "booz_xform_jax"}
     assert all(isinstance(value, bool) for value in status.values())
+
+
+def test_optional_jax_geometry_backend_report_marks_gradient_boundary() -> None:
+    report = optional_jax_geometry_backend_report()
+
+    assert report["backends"] == optional_jax_geometry_backend_status()
+    assert report["gradient_availability"]["spectral_scale_to_boozer_proxy"] == (
+        "available_when_optional_backends_installed"
+    )
+    assert (
+        report["gradient_availability"]["sfincs_kinetic_transport_solve"]
+        == "not_covered_by_this_lane"
+    )
+    assert "booz_xform_jax" in report["differentiated_graph"]
+    assert "SFINCS kinetic transport solve" in report["outside_differentiated_graph"]
+    assert report["claim"] == "geometry_proxy_gradient_gate_not_full_transport_gradient"
+
+
+def test_geometry_proxy_workflow_summary_records_stage_claims_and_gate() -> None:
+    summary = geometry_proxy_workflow_summary(
+        provenance="unit-test wout",
+        requested_surface=0.5,
+        selected_surface=0.49,
+        boozer_resolution={"mboz": 3, "nboz": 3},
+        grid_shape={"n_theta": 8, "n_zeta": 6},
+        scale=1.0,
+        proxy_objective=0.125,
+        autodiff_gradient=2.0,
+        finite_difference_gradient=2.000001,
+        finite_difference_step=1.0e-4,
+        backend_status={"vmec_jax": True, "booz_xform_jax": False},
+    )
+
+    assert summary["workflow"] == "vmec_jax_to_boozer_sfincs_geometry_proxy"
+    assert summary["provenance"]["source"] == "unit-test wout"
+    assert summary["required_optional_dependencies"]["vmec_jax"]["importable"] is True
+    assert summary["required_optional_dependencies"]["booz_xform_jax"]["importable"] is False
+    assert summary["numerical_gradient_gate"]["status"] == "pass"
+    assert summary["results"]["proxy_objective"] == pytest.approx(0.125)
+    kinetic_stage = next(
+        stage for stage in summary["stages"] if stage["name"] == "sfincs_kinetic_transport_solve"
+    )
+    assert kinetic_stage["differentiability"] == "not_claimed_not_covered_by_this_lane"
+    assert summary["claims"]["not_claimed"] == (
+        "full VMEC-boundary-to-SFINCS kinetic transport gradients"
+    )
+
+
+def test_geometry_proxy_workflow_summary_marks_failed_gradient_gate() -> None:
+    summary = geometry_proxy_workflow_summary(
+        autodiff_gradient=1.0,
+        finite_difference_gradient=2.0,
+        finite_difference_step=1.0e-4,
+        gradient_rtol=1.0e-6,
+        gradient_atol=1.0e-9,
+    )
+
+    assert summary["numerical_gradient_gate"]["status"] == "fail"
+    assert summary["numerical_gradient_gate"]["absolute_error"] == pytest.approx(1.0)
 
 
 def test_vmec_wout_from_wout_like_transposes_vmec_jax_radius_mode_arrays() -> None:
@@ -168,6 +232,74 @@ def test_boozer_spectrum_proxy_gradient_matches_centered_difference() -> None:
     finite_difference = float((objective(step) - objective(-step)) / (2.0 * step))
 
     assert autodiff == pytest.approx(finite_difference, rel=5.0e-6, abs=1.0e-9)
+
+
+def test_public_vmec_jax_boozer_example_backend_check_is_runnable() -> None:
+    script = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "autodiff"
+        / "vmec_jax_to_boozer_sfincs_pipeline.py"
+    )
+    result = subprocess.run(
+        [sys.executable, str(script), "--check-backends"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Optional JAX geometry backend status:" in result.stdout
+    assert "vmec_jax:" in result.stdout
+    assert "booz_xform_jax:" in result.stdout
+    assert "file-backed/setup only:" in result.stdout
+    assert "not claimed: full VMEC-boundary-to-SFINCS-transport gradients" in result.stdout
+    assert "numerical gradient gate: not_run" in result.stdout
+    assert "pass --json with --check-backends" in result.stdout
+    assert "pass --summary-json PATH" in result.stdout
+
+
+def test_public_vmec_jax_boozer_example_backend_check_json_is_runnable() -> None:
+    script = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "autodiff"
+        / "vmec_jax_to_boozer_sfincs_pipeline.py"
+    )
+    result = subprocess.run(
+        [sys.executable, str(script), "--check-backends", "--json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    report = json.loads(result.stdout)
+    assert set(report["backends"]) == {"vmec_jax", "booz_xform_jax"}
+    assert report["gradient_availability"]["vmec_file_io"] == "setup_only_not_differentiated"
+    assert report["gradient_availability"]["sfincs_kinetic_transport_solve"] == "not_covered_by_this_lane"
+
+
+def test_public_vmec_jax_boozer_example_backend_check_writes_summary_json(tmp_path: Path) -> None:
+    script = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "autodiff"
+        / "vmec_jax_to_boozer_sfincs_pipeline.py"
+    )
+    summary_path = tmp_path / "workflow-summary.json"
+    result = subprocess.run(
+        [sys.executable, str(script), "--check-backends", "--summary-json", str(summary_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert "pass --summary-json PATH" in result.stdout
+    assert summary["workflow"] == "vmec_jax_to_boozer_sfincs_geometry_proxy"
+    assert summary["numerical_gradient_gate"]["status"] == "not_run"
+    assert summary["claims"]["not_claimed"] == (
+        "full VMEC-boundary-to-SFINCS kinetic transport gradients"
+    )
 
 
 def _optional_vmec_jax_wout_fixture(vmec_jax_module) -> Path | None:

@@ -438,6 +438,16 @@ python examples/performance/benchmark_transport_parallel_scaling.py \
   --workers 1 2
 ```
 
+To regenerate only the checked-in figure from the saved JSON payload without
+rerunning the multi-minute GPU benchmark:
+
+```bash
+python examples/performance/benchmark_transport_parallel_scaling.py \
+  --from-json examples/performance/output/transport_parallel_scaling_gpu.json \
+  --out-dir docs/_static/figures/parallel \
+  --figure-name transport_parallel_scaling_gpu.png
+```
+
 ![GPU transport scaling](docs/_static/figures/parallel/transport_parallel_scaling_gpu.png)
 
 Compare two outputs:
@@ -479,7 +489,7 @@ python scripts/run_scaled_example_suite.py \
   --examples-root examples/sfincs_examples \
   --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
   --reference-results-root tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix \
-  --out-root tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106 \
+  --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
   --scale-factor 1.0 \
   --runtime-target-basis fortran \
   --fortran-min-runtime-s 0.0 \
@@ -487,8 +497,10 @@ python scripts/run_scaled_example_suite.py \
   --runtime-baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
   --jax-profile-marks on
 python scripts/generate_readme_fast_branch_audit.py \
-  --out-root tests/scaled_example_suite_release_cpu_frozen_2026-04-25_v106 \
-  --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-04-28
+  --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
+  --gpu-out-root tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas \
+  --baseline-report tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json \
+  --min-fortran-runtime-s 10
 ```
 
 The benchmark policy on `main` is:
@@ -563,7 +575,7 @@ Full per-case runtime / memory table:
 | `tokamak_1species_PASCollisions_noEr_withQN` | 75.242 | 5.147 | 0.07x | 5.147 | 0.07x | 11.444 | 0.15x | 10.019 | 0.13x | 165.0 | 612.3 | 3.71x | 459.5 | 2.78x | 0/274 (strict 0/274) | 0/274 (strict 0/274) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 75.698 | 7.049 | 0.09x | 6.231 | 0.08x | 14.423 | 0.19x | 13.193 | 0.17x | 248.9 | 1319.5 | 5.30x | 1572.1 | 6.32x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_noEr` | 75.362 | 2.033 | 0.03x | 2.023 | 0.03x | 5.243 | 0.07x | 5.207 | 0.07x | 215.3 | 393.5 | 1.83x | 1168.7 | 5.43x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
-| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 9.753 | 0.13x | 9.743 | 0.13x | 22.165 | 0.29x | 22.158 | 0.29x | 386.6 | 1585.2 | 4.10x | 2124.0 | 5.49x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
+| `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 9.435 | 0.12x | 8.669 | 0.11x | 23.369 | 0.31x | 22.264 | 0.29x | 386.6 | 1389.9 | 3.60x | 2007.0 | 5.19x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 
 Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
 - `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.0s (delta=2.0s)

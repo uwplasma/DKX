@@ -131,3 +131,59 @@ def test_rhs1_dispatch_default_falls_back_to_block_preconditioner(monkeypatch) -
         is sentinel
     )
     assert seen == {"species": 2, "x": 3, "xi": 4}
+
+
+def test_rhs1_dkes_gmres_budget_respects_explicit_limits() -> None:
+    restart, maxiter, restart_defaulted, maxiter_defaulted = vd._rhs1_dkes_gmres_budget(
+        restart=20,
+        maxiter=20,
+        restart_forced=True,
+        maxiter_forced=True,
+        restart_cap_env="100",
+    )
+
+    assert (restart, maxiter) == (20, 20)
+    assert restart_defaulted is False
+    assert maxiter_defaulted is False
+
+
+def test_rhs1_dkes_gmres_budget_applies_defaults_when_unforced() -> None:
+    restart, maxiter, restart_defaulted, maxiter_defaulted = vd._rhs1_dkes_gmres_budget(
+        restart=20,
+        maxiter=20,
+        restart_forced=False,
+        maxiter_forced=False,
+        restart_cap_env="90",
+    )
+
+    assert (restart, maxiter) == (80, 600)
+    assert restart_defaulted is True
+    assert maxiter_defaulted is True
+
+
+def test_rhs1_dkes_gmres_budget_caps_unforced_restart() -> None:
+    restart, maxiter, restart_defaulted, maxiter_defaulted = vd._rhs1_dkes_gmres_budget(
+        restart=200,
+        maxiter=None,
+        restart_forced=False,
+        maxiter_forced=False,
+        restart_cap_env="100",
+    )
+
+    assert (restart, maxiter) == (100, 600)
+    assert restart_defaulted is True
+    assert maxiter_defaulted is True
+
+
+def test_rhs1_pas_tz_guarded_structured_levels_parse_aliases() -> None:
+    assert vd._rhs1_pas_tz_guarded_structured_levels("") == ()
+    assert vd._rhs1_pas_tz_guarded_structured_levels("off") == ()
+    assert vd._rhs1_pas_tz_guarded_structured_levels("structured") == ("xmg", "collision")
+    assert vd._rhs1_pas_tz_guarded_structured_levels("x+coll+x") == ("xmg", "collision")
+    assert vd._rhs1_pas_tz_guarded_structured_levels("unknown,collision_diag") == ("collision",)
+
+
+def test_ksp_iteration_solver_label_reports_lgmres_method() -> None:
+    assert vd._ksp_iteration_solver_label(solver_kind="gmres", solve_method="incremental") == "gmres"
+    assert vd._ksp_iteration_solver_label(solver_kind="gmres", solve_method="lgmres") == "lgmres"
+    assert vd._ksp_iteration_solver_label(solver_kind="bicgstab", solve_method="lgmres") == "bicgstab"

@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from sfincs_jax import jax_geometry_adapters
 from sfincs_jax.geometry import boozer_geometry_scheme1, boozer_geometry_scheme2, boozer_geometry_scheme4
 from sfincs_jax.geometry import boozer_geometry_from_bc_file
 from sfincs_jax.grids import uniform_diff_matrices
@@ -19,6 +20,25 @@ from sfincs_jax.io import (
 from sfincs_jax.vmec_geometry import _finite_diff_on_full_mesh_from_half_mesh
 from sfincs_jax.vmec_geometry import vmec_geometry_from_wout, vmec_geometry_from_wout_file
 from sfincs_jax.vmec_wout import read_vmec_wout
+
+
+def test_optional_jax_geometry_backend_status_is_shallow(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_find_spec(name: str) -> object | None:
+        calls.append(name)
+        if name == "vmec_jax":
+            return object()
+        if name == "booz_xform_jax":
+            return None
+        raise AssertionError(f"unexpected optional backend probe: {name}")
+
+    monkeypatch.setattr(jax_geometry_adapters, "find_spec", fake_find_spec)
+
+    status = jax_geometry_adapters.optional_jax_geometry_backend_status()
+
+    assert status == {"vmec_jax": True, "booz_xform_jax": False}
+    assert calls == ["vmec_jax", "booz_xform_jax"]
 
 
 def test_uniform_diff_matrices_invalid_inputs_and_weights() -> None:
