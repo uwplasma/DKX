@@ -176,20 +176,27 @@ source example:
 python scripts/run_qi_seed_robustness.py \
   --out-root tests/qi_seed_robustness \
   --seeds 0 1 2 \
+  --execute \
+  --max-residual-ratio 1 \
+  --require-converged \
   --clean
 ```
 
 This writes per-seed `input.namelist` files, localizes the QI VMEC equilibrium
 next to each case, applies deterministic `nu_n` and `Er` perturbations, and
-records the commands in `manifest.json`. Add `--execute` to run each seed
-through `sfincs_jax write-output` and record stdout/stderr, return codes,
-output presence, and solver-trace residual metadata in the same manifest.
+records the commands in `manifest.json`. With `--execute`, it runs each seed
+through `sfincs_jax write-output` and records stdout/stderr, return codes,
+output presence, solver-trace residual metadata, aggregate summary fields, and
+the optional promotion gates in the same manifest.
 
 The execute smoke defaults to the public `auto` CLI solver policy. The bounded
-checked smoke now selects the robust dense path and converges below the requested
-residual target. Check `execution.results[].solver_trace_summary.converged` and
-the residual ratio before treating any new result as converged evidence. To probe
-another solver path explicitly, override the method:
+checked multi-seed smoke now keeps the public `auto` method, auto-selects the
+fast dense full-FP path for three neighboring QI seeds at `7 x 13 x 25 x 4`, and
+converges below the requested residual target. Check
+`execution.gates.passed`, `execution.summary.max_residual_ratio`, and
+`execution.results[].solver_trace_summary.converged` before treating any new
+result as converged evidence. To probe another solver path explicitly, override
+the method:
 
 ```bash
 python scripts/run_qi_seed_robustness.py \
