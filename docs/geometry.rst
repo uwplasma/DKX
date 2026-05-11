@@ -167,11 +167,36 @@ The public optional JAX-native handoff example is:
 
 .. code-block:: bash
 
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --check-backends
+
+That command only reports importability of ``vmec_jax`` and ``booz_xform_jax``
+and prints the current differentiability boundary.  It does not import either
+optional backend and should run in a normal ``sfincs_jax`` development
+environment.
+
+When both optional packages are installed, run the file-backed VMEC setup path
+with an explicit ``wout`` file:
+
+.. code-block:: bash
+
    python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
      --wout /path/to/wout_circular_tokamak.nc \
      --mboz 3 \
      --nboz 3 \
-     --surface 0.5
+     --surface 0.5 \
+     --steps 0
+
+The same file can be supplied with
+``SFINCS_JAX_VMEC_JAX_WOUT=/path/to/wout.nc``.  If ``vmec_jax`` example decks are
+available locally, the script can also build the VMEC-like object before the
+Boozer transform:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
+     --vmec-case circular_tokamak \
+     --vmec-max-iter 1 \
+     --steps 0
 
 This script uses ``vmec_jax`` provenance for a VMEC ``wout`` object,
 ``booz_xform_jax`` for the Boozer transform, and
