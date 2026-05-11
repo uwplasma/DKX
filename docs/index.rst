@@ -16,6 +16,14 @@ On the current ``main`` branch:
 - the Python API can switch to differentiable solve paths when end-to-end sensitivities are needed,
 - and the remaining open work is performance and memory tuning on the heaviest cases, not correctness of the documented workflows.
 
+The active integration branch also contains opt-in mapped speed-grid evidence,
+a QI seed-robustness runner, and a solver-path policy extraction. Those lanes are
+documented as bounded integration work: mapped-grid artifacts currently cover PAS
+RHSMode=2 smoke/reduced comparisons, the checked QI execute smoke now passes one
+low-resolution seed on the default CLI path, and the solver-path refactor is a
+policy reproducibility improvement rather than a new physics or performance
+claim.
+
 What this documentation covers
 ------------------------------
 
@@ -82,6 +90,7 @@ This manual is organized around the actual user and developer workflows:
    parallelism
    performance
    performance_techniques
+   adaptive_speed_grid
    testing
    validation_matrix
    paper_figures

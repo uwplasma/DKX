@@ -36,6 +36,7 @@ From the repository root:
 .. code-block:: bash
 
    pytest -q
+   python scripts/check_release_gates.py
    sphinx-build -W -b html docs docs/_build/html
    python -m build
    python -m twine check dist/*
@@ -45,6 +46,67 @@ CI/CD also enforces this through:
 - ``.github/workflows/ci.yml``
 - ``.github/workflows/docs.yml``
 - ``.github/workflows/publish-pypi.yml``
+
+For a fast claim-scope check without running the whole suite, use:
+
+.. code-block:: bash
+
+   pytest -q tests/test_validation_manifest_schema.py tests/test_release_gate_metadata.py
+   python scripts/check_release_gates.py
+
+This validates that publication-facing lanes are either implemented for the
+documented current claim, kept as bounded scaffolds/proxies, or explicitly closed as
+post-release work. No manifest lane may silently remain an open release blocker.
+
+For the current mapped-grid / QI / solver-path integration branch, also run the
+bounded integration checks before promoting any of those lanes into release-facing
+metadata:
+
+.. code-block:: bash
+
+   pytest -q \
+     tests/test_adaptive_maps.py \
+     tests/test_mapped_xgrid_objectives.py \
+     tests/test_mapped_xgrid_v3.py \
+     tests/test_mapped_xgrid_transport_evidence.py \
+     tests/test_run_mapped_xgrid_transport_evidence.py \
+     tests/test_run_qi_seed_robustness.py \
+     tests/test_solver_path_policy.py
+
+Those tests are not a substitute for full-suite parity or production-resolution
+benchmark evidence. They only prove that the opt-in mapped grid, QI seed runner,
+and solver-path policy seams are wired and reproducible on bounded inputs.
+
+For a bounded QI smoke rerun, use the default CLI solver policy first:
+
+.. code-block:: bash
+
+   python scripts/run_qi_seed_robustness.py \
+     --input examples/additional_examples/input.namelist \
+     --out-root tests/qi_seed_robustness_smoke \
+     --seeds 0 \
+     --resolution-scale 0.15 \
+     --min-ntheta 7 --min-nzeta 11 --min-nx 4 --min-nxi 8 \
+     --execute \
+     --clean
+
+The checked summary in ``docs/_static/qi_seed_robustness_smoke.json`` records a
+single passing bounded seed. Only claim seed robustness after a wider multi-seed
+ladder records passing executions and the solver-trace/output checks needed for
+the claim.
+
+If claiming mapped x-grid transport evidence, regenerate the bounded artifacts and
+review their residuals and transport-matrix errors before updating docs:
+
+.. code-block:: bash
+
+   python scripts/run_mapped_xgrid_transport_evidence.py \
+     --case reduced_pas_tokamak_rhsmode2 \
+     --json-out docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json \
+     --csv-out docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.csv
+
+Keep the claim scoped to PAS RHSMode=2 bounded evidence unless a broader
+production-resolution comparison is checked in and gated.
 
 Smoke-run the examples that do not require optional dependencies:
 

@@ -5,6 +5,17 @@ from pathlib import Path
 
 
 _VALID_STATUSES = {"implemented", "deferred_post_release"}
+_VALID_CLAIM_STATUSES = {
+    "release_ready",
+    "regression_scaffold",
+    "bounded_proxy",
+    "closed_deferred",
+}
+_IMPLEMENTED_CLAIM_STATUSES = {
+    "release_ready",
+    "regression_scaffold",
+    "bounded_proxy",
+}
 _VALID_KINDS = {
     "literature_reproduction",
     "literature_validation",
@@ -36,6 +47,19 @@ def test_validation_manifest_records_have_research_gate_schema() -> None:
     for record in records:
         assert str(record["status"]) in _VALID_STATUSES
         assert str(record["kind"]) in _VALID_KINDS
+        gate = record.get("release_gate")
+        assert isinstance(gate, dict), f"{record['id']} missing release_gate"
+        assert str(gate.get("claim_status")) in _VALID_CLAIM_STATUSES
+        assert gate.get("blocks_current_release") is False
+        assert str(gate.get("evidence", "")).strip()
+        assert str(gate.get("promotion_gate", "")).strip()
+        if str(record["status"]) == "deferred_post_release":
+            assert gate.get("claim_status") == "closed_deferred"
+            reason = str(gate.get("closed_or_deferred_reason", "")).lower()
+            assert "closed" in reason
+            assert "post-release" in reason
+        else:
+            assert gate.get("claim_status") in _IMPLEMENTED_CLAIM_STATUSES
         for key in ("literature", "claims", "source_code", "tests", "acceptance_gates"):
             assert key in record, f"{record['id']} missing {key}"
             assert isinstance(record[key], list), f"{record['id']} {key} must be a list"
