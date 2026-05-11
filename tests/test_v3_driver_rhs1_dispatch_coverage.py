@@ -181,3 +181,9 @@ def test_rhs1_pas_tz_guarded_structured_levels_parse_aliases() -> None:
     assert vd._rhs1_pas_tz_guarded_structured_levels("structured") == ("xmg", "collision")
     assert vd._rhs1_pas_tz_guarded_structured_levels("x+coll+x") == ("xmg", "collision")
     assert vd._rhs1_pas_tz_guarded_structured_levels("unknown,collision_diag") == ("collision",)
+
+
+def test_ksp_iteration_solver_label_reports_lgmres_method() -> None:
+    assert vd._ksp_iteration_solver_label(solver_kind="gmres", solve_method="incremental") == "gmres"
+    assert vd._ksp_iteration_solver_label(solver_kind="gmres", solve_method="lgmres") == "lgmres"
+    assert vd._ksp_iteration_solver_label(solver_kind="bicgstab", solve_method="lgmres") == "bicgstab"

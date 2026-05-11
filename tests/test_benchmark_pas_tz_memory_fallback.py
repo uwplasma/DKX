@@ -7,7 +7,14 @@ import sys
 
 import pytest
 
-from scripts.benchmark_pas_tz_memory_fallback import _override_namelist_text, _run_child, _variant_env, build_plan, main
+from scripts.benchmark_pas_tz_memory_fallback import (
+    _override_namelist_text,
+    _run_child,
+    _variant_env,
+    _variant_solve_method,
+    build_plan,
+    main,
+)
 
 
 def test_variant_env_forces_bounded_pas_tz_memory_fallback() -> None:
@@ -36,6 +43,14 @@ def test_variant_env_supports_structured_tzfft_correction() -> None:
     assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS"] == "xmg,collision"
 
 
+def test_variant_env_supports_lgmres_suffix_without_changing_fallback() -> None:
+    env = _variant_env("tzfft-lgmres", block=7, overlap=2, maxiter=5, restart=11)
+
+    assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK"] == "tzfft"
+    assert _variant_solve_method("tzfft-lgmres", "incremental") == "lgmres"
+    assert _variant_solve_method("tzfft", "incremental") == "incremental"
+
+
 def test_dry_run_writes_reproducible_plan(tmp_path: Path) -> None:
     out = tmp_path / "pas_tz_plan.json"
 
@@ -53,6 +68,8 @@ def test_dry_run_writes_reproducible_plan(tmp_path: Path) -> None:
             "3",
             "--restart",
             "4",
+            "--solve-method",
+            "lgmres",
             "--block",
             "5",
             "--overlap",
@@ -72,6 +89,7 @@ def test_dry_run_writes_reproducible_plan(tmp_path: Path) -> None:
     payload = json.loads(out.read_text())
     assert payload["kind"] == "pas_tz_memory_fallback_benchmark"
     assert payload["plan"]["variants"] == ["hybrid", "zeta"]
+    assert payload["plan"]["solve_method"] == "lgmres"
     assert payload["plan"]["input_overrides"] == {
         "Ntheta": 31,
         "Nzeta": 41,
@@ -86,6 +104,7 @@ def test_build_plan_records_solver_limits() -> None:
         input = Path("case/input.namelist")
         timeout_s = 9.0
         tol = 1.0e-7
+        solve_method = "incremental"
         maxiter = 6
         restart = 8
         block = 4
@@ -101,6 +120,7 @@ def test_build_plan_records_solver_limits() -> None:
     assert plan["input_overrides"] == {"Ntheta": 31, "Nxi": 51}
     assert plan["timeout_s"] == 9.0
     assert plan["tol"] == 1.0e-7
+    assert plan["solve_method"] == "incremental"
     assert plan["maxiter"] == 6
     assert plan["restart"] == 8
     assert plan["block"] == 4
@@ -170,6 +190,7 @@ def test_run_child_uses_temporary_input_overrides_and_env(
             "out": out,
             "timeout_s": 9.0,
             "tol": 1.0e-7,
+            "solve_method": "incremental",
             "maxiter": 6,
             "restart": 8,
             "block": 4,
