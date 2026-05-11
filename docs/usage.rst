@@ -376,6 +376,18 @@ performance without changing the input file:
     ``L`` modes (see ``SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX``).
   - ``pas_tz``: PAS 3D block‑tridiagonal preconditioner in :math:`L` with dense
     :math:`(\theta,\zeta)` blocks (cheaper than full ``xblock_tz`` for large grids).
+    If a requested ``pas_tz`` build is rejected by the memory estimator,
+    ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK`` controls the guarded fallback:
+    the default is a cheap collision fallback, ``hybrid`` restores the historical
+    ``pas_hybrid`` fallback for profiling, ``theta``/``zeta``/``schwarz``
+    force the bounded structured-Schwarz experiment, and ``tzfft`` selects the
+    experimental matrix-free angular-streaming fallback. Guarded fallbacks skip
+    stage-2 GMRES by default; set
+    ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1`` only when profiling a
+    strict polish retry. ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft``
+    keeps the cheap fallback as the Krylov preconditioner but applies a bounded
+    matrix-free ``tzfft`` correction after Krylov; this is an experimental
+    profiling option, not a default.
   - ``pas_tokamak_theta``: tokamak‑style PAS :math:`(\theta,L)` block‑tridiagonal preconditioner
     (``N_\zeta=1`` or zeta‑invariant geometries). The optional structured
     ``L>=2`` tail is available via ``SFINCS_JAX_PAS_TOKAMAK_STRUCTURED=1`` and
