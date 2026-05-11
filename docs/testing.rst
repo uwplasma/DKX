@@ -553,6 +553,11 @@ covered by a bounded end-to-end test on a tiny fixture. The heavy W7-X reference
 artifact is closed in the manifest as ``deferred_post_release`` until a defensible
 profile/equilibrium reconstruction is pinned.
 
+The deferred panel data also records explicit ``deferred_reasons`` and provenance
+completeness scores. This keeps manuscript-facing labels conservative: a W7-X
+ambipolar figure remains a scaffold until the numerical root gates pass and the
+matching W7-X provenance artifact is complete and checked in.
+
 The same scaffold is now resumable for heavy runs: ``run_er_scan`` accepts
 ``skip_existing=True``, the ``sfincs_jax scan-er`` CLI exposes ``--skip-existing``,
 and the publication script adds ``--skip-existing``, ``--scan-only``, and
