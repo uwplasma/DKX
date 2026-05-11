@@ -29,6 +29,10 @@ def _geometry4_large_pas_closeout() -> dict[str, object]:
     return _load_json(FIXTURES / "geometry4_large_pas_closeout_2026-05-09.json")
 
 
+def _pas_tz_memory_fallback_smoke() -> dict[str, object]:
+    return _load_json(FIXTURES / "pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json")
+
+
 def test_cpu_solver_path_audit_stays_parity_clean() -> None:
     report = _load_json(FIXTURES / "cpu_audit_snapshot.json")["strict_report"]
 
@@ -247,6 +251,37 @@ def test_geometry4_large_pas_closeout_does_not_promote_timeout_candidates() -> N
     )
     assert all(float(row["wall_s"]) >= 300.0 for row in [*cpu_candidates, *gpu_candidates])
     assert "structured/chunked geometry-aware PAS preconditioner" in closeout["required_future_algorithm"]
+
+
+def test_pas_tz_memory_fallback_smoke_keeps_structured_fallback_opt_in() -> None:
+    smoke = _pas_tz_memory_fallback_smoke()
+
+    assert smoke["kind"] == "pas_tz_memory_fallback_benchmark"
+    assert smoke["plan"]["input"] == "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist"
+    assert smoke["plan"]["timeout_s"] == 15.0
+    assert smoke["plan"]["variants"] == ["collision", "hybrid", "zeta", "theta", "tzfft"]
+
+    rows = {row["variant"]: row for row in smoke["results"]}
+    assert set(rows) == {"collision", "hybrid", "zeta", "theta", "tzfft"}
+    for variant in ("collision", "hybrid", "zeta", "theta"):
+        row = rows[variant]
+        assert row["status"] == "ok"
+        assert float(row["elapsed_s"]) < 5.0
+        assert float(row["residual_norm"]) > 1.0e3
+        messages = "\n".join(row["messages_tail"])
+        assert f"guarded out (axis={variant})" in messages
+        assert "skipping strong preconditioner after guarded PAS-TZ fallback" in messages
+    tzfft = rows["tzfft"]
+    assert tzfft["status"] == "ok"
+    assert float(tzfft["elapsed_s"]) < 5.0
+    assert float(tzfft["residual_norm"]) < 1.0e-2
+    assert float(tzfft["residual_norm"]) < float(rows["collision"]["residual_norm"]) / 1.0e6
+    tzfft_messages = "\n".join(tzfft["messages_tail"])
+    assert "guarded out (axis=tzfft)" in tzfft_messages
+    assert "stage2 reduced GMRES skipped after guarded PAS-TZ fallback" in tzfft_messages
+    assert "skipping strong preconditioner after guarded PAS-TZ fallback" in tzfft_messages
+    assert float(rows["collision"]["residual_norm"]) < float(rows["hybrid"]["residual_norm"])
+    assert float(rows["collision"]["max_rss_mb"]) <= float(rows["hybrid"]["max_rss_mb"])
 
 
 def test_fp3d_sparse_pc_probe_beats_dense_default_without_parity_loss() -> None:
