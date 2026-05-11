@@ -69,7 +69,12 @@ def streaming_l2_norm(value: ArrayLike, *, block_size: int | None = None) -> flo
     total = 0.0
     for start in range(0, int(arr.size), block):
         chunk = arr[start : start + block]
-        total += float(jnp.real(jnp.vdot(chunk, chunk)))
+        chunk_total = float(jnp.real(jnp.vdot(chunk, chunk)))
+        if not math.isfinite(chunk_total):
+            return chunk_total
+        total += chunk_total
+        if not math.isfinite(total):
+            return total
     return math.sqrt(max(0.0, total))
 
 

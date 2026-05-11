@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -168,6 +170,27 @@ def test_boozer_spectrum_proxy_gradient_matches_centered_difference() -> None:
     finite_difference = float((objective(step) - objective(-step)) / (2.0 * step))
 
     assert autodiff == pytest.approx(finite_difference, rel=5.0e-6, abs=1.0e-9)
+
+
+def test_public_vmec_jax_boozer_example_backend_check_is_runnable() -> None:
+    script = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "autodiff"
+        / "vmec_jax_to_boozer_sfincs_pipeline.py"
+    )
+    result = subprocess.run(
+        [sys.executable, str(script), "--check-backends"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Optional JAX geometry backend status:" in result.stdout
+    assert "vmec_jax:" in result.stdout
+    assert "booz_xform_jax:" in result.stdout
+    assert "file-backed/setup only:" in result.stdout
+    assert "not claimed: full VMEC-boundary-to-SFINCS-transport gradients" in result.stdout
 
 
 def _optional_vmec_jax_wout_fixture(vmec_jax_module) -> Path | None:

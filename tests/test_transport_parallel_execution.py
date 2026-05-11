@@ -5,6 +5,7 @@ from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from sfincs_jax.transport_parallel_execution import (
     build_transport_parallel_payloads,
@@ -82,6 +83,24 @@ def test_run_transport_parallel_payloads_uses_gpu_runner() -> None:
     assert results[0]["which_rhs_values"] == [1]
 
 
+def test_run_transport_parallel_payloads_rejects_invalid_worker_count() -> None:
+    with pytest.raises(ValueError, match="transport parallel worker count must be >= 1; got 0"):
+        run_transport_parallel_payloads(
+            payloads=[{"which_rhs_values": [1]}],
+            parallel_workers=0,
+            parallel_backend="cpu",
+            run_gpu_subprocesses=lambda **_kwargs: [],
+            persistent_pool_enabled=False,
+            get_pool=lambda **_kwargs: None,
+            shutdown_pool=lambda: None,
+            worker=lambda payload: payload,
+            worker_env=lambda _n: None,
+            executor_class=None,
+            executor_kwargs=lambda **_kwargs: {},
+            emit=None,
+        )
+
+
 class _DummyPool:
     def __init__(self, results):
         self._results = results
@@ -119,6 +138,38 @@ def test_run_transport_parallel_payloads_retries_broken_pool_then_falls_back() -
     )
     assert shutdown_calls == ["x"]
     assert [res["which_rhs_values"] for res in results] == [[1], [2]]
+
+
+def test_run_transport_parallel_payloads_preserves_payload_order_when_cpu_futures_finish_out_of_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads = [
+        {"which_rhs_values": [1]},
+        {"which_rhs_values": [2]},
+        {"which_rhs_values": [3]},
+    ]
+
+    monkeypatch.setattr(
+        "sfincs_jax.transport_parallel_execution.concurrent.futures.as_completed",
+        lambda futures: reversed(list(futures)),
+    )
+
+    results = run_transport_parallel_payloads(
+        payloads=payloads,
+        parallel_workers=3,
+        parallel_backend="cpu",
+        run_gpu_subprocesses=lambda **_kwargs: [],
+        persistent_pool_enabled=True,
+        get_pool=lambda **_kwargs: _DummyPool(payloads),
+        shutdown_pool=lambda: None,
+        worker=lambda payload: {"which_rhs_values": payload["which_rhs_values"]},
+        worker_env=lambda _n: _DummyEnv(),
+        executor_class=None,
+        executor_kwargs=lambda **_kwargs: {},
+        emit=None,
+    )
+
+    assert [res["which_rhs_values"] for res in results] == [[1], [2], [3]]
 
 
 class _DummyContextPool(_DummyPool):

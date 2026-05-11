@@ -9,6 +9,11 @@ few scalar optimization steps.
 The optimized scalar is a bounded geometry/transport proxy, not a full kinetic solve.
 It is the public handoff point for fully JAX-native geometry workflows while the full
 VMEC-boundary-to-transport-solve objective remains a larger research lane.
+
+Only the in-memory spectral scaling, ``booz_xform_jax`` call, and
+``sfincs_jax`` Boozer-spectrum proxy objective are differentiated here.  VMEC
+file reads, fixed-boundary setup, and the SFINCS kinetic transport solve are
+outside this example's differentiated graph.
 """
 
 from __future__ import annotations
@@ -32,7 +37,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.jax_geometry_adapters import boozer_spectrum_geometry_proxy_objective
+from sfincs_jax.jax_geometry_adapters import (
+    boozer_spectrum_geometry_proxy_objective,
+    optional_jax_geometry_backend_status,
+)
 
 
 def _default_wout_candidates() -> list[Path]:
@@ -59,6 +67,31 @@ def _find_default_wout() -> Path:
         "SFINCS_JAX_VMEC_JAX_WOUT. Checked:\n  "
         f"{joined}"
     )
+
+
+def _print_backend_status() -> None:
+    status = optional_jax_geometry_backend_status()
+    print("Optional JAX geometry backend status:")
+    for name in ("vmec_jax", "booz_xform_jax"):
+        availability = "available" if status[name] else "missing"
+        print(f"  {name}: {availability}")
+    print("Runnable paths:")
+    print("  no optional dependencies: run this script with --check-backends")
+    print(
+        "  file-backed setup: pass --wout /path/to/wout.nc "
+        "or set SFINCS_JAX_VMEC_JAX_WOUT"
+    )
+    print(
+        "  optional in-memory setup: pass --vmec-case circular_tokamak "
+        "when vmec_jax is installed"
+    )
+    print("Differentiability boundary:")
+    print("  differentiated: scaled spectral arrays -> booz_xform_jax -> sfincs_jax proxy objective")
+    print(
+        "  file-backed/setup only: VMEC file I/O, vmec_jax example solves, "
+        "and sfincs_jax VMEC file adapters"
+    )
+    print("  not claimed: full VMEC-boundary-to-SFINCS-transport gradients")
 
 
 def _load_wout_from_vmec_case(args: argparse.Namespace):
@@ -133,6 +166,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wout", type=Path, default=None, help="VMEC wout file read through vmec_jax.")
     parser.add_argument(
+        "--check-backends",
+        action="store_true",
+        help="Print optional backend status and the current differentiability boundary, then exit.",
+    )
+    parser.add_argument(
         "--vmec-case",
         default=None,
         help="Optional vmec_jax example case to solve first, e.g. circular_tokamak.",
@@ -151,6 +189,10 @@ def main() -> int:
     parser.add_argument("--steps", type=int, default=3, help="Scalar gradient-descent steps.")
     parser.add_argument("--learning-rate", type=float, default=5.0)
     args = parser.parse_args()
+
+    if args.check_backends:
+        _print_backend_status()
+        return 0
 
     if args.vmec_case:
         wout_like, provenance = _load_wout_from_vmec_case(args)
@@ -212,6 +254,11 @@ def main() -> int:
     print(f"  d objective / d scale (JAX) = {float(gradient):.12e}")
     print(f"  d objective / d scale (centered FD) = {float(finite_difference):.12e}")
     print(f"  abs gradient error = {abs(float(gradient - finite_difference)):.3e}")
+    print("  differentiated graph: scaled spectral arrays -> booz_xform_jax -> sfincs_jax proxy objective")
+    print(
+        "  outside graph: file I/O, VMEC setup, sfincs_jax VMEC file adapters, "
+        "and kinetic transport solve"
+    )
 
     scale = scale0
     for k in range(max(0, int(args.steps))):
