@@ -156,6 +156,7 @@ from . import solver_path_policy as _solver_path_policy
 from .rhs1_host_policy import (
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
     host_sparse_factor_dtype as _host_sparse_factor_dtype_impl,
+    rhs1_dense_auto_fp_cutoff as _rhs1_dense_auto_fp_cutoff_impl,
     rhs1_dense_backend_allowed as _rhs1_dense_backend_allowed_impl,
     rhs1_dense_fallback_max as _rhs1_dense_fallback_max_impl,
     rhs1_dense_krylov_allowed as _rhs1_dense_krylov_allowed_impl,
@@ -165,6 +166,10 @@ from .rhs1_host_policy import (
     rhs1_host_sparse_direct_allowed as _rhs1_host_sparse_direct_allowed_impl,
     rhs1_host_sparse_skip_dense_ratio as _rhs1_host_sparse_skip_dense_ratio_impl,
     rhs1_sparse_operator_preconditioned_rescue_allowed as _rhs1_sparse_operator_preconditioned_rescue_allowed_impl,
+)
+from .host_refinement import (
+    host_direct_solve_with_refinement as _host_direct_solve_with_refinement_impl,
+    host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
 from .transport_policy import (
     transport_dense_accelerator_auto_allowed as _transport_dense_accelerator_auto_allowed_impl,
@@ -687,25 +692,14 @@ def _host_sparse_direct_solve_with_refinement(
     rhs_vec: jnp.ndarray,
     factor_dtype: np.dtype,
     refine_steps: int,
-    ) -> tuple[np.ndarray, float]:
-    rhs64 = np.asarray(rhs_vec, dtype=np.float64).reshape((-1,))
-    rhs_factor = np.asarray(rhs_vec, dtype=factor_dtype).reshape((-1,))
-    x_np = np.asarray(ilu.solve(rhs_factor), dtype=np.float64)
-    residual_np = rhs64 - a_csr_full @ x_np
-    residual_norm = float(np.linalg.norm(residual_np))
-    for _ in range(max(0, int(refine_steps))):
-        if not np.isfinite(residual_norm) or residual_norm == 0.0:
-            break
-        dx_np = np.asarray(ilu.solve(np.asarray(residual_np, dtype=factor_dtype)), dtype=np.float64)
-        x_trial = x_np + dx_np
-        residual_trial = rhs64 - a_csr_full @ x_trial
-        residual_norm_trial = float(np.linalg.norm(residual_trial))
-        if not np.isfinite(residual_norm_trial) or residual_norm_trial >= residual_norm:
-            break
-        x_np = x_trial
-        residual_np = residual_trial
-        residual_norm = residual_norm_trial
-    return x_np, residual_norm
+) -> tuple[np.ndarray, float]:
+    return _host_sparse_direct_solve_with_refinement_impl(
+        ilu=ilu,
+        a_csr_full=a_csr_full,
+        rhs_vec=rhs_vec,
+        factor_dtype=factor_dtype,
+        refine_steps=refine_steps,
+    )
 
 
 def _host_direct_solve_with_refinement(
@@ -716,24 +710,13 @@ def _host_direct_solve_with_refinement(
     factor_dtype: np.dtype,
     refine_steps: int,
 ) -> tuple[np.ndarray, float]:
-    rhs64 = np.asarray(rhs_vec, dtype=np.float64).reshape((-1,))
-    rhs_factor = np.asarray(rhs_vec, dtype=factor_dtype).reshape((-1,))
-    x_np = np.asarray(factor_solve(rhs_factor), dtype=np.float64)
-    residual_np = rhs64 - operator_matrix @ x_np
-    residual_norm = float(np.linalg.norm(residual_np))
-    for _ in range(max(0, int(refine_steps))):
-        if not np.isfinite(residual_norm) or residual_norm == 0.0:
-            break
-        dx_np = np.asarray(factor_solve(np.asarray(residual_np, dtype=factor_dtype)), dtype=np.float64)
-        x_trial = x_np + dx_np
-        residual_trial = rhs64 - operator_matrix @ x_trial
-        residual_norm_trial = float(np.linalg.norm(residual_trial))
-        if not np.isfinite(residual_norm_trial) or residual_norm_trial >= residual_norm:
-            break
-        x_np = x_trial
-        residual_np = residual_trial
-        residual_norm = residual_norm_trial
-    return x_np, residual_norm
+    return _host_direct_solve_with_refinement_impl(
+        factor_solve=factor_solve,
+        operator_matrix=operator_matrix,
+        rhs_vec=rhs_vec,
+        factor_dtype=factor_dtype,
+        refine_steps=refine_steps,
+    )
 
 
 def _host_sparse_direct_polish(
@@ -13644,6 +13627,28 @@ def solve_v3_full_system_linear_gmres(
         # fallback (wasting compile/runtime).
         rhs1_bicgstab_kind = "rhs1"
     solve_method_kind = str(solve_method).strip().lower()
+    use_implicit = _resolve_use_implicit(differentiable=differentiable)
+    if (
+        solve_method_kind in {"auto", "default", "incremental"}
+        and (not use_implicit)
+        and jax.default_backend() == "cpu"
+        and op.fblock.fp is not None
+        and op.fblock.pas is None
+        and (not bool(op.include_phi1))
+        and int(op.rhs_mode) == 1
+    ):
+        dense_auto_cutoff = _rhs1_dense_auto_fp_cutoff_impl(
+            dense_active_cutoff=_rhsmode1_dense_fallback_max(op),
+        )
+        if dense_auto_cutoff > 0 and int(active_size) <= int(dense_auto_cutoff):
+            solve_method = "dense"
+            solve_method_kind = "dense"
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: auto-selected dense "
+                    f"full-FP solve (size={int(active_size)} <= cutoff={int(dense_auto_cutoff)})",
+                )
     if solve_method_kind == "dense_ksp":
         # `dense_ksp` uses its own PETSc-like block preconditioner on the assembled dense system.
         rhs1_precond_enabled = False
@@ -13667,7 +13672,6 @@ def solve_v3_full_system_linear_gmres(
         # PAS-large fastpath intentionally accepts the short-recurrence solution
         # when it is already parity-accurate at our regression tolerances.
         bicgstab_fallback_strict = False
-    use_implicit = _resolve_use_implicit(differentiable=differentiable)
     distributed_axis = _resolve_distributed_gmres_axis(op=op, emit=emit)
     use_sharded_matvec = distributed_axis in {"theta", "zeta"} and (not use_implicit)
     distributed_auto_solver_env = os.environ.get("SFINCS_JAX_DISTRIBUTED_KRYLOV", "").strip().lower()

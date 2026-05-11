@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-11 (Europe/Lisbon)
+Last updated: 2026-05-12 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -65,12 +65,18 @@ Current active lane (2026-05-11, validation/docs/release integration):
   `tests/test_run_qi_seed_robustness.py` now provide deterministic neighboring
   smoke decks around `examples/additional_examples/input.namelist`, localize the
   QI VMEC equilibrium per seed, perturb `nu_n` / `Er`, and can optionally
-  execute each seed through `sfincs_jax write-output`. The checked smoke summary
-  at `docs/_static/qi_seed_robustness_smoke.json` records one default-CLI pass
-  (`passed=1`, `failed=0`, selected dense solve, residual ratio below `1`) after
-  narrowing the 3D full-FP sparse-PC auto gate. This closes the immediate
-  runnable QI-smoke gap, but it is not yet a production-resolution multi-seed QI
-  robustness claim.
+  execute each seed through `sfincs_jax write-output`. The runner now includes
+  opt-in residual/convergence gates (`--max-residual-ratio`,
+  `--require-converged`, and `--require-accepted-converged`) plus aggregate
+  execution summaries. The checked summaries at
+  `docs/_static/qi_seed_robustness_smoke.json` and
+  `docs/_static/qi_seed_robustness_multiseed.json` record bounded default-CLI
+  passes. The multi-seed artifact covers seeds `0,1,2` at `7 x 13 x 25 x 4`,
+  with `process_failed=0`, all seeds `converged=true`, public `auto` solve
+  method, and maximum residual ratio `7.872e-7`. This also fixed the previous
+  `Nxi=25` default-policy failure where `auto` skipped dense, entered a slow
+  fallback path, and failed the residual gate. It is not yet a
+  production-resolution CPU/GPU QI robustness claim.
 - Mapped x-grid status: checked JSON/CSV artifacts under `docs/_static/` now
   exercise tiny and reduced PAS RHSMode=2 transport-matrix comparisons. The
   reduced PAS tokamak artifact compares mapped `Nx=7` candidates against an
@@ -81,6 +87,11 @@ Current active lane (2026-05-11, validation/docs/release integration):
   JIT, dtype, sparse-PC default, structural-tolerance, residual-rescue, and
   resource-exhaustion decisions with direct tests. This is a policy-surface
   hardening lane, not a new numerical solver claim.
+- Host-refinement refactor status: `host_refinement.py` now owns the NumPy-only
+  dense and sparse host iterative-refinement loops used by direct-solve rescue
+  paths. `v3_driver.py` keeps compatibility wrappers, so solver behavior is
+  unchanged while the implementation becomes directly testable without loading
+  the full driver.
 - Large refactor closure status: the mapped-x-grid / QI / solver-path sequence
   is locally integrated in this worktree, but promotion should still be staged
   by feature area: adaptive speed-map primitives, mapped x-grid construction,

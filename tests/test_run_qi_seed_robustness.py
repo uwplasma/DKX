@@ -151,6 +151,10 @@ def test_qi_seed_runner_records_mocked_execution_results(tmp_path: Path, monkeyp
     manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["execution"]["passed"] == 1
     assert manifest["execution"]["failed"] == 0
+    assert manifest["execution"]["summary"]["attempted"] == 1
+    assert manifest["execution"]["summary"]["process_passed"] == 1
+    assert manifest["execution"]["summary"]["solver_traces_written"] == 0
+    assert manifest["execution"]["gates"]["passed"] is True
     assert len(commands) == 1
     assert commands[0][1:4] == ["-m", "sfincs_jax", "write-output"]
     assert "--solve-method" not in commands[0]
@@ -223,6 +227,128 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
     assert summary["residual_target"] == 1.0e-11
     assert summary["residual_ratio"] == 2.0e5
     assert summary["iterations"] == 12
+    assert manifest["execution"]["summary"]["max_residual_ratio"] == 2.0e5
+    assert manifest["execution"]["summary"]["converged"] == 0
+    assert manifest["execution"]["summary"]["solve_methods"] == ["dense"]
+    assert manifest["execution"]["gates"]["passed"] is True
+
+
+def test_qi_seed_runner_enforces_optional_trace_gates(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        trace_path = Path(command[command.index("--solver-trace") + 1])
+        output_path = Path(command[command.index("--out") + 1])
+        output_path.write_bytes(b"h5")
+        trace_path.write_text(
+            json.dumps(
+                {
+                    "backend": "cpu",
+                    "converged": False,
+                    "elapsed_s": 1.25,
+                    "residual_norm": 2.0e-6,
+                    "residual_target": 1.0e-11,
+                    "selected_path": "rhsmode1_solution",
+                    "solve_method": "dense",
+                    "metadata": {"solver_metadata": {"accepted_converged": False}},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "5",
+                "--execute",
+                "--max-residual-ratio",
+                "1",
+                "--require-converged",
+                "--require-accepted-converged",
+                "--clean",
+            ]
+        )
+        == 1
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    gates = manifest["execution"]["gates"]
+    assert gates["passed"] is False
+    reasons = {failure["reason"] for failure in gates["failures"]}
+    assert reasons == {"residual_ratio_exceeded", "not_converged", "not_accepted_converged"}
+
+
+def test_qi_seed_runner_passes_optional_trace_gates(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        trace_path = Path(command[command.index("--solver-trace") + 1])
+        output_path = Path(command[command.index("--out") + 1])
+        output_path.write_bytes(b"h5")
+        trace_path.write_text(
+            json.dumps(
+                {
+                    "backend": "cpu",
+                    "converged": True,
+                    "elapsed_s": 0.75,
+                    "residual_norm": 4.0e-12,
+                    "residual_target": 1.0e-11,
+                    "selected_path": "rhsmode1_solution",
+                    "solve_method": "dense",
+                    "metadata": {
+                        "solver_metadata": {
+                            "accepted_converged": True,
+                            "iterations": 1,
+                            "solver_kind": "dense",
+                        }
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "5",
+                "--execute",
+                "--max-residual-ratio",
+                "1",
+                "--require-converged",
+                "--require-accepted-converged",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["execution"]["gates"]["passed"] is True
+    assert manifest["execution"]["summary"]["max_residual_ratio"] == 0.4
+    assert manifest["execution"]["summary"]["converged"] == 1
+    assert manifest["execution"]["summary"]["accepted_converged"] == 1
 
 
 def test_qi_seed_runner_keeps_explicit_diagnostic_solve_method(tmp_path: Path) -> None:

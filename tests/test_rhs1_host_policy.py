@@ -28,12 +28,21 @@ from sfincs_jax.rhs1_host_policy import (
 )
 
 
-def _op(*, has_fp: bool = True, has_pas: bool = False, rhs_mode: int = 1, include_phi1: bool = False, constraint_scheme: int = 1):
+def _op(
+    *,
+    has_fp: bool = True,
+    has_pas: bool = False,
+    rhs_mode: int = 1,
+    include_phi1: bool = False,
+    constraint_scheme: int = 1,
+    n_xi: int = 100,
+):
     return SimpleNamespace(
         rhs_mode=rhs_mode,
         include_phi1=include_phi1,
         constraint_scheme=constraint_scheme,
         n_zeta=5,
+        n_xi=n_xi,
         fblock=SimpleNamespace(fp=object() if has_fp else None, pas=object() if has_pas else None),
     )
 
@@ -108,7 +117,7 @@ def test_rhs1_dense_fallback_max_respects_fp_pas_and_env_overrides(monkeypatch) 
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", raising=False)
 
-    assert rhs1_dense_fallback_max(_op(has_fp=True)) == 5000
+    assert rhs1_dense_fallback_max(_op(has_fp=True)) == 6000
     assert rhs1_dense_fallback_max(_op(has_fp=False, has_pas=True, constraint_scheme=1)) == 0
     assert rhs1_dense_fallback_max(_op(has_fp=False, has_pas=True, constraint_scheme=0)) == 5000
 
@@ -131,7 +140,7 @@ def test_rhs1_dense_auto_fp_cutoff_matches_fallback_budget(monkeypatch) -> None:
 
     assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=5000) == 5000
     assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=3200) == 3200
-    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=9000) == 5000
+    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=9000) == 6000
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "2628")
     assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=5000) == 2628
@@ -303,6 +312,22 @@ def test_rhs1_fp_3d_sparse_pc_auto_targets_measured_cpu_fp_window(monkeypatch) -
         backend="cpu",
         eparallel_abs=1.0e-4,
     )
+    assert not rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1, n_xi=25),
+        active_size=6516,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN_NXI", "20")
+    assert rhs1_fp_3d_sparse_pc_auto_allowed(
+        op=_op(has_fp=True, constraint_scheme=1, n_xi=25),
+        active_size=6516,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN_NXI", raising=False)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC", "off")
     assert not rhs1_fp_3d_sparse_pc_auto_allowed(

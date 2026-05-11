@@ -576,13 +576,14 @@ The QI seed-robustness runner is guarded by
 neighboring cases, localizes the VMEC equilibrium beside each generated
 ``input.namelist``, perturbs ``nu_n`` and ``Er`` by seed, and can optionally run
 ``sfincs_jax write-output`` while recording stdout, stderr, and solver-trace paths.
-The current checked smoke summary in
-``docs/_static/qi_seed_robustness_smoke.json`` records one low-resolution seed on
-the default CLI path: ``passed=1``, ``failed=0``, selected solver method
-``dense``, and residual ratio below ``1``. Treat this as bounded runner and
-solver-policy evidence, not as a production-resolution multi-seed robustness
-claim. Promote QI robustness only after a wider seed ladder is checked with
-solver traces and release-manifest gates.
+The checked summaries in ``docs/_static/qi_seed_robustness_smoke.json`` and
+``docs/_static/qi_seed_robustness_multiseed.json`` record low-resolution default
+CLI evidence. The multi-seed artifact runs three neighboring seeds at ``7 x 13
+x 25 x 4``, records ``process_failed=0``, public solver method ``auto``, all
+seeds ``converged=true``, and maximum residual ratio below ``1e-6``. Treat this as
+bounded runner and solver-policy evidence, not as a production-resolution QI
+robustness claim. Promote QI robustness only after production-resolution CPU/GPU
+seed ladders are checked with solver traces and release-manifest gates.
 
 The high-collisionality Simakov-Helander lane now has a bounded normalization audit:
 

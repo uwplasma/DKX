@@ -1,0 +1,67 @@
+{
+  "case_count": 3,
+  "evidence_note": "Bounded three-seed QI robustness evidence for the public auto CLI solver policy. This covers the previously fragile Nxi=25 QI window and verifies that auto selects the fast dense path before sparse/fallback branches. It remains below production resolution.",
+  "execution_summary": {
+    "accepted_converged": 0,
+    "attempted": 3,
+    "backends": [
+      "cpu"
+    ],
+    "converged": 3,
+    "max_elapsed_s": 3.1873671249995823,
+    "max_residual_ratio": 7.872442389293008e-7,
+    "outputs_written": 3,
+    "process_failed": 0,
+    "process_passed": 3,
+    "selected_paths": [
+      "rhsmode1_solution"
+    ],
+    "solve_methods": [
+      "auto"
+    ],
+    "solver_traces_written": 3,
+    "timed_out": 0
+  },
+  "gates": {
+    "failures": [],
+    "max_residual_ratio": 1.0,
+    "passed": true,
+    "require_accepted_converged": false,
+    "require_converged": true
+  },
+  "lane": "qi_seed_robustness",
+  "public_cli_default_path": true,
+  "resolution": {
+    "NTHETA": 7,
+    "NX": 4,
+    "NXI": 25,
+    "NZETA": 13
+  },
+  "resolution_scale": 0.15,
+  "schema_version": 1,
+  "seeds": [
+    {
+      "case": "qi_seed_0000",
+      "elapsed_s": 3.1873671249995823,
+      "residual_ratio": 7.872442389293008e-7,
+      "seed": 0,
+      "solver_elapsed_s": 2.249611167000694
+    },
+    {
+      "case": "qi_seed_0001",
+      "elapsed_s": 3.002990166000018,
+      "residual_ratio": 2.2990755237540854e-7,
+      "seed": 1,
+      "solver_elapsed_s": 2.11550358400018
+    },
+    {
+      "case": "qi_seed_0002",
+      "elapsed_s": 2.972974833999615,
+      "residual_ratio": 2.6354082421411237e-7,
+      "seed": 2,
+      "solver_elapsed_s": 2.1110161670003436
+    }
+  ],
+  "source_input": "examples/additional_examples/input.namelist",
+  "timeout_s": 300.0
+}

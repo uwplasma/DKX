@@ -123,7 +123,7 @@ def rhs1_dense_fallback_max(op: Any) -> int:
     elif dense_fp_cutoff_raw:
         dense_fp_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", base_max)
     else:
-        dense_fp_max = 5000
+        dense_fp_max = 6000
     if dense_fp_max <= 0:
         return base_max
     return max(base_max, dense_fp_max)
@@ -134,7 +134,7 @@ def rhs1_dense_auto_fp_cutoff(*, dense_active_cutoff: int) -> int:
 
     This is the pre-Krylov auto-selection threshold used by the CLI/output
     writer. It intentionally matches the default full-FP dense fallback budget
-    (5000 active unknowns) so moderate FP systems do not first run through the
+    (6000 active unknowns) so moderate FP systems do not first run through the
     expensive Krylov/strong/sparse rescue ladder. Users may still disable the
     initial dense path with ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF=0`` or lower it
     for memory-constrained hosts.
@@ -145,7 +145,7 @@ def rhs1_dense_auto_fp_cutoff(*, dense_active_cutoff: int) -> int:
             return max(0, int(raw))
         except ValueError:
             pass
-    return min(max(0, int(dense_active_cutoff)), 5000)
+    return min(max(0, int(dense_active_cutoff)), 6000)
 
 
 def rhs1_dense_auto_fp_accelerator_min() -> int:
@@ -478,9 +478,9 @@ def rhs1_fp_3d_sparse_pc_auto_allowed(
     Bounded HSX and geometryScheme11 FP probes show that the host sparse-PC
     branch can beat the dense FP shortcut on runtime and memory for some
     geometry-rich systems while preserving Fortran parity. Keep the promotion
-    narrow and CPU-only, and do not take it for small systems by default: dense
-    LU is more robust for QI-like smoke decks and avoids sparse-factorization
-    failures before a solver trace is written.
+    narrow and CPU-only, and do not take it for small or low-pitch-resolution
+    systems by default: dense LU is more robust for QI-like smoke decks and
+    avoids sparse-factorization failures before a solver trace is written.
     """
     env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC")
     if env is False:
@@ -500,6 +500,10 @@ def rhs1_fp_3d_sparse_pc_auto_allowed(
     if int(getattr(op, "n_zeta", 1)) <= 1:
         return False
     if abs(float(eparallel_abs)) > 0.0:
+        return False
+
+    min_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN_NXI", 50)
+    if int(getattr(op, "n_xi", max(0, int(min_nxi)))) < max(0, int(min_nxi)):
         return False
 
     min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN", 5001)

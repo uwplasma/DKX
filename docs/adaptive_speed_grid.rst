@@ -146,25 +146,29 @@ the QI VMEC equilibrium beside its generated ``input.namelist``, applies
 seed-derived ``nu_n`` and ``Er`` perturbations, and records the exact
 ``sfincs_jax write-output`` command in ``manifest.json``.
 
-Use ``--execute`` for a bounded real solve smoke:
+Use ``--execute`` for a bounded real solve smoke. For a promotable bounded
+ladder, keep the default ``auto`` CLI policy and add residual/convergence gates:
 
 .. code-block:: bash
 
    python scripts/run_qi_seed_robustness.py \
      --out-root tests/qi_seed_robustness \
-     --seeds 0 \
+     --seeds 0 1 2 \
      --execute \
      --timeout-s 300 \
+     --max-residual-ratio 1 \
+     --require-converged \
      --clean
 
 The QI lane defaults to the public ``auto`` CLI solver policy. The bounded
-checked smoke currently selects the robust dense path, converges below the
-requested residual target, and records the result in
-``docs/_static/qi_seed_robustness_smoke.json``. The manifest records
+checked multi-seed artifact covers three neighboring seeds at ``7 x 13 x 25 x
+4`` and verifies that ``auto`` uses the fast dense full-FP path before entering
+the sparse/fallback ladder. Each seed converges below the requested residual
+target, with maximum residual ratio below ``1e-6``. The manifest records
 stdout/stderr paths, return codes, output and solver-trace presence, and a
 compact solver-trace summary including residual norm, residual target, residual
-ratio, and convergence flags. Treat this as one-seed bounded integration
-evidence; require a wider seed ladder before claiming production seed
+ratio, and convergence flags. Treat this as bounded integration evidence;
+require production-resolution CPU/GPU ladders before claiming full QI
 robustness.
 
 Limitations
