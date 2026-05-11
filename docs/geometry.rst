@@ -186,6 +186,21 @@ gradient-availability labels for each stage, the differentiated graph, and the
 explicit non-claim that this is a geometry-proxy gradient gate rather than a full
 transport-gradient workflow.
 
+Runs that need provenance for publication artifacts can write a reusable workflow
+summary:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
+     --check-backends \
+     --summary-json workflow-summary.json
+
+The same ``--summary-json`` option works for the full geometry-proxy run.  The
+summary records stage names, optional dependency importability, the precise
+differentiability status of each stage, the numerical gradient-gate status when
+the proxy objective is evaluated, and the explicit non-claim that full kinetic
+transport gradients are not covered by this lane.
+
 When both optional packages are installed, run the file-backed VMEC setup path
 with an explicit ``wout`` file:
 
@@ -215,7 +230,8 @@ This script uses ``vmec_jax`` provenance for a VMEC ``wout`` object,
 ``sfincs_jax.jax_geometry_adapters.boozer_spectrum_geometry_proxy_objective``
 for a differentiable scalar objective.  It reports the objective, the JAX
 gradient with respect to a VMEC magnetic-spectrum scale parameter, a centered
-finite-difference check, and a few gradient-descent steps.
+finite-difference check, a pass/fail numerical gradient gate for that proxy
+path, and a few gradient-descent steps.
 
 The current example validates the differentiable
 ``VMEC-like spectral arrays -> booz_xform_jax -> sfincs_jax Boozer-spectrum

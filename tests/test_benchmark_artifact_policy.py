@@ -7,9 +7,16 @@ from pathlib import Path
 import pytest
 
 from scripts.check_benchmark_artifacts import main as check_benchmark_artifacts_main
+from scripts.benchmark_artifact_index import main as benchmark_artifact_index_main
 from sfincs_jax.benchmark_artifact_policy import (
+    ARTIFACT_CLASS_LEGACY,
+    ARTIFACT_CLASS_NON_PAS,
+    ARTIFACT_CLASS_RELEASE_BLOCKING,
+    ARTIFACT_CLASS_SCHEMA_V2,
     BenchmarkArtifactPolicyError,
     benchmark_artifact_policy_errors,
+    classify_benchmark_artifact_file,
+    index_benchmark_artifact_files,
     validate_benchmark_artifact,
 )
 
@@ -213,3 +220,115 @@ def test_cli_reports_failure_for_invalid_file(tmp_path: Path, capsys: pytest.Cap
     assert rc == 1
     assert captured.out == ""
     assert captured.err == f"{artifact}: missing field results[1].variant_provenance\n"
+
+
+def test_release_index_classifies_schema_v2_compliant_file(tmp_path: Path) -> None:
+    artifact = tmp_path / "pas_release_v2.json"
+    artifact.write_text(json.dumps(_valid_payload()) + "\n")
+
+    entry = classify_benchmark_artifact_file(artifact)
+
+    assert entry.classification == ARTIFACT_CLASS_SCHEMA_V2
+    assert entry.errors == ()
+    assert not entry.release_blocking
+
+
+def test_release_index_excludes_legacy_schema_v1_from_gate(tmp_path: Path) -> None:
+    payload = copy.deepcopy(_valid_payload())
+    payload["schema_version"] = 1
+    artifact = tmp_path / "pas_historical_v1.json"
+    artifact.write_text(json.dumps(payload) + "\n")
+
+    entry = classify_benchmark_artifact_file(artifact)
+
+    assert entry.classification == ARTIFACT_CLASS_LEGACY
+    assert entry.errors == ()
+    assert not entry.release_blocking
+
+
+def test_release_index_classifies_non_pas_unrelated_file(tmp_path: Path) -> None:
+    artifact = tmp_path / "package_metadata.json"
+    artifact.write_text(json.dumps({"name": "sfincs-jax", "schema_version": 2}) + "\n")
+
+    entry = classify_benchmark_artifact_file(artifact)
+
+    assert entry.classification == ARTIFACT_CLASS_NON_PAS
+    assert entry.errors == ()
+    assert not entry.release_blocking
+
+
+def test_release_index_treats_malformed_json_as_release_blocking(tmp_path: Path) -> None:
+    artifact = tmp_path / "broken.json"
+    artifact.write_text('{"schema_version": 2,')
+
+    entry = classify_benchmark_artifact_file(artifact)
+
+    assert entry.classification == ARTIFACT_CLASS_RELEASE_BLOCKING
+    assert entry.release_blocking
+    assert entry.errors == (
+        f"{artifact}: invalid JSON: Expecting property name enclosed in double quotes at line 1 column 22",
+    )
+
+
+def test_release_index_treats_duplicate_v2_variants_as_release_blocking(tmp_path: Path) -> None:
+    payload = copy.deepcopy(_valid_payload())
+    plan = payload["plan"]
+    assert isinstance(plan, dict)
+    variant_methods = plan["variant_methods"]
+    assert isinstance(variant_methods, list)
+    variant_methods.append({"variant": "zeta", "realized_solve_method": "lgmres"})
+    artifact = tmp_path / "pas_release_duplicate_variants.json"
+    artifact.write_text(json.dumps(payload) + "\n")
+
+    entry = classify_benchmark_artifact_file(artifact)
+
+    assert entry.classification == ARTIFACT_CLASS_RELEASE_BLOCKING
+    assert entry.release_blocking
+    assert entry.errors == (
+        f"{artifact}: duplicate variant 'zeta' in plan.variant_methods at indexes 0 and 2",
+    )
+
+
+def test_release_index_summary_counts(tmp_path: Path) -> None:
+    valid = tmp_path / "valid.json"
+    valid.write_text(json.dumps(_valid_payload()) + "\n")
+    legacy_payload = copy.deepcopy(_valid_payload())
+    legacy_payload["schema_version"] = 1
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text(json.dumps(legacy_payload) + "\n")
+    unrelated = tmp_path / "unrelated.json"
+    unrelated.write_text(json.dumps({"tool": "pytest"}) + "\n")
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{")
+
+    index = index_benchmark_artifact_files([valid, legacy, unrelated, malformed])
+
+    assert index.counts == {
+        ARTIFACT_CLASS_SCHEMA_V2: 1,
+        ARTIFACT_CLASS_LEGACY: 1,
+        ARTIFACT_CLASS_NON_PAS: 1,
+        ARTIFACT_CLASS_RELEASE_BLOCKING: 1,
+    }
+    assert [entry.path for entry in index.release_blocking] == [malformed]
+
+
+def test_release_index_cli_reports_counts_and_fails_for_blockers(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    valid = tmp_path / "valid.json"
+    valid.write_text(json.dumps(_valid_payload()) + "\n")
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{")
+
+    rc = benchmark_artifact_index_main([str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert f"{valid}: schema-v2-compliant\n" in captured.out
+    assert f"{malformed}: release-blocking\n" in captured.out
+    assert "summary: total=2" in captured.out
+    assert "schema-v2-compliant=1" in captured.out
+    assert "release-blocking=1" in captured.out
+    assert f"{malformed}: invalid JSON:" in captured.err
+    assert "release gate: fail (1 blocking artifact(s))" in captured.err
