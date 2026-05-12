@@ -97,5 +97,14 @@ def test_checked_in_research_lane_manifest_is_consistent() -> None:
     assert research_lane_completion_errors(payload, source=_manifest_path(), repo_root=_repo_root()) == []
 
 
+def test_checked_in_research_lane_manifest_records_computed_overall_average() -> None:
+    payload = json.loads(_manifest_path().read_text(encoding="utf-8"))
+    lanes = payload["lanes"]
+    expected = round(sum(float(lane["current_percent"]) for lane in lanes) / len(lanes), 1)
+
+    assert payload["overall_average_percent"] == expected
+    assert payload["overall_average_percent"] > 90.0
+
+
 def test_research_lane_checker_cli_passes_current_manifest() -> None:
     assert check_research_lanes_main([]) == 0
