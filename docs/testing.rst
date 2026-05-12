@@ -695,14 +695,23 @@ maximum residual ratio ``0.963``. These artifacts close the bounded public-auto
 solver-route robustness blocker, but they are not yet a production-resolution QI
 claim.
 
+The next-scale
+``docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json`` artifact keeps
+that boundary honest. It raises the public-auto CPU grid to
+``15 x 29 x 55 x 4`` with the bounded x-block sparse-PC window widened for the
+probe, but it still times out after ``360 s`` before writing output or a solver
+trace. This is blocker evidence, not a regression: it shows that the next QI
+promotion needs lower-cost sparse x-block setup/factorization before the default
+auto window is widened again.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
-passing bounded grid ``70202``, the largest attempted bounded grid ``70202``,
-ten passing artifacts and two non-passing blocker artifacts, a ``50%`` per-axis
-lane-completion estimate based only on passing artifacts, and ``93.12%`` of
-production total size still uncovered. The production acceptance gate requires
-five seeds on both CPU and one GPU with ``public_cli_default_path``,
+passing bounded grid ``70202``, the largest attempted bounded grid ``95702``,
+ten passing artifacts and three non-passing blocker artifacts, a ``50%``
+per-axis lane-completion estimate based only on passing artifacts, and
+``93.12%`` of production total size still uncovered. The production acceptance
+gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
 ``solve_method=auto``, ``process_failed=0``, ``timed_out=0``,
 ``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
 ``max_residual_ratio <= 1``. Treat these as bounded runner and solver-policy
