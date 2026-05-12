@@ -1193,8 +1193,8 @@
       "gpu": 39
     },
     "source_reports": {
-      "cpu": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json",
-      "gpu": "/Users/rogeriojorge/local/tests/sfincs_jax/tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas/suite_report.json"
+      "cpu": "tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json",
+      "gpu": "tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas/suite_report.json"
     }
   },
   "reports": {

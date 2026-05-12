@@ -27,6 +27,7 @@ SFINCS_FORTRAN_REPO_URL = "https://github.com/landreman/sfincs"
 SIMAKOV_HELANDER_HIGH_COLLISIONALITY_URL = "https://doi.org/10.1063/1.3104715"
 PAUL_2019_ADJOINT_URL = "https://arxiv.org/abs/1904.06430"
 SFINCS_ADJOINT_APS_URL = "https://meetings-archive.aps.org/dpp/2018/bp11/36/"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PUBLIC_3D_BENCHMARK_FLOOR = {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100}
 PUBLIC_TOKAMAK_BENCHMARK_FLOOR = {"NTHETA": 25, "NZETA": 1, "NX": 4, "NXI": 100}
@@ -42,6 +43,15 @@ SUITE_STRICT_MISMATCH_FIELDS = (
     "strict_n_mismatch_physics",
     "strict_n_mismatch_solver",
 )
+
+
+def _portable_repo_path(path: Path) -> str:
+    """Return a stable repository-relative path when the artifact is in-tree."""
+
+    try:
+        return path.resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
 
 
 @dataclass(frozen=True)
@@ -1070,8 +1080,8 @@ def build_fortran_suite_benchmark_summary(
                 SFINCS_FORTRAN_REPO_URL,
             ],
             "source_reports": {
-                "cpu": str(cpu_report),
-                "gpu": str(gpu_report),
+                "cpu": _portable_repo_path(cpu_report),
+                "gpu": _portable_repo_path(gpu_report),
             },
             "source_case_counts": {
                 "cpu": int(len(raw_cpu_metrics)),
