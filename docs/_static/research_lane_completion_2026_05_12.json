@@ -3,7 +3,7 @@
   "lanes": [
     {
       "before_percent": 23,
-      "current_percent": 93,
+      "current_percent": 95,
       "evidence": [
         {
           "claim": "Production-readiness manifest rolls up all checked QI CPU/GPU seed artifacts and explicitly keeps the gate bounded until production CPU/GPU ladders exist.",
@@ -80,6 +80,14 @@
         {
           "claim": "Scale-0.55 one-GPU five-seed QI ladder passes from a clean office checkout with zero failures/timeouts, all outputs and traces, max elapsed 206.7 s, and max residual ratio 8.28e-3.",
           "path": "docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json"
+        },
+        {
+          "claim": "Scale-0.60 CPU seed-0 QI probe passes at active size 81377 with left-preconditioned exact-xblock-LU GMRES in 42.2 s and residual ratio 3.42e-3.",
+          "path": "docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json"
+        },
+        {
+          "claim": "Scale-0.60 one-GPU seed-0 QI probe passes at active size 81377 from a clean office checkout in 145.1 s and residual ratio 4.68e-3.",
+          "path": "docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json"
         }
       ],
       "gates": [
@@ -90,12 +98,12 @@
       ],
       "id": "production_qi_cpu_gpu",
       "next_actions": [
-        "Run a next-size bounded CPU/GPU QI seed ladder before widening the default QI auto-policy window.",
+        "Run the scale-0.60 CPU/GPU five-seed QI ladder before widening the default QI auto-policy window.",
         "Profile host-assembled x-block sparse LU memory and factorization ordering at scale 0.55 and the next bounded scale before any production-resolution promotion.",
         "Refresh the production-resolution readiness estimate only after the next bounded CPU/GPU seed ladders pass."
       ],
       "second_push_delta_percent": 65,
-      "second_push_result": "scale-0.50 and scale-0.55 public auto CPU and one-GPU five-seed QI ladders pass; the scale-0.55 setup cliff and hard-seed right-PC slow mode are closed by the exact-LU cap increase plus size-aware precondition-side policy, while production-resolution ladders remain open",
+      "second_push_result": "scale-0.50 and scale-0.55 public auto CPU and one-GPU five-seed QI ladders pass, and scale-0.60 CPU/GPU seed-0 probes pass; the setup cliff and hard-seed right-PC slow mode are closed by the exact-LU cap increase plus size-aware precondition-side policy, while scale-0.60 multiseed and production-resolution ladders remain open",
       "status": "active",
       "target_percent": 100,
       "title": "Production-resolution QI CPU/GPU robustness"
@@ -464,7 +472,7 @@
     }
   ],
   "minimum_substantial_delta_percent": 10,
-  "overall_average_percent": 92.4,
+  "overall_average_percent": 92.7,
   "owner_threads": [
     "019e1b62-a2b6-7d82-924c-d3f27b58cc34",
     "019e1b62-ee67-78f3-a63f-06f5623b4217",
@@ -486,5 +494,5 @@
   "purpose": "Machine-readable completion tracker for the coordinated large-push research/performance lanes. Percentages are engineering readiness estimates backed by checked-in evidence, not physics claims by themselves.",
   "requested_second_push_delta_percent": 15,
   "schema_version": 1,
-  "second_push_assessment": "large push is now at 92.4% overall: PAS CPU/GPU production-floor artifacts, release-grade parallel audit gates, refactor/CI policy extraction, optional JAX-ecosystem gates, the scale-0.55 CPU QI exact-LU successor, and the adaptive-side scale-0.55 CPU/GPU five-seed successors are reflected in the manifest. QI remains active at 93% because production-resolution CPU/GPU seed ladders are still required before promotion."
+  "second_push_assessment": "large push is now at 92.7% overall: PAS CPU/GPU production-floor artifacts, release-grade parallel audit gates, refactor/CI policy extraction, optional JAX-ecosystem gates, the scale-0.55 CPU QI exact-LU successor, adaptive-side scale-0.55 CPU/GPU five-seed successors, and scale-0.60 seed-0 CPU/GPU probes are reflected in the manifest. QI remains active at 95% because scale-0.60 multiseed and production-resolution CPU/GPU seed ladders are still required before promotion."
 }
