@@ -37,6 +37,7 @@ From the repository root:
 
    pytest -q
    python scripts/check_release_gates.py
+   python scripts/check_research_lanes.py
    sphinx-build -W -b html docs docs/_build/html
    python -m build
    python -m twine check dist/*
@@ -53,10 +54,14 @@ For a fast claim-scope check without running the whole suite, use:
 
    pytest -q tests/test_validation_manifest_schema.py tests/test_release_gate_metadata.py
    python scripts/check_release_gates.py
+   python scripts/check_research_lanes.py
 
 This validates that publication-facing lanes are either implemented for the
 documented current claim, kept as bounded scaffolds/proxies, or explicitly closed as
 post-release work. No manifest lane may silently remain an open release blocker.
+The research-lane check additionally validates that active large-push completion
+estimates are tied to checked-in evidence and next actions rather than informal
+status text.
 
 For the current mapped-grid / QI / solver-path integration branch, also run the
 bounded integration checks before promoting any of those lanes into release-facing

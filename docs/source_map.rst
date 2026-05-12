@@ -213,8 +213,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   including PETSc-like preconditioned-residual acceptance for the relevant
   near-singular transport systems.
 - ``sfincs_jax/transport_parallel_policy.py``:
-  transport process-parallel backend selection, worker env, GPU worker env, and pool
-  policy.
+  pure transport process-parallel backend selection, worker-count validation,
+  benchmark scaling audits, process-pool cache keys, GPU-worker environment
+  isolation, and multiprocessing fallback policy.
 - ``sfincs_jax/transport_parallel_runtime.py``:
   transport parallel RHS partitioning, GPU worker subprocess launch, and parent-side
   merge of per-worker state/residual/elapsed-time results.
@@ -246,6 +247,12 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   lightweight so CLI progress can stay informative without importing heavy solver
   dependencies. It is solver-neutral: it improves observability without affecting
   numerical decisions.
+- ``sfincs_jax/solver_progress_policy.py``:
+  the pure formatting and RHSMode=1 progress-threshold policy re-exported by
+  ``solver_progress.py`` so CLI observability decisions remain unit-testable.
+- ``sfincs_jax/benchmark_artifact_policy.py``:
+  fast schema, provenance, and release-blocking classification policy for checked-in
+  benchmark JSON artifacts.
 - ``sfincs_jax/memory_model.py``:
   conservative dense/CSR/Krylov/preconditioner memory estimates used by solver
   restart caps, benchmark manifests, and measured solver-candidate gates. This is

@@ -147,23 +147,39 @@ seed-derived ``nu_n`` and ``Er`` perturbations, and records the exact
 ``sfincs_jax write-output`` command in ``manifest.json``.
 
 Use ``--execute`` for a bounded real solve smoke. For a promotable bounded
-ladder, keep the default ``auto`` CLI policy and add residual/convergence gates:
+ladder, keep the default ``auto`` CLI policy, add residual/convergence gates,
+and write a compact artifact from the generated ``manifest.json``:
+
+.. code-block:: bash
+
+   JAX_PLATFORM_NAME=cpu python scripts/run_qi_seed_robustness.py \
+     --out-root tests/qi_seed_robustness_multiseed5_cpu \
+     --seeds 0 1 2 3 4 \
+     --resolution-scale 0.25 \
+     --min-nzeta 13 \
+     --min-nxi 25 \
+     --execute \
+     --timeout-s 120 \
+     --max-residual-ratio 1 \
+     --require-converged \
+     --summary-output docs/_static/qi_seed_robustness_multiseed5_cpu.json \
+     --clean
+
+Refresh the production-readiness manifest without rerunning solves:
 
 .. code-block:: bash
 
    python scripts/run_qi_seed_robustness.py \
-     --out-root tests/qi_seed_robustness \
-     --seeds 0 1 2 \
-     --execute \
-     --timeout-s 300 \
-     --max-residual-ratio 1 \
-     --require-converged \
-     --clean
+     --summarize-artifacts-only \
+     --evidence-manifest-output docs/_static/qi_seed_robustness_evidence_manifest.json
 
 The QI lane defaults to the public ``auto`` CLI solver policy. The bounded
 checked multi-seed CPU and one-GPU artifacts cover three neighboring seeds at
 ``7 x 13 x 25 x 4`` and verify that ``auto`` uses the fast dense full-FP path
-before entering the sparse/fallback ladder. A larger single-seed
+before entering the sparse/fallback ladder. The current five-seed CPU artifact
+extends that same low-resolution ladder to seeds ``0..4`` with ``process_failed=0``,
+``timed_out=0``, ``outputs_written=5``, ``solver_traces_written=5``,
+``converged=5``, and maximum residual ratio ``7.88e-7``. A larger single-seed
 ``9 x 19 x 35 x 4`` artifact in
 ``docs/_static/qi_seed_robustness_scale035_cpu_gpu.json`` validates the next
 policy tier: at ``13169`` active unknowns, CPU converges in ``29.8 s`` and one
@@ -172,9 +188,60 @@ host-sparse rescue. Before that rescue was enabled, the same GPU case spent
 ``195 s`` in the Krylov/fallback tail and was rejected with residual ratio
 ``53.9``. The manifest records stdout/stderr paths, return codes, output and
 solver-trace presence, and a compact solver-trace summary including residual
-norm, residual target, residual ratio, and convergence flags. Treat these as
-bounded integration evidence; require production-resolution CPU/GPU ladders
-before claiming full QI robustness.
+norm, residual target, residual ratio, and convergence flags.
+
+The checked production-readiness manifest is
+``docs/_static/qi_seed_robustness_evidence_manifest.json``. It keeps the lane at
+``bounded_proxy`` because the largest checked grid is still ``23942`` estimated
+unknowns versus ``1020002`` at the authored production resolution
+``25 x 51 x 100 x 8``. The bounded lane-completion estimate is therefore ``35%``
+by the smallest per-axis resolution fraction, while ``97.65%`` of the production
+total-size estimate remains uncovered.
+
+Production-resolution promotion requires both scheduled ladders below to pass
+before changing the gate status:
+
+.. code-block:: bash
+
+   JAX_PLATFORM_NAME=cpu python scripts/run_qi_seed_robustness.py \
+     --out-root tests/qi_seed_robustness_prod_cpu \
+     --seeds 0 1 2 3 4 \
+     --resolution-scale 1.0 \
+     --min-ntheta 25 \
+     --min-nzeta 51 \
+     --min-nx 8 \
+     --min-nxi 100 \
+     --execute \
+     --timeout-s 3600 \
+     --max-residual-ratio 1 \
+     --require-converged \
+     --summary-output docs/_static/qi_seed_robustness_prod_cpu.json \
+     --clean
+
+.. code-block:: bash
+
+   CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu python scripts/run_qi_seed_robustness.py \
+     --out-root tests/qi_seed_robustness_prod_gpu0 \
+     --seeds 0 1 2 3 4 \
+     --resolution-scale 1.0 \
+     --min-ntheta 25 \
+     --min-nzeta 51 \
+     --min-nx 8 \
+     --min-nxi 100 \
+     --execute \
+     --timeout-s 3600 \
+     --max-residual-ratio 1 \
+     --require-converged \
+     --summary-output docs/_static/qi_seed_robustness_prod_gpu0.json \
+     --clean
+
+Acceptance is machine-readable: each production artifact must report
+``public_cli_default_path=true``, ``solve_methods=["auto"]``, ``process_failed=0``,
+``timed_out=0``, ``outputs_written=5``, ``solver_traces_written=5``,
+``converged=5``, and ``max_residual_ratio <= 1``. Treat all current artifacts as
+bounded integration evidence; do not claim full QI robustness until both CPU and
+GPU production-resolution artifacts are checked in and the evidence manifest is
+regenerated.
 
 Limitations
 -----------
