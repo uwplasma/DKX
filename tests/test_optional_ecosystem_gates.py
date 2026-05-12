@@ -40,6 +40,7 @@ def _measured_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def test_optional_lineax_synthetic_gate_emits_measured_summary(tmp_path: Path) -> None:
     out_json = tmp_path / "lineax_synthetic_gate.json"
+    summary_json = tmp_path / "lineax_synthetic_gate_summary.json"
     rows = _run_json(
         [
             sys.executable,
@@ -56,15 +57,21 @@ def test_optional_lineax_synthetic_gate_emits_measured_summary(tmp_path: Path) -
             "60",
             "--out-json",
             str(out_json),
+            "--summary-json",
+            str(summary_json),
         ],
         out_json,
     )
     summary = _measured_summary(rows)
+    measured_summary = json.loads(summary_json.read_text(encoding="utf-8"))
     by_backend = {row["backend"]: row for row in rows}
 
     assert summary["rows"] == 2
     assert summary["measured_rows"] >= 1
     assert set(summary["backends"]) == {"current_custom_linear_solve", "lineax_gmres"}
+    assert measured_summary["gate"] == "optional_lineax_implicit_solve"
+    assert measured_summary["adoption_decision"]["production_default"] == "keep_current_custom_linear_solve"
+    assert measured_summary["adoption_decision"]["hard_dependency"] is False
 
     current = by_backend["current_custom_linear_solve"]
     assert current["status"] == "ok"
@@ -85,6 +92,7 @@ def test_optional_lineax_synthetic_gate_emits_measured_summary(tmp_path: Path) -
 
 def test_optional_equinox_jaxopt_gate_emits_measured_summary(tmp_path: Path) -> None:
     out_json = tmp_path / "eqx_jaxopt_gate.json"
+    summary_json = tmp_path / "eqx_jaxopt_gate_summary.json"
     rows = _run_json(
         [
             sys.executable,
@@ -101,14 +109,22 @@ def test_optional_equinox_jaxopt_gate_emits_measured_summary(tmp_path: Path) -> 
             "0.1",
             "--out-json",
             str(out_json),
+            "--summary-json",
+            str(summary_json),
         ],
         out_json,
     )
     summary = _measured_summary(rows)
+    measured_summary = json.loads(summary_json.read_text(encoding="utf-8"))
     by_backend = {row["backend"]: row for row in rows}
 
     assert summary["rows"] == 2
     assert set(summary["backends"]) == {"equinox_wrapper", "jaxopt_gradient_descent"}
+    assert measured_summary["gate"] == "optional_equinox_jaxopt_scheme4"
+    assert measured_summary["adoption_decision"]["production_solver_dependency"] == (
+        "do_not_promote_from_objective_wrapper_gate"
+    )
+    assert measured_summary["adoption_decision"]["hard_dependency"] is False
 
     eqx = by_backend["equinox_wrapper"]
     if _has_module("equinox"):

@@ -93,12 +93,13 @@ def research_lane_completion_errors(
         if before is not None and current is not None:
             if current < before:
                 add(f"{label}: current_percent must be >= before_percent")
-            elif current - before >= min_delta:
+            elif _lane_delta_satisfies_push_gate(before, current, target, min_delta):
                 substantial_count += 1
             elif status not in {"closed", "deferred"}:
+                required_delta = _required_lane_delta(before, target, min_delta)
                 add(
-                    f"{label}: active/evidence_ready lane delta must be >= {min_delta:g} "
-                    "percentage points"
+                    f"{label}: active/evidence_ready lane delta must be >= {required_delta:g} "
+                    "percentage points or saturate target_percent"
                 )
         if current is not None and target is not None and current > target:
             add(f"{label}: current_percent must be <= target_percent")
@@ -192,6 +193,32 @@ def _percent_field(
         add(f"{label}: field {field} must be a finite percentage in [0, 100]")
         return None
     return value
+
+
+def _required_lane_delta(before: float, target: float | None, min_delta: float) -> float:
+    """Return the target-capped lane movement required by the manifest gate."""
+
+    if target is None:
+        return min_delta
+    return min(min_delta, max(0.0, target - before))
+
+
+def _lane_delta_satisfies_push_gate(
+    before: float,
+    current: float,
+    target: float | None,
+    min_delta: float,
+) -> bool:
+    """Return whether a lane made a substantial or target-saturating push.
+
+    Several lanes may have fewer percentage points remaining than the current
+    large-push target.  Those lanes must reach ``target_percent`` rather than
+    being allowed to overclaim beyond the target just to satisfy the requested
+    absolute delta.
+    """
+
+    required_delta = _required_lane_delta(before, target, min_delta)
+    return current - before >= required_delta
 
 
 def _check_nonempty_list(value: object, label: str, add: Callable[[str], None]) -> None:

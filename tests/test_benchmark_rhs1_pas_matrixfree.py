@@ -165,6 +165,29 @@ def test_child_payload_covers_keep_and_reject_gates() -> None:
     json.dumps({"results": [keep, reject]}, allow_nan=False)
 
 
+def test_child_payload_tiny_update_rejects_before_candidate_matvec() -> None:
+    args = _parse_args(
+        [
+            "--systems",
+            "tiny_update_reject",
+            "--metadata-inputs",
+            "--min-update-norm-ratio",
+            "1e-8",
+        ]
+    )
+    case = build_probe_cases(args)[0]
+
+    row = _child_payload(case)
+
+    assert row["status"] == "ok"
+    assert row["gate"] == "reject"
+    assert row["gate_reason"] == "update-norm-too-small"
+    assert row["meets_expected_gate"] is True
+    assert row["metrics"]["matvec_calls"] == 1
+    assert row["metrics"]["correction_calls"] == 1
+    assert row["gate_diagnostics"]["matrix_free_metadata"]["candidate_matvecs"] == 0
+
+
 def test_child_payload_rejects_nonfinite_candidate_with_json_safe_history() -> None:
     args = _parse_args(
         [

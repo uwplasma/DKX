@@ -53,6 +53,7 @@ For a fast claim-scope check without running the whole suite, use:
 .. code-block:: bash
 
    pytest -q tests/test_validation_manifest_schema.py tests/test_release_gate_metadata.py
+   pytest -q tests/test_benchmark_doc_claims.py tests/test_generate_fortran_suite_benchmark_summary.py
    python scripts/check_release_gates.py
    python scripts/check_research_lanes.py
 
@@ -61,7 +62,12 @@ documented current claim, kept as bounded scaffolds/proxies, or explicitly close
 post-release work. No manifest lane may silently remain an open release blocker.
 The research-lane check additionally validates that active large-push completion
 estimates are tied to checked-in evidence and next actions rather than informal
-status text.
+status text. When a push asks for a larger absolute movement than a lane has
+remaining, the lane may pass only by saturating its checked target percentage;
+the gate does not allow percentages to exceed the target just to satisfy a
+requested point increase.
+The benchmark-doc checks make the README/docs runtime and memory claims fail if
+they drift from the checked-in CPU/GPU suite reports or benchmark summary JSON.
 
 For the current mapped-grid / QI / solver-path integration branch, also run the
 bounded integration checks before promoting any of those lanes into release-facing

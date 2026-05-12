@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from sfincs_jax.rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
     estimate_pas_tz_schwarz_fallback_work,
+    pas_tz_schwarz_fallback_guard,
     pas_tz_schwarz_fallback_memory_safe,
     preferred_pas_tz_schwarz_axis,
     resolve_pas_tz_cheap_fallback_kind,
@@ -203,6 +204,15 @@ def test_pas_tz_schwarz_fallback_work_estimate_flags_research_grid() -> None:
         block=3,
         overlap=1,
     )
+    guard = pas_tz_schwarz_fallback_guard(
+        _op(n_species=2, n_theta=25, n_zeta=51, n_x=4, n_xi=100),
+        axis="zeta",
+        block=3,
+        overlap=1,
+    )
+    assert guard["safe"] is False
+    assert "max-inverse-entries-exceeded" in guard["reason"]
+    assert guard["work"]["inverse_entries"] == 3_400_000_000
 
 
 def test_build_pas_tz_memory_fallback_uses_collision_when_schwarz_guard_fails(monkeypatch) -> None:
@@ -359,3 +369,4 @@ def test_build_pas_tz_memory_fallback_marks_default_collision_guarded(monkeypatc
 
     assert getattr(result, "_sfincs_jax_pas_tz_guarded_fallback") is True
     assert getattr(result, "_sfincs_jax_pas_tz_guarded_axis") == "collision"
+    assert getattr(result, "_sfincs_jax_pas_tz_guarded_metadata")["reason"] == "cheap-collision"

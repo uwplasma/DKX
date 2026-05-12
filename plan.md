@@ -44,6 +44,47 @@ Immediate priorities:
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
 
 Current active lane (2026-05-12, coordinated large-push research/performance closure):
+- [ ] Second larger push requested on 2026-05-12: increase each open lane by at
+  least `15` percentage points where possible, or saturate the checked target for
+  lanes with less than `15` points remaining. Active workers now own QI
+  production readiness, PAS/runtime-memory, parallel scaling, refactor/coverage,
+  VMEC/Boozer plus optional JAX ecosystem gates, and benchmark/docs release
+  consistency. The main thread owns the cross-lane manifest, target-capped lane
+  policy, plan integration, final tests, and commit/push.
+- [x] Upgraded `sfincs_jax/research_lane_policy.py` so large-push gates are
+  target-capped: a lane cannot overclaim beyond `target_percent`, and a lane
+  with fewer points remaining must reach that target. Added regression tests for
+  target saturation and unfinished target saturation in
+  `tests/test_research_lane_policy.py`.
+- [x] Integrated second-push worker results into
+  `docs/_static/research_lane_completion_2026_05_12.json`. The overall lane
+  average moved to `79.0%`; the VMEC/Boozer lane saturated its scoped `93%`
+  target, the benchmark/docs lane saturated its `98%` target, and the JAX
+  ecosystem lane moved to `82%` after measured Lineax/Equinox/JAXopt gates. QI
+  moved only to `44%` after the new scale-0.45 CPU success because the scale-0.50
+  public-auto probe timed out. PAS, parallel, and refactor/coverage gained
+  fail-fast gates, timeout-safe benchmark plans, and focused coverage, but they
+  did not honestly clear a +15 point move from the immediately preceding
+  baseline.
+- [x] Added a passing larger QI CPU artifact at
+  `docs/_static/qi_seed_robustness_scale045_cpu_probe.json`: `11 x 23 x 45 x 4`,
+  public `auto` solver, output and solver trace written, `106.0 s`, and residual
+  ratio `4.96e-7`. The existing scale-0.50 timeout artifact remains checked in
+  as blocker evidence and is excluded from completion estimates by
+  `scripts/run_qi_seed_robustness.py`.
+- [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
+  candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
+  metadata, and tests. This reduces wasted candidate work in bounded probes, but
+  a production residual-clean geometry-rich default-promotion artifact is still
+  required before claiming the lane closed.
+- [x] Parallel second-push result: added timeout-safe two-GPU case-throughput
+  benchmarking and a pure audit that rejects release overclaims, non-GPU
+  payloads, cold/mixed timing, and sub-unity speedups. This improves the GPU
+  campaign workflow but does not close single-case strong scaling.
+- [x] Refactor/coverage second-push result: added focused fast tests around
+  solver-candidate promotion, residual diagnostics, and policy docstrings.
+  Focused helper coverage improved, but package-wide `95%` still requires more
+  driver decomposition and a JAX-safe coverage environment.
 - [x] Spawned workers across the active QI, PAS/runtime-memory, parallelism,
   refactor/coverage/CI, and VMEC/JAX-ecosystem lanes rather than continuing with
   single-file incremental work.

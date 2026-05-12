@@ -16,6 +16,7 @@ with nontrivial gradients while remaining cheap enough for focused tests.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
@@ -52,6 +53,70 @@ class ObjectiveGateResult:
 
     def to_json_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def summarize_gate_results(results: list[ObjectiveGateResult]) -> dict[str, Any]:
+    """Summarize optional objective-wrapper evidence without promoting deps."""
+    rows = [result.to_json_dict() for result in results]
+    counts = Counter(str(row["status"]) for row in rows)
+    measured_rows = [
+        row for row in rows if row.get("status") == "ok" and row.get("elapsed_s") is not None
+    ]
+    by_backend = {str(row["backend"]): row for row in rows}
+    eqx = by_backend.get("equinox_wrapper")
+    jaxopt = by_backend.get("jaxopt_gradient_descent")
+
+    if eqx is None:
+        eqx_decision = "not_evaluated"
+        eqx_reason = "No Equinox row was requested."
+    elif eqx["status"] == "skipped":
+        eqx_decision = "not_evaluated_missing_optional_dependency"
+        eqx_reason = str(eqx.get("error"))
+    elif eqx["status"] == "ok" and float(eqx.get("directional_grad_abs_error") or 1.0) < 1.0e-6:
+        eqx_decision = "candidate_objective_wrapper_only"
+        eqx_reason = "Equinox wrapped the real scheme-4 objective and matched finite difference."
+    else:
+        eqx_decision = "defer_gradient_gate_not_clean"
+        eqx_reason = "Equinox did not satisfy the directional-gradient gate."
+
+    if jaxopt is None:
+        jaxopt_decision = "not_evaluated"
+        jaxopt_reason = "No JAXopt row was requested."
+    elif jaxopt["status"] == "skipped":
+        jaxopt_decision = "not_evaluated_missing_optional_dependency"
+        jaxopt_reason = str(jaxopt.get("error"))
+    elif (
+        jaxopt["status"] == "ok"
+        and float(jaxopt.get("loss_ratio") or 1.0) < 1.0e-6
+        and float(jaxopt.get("final_param_error") or 1.0) < 1.0e-4
+    ):
+        jaxopt_decision = "candidate_for_bounded_optimization_examples"
+        jaxopt_reason = "JAXopt reduced the real scheme-4 objective and recovered target parameters."
+    else:
+        jaxopt_decision = "defer_optimization_gate_not_clean"
+        jaxopt_reason = "JAXopt did not satisfy the bounded optimization gate."
+
+    return {
+        "gate": "optional_equinox_jaxopt_scheme4",
+        "rows": len(rows),
+        "status_counts": dict(counts),
+        "measured_rows": len(measured_rows),
+        "backends": sorted({str(row["backend"]) for row in rows}),
+        "case": "scheme4_geometry_fit",
+        "evidence": {
+            "equinox_directional_grad_abs_error": None if eqx is None else eqx.get("directional_grad_abs_error"),
+            "jaxopt_loss_ratio": None if jaxopt is None else jaxopt.get("loss_ratio"),
+            "jaxopt_final_param_error": None if jaxopt is None else jaxopt.get("final_param_error"),
+        },
+        "adoption_decision": {
+            "equinox": eqx_decision,
+            "equinox_reason": eqx_reason,
+            "jaxopt": jaxopt_decision,
+            "jaxopt_reason": jaxopt_reason,
+            "production_solver_dependency": "do_not_promote_from_objective_wrapper_gate",
+            "hard_dependency": False,
+        },
+    }
 
 
 def make_scheme4_problem(
@@ -277,6 +342,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--maxiter", type=int, default=5)
     parser.add_argument("--stepsize", type=float, default=0.1)
     parser.add_argument("--out-json", type=Path)
+    parser.add_argument(
+        "--summary-json",
+        type=Path,
+        help="Write measured summary and adoption decision JSON without changing --out-json rows.",
+    )
     return parser
 
 
@@ -285,10 +355,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     results = run_gate(args)
     payload = [result.to_json_dict() for result in results]
+    summary = summarize_gate_results(results)
     text = json.dumps(payload, indent=2, sort_keys=True)
     if args.out_json is not None:
         args.out_json.parent.mkdir(parents=True, exist_ok=True)
         args.out_json.write_text(text + "\n")
+    if args.summary_json is not None:
+        args.summary_json.parent.mkdir(parents=True, exist_ok=True)
+        args.summary_json.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     print(text)
     return 0
 

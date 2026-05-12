@@ -12,7 +12,7 @@ def float_env(name: str) -> float:
     if not value:
         return 0.0
     try:
-        return float(value)
+        return max(0.0, float(value))
     except ValueError:
         return 0.0
 
@@ -22,7 +22,13 @@ def transport_residual_gate_thresholds_from_env(
     abs_env: str = "SFINCS_JAX_TRANSPORT_ABORT_MAX_RESIDUAL",
     rel_env: str = "SFINCS_JAX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL",
 ) -> tuple[float, float]:
-    """Return absolute and RHS-normalized residual abort thresholds."""
+    """Return absolute and RHS-normalized residual abort thresholds.
+
+    Empty, invalid, or negative values disable the corresponding gate by
+    returning ``0.0``. Keeping that normalization here makes downstream failure
+    formatting deterministic and avoids treating negative thresholds as a
+    separate policy case.
+    """
     return float_env(abs_env), float_env(rel_env)
 
 
@@ -74,4 +80,3 @@ def transport_residual_gate_failures_from_arrays(
         if failure is not None:
             failures.append(failure)
     return failures
-

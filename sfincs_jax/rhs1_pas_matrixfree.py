@@ -26,6 +26,8 @@ class Rhs1PasMatrixFreeConfig:
     min_residual_reduction: float = 1.0e-3
     block_size: int | None = None
     max_update_norm_ratio: float | None = None
+    min_update_norm_ratio: float | None = None
+    max_candidate_elements: int | None = None
 
     def __post_init__(self) -> None:
         if int(self.max_steps) < 1:
@@ -42,6 +44,12 @@ class Rhs1PasMatrixFreeConfig:
             ratio = float(self.max_update_norm_ratio)
             if not math.isfinite(ratio) or ratio <= 0.0:
                 raise ValueError("max_update_norm_ratio must be finite and > 0 when provided")
+        if self.min_update_norm_ratio is not None:
+            ratio = float(self.min_update_norm_ratio)
+            if not math.isfinite(ratio) or ratio < 0.0:
+                raise ValueError("min_update_norm_ratio must be finite and >= 0 when provided")
+        if self.max_candidate_elements is not None and int(self.max_candidate_elements) < 1:
+            raise ValueError("max_candidate_elements must be >= 1 when provided")
 
 
 @dataclass(frozen=True)
@@ -89,6 +97,42 @@ def _gate_diagnostics(
     diagnostics["initial_residual_finite"] = initial is not None
     diagnostics["candidate_residual_finite"] = candidate is not None if candidate_residual_norm is not None else None
     return diagnostics
+
+
+def _array_metadata(value: jnp.ndarray, *, block_size: int | None) -> dict[str, object]:
+    arr = jnp.asarray(value)
+    element_count = int(arr.size)
+    itemsize = int(getattr(arr.dtype, "itemsize", 0))
+    return {
+        "shape": tuple(int(dim) for dim in arr.shape),
+        "dtype": str(arr.dtype),
+        "element_count": element_count,
+        "array_bytes": int(element_count * itemsize),
+        "block_size": None if block_size is None else int(block_size),
+    }
+
+
+def _with_matrixfree_metadata(
+    diagnostics: dict[str, object],
+    *,
+    x_template: jnp.ndarray,
+    config: Rhs1PasMatrixFreeConfig,
+    live_arrays: int,
+    candidate_matvecs: int,
+) -> dict[str, object]:
+    enriched = dict(diagnostics)
+    metadata = _array_metadata(x_template, block_size=config.block_size)
+    metadata["estimated_live_array_count"] = int(live_arrays)
+    metadata["estimated_live_array_bytes"] = int(metadata["array_bytes"]) * int(live_arrays)
+    metadata["candidate_matvecs"] = int(candidate_matvecs)
+    metadata["max_candidate_elements"] = (
+        None if config.max_candidate_elements is None else int(config.max_candidate_elements)
+    )
+    metadata["min_update_norm_ratio"] = (
+        None if config.min_update_norm_ratio is None else float(config.min_update_norm_ratio)
+    )
+    enriched["matrix_free_metadata"] = metadata
+    return enriched
 
 
 def streaming_l2_norm(value: ArrayLike, *, block_size: int | None = None) -> float:
@@ -171,11 +215,17 @@ def rhs1_pas_matrixfree_correction(
             accepted_steps=0,
             accepted=False,
             reason="nonfinite-initial-residual",
-            diagnostics=_gate_diagnostics(
-                reason="nonfinite-initial-residual",
-                initial_residual_norm=initial_norm,
-                min_residual_reduction=float(config.min_residual_reduction),
-                accepted_steps=0,
+            diagnostics=_with_matrixfree_metadata(
+                _gate_diagnostics(
+                    reason="nonfinite-initial-residual",
+                    initial_residual_norm=initial_norm,
+                    min_residual_reduction=float(config.min_residual_reduction),
+                    accepted_steps=0,
+                ),
+                x_template=x_initial,
+                config=config,
+                live_arrays=2,
+                candidate_matvecs=0,
             ),
         )
 
@@ -183,7 +233,9 @@ def rhs1_pas_matrixfree_correction(
     best_norm = initial_norm
     current_residual = jnp.asarray(residual)
     omega_use = float(config.omega)
-    for _step in range(max(1, int(config.max_steps))):
+    max_steps = max(1, int(config.max_steps))
+    candidate_matvecs = 0
+    for step_index in range(max_steps):
         update = jnp.asarray(correction(current_residual))
         if update.shape != x_initial.shape:
             return Rhs1PasMatrixFreeResult(
@@ -194,12 +246,18 @@ def rhs1_pas_matrixfree_correction(
                 accepted_steps=accepted_steps,
                 accepted=accepted_steps > 0,
                 reason="update-shape-mismatch",
-                diagnostics={
-                    "reason": "update-shape-mismatch",
-                    "accepted_steps": int(accepted_steps),
-                    "expected_shape": tuple(int(dim) for dim in x_initial.shape),
-                    "observed_shape": tuple(int(dim) for dim in update.shape),
-                },
+                diagnostics=_with_matrixfree_metadata(
+                    {
+                        "reason": "update-shape-mismatch",
+                        "accepted_steps": int(accepted_steps),
+                        "expected_shape": tuple(int(dim) for dim in x_initial.shape),
+                        "observed_shape": tuple(int(dim) for dim in update.shape),
+                    },
+                    x_template=x_initial,
+                    config=config,
+                    live_arrays=3,
+                    candidate_matvecs=candidate_matvecs,
+                ),
             )
         update_norm = streaming_l2_norm(update, block_size=config.block_size)
         if not math.isfinite(update_norm):
@@ -211,12 +269,18 @@ def rhs1_pas_matrixfree_correction(
                 accepted_steps=accepted_steps,
                 accepted=accepted_steps > 0,
                 reason="nonfinite-update",
-                diagnostics={
-                    "reason": "nonfinite-update",
-                    "accepted_steps": int(accepted_steps),
-                    "update_norm": None,
-                    "update_norm_finite": False,
-                },
+                diagnostics=_with_matrixfree_metadata(
+                    {
+                        "reason": "nonfinite-update",
+                        "accepted_steps": int(accepted_steps),
+                        "update_norm": None,
+                        "update_norm_finite": False,
+                    },
+                    x_template=x_initial,
+                    config=config,
+                    live_arrays=3,
+                    candidate_matvecs=candidate_matvecs,
+                ),
             )
         if update_norm == 0.0 or omega_use == 0.0:
             history.append(best_norm)
@@ -228,14 +292,49 @@ def rhs1_pas_matrixfree_correction(
                 accepted_steps=accepted_steps,
                 accepted=accepted_steps > 0,
                 reason="insufficient-residual-improvement",
-                diagnostics=_gate_diagnostics(
-                    reason="insufficient-residual-improvement",
-                    initial_residual_norm=best_norm,
-                    candidate_residual_norm=best_norm,
-                    min_residual_reduction=float(config.min_residual_reduction),
-                    accepted_steps=accepted_steps,
+                diagnostics=_with_matrixfree_metadata(
+                    _gate_diagnostics(
+                        reason="insufficient-residual-improvement",
+                        initial_residual_norm=best_norm,
+                        candidate_residual_norm=best_norm,
+                        min_residual_reduction=float(config.min_residual_reduction),
+                        accepted_steps=accepted_steps,
+                    ),
+                    x_template=x_initial,
+                    config=config,
+                    live_arrays=3,
+                    candidate_matvecs=candidate_matvecs,
                 ),
             )
+        if config.min_update_norm_ratio is not None:
+            min_update_ratio = float(config.min_update_norm_ratio)
+            min_update_norm = max(float(best_norm), 1.0) * min_update_ratio
+            damped_update_norm = abs(omega_use) * float(update_norm)
+            if damped_update_norm <= min_update_norm:
+                history.append(best_norm)
+                return Rhs1PasMatrixFreeResult(
+                    x=x_best,
+                    residual_norm=best_norm,
+                    initial_residual_norm=initial_norm,
+                    residual_history=tuple(history),
+                    accepted_steps=accepted_steps,
+                    accepted=accepted_steps > 0,
+                    reason="update-norm-too-small",
+                    diagnostics=_with_matrixfree_metadata(
+                        {
+                            "reason": "update-norm-too-small",
+                            "accepted_steps": int(accepted_steps),
+                            "update_norm": float(update_norm),
+                            "damped_update_norm": float(damped_update_norm),
+                            "min_update_norm": float(min_update_norm),
+                            "min_update_norm_ratio": float(min_update_ratio),
+                        },
+                        x_template=x_initial,
+                        config=config,
+                        live_arrays=3,
+                        candidate_matvecs=candidate_matvecs,
+                    ),
+                )
         if config.max_update_norm_ratio is not None:
             max_update_ratio = float(config.max_update_norm_ratio)
             if update_norm > max_update_ratio:
@@ -252,19 +351,49 @@ def rhs1_pas_matrixfree_correction(
                     accepted_steps=accepted_steps,
                     accepted=accepted_steps > 0,
                     reason="update-norm-too-large",
-                    diagnostics={
-                        "reason": "update-norm-too-large",
-                        "accepted_steps": int(accepted_steps),
-                        "update_norm": float(update_norm),
-                        "update_norm_limit": float(update_limit),
-                        "x_scale": float(x_scale),
-                        "max_update_norm_ratio": float(max_update_ratio),
-                    },
+                    diagnostics=_with_matrixfree_metadata(
+                        {
+                            "reason": "update-norm-too-large",
+                            "accepted_steps": int(accepted_steps),
+                            "update_norm": float(update_norm),
+                            "update_norm_limit": float(update_limit),
+                            "x_scale": float(x_scale),
+                            "max_update_norm_ratio": float(max_update_ratio),
+                        },
+                        x_template=x_initial,
+                        config=config,
+                        live_arrays=3,
+                        candidate_matvecs=candidate_matvecs,
+                    ),
                 )
+        if config.max_candidate_elements is not None and int(x_initial.size) > int(config.max_candidate_elements):
+            return Rhs1PasMatrixFreeResult(
+                x=x_best,
+                residual_norm=best_norm,
+                initial_residual_norm=initial_norm,
+                residual_history=tuple(history),
+                accepted_steps=accepted_steps,
+                accepted=accepted_steps > 0,
+                reason="candidate-size-limit-exceeded",
+                diagnostics=_with_matrixfree_metadata(
+                    {
+                        "reason": "candidate-size-limit-exceeded",
+                        "accepted_steps": int(accepted_steps),
+                        "element_count": int(x_initial.size),
+                        "max_candidate_elements": int(config.max_candidate_elements),
+                    },
+                    x_template=x_initial,
+                    config=config,
+                    live_arrays=3,
+                    candidate_matvecs=candidate_matvecs,
+                ),
+            )
 
         candidate = x_best + jnp.asarray(omega_use * update, dtype=x_initial.dtype)
         candidate = jnp.asarray(candidate, dtype=x_initial.dtype)
+        del update
         candidate_residual = rhs_arr - matvec(candidate)
+        candidate_matvecs += 1
         if jnp.asarray(candidate_residual).shape != x_initial.shape:
             return Rhs1PasMatrixFreeResult(
                 x=x_best,
@@ -274,12 +403,18 @@ def rhs1_pas_matrixfree_correction(
                 accepted_steps=accepted_steps,
                 accepted=accepted_steps > 0,
                 reason="candidate-residual-shape-mismatch",
-                diagnostics={
-                    "reason": "candidate-residual-shape-mismatch",
-                    "accepted_steps": int(accepted_steps),
-                    "expected_shape": tuple(int(dim) for dim in x_initial.shape),
-                    "observed_shape": tuple(int(dim) for dim in jnp.asarray(candidate_residual).shape),
-                },
+                diagnostics=_with_matrixfree_metadata(
+                    {
+                        "reason": "candidate-residual-shape-mismatch",
+                        "accepted_steps": int(accepted_steps),
+                        "expected_shape": tuple(int(dim) for dim in x_initial.shape),
+                        "observed_shape": tuple(int(dim) for dim in jnp.asarray(candidate_residual).shape),
+                    },
+                    x_template=x_initial,
+                    config=config,
+                    live_arrays=5,
+                    candidate_matvecs=candidate_matvecs,
+                ),
             )
         candidate_norm = streaming_l2_norm(candidate_residual, block_size=config.block_size)
         history.append(candidate_norm)
@@ -297,18 +432,27 @@ def rhs1_pas_matrixfree_correction(
                 accepted_steps=accepted_steps,
                 accepted=accepted_steps > 0,
                 reason=reason,
-                diagnostics=_gate_diagnostics(
-                    reason=reason,
-                    initial_residual_norm=best_norm,
-                    candidate_residual_norm=candidate_norm,
-                    min_residual_reduction=float(config.min_residual_reduction),
-                    accepted_steps=accepted_steps,
+                diagnostics=_with_matrixfree_metadata(
+                    _gate_diagnostics(
+                        reason=reason,
+                        initial_residual_norm=best_norm,
+                        candidate_residual_norm=candidate_norm,
+                        min_residual_reduction=float(config.min_residual_reduction),
+                        accepted_steps=accepted_steps,
+                    ),
+                    x_template=x_initial,
+                    config=config,
+                    live_arrays=5,
+                    candidate_matvecs=candidate_matvecs,
                 ),
             )
         x_best = candidate
-        current_residual = jnp.asarray(candidate_residual)
         best_norm = candidate_norm
         accepted_steps += 1
+        if step_index + 1 < max_steps:
+            current_residual = jnp.asarray(candidate_residual)
+        else:
+            del candidate_residual
 
     return Rhs1PasMatrixFreeResult(
         x=x_best,
@@ -318,12 +462,18 @@ def rhs1_pas_matrixfree_correction(
         accepted_steps=accepted_steps,
         accepted=accepted_steps > 0,
         reason="accepted",
-        diagnostics=_gate_diagnostics(
-            reason="accepted",
-            initial_residual_norm=initial_norm,
-            candidate_residual_norm=best_norm,
-            min_residual_reduction=float(config.min_residual_reduction),
-            accepted_steps=accepted_steps,
+        diagnostics=_with_matrixfree_metadata(
+            _gate_diagnostics(
+                reason="accepted",
+                initial_residual_norm=initial_norm,
+                candidate_residual_norm=best_norm,
+                min_residual_reduction=float(config.min_residual_reduction),
+                accepted_steps=accepted_steps,
+            ),
+            x_template=x_initial,
+            config=config,
+            live_arrays=4 if max_steps == 1 else 5,
+            candidate_matvecs=candidate_matvecs,
         ),
     )
 

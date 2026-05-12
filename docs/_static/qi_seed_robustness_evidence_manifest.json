@@ -19,18 +19,22 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 5,
-    "bounded_lane_completion_estimate_percent": 35.0,
+    "artifact_count": 7,
+    "bounded_lane_completion_estimate_percent": 44.0,
     "checked_backends": [
       "cpu",
       "gpu"
     ],
+    "completion_estimate_basis": "largest passing measured artifact only",
+    "largest_attempted_total_size": 70202,
+    "largest_nonpassing_total_size": 70202,
     "max_checked_active_size": 13169,
-    "max_checked_per_axis_resolution_fraction": 0.35,
-    "max_checked_total_size": 23942,
-    "max_checked_total_size_fraction": 0.023472502995092168,
-    "passing_artifact_count": 5,
-    "production_total_size_uncovered_percent": 97.65
+    "max_checked_per_axis_resolution_fraction": 0.44,
+    "max_checked_total_size": 45542,
+    "max_checked_total_size_fraction": 0.04464893206091753,
+    "nonpassing_artifact_count": 1,
+    "passing_artifact_count": 6,
+    "production_total_size_uncovered_percent": 95.54
   },
   "lane": "qi_seed_robustness",
   "open_blockers": [
@@ -196,6 +200,58 @@
       },
       "schema_version": 2,
       "total_size": 9102
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 106.00815950000106,
+      "max_residual_ratio": 4.95789141668334e-07,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale045_cpu_probe.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 11,
+        "NX": 4,
+        "NXI": 45,
+        "NZETA": 23
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.44,
+        "NX": 0.5,
+        "NXI": 0.45,
+        "NZETA": 0.45098039215686275
+      },
+      "schema_version": 2,
+      "total_size": 45542
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "max_elapsed_s": 180.03829112499807,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale050_cpu_probe.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 13,
+        "NX": 4,
+        "NXI": 50,
+        "NZETA": 27
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.52,
+        "NX": 0.5,
+        "NXI": 0.5,
+        "NZETA": 0.5294117647058824
+      },
+      "schema_version": 2,
+      "total_size": 70202
     }
   ],
   "source_input": "examples/additional_examples/input.namelist"

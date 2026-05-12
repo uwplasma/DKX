@@ -25,6 +25,7 @@ Example
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
 import json
@@ -72,6 +73,101 @@ class GateResult:
 
     def to_json_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def _safe_ratio(candidate: float | None, baseline: float | None) -> float | None:
+    if candidate is None or baseline is None or baseline <= 0.0:
+        return None
+    return float(candidate) / float(baseline)
+
+
+def summarize_gate_results(results: list[GateResult]) -> dict[str, Any]:
+    """Summarize measured Lineax evidence into a bounded adoption decision."""
+    rows = [result.to_json_dict() for result in results]
+    counts = Counter(str(row["status"]) for row in rows)
+    measured_rows = [
+        row for row in rows if row.get("status") == "ok" and row.get("elapsed_s") is not None
+    ]
+    by_case_backend = {(str(row["case"]), str(row["backend"])): row for row in rows}
+    comparisons: list[dict[str, Any]] = []
+    for case in sorted({str(row["case"]) for row in rows}):
+        current = by_case_backend.get((case, "current_custom_linear_solve"))
+        lineax = by_case_backend.get((case, "lineax_gmres"))
+        if current is None or lineax is None:
+            continue
+        comparisons.append(
+            {
+                "case": case,
+                "current_status": current["status"],
+                "lineax_status": lineax["status"],
+                "elapsed_ratio_lineax_over_current": _safe_ratio(
+                    lineax.get("elapsed_s"),
+                    current.get("elapsed_s"),
+                ),
+                "current_relative_residual": current.get("relative_residual"),
+                "lineax_relative_residual": lineax.get("relative_residual"),
+                "lineax_grad_abs_error": lineax.get("grad_abs_error"),
+                "lineax_max_solution_error": lineax.get("max_solution_error"),
+            }
+        )
+
+    lineax_rows = [row for row in rows if row["backend"] == "lineax_gmres"]
+    lineax_ok = [row for row in lineax_rows if row["status"] == "ok"]
+    lineax_errors = [row for row in lineax_rows if row["status"] == "error"]
+    lineax_skipped = [row for row in lineax_rows if row["status"] == "skipped"]
+    sfincs_lineax_rows = [row for row in lineax_rows if str(row["case"]).startswith("sfincs_")]
+    sfincs_lineax_ready = bool(sfincs_lineax_rows) and all(
+        row["status"] == "ok"
+        and (row.get("relative_residual") is None or float(row["relative_residual"]) < 1.0e-8)
+        and (row.get("grad_abs_error") is None or float(row["grad_abs_error"]) < 1.0e-4)
+        and (row.get("max_solution_error") is None or float(row["max_solution_error"]) < 1.0e-6)
+        for row in sfincs_lineax_rows
+    )
+    speedup_cases = [
+        row for row in comparisons
+        if row["elapsed_ratio_lineax_over_current"] is not None
+        and row["lineax_status"] == "ok"
+        and float(row["elapsed_ratio_lineax_over_current"]) < 0.9
+    ]
+
+    if lineax_errors:
+        decision = "do_not_promote_error_status"
+        reason = "At least one Lineax row returned an error status."
+    elif lineax_skipped and not lineax_ok:
+        decision = "not_evaluated_missing_optional_dependency"
+        reason = "Lineax is not installed in this environment."
+    elif sfincs_lineax_ready and speedup_cases:
+        decision = "candidate_for_bounded_experiments_only"
+        reason = "Lineax passed SFINCS residual checks and showed at least one measured speedup."
+    elif lineax_ok:
+        decision = "defer_no_sufficient_sfincs_speedup_evidence"
+        reason = "Lineax ran, but the gate does not yet justify production adoption."
+    else:
+        decision = "not_evaluated"
+        reason = "No Lineax evidence rows were available."
+
+    return {
+        "gate": "optional_lineax_implicit_solve",
+        "rows": len(rows),
+        "status_counts": dict(counts),
+        "measured_rows": len(measured_rows),
+        "backends": sorted({str(row["backend"]) for row in rows}),
+        "cases": sorted({str(row["case"]) for row in rows}),
+        "comparisons": comparisons,
+        "lineax_evidence": {
+            "ok_rows": len(lineax_ok),
+            "skipped_rows": len(lineax_skipped),
+            "error_rows": len(lineax_errors),
+            "sfincs_rows_ready": sfincs_lineax_ready,
+            "speedup_cases": [row["case"] for row in speedup_cases],
+        },
+        "adoption_decision": {
+            "lineax": decision,
+            "reason": reason,
+            "production_default": "keep_current_custom_linear_solve",
+            "hard_dependency": False,
+        },
+    }
 
 
 def make_nonsymmetric_system(size: int) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -721,6 +817,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--restart", type=int, default=20)
     parser.add_argument("--maxiter", type=int, default=100)
     parser.add_argument("--out-json", type=Path)
+    parser.add_argument(
+        "--summary-json",
+        type=Path,
+        help="Write measured summary and adoption decision JSON without changing --out-json rows.",
+    )
     return parser
 
 
@@ -729,10 +830,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     results = run_gate(args)
     payload = [result.to_json_dict() for result in results]
+    summary = summarize_gate_results(results)
     text = json.dumps(payload, indent=2, sort_keys=True)
     if args.out_json is not None:
         args.out_json.parent.mkdir(parents=True, exist_ok=True)
         args.out_json.write_text(text + "\n")
+    if args.summary_json is not None:
+        args.summary_json.parent.mkdir(parents=True, exist_ok=True)
+        args.summary_json.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     print(text)
     return 0
 

@@ -82,6 +82,7 @@ def test_jaxopt_gate_skips_when_module_not_supplied() -> None:
 def test_optional_eqx_jaxopt_gate_cli_writes_json(tmp_path: Path) -> None:
     mod = _load_module()
     out_json = tmp_path / "eqx_jaxopt_gate.json"
+    summary_json = tmp_path / "eqx_jaxopt_gate_summary.json"
     rc = mod.main(
         [
             "--backend",
@@ -96,17 +97,42 @@ def test_optional_eqx_jaxopt_gate_cli_writes_json(tmp_path: Path) -> None:
             "0.1",
             "--out-json",
             str(out_json),
+            "--summary-json",
+            str(summary_json),
         ]
     )
     assert rc == 0
     payload = json.loads(out_json.read_text())
+    summary = json.loads(summary_json.read_text())
     rows = {row["backend"]: row for row in payload}
     assert set(rows) == {"equinox_wrapper", "jaxopt_gradient_descent"}
+    assert summary["gate"] == "optional_equinox_jaxopt_scheme4"
+    assert summary["adoption_decision"]["hard_dependency"] is False
+    assert summary["adoption_decision"]["production_solver_dependency"] == (
+        "do_not_promote_from_objective_wrapper_gate"
+    )
     if _HAS_EQUINOX:
         assert rows["equinox_wrapper"]["status"] == "ok"
+        assert summary["adoption_decision"]["equinox"] == "candidate_objective_wrapper_only"
     else:
         assert rows["equinox_wrapper"]["status"] == "skipped"
+        assert summary["adoption_decision"]["equinox"] == "not_evaluated_missing_optional_dependency"
     if _HAS_EQUINOX and _HAS_JAXOPT:
         assert rows["jaxopt_gradient_descent"]["status"] == "ok"
+        assert summary["adoption_decision"]["jaxopt"] == "candidate_for_bounded_optimization_examples"
     else:
         assert rows["jaxopt_gradient_descent"]["status"] == "skipped"
+        assert summary["adoption_decision"]["jaxopt"] == "not_evaluated_missing_optional_dependency"
+
+
+def test_eqx_jaxopt_summary_logic_keeps_solver_adoption_bounded() -> None:
+    mod = _load_module()
+    results = [
+        mod.run_equinox_gate(eqx_module=None),
+        mod.run_jaxopt_gate(eqx_module=None, jaxopt_module=None),
+    ]
+    summary = mod.summarize_gate_results(results)
+    assert summary["status_counts"]["skipped"] == 2
+    assert summary["adoption_decision"]["equinox"] == "not_evaluated_missing_optional_dependency"
+    assert summary["adoption_decision"]["jaxopt"] == "not_evaluated_missing_optional_dependency"
+    assert summary["adoption_decision"]["hard_dependency"] is False

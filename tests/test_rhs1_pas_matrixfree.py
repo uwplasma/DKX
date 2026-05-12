@@ -99,6 +99,67 @@ def test_matrixfree_correction_reports_update_norm_limit_reject() -> None:
     assert result.diagnostics["update_norm"] == pytest.approx(math.sqrt(50000.0))
     assert result.diagnostics["update_norm_limit"] == pytest.approx(1.5)
     assert result.diagnostics["max_update_norm_ratio"] == pytest.approx(1.5)
+    assert result.diagnostics["matrix_free_metadata"]["candidate_matvecs"] == 0
+
+
+def test_matrixfree_correction_rejects_tiny_update_without_candidate_matvec() -> None:
+    rhs = jnp.asarray([1.0, 2.0, 3.0], dtype=jnp.float32)
+    x0 = jnp.zeros_like(rhs)
+    calls = {"matvec": 0, "correction": 0}
+
+    def matvec(x):
+        calls["matvec"] += 1
+        return x
+
+    def tiny_correction(residual):
+        calls["correction"] += 1
+        return jnp.asarray(1.0e-8, dtype=residual.dtype) * residual
+
+    result = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        correction=tiny_correction,
+        config=Rhs1PasMatrixFreeConfig(
+            max_steps=1,
+            min_update_norm_ratio=1.0e-4,
+        ),
+    )
+
+    assert not result.accepted
+    assert result.reason == "update-norm-too-small"
+    assert result.residual_history == pytest.approx((result.initial_residual_norm, result.initial_residual_norm))
+    assert result.diagnostics["matrix_free_metadata"]["candidate_matvecs"] == 0
+    assert result.diagnostics["damped_update_norm"] < result.diagnostics["min_update_norm"]
+    assert calls == {"matvec": 1, "correction": 1}
+
+
+def test_matrixfree_correction_candidate_size_limit_rejects_before_candidate_matvec() -> None:
+    rhs = jnp.ones((5,), dtype=jnp.float32)
+    x0 = jnp.zeros_like(rhs)
+    calls = {"matvec": 0, "correction": 0}
+
+    def matvec(x):
+        calls["matvec"] += 1
+        return x
+
+    def correction(residual):
+        calls["correction"] += 1
+        return residual
+
+    result = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        correction=correction,
+        config=Rhs1PasMatrixFreeConfig(max_candidate_elements=4),
+    )
+
+    assert not result.accepted
+    assert result.reason == "candidate-size-limit-exceeded"
+    assert result.diagnostics["matrix_free_metadata"]["element_count"] == 5
+    assert result.diagnostics["matrix_free_metadata"]["candidate_matvecs"] == 0
+    assert calls == {"matvec": 1, "correction": 1}
 
 
 def test_matrixfree_correction_rejects_zero_update_without_candidate_matvec() -> None:
@@ -182,6 +243,8 @@ def test_matrixfree_correction_preserves_shape_and_dtype() -> None:
     assert result.x.dtype == x0.dtype
     assert len(result.residual_history) == 3
     assert result.residual_history[-1] == pytest.approx(0.25 * result.initial_residual_norm)
+    assert result.diagnostics["matrix_free_metadata"]["candidate_matvecs"] == 2
+    assert result.diagnostics["matrix_free_metadata"]["estimated_live_array_count"] == 5
 
 
 def test_matrixfree_acceptance_gate_documents_keep_reject_reasons() -> None:
@@ -222,3 +285,7 @@ def test_matrixfree_config_validation() -> None:
         Rhs1PasMatrixFreeConfig(block_size=0)
     with pytest.raises(ValueError):
         Rhs1PasMatrixFreeConfig(max_update_norm_ratio=0.0)
+    with pytest.raises(ValueError):
+        Rhs1PasMatrixFreeConfig(min_update_norm_ratio=-1.0)
+    with pytest.raises(ValueError):
+        Rhs1PasMatrixFreeConfig(max_candidate_elements=0)

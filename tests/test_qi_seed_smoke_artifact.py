@@ -119,6 +119,68 @@ def test_qi_seed_multiseed5_cpu_artifact_records_passing_manifest_gate() -> None
     assert max(seed["residual_ratio"] for seed in seeds) == summary["max_residual_ratio"]
 
 
+def test_qi_seed_scale050_cpu_probe_artifact_records_timeout_blocker() -> None:
+    path = Path("docs/_static/qi_seed_robustness_scale050_cpu_probe.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    assert payload["schema_version"] == 2
+    assert payload["artifact_kind"] == "qi_seed_execution_summary"
+    assert payload["lane"] == "qi_seed_robustness"
+    assert payload["case_count"] == 1
+    assert payload["public_cli_default_path"] is True
+    assert payload["resolution"] == {"NTHETA": 13, "NZETA": 27, "NX": 4, "NXI": 50}
+    assert payload["total_size_estimate"] == 70202
+    assert "blocker evidence" in payload["evidence_note"]
+
+    gates = payload["gates"]
+    assert gates["passed"] is False
+    assert {failure["reason"] for failure in gates["failures"]} == {"process_failed"}
+
+    summary = payload["execution_summary"]
+    assert summary["attempted"] == 1
+    assert summary["process_passed"] == 0
+    assert summary["process_failed"] == 1
+    assert summary["timed_out"] == 1
+    assert summary["outputs_written"] == 0
+    assert summary["solver_traces_written"] == 0
+    assert summary["converged"] == 0
+    assert summary["backends"] == []
+    assert summary["max_residual_ratio"] is None
+
+    seed = payload["seeds"][0]
+    assert seed["seed"] == 0
+    assert seed["returncode"] == 124
+    assert seed["timed_out"] is True
+    assert seed["output_exists"] is False
+    assert seed["solver_trace_exists"] is False
+    assert seed["converged"] is None
+    assert seed["residual_ratio"] is None
+
+
+def test_qi_seed_scale045_cpu_probe_artifact_records_passing_larger_cpu_gate() -> None:
+    path = Path("docs/_static/qi_seed_robustness_scale045_cpu_probe.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    assert payload["schema_version"] == 2
+    assert payload["artifact_kind"] == "qi_seed_execution_summary"
+    assert payload["public_cli_default_path"] is True
+    assert payload["resolution"] == {"NTHETA": 11, "NZETA": 23, "NX": 4, "NXI": 45}
+    assert payload["total_size_estimate"] == 45542
+    assert payload["gates"]["passed"] is True
+
+    summary = payload["execution_summary"]
+    assert summary["attempted"] == 1
+    assert summary["process_passed"] == 1
+    assert summary["process_failed"] == 0
+    assert summary["timed_out"] == 0
+    assert summary["outputs_written"] == 1
+    assert summary["solver_traces_written"] == 1
+    assert summary["converged"] == 1
+    assert summary["backends"] == ["cpu"]
+    assert summary["max_residual_ratio"] < 1.0e-6
+    assert summary["max_elapsed_s"] < 240.0
+
+
 def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     path = Path("docs/_static/qi_seed_robustness_evidence_manifest.json")
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -138,15 +200,19 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 5
-    assert current["passing_artifact_count"] == current["artifact_count"]
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 7
+    assert current["passing_artifact_count"] == 6
+    assert current["nonpassing_artifact_count"] == 1
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 13169
-    assert current["max_checked_total_size"] == 23942
-    assert current["max_checked_total_size_fraction"] < 0.03
-    assert current["max_checked_per_axis_resolution_fraction"] == 0.35
-    assert current["bounded_lane_completion_estimate_percent"] == 35.0
-    assert current["production_total_size_uncovered_percent"] > 97.0
+    assert current["max_checked_total_size"] == 45542
+    assert current["largest_attempted_total_size"] == 70202
+    assert current["largest_nonpassing_total_size"] == 70202
+    assert current["max_checked_total_size_fraction"] < 0.05
+    assert current["max_checked_per_axis_resolution_fraction"] == 0.44
+    assert current["bounded_lane_completion_estimate_percent"] == 44.0
+    assert current["completion_estimate_basis"] == "largest passing measured artifact only"
+    assert current["production_total_size_uncovered_percent"] > 95.0
 
     source_paths = {artifact["path"] for artifact in payload["source_artifacts"]}
     assert {
@@ -155,6 +221,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_multiseed_gpu.json",
         "docs/_static/qi_seed_robustness_scale035_cpu_gpu.json",
         "docs/_static/qi_seed_robustness_multiseed5_cpu.json",
+        "docs/_static/qi_seed_robustness_scale045_cpu_probe.json",
+        "docs/_static/qi_seed_robustness_scale050_cpu_probe.json",
     } == source_paths
 
     gates = payload["acceptance_gates"]

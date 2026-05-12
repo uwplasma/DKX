@@ -78,6 +78,7 @@ def _find_default_wout() -> Path:
 def _print_backend_status() -> None:
     report = optional_jax_geometry_backend_report()
     summary = geometry_proxy_workflow_summary()
+    readiness = _synthetic_backend_readiness_gate()
     contract = report["workflow_contract"]
     status = report["backends"]
     print("Optional JAX geometry backend status:")
@@ -108,6 +109,12 @@ def _print_backend_status() -> None:
     print(f"  no-overclaim gate: {contract['no_overclaim_gate']['status']}")
     print(f"  kinetic gradient status: {contract['no_overclaim_gate']['kinetic_gradient_status']}")
     print("Workflow summary:")
+    print(
+        "  backend-readiness gate: "
+        f"{readiness['status']} "
+        f"(abs_grad_error={readiness['absolute_error']:.3e}, "
+        f"tol={readiness['tolerance']:.3e}, optional_deps=false)"
+    )
     print(f"  numerical gradient gate: {summary['numerical_gradient_gate']['status']}")
     print(f"  kinetic transport gradients: {summary['claims']['not_claimed']}")
     print("Machine-readable report:")
@@ -118,6 +125,51 @@ def _print_backend_status() -> None:
 def _write_summary_json(path: Path, summary: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _synthetic_backend_readiness_gate() -> dict[str, object]:
+    """Check the local sfincs_jax Boozer-proxy autodiff path without optionals."""
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, 16, endpoint=False, dtype=jnp.float64)
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / 5.0, 12, endpoint=False, dtype=jnp.float64)
+    base_bmnc = jnp.asarray([1.0, 0.045, -0.021, 0.012, 0.006], dtype=jnp.float64)
+    ixm_b = jnp.asarray([0, 1, 1, 2, 3], dtype=jnp.int32)
+    ixn_b = jnp.asarray([0, 0, 1, -1, 2], dtype=jnp.int32)
+    non_axis = (ixm_b != 0) | (ixn_b != 0)
+    scale0 = jnp.asarray(1.0, dtype=jnp.float64)
+    fd_step = 1.0e-5
+    rtol = 5.0e-4
+    atol = 1.0e-8
+
+    def objective(scale: jnp.ndarray) -> jnp.ndarray:
+        bmnc = jnp.where(non_axis, base_bmnc * scale, base_bmnc)
+        return boozer_spectrum_geometry_proxy_objective(
+            bmnc,
+            ixm_b,
+            ixn_b,
+            theta=theta,
+            zeta=zeta,
+        )
+
+    value, grad = jax.value_and_grad(objective)(scale0)
+    finite_difference = (objective(scale0 + fd_step) - objective(scale0 - fd_step)) / (2.0 * fd_step)
+    abs_error = abs(float(grad) - float(finite_difference))
+    tolerance = atol + rtol * abs(float(finite_difference))
+    return {
+        "status": "pass" if abs_error <= tolerance else "fail",
+        "optional_dependencies_required": False,
+        "claim": "sfincs_jax_boozer_proxy_backend_readiness_only",
+        "not_claimed": "vmec_jax or booz_xform_jax transform execution",
+        "objective": float(value),
+        "autodiff_gradient": float(grad),
+        "finite_difference_gradient": float(finite_difference),
+        "absolute_error": abs_error,
+        "tolerance": tolerance,
+        "finite_difference_step": fd_step,
+        "rtol": rtol,
+        "atol": atol,
+        "grid_shape": {"n_theta": int(theta.size), "n_zeta": int(zeta.size)},
+        "spectrum_modes": int(base_bmnc.size),
+    }
 
 
 def _load_wout_from_vmec_case(args: argparse.Namespace):
@@ -229,10 +281,13 @@ def main() -> int:
 
     if args.check_backends:
         summary = geometry_proxy_workflow_summary()
+        summary["backend_readiness_gate"] = _synthetic_backend_readiness_gate()
         if args.summary_json is not None:
             _write_summary_json(args.summary_json, summary)
         if args.json:
-            print(json.dumps(optional_jax_geometry_backend_report(), indent=2, sort_keys=True))
+            report = optional_jax_geometry_backend_report()
+            report["backend_readiness_gate"] = summary["backend_readiness_gate"]
+            print(json.dumps(report, indent=2, sort_keys=True))
         else:
             _print_backend_status()
         return 0
