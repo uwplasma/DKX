@@ -1,0 +1,300 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T00:00:00+01:00",
+  "minimum_substantial_delta_percent": 10,
+  "purpose": "Machine-readable completion tracker for the coordinated large-push research/performance lanes. Percentages are engineering readiness estimates backed by checked-in evidence, not physics claims by themselves.",
+  "owner_threads": [
+    "019e1b62-a2b6-7d82-924c-d3f27b58cc34",
+    "019e1b62-ee67-78f3-a63f-06f5623b4217",
+    "019e1b63-2170-7de2-8d6d-42c5602359d3",
+    "019e1b63-5db0-7030-a631-140cdfeccfb4",
+    "019e1b63-9ded-7893-a9d8-51e4b2a0b2df"
+  ],
+  "lanes": [
+    {
+      "id": "production_qi_cpu_gpu",
+      "title": "Production-resolution QI CPU/GPU robustness",
+      "status": "evidence_ready",
+      "before_percent": 23,
+      "current_percent": 35,
+      "target_percent": 100,
+      "evidence": [
+        {
+          "path": "docs/_static/qi_seed_robustness_evidence_manifest.json",
+          "claim": "Production-readiness manifest rolls up all checked QI CPU/GPU seed artifacts and explicitly keeps the gate bounded until production CPU/GPU ladders exist."
+        },
+        {
+          "path": "docs/_static/qi_seed_robustness_multiseed5_cpu.json",
+          "claim": "New five-seed bounded CPU QI ladder passes seeds 0..4 with zero process failures and maximum residual ratio below 1e-6."
+        },
+        {
+          "path": "docs/_static/qi_seed_robustness_scale035_cpu_gpu.json",
+          "claim": "Bounded QI CPU and one-GPU auto policy now converges at the higher scale-0.35 probe after host-sparse rescue."
+        },
+        {
+          "path": "scripts/run_qi_seed_robustness.py",
+          "claim": "Runner materializes deterministic QI neighboring decks with residual and acceptance gates."
+        },
+        {
+          "path": "tests/test_run_qi_seed_robustness.py",
+          "claim": "CI-fast runner tests lock deterministic generation and gate semantics."
+        }
+      ],
+      "gates": [
+        "Residual ratio must remain below the requested gate on CPU and GPU.",
+        "Production-resolution promotion still requires wider seeds and wall-time/memory budgets.",
+        "No QI-specific default branch may bypass the public auto solver policy."
+      ],
+      "next_actions": [
+        "Run the worker-generated production QI ladder artifacts and promote only if all seeds converge.",
+        "Add the production QI figure to the validation dashboard after CPU/GPU artifacts agree."
+      ]
+    },
+    {
+      "id": "pas_geometry_runtime_memory",
+      "title": "PAS and geometry-rich runtime/memory offenders",
+      "status": "active",
+      "before_percent": 53,
+      "current_percent": 65,
+      "target_percent": 97,
+      "evidence": [
+        {
+          "path": "examples/performance/output/pas_tz_prod_floor_cpu_tzfft_25x51x100x4.json",
+          "claim": "Production-floor PAS-TZ tzfft CPU artifact converges at the collaborator floor without dense allocation."
+        },
+        {
+          "path": "sfincs_jax/rhs1_pas_matrixfree.py",
+          "claim": "No-op PAS matrix-free corrections now avoid the extra candidate matvec while preserving residual history and reject reason."
+        },
+        {
+          "path": "scripts/benchmark_pas_tz_memory_fallback.py",
+          "claim": "Benchmark harness now rejects default-promotion candidates that regress elapsed time or peak RSS against baseline."
+        },
+        {
+          "path": "docs/performance_techniques.rst",
+          "claim": "Docs now distinguish promoted PAS memory routes from rejected experimental routes."
+        }
+      ],
+      "gates": [
+        "Keep only routes that improve runtime or memory while preserving true residual and Fortran parity.",
+        "Reject fallback candidates that avoid allocation but do not reduce the residual.",
+        "CPU and GPU default policy changes require bounded artifacts before README-facing claims."
+      ],
+      "next_actions": [
+        "Integrate worker PAS matrix-free/structured-candidate results if they clear the medium gate.",
+        "Regenerate the production benchmark summary after the accepted PAS policy is stable."
+      ]
+    },
+    {
+      "id": "parallel_scaling",
+      "title": "Executable parallelism and strong-scaling evidence",
+      "status": "active",
+      "before_percent": 66,
+      "current_percent": 78,
+      "target_percent": 92,
+      "evidence": [
+        {
+          "path": "examples/performance/benchmark_transport_parallel_scaling.py",
+          "claim": "Transport-worker benchmark now has a plan-only mode that records deterministic RHS partitioning, skipped worker counts, timing semantics, and release-gate semantics without launching solves."
+        },
+        {
+          "path": "examples/performance/benchmark_sharded_solve_scaling.py",
+          "claim": "Single-case sharded-solve benchmark now has a plan-only mode that records timeout, backend, sharding, and non-release scaling semantics before launching expensive samples."
+        },
+        {
+          "path": "examples/performance/benchmark_multi_gpu_case_throughput.py",
+          "claim": "Multi-GPU case-throughput benchmark now has a plan-only mode that records warmup, sequential one-GPU, and parallel two-GPU child process plans before launching GPU work."
+        },
+        {
+          "path": "examples/performance/benchmark_sharded_matvec_scaling.py",
+          "claim": "Sharded matvec benchmark now records deterministic plan-only metadata for device counts, padding, compiled-hot-loop timing, and memory-gate semantics."
+        },
+        {
+          "path": "tests/test_benchmark_transport_parallel_scaling.py",
+          "claim": "New tests validate capped worker plans, cold-start rejection semantics, and GPU worker schedule coalescing."
+        },
+        {
+          "path": "tests/test_benchmark_multi_gpu_case_throughput.py",
+          "claim": "New tests keep multi-GPU throughput plans non-release and verify the internal sharded-solve command contract."
+        },
+        {
+          "path": "tests/test_benchmark_sharded_solve_scaling.py",
+          "claim": "New tests validate single-case sharded plan JSON and ensure it remains an experimental non-release claim."
+        },
+        {
+          "path": "docs/_static/figures/parallel/transport_parallel_scaling_gpu.png",
+          "claim": "Release-facing GPU transport-worker throughput figure is checked in."
+        },
+        {
+          "path": "docs/parallelism.rst",
+          "claim": "Parallelism docs describe process, worker, GPU, and validation routes."
+        },
+        {
+          "path": "sfincs_jax/transport_parallel_runtime.py",
+          "claim": "Runtime policy module owns worker-count and backend decisions."
+        }
+      ],
+      "gates": [
+        "Case-parallel and transport-worker paths must preserve serial output ordering and parity.",
+        "Strong-scaling claims require per-worker work large enough to amortize setup.",
+        "Single-case multi-GPU remains experimental unless a measured publication-grade artifact improves wall time."
+      ],
+      "next_actions": [
+        "Merge worker parallel manifest checks and bounded CPU/GPU scaling tables.",
+        "Keep single-case multi-GPU as an explicit experimental lane until speedup is measured."
+      ]
+    },
+    {
+      "id": "refactor_coverage_ci",
+      "title": "Refactor, source map, coverage, and CI readiness",
+      "status": "evidence_ready",
+      "before_percent": 63,
+      "current_percent": 75,
+      "target_percent": 95,
+      "evidence": [
+        {
+          "path": "tests/test_policy_module_docstrings.py",
+          "claim": "Dynamic docstring tests now cover public APIs in split policy modules so refactors stay discoverable."
+        },
+        {
+          "path": "tests/test_transport_policy_coverage.py",
+          "claim": "New pure-policy tests improve coverage of transport solver, backend, and parallel environment decisions without launching slow solves."
+        },
+        {
+          "path": "docs/source_map.rst",
+          "claim": "Source-map docs identify policy, solver, transport, geometry, and validation modules."
+        },
+        {
+          "path": "tests/test_release_gate_metadata.py",
+          "claim": "Release-claim metadata is enforced without launching expensive solves."
+        },
+        {
+          "path": "sfincs_jax/host_refinement.py",
+          "claim": "Host refinement logic was split out of the driver and became directly testable."
+        }
+      ],
+      "gates": [
+        "Coverage gains must come from focused module tests, not slow full-solve duplication.",
+        "Large driver splits must preserve CLI/API parity and existing solver provenance.",
+        "CI-fast checks must remain within the documented time budget."
+      ],
+      "next_actions": [
+        "Integrate worker module-docstring and source-map checks.",
+        "Continue splitting v3_driver only at tested policy or math boundaries."
+      ]
+    },
+    {
+      "id": "vmec_booz_sfincs_workflow",
+      "title": "vmec_jax to booz_xform_jax to sfincs_jax differentiable workflow",
+      "status": "evidence_ready",
+      "before_percent": 73,
+      "current_percent": 85,
+      "target_percent": 93,
+      "evidence": [
+        {
+          "path": "docs/vmec_jax_workflow.rst",
+          "claim": "New docs page states the skip-safe workflow, commands, differentiability contract, and non-claims."
+        },
+        {
+          "path": "examples/optimization/vmec_jax_workflow_status.py",
+          "claim": "New status scaffold reports optional backend availability and exact proxy-gradient commands without importing optional packages."
+        },
+        {
+          "path": "examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py",
+          "claim": "Optional differentiable geometry handoff example exists and is documented."
+        },
+        {
+          "path": "docs/_static/figures/finite_beta_vmec_jax_sfincs_bootstrap_er.png",
+          "claim": "Finite-beta VMEC-to-SFINCS profile figure is checked in for user-facing docs."
+        },
+        {
+          "path": "sfincs_jax/jax_geometry_adapters.py",
+          "claim": "Adapter module isolates JAX-native geometry inputs from file-backed VMEC loading."
+        }
+      ],
+      "gates": [
+        "End-to-end optimization claims require differentiating through a validated geometry-to-transport scalar.",
+        "Boozer and VMEC optional dependencies must fail gracefully when not installed.",
+        "Profile-current and ambipolar outputs must pass convergence gates before publication claims."
+      ],
+      "next_actions": [
+        "Merge worker updates that add a public end-to-end example gate if they stay lightweight.",
+        "Add a bounded autodiff sensitivity test over a reduced geometry contract."
+      ]
+    },
+    {
+      "id": "jax_ecosystem_solver_evaluation",
+      "title": "JAX ecosystem solver/preconditioner evaluation",
+      "status": "evidence_ready",
+      "before_percent": 50,
+      "current_percent": 65,
+      "target_percent": 88,
+      "evidence": [
+        {
+          "path": "tests/test_optional_ecosystem_gates.py",
+          "claim": "New tests run measured optional Lineax, Equinox, and JAXopt gates while skipping safely if optional packages are absent."
+        },
+        {
+          "path": "docs/performance.rst",
+          "claim": "Docs record the memory/runtime rationale for short-recurrence Krylov, checkpointing, and JAX profiling."
+        },
+        {
+          "path": "docs/performance_techniques.rst",
+          "claim": "Performance-technique docs record keep/reject gates for solver candidates."
+        },
+        {
+          "path": "sfincs_jax/solver_selection_policy.py",
+          "claim": "Solver-selection policy is isolated enough to host future lineax/equinox experiments behind gates."
+        }
+      ],
+      "gates": [
+        "No new JAX ecosystem dependency is promoted unless it reduces runtime or memory on a documented case.",
+        "Any replacement solver must preserve autodiff semantics or explicitly remain in the non-differentiable CLI lane.",
+        "Hard-coded branch thresholds should move to measured policy gates when evidence exists."
+      ],
+      "next_actions": [
+        "Run bounded lineax/equinox feasibility probes through worker-owned policy surfaces.",
+        "Document rejected dependency experiments so they do not reappear as unmeasured defaults."
+      ]
+    },
+    {
+      "id": "benchmark_parity_docs",
+      "title": "Benchmark, parity, README, and documentation publication surface",
+      "status": "evidence_ready",
+      "before_percent": 78,
+      "current_percent": 90,
+      "target_percent": 98,
+      "evidence": [
+        {
+          "path": "scripts/check_research_lanes.py",
+          "claim": "New CI-fast research-lane checker prevents subjective or unsupported completion claims."
+        },
+        {
+          "path": "tests/test_research_lane_policy.py",
+          "claim": "New tests enforce evidence paths, non-regressing completion percentages, and substantial per-lane deltas."
+        },
+        {
+          "path": "docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png",
+          "claim": "README-facing Fortran/JAX runtime and active-memory comparison figure is checked in."
+        },
+        {
+          "path": "examples/publication_figures/validation_manifest.json",
+          "claim": "Validation manifest records release-ready, bounded-proxy, and deferred lanes explicitly."
+        },
+        {
+          "path": "scripts/check_benchmark_artifacts.py",
+          "claim": "Benchmark artifact policy prevents stale or inconsistent runtime/memory claims."
+        }
+      ],
+      "gates": [
+        "README table and figure must be generated from the same canonical filtered rows.",
+        "No jax_error or max_attempts row may appear in public release-facing parity claims.",
+        "Low-resolution CI smoke rows must not be promoted into runtime comparison claims."
+      ],
+      "next_actions": [
+        "Regenerate final plots after worker lane changes are integrated.",
+        "Run benchmark-artifact and docs checks before commit and push."
+      ]
+    }
+  ]
+}
