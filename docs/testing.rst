@@ -731,13 +731,23 @@ ladder completes with maximum elapsed time ``44.5 s`` and maximum residual
 ratio ``5.88e-3``; the one-GPU ladder completes with maximum elapsed time
 ``206.7 s`` and maximum residual ratio ``8.28e-3``.
 
+The next-size seed-0 artifacts
+``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json`` and
+``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json``
+raise the bounded grid to ``15 x 31 x 60 x 5`` with active size ``81377`` and
+total size ``139502``. Both pass with left-preconditioned exact-xblock-LU GMRES,
+zero process failures, output and solver trace written, residual ratios below
+``4.7e-3``, and elapsed times ``42.2 s`` on CPU and ``145.1 s`` on one GPU. This
+is used only to advance the next-size readiness estimate; production promotion
+still requires multi-seed CPU/GPU evidence at the larger target.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
-passing bounded grid ``95702``, the largest attempted bounded grid ``95702``,
-fourteen passing artifacts and three non-passing blocker artifacts, a ``50%``
+passing bounded grid ``139502``, the largest attempted bounded grid ``139502``,
+sixteen passing artifacts and three non-passing blocker artifacts, a ``60%``
 per-axis lane-completion estimate based only on passing artifacts, and
-``90.62%`` of production total size still uncovered. The production acceptance
+``86.32%`` of production total size still uncovered. The production acceptance
 gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
 ``solve_method=auto``, ``process_failed=0``, ``timed_out=0``,
 ``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
