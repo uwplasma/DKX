@@ -521,14 +521,14 @@ Solver defaults (Phi1 + sharding)
   ``SFINCS_JAX_PHI1_USE_FROZEN_LINEARIZATION``.
 - **FP dense fallback threshold (RHSMode=1)**: full Fokker–Planck cases use a higher
   dense fallback ceiling to recover Fortran convergence when Krylov stagnates.
-  The FP-specific cutoff is ``SFINCS_JAX_RHSMODE1_DENSE_FP_MAX`` (default: ``5000``),
+  The FP-specific cutoff is ``SFINCS_JAX_RHSMODE1_DENSE_FP_MAX`` (default: ``6000``),
   while generic RHSMode=1 dense fallbacks use ``SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX``
   (default: ``400``).
 - **Small FP dense defaults (RHSMode=1)**: for modest system sizes, `sfincs_jax`
   defaults to a direct dense solve for full Fokker–Planck systems to avoid expensive
   Krylov + fallback paths while matching v3 parity. The FP cutoff is
   ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF`` (default:
-  ``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF, 5000)``). On accelerators, the
+  ``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF, 6000)``). On accelerators, the
   same shortcut is only automatic above
   ``SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN`` (default: ``1000``), since the
   current GPU suite shows tiny FP systems are faster on the lower-overhead
