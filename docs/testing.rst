@@ -315,12 +315,21 @@ policy modules and checks that their explanatory module docstrings are real
 keeps the source map and generated API documentation useful as the large driver is
 split into manageable pieces.
 
+The docstring gate now discovers every ``sfincs_jax/*policy*.py`` module and also
+checks public policy classes/functions, so new extraction seams must remain
+discoverable. ``tests/test_transport_policy_coverage.py`` adds fast direct coverage
+for transport backend/sparse-host/recycle policy and transport parallel
+scaling-audit/environment helpers without running transport solves.
+
 QI seed-robustness artifacts are also checked as data, not only as scripts.
 ``tests/test_qi_seed_smoke_artifact.py`` verifies the one-seed smoke artifact,
-the three-seed CPU artifact, and the three-seed one-GPU artifact. The GPU
-artifact protects the moderate full-FP accelerator auto-dense policy that avoids
-the slow sparse/fallback ladder for the fragile ``Nxi=25`` QI window while
-keeping tiny GPU fixtures on the matrix-free path.
+the three-seed CPU artifact, the three-seed one-GPU artifact, the five-seed CPU
+manifest-summary artifact, and the production-readiness evidence manifest. The
+GPU artifact protects the moderate full-FP accelerator auto-dense policy that
+avoids the slow sparse/fallback ladder for the fragile ``Nxi=25`` QI window while
+keeping tiny GPU fixtures on the matrix-free path. The evidence manifest keeps
+the lane at ``bounded_proxy`` until production-resolution CPU and GPU artifacts
+exist and pass the same residual/convergence gates.
 
 The scan/CLI progress surface is also guarded without running expensive scan
 points.  ``tests/test_scans_progress_and_recycle.py`` covers duration formatting,
@@ -483,6 +492,12 @@ unit/regression suite:
   ``release_ready``, ``regression_scaffold``, ``bounded_proxy``, or
   ``closed_deferred``; none may block the current release without being explicitly
   closed or removed from the release manifest.
+- ``docs/_static/research_lane_completion_2026_05_12.json`` records the active
+  research/performance lanes, evidence artifacts, completion estimates, gates,
+  and next actions for the current large-push cycle. ``scripts/check_research_lanes.py``
+  and ``tests/test_research_lane_policy.py`` enforce that those percentages are
+  evidence-backed and that active lanes record substantial measured progress
+  before their completion estimate is increased.
 
 The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep family:
 
@@ -583,19 +598,34 @@ The QI seed-robustness runner is guarded by
 neighboring cases, localizes the VMEC equilibrium beside each generated
 ``input.namelist``, perturbs ``nu_n`` and ``Er`` by seed, and can optionally run
 ``sfincs_jax write-output`` while recording stdout, stderr, and solver-trace paths.
-The checked summaries in ``docs/_static/qi_seed_robustness_smoke.json`` and
-``docs/_static/qi_seed_robustness_multiseed.json`` record low-resolution default
-CLI evidence. The multi-seed artifact runs three neighboring seeds at ``7 x 13
-x 25 x 4``, records ``process_failed=0``, public solver method ``auto``, all
-seeds ``converged=true``, and maximum residual ratio below ``1e-6``. The larger
+The checked summaries in ``docs/_static/qi_seed_robustness_smoke.json``,
+``docs/_static/qi_seed_robustness_multiseed.json``, and
+``docs/_static/qi_seed_robustness_multiseed5_cpu.json`` record low-resolution
+default CLI evidence. The three-seed CPU/GPU artifacts run neighboring seeds at
+``7 x 13 x 25 x 4`` and record ``process_failed=0``, public solver method
+``auto``, all seeds ``converged=true``, and maximum residual ratio below
+``1e-6``. The five-seed CPU artifact extends the CPU ladder to seeds ``0..4``
+from the reusable manifest-summary writer with ``timed_out=0``,
+``outputs_written=5``, ``solver_traces_written=5``, and maximum residual ratio
+``7.88e-7``. The larger
 ``docs/_static/qi_seed_robustness_scale035_cpu_gpu.json`` artifact records the
 bounded ``9 x 19 x 35 x 4`` CPU/GPU gate that caught and fixed the accelerator
 Krylov-tail failure: the GPU case moved from a ``195 s`` rejected solve with
 residual ratio ``53.9`` to a ``42.8 s`` converged solve with residual ratio
-``4.49e-7``. Treat these as bounded runner and solver-policy evidence, not as a
-production-resolution QI robustness claim. Promote QI robustness only after
-production-resolution CPU/GPU seed ladders are checked with solver traces and
-release-manifest gates.
+``4.49e-7``.
+
+``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
+into the current production-readiness gate. It records the production target
+``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
+bounded grid ``23942``, a ``35%`` per-axis lane-completion estimate, and
+``97.65%`` of production total size still uncovered. The production acceptance
+gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
+``solve_method=auto``, ``process_failed=0``, ``timed_out=0``,
+``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
+``max_residual_ratio <= 1``. Treat these as bounded runner and solver-policy
+evidence, not as a production-resolution QI robustness claim. Promote QI
+robustness only after production-resolution CPU/GPU seed ladders are checked
+with solver traces and the evidence manifest is regenerated.
 
 The high-collisionality Simakov-Helander lane now has a bounded normalization audit:
 
