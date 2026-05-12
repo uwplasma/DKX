@@ -1534,7 +1534,11 @@ Controls:
   outputs and solver traces written, maximum elapsed times ``11.58 s`` and
   ``41.18 s``, and maximum residual ratios ``0.966`` and ``0.963``. This closes
   the bounded public-auto route gate; the production-resolution QI ladder remains
-  separate.
+  separate. The next-scale
+  ``docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json`` probe timed
+  out after ``360 s`` at ``15 x 29 x 55 x 4`` even with a widened cap, so the
+  default upper size remains bounded until x-block sparse setup/factorization is
+  made cheaper.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual

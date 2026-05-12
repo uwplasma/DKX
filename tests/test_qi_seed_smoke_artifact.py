@@ -396,14 +396,14 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 12
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 13
     assert current["passing_artifact_count"] == 10
-    assert current["nonpassing_artifact_count"] == 2
+    assert current["nonpassing_artifact_count"] == 3
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 13169
     assert current["max_checked_total_size"] == 70202
-    assert current["largest_attempted_total_size"] == 70202
-    assert current["largest_nonpassing_total_size"] == 70202
+    assert current["largest_attempted_total_size"] == 95702
+    assert current["largest_nonpassing_total_size"] == 95702
     assert current["max_checked_total_size_fraction"] < 0.07
     assert current["max_checked_per_axis_resolution_fraction"] == 0.5
     assert current["bounded_lane_completion_estimate_percent"] == 50.0
@@ -424,6 +424,7 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json",
         "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json",
         "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json",
+        "docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json",
     } == source_paths
 
     gates = payload["acceptance_gates"]

@@ -10139,36 +10139,39 @@ Progress update (2026-05-11): integrated multi-lane release hardening push
 
 Updated lane status after this integrated push:
 
+- Overall open-lane average: `91.3%`. The machine-readable tracker now reflects
+  release-grade PAS CPU/GPU production-floor evidence, parallel release-audit
+  gates, refactor/CI policy extraction, and optional JAX-ecosystem adoption
+  gates. QI stays at `85%` because the honest next-scale `0.55` CPU probe timed
+  out before output even with a widened x-block sparse-PC cap.
 - PAS-heavy memory/runtime: `93%`. The probe/gate layer is now strong enough
   for short real production-floor probes, but a default solver change still
   needs real geometry4/HSX/geometry11 residual/runtime/memory wins.
-- Benchmark artifact reproducibility gates: `99%`. Canonical plot/table rows
+- Benchmark/parity/docs lane: `98%`. Canonical plot/table rows
   and Fortran-suite summary release gates are in place; remaining work is
   release CI wiring and regeneration of any artifacts promoted beyond
   historical provenance.
-- FP production-floor memory/runtime: `95%`. No default behavior changed.
-- CPU/GPU parity for documented workflows: `100%` for touched lanes; parity
-  remains protected by existing fixture and suite tests.
-- CI/docs health: `100%` locally; remote CI/docs still need confirmation after
-  push.
-- Coverage/refactor path: `73%`. One more policy slice is now outside
-  `v3_driver.py`; reaching much higher coverage still requires continued
-  driver decomposition, not slow full-solve tests.
-- Parallel transport workers: `88%`. Release claims are now strongly audited.
-  Single-case multi-GPU strong scaling remains experimental and unclaimed.
-- `vmec_jax` / `booz_xform_jax` workflow: `72%` for public workflow/provenance
-  and proxy-gradient UX; full differentiable kinetic transport remains deferred.
-- Deferred manuscript physics lanes: `58%`. Figure/gate metadata is stronger,
-  but W7-X ambipolar and full Simakov-Helander high-`nu` claims still require
-  checked-in converged artifacts.
+- Coverage/refactor path: `90%`. More solver dispatch is now in directly tested
+  policy helpers, release metadata checks are CI-fast, and public-auto QI route
+  evidence is covered by artifact tests. The explicit 95% package-coverage target
+  still requires a JAX-safe coverage job and more driver decomposition.
+- Parallel transport workers: `92%`. Release-facing transport-worker claims are
+  now audit-gated and have GPU throughput evidence. Setup-dominated two-GPU
+  case-throughput and single-case sharded solves remain experimental and
+  unclaimed.
+- `vmec_jax` / `booz_xform_jax` workflow: `93%`, saturating the scoped release
+  target for public workflow/provenance and proxy-gradient UX. Full
+  differentiable kinetic transport remains deferred outside this target.
+- Optional JAX ecosystem solver evaluation: `88%` target-saturated for release.
+  Lineax/Equinox/JAXopt gates are documented and tested, with Lineax kept
+  unpromoted for real SFINCS error statuses.
 
 Next concrete actions:
 
-1. Advance the QI ladder to the next bounded resolution scale with public
-   `solve_method=auto`, solver traces, and residual ratios checked on CPU and
-   one GPU.
-2. Profile the next QI scale before production promotion so any memory growth
-   from host-assembled x-block sparse LU is bounded and documented.
+1. Reduce QI scale-0.55 x-block sparse setup/factorization cost before widening
+   the default auto-policy cap or attempting production-resolution QI.
+2. Profile scale-0.55 x-block sparse LU ordering, memory, and factor reuse so
+   the next QI attempt has a concrete algorithmic target.
 3. Run the first short real-solve PAS production-floor probe selected by the
    preflight, requiring a residual/runtime/memory win before any solver-default
    promotion.
