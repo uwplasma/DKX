@@ -200,8 +200,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 7
-    assert current["passing_artifact_count"] == 6
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 8
+    assert current["passing_artifact_count"] == 7
     assert current["nonpassing_artifact_count"] == 1
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 13169
@@ -218,6 +218,7 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert {
         "docs/_static/qi_seed_robustness_smoke.json",
         "docs/_static/qi_seed_robustness_multiseed.json",
+        "docs/_static/qi_seed_robustness_multiseed3_cpu.json",
         "docs/_static/qi_seed_robustness_multiseed_gpu.json",
         "docs/_static/qi_seed_robustness_scale035_cpu_gpu.json",
         "docs/_static/qi_seed_robustness_multiseed5_cpu.json",
