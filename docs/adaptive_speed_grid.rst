@@ -161,14 +161,14 @@ ladder, keep the default ``auto`` CLI policy and add residual/convergence gates:
      --clean
 
 The QI lane defaults to the public ``auto`` CLI solver policy. The bounded
-checked multi-seed artifact covers three neighboring seeds at ``7 x 13 x 25 x
-4`` and verifies that ``auto`` uses the fast dense full-FP path before entering
-the sparse/fallback ladder. Each seed converges below the requested residual
-target, with maximum residual ratio below ``1e-6``. The manifest records
-stdout/stderr paths, return codes, output and solver-trace presence, and a
-compact solver-trace summary including residual norm, residual target, residual
-ratio, and convergence flags. Treat this as bounded integration evidence;
-require production-resolution CPU/GPU ladders before claiming full QI
+checked multi-seed CPU and one-GPU artifacts cover three neighboring seeds at
+``7 x 13 x 25 x 4`` and verify that ``auto`` uses the fast dense full-FP path
+before entering the sparse/fallback ladder. Each seed converges below the
+requested residual target, with maximum residual ratio below ``1e-6``. The
+manifest records stdout/stderr paths, return codes, output and solver-trace
+presence, and a compact solver-trace summary including residual norm, residual
+target, residual ratio, and convergence flags. Treat this as bounded integration
+evidence; require production-resolution CPU/GPU ladders before claiming full QI
 robustness.
 
 Limitations

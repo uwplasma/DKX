@@ -774,7 +774,7 @@ performance without changing the input file:
   `sfincs_jax` now **defaults to a direct dense solve** instead of Krylov to match
   Fortran and avoid expensive fallback paths. This cutoff controls the active-size
   threshold for that default (default: ``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF,
-  5000)``; set ``0`` to disable the initial dense path).
+  6000)``; set ``0`` to disable the initial dense path).
 - ``SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN``: minimum active size for the
   default accelerator dense shortcut in full-FP RHSMode=1 cases (default: ``1000``).
   This keeps tiny GPU fixtures on the lower-overhead matrix-free path while allowing
@@ -790,7 +790,7 @@ performance without changing the input file:
   the tokamak-Er dense default (default: ``350000000``). Lower this on
   memory-constrained hosts.
 - ``SFINCS_JAX_RHSMODE1_DENSE_FP_MAX``: override the RHSMode=1 dense fallback ceiling for
-  full Fokker–Planck (``collisionOperator=0``) cases (default: ``5000``).
+  full Fokker–Planck (``collisionOperator=0``) cases (default: ``6000``).
 - ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX``: override the RHSMode=1 dense fallback ceiling for
   PAS/constraintScheme=2 cases. Dense PAS fallback is **disabled by default** to
   preserve parity; set this explicitly (e.g. ``5000``) to enable it.
