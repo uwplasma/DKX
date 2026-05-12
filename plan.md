@@ -191,6 +191,17 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   per-axis and `13.7%` of production total size, while keeping promotion honest:
   scale `0.60` still needs a CPU/GPU five-seed ladder before widening the public
   auto window toward production.
+- [ ] Resolve the scale-0.60 multi-seed slow mode before promoting the next
+  QI window. A first bounded five-seed attempt showed seed `0` passing on CPU
+  in `41.5 s` and on one `office` GPU in `137.9 s`, but CPU seed `1` timed out
+  after `420 s` while still progressing through left-preconditioned GMRES
+  (`4500` matvecs at `404.6 s`), CPU seed `2` showed the same pattern (`3600`
+  matvecs at `319.3 s` when the run was stopped), and GPU seed `1` was also
+  slow (`1200` matvecs at `545.9 s`) before the remote ladder was stopped to
+  avoid wasting GPU time. This is now the concrete next algorithmic blocker:
+  scale-0.60 needs a stronger seed-robust global-coupling/preconditioner
+  correction, adaptive side/ordering by seed metrics, or a tighter restart/seed
+  rescue before the five-seed ladder can be closed.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
