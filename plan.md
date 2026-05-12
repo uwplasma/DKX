@@ -168,6 +168,18 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   still progressing at hundreds to thousands of matvecs and timing out on one
   GPU, so the next gate is to rerun the matching GPU hard seed and then the
   five-seed GPU ladder from a clean checkout.
+- [x] Closed the bounded scale-0.55 CPU/GPU five-seed QI ladder with the new
+  adaptive-side default. The CPU artifact
+  `docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_cpu.json`
+  passes seeds `0..4` with zero process failures/timeouts, all outputs and
+  solver traces written, maximum elapsed time `44.5 s`, and maximum residual
+  ratio `5.88e-3`. The clean `office` GPU artifact
+  `docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json`
+  passes the same seeds with maximum elapsed time `206.7 s`, maximum residual
+  ratio `8.28e-3`, and hard seed `3` reduced from the previous right-PC GPU
+  timeout to `~206 s`. This closes the next bounded QI CPU/GPU robustness gate;
+  remaining QI promotion now requires a next-size bounded ladder or
+  production-resolution ladder, not another scale-0.55 rerun.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
@@ -10163,12 +10175,12 @@ Progress update (2026-05-11): integrated multi-lane release hardening push
 
 Updated lane status after this integrated push:
 
-- Overall open-lane average: `92.0%`. The machine-readable tracker now reflects
+- Overall open-lane average: `92.4%`. The machine-readable tracker now reflects
   release-grade PAS CPU/GPU production-floor evidence, parallel release-audit
   gates, refactor/CI policy extraction, optional JAX-ecosystem adoption gates,
-  the scale-0.55 CPU QI exact-LU successor, and the hard-seed adaptive-side CPU
-  successor. QI is still active at `90%` because the matching scale-0.55 GPU
-  ladder and production-resolution CPU/GPU ladders remain open.
+  the scale-0.55 CPU QI exact-LU successor, and the adaptive-side scale-0.55
+  CPU/GPU five-seed successors. QI is still active at `93%` because
+  production-resolution CPU/GPU ladders remain open.
 - PAS-heavy memory/runtime: `93%`. The probe/gate layer is now strong enough
   for short real production-floor probes, but a default solver change still
   needs real geometry4/HSX/geometry11 residual/runtime/memory wins.
@@ -10193,9 +10205,8 @@ Updated lane status after this integrated push:
 
 Next concrete actions:
 
-1. Run the matching scale-0.55 GPU QI hard seed with the adaptive side policy,
-   then rerun the five-seed GPU ladder before widening the default auto-policy
-   cap or attempting production-resolution QI.
+1. Run a next-size bounded QI CPU/GPU ladder before widening the default
+   auto-policy cap or attempting production-resolution QI.
 2. Profile scale-0.55 x-block sparse LU ordering, memory, and factor reuse so
    the next QI attempt has a concrete algorithmic target.
 3. Run the first short real-solve PAS production-floor probe selected by the

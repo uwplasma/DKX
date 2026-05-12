@@ -1550,9 +1550,15 @@ Controls:
   ``SFINCS_JAX_GMRES_PRECONDITION_SIDE``. The checked
   ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json``
   artifact closes that hard CPU seed in ``~47 s`` with residual ratio
-  ``2.98e-3`` and records ``precondition_side=left``. The default upper
-  auto-size window remains bounded until the matching GPU and wider seed ladders
-  pass.
+  ``2.98e-3`` and records ``precondition_side=left``. The matching five-seed
+  CPU and one-GPU artifacts
+  ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_cpu.json``
+  and
+  ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json``
+  pass seeds ``0..4`` with all outputs and solver traces written, maximum
+  elapsed times ``44.5 s`` and ``206.7 s``, and maximum residual ratios below
+  ``8.3e-3``. The default upper auto-size window remains bounded until the
+  next-size and production-resolution ladders pass.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual
