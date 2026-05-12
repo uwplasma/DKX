@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 15,
+    "artifact_count": 17,
     "bounded_lane_completion_estimate_percent": 50.0,
     "checked_backends": [
       "cpu",
@@ -33,7 +33,7 @@
     "max_checked_total_size": 95702,
     "max_checked_total_size_fraction": 0.09382530622488976,
     "nonpassing_artifact_count": 3,
-    "passing_artifact_count": 12,
+    "passing_artifact_count": 14,
     "production_total_size_uncovered_percent": 90.62
   },
   "lane": "qi_seed_robustness",
@@ -449,6 +449,60 @@
       "max_residual_ratio": 0.0029834587195199077,
       "passed": true,
       "path": "docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 4,
+        "NXI": 55,
+        "NZETA": 29
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.5,
+        "NXI": 0.55,
+        "NZETA": 0.5686274509803921
+      },
+      "schema_version": 2,
+      "total_size": 95702
+    },
+    {
+      "active_size": 52637,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 5,
+      "max_elapsed_s": 44.482512000002316,
+      "max_residual_ratio": 0.005879187421488486,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_cpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 4,
+        "NXI": 55,
+        "NZETA": 29
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.5,
+        "NXI": 0.55,
+        "NZETA": 0.5686274509803921
+      },
+      "schema_version": 2,
+      "total_size": 95702
+    },
+    {
+      "active_size": 52637,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "gpu"
+      ],
+      "case_count": 5,
+      "max_elapsed_s": 206.66298650670797,
+      "max_residual_ratio": 0.008283950277956835,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json",
       "public_cli_default_path": true,
       "resolution": {
         "NTHETA": 15,
