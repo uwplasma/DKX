@@ -119,6 +119,43 @@ def test_main_writes_case_preset_artifacts(tmp_path: Path):
     assert payload["best_by_transport_error"]["log_length"] == -1.0
 
 
+def test_main_writes_scorecard_artifacts(tmp_path: Path):
+    root = Path(__file__).resolve().parents[1]
+    tiny = root / "docs" / "_static" / "mapped_xgrid_transport_evidence_rhsmode2_tiny.json"
+    reduced = (
+        root
+        / "docs"
+        / "_static"
+        / "mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json"
+    )
+    json_path = tmp_path / "mapped_scorecard.json"
+    csv_path = tmp_path / "mapped_scorecard.csv"
+
+    rc = mod.main(
+        [
+            "--scorecard",
+            str(tiny),
+            str(reduced),
+            "--scorecard-json-out",
+            str(json_path),
+            "--scorecard-csv-out",
+            str(csv_path),
+        ],
+        solve_fn=_fake_transport_solve,
+    )
+
+    assert rc == 0
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["kind"] == "mapped_xgrid_transport_scorecard"
+    assert payload["summary"]["case_count"] == 2
+    assert payload["summary"]["useful_count"] == 1
+    assert payload["summary"]["negative_count"] == 1
+
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["mapped_classification"] for row in rows] == ["negative", "useful"]
+
+
 def test_list_cases_prints_presets(capsys):
     rc = mod.main(["--list-cases"], solve_fn=_fake_transport_solve)
 

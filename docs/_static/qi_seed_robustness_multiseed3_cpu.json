@@ -1,0 +1,124 @@
+{
+  "artifact_kind": "qi_seed_execution_summary",
+  "case_count": 3,
+  "er_jitter": 0.02,
+  "evidence_note": "Bounded QI seed-robustness execution summary generated from the reusable runner manifest gate. Passing artifacts provide measured evidence at their recorded resolution; failed or timed-out artifacts are blocker evidence and must not be used for production promotion.",
+  "execution_summary": {
+    "accepted_converged": 0,
+    "attempted": 3,
+    "backends": [
+      "cpu"
+    ],
+    "converged": 3,
+    "max_elapsed_s": 8.237716499948874,
+    "max_residual_ratio": 8.130354507473568e-07,
+    "outputs_written": 3,
+    "process_failed": 0,
+    "process_passed": 3,
+    "selected_paths": [
+      "rhsmode1_solution"
+    ],
+    "solve_methods": [
+      "auto"
+    ],
+    "solver_traces_written": 3,
+    "timed_out": 0
+  },
+  "fail_fast": false,
+  "gates": {
+    "failures": [],
+    "max_residual_ratio": 1.0,
+    "passed": true,
+    "require_accepted_converged": false,
+    "require_converged": true
+  },
+  "lane": "qi_seed_robustness",
+  "nu_jitter": 0.05,
+  "public_cli_default_path": true,
+  "resolution": {
+    "NTHETA": 7,
+    "NX": 4,
+    "NXI": 25,
+    "NZETA": 13
+  },
+  "resolution_scale": 0.25,
+  "schema_version": 2,
+  "seeds": [
+    {
+      "accepted_converged": null,
+      "backend": "cpu",
+      "case": "qi_seed_0000",
+      "converged": true,
+      "elapsed_s": 8.237716499948874,
+      "output_exists": true,
+      "residual_norm": 9.483802689343095e-18,
+      "residual_ratio": 7.418685218746993e-07,
+      "residual_target": 1.2783670434455904e-11,
+      "resolution": {
+        "NTHETA": 7,
+        "NX": 4,
+        "NXI": 25,
+        "NZETA": 13
+      },
+      "returncode": 0,
+      "seed": 0,
+      "selected_path": "rhsmode1_solution",
+      "solve_method": "auto",
+      "solver_elapsed_s": 7.487261584028602,
+      "solver_trace_exists": true,
+      "timed_out": false
+    },
+    {
+      "accepted_converged": null,
+      "backend": "cpu",
+      "case": "qi_seed_0001",
+      "converged": true,
+      "elapsed_s": 7.395834166789427,
+      "output_exists": true,
+      "residual_norm": 1.0496776199717997e-17,
+      "residual_ratio": 8.130354507473568e-07,
+      "residual_target": 1.2910600872408665e-11,
+      "resolution": {
+        "NTHETA": 7,
+        "NX": 4,
+        "NXI": 25,
+        "NZETA": 13
+      },
+      "returncode": 0,
+      "seed": 1,
+      "selected_path": "rhsmode1_solution",
+      "solve_method": "auto",
+      "solver_elapsed_s": 6.7074270830489695,
+      "solver_trace_exists": true,
+      "timed_out": false
+    },
+    {
+      "accepted_converged": null,
+      "backend": "cpu",
+      "case": "qi_seed_0002",
+      "converged": true,
+      "elapsed_s": 7.474816458998248,
+      "output_exists": true,
+      "residual_norm": 3.593254411397141e-18,
+      "residual_ratio": 2.782066417495921e-07,
+      "residual_target": 1.2915775082865755e-11,
+      "resolution": {
+        "NTHETA": 7,
+        "NX": 4,
+        "NXI": 25,
+        "NZETA": 13
+      },
+      "returncode": 0,
+      "seed": 2,
+      "selected_path": "rhsmode1_solution",
+      "solve_method": "auto",
+      "solver_elapsed_s": 6.7346737079788,
+      "solver_trace_exists": true,
+      "timed_out": false
+    }
+  ],
+  "solve_method_request": "auto",
+  "source_input": "examples/additional_examples/input.namelist",
+  "timeout_s": 120.0,
+  "total_size_estimate": 9102
+}

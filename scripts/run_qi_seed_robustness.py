@@ -27,6 +27,7 @@ DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "qi_seed_robustness"
 DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_smoke.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed3_cpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale035_cpu_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed5_cpu.json",

@@ -1,0 +1,84 @@
+{
+  "cases": [
+    {
+      "active_dof_reduction": 974,
+      "active_dof_reduction_fraction": 0.4,
+      "best_active_size": 1461,
+      "best_log_length": 0.0,
+      "best_matrix_max_abs_error": 2.27111628619444,
+      "best_matrix_relative_frobenius_error": 0.6942275967706594,
+      "best_total_size": 1461,
+      "candidate_max_relative_residual_norm": 3.6852296144703905e-12,
+      "candidate_max_residual_norm": 8.002073884900729e-15,
+      "candidate_n_x": 3,
+      "case": "mapped_xgrid_transport_evidence_rhsmode2_tiny",
+      "input_namelist": "tests/ref/transportMatrix_PAS_tiny_rhsMode2_scheme2.input.namelist",
+      "mapped_classification": "negative",
+      "mapped_negative": true,
+      "mapped_useful": false,
+      "reference_active_size": 2435,
+      "reference_max_relative_residual_norm": 1.7430130344196438e-12,
+      "reference_max_residual_norm": 1.6094253419066994e-14,
+      "reference_n_x": 5,
+      "reference_total_size": 2435,
+      "residual_gate_pass": true,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "source_artifact": "docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.json",
+      "total_dof_reduction": 974,
+      "total_dof_reduction_fraction": 0.4
+    },
+    {
+      "active_dof_reduction": 501,
+      "active_dof_reduction_fraction": 0.4735349716446125,
+      "best_active_size": 557,
+      "best_log_length": 0.5,
+      "best_matrix_max_abs_error": 2.435482537280663,
+      "best_matrix_relative_frobenius_error": 0.05547580228546948,
+      "best_total_size": 777,
+      "candidate_max_relative_residual_norm": 1.0064074846169359e-13,
+      "candidate_max_residual_norm": 1.4430589562365452e-14,
+      "candidate_n_x": 7,
+      "case": "reduced_pas_tokamak_rhsmode2",
+      "input_namelist": "tests/reduced_inputs/tokamak_1species_PASCollisions_noEr.input.namelist",
+      "mapped_classification": "useful",
+      "mapped_negative": false,
+      "mapped_useful": true,
+      "reference_active_size": 1058,
+      "reference_max_relative_residual_norm": 2.1702130821430237e-13,
+      "reference_max_residual_norm": 1.4440285168296266e-14,
+      "reference_n_x": 13,
+      "reference_total_size": 1443,
+      "residual_gate_pass": true,
+      "solve_methods": [
+        "dense"
+      ],
+      "solver_kinds": [
+        "dense"
+      ],
+      "source_artifact": "docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json",
+      "total_dof_reduction": 666,
+      "total_dof_reduction_fraction": 0.46153846153846156
+    }
+  ],
+  "kind": "mapped_xgrid_transport_scorecard",
+  "schema_version": 1,
+  "summary": {
+    "best_case_by_error": "reduced_pas_tokamak_rhsmode2",
+    "best_matrix_relative_frobenius_error": 0.05547580228546948,
+    "case_count": 2,
+    "mixed_count": 0,
+    "negative_count": 1,
+    "useful_count": 1
+  },
+  "thresholds": {
+    "active_dof_reduction_gate": 0.0,
+    "negative_error_gate": 0.5,
+    "relative_residual_gate": 1e-08,
+    "useful_error_gate": 0.1
+  }
+}

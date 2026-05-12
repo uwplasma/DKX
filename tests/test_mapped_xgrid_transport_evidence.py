@@ -9,12 +9,16 @@ import numpy as np
 import pytest
 
 from sfincs_jax.mapped_xgrid_transport_evidence import (
+    build_transport_evidence_scorecard,
     copy_namelist_with_mapped_xgrid,
     copy_namelist_with_resolution,
     run_rational_tail_transport_comparison,
+    transport_scorecard_to_dict,
     transport_evidence_report_to_dict,
     transport_matrix_error,
     transport_solve_summary,
+    write_transport_scorecard_csv,
+    write_transport_scorecard_json,
     write_transport_evidence_csv,
     write_transport_evidence_json,
 )
@@ -273,6 +277,50 @@ def test_transport_evidence_report_artifacts_roundtrip(tmp_path: Path):
     assert len(rows) == 2
     assert rows[0]["solver_kinds"] == "gmres;sparse_lu"
     assert rows[0]["reference_n_x"] == "9"
+
+
+def test_transport_evidence_scorecard_classifies_useful_and_negative_cases(tmp_path: Path):
+    root = Path(__file__).resolve().parents[1]
+    tiny = root / "docs" / "_static" / "mapped_xgrid_transport_evidence_rhsmode2_tiny.json"
+    reduced = (
+        root
+        / "docs"
+        / "_static"
+        / "mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json"
+    )
+
+    scorecard = build_transport_evidence_scorecard([tiny, reduced])
+    payload = transport_scorecard_to_dict(scorecard)
+
+    assert payload["kind"] == "mapped_xgrid_transport_scorecard"
+    assert payload["schema_version"] == 1
+    assert payload["summary"]["case_count"] == 2
+    assert payload["summary"]["useful_count"] == 1
+    assert payload["summary"]["negative_count"] == 1
+    by_case = {case["case"]: case for case in payload["cases"]}
+    assert (
+        by_case["mapped_xgrid_transport_evidence_rhsmode2_tiny"]["mapped_classification"]
+        == "negative"
+    )
+    reduced_case = by_case["reduced_pas_tokamak_rhsmode2"]
+    assert reduced_case["mapped_classification"] == "useful"
+    assert reduced_case["best_matrix_relative_frobenius_error"] < 0.06
+    assert reduced_case["active_dof_reduction_fraction"] > 0.47
+    assert reduced_case["residual_gate_pass"] is True
+
+    json_path = tmp_path / "scorecard.json"
+    csv_path = tmp_path / "scorecard.csv"
+    write_transport_scorecard_json(scorecard, json_path)
+    write_transport_scorecard_csv(scorecard, csv_path)
+
+    reloaded = json.loads(json_path.read_text(encoding="utf-8"))
+    assert reloaded["summary"]["best_case_by_error"] == "reduced_pas_tokamak_rhsmode2"
+
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 2
+    assert rows[1]["mapped_classification"] == "useful"
+    assert rows[1]["mapped_useful"] == "True"
 
 
 def test_run_rational_tail_transport_comparison_rejects_empty_scan():

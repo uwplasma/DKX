@@ -188,6 +188,11 @@ records the commands in `manifest.json`. With `--execute`, it runs each seed
 through `sfincs_jax write-output` and records stdout/stderr, return codes,
 output presence, solver-trace residual metadata, aggregate summary fields, and
 the optional promotion gates in the same manifest.
+Add `--summary-output docs/_static/qi_seed_robustness_<name>.json` to write a
+compact checked artifact, and refresh
+`docs/_static/qi_seed_robustness_evidence_manifest.json` with
+`--evidence-manifest-output` when the artifact should count toward the bounded
+QI evidence manifest.
 
 The execute smoke defaults to the public `auto` CLI solver policy. The bounded
 checked multi-seed smoke now keeps the public `auto` method, auto-selects the

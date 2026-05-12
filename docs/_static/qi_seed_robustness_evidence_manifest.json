@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 7,
+    "artifact_count": 8,
     "bounded_lane_completion_estimate_percent": 44.0,
     "checked_backends": [
       "cpu",
@@ -33,7 +33,7 @@
     "max_checked_total_size": 45542,
     "max_checked_total_size_fraction": 0.04464893206091753,
     "nonpassing_artifact_count": 1,
-    "passing_artifact_count": 6,
+    "passing_artifact_count": 7,
     "production_total_size_uncovered_percent": 95.54
   },
   "lane": "qi_seed_robustness",
@@ -117,6 +117,33 @@
         "NZETA": 0.2549019607843137
       },
       "schema_version": 1,
+      "total_size": 9102
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 3,
+      "max_elapsed_s": 8.237716499948874,
+      "max_residual_ratio": 8.130354507473568e-07,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_multiseed3_cpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 7,
+        "NX": 4,
+        "NXI": 25,
+        "NZETA": 13
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.28,
+        "NX": 0.5,
+        "NXI": 0.25,
+        "NZETA": 0.2549019607843137
+      },
+      "schema_version": 2,
       "total_size": 9102
     },
     {

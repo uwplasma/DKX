@@ -611,7 +611,8 @@ neighboring cases, localizes the VMEC equilibrium beside each generated
 ``input.namelist``, perturbs ``nu_n`` and ``Er`` by seed, and can optionally run
 ``sfincs_jax write-output`` while recording stdout, stderr, and solver-trace paths.
 The checked summaries in ``docs/_static/qi_seed_robustness_smoke.json``,
-``docs/_static/qi_seed_robustness_multiseed.json``, and
+``docs/_static/qi_seed_robustness_multiseed.json``,
+``docs/_static/qi_seed_robustness_multiseed3_cpu.json``, and
 ``docs/_static/qi_seed_robustness_multiseed5_cpu.json`` record low-resolution
 default CLI evidence. The three-seed CPU/GPU artifacts run neighboring seeds at
 ``7 x 13 x 25 x 4`` and record ``process_failed=0``, public solver method

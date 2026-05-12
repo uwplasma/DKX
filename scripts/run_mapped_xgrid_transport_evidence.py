@@ -14,8 +14,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from sfincs_jax.mapped_xgrid_transport_evidence import (  # noqa: E402
+    build_transport_evidence_scorecard,
     copy_namelist_with_resolution,
     run_rational_tail_transport_comparison,
+    write_transport_scorecard_csv,
+    write_transport_scorecard_json,
     write_transport_evidence_csv,
     write_transport_evidence_json,
 )
@@ -98,6 +101,47 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Named evidence preset. Use --list-cases to see the documented options.",
     )
     parser.add_argument("--list-cases", action="store_true", help="Print available presets and exit.")
+    parser.add_argument(
+        "--scorecard",
+        nargs="+",
+        type=Path,
+        metavar="EVIDENCE_JSON",
+        help="Aggregate one or more mapped evidence JSON artifacts instead of running a solve.",
+    )
+    parser.add_argument(
+        "--scorecard-json-out",
+        type=Path,
+        help="Output aggregate scorecard JSON path.",
+    )
+    parser.add_argument(
+        "--scorecard-csv-out",
+        type=Path,
+        help="Output aggregate scorecard CSV path.",
+    )
+    parser.add_argument(
+        "--useful-error-gate",
+        type=float,
+        default=0.1,
+        help="Scorecard useful threshold for best relative Frobenius transport error.",
+    )
+    parser.add_argument(
+        "--negative-error-gate",
+        type=float,
+        default=0.5,
+        help="Scorecard negative threshold for best relative Frobenius transport error.",
+    )
+    parser.add_argument(
+        "--relative-residual-gate",
+        type=float,
+        default=1.0e-8,
+        help="Scorecard gate for candidate and reference relative residuals.",
+    )
+    parser.add_argument(
+        "--active-dof-reduction-gate",
+        type=float,
+        default=0.0,
+        help="Minimum active-DOF reduction fraction required for useful scorecard status.",
+    )
     parser.add_argument("--json-out", type=Path, help="Output JSON evidence path.")
     parser.add_argument("--csv-out", type=Path, help="Output CSV evidence path.")
     parser.add_argument(
@@ -123,6 +167,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--solve-method", default=None, help="Optional solve_method override passed to the transport solver.")
     args = parser.parse_args(argv)
     if args.list_cases:
+        return args
+    if args.scorecard is not None:
+        if args.input_namelist is not None or args.case is not None:
+            parser.error("--scorecard cannot be combined with input_namelist or --case/--preset")
+        if args.scorecard_json_out is None or args.scorecard_csv_out is None:
+            parser.error(
+                "--scorecard-json-out and --scorecard-csv-out are required with --scorecard"
+            )
         return args
     if args.case is not None and args.input_namelist is not None:
         parser.error("input_namelist cannot be combined with --case/--preset")
@@ -254,6 +306,23 @@ def run_from_args(
     if args.list_cases:
         for name, preset in CASE_PRESETS.items():
             print(f"{name}: {preset.description}")
+        return 0
+
+    if args.scorecard is not None:
+        scorecard = build_transport_evidence_scorecard(
+            args.scorecard,
+            useful_error_gate=float(args.useful_error_gate),
+            negative_error_gate=float(args.negative_error_gate),
+            relative_residual_gate=float(args.relative_residual_gate),
+            active_dof_reduction_gate=float(args.active_dof_reduction_gate),
+        )
+        write_transport_scorecard_json(scorecard, args.scorecard_json_out)
+        write_transport_scorecard_csv(scorecard, args.scorecard_csv_out)
+        print(f"wrote {args.scorecard_json_out}")
+        print(f"wrote {args.scorecard_csv_out}")
+        print(f"scorecard_cases={scorecard.case_count}")
+        print(f"scorecard_useful={scorecard.useful_count}")
+        print(f"scorecard_negative={scorecard.negative_count}")
         return 0
 
     if args.reference_namelist is not None and args.reference_nx is not None:

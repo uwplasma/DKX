@@ -137,6 +137,29 @@ lower-resolution mapped candidates against that reference. Comparing only
 same-resolution grids is a useful smoke test but is not enough to support a
 resolution-reduction claim.
 
+The checked artifacts in ``docs/_static`` include both the original tiny
+PAS smoke test and a reduced real PAS tokamak scan. The aggregate scorecard is
+written to ``mapped_xgrid_transport_scorecard.json`` and
+``mapped_xgrid_transport_scorecard.csv``. It classifies each case using the
+best transport-matrix relative Frobenius error, active-DOF reduction, and
+relative-residual gates. With the checked thresholds
+``useful_error_gate = 0.1``, ``negative_error_gate = 0.5``, and
+``relative_residual_gate = 1e-8``, the tiny fixture is a negative control
+(``0.694`` best relative error despite 40% active-DOF reduction), while the
+reduced PAS tokamak case is useful evidence (``0.0555`` best relative error,
+47.4% active-DOF reduction, and residuals below the gate).
+
+The scorecard can be regenerated without rerunning solves:
+
+.. code-block:: bash
+
+   python scripts/run_mapped_xgrid_transport_evidence.py \
+     --scorecard \
+       docs/_static/mapped_xgrid_transport_evidence_rhsmode2_tiny.json \
+       docs/_static/mapped_xgrid_transport_evidence_reduced_pas_tokamak_rhsmode2.json \
+     --scorecard-json-out docs/_static/mapped_xgrid_transport_scorecard.json \
+     --scorecard-csv-out docs/_static/mapped_xgrid_transport_scorecard.csv
+
 QI seed-robustness smoke
 ------------------------
 

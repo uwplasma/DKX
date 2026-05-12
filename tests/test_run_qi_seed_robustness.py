@@ -233,6 +233,72 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
     assert manifest["execution"]["gates"]["passed"] is True
 
 
+def test_qi_seed_runner_writes_compact_summary_artifact(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+    summary_path = tmp_path / "qi_seed_summary.json"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        case_dir = Path(command[command.index("--input") + 1]).parent
+        if case_dir.name.endswith("0000"):
+            output_path = Path(command[command.index("--out") + 1])
+            trace_path = Path(command[command.index("--solver-trace") + 1])
+            output_path.write_bytes(b"h5")
+            trace_path.write_text(
+                json.dumps(
+                    {
+                        "backend": "cpu",
+                        "converged": True,
+                        "elapsed_s": 0.5,
+                        "residual_norm": 4.0e-12,
+                        "residual_target": 1.0e-11,
+                        "selected_path": "rhsmode1_solution",
+                        "solve_method": "auto",
+                        "metadata": {"solver_metadata": {"accepted_converged": True}},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0)
+        stderr.write("mock failure\n")
+        return SimpleNamespace(returncode=2)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "0",
+                "1",
+                "--execute",
+                "--summary-output",
+                str(summary_path),
+                "--clean",
+            ]
+        )
+        == 1
+    )
+
+    artifact = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert artifact["artifact_kind"] == "qi_seed_execution_summary"
+    assert artifact["execution_summary"]["process_passed"] == 1
+    assert artifact["execution_summary"]["process_failed"] == 1
+    assert artifact["execution_summary"]["outputs_written"] == 1
+    assert artifact["execution_summary"]["solver_traces_written"] == 1
+    assert artifact["seeds"][0]["returncode"] == 0
+    assert artifact["seeds"][0]["solver_trace_exists"] is True
+    assert artifact["seeds"][0]["residual_ratio"] == 0.4
+    assert artifact["seeds"][1]["returncode"] == 2
+    assert artifact["seeds"][1]["solver_trace_exists"] is False
+
+
 def test_qi_seed_runner_enforces_optional_trace_gates(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
