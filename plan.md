@@ -144,6 +144,18 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   residual ratio `0.963`. This closes the bounded public-auto robustness
   blocker. The remaining QI promotion gates are the next bounded resolution
   scale and finally production resolution.
+- [x] Added a larger seed-count and next-resolution QI evidence pair. The
+  `docs/_static/qi_seed_robustness_scale050_cpu_multiseed10.json` public-auto
+  CPU ladder passes seeds `0..9` with strict accepted-convergence gating,
+  `10/10` outputs and traces, maximum elapsed time `11.03 s`, and maximum
+  residual ratio `0.998`. The next attempted scale,
+  `docs/_static/qi_seed_robustness_scale057_cpu_multiseed3.json`, raises the
+  generated deck to `15 x 29 x 57 x 5` (`123977` total size estimate) and times
+  out for all three seeds at the bounded `240 s` budget after reaching the
+  explicit x-block seed and sparse-ILU global rescue. This is useful blocker
+  evidence: the robust scale-0.50 path is seed-stable, while the next
+  resolution jump needs a better global coupling/preconditioner strategy before
+  production-resolution claims.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
