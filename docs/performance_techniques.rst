@@ -1558,7 +1558,14 @@ Controls:
   pass seeds ``0..4`` with all outputs and solver traces written, maximum
   elapsed times ``44.5 s`` and ``206.7 s``, and maximum residual ratios below
   ``8.3e-3``. The default upper auto-size window remains bounded until the
-  next-size and production-resolution ladders pass.
+  next-size and production-resolution ladders pass. The first next-size
+  ``15 x 31 x 60 x 5`` seed-0 artifacts
+  ``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json``
+  and
+  ``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json``
+  also pass at active size ``81377`` with elapsed times ``42.2 s`` and
+  ``145.1 s`` and residual ratios below ``4.7e-3``; this is a bounded seed-0
+  probe, not a production-resolution five-seed claim.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual
