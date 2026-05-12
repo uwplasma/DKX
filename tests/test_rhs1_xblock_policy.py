@@ -3,11 +3,19 @@ from __future__ import annotations
 import pytest
 
 from sfincs_jax.rhs1_xblock_policy import (
+    DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER,
+    DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K,
     DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE,
+    DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE,
     resolve_rhs1_xblock_sparse_pc_policy,
     rhs1_xblock_gmres_restart,
     rhs1_xblock_krylov_method,
+    rhs1_xblock_lgmres_rescue_enabled,
+    rhs1_xblock_lgmres_rescue_maxiter,
+    rhs1_xblock_lgmres_rescue_outer_k,
     rhs1_xblock_precondition_side,
+    rhs1_xblock_side_probe_enabled,
+    rhs1_xblock_side_probe_should_switch,
 )
 
 
@@ -122,6 +130,84 @@ def test_precondition_side_keeps_tokamak_er_right_pc_independent_of_size_window(
         include_electric_field_xi=True,
     )
     assert (side, auto_right) == ("right", True)
+
+
+def test_side_probe_defaults_only_for_large_full_fp_3d_auto_gmres() -> None:
+    assert rhs1_xblock_side_probe_enabled(
+        env_value="",
+        explicit_side_env_value="",
+        full_fp_3d_pc=True,
+        active_size=DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE,
+        min_active_size_env_value="",
+        krylov_method="gmres",
+        precondition_side="left",
+    )
+
+    blocked_cases = (
+        {"active_size": DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE - 1},
+        {"full_fp_3d_pc": False},
+        {"explicit_side_env_value": "right"},
+        {"krylov_method": "lgmres"},
+        {"precondition_side": "none"},
+    )
+    base = {
+        "env_value": "",
+        "explicit_side_env_value": "",
+        "full_fp_3d_pc": True,
+        "active_size": DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE,
+        "min_active_size_env_value": "",
+        "krylov_method": "gmres",
+        "precondition_side": "left",
+    }
+    for override in blocked_cases:
+        kwargs = {**base, **override}
+        assert not rhs1_xblock_side_probe_enabled(**kwargs)
+
+
+def test_side_probe_respects_env_overrides_and_switch_threshold() -> None:
+    assert rhs1_xblock_side_probe_enabled(
+        env_value="1",
+        explicit_side_env_value="",
+        full_fp_3d_pc=False,
+        active_size=1,
+        min_active_size_env_value="999999",
+        krylov_method="gmres",
+        precondition_side="left",
+    )
+    assert not rhs1_xblock_side_probe_enabled(
+        env_value="0",
+        explicit_side_env_value="",
+        full_fp_3d_pc=True,
+        active_size=1_000_000,
+        min_active_size_env_value="",
+        krylov_method="gmres",
+        precondition_side="left",
+    )
+    assert rhs1_xblock_side_probe_should_switch(residual_ratio=5_001.0, switch_ratio_env_value="")
+    assert not rhs1_xblock_side_probe_should_switch(residual_ratio=4_999.0, switch_ratio_env_value="")
+    assert rhs1_xblock_side_probe_should_switch(residual_ratio=11.0, switch_ratio_env_value="10")
+    assert not rhs1_xblock_side_probe_should_switch(residual_ratio=None, switch_ratio_env_value="10")
+
+
+def test_lgmres_rescue_respects_explicit_krylov_method_and_caps_maxiter() -> None:
+    assert rhs1_xblock_lgmres_rescue_enabled(env_value="", krylov_env_value="")
+    assert rhs1_xblock_lgmres_rescue_enabled(env_value="", krylov_env_value="auto")
+    assert rhs1_xblock_lgmres_rescue_enabled(env_value="1", krylov_env_value="gmres")
+    assert not rhs1_xblock_lgmres_rescue_enabled(env_value="", krylov_env_value="gmres")
+    assert not rhs1_xblock_lgmres_rescue_enabled(env_value="0", krylov_env_value="")
+
+    selected, capped = rhs1_xblock_lgmres_rescue_maxiter("", current_maxiter=400)
+    assert selected == DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER
+    assert capped
+    selected, capped = rhs1_xblock_lgmres_rescue_maxiter("96", current_maxiter=400)
+    assert selected == 96
+    assert capped
+    selected, capped = rhs1_xblock_lgmres_rescue_maxiter("", current_maxiter=32)
+    assert selected == 32
+    assert not capped
+    assert rhs1_xblock_lgmres_rescue_outer_k("") == DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
+    assert rhs1_xblock_lgmres_rescue_outer_k("12") == 12
+    assert rhs1_xblock_lgmres_rescue_outer_k("bad") == DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
 
 
 def test_invalid_precondition_side_falls_back_to_default_policy() -> None:

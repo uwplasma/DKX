@@ -208,6 +208,28 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   some seeds. A future fix should not simply widen timeouts: it should add a
   cheap side-selection probe or an early left-to-right/right-to-left rescue
   based on measured residual decrease per matvec.
+- [x] Closed the CPU half of the scale-0.60 multi-seed QI blocker with a
+  bounded side-probe plus LGMRES rescue, without widening blind timeouts. The
+  driver now runs one default-side GMRES restart on large 3D full-FP x-block
+  systems; if the true-residual ratio remains above `5e3` on the CPU default
+  route, it reuses the left-probe state and switches to LGMRES with
+  `outer_k=10` and a capped `80` outer iterations. The checked artifact
+  `docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json`
+  passes seeds `0..4` at `15 x 31 x 60 x 5`, active size `81377`, with
+  `accepted_converged=true`, zero timeouts, max elapsed `307.9 s`, and max
+  residual ratio `8.42e-3`. This replaces the old seed `1`/`2` CPU timeout
+  behavior with a measured, progress-logged rescue.
+- [ ] Keep the scale-0.60 GPU QI hard-seed lane open. The same LGMRES rescue is
+  CPU-default only because an `office` GPU seed `3` probe timed out at `620 s`
+  after selecting the LGMRES rescue, with low accelerator utilization and no
+  solver trace. The side-switched right-GMRES GPU probe also timed out at
+  `620 s`. These blocker artifacts are checked in as
+  `docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json`
+  and
+  `docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json`.
+  The next GPU algorithmic step is not another timeout increase; it needs a
+  GPU-native Krylov/preconditioner path or an explicit CPU-offload policy for
+  host-Krylov QI hard seeds.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but

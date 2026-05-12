@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE = 45_000
+DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE = 80_000
+DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO = 5_000.0
+DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER = 80
+DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K = 10
 
 
 @dataclass(frozen=True)
@@ -38,6 +42,124 @@ def _active_size_allows_full_fp_3d_right_pc(active_size: int | None, max_active_
         return int(active_size) <= int(max_active_size)
     except (TypeError, ValueError):
         return True
+
+
+def rhs1_xblock_side_probe_min_active_size(env_value: str) -> int:
+    """Return the active-size floor for the 3D full-FP side probe."""
+    raw = str(env_value).strip()
+    if not raw:
+        return DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE
+
+
+def rhs1_xblock_side_probe_enabled(
+    *,
+    env_value: str,
+    explicit_side_env_value: str,
+    full_fp_3d_pc: bool,
+    active_size: int | None,
+    min_active_size_env_value: str,
+    krylov_method: str,
+    precondition_side: str,
+) -> bool:
+    """Return whether to run the bounded precondition-side probe.
+
+    The probe is deliberately scoped to larger 3D full-FP QI-like systems where
+    bounded evidence has shown seed-dependent left/right slow modes. Explicit
+    user side overrides are always respected and disable the automatic probe.
+    """
+    raw = str(env_value).strip().lower()
+    if raw in {"0", "false", "f", "no", "off", ".false.", ".f."}:
+        return False
+    explicit_side = str(explicit_side_env_value).strip().lower()
+    if explicit_side in {"left", "right", "none"}:
+        return False
+    method = str(krylov_method).strip().lower()
+    side = str(precondition_side).strip().lower()
+    if method != "gmres" or side not in {"left", "right"}:
+        return False
+    if raw in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
+        return True
+    if raw not in {"", "auto", "default"}:
+        return False
+    if not bool(full_fp_3d_pc):
+        return False
+    min_active_size = rhs1_xblock_side_probe_min_active_size(min_active_size_env_value)
+    try:
+        return int(active_size) >= int(min_active_size)
+    except (TypeError, ValueError):
+        return False
+
+
+def rhs1_xblock_side_probe_should_switch(
+    *,
+    residual_ratio: float | None,
+    switch_ratio_env_value: str,
+) -> bool:
+    """Return whether a default-side probe is weak enough to try the other side."""
+    raw = str(switch_ratio_env_value).strip()
+    try:
+        threshold = float(raw) if raw else DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO
+    except ValueError:
+        threshold = DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO
+    threshold = max(1.0, float(threshold))
+    if residual_ratio is None:
+        return False
+    try:
+        value = float(residual_ratio)
+    except (TypeError, ValueError):
+        return False
+    return bool(value == value and value not in {float("inf"), float("-inf")} and value > threshold)
+
+
+def rhs1_xblock_lgmres_rescue_enabled(*, env_value: str, krylov_env_value: str) -> bool:
+    """Return whether a weak large-QI GMRES probe may switch to LGMRES.
+
+    Explicit Krylov method requests are treated as user intent and are not
+    rewritten by the automatic rescue. Users can still force this rescue with
+    ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE=1``.
+    """
+    raw = str(env_value).strip().lower()
+    if raw in {"0", "false", "f", "no", "off", ".false.", ".f."}:
+        return False
+    if raw in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
+        return True
+    if raw not in {"", "auto", "default"}:
+        return False
+    method_env = str(krylov_env_value).strip().lower().replace("-", "_")
+    return method_env in {"", "auto", "default"}
+
+
+def rhs1_xblock_lgmres_rescue_maxiter(env_value: str, current_maxiter: int) -> tuple[int, bool]:
+    """Return the bounded LGMRES-rescue outer-iteration limit and cap flag."""
+    try:
+        requested = int(current_maxiter)
+    except (TypeError, ValueError):
+        requested = DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER
+    requested = max(1, int(requested))
+    raw = str(env_value).strip()
+    if raw:
+        try:
+            selected = max(1, int(raw))
+        except ValueError:
+            selected = min(requested, DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER)
+    else:
+        selected = min(requested, DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER)
+    return selected, bool(selected != requested)
+
+
+def rhs1_xblock_lgmres_rescue_outer_k(env_value: str) -> int:
+    """Return the LGMRES augmentation-space size for the large-QI rescue."""
+    raw = str(env_value).strip()
+    if raw:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            return DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
+    return DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
 
 
 def rhs1_xblock_precondition_side(
@@ -176,9 +298,19 @@ def resolve_rhs1_xblock_sparse_pc_policy(
 
 __all__ = [
     "DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE",
+    "DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER",
+    "DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K",
+    "DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE",
+    "DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO",
     "RHS1XBlockSparsePCPolicy",
     "resolve_rhs1_xblock_sparse_pc_policy",
     "rhs1_xblock_gmres_restart",
     "rhs1_xblock_krylov_method",
+    "rhs1_xblock_lgmres_rescue_enabled",
+    "rhs1_xblock_lgmres_rescue_maxiter",
+    "rhs1_xblock_lgmres_rescue_outer_k",
     "rhs1_xblock_precondition_side",
+    "rhs1_xblock_side_probe_enabled",
+    "rhs1_xblock_side_probe_min_active_size",
+    "rhs1_xblock_side_probe_should_switch",
 ]
