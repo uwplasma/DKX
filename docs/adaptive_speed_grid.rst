@@ -163,13 +163,18 @@ ladder, keep the default ``auto`` CLI policy and add residual/convergence gates:
 The QI lane defaults to the public ``auto`` CLI solver policy. The bounded
 checked multi-seed CPU and one-GPU artifacts cover three neighboring seeds at
 ``7 x 13 x 25 x 4`` and verify that ``auto`` uses the fast dense full-FP path
-before entering the sparse/fallback ladder. Each seed converges below the
-requested residual target, with maximum residual ratio below ``1e-6``. The
-manifest records stdout/stderr paths, return codes, output and solver-trace
-presence, and a compact solver-trace summary including residual norm, residual
-target, residual ratio, and convergence flags. Treat this as bounded integration
-evidence; require production-resolution CPU/GPU ladders before claiming full QI
-robustness.
+before entering the sparse/fallback ladder. A larger single-seed
+``9 x 19 x 35 x 4`` artifact in
+``docs/_static/qi_seed_robustness_scale035_cpu_gpu.json`` validates the next
+policy tier: at ``13169`` active unknowns, CPU converges in ``29.8 s`` and one
+RTX A4000 GPU converges in ``42.8 s`` through the bounded accelerator
+host-sparse rescue. Before that rescue was enabled, the same GPU case spent
+``195 s`` in the Krylov/fallback tail and was rejected with residual ratio
+``53.9``. The manifest records stdout/stderr paths, return codes, output and
+solver-trace presence, and a compact solver-trace summary including residual
+norm, residual target, residual ratio, and convergence flags. Treat these as
+bounded integration evidence; require production-resolution CPU/GPU ladders
+before claiming full QI robustness.
 
 Limitations
 -----------
