@@ -88,10 +88,15 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS=4` probe accepted two
   post-GMRES matrix-free minimum-residual corrections but only improved
   `5.413504e-6 -> 5.409759e-6`, leaving the residual ratio above `2.1e5`.
+  A third opt-in `SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=lgmres` probe was also
+  rejected: LGMRES stalled at `5.577462e-6`, fell back to GMRES, doubled the
+  matvec count to `65204`, and ended at the same `5.413504e-6` floor after
+  about `300 s`.
   Next QI work must therefore implement a stronger global/coarse correction
   after x-block seeding instead of increasing timeouts, materializing the full
   sparse operator, enabling a default seed probe, or relying on scalar
-  post-minres cleanup.
+  post-minres cleanup, the current small post-coarse space, or a Krylov-method
+  toggle.
 - [x] Implemented the first gated matrix-free correction hook for that next
   step: explicit `xblock_sparse_pc_gmres` now accepts opt-in
   `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`, which applies bounded
@@ -118,10 +123,18 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
   a production residual-clean geometry-rich default-promotion artifact is still
   required before claiming the lane closed.
+- [x] PAS/memory follow-up: fallback benchmark rows now require explicit
+  guarded-PAS-TZ provenance before any candidate can pass all gates or appear as
+  promotion eligible. This closes a false-positive benchmark loophole without
+  changing default solver policy.
 - [x] Parallel second-push result: added timeout-safe two-GPU case-throughput
   benchmarking and a pure audit that rejects release overclaims, non-GPU
   payloads, cold/mixed timing, and sub-unity speedups. This improves the GPU
   campaign workflow but does not close single-case strong scaling.
+- [x] Parallel follow-up: transport-worker benchmark plans and measured payloads
+  now include a compile-amortization gate. Release scaling claims fail closed if
+  they request `release_scaling_claim=true` without evidence that compilation and
+  setup were excluded from timed repeats.
 - [x] Follow-up office GPU result on commit `39e1e2f`: the timeout-safe
   two-GPU case-throughput benchmark completed with `nsolve=1` and a `180 s`
   child timeout, wrote
@@ -134,6 +147,17 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   solver-candidate promotion, residual diagnostics, and policy docstrings.
   Focused helper coverage improved, but package-wide `95%` still requires more
   driver decomposition and a JAX-safe coverage environment.
+- [x] Refactor/coverage follow-up: added CI-fast branch coverage for dense
+  accelerator guards, sparse-direct eligibility, host-GMRES rejection paths,
+  sparse-factor dtype overrides, metric edge cases, and malformed release
+  manifests. This reduces policy-helper risk but does not justify a package-wide
+  threshold increase by itself.
+- [x] VMEC/Boozer/JAX-ecosystem follow-up: added a shared pure-JAX
+  Boozer-spectrum proxy transport objective with a full spectral finite-
+  difference gradient check and JVP/dot-product consistency gate. The status and
+  handoff CLIs now use this shared gate; it strengthens default-CI
+  differentiability coverage while remaining explicitly a proxy, not a full
+  VMEC-boundary-to-kinetic-transport gradient claim.
 - [x] Spawned workers across the active QI, PAS/runtime-memory, parallelism,
   refactor/coverage/CI, and VMEC/JAX-ecosystem lanes rather than continuing with
   single-file incremental work.

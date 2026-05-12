@@ -29,6 +29,7 @@ class TransportParallelScalingAudit:
     benchmark_kind: str = "transport_worker_scaling"
     timing_semantics: str | None = None
     deterministic_output_check: bool = False
+    compile_amortization_gate: bool = False
     min_speedup: float = 1.2
     min_efficiency: float = 0.50
     min_parallel_workers: int = 2
@@ -318,6 +319,71 @@ def _deterministic_output_check(
     return False, "deterministic output check was not recorded"
 
 
+def _compile_amortization_gate(
+    summary: dict[str, object],
+    *,
+    timing_semantics: str | None,
+) -> tuple[bool, bool, tuple[str, ...], tuple[str, ...]]:
+    raw = summary.get("compile_amortization_gate", summary.get("compile_amortization"))
+    if raw is None:
+        return False, False, (), ("compile-amortization gate was not recorded",)
+    if not isinstance(raw, dict):
+        raise ValueError("compile_amortization_gate must be a dictionary")
+
+    failures: list[str] = []
+    notes: list[str] = []
+    passes = _optional_bool(raw.get("passes"), name="compile_amortization_gate.passes")
+    if passes is None:
+        failures.append("compile-amortization gate must record passes=true/false")
+    elif not passes:
+        failures.append("compile-amortization gate did not pass")
+
+    gate_timing_raw = raw.get("timing_semantics")
+    if gate_timing_raw is not None:
+        gate_timing = str(gate_timing_raw).strip().lower().replace("-", "_")
+        if timing_semantics is not None and gate_timing != timing_semantics:
+            failures.append(
+                "compile-amortization timing semantics "
+                f"{gate_timing!r} do not match summary timing semantics {timing_semantics!r}"
+            )
+
+    compile_in_timed_region = _optional_bool(
+        raw.get("compile_in_timed_region"),
+        name="compile_amortization_gate.compile_in_timed_region",
+    )
+    if compile_in_timed_region:
+        failures.append("compile-amortization gate records compilation inside the timed region")
+
+    timed_repeats = _optional_positive_int(
+        raw.get("timed_repeats", raw.get("repeats")),
+        name="compile_amortization_gate.timed_repeats",
+    )
+    min_timed_repeats = _optional_positive_int(
+        raw.get("min_timed_repeats", 1),
+        name="compile_amortization_gate.min_timed_repeats",
+    )
+    if timed_repeats is not None and min_timed_repeats is not None and timed_repeats < min_timed_repeats:
+        failures.append(
+            f"compile-amortization gate recorded only {timed_repeats} timed repeats; "
+            f"need at least {min_timed_repeats}"
+        )
+
+    if timing_semantics in {"cold", "cold_start", "cold_cache", "mixed", "mixed_warm_cold"}:
+        failures.append(f"compile-amortization gate cannot pass timing semantics {timing_semantics!r}")
+
+    reason = raw.get("reason")
+    if reason is not None:
+        notes.append(str(reason))
+    raw_notes = raw.get("notes")
+    if raw_notes is not None:
+        try:
+            notes.extend(str(note) for note in raw_notes)  # type: ignore[arg-type]
+        except TypeError as exc:
+            raise ValueError("compile_amortization_gate.notes must be an iterable of strings") from exc
+
+    return True, not failures, tuple(failures), tuple(notes)
+
+
 def audit_transport_parallel_scaling_summary(
     summary: dict[str, object],
     *,
@@ -353,6 +419,7 @@ def audit_transport_parallel_scaling_summary(
     task_count = _scaling_task_count(summary)
     device_count, device_note = _scaling_device_count(summary, backend=backend)
     timing_semantics, timing_note = _timing_semantics(summary)
+    requested_release = _optional_bool(summary.get("release_scaling_claim"), name="release_scaling_claim")
 
     raw_results = summary.get("results")
     if not isinstance(raw_results, list) or not raw_results:
@@ -402,6 +469,10 @@ def audit_transport_parallel_scaling_summary(
         summary,
         deterministic_payload_coverage=deterministic_payload_coverage,
     )
+    compile_gate_recorded, compile_gate_ok, compile_failures, compile_notes = _compile_amortization_gate(
+        summary,
+        timing_semantics=timing_semantics,
+    )
 
     failures: list[str] = []
     notes: list[str] = []
@@ -433,6 +504,10 @@ def audit_transport_parallel_scaling_summary(
         failures.append("deterministic payload coverage was not proven")
     if not deterministic_output_check:
         failures.append("deterministic output check was not proven")
+    if compile_gate_recorded:
+        failures.extend(compile_failures)
+    elif requested_release is True:
+        failures.append("explicit release_scaling_claim=true requires compile-amortization gate metadata")
     if claim_speedup > claim_finite_task_ideal_speedup * 1.05:
         failures.append(
             f"speedup {claim_speedup:.3g}x exceeds finite-task ideal {claim_finite_task_ideal_speedup:.3g}x by more than 5%"
@@ -446,9 +521,13 @@ def audit_transport_parallel_scaling_summary(
         notes.append(coverage_note)
     if output_note is not None:
         notes.append(output_note)
+    notes.extend(compile_notes)
+    if requested_release is False:
+        notes.append("summary explicitly records release_scaling_claim=false")
     if task_count < claim_workers:
         notes.append(f"{task_count} transport tasks cannot keep {claim_workers} workers fully occupied")
 
+    release_scaling_claim = not failures and requested_release is not False
     return TransportParallelScalingAudit(
         backend=backend,
         task_count=task_count,
@@ -460,12 +539,13 @@ def audit_transport_parallel_scaling_summary(
         claim_efficiency=claim_efficiency,
         claim_finite_task_ideal_speedup=claim_finite_task_ideal_speedup,
         deterministic_payload_coverage=deterministic_payload_coverage,
-        release_scaling_claim=not failures,
+        release_scaling_claim=release_scaling_claim,
         failures=tuple(failures),
         notes=tuple(notes),
         benchmark_kind=benchmark_kind,
         timing_semantics=timing_semantics,
         deterministic_output_check=deterministic_output_check,
+        compile_amortization_gate=compile_gate_ok,
         min_speedup=min_speedup_value,
         min_efficiency=min_efficiency_value,
         min_parallel_workers=min_parallel_workers_value,

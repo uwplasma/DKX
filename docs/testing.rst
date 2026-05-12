@@ -643,7 +643,7 @@ estimate.
 The follow-up
 ``docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json``
 artifact keeps the scale-0.50 blocker actionable without checking in copied VMEC
-run directories. It compares seven bounded CPU routes at the same
+run directories. It compares eight bounded CPU routes at the same
 ``13 x 27 x 50 x 4`` resolution. The public ``auto`` route still times out after
 ``360 s`` after building an explicit FP x-block seed; ``sparse_host_safe`` fails
 host sparse LU on a ``126365616``-entry conservative pattern; ``sparse_lsmr``
@@ -655,10 +655,15 @@ RHS norm, and the run still stalled at ``5.41e-6``. A first opt-in post-GMRES
 matrix-free minimum-residual hook was then tested with four requested steps; it
 accepted two corrections but only changed the true residual from
 ``5.413504e-6`` to ``5.409759e-6``. A stronger opt-in 10-direction coarse
-least-squares correction improved the same floor only to ``5.401187e-6``. This
+least-squares correction improved the same floor only to ``5.401187e-6``. An
+opt-in LGMRES variant was also tested as a restart-robust Krylov alternative; it
+stalled at ``5.577462e-6``, fell back to GMRES, doubled the matrix-vector count
+to ``65204``, and ended at the original ``5.413504e-6`` floor after about
+``300 s``. This
 makes the next required algorithmic step a different global coupling strategy,
 not a larger timeout, full sparse materialization, default initial-seed probe,
-scalar post-minres cleanup, or the current small residual subspace alone.
+scalar post-minres cleanup, the current small residual subspace, or a Krylov
+method toggle alone.
 
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target

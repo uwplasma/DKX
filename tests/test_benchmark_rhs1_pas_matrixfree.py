@@ -14,6 +14,10 @@ from scripts.benchmark_rhs1_pas_matrixfree import (
     main,
     run_bounded_real_solve_probe,
 )
+from scripts.benchmark_pas_tz_memory_fallback import (
+    result_gates as pas_tz_result_gates,
+    summarize_results as summarize_pas_tz_results,
+)
 
 
 def _parse_args(argv: list[str]):
@@ -711,3 +715,70 @@ def test_dry_run_never_launches_opt_in_production_real_solve(tmp_path: Path, mon
         target["will_run"] is False
         for target in payload["plan"]["bounded_real_solve_probe"]["targets"].values()
     )
+
+
+def test_pas_tz_benchmark_requires_guarded_fallback_provenance() -> None:
+    args = type(
+        "Args",
+        (),
+        {
+            "timeout_s": 9.0,
+            "stall_s": 9.0,
+            "max_rss_mb": 0.0,
+            "max_residual_norm": 1.0e-3,
+            "expected_backend": "auto",
+            "allow_solver_churn": False,
+            "solve_method": "incremental",
+            "require_default_promotion_gate": False,
+        },
+    )()
+    row = {
+        "status": "ok",
+        "elapsed_s": 1.0,
+        "max_rss_mb": 256.0,
+        "residual_norm": 1.0e-5,
+        "phase_metadata": [{"name": "solve", "status": "ok", "elapsed_s": 1.0}],
+        "solver_provenance": {
+            "requested_solve_method": "incremental",
+            "realized_solve_method": "incremental",
+        },
+        "metadata": {"accepted_converged": True},
+        "messages_tail": ["solve_v3_full_system_linear_gmres: completed without PAS-TZ fallback"],
+    }
+
+    gates = pas_tz_result_gates(args, row, "tzfft")
+
+    assert gates["guarded_pas_tz"]["status"] == "fail"
+    assert gates["guarded_pas_tz"]["reason"] == "missing-guarded-pas-tz-evidence"
+
+    row["messages_tail"] = [
+        "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback"
+    ]
+    gates = pas_tz_result_gates(args, row, "tzfft")
+
+    assert gates["guarded_pas_tz"]["status"] == "pass"
+    assert gates["guarded_pas_tz"]["reason"] == "guarded-pas-tz-evidence-recorded"
+
+
+def test_pas_tz_summary_does_not_promote_when_any_gate_failed() -> None:
+    row = {
+        "variant": "tzfft",
+        "status": "ok",
+        "gate": "fail",
+        "gate_failures": ["guarded_pas_tz:missing-guarded-pas-tz-evidence"],
+        "gates": {
+            "default_promotion": {
+                "status": "pass",
+                "reason": "promotion-win-recorded",
+            },
+            "guarded_pas_tz": {
+                "status": "fail",
+                "reason": "missing-guarded-pas-tz-evidence",
+            },
+        },
+    }
+
+    summary = summarize_pas_tz_results([row])
+
+    assert summary["all_gates_passed"] is False
+    assert summary["promotion_eligible_variants"] == []

@@ -86,6 +86,9 @@ def test_build_transport_benchmark_plan_records_capped_workers_and_gate_semantic
     assert plan["workers"] == [1, 3]
     assert plan["skipped_workers"] == [4]
     assert plan["timing_semantics"] == "cache_warm"
+    assert plan["compile_amortization_gate"]["passes"] is True
+    assert plan["compile_amortization_gate"]["persistent_compile_cache"] is True
+    assert plan["compile_amortization_gate"]["compile_in_timed_region"] is False
     assert plan["estimated_transport_solve_calls"] == 3
     assert plan["payloads"] == [
         {"which_rhs_values": [1]},
@@ -93,6 +96,7 @@ def test_build_transport_benchmark_plan_records_capped_workers_and_gate_semantic
         {"which_rhs_values": [3]},
     ]
     assert plan["release_gate_semantics"]["cold_start_rejected"] is True
+    assert plan["release_gate_semantics"]["requires_compile_amortization_gate"] is True
     assert plan["memory_gate_semantics"]["gpu_preallocation_disabled"] is True
     assert "--audit" in plan["benchmark_command"]
 
@@ -134,6 +138,64 @@ def test_transport_scaling_audit_rejects_cold_or_weak_speedup_payloads() -> None
     weak_audit = audit_transport_parallel_scaling_summary(weak_payload)
     assert weak_audit.release_scaling_claim is False
     assert any("speedup" in failure for failure in weak_audit.failures)
+
+
+def test_transport_scaling_audit_validates_compile_amortization_gate() -> None:
+    payload = {
+        "benchmark_kind": "transport_worker_scaling",
+        "backend": "cpu",
+        "rhs_count": 3,
+        "which_rhs_values": [1, 2, 3],
+        "workers": [1, 2],
+        "timing_semantics": "cache_warm",
+        "deterministic_payload_coverage": True,
+        "deterministic_output_check": True,
+        "payloads": [
+            {"which_rhs_values": [1, 3]},
+            {"which_rhs_values": [2]},
+        ],
+        "results": [
+            {"workers": 1, "mean_s": 10.0, "speedup": 1.0},
+            {"workers": 2, "mean_s": 7.0, "speedup": 10.0 / 7.0},
+        ],
+    }
+
+    explicit_release = audit_transport_parallel_scaling_summary({**payload, "release_scaling_claim": True})
+    assert explicit_release.release_scaling_claim is False
+    assert any("compile-amortization gate metadata" in failure for failure in explicit_release.failures)
+
+    failing_gate = audit_transport_parallel_scaling_summary(
+        {
+            **payload,
+            "compile_amortization_gate": {
+                "passes": False,
+                "timing_semantics": "cache_warm",
+                "timed_repeats": 1,
+                "min_timed_repeats": 1,
+                "compile_in_timed_region": True,
+            },
+        }
+    )
+    assert failing_gate.release_scaling_claim is False
+    assert failing_gate.compile_amortization_gate is False
+    assert any("did not pass" in failure for failure in failing_gate.failures)
+    assert any("inside the timed region" in failure for failure in failing_gate.failures)
+
+    passing_gate = audit_transport_parallel_scaling_summary(
+        {
+            **payload,
+            "release_scaling_claim": True,
+            "compile_amortization_gate": {
+                "passes": True,
+                "timing_semantics": "cache_warm",
+                "timed_repeats": 1,
+                "min_timed_repeats": 1,
+                "compile_in_timed_region": False,
+            },
+        }
+    )
+    assert passing_gate.release_scaling_claim is True
+    assert passing_gate.compile_amortization_gate is True
 
 
 def test_gpu_transport_runtime_plan_deduplicates_and_coalesces_workers() -> None:
