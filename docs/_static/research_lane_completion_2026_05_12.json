@@ -3,7 +3,7 @@
   "lanes": [
     {
       "before_percent": 23,
-      "current_percent": 95,
+      "current_percent": 96,
       "evidence": [
         {
           "claim": "Production-readiness manifest rolls up all checked QI CPU/GPU seed artifacts and explicitly keeps the gate bounded until production CPU/GPU ladders exist.",
@@ -88,6 +88,18 @@
         {
           "claim": "Scale-0.60 one-GPU seed-0 QI probe passes at active size 81377 from a clean office checkout in 145.1 s and residual ratio 4.68e-3.",
           "path": "docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json"
+        },
+        {
+          "claim": "Scale-0.60 CPU five-seed QI ladder passes accepted-converged strict gates with the bounded side-probe/LGMRES rescue; max elapsed 307.9 s and max residual ratio 8.42e-3.",
+          "path": "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json"
+        },
+        {
+          "claim": "Scale-0.60 GPU seed3 LGMRES-rescue probe times out at 620 s on office, showing the CPU rescue is not a GPU default.",
+          "path": "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json"
+        },
+        {
+          "claim": "Scale-0.60 GPU seed3 right-preconditioned GMRES side-switch probe also times out at 620 s, keeping the hard-seed GPU lane open.",
+          "path": "docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json"
         }
       ],
       "gates": [
@@ -98,12 +110,12 @@
       ],
       "id": "production_qi_cpu_gpu",
       "next_actions": [
-        "Run the scale-0.60 CPU/GPU five-seed QI ladder before widening the default QI auto-policy window.",
-        "Profile host-assembled x-block sparse LU memory and factorization ordering at scale 0.55 and the next bounded scale before any production-resolution promotion.",
-        "Refresh the production-resolution readiness estimate only after the next bounded CPU/GPU seed ladders pass."
+        "Design and test a GPU-native scale-0.60 QI hard-seed solver path or an explicit CPU-offload policy for host-Krylov hard seeds before widening the default QI auto-policy window.",
+        "Only after the scale-0.60 GPU five-seed ladder passes, raise the full-FP 3D x-block sparse-PC default max window beyond the current bounded opt-in gate.",
+        "Profile host-assembled x-block sparse LU memory and factorization ordering at scale 0.60 and the next bounded scale before any production-resolution promotion."
       ],
       "second_push_delta_percent": 65,
-      "second_push_result": "scale-0.50 and scale-0.55 public auto CPU and one-GPU five-seed QI ladders pass, and scale-0.60 CPU/GPU seed-0 probes pass; the setup cliff and hard-seed right-PC slow mode are closed by the exact-LU cap increase plus size-aware precondition-side policy, while scale-0.60 multiseed and production-resolution ladders remain open",
+      "second_push_result": "scale-0.50 and scale-0.55 public auto CPU and one-GPU five-seed QI ladders pass; scale-0.60 CPU now also passes seeds 0..4 with the bounded side-probe/LGMRES rescue. Scale-0.60 GPU seed3 remains the honest blocker: both CPU-style LGMRES rescue and right-GMRES side switch timed out at 620 s on office, so GPU promotion needs a GPU-native or explicit CPU-offload hard-seed path.",
       "status": "active",
       "target_percent": 100,
       "title": "Production-resolution QI CPU/GPU robustness"
@@ -472,7 +484,7 @@
     }
   ],
   "minimum_substantial_delta_percent": 10,
-  "overall_average_percent": 92.7,
+  "overall_average_percent": 92.9,
   "owner_threads": [
     "019e1b62-a2b6-7d82-924c-d3f27b58cc34",
     "019e1b62-ee67-78f3-a63f-06f5623b4217",
