@@ -43,6 +43,68 @@ Immediate priorities:
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
 
+Current active lane (2026-05-12, coordinated large-push research/performance closure):
+- [x] Spawned workers across the active QI, PAS/runtime-memory, parallelism,
+  refactor/coverage/CI, and VMEC/JAX-ecosystem lanes rather than continuing with
+  single-file incremental work.
+- [x] Added a machine-readable cross-lane completion artifact at
+  `docs/_static/research_lane_completion_2026_05_12.json` plus
+  `sfincs_jax/research_lane_policy.py`, `scripts/check_research_lanes.py`, and
+  `tests/test_research_lane_policy.py`. The gate requires evidence paths,
+  non-regressing completion estimates, non-empty acceptance gates, and at least
+  a 10 percentage-point measured increase for active/evidence-ready lanes.
+- [x] QI lane: generated a new bounded five-seed CPU artifact
+  `docs/_static/qi_seed_robustness_multiseed5_cpu.json` and a production-readiness
+  rollup `docs/_static/qi_seed_robustness_evidence_manifest.json`. The measured
+  five-seed bounded CPU ladder passed `5/5`, had zero process failures/timeouts,
+  wrote all outputs and solver traces, and reported maximum residual ratio
+  `7.872e-7`. This materially improves seed coverage but keeps the lane honest:
+  the production gate remains bounded because `25 x 51 x 100 x 8` CPU/GPU
+  five-seed ladders are not checked in.
+- [x] PAS/runtime-memory lane: tightened promotion gates so a candidate cannot be
+  promoted if either elapsed time or peak RSS regresses against the baseline,
+  added pass-through controls to the RHSMode=1 PAS matrix-free benchmark planner,
+  and reduced no-op PAS matrix-free correction probes from two matvecs to one
+  while preserving residual/reject semantics. The bounded PAS probe rejected an
+  `lgmres` candidate as a runtime-and-memory regression, which is the intended
+  future-proof behavior.
+- [x] VMEC/Boozer/JAX-ecosystem lane: added the skip-safe
+  `examples/optimization/vmec_jax_workflow_status.py` scaffold, a dedicated
+  `docs/vmec_jax_workflow.rst` page, and optional Lineax/Equinox/JAXopt measured
+  gates. Local optional-package checks passed, including VMEC/Boozer proxy-gradient
+  validation, Lineax synthetic implicit-solve gate, and Equinox/JAXopt objective
+  gates. The docs explicitly avoid claiming full VMEC-boundary-to-SFINCS kinetic
+  transport gradients.
+- [x] Refactor/coverage/CI lane: centralized repeated transport env-flag parsing,
+  added module/public docstrings across split policy helpers, strengthened dynamic
+  docstring coverage for `sfincs_jax/*policy*.py`, and added fast pure-policy
+  coverage for transport backend, sparse/direct, host-GMRES, and parallel-worker
+  decisions. Focused lane tests passed `29/29`; touched policy-module coverage
+  under `coverage run --timid` is `83%`. The full 95% package-coverage target
+  remains open because it needs broader driver/module splitting rather than slow
+  full-solve tests.
+- [x] Parallel/scaling lane: added plan-only modes to
+  `examples/performance/benchmark_transport_parallel_scaling.py` and
+  `examples/performance/benchmark_sharded_solve_scaling.py`, so CPU/GPU scaling
+  campaigns can be reviewed for worker caps, RHS partitioning, backend env,
+  timeout/memory controls, warm/cold timing semantics, and release-gate semantics
+  before launching expensive solves. Added GPU worker schedule planning in
+  `transport_parallel_runtime.py`. Focused parallel tests passed `64/64` in
+  `19.61 s`. This improves reproducibility and avoids overclaiming; single-case
+  multi-device strong scaling remains experimental until measured speedup
+  artifacts clear the gate.
+- [x] Focused integrated validation after worker merge:
+  `pytest -q tests/test_research_lane_policy.py tests/test_qi_seed_smoke_artifact.py
+  tests/test_benchmark_pas_tz_memory_fallback.py tests/test_benchmark_rhs1_pas_matrixfree.py
+  tests/test_rhs1_pas_matrixfree.py tests/test_transport_policy_coverage.py
+  tests/test_vmec_jax_workflow.py tests/test_optional_ecosystem_gates.py
+  tests/test_policy_module_docstrings.py` passed `69/69` in `5.71 s`.
+- [x] Remaining integration work in this large push: merged the parallel and
+  refactor worker outputs, updated the completion artifact with measured
+  results, and ran release/research-lane checks, docs build, and a broader
+  focused package test set. Final local full-suite/commit/push remains the last
+  closeout step for this push.
+
 Current active lane (2026-05-11, validation/docs/release integration):
 - [x] Keep this pass write-scoped to validation, documentation, planning, and
   release gates. Do not edit `v3_driver.py`, QI/mapped-grid implementation code,

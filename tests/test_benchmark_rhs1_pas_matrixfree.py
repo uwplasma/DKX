@@ -128,6 +128,7 @@ def test_dry_run_writes_json_schema_without_subprocess(
     assert payload["plan"]["bounded_real_solve_probe"]["parent_wall_timeout_s"] <= 600.0
     assert payload["plan"]["bounded_real_solve_probe"]["total_wall_timeout_budget_s"] <= 600.0
     assert payload["plan"]["bounded_real_solve_probe"]["gates"]["max_rss_mb"] == 4096.0
+    assert payload["plan"]["bounded_real_solve_probe"]["gates"]["default_promotion_required"] is False
     assert payload["plan"]["bounded_real_solve_probe"]["safety_policy"]["invalid_targets_fail_closed"] is True
     assert set(payload["plan"]["gates"]) == {"keep", "reject"}
     assert payload["plan"]["cases"][0]["case_id"] == "diagonal_keep"
@@ -572,6 +573,68 @@ def test_opt_in_production_real_solve_probe_selects_requested_target_aliases(
             record["skip_reason"] in {None, "not-requested"}
             for record in real_solve["targets"].values()
         )
+
+
+def test_production_real_solve_probe_propagates_default_promotion_gate(
+    tmp_path: Path,
+) -> None:
+    geom4 = _write_input(tmp_path, geometry_scheme=4, case_name="geometryScheme4_2species_PAS_noEr")
+    artifact = _write_artifact(tmp_path / "artifacts" / "geometry4.json", target_input=str(geom4))
+    args = _parse_args(
+        [
+            "--run-production-solve-probe",
+            "--out",
+            str(tmp_path / "probe.json"),
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+            str(geom4),
+            "--artifact-inputs",
+            str(artifact),
+            "--production-solve-targets",
+            "geometry4",
+            "--production-solve-require-default-promotion-gate",
+            "--production-solve-baseline-elapsed-s",
+            "50",
+            "--production-solve-baseline-rss-mb",
+            "4000",
+            "--production-solve-min-runtime-speedup",
+            "1.10",
+            "--production-solve-min-memory-reduction",
+            "1.20",
+        ]
+    )
+
+    plan = build_plan(args)
+    real_solve = plan["bounded_real_solve_probe"]
+    command = real_solve["targets"]["geometry4"]["command"]
+
+    assert real_solve["gates"]["default_promotion_required"] is True
+    assert real_solve["gates"]["baseline_elapsed_s"] == 50.0
+    assert real_solve["gates"]["baseline_rss_mb"] == 4000.0
+    assert "--require-default-promotion-gate" in command
+    assert command[command.index("--baseline-elapsed-s") + 1] == "50.0"
+    assert command[command.index("--baseline-rss-mb") + 1] == "4000.0"
+    assert command[command.index("--min-runtime-speedup") + 1] == "1.1"
+    assert command[command.index("--min-memory-reduction") + 1] == "1.2"
+
+
+def test_production_real_solve_promotion_gate_requires_baselines(tmp_path: Path) -> None:
+    out = tmp_path / "probe.json"
+
+    try:
+        main(
+            [
+                "--dry-run",
+                "--out",
+                str(out),
+                "--production-solve-require-default-promotion-gate",
+            ]
+        )
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected parser failure for missing promotion baselines")
 
 
 def test_production_real_solve_probe_rejects_unknown_target_without_fallback(

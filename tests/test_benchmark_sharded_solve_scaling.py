@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from examples.performance.benchmark_sharded_matvec_scaling import _build_sharded_matvec_benchmark_plan
 from examples.performance.benchmark_sharded_solve_scaling import (
+    _build_sharded_solve_benchmark_plan,
     _configure_backend_env,
     _configure_benchmark_subprocess_env,
     _configure_solver_env,
+    _run_once_command,
     _run_once_subprocess,
     _timing_semantics,
 )
+from sfincs_jax.transport_parallel_policy import audit_sharded_solve_scaling_summary
 
 
 def test_configure_backend_env_cpu() -> None:
@@ -127,3 +131,108 @@ def test_run_once_subprocess_passes_recorded_solver_options(monkeypatch, tmp_pat
     assert env["JAX_COMPILATION_CACHE_DIR"] == str(tmp_path / "cache")
     assert env["TF_CPP_MIN_LOG_LEVEL"] == "2"
     assert timeout == 45.0
+
+
+def test_run_once_command_records_all_sharded_solver_options() -> None:
+    cmd = _run_once_command(
+        input_path=Path("case.input.namelist"),
+        shard_axis="zeta",
+        gmres_distributed="0",
+        distributed_krylov="off",
+        periodic_stencil_on_sharded="off",
+        nsolve=3,
+        inner_warmup_solves=1,
+        rhs1_precond="theta_schwarz",
+        backend="gpu",
+        schwarz_coarse_levels=2,
+        schwarz_coarse_steps=1,
+        schwarz_coarse_damp=0.75,
+    )
+
+    assert cmd[1].endswith("benchmark_sharded_solve_scaling.py")
+    assert "--run-once" in cmd
+    assert cmd[cmd.index("--shard-axis") + 1] == "zeta"
+    assert cmd[cmd.index("--gmres-distributed") + 1] == "0"
+    assert cmd[cmd.index("--distributed-krylov") + 1] == "off"
+    assert cmd[cmd.index("--periodic-stencil-on-sharded") + 1] == "off"
+    assert cmd[cmd.index("--rhs1-precond") + 1] == "theta_schwarz"
+    assert cmd[cmd.index("--backend") + 1] == "gpu"
+    assert cmd[cmd.index("--schwarz-coarse-levels") + 1] == "2"
+
+
+def test_sharded_solve_plan_records_hot_timing_timeout_and_non_release_gate(tmp_path: Path) -> None:
+    plan = _build_sharded_solve_benchmark_plan(
+        input_path=Path("examples/performance/rhsmode1_sharded_scaling.input.namelist"),
+        devices=[2, 1],
+        warmup=0,
+        repeats=1,
+        nsolve=4,
+        inner_warmup_solves=1,
+        sample_timeout_s=120.0,
+        global_warmup=0,
+        out_dir=tmp_path / "out",
+        cache_dir=tmp_path / "cache",
+        shard_axis="theta",
+        gmres_distributed="1",
+        distributed_krylov="auto",
+        periodic_stencil_on_sharded="auto",
+        rhs1_precond="theta_schwarz",
+        backend="gpu",
+        schwarz_coarse_levels=2,
+        schwarz_coarse_steps=None,
+        schwarz_coarse_damp=None,
+        audit=True,
+    )
+
+    assert plan["artifact_kind"] == "benchmark_plan"
+    assert plan["launches_solves"] is False
+    assert plan["devices"] == [1, 2]
+    assert plan["timing_semantics"] == "hot_solve"
+    assert plan["release_scaling_claim"] is False
+    assert plan["speedup_gate_semantics"]["gate_scope"] == "schema_and_honesty_only"
+    assert plan["memory_gate_semantics"]["child_process_timeout_enabled"] is True
+    assert plan["device_plan"][1]["env"]["CUDA_VISIBLE_DEVICES"] == "0,1"
+    assert "--audit" in plan["benchmark_command"]
+
+
+def test_sharded_solve_audit_keeps_single_case_scaling_non_release() -> None:
+    payload = {
+        "benchmark_kind": "single_case_sharded_solve",
+        "scaling_status": "experimental_single_case_sharding",
+        "experimental_single_case_scaling": True,
+        "release_scaling_claim": True,
+        "backend": "cpu",
+        "timing_semantics": "hot_solve",
+        "deterministic_output_check": False,
+        "results": [
+            {"devices": 1, "mean_s": 10.0, "speedup": 1.0},
+            {"devices": 2, "mean_s": 4.0, "speedup": 2.5},
+        ],
+    }
+
+    audit = audit_sharded_solve_scaling_summary(payload)
+
+    assert audit.release_scaling_claim is False
+    assert audit.ci_gate_pass is False
+    assert any("release_scaling_claim=true" in failure for failure in audit.failures)
+
+
+def test_sharded_matvec_plan_records_compiled_hot_loop_and_padding(tmp_path: Path) -> None:
+    plan = _build_sharded_matvec_benchmark_plan(
+        input_path=Path("examples/performance/transport_parallel_sharded.input.namelist"),
+        devices=[2, 1],
+        nrep=20,
+        repeats=2,
+        global_warmup=1,
+        axis="theta",
+        pad=True,
+        out_dir=tmp_path / "out",
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert plan["artifact_kind"] == "benchmark_plan"
+    assert plan["benchmark_kind"] == "sharded_matvec_scaling"
+    assert plan["devices"] == [1, 2]
+    assert plan["timing_semantics"] == "compiled_matvec_hot_loop"
+    assert plan["memory_gate_semantics"]["padding_enabled"] is True
+    assert plan["estimated_child_process_samples"] == 5

@@ -24,6 +24,13 @@ from typing import Iterable
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_QI_INPUT = REPO_ROOT / "examples" / "additional_examples" / "input.namelist"
 DEFAULT_OUT_ROOT = REPO_ROOT / "tests" / "qi_seed_robustness"
+DEFAULT_EVIDENCE_ARTIFACTS = (
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_smoke.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed_gpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale035_cpu_gpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed5_cpu.json",
+)
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 
 
@@ -71,6 +78,37 @@ def _replace_or_append_parameter(text: str, *, group: str, key: str, value: str)
 
 def _normalize_text(text: str) -> str:
     return "\n".join(line.rstrip() for line in text.splitlines()).rstrip() + "\n"
+
+
+def _repo_relative(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(resolved)
+
+
+def _total_size_from_resolution(resolution: dict[str, object]) -> int | None:
+    try:
+        product = 1
+        for key in RESOLUTION_KEYS:
+            product *= int(resolution[key])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return product + 2
+
+
+def _resolution_fractions(resolution: dict[str, object], production_resolution: dict[str, int]) -> dict[str, float]:
+    fractions: dict[str, float] = {}
+    for key in RESOLUTION_KEYS:
+        denominator = int(production_resolution.get(key, 0))
+        if denominator <= 0:
+            continue
+        try:
+            fractions[key] = float(resolution[key]) / float(denominator)
+        except (KeyError, TypeError, ValueError):
+            continue
+    return fractions
 
 
 def _hash_unit(seed: int, label: str) -> float:
@@ -404,6 +442,401 @@ def _evaluate_execution_gates(
     }
 
 
+def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object]:
+    """Return a docs-friendly execution summary from a generated manifest."""
+    execution = manifest.get("execution")
+    if not isinstance(execution, dict):
+        raise ValueError("--summary-output requires --execute so execution results exist")
+    cases = manifest.get("cases")
+    if not isinstance(cases, list) or not cases:
+        raise ValueError("manifest has no cases to summarize")
+
+    case_by_name = {str(case.get("case")): case for case in cases if isinstance(case, dict)}
+    results = execution.get("results")
+    if not isinstance(results, list):
+        raise ValueError("manifest execution has no result list")
+
+    seed_summaries: list[dict[str, object]] = []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        trace = result.get("solver_trace_summary")
+        trace_summary = trace if isinstance(trace, dict) else {}
+        case = case_by_name.get(str(result.get("case")), {})
+        seed_summaries.append(
+            {
+                "case": result.get("case"),
+                "seed": result.get("seed"),
+                "returncode": result.get("returncode"),
+                "timed_out": result.get("timed_out"),
+                "output_exists": result.get("output_exists"),
+                "solver_trace_exists": result.get("solver_trace_exists"),
+                "elapsed_s": result.get("elapsed_s"),
+                "solver_elapsed_s": trace_summary.get("elapsed_s"),
+                "backend": trace_summary.get("backend"),
+                "solve_method": trace_summary.get("solve_method"),
+                "selected_path": trace_summary.get("selected_path"),
+                "converged": trace_summary.get("converged"),
+                "accepted_converged": trace_summary.get("accepted_converged"),
+                "residual_norm": trace_summary.get("residual_norm"),
+                "residual_target": trace_summary.get("residual_target"),
+                "residual_ratio": trace_summary.get("residual_ratio"),
+                "resolution": case.get("resolution") if isinstance(case, dict) else None,
+            }
+        )
+
+    first_case = cases[0]
+    resolution = first_case.get("resolution") if isinstance(first_case, dict) else None
+    source_input = Path(str(manifest["source_input"]))
+    solve_method = str(manifest.get("solve_method", ""))
+    return {
+        "schema_version": 2,
+        "artifact_kind": "qi_seed_execution_summary",
+        "lane": "qi_seed_robustness",
+        "source_input": _repo_relative(source_input),
+        "resolution_scale": manifest.get("resolution_scale"),
+        "resolution": resolution,
+        "total_size_estimate": _total_size_from_resolution(resolution) if isinstance(resolution, dict) else None,
+        "case_count": manifest.get("case_count"),
+        "public_cli_default_path": solve_method.strip().lower() in {"auto", "default", ""},
+        "solve_method_request": solve_method,
+        "nu_jitter": manifest.get("nu_jitter"),
+        "er_jitter": manifest.get("er_jitter"),
+        "evidence_note": (
+            "Bounded five-seed CPU QI robustness evidence generated from the reusable runner "
+            "manifest gate. It extends the low-resolution seed count but remains below "
+            "production resolution."
+        ),
+        "execution_summary": execution.get("summary"),
+        "gates": execution.get("gates"),
+        "seeds": seed_summaries,
+        "timeout_s": execution.get("timeout_s"),
+        "fail_fast": execution.get("fail_fast"),
+    }
+
+
+def _write_compact_execution_artifact(path: Path, manifest: dict[str, object]) -> dict[str, object]:
+    payload = _compact_execution_artifact(manifest)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
+
+
+def _artifact_passed(payload: dict[str, object]) -> bool:
+    gates = payload.get("gates")
+    if isinstance(gates, dict) and isinstance(gates.get("passed"), bool):
+        return bool(gates["passed"])
+    if "passed" in payload and "failed" in payload:
+        try:
+            return int(payload["passed"]) > 0 and int(payload["failed"]) == 0
+        except (TypeError, ValueError):
+            return False
+    return False
+
+
+def _artifact_backends(payload: dict[str, object]) -> list[str]:
+    summary = payload.get("execution_summary")
+    if isinstance(summary, dict) and isinstance(summary.get("backends"), list):
+        return sorted({str(backend) for backend in summary["backends"] if backend})
+
+    trace = payload.get("solver_trace_summary")
+    if isinstance(trace, dict) and trace.get("backend"):
+        return [str(trace["backend"])]
+
+    runs = payload.get("runs")
+    if isinstance(runs, dict):
+        backends = set()
+        for run in runs.values():
+            if isinstance(run, dict) and run.get("backend") and run.get("process_passed") is not False:
+                backends.add(str(run["backend"]))
+        return sorted(backends)
+    return []
+
+
+def _artifact_max_residual_ratio(payload: dict[str, object]) -> float | None:
+    candidates: list[float] = []
+    summary = payload.get("execution_summary")
+    if isinstance(summary, dict):
+        value = _finite_float_or_none(summary.get("max_residual_ratio"))
+        if value is not None:
+            candidates.append(value)
+
+    trace = payload.get("solver_trace_summary")
+    if isinstance(trace, dict):
+        value = _finite_float_or_none(trace.get("residual_ratio"))
+        if value is not None:
+            candidates.append(value)
+
+    runs = payload.get("runs")
+    if isinstance(runs, dict):
+        for run_name, run in runs.items():
+            if not isinstance(run, dict) or str(run_name).endswith("before_patch"):
+                continue
+            value = _finite_float_or_none(run.get("residual_ratio"))
+            if value is not None:
+                candidates.append(value)
+    return max(candidates) if candidates else None
+
+
+def _artifact_max_elapsed_s(payload: dict[str, object]) -> float | None:
+    candidates: list[float] = []
+    summary = payload.get("execution_summary")
+    if isinstance(summary, dict):
+        value = _finite_float_or_none(summary.get("max_elapsed_s"))
+        if value is not None:
+            candidates.append(value)
+
+    value = _finite_float_or_none(payload.get("execution_elapsed_s"))
+    if value is not None:
+        candidates.append(value)
+
+    runs = payload.get("runs")
+    if isinstance(runs, dict):
+        for run_name, run in runs.items():
+            if not isinstance(run, dict) or str(run_name).endswith("before_patch"):
+                continue
+            value = _finite_float_or_none(run.get("elapsed_s"))
+            if value is not None:
+                candidates.append(value)
+    return max(candidates) if candidates else None
+
+
+def _artifact_case_count(payload: dict[str, object]) -> int:
+    try:
+        case_count = int(payload.get("case_count", 0))
+    except (TypeError, ValueError):
+        case_count = 0
+    if case_count > 0:
+        return case_count
+    return 1 if isinstance(payload.get("runs"), dict) else 0
+
+
+def _summarize_evidence_artifact(path: Path, payload: dict[str, object], production_resolution: dict[str, int]) -> dict[str, object]:
+    resolution = payload.get("resolution")
+    resolution_dict = resolution if isinstance(resolution, dict) else {}
+    total_size = _finite_float_or_none(payload.get("total_size"))
+    if total_size is None:
+        estimate = _total_size_from_resolution(resolution_dict)
+        total_size = float(estimate) if estimate is not None else None
+    active_size = _finite_float_or_none(payload.get("active_size"))
+    return {
+        "path": _repo_relative(path),
+        "schema_version": payload.get("schema_version"),
+        "artifact_kind": payload.get("artifact_kind", "legacy_qi_seed_summary"),
+        "passed": _artifact_passed(payload),
+        "case_count": _artifact_case_count(payload),
+        "backends": _artifact_backends(payload),
+        "public_cli_default_path": payload.get("public_cli_default_path"),
+        "resolution": resolution,
+        "resolution_fractions": _resolution_fractions(resolution_dict, production_resolution),
+        "total_size": int(total_size) if total_size is not None else None,
+        "active_size": int(active_size) if active_size is not None else None,
+        "max_residual_ratio": _artifact_max_residual_ratio(payload),
+        "max_elapsed_s": _artifact_max_elapsed_s(payload),
+    }
+
+
+def build_evidence_manifest(
+    *,
+    artifact_paths: Iterable[Path],
+    source_input: Path,
+    production_seed_count: int,
+    production_timeout_s: float,
+) -> dict[str, object]:
+    """Build the QI production-readiness manifest from checked summary artifacts."""
+    source_text = source_input.read_text(encoding="utf-8")
+    source_resolution = _read_resolution(source_text)
+    production_resolution = _scaled_resolution(
+        source_resolution,
+        scale=1.0,
+        min_ntheta=int(source_resolution.get("NTHETA", 25)),
+        min_nzeta=int(source_resolution.get("NZETA", 51)),
+        min_nx=int(source_resolution.get("NX", 8)),
+        min_nxi=int(source_resolution.get("NXI", 100)),
+    )
+    production_total_size = _total_size_from_resolution(production_resolution)
+
+    artifacts: list[dict[str, object]] = []
+    seen_artifacts: set[Path] = set()
+    for path in artifact_paths:
+        resolved_path = path.resolve()
+        if resolved_path in seen_artifacts or not resolved_path.exists():
+            continue
+        seen_artifacts.add(resolved_path)
+        payload = json.loads(resolved_path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            artifacts.append(_summarize_evidence_artifact(resolved_path, payload, production_resolution))
+
+    max_total_size = max(
+        (int(artifact["total_size"]) for artifact in artifacts if artifact.get("total_size") is not None),
+        default=0,
+    )
+    max_active_size = max(
+        (int(artifact["active_size"]) for artifact in artifacts if artifact.get("active_size") is not None),
+        default=0,
+    )
+    max_per_axis_fraction = max(
+        (
+            min(float(value) for value in artifact["resolution_fractions"].values())
+            for artifact in artifacts
+            if isinstance(artifact.get("resolution_fractions"), dict) and artifact["resolution_fractions"]
+        ),
+        default=0.0,
+    )
+    max_total_fraction = (
+        float(max_total_size) / float(production_total_size)
+        if production_total_size is not None and production_total_size > 0
+        else None
+    )
+    passed_artifacts = [artifact for artifact in artifacts if artifact.get("passed") is True]
+    checked_backends = sorted(
+        {
+            str(backend)
+            for artifact in passed_artifacts
+            for backend in artifact.get("backends", [])
+            if backend
+        }
+    )
+
+    cpu_command = [
+        "JAX_PLATFORM_NAME=cpu",
+        "python",
+        "scripts/run_qi_seed_robustness.py",
+        "--out-root",
+        "tests/qi_seed_robustness_prod_cpu",
+        "--seeds",
+        *[str(seed) for seed in range(int(production_seed_count))],
+        "--resolution-scale",
+        "1.0",
+        "--min-ntheta",
+        str(production_resolution["NTHETA"]),
+        "--min-nzeta",
+        str(production_resolution["NZETA"]),
+        "--min-nx",
+        str(production_resolution["NX"]),
+        "--min-nxi",
+        str(production_resolution["NXI"]),
+        "--execute",
+        "--timeout-s",
+        str(float(production_timeout_s)),
+        "--max-residual-ratio",
+        "1",
+        "--require-converged",
+        "--summary-output",
+        "docs/_static/qi_seed_robustness_prod_cpu.json",
+        "--clean",
+    ]
+    gpu_command = [
+        "CUDA_VISIBLE_DEVICES=0",
+        "JAX_PLATFORM_NAME=gpu",
+        "python",
+        "scripts/run_qi_seed_robustness.py",
+        "--out-root",
+        "tests/qi_seed_robustness_prod_gpu0",
+        "--seeds",
+        *[str(seed) for seed in range(int(production_seed_count))],
+        "--resolution-scale",
+        "1.0",
+        "--min-ntheta",
+        str(production_resolution["NTHETA"]),
+        "--min-nzeta",
+        str(production_resolution["NZETA"]),
+        "--min-nx",
+        str(production_resolution["NX"]),
+        "--min-nxi",
+        str(production_resolution["NXI"]),
+        "--execute",
+        "--timeout-s",
+        str(float(production_timeout_s)),
+        "--max-residual-ratio",
+        "1",
+        "--require-converged",
+        "--summary-output",
+        "docs/_static/qi_seed_robustness_prod_gpu0.json",
+        "--clean",
+    ]
+
+    return {
+        "schema_version": 1,
+        "artifact_kind": "qi_seed_production_gate_manifest",
+        "lane": "qi_seed_robustness",
+        "source_input": _repo_relative(source_input),
+        "release_gate": "bounded_proxy",
+        "release_gate_reason": (
+            "Bounded CPU/GPU QI artifacts pass, but no production-resolution CPU/GPU "
+            "multi-seed ladder has been checked in yet."
+        ),
+        "source_artifacts": artifacts,
+        "current_evidence": {
+            "artifact_count": len(artifacts),
+            "passing_artifact_count": len(passed_artifacts),
+            "checked_backends": checked_backends,
+            "max_checked_total_size": max_total_size,
+            "max_checked_active_size": max_active_size or None,
+            "max_checked_total_size_fraction": max_total_fraction,
+            "max_checked_per_axis_resolution_fraction": max_per_axis_fraction,
+            "bounded_lane_completion_estimate_percent": round(100.0 * max_per_axis_fraction, 1),
+            "production_total_size_uncovered_percent": (
+                round(100.0 * (1.0 - max_total_fraction), 2) if max_total_fraction is not None else None
+            ),
+        },
+        "production_target": {
+            "resolution": production_resolution,
+            "total_size_estimate": production_total_size,
+            "seed_count": int(production_seed_count),
+            "required_backends": ["cpu", "gpu"],
+        },
+        "acceptance_gates": {
+            "public_cli_default_path": True,
+            "solve_method": "auto",
+            "process_failed": 0,
+            "timed_out": 0,
+            "outputs_written": int(production_seed_count),
+            "solver_traces_written": int(production_seed_count),
+            "converged": int(production_seed_count),
+            "max_residual_ratio": 1.0,
+            "required_backends": ["cpu", "gpu"],
+            "required_artifacts": [
+                "docs/_static/qi_seed_robustness_prod_cpu.json",
+                "docs/_static/qi_seed_robustness_prod_gpu0.json",
+            ],
+        },
+        "regeneration_commands": {
+            "refresh_evidence_manifest": (
+                "python scripts/run_qi_seed_robustness.py "
+                "--summarize-artifacts-only "
+                "--evidence-manifest-output docs/_static/qi_seed_robustness_evidence_manifest.json"
+            ),
+            "production_cpu_seed_ladder": " ".join(cpu_command),
+            "production_gpu0_seed_ladder": " ".join(gpu_command),
+        },
+        "open_blockers": [
+            "Run and check in production-resolution CPU multi-seed summary artifact.",
+            "Run and check in production-resolution GPU0 multi-seed summary artifact.",
+            "Promote release_gate only after both production artifacts pass the residual and convergence gates.",
+        ],
+    }
+
+
+def _write_evidence_manifest(
+    *,
+    output_path: Path,
+    artifact_paths: Iterable[Path],
+    source_input: Path,
+    production_seed_count: int,
+    production_timeout_s: float,
+) -> dict[str, object]:
+    payload = build_evidence_manifest(
+        artifact_paths=artifact_paths,
+        source_input=source_input,
+        production_seed_count=production_seed_count,
+        production_timeout_s=production_timeout_s,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=DEFAULT_QI_INPUT, help="Base QI input.namelist.")
@@ -444,6 +877,42 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Optional promotion gate: require every solver trace metadata to report accepted_converged=true.",
     )
+    parser.add_argument(
+        "--summary-output",
+        type=Path,
+        default=None,
+        help="Optional compact JSON artifact written from the executed manifest for docs/_static.",
+    )
+    parser.add_argument(
+        "--evidence-manifest-output",
+        type=Path,
+        default=None,
+        help="Optional production-readiness manifest summarizing checked QI docs/_static artifacts.",
+    )
+    parser.add_argument(
+        "--evidence-artifacts",
+        type=Path,
+        nargs="+",
+        default=None,
+        help="QI summary artifacts to include in --evidence-manifest-output.",
+    )
+    parser.add_argument(
+        "--production-seed-count",
+        type=int,
+        default=5,
+        help="Seed count required by generated production-resolution acceptance commands.",
+    )
+    parser.add_argument(
+        "--production-timeout-s",
+        type=float,
+        default=3600.0,
+        help="Per-seed timeout for generated production-resolution acceptance commands.",
+    )
+    parser.add_argument(
+        "--summarize-artifacts-only",
+        action="store_true",
+        help="Only write --evidence-manifest-output; do not materialize or execute seed cases.",
+    )
     parser.add_argument("--clean", action="store_true", help="Remove --out-root before materializing cases.")
     return parser
 
@@ -453,6 +922,23 @@ def main(argv: list[str] | None = None) -> int:
     source_input = Path(args.input).resolve()
     if not source_input.exists():
         raise FileNotFoundError(source_input)
+
+    evidence_artifacts = [
+        Path(path).resolve()
+        for path in (args.evidence_artifacts if args.evidence_artifacts is not None else DEFAULT_EVIDENCE_ARTIFACTS)
+    ]
+    if bool(args.summarize_artifacts_only):
+        if args.evidence_manifest_output is None:
+            raise ValueError("--summarize-artifacts-only requires --evidence-manifest-output")
+        _write_evidence_manifest(
+            output_path=Path(args.evidence_manifest_output).resolve(),
+            artifact_paths=evidence_artifacts,
+            source_input=source_input,
+            production_seed_count=int(args.production_seed_count),
+            production_timeout_s=float(args.production_timeout_s),
+        )
+        print(f"Wrote {Path(args.evidence_manifest_output).resolve()}")
+        return 0
 
     out_root = Path(args.out_root).resolve()
     if args.clean and out_root.exists():
@@ -514,6 +1000,23 @@ def main(argv: list[str] | None = None) -> int:
     manifest_path = out_root / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"Wrote {manifest_path}")
+    if args.summary_output is not None:
+        summary_path = Path(args.summary_output).resolve()
+        _write_compact_execution_artifact(summary_path, manifest)
+        print(f"Wrote {summary_path}")
+    if args.evidence_manifest_output is not None:
+        evidence_path = Path(args.evidence_manifest_output).resolve()
+        artifact_paths = list(evidence_artifacts)
+        if args.summary_output is not None:
+            artifact_paths.append(Path(args.summary_output).resolve())
+        _write_evidence_manifest(
+            output_path=evidence_path,
+            artifact_paths=artifact_paths,
+            source_input=source_input,
+            production_seed_count=int(args.production_seed_count),
+            production_timeout_s=float(args.production_timeout_s),
+        )
+        print(f"Wrote {evidence_path}")
     print(f"Cases: {len(cases)}")
     if bool(args.execute):
         execution = manifest["execution"]  # type: ignore[index]

@@ -15,6 +15,18 @@ from sfincs_jax.v3_driver import full_system_operator_from_namelist
 from sfincs_jax.v3_system import apply_v3_full_system_operator_cached
 
 
+def _display_path(path: Path, *, repo_root: Path) -> str:
+    try:
+        return str(Path(path).resolve().relative_to(repo_root))
+    except ValueError:
+        return str(path)
+
+
+def _normalize_device_counts(requested_devices: list[int]) -> list[int]:
+    devices = sorted({int(d) for d in requested_devices if int(d) >= 1})
+    return devices or [1]
+
+
 def _run_once(input_path: Path, *, nrep: int) -> float:
     os.environ["SFINCS_JAX_FORTRAN_STDOUT"] = "0"
     os.environ["SFINCS_JAX_SOLVER_ITER_STATS"] = "0"
@@ -48,6 +60,137 @@ def _run_once(input_path: Path, *, nrep: int) -> float:
     return (t1 - t0) / float(max(1, int(nrep)))
 
 
+def _run_once_args(*, input_path: Path | str, nrep: int) -> list[str]:
+    return [
+        "--run-once",
+        "--input",
+        str(input_path),
+        "--nrep",
+        str(int(nrep)),
+    ]
+
+
+def _run_once_command(*, input_path: Path, nrep: int) -> list[str]:
+    return [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        *_run_once_args(input_path=input_path, nrep=nrep),
+    ]
+
+
+def _device_env_preview(
+    *,
+    devices: int,
+    cache_dir: Path | None,
+    axis: str,
+    pad: bool,
+    repo_root: Path,
+) -> dict[str, str]:
+    env = {
+        "SFINCS_JAX_CPU_DEVICES": str(int(devices)),
+        "SFINCS_JAX_MATVEC_SHARD_AXIS": str(axis),
+        "SFINCS_JAX_AUTO_SHARD": "1",
+        "SFINCS_JAX_SHARD_PAD": "1" if pad else "0",
+        "SFINCS_JAX_FORTRAN_STDOUT": "0",
+        "SFINCS_JAX_SOLVER_ITER_STATS": "0",
+    }
+    if cache_dir is not None:
+        env["JAX_COMPILATION_CACHE_DIR"] = _display_path(cache_dir, repo_root=repo_root)
+    return env
+
+
+def _build_sharded_matvec_benchmark_plan(
+    *,
+    input_path: Path,
+    devices: list[int],
+    nrep: int,
+    repeats: int,
+    global_warmup: int,
+    axis: str,
+    pad: bool,
+    out_dir: Path,
+    cache_dir: Path,
+) -> dict[str, object]:
+    repo_root = Path(__file__).resolve().parents[2]
+    normalized_devices = _normalize_device_counts(devices)
+    input_display = _display_path(input_path, repo_root=repo_root)
+    device_plan = []
+    for d in normalized_devices:
+        device_plan.append(
+            {
+                "devices": int(d),
+                "timed_repeats": max(int(repeats), 1),
+                "nrep_per_timing": max(int(nrep), 1),
+                "env": _device_env_preview(
+                    devices=d,
+                    cache_dir=cache_dir,
+                    axis=str(axis),
+                    pad=bool(pad),
+                    repo_root=repo_root,
+                ),
+                "run_once_command": [
+                    "python",
+                    "examples/performance/benchmark_sharded_matvec_scaling.py",
+                    *_run_once_args(input_path=input_display, nrep=int(nrep)),
+                ],
+            }
+        )
+    return {
+        "artifact_kind": "benchmark_plan",
+        "benchmark_kind": "sharded_matvec_scaling",
+        "launches_solves": False,
+        "input": input_path.name,
+        "input_path": input_display,
+        "case": input_path.stem.replace(".input", ""),
+        "axis": str(axis),
+        "pad": bool(pad),
+        "devices": normalized_devices,
+        "nrep": int(nrep),
+        "repeats": int(repeats),
+        "global_warmup": int(global_warmup),
+        "timing_semantics": "compiled_matvec_hot_loop",
+        "device_plan": device_plan,
+        "estimated_child_process_samples": int(max(global_warmup, 0))
+        + len(normalized_devices) * max(int(repeats), 1),
+        "speedup_gate_semantics": {
+            "release_gate": False,
+            "metric": "one_device_mean_s / device_mean_s",
+            "matvec_microbenchmark_only": True,
+        },
+        "memory_gate_semantics": {
+            "status": "not_measured_in_plan",
+            "cpu_devices_per_child": "SFINCS_JAX_CPU_DEVICES",
+            "padding_enabled": bool(pad),
+        },
+        "benchmark_command": [
+            "python",
+            "examples/performance/benchmark_sharded_matvec_scaling.py",
+            "--input",
+            input_display,
+            "--axis",
+            str(axis),
+            "--devices",
+            *[str(int(d)) for d in normalized_devices],
+            "--nrep",
+            str(int(nrep)),
+            "--repeats",
+            str(int(repeats)),
+            "--global-warmup",
+            str(int(global_warmup)),
+            "--out-dir",
+            _display_path(out_dir, repo_root=repo_root),
+            "--cache-dir",
+            _display_path(cache_dir, repo_root=repo_root),
+            *(["--pad"] if pad else []),
+        ],
+    }
+
+
+def _write_plan_json(plan: dict[str, object], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")
+
+
 def _run_once_subprocess(
     *, input_path: Path, devices: int, nrep: int, cache_dir: Path | None, axis: str, pad: bool
 ) -> float:
@@ -61,15 +204,7 @@ def _run_once_subprocess(
     if cache_dir is not None:
         env["JAX_COMPILATION_CACHE_DIR"] = str(cache_dir)
 
-    cmd = [
-        sys.executable,
-        str(Path(__file__).resolve()),
-        "--run-once",
-        "--input",
-        str(input_path),
-        "--nrep",
-        str(int(nrep)),
-    ]
+    cmd = _run_once_command(input_path=input_path, nrep=int(nrep))
     out = subprocess.check_output(cmd, env=env, text=True)
     return float(out.strip().splitlines()[-1])
 
@@ -131,6 +266,17 @@ def main() -> None:
         action="store_true",
         help="Run once and print wall time (internal).",
     )
+    parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="Write a deterministic benchmark plan JSON without launching matvec child processes.",
+    )
+    parser.add_argument(
+        "--plan-json",
+        type=Path,
+        default=None,
+        help="Path for --plan-only JSON (default: --out-dir/sharded_matvec_benchmark_plan.json).",
+    )
     args = parser.parse_args()
 
     input_path = args.input
@@ -145,9 +291,27 @@ def main() -> None:
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = args.cache_dir
-    cache_dir.mkdir(parents=True, exist_ok=True)
 
-    devices = sorted({int(d) for d in args.devices if int(d) >= 1})
+    devices = _normalize_device_counts([int(d) for d in args.devices])
+
+    if args.plan_only:
+        plan = _build_sharded_matvec_benchmark_plan(
+            input_path=input_path,
+            devices=devices,
+            nrep=int(args.nrep),
+            repeats=int(args.repeats),
+            global_warmup=int(args.global_warmup),
+            axis=str(args.axis),
+            pad=bool(args.pad),
+            out_dir=out_dir,
+            cache_dir=cache_dir,
+        )
+        plan_path = args.plan_json if args.plan_json is not None else out_dir / "sharded_matvec_benchmark_plan.json"
+        _write_plan_json(plan, plan_path)
+        print(json.dumps(plan, indent=2, sort_keys=True))
+        return
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
     if args.global_warmup and args.global_warmup > 0:
         for _ in range(int(args.global_warmup)):

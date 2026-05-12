@@ -182,6 +182,7 @@ def rhs1_pas_matrixfree_correction(
     accepted_steps = 0
     best_norm = initial_norm
     current_residual = jnp.asarray(residual)
+    omega_use = float(config.omega)
     for _step in range(max(1, int(config.max_steps))):
         update = jnp.asarray(correction(current_residual))
         if update.shape != x_initial.shape:
@@ -217,10 +218,32 @@ def rhs1_pas_matrixfree_correction(
                     "update_norm_finite": False,
                 },
             )
+        if update_norm == 0.0 or omega_use == 0.0:
+            history.append(best_norm)
+            return Rhs1PasMatrixFreeResult(
+                x=x_best,
+                residual_norm=best_norm,
+                initial_residual_norm=initial_norm,
+                residual_history=tuple(history),
+                accepted_steps=accepted_steps,
+                accepted=accepted_steps > 0,
+                reason="insufficient-residual-improvement",
+                diagnostics=_gate_diagnostics(
+                    reason="insufficient-residual-improvement",
+                    initial_residual_norm=best_norm,
+                    candidate_residual_norm=best_norm,
+                    min_residual_reduction=float(config.min_residual_reduction),
+                    accepted_steps=accepted_steps,
+                ),
+            )
         if config.max_update_norm_ratio is not None:
-            x_scale = max(streaming_l2_norm(x_best, block_size=config.block_size), 1.0)
-            if update_norm > x_scale * float(config.max_update_norm_ratio):
-                update_limit = x_scale * float(config.max_update_norm_ratio)
+            max_update_ratio = float(config.max_update_norm_ratio)
+            if update_norm > max_update_ratio:
+                x_scale = max(streaming_l2_norm(x_best, block_size=config.block_size), 1.0)
+            else:
+                x_scale = 1.0
+            if update_norm > x_scale * max_update_ratio:
+                update_limit = x_scale * max_update_ratio
                 return Rhs1PasMatrixFreeResult(
                     x=x_best,
                     residual_norm=best_norm,
@@ -235,11 +258,11 @@ def rhs1_pas_matrixfree_correction(
                         "update_norm": float(update_norm),
                         "update_norm_limit": float(update_limit),
                         "x_scale": float(x_scale),
-                        "max_update_norm_ratio": float(config.max_update_norm_ratio),
+                        "max_update_norm_ratio": float(max_update_ratio),
                     },
                 )
 
-        candidate = x_best + jnp.asarray(float(config.omega) * update, dtype=x_initial.dtype)
+        candidate = x_best + jnp.asarray(omega_use * update, dtype=x_initial.dtype)
         candidate = jnp.asarray(candidate, dtype=x_initial.dtype)
         candidate_residual = rhs_arr - matvec(candidate)
         if jnp.asarray(candidate_residual).shape != x_initial.shape:

@@ -613,6 +613,35 @@ def result_gates(args: argparse.Namespace, row: dict[str, Any], variant: str) ->
                 elapsed_s=elapsed_max,
                 max_rss_mb=max_rss_mb,
             )
+        elif elapsed_max > baseline_elapsed_s and max_rss_mb > baseline_rss_mb:
+            default_promotion_gate = _gate(
+                "fail",
+                "runtime-and-memory-regression",
+                elapsed_s=elapsed_max,
+                baseline_elapsed_s=baseline_elapsed_s,
+                max_rss_mb=max_rss_mb,
+                baseline_rss_mb=baseline_rss_mb,
+                runtime_speedup=runtime_speedup,
+                memory_reduction=memory_reduction,
+            )
+        elif elapsed_max > baseline_elapsed_s:
+            default_promotion_gate = _gate(
+                "fail",
+                "runtime-regression",
+                elapsed_s=elapsed_max,
+                baseline_elapsed_s=baseline_elapsed_s,
+                runtime_speedup=runtime_speedup,
+                memory_reduction=memory_reduction,
+            )
+        elif max_rss_mb > baseline_rss_mb:
+            default_promotion_gate = _gate(
+                "fail",
+                "memory-regression",
+                max_rss_mb=max_rss_mb,
+                baseline_rss_mb=baseline_rss_mb,
+                runtime_speedup=runtime_speedup,
+                memory_reduction=memory_reduction,
+            )
         elif not (runtime_win or memory_win):
             default_promotion_gate = _gate(
                 "fail",
@@ -779,6 +808,10 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "baseline_rss_mb": _optional_float(getattr(args, "baseline_rss_mb", None)),
             "min_runtime_speedup": float(getattr(args, "min_runtime_speedup", DEFAULT_MIN_PROMOTION_SPEEDUP)),
             "min_memory_reduction": float(getattr(args, "min_memory_reduction", DEFAULT_MIN_PROMOTION_MEMORY_REDUCTION)),
+            "promotion_policy": (
+                "residual-clean candidates must not regress elapsed_s or max_rss_mb "
+                "against baseline and must still show a material runtime or memory win"
+            ),
         },
     }
 
@@ -788,6 +821,7 @@ def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     by_status: dict[str, int] = {}
     by_gate: dict[str, int] = {"pass": 0, "fail": 0}
     failed_variants: list[str] = []
+    promotion_eligible_variants: list[str] = []
     failure_reasons: dict[str, int] = {}
     for row in results:
         status = str(row.get("status", "unknown"))
@@ -801,12 +835,19 @@ def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             for failure in failures:
                 key = str(failure)
                 failure_reasons[key] = failure_reasons.get(key, 0) + 1
+        gates = row.get("gates", {})
+        if isinstance(gates, dict):
+            promotion_gate = gates.get("default_promotion", {})
+            if isinstance(promotion_gate, dict) and promotion_gate.get("status") == "pass":
+                if promotion_gate.get("reason") == "promotion-win-recorded":
+                    promotion_eligible_variants.append(str(row.get("variant", "unknown")))
     return {
         "result_count": len(results),
         "by_status": by_status,
         "by_gate": by_gate,
         "all_gates_passed": by_gate.get("fail", 0) == 0,
         "failed_variants": failed_variants,
+        "promotion_eligible_variants": promotion_eligible_variants,
         "failure_reasons": failure_reasons,
     }
 

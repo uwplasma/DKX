@@ -75,3 +75,102 @@ def test_qi_seed_scale035_cpu_gpu_artifact_records_host_sparse_gpu_fix() -> None
     assert payload["runs"]["gpu_after_patch"]["residual_ratio"] < 1.0
     assert payload["runs"]["gpu_after_patch"]["elapsed_s"] < payload["runs"]["gpu_before_patch"]["elapsed_s"]
     assert payload["solver_policy"]["accelerator_host_sparse_rescue_default_max_active_size"] == 30000
+
+
+def test_qi_seed_multiseed5_cpu_artifact_records_passing_manifest_gate() -> None:
+    path = Path("docs/_static/qi_seed_robustness_multiseed5_cpu.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    assert payload["schema_version"] == 2
+    assert payload["artifact_kind"] == "qi_seed_execution_summary"
+    assert payload["lane"] == "qi_seed_robustness"
+    assert payload["case_count"] == 5
+    assert payload["public_cli_default_path"] is True
+    assert payload["resolution"] == {"NTHETA": 7, "NZETA": 13, "NX": 4, "NXI": 25}
+    assert payload["total_size_estimate"] == 9102
+
+    gates = payload["gates"]
+    assert gates["passed"] is True
+    assert gates["max_residual_ratio"] == 1.0
+    assert gates["require_converged"] is True
+
+    summary = payload["execution_summary"]
+    assert summary["attempted"] == 5
+    assert summary["process_passed"] == 5
+    assert summary["process_failed"] == 0
+    assert summary["timed_out"] == 0
+    assert summary["outputs_written"] == 5
+    assert summary["solver_traces_written"] == 5
+    assert summary["converged"] == 5
+    assert summary["backends"] == ["cpu"]
+    assert summary["solve_methods"] == ["auto"]
+    assert summary["selected_paths"] == ["rhsmode1_solution"]
+    assert summary["max_residual_ratio"] < 1.0
+
+    seeds = payload["seeds"]
+    assert {seed["seed"] for seed in seeds} == {0, 1, 2, 3, 4}
+    assert all(seed["returncode"] == 0 for seed in seeds)
+    assert all(seed["timed_out"] is False for seed in seeds)
+    assert all(seed["output_exists"] is True for seed in seeds)
+    assert all(seed["solver_trace_exists"] is True for seed in seeds)
+    assert all(seed["backend"] == "cpu" for seed in seeds)
+    assert all(seed["solve_method"] == "auto" for seed in seeds)
+    assert all(seed["converged"] is True for seed in seeds)
+    assert max(seed["residual_ratio"] for seed in seeds) == summary["max_residual_ratio"]
+
+
+def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
+    path = Path("docs/_static/qi_seed_robustness_evidence_manifest.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    assert payload["schema_version"] == 1
+    assert payload["artifact_kind"] == "qi_seed_production_gate_manifest"
+    assert payload["lane"] == "qi_seed_robustness"
+    assert payload["release_gate"] == "bounded_proxy"
+    assert payload["production_target"]["resolution"] == {
+        "NTHETA": 25,
+        "NZETA": 51,
+        "NX": 8,
+        "NXI": 100,
+    }
+    assert payload["production_target"]["total_size_estimate"] == 1020002
+    assert payload["production_target"]["seed_count"] == 5
+    assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
+
+    current = payload["current_evidence"]
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 5
+    assert current["passing_artifact_count"] == current["artifact_count"]
+    assert current["checked_backends"] == ["cpu", "gpu"]
+    assert current["max_checked_active_size"] == 13169
+    assert current["max_checked_total_size"] == 23942
+    assert current["max_checked_total_size_fraction"] < 0.03
+    assert current["max_checked_per_axis_resolution_fraction"] == 0.35
+    assert current["bounded_lane_completion_estimate_percent"] == 35.0
+    assert current["production_total_size_uncovered_percent"] > 97.0
+
+    source_paths = {artifact["path"] for artifact in payload["source_artifacts"]}
+    assert {
+        "docs/_static/qi_seed_robustness_smoke.json",
+        "docs/_static/qi_seed_robustness_multiseed.json",
+        "docs/_static/qi_seed_robustness_multiseed_gpu.json",
+        "docs/_static/qi_seed_robustness_scale035_cpu_gpu.json",
+        "docs/_static/qi_seed_robustness_multiseed5_cpu.json",
+    } == source_paths
+
+    gates = payload["acceptance_gates"]
+    assert gates["public_cli_default_path"] is True
+    assert gates["solve_method"] == "auto"
+    assert gates["process_failed"] == 0
+    assert gates["timed_out"] == 0
+    assert gates["outputs_written"] == 5
+    assert gates["solver_traces_written"] == 5
+    assert gates["converged"] == 5
+    assert gates["max_residual_ratio"] == 1.0
+    assert gates["required_backends"] == ["cpu", "gpu"]
+
+    commands = payload["regeneration_commands"]
+    assert "--summarize-artifacts-only" in commands["refresh_evidence_manifest"]
+    assert "JAX_PLATFORM_NAME=cpu" in commands["production_cpu_seed_ladder"]
+    assert "JAX_PLATFORM_NAME=gpu" in commands["production_gpu0_seed_ladder"]
+    assert "--resolution-scale 1.0" in commands["production_cpu_seed_ladder"]
+    assert "--resolution-scale 1.0" in commands["production_gpu0_seed_ladder"]

@@ -51,6 +51,172 @@ def _payloads_for_workers(*, rhs_count: int, workers: int) -> list[dict[str, obj
     return [{"which_rhs_values": chunk} for chunk in partition_transport_rhs(rhs_values, active_workers)]
 
 
+def _display_path(path: Path, *, repo_root: Path) -> str:
+    try:
+        return str(Path(path).resolve().relative_to(repo_root))
+    except ValueError:
+        return str(path)
+
+
+def _normalize_worker_counts(*, rhs_count: int, requested_workers: list[int]) -> tuple[list[int], list[int], list[int]]:
+    requested = sorted({int(w) for w in requested_workers if int(w) >= 1})
+    workers = [w for w in requested if w <= int(rhs_count)]
+    skipped = [w for w in requested if w > int(rhs_count)]
+    if not workers:
+        workers = [1] if int(rhs_count) <= 1 else [1, int(rhs_count)]
+    return requested, workers, skipped
+
+
+def _transport_benchmark_command(
+    *,
+    input_path: Path,
+    workers: list[int],
+    repeats: int,
+    warmup: int,
+    global_warmup: int,
+    precond: str,
+    backend: str,
+    out_dir: Path,
+    cache_dir: Path,
+    figure_name: str,
+    repo_root: Path,
+    audit: bool,
+) -> list[str]:
+    cmd = [
+        "python",
+        "examples/performance/benchmark_transport_parallel_scaling.py",
+        "--input",
+        _display_path(input_path, repo_root=repo_root),
+        "--workers",
+        *[str(int(w)) for w in workers],
+        "--repeats",
+        str(int(repeats)),
+        "--warmup",
+        str(int(warmup)),
+        "--global-warmup",
+        str(int(global_warmup)),
+        "--precond",
+        str(precond),
+        "--backend",
+        str(backend),
+        "--out-dir",
+        _display_path(out_dir, repo_root=repo_root),
+        "--cache-dir",
+        _display_path(cache_dir, repo_root=repo_root),
+        "--figure-name",
+        str(figure_name),
+    ]
+    if audit:
+        cmd.append("--audit")
+    return cmd
+
+
+def _build_transport_benchmark_plan(
+    *,
+    input_path: Path,
+    rhs_mode: int,
+    rhs_count: int,
+    requested_workers: list[int],
+    repeats: int,
+    warmup: int,
+    global_warmup: int,
+    precond: str,
+    backend: str,
+    out_dir: Path,
+    cache_dir: Path,
+    figure_name: str,
+    audit: bool = False,
+) -> dict[str, object]:
+    repo_root = Path(__file__).resolve().parents[2]
+    requested, workers, skipped_workers = _normalize_worker_counts(
+        rhs_count=int(rhs_count),
+        requested_workers=requested_workers,
+    )
+    timing_semantics = _timing_semantics(
+        global_warmup=int(global_warmup),
+        per_worker_warmup=int(warmup),
+    )
+    payloads_by_workers = {
+        str(w): _payloads_for_workers(rhs_count=int(rhs_count), workers=int(w)) for w in workers
+    }
+    worker_plan = [
+        {
+            "workers": int(w),
+            "active_workers": min(int(w), int(rhs_count)),
+            "payloads": payloads_by_workers[str(w)],
+            "warmup_runs": max(int(warmup), 0),
+            "timed_repeats": max(int(repeats), 1),
+            "finite_task_ideal_speedup": float(rhs_count) / float(np.ceil(float(rhs_count) / float(w))),
+        }
+        for w in workers
+    ]
+    benchmark_command = _transport_benchmark_command(
+        input_path=input_path,
+        workers=workers,
+        repeats=int(repeats),
+        warmup=int(warmup),
+        global_warmup=int(global_warmup),
+        precond=str(precond),
+        backend=str(backend),
+        out_dir=out_dir,
+        cache_dir=cache_dir,
+        figure_name=str(figure_name),
+        repo_root=repo_root,
+        audit=bool(audit),
+    )
+    backend_l = str(backend).strip().lower()
+    return {
+        "artifact_kind": "benchmark_plan",
+        "benchmark_kind": "transport_worker_scaling",
+        "launches_solves": False,
+        "input": input_path.name,
+        "input_path": _display_path(input_path, repo_root=repo_root),
+        "case": input_path.stem.replace(".input", ""),
+        "rhs_mode": int(rhs_mode),
+        "rhs_count": int(rhs_count),
+        "which_rhs_values": list(range(1, int(rhs_count) + 1)),
+        "requested_workers": requested,
+        "workers": workers,
+        "skipped_workers": skipped_workers,
+        "worker_plan": worker_plan,
+        "payloads_by_workers": payloads_by_workers,
+        "payloads": payloads_by_workers[str(max(workers))],
+        "precond": str(precond),
+        "backend": backend_l,
+        "timing_semantics": timing_semantics,
+        "global_warmup": int(global_warmup),
+        "per_worker_warmup": int(warmup),
+        "repeats": int(repeats),
+        "estimated_transport_solve_calls": int(max(global_warmup, 0))
+        + len(workers) * (max(int(warmup), 0) + max(int(repeats), 1)),
+        "deterministic_payload_coverage": True,
+        "deterministic_output_check": True,
+        "measurement_scope": "transport_solve_only",
+        "ideal_speedup_finite_rhs": [
+            float(rhs_count) / float(np.ceil(float(rhs_count) / float(w))) for w in workers
+        ],
+        "release_gate_semantics": {
+            "evaluated_by": "audit_transport_parallel_scaling_summary",
+            "requires_measured_results": True,
+            "min_speedup": 1.2,
+            "min_efficiency": 0.5,
+            "cold_start_rejected": True,
+        },
+        "memory_gate_semantics": {
+            "status": "not_measured_in_plan",
+            "gpu_preallocation_disabled": backend_l == "gpu",
+            "gpu_allocator": "cuda_malloc_async" if backend_l == "gpu" else None,
+            "cpu_devices_per_worker": 1 if backend_l == "cpu" else None,
+        },
+        "benchmark_command": benchmark_command,
+    }
+
+
+def _write_plan_json(plan: dict[str, object], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")
+
+
 def _run_scaling_audit(payload: dict[str, object]) -> None:
     audit = audit_transport_parallel_scaling_summary(payload)
     if audit.release_scaling_claim:
@@ -213,10 +379,24 @@ def main() -> None:
         action="store_true",
         help="Fail fast if the saved/new payload does not pass the transport-worker release scaling gate.",
     )
+    parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="Write a deterministic benchmark plan JSON without launching solves.",
+    )
+    parser.add_argument(
+        "--plan-json",
+        type=Path,
+        default=None,
+        help="Path for --plan-only JSON (default: --out-dir/transport_parallel_benchmark_plan.json).",
+    )
     args = parser.parse_args()
 
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.from_json is not None and args.plan_only:
+        raise SystemExit("--plan-only cannot be combined with --from-json")
 
     if args.from_json is not None:
         payload = json.loads(Path(args.from_json).read_text())
@@ -232,20 +412,41 @@ def main() -> None:
     rhs_mode = _rhs_mode_from_namelist(input_path)
     rhs_count = transport_matrix_size_from_rhs_mode(rhs_mode)
 
+    requested_workers, workers, skipped_workers = _normalize_worker_counts(
+        rhs_count=int(rhs_count),
+        requested_workers=[int(w) for w in args.workers],
+    )
+
+    if args.plan_only:
+        plan = _build_transport_benchmark_plan(
+            input_path=input_path,
+            rhs_mode=int(rhs_mode),
+            rhs_count=int(rhs_count),
+            requested_workers=requested_workers,
+            repeats=int(args.repeats),
+            warmup=int(args.warmup),
+            global_warmup=int(args.global_warmup),
+            precond=str(args.precond),
+            backend=str(args.backend),
+            out_dir=out_dir,
+            cache_dir=args.cache_dir,
+            figure_name=str(args.figure_name),
+            audit=bool(args.audit),
+        )
+        plan_path = args.plan_json if args.plan_json is not None else out_dir / "transport_parallel_benchmark_plan.json"
+        _write_plan_json(plan, plan_path)
+        print(json.dumps(plan, indent=2, sort_keys=True))
+        return
+
     cache_dir = args.cache_dir
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    requested_workers = sorted({int(w) for w in args.workers if int(w) >= 1})
-    workers = [w for w in requested_workers if w <= int(rhs_count)]
-    skipped_workers = [w for w in requested_workers if w > int(rhs_count)]
     if skipped_workers:
         print(
             "Skipping worker counts above independent RHS task count "
             f"(rhs_count={int(rhs_count)} skipped={skipped_workers})",
             flush=True,
         )
-    if not workers:
-        workers = [1] if int(rhs_count) <= 1 else [1, int(rhs_count)]
 
     if args.global_warmup and args.global_warmup > 0:
         for i in range(int(args.global_warmup)):

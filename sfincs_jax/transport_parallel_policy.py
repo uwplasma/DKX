@@ -1,3 +1,5 @@
+"""Pure transport parallelism, scaling-audit, and worker-env policy helpers."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
@@ -617,6 +619,7 @@ def transport_parallel_worker_env(
 
 
 def transport_parallel_start_method() -> str:
+    """Resolve the multiprocessing start method used by transport workers."""
     env = os.environ.get("SFINCS_JAX_TRANSPORT_MP_START_METHOD", "").strip().lower()
     if env in {"", "auto"}:
         return "spawn"
@@ -626,6 +629,7 @@ def transport_parallel_start_method() -> str:
 
 
 def transport_parallel_backend() -> str:
+    """Resolve whether transport worker parallelism uses CPU or GPU workers."""
     env = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND", "").strip().lower()
     if env in {"", "auto", "cpu", "process"}:
         return "cpu"
@@ -635,11 +639,13 @@ def transport_parallel_backend() -> str:
 
 
 def transport_parallel_persistent_pool_enabled() -> bool:
+    """Return whether CPU transport workers may reuse a persistent process pool."""
     env = os.environ.get("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "").strip().lower()
     return env not in {"0", "false", "no", "off"}
 
 
 def transport_parallel_pool_key(parallel_workers: int) -> tuple[object, ...]:
+    """Return the cache key for a persistent transport worker pool."""
     return (
         validate_transport_parallel_worker_count(parallel_workers),
         transport_parallel_backend(),
@@ -650,6 +656,7 @@ def transport_parallel_pool_key(parallel_workers: int) -> tuple[object, ...]:
 
 
 def transport_parallel_visible_gpu_ids(parallel_workers: int) -> list[str]:
+    """Return the visible GPU ids assigned to GPU transport workers."""
     workers = validate_transport_parallel_worker_count(parallel_workers, context="GPU transport")
     visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
     if visible:
@@ -665,6 +672,7 @@ def transport_parallel_visible_gpu_ids(parallel_workers: int) -> list[str]:
 
 
 def transport_parallel_gpu_worker_env(*, gpu_id: str) -> dict[str, str]:
+    """Return an isolated environment for one GPU transport child process."""
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     env["SFINCS_JAX_TRANSPORT_PARALLEL"] = "off"
@@ -684,6 +692,7 @@ def transport_parallel_pool_executor_kwargs(
     get_context: Callable[[str], object],
     emit: Callable[[int, str], None] | None = None,
 ) -> dict[str, object]:
+    """Build ``ProcessPoolExecutor`` kwargs with a safe spawn fallback."""
     workers = validate_transport_parallel_worker_count(parallel_workers)
     kwargs: dict[str, object] = {"max_workers": workers}
     start_method = transport_parallel_start_method()

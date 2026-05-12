@@ -135,6 +135,7 @@ def test_dry_run_writes_reproducible_plan(tmp_path: Path) -> None:
     assert payload["plan"]["gates"]["stall_s"] == 12.0
     assert payload["plan"]["gates"]["max_default_runtime_s"] == 600.0
     assert payload["plan"]["gates"]["max_residual_norm"] == 1.0e-3
+    assert "must not regress elapsed_s or max_rss_mb" in payload["plan"]["gates"]["promotion_policy"]
     assert payload["summary"]["result_count"] == 0
     assert payload["results"] == []
 
@@ -526,6 +527,89 @@ def test_default_promotion_gate_rejects_clean_candidate_without_material_win() -
 
     assert gates["default_promotion"]["status"] == "fail"
     assert gates["default_promotion"]["reason"] == "no-runtime-or-memory-win"
+
+
+def test_default_promotion_gate_rejects_runtime_or_memory_regressions() -> None:
+    args = type(
+        "Args",
+        (),
+        {
+            "timeout_s": 9.0,
+            "stall_s": 9.0,
+            "max_rss_mb": 0.0,
+            "max_residual_norm": 1.0e-3,
+            "expected_backend": "auto",
+            "allow_solver_churn": False,
+            "solve_method": "incremental",
+            "require_default_promotion_gate": True,
+            "baseline_elapsed_s": 10.0,
+            "baseline_rss_mb": 1000.0,
+            "min_runtime_speedup": 1.05,
+            "min_memory_reduction": 1.05,
+        },
+    )()
+    base_row = {
+        "status": "ok",
+        "residual_norm": 1.0e-5,
+        "solver_provenance": {
+            "requested_solve_method": "incremental",
+            "realized_solve_method": "incremental",
+        },
+        "metadata": {"accepted_converged": True},
+    }
+
+    faster_higher_memory = {
+        **base_row,
+        "elapsed_s": 8.0,
+        "max_rss_mb": 1001.0,
+        "phase_metadata": [{"name": "solve", "status": "ok", "elapsed_s": 8.0}],
+    }
+    lower_memory_slower = {
+        **base_row,
+        "elapsed_s": 10.1,
+        "max_rss_mb": 800.0,
+        "phase_metadata": [{"name": "solve", "status": "ok", "elapsed_s": 10.1}],
+    }
+    both_regressed = {
+        **base_row,
+        "elapsed_s": 10.1,
+        "max_rss_mb": 1001.0,
+        "phase_metadata": [{"name": "solve", "status": "ok", "elapsed_s": 10.1}],
+    }
+
+    gates = result_gates(args, faster_higher_memory, "tzfft")
+    assert gates["default_promotion"]["status"] == "fail"
+    assert gates["default_promotion"]["reason"] == "memory-regression"
+
+    gates = result_gates(args, lower_memory_slower, "tzfft")
+    assert gates["default_promotion"]["status"] == "fail"
+    assert gates["default_promotion"]["reason"] == "runtime-regression"
+
+    gates = result_gates(args, both_regressed, "tzfft")
+    assert gates["default_promotion"]["status"] == "fail"
+    assert gates["default_promotion"]["reason"] == "runtime-and-memory-regression"
+
+
+def test_summarize_results_lists_only_promotion_win_rows() -> None:
+    promoted = {
+        "variant": "tzfft",
+        "status": "ok",
+        "gate": "pass",
+        "gate_failures": [],
+        "gates": {"default_promotion": {"status": "pass", "reason": "promotion-win-recorded"}},
+    }
+    not_requested = {
+        "variant": "collision",
+        "status": "ok",
+        "gate": "pass",
+        "gate_failures": [],
+        "gates": {"default_promotion": {"status": "pass", "reason": "default-promotion-gate-not-requested"}},
+    }
+
+    summary = summarize_results([promoted, not_requested])
+
+    assert summary["all_gates_passed"] is True
+    assert summary["promotion_eligible_variants"] == ["tzfft"]
 
 
 def test_main_rejects_long_timeout_without_explicit_opt_in(tmp_path: Path) -> None:

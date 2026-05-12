@@ -9,42 +9,67 @@ import time
 from pathlib import Path
 
 
-def _base_env(cache_dir: Path | None, rhs1_precond: str, coarse_levels: int | None) -> dict[str, str]:
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
-    env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-    env["TF_GPU_ALLOCATOR"] = "cuda_malloc_async"
-    env["SFINCS_JAX_MATVEC_SHARD_AXIS"] = "theta"
-    env["SFINCS_JAX_GMRES_DISTRIBUTED"] = "0"
-    env["SFINCS_JAX_DISTRIBUTED_KRYLOV"] = "auto"
-    env["SFINCS_JAX_AUTO_SHARD"] = "0"
-    env["SFINCS_JAX_IMPLICIT_SOLVE"] = "1"
-    env["SFINCS_JAX_SHARD_PAD"] = "1"
-    env["SFINCS_JAX_FORTRAN_STDOUT"] = "0"
-    env["SFINCS_JAX_SOLVER_ITER_STATS"] = "0"
-    env["SFINCS_JAX_RHSMODE1_PRECONDITIONER"] = rhs1_precond
-    if coarse_levels is None:
-        env.pop("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS", None)
-    else:
+def _display_path(path: Path, *, repo_root: Path) -> str:
+    try:
+        return str(Path(path).resolve().relative_to(repo_root))
+    except ValueError:
+        return str(path)
+
+
+def _base_env_overrides(cache_dir: Path | None, rhs1_precond: str, coarse_levels: int | None) -> dict[str, str]:
+    env = {
+        "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+        "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
+        "TF_GPU_ALLOCATOR": "cuda_malloc_async",
+        "SFINCS_JAX_MATVEC_SHARD_AXIS": "theta",
+        "SFINCS_JAX_GMRES_DISTRIBUTED": "0",
+        "SFINCS_JAX_DISTRIBUTED_KRYLOV": "auto",
+        "SFINCS_JAX_AUTO_SHARD": "0",
+        "SFINCS_JAX_IMPLICIT_SOLVE": "1",
+        "SFINCS_JAX_SHARD_PAD": "1",
+        "SFINCS_JAX_FORTRAN_STDOUT": "0",
+        "SFINCS_JAX_SOLVER_ITER_STATS": "0",
+        "SFINCS_JAX_RHSMODE1_PRECONDITIONER": str(rhs1_precond),
+    }
+    if coarse_levels is not None:
         env["SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS"] = str(int(coarse_levels))
     if cache_dir is not None:
-        cache_dir.mkdir(parents=True, exist_ok=True)
         env["JAX_COMPILATION_CACHE_DIR"] = str(cache_dir)
     return env
 
 
-def _run_case_once(*, input_path: Path, visible_devices: str, nsolve: int, env: dict[str, str]) -> float:
-    local_env = dict(env)
-    local_env["CUDA_VISIBLE_DEVICES"] = visible_devices
-    cmd = [
-        sys.executable,
-        str(Path(__file__).with_name("benchmark_sharded_solve_scaling.py")),
+def _base_env(cache_dir: Path | None, rhs1_precond: str, coarse_levels: int | None) -> dict[str, str]:
+    env = os.environ.copy()
+    if coarse_levels is None:
+        env.pop("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS", None)
+    if cache_dir is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+    env.update(_base_env_overrides(cache_dir, rhs1_precond, coarse_levels))
+    return env
+
+
+def _case_run_once_args(*, input_path: Path | str, nsolve: int) -> list[str]:
+    return [
         "--run-once",
         "--input",
         str(input_path),
         "--nsolve",
         str(int(nsolve)),
     ]
+
+
+def _case_run_once_command(*, input_path: Path, nsolve: int) -> list[str]:
+    return [
+        sys.executable,
+        str(Path(__file__).with_name("benchmark_sharded_solve_scaling.py")),
+        *_case_run_once_args(input_path=input_path, nsolve=nsolve),
+    ]
+
+
+def _run_case_once(*, input_path: Path, visible_devices: str, nsolve: int, env: dict[str, str]) -> float:
+    local_env = dict(env)
+    local_env["CUDA_VISIBLE_DEVICES"] = visible_devices
+    cmd = _case_run_once_command(input_path=input_path, nsolve=int(nsolve))
     out = subprocess.check_output(cmd, env=local_env, text=True)
     return float(out.strip().splitlines()[-1])
 
@@ -71,15 +96,7 @@ def _sequential_two_cases(*, input_path: Path, nsolve: int, env: dict[str, str])
 
 
 def _parallel_two_cases(*, input_path: Path, nsolve: int, env: dict[str, str]) -> dict[str, float]:
-    cmd = [
-        sys.executable,
-        str(Path(__file__).with_name("benchmark_sharded_solve_scaling.py")),
-        "--run-once",
-        "--input",
-        str(input_path),
-        "--nsolve",
-        str(int(nsolve)),
-    ]
+    cmd = _case_run_once_command(input_path=input_path, nsolve=int(nsolve))
     env0 = dict(env)
     env1 = dict(env)
     env0["CUDA_VISIBLE_DEVICES"] = "0"
@@ -101,6 +118,88 @@ def _parallel_two_cases(*, input_path: Path, nsolve: int, env: dict[str, str]) -
         "case1_s": float(dt1),
         "wall_s": float(wall),
     }
+
+
+def _build_case_throughput_plan(
+    *,
+    input_path: Path,
+    nsolve: int,
+    rhs1_precond: str,
+    coarse_levels: int | None,
+    out_dir: Path,
+    cache_dir: Path | None,
+) -> dict[str, object]:
+    repo_root = Path(__file__).resolve().parents[2]
+    input_display = _display_path(input_path, repo_root=repo_root)
+    run_once_command = [
+        "python",
+        "examples/performance/benchmark_sharded_solve_scaling.py",
+        *_case_run_once_args(input_path=input_display, nsolve=int(nsolve)),
+    ]
+    env = _base_env_overrides(cache_dir, rhs1_precond, coarse_levels)
+    env["PYTHONPATH"] = _display_path(repo_root, repo_root=repo_root)
+    if cache_dir is not None:
+        env["JAX_COMPILATION_CACHE_DIR"] = _display_path(cache_dir, repo_root=repo_root)
+    benchmark_command = [
+        "python",
+        "examples/performance/benchmark_multi_gpu_case_throughput.py",
+        "--input",
+        input_display,
+        "--nsolve",
+        str(int(nsolve)),
+        "--rhs1-precond",
+        str(rhs1_precond),
+        "--out-dir",
+        _display_path(out_dir, repo_root=repo_root),
+    ]
+    if cache_dir is not None:
+        benchmark_command.extend(["--cache-dir", _display_path(cache_dir, repo_root=repo_root)])
+    if coarse_levels is not None:
+        benchmark_command.extend(["--schwarz-coarse-levels", str(int(coarse_levels))])
+    return {
+        "artifact_kind": "benchmark_plan",
+        "benchmark_kind": "multi_gpu_case_throughput",
+        "launches_solves": False,
+        "release_scaling_claim": False,
+        "required_gpu_count": 2,
+        "input": input_path.name,
+        "input_path": input_display,
+        "case": input_path.stem.replace(".input", ""),
+        "nsolve": int(nsolve),
+        "rhs1_precond": str(rhs1_precond),
+        "schwarz_coarse_levels": coarse_levels,
+        "timing_semantics": "cache_warm",
+        "env": env,
+        "warmup_plan": [
+            {"gpu_id": "0", "visible_devices": "0", "run_once_command": run_once_command},
+            {"gpu_id": "1", "visible_devices": "1", "run_once_command": run_once_command},
+        ],
+        "sequential_one_gpu_plan": [
+            {"case_index": 0, "visible_devices": "0", "run_once_command": run_once_command},
+            {"case_index": 1, "visible_devices": "0", "run_once_command": run_once_command},
+        ],
+        "parallel_two_gpu_plan": [
+            {"case_index": 0, "visible_devices": "0", "run_once_command": run_once_command},
+            {"case_index": 1, "visible_devices": "1", "run_once_command": run_once_command},
+        ],
+        "estimated_child_process_samples": 6,
+        "speedup_gate_semantics": {
+            "metric": "sequential_one_gpu.wall_s / parallel_two_gpu.wall_s",
+            "greater_than_one_means_throughput_improvement": True,
+            "release_gate": False,
+        },
+        "memory_gate_semantics": {
+            "gpu_preallocation_disabled": True,
+            "gpu_allocator": "cuda_malloc_async",
+            "status": "allocator_defaults_recorded; peak memory is measured externally",
+        },
+        "benchmark_command": benchmark_command,
+    }
+
+
+def _write_plan_json(plan: dict[str, object], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")
 
 
 def main() -> None:
@@ -142,6 +241,17 @@ def main() -> None:
         default=repo_root / "examples" / "performance" / "output" / "gpu_case_throughput" / "jax_cache",
         help="Persistent JAX cache directory.",
     )
+    parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="Write a deterministic benchmark plan JSON without launching GPU child processes.",
+    )
+    parser.add_argument(
+        "--plan-json",
+        type=Path,
+        default=None,
+        help="Path for --plan-only JSON (default: --out-dir/gpu_case_throughput_plan.json).",
+    )
     args = parser.parse_args()
 
     if not args.input.exists():
@@ -149,6 +259,21 @@ def main() -> None:
 
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.plan_only:
+        plan = _build_case_throughput_plan(
+            input_path=args.input,
+            nsolve=int(args.nsolve),
+            rhs1_precond=str(args.rhs1_precond),
+            coarse_levels=args.schwarz_coarse_levels,
+            out_dir=out_dir,
+            cache_dir=args.cache_dir,
+        )
+        plan_path = args.plan_json if args.plan_json is not None else out_dir / "gpu_case_throughput_plan.json"
+        _write_plan_json(plan, plan_path)
+        print(json.dumps(plan, indent=2, sort_keys=True))
+        return
+
     env = _base_env(args.cache_dir, args.rhs1_precond, args.schwarz_coarse_levels)
 
     # Warm both devices individually before timing steady-state throughput.

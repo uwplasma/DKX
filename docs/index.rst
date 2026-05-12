@@ -80,6 +80,7 @@ This manual is organized around the actual user and developer workflows:
    outputs
    normalizations
    geometry
+   vmec_jax_workflow
    method
    numerics
    source_map
