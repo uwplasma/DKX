@@ -289,6 +289,7 @@ def test_xblock_sparse_pc_gmres_initial_seed_can_be_disabled(monkeypatch) -> Non
     monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE", "1")
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -303,6 +304,9 @@ def test_xblock_sparse_pc_gmres_initial_seed_can_be_disabled(monkeypatch) -> Non
     assert result.metadata["xblock_initial_seed_residual_ratio"] is None
     assert result.metadata["xblock_post_minres_steps_requested"] == 2
     assert result.metadata["xblock_post_minres_steps_accepted"] == 0
+    assert result.metadata["xblock_post_coarse_steps_requested"] == 1
+    assert result.metadata["xblock_post_coarse_steps_accepted"] == 0
+    assert result.metadata["xblock_post_coarse_direction_count"] == 0
 
 
 @pytest.mark.parametrize(

@@ -3,25 +3,27 @@
   "case_count": 1,
   "conclusion": {
     "initial_seed_optin_status": "Tested after the first matrix: it was rejected because the x-block seed residual was slightly worse than the RHS norm and the run still stalled at 5.41e-6, so it remains opt-in and is not a default performance path.",
-    "next_algorithmic_need": "matrix-free global/coarse correction after x-block seeding, rather than a larger timeout or full sparse materialization.",
+    "next_algorithmic_need": "different global coupling strategy before or inside Krylov, rather than a larger timeout, full sparse materialization, default initial seed, scalar post-minres cleanup, or the current small post-coarse residual subspace.",
     "observed_blocker": "x-block seeding improves the residual but all existing full sparse/direct/least-squares/Krylov rescue routes either time out, fail factorization, or stall near 5e-6 against a 2.5e-11 target.",
+    "post_coarse1_optin_status": "Tested as a stronger multidirectional matrix-free coarse hook. It accepted one 10-direction least-squares step and reduced the residual only from 5.413504e-6 to 5.401187e-6, so it remains opt-in and is not sufficient for closing scale-0.50 QI.",
     "post_minres4_optin_status": "Tested as the first matrix-free correction hook. It accepted two steps and reduced the residual only from 5.413504e-6 to 5.409759e-6, so it remains opt-in and is not sufficient for closing scale-0.50 QI.",
     "scale045_status": "passes in checked artifact docs/_static/qi_seed_robustness_scale045_cpu_probe.json",
     "scale050_status": "not closed"
   },
   "evidence_note": "Scale-0.50 QI blocker matrix. These are diagnostic failed runs, not production promotion evidence. The matrix preserves solver-stage breadcrumbs without checking in copied VMEC/run directories.",
   "execution_summary": {
-    "attempted": 6,
+    "attempted": 7,
     "backends": [],
     "max_elapsed_s": 360.075369582999,
     "max_residual_ratio": null,
     "outputs_written": 0,
-    "process_failed": 6,
+    "process_failed": 7,
     "process_passed": 0,
     "solve_methods": [
       "auto",
       "sparse_host_safe",
       "sparse_lsmr",
+      "xblock_sparse_pc_gmres",
       "xblock_sparse_pc_gmres",
       "xblock_sparse_pc_gmres",
       "xblock_sparse_pc_gmres"
@@ -63,6 +65,12 @@
       },
       {
         "option": "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS=4",
+        "reason": "process_failed",
+        "returncode": 2,
+        "solve_method": "xblock_sparse_pc_gmres"
+      },
+      {
+        "option": "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE=1",
         "reason": "process_failed",
         "returncode": 2,
         "solve_method": "xblock_sparse_pc_gmres"
@@ -247,6 +255,41 @@
       "solver_trace_exists": false,
       "stderr_tail": [
         "sfincs_jax write-output failed: Refusing to write nonconverged RHSMode=1 diagnostics for a production-sized solve: active_size=39314 residual_norm=5.409759e-06 target=2.510072e-11 solve_method=xblock_sparse_pc_gmres. accepted_converged=False criterion=true_residual. Use a converged solver path such as --solve-method sparse_pc_gmres, lower the resolution, or set SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1 only for debugging partial states."
+      ],
+      "timed_out": false
+    },
+    "xblock_sparse_pc_gmres_post_coarse1_optin": {
+      "active_size": 39314,
+      "elapsed_s": 157.71449737499643,
+      "option": "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE=1",
+      "output_exists": false,
+      "post_coarse_direction_count": 10,
+      "post_coarse_relative_improvement": 0.0022752361501902833,
+      "post_coarse_residual_after": 5.401187e-06,
+      "post_coarse_residual_before": 5.413504e-06,
+      "progress_events": [
+        "sparse_lu: nnz=69134 (8.768e-03 density)",
+        "sparse_ilu: dropping entries |a| < 3.306e-08",
+        "sparse_ilu: nnz=170619 (3.836e-03 density)",
+        "sparse_ilu: dropping entries |a| < 1.993e-08",
+        "sparse_ilu: nnz=321599 (2.131e-03 density)",
+        "sparse_ilu: factorization failed (attempt=1/3 thresh=1.993e-08 drop_tol=1.0e-04 fill=10.0) (RuntimeError: Factor is exactly singular)",
+        "sparse_ilu: dropping entries |a| < 1.993e-09",
+        "sparse_ilu: nnz=324679 (2.151e-03 density)",
+        "sparse_ilu: dropping entries |a| < 1.096e-08",
+        "sparse_ilu: nnz=464484 (1.508e-03 density)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres post-coarse improved residual 5.413504e-06 -> 5.401187e-06 (steps=1 directions=10)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=gmres elapsed_s=156.638 iters=32000 matvecs=32413 residual=5.401187e-06 target=2.510072e-11 ksp_residual=3.281003e-01",
+        "sfincs_jax write-output failed: Refusing to write nonconverged RHSMode=1 diagnostics for a production-sized solve: active_size=39314 residual_norm=5.401187e-06 target=2.510072e-11 solve_method=xblock_sparse_pc_gmres. accepted_converged=False criterion=true_residual. Use a converged solver path such as --solve-method sparse_pc_gmres, lower the resolution, or set SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1 only for debugging partial states."
+      ],
+      "residual_norm_or_last_reported": 5.401187e-06,
+      "residual_ratio_or_last_reported": 215180.56055762543,
+      "residual_target": 2.510072e-11,
+      "returncode": 2,
+      "solve_method": "xblock_sparse_pc_gmres",
+      "solver_trace_exists": false,
+      "stderr_tail": [
+        "sfincs_jax write-output failed: Refusing to write nonconverged RHSMode=1 diagnostics for a production-sized solve: active_size=39314 residual_norm=5.401187e-06 target=2.510072e-11 solve_method=xblock_sparse_pc_gmres. accepted_converged=False criterion=true_residual. Use a converged solver path such as --solve-method sparse_pc_gmres, lower the resolution, or set SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1 only for debugging partial states."
       ],
       "timed_out": false
     }

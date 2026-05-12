@@ -192,7 +192,7 @@ def test_qi_seed_scale050_solver_matrix_records_failed_diagnostic_routes() -> No
     assert payload["total_size_estimate"] == 70202
     assert payload["gates"]["passed"] is False
     assert payload["execution_summary"]["process_passed"] == 0
-    assert payload["execution_summary"]["process_failed"] == 6
+    assert payload["execution_summary"]["process_failed"] == 7
 
     runs = payload["runs"]
     assert set(runs) == {
@@ -201,6 +201,7 @@ def test_qi_seed_scale050_solver_matrix_records_failed_diagnostic_routes() -> No
         "sparse_lsmr",
         "xblock_sparse_pc_gmres",
         "xblock_sparse_pc_gmres_initial_seed_optin",
+        "xblock_sparse_pc_gmres_post_coarse1_optin",
         "xblock_sparse_pc_gmres_post_minres4_optin",
     }
     assert runs["auto_360s"]["timed_out"] is True
@@ -227,6 +228,20 @@ def test_qi_seed_scale050_solver_matrix_records_failed_diagnostic_routes() -> No
     assert any(
         "post-minres improved residual" in event
         for event in runs["xblock_sparse_pc_gmres_post_minres4_optin"]["progress_events"]
+    )
+    assert runs["xblock_sparse_pc_gmres_post_coarse1_optin"]["elapsed_s"] < runs["xblock_sparse_pc_gmres"][
+        "elapsed_s"
+    ]
+    assert runs["xblock_sparse_pc_gmres_post_coarse1_optin"]["residual_ratio_or_last_reported"] > 1.0e5
+    assert (
+        0.0
+        < runs["xblock_sparse_pc_gmres_post_coarse1_optin"]["post_coarse_relative_improvement"]
+        < 1.0e-2
+    )
+    assert runs["xblock_sparse_pc_gmres_post_coarse1_optin"]["post_coarse_direction_count"] == 10
+    assert any(
+        "post-coarse improved residual" in event
+        for event in runs["xblock_sparse_pc_gmres_post_coarse1_optin"]["progress_events"]
     )
     assert "not closed" in payload["conclusion"]["scale050_status"]
 

@@ -8464,6 +8464,206 @@ def _apply_preconditioned_minres_correction(
     return x, residual, tuple(history), tuple(alphas)
 
 
+def _rhs1_bool_env(name: str, *, default: bool = False) -> bool:
+    """Parse a boolean environment variable used by RHSMode=1 diagnostic hooks."""
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return bool(default)
+    if raw in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
+        return True
+    if raw in {"0", "false", "f", "no", "off", ".false.", ".f."}:
+        return False
+    return bool(default)
+
+
+def _rhs1_int_env(name: str, *, default: int, minimum: int = 0) -> int:
+    """Parse an integer environment variable with a lower bound."""
+    raw = os.environ.get(name, "").strip()
+    try:
+        value = int(raw) if raw else int(default)
+    except ValueError:
+        value = int(default)
+    return max(int(minimum), int(value))
+
+
+def _rhs1_float_env(name: str, *, default: float, minimum: float = 0.0) -> float:
+    """Parse a float environment variable with a lower bound."""
+    raw = os.environ.get(name, "").strip()
+    try:
+        value = float(raw) if raw else float(default)
+    except ValueError:
+        value = float(default)
+    return max(float(minimum), float(value))
+
+
+def _rhs1_xblock_post_coarse_directions(
+    *,
+    op: V3FullSystemOperator,
+    residual: jnp.ndarray,
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    include_raw: bool,
+    fsavg_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+) -> tuple[tuple[str, jnp.ndarray], ...]:
+    """Build a small physics-aware correction basis for stalled RHSMode=1 solves.
+
+    The basis is intentionally low-dimensional and matrix-free: residual-like
+    directions handle generic error, flux-surface-averaged low-L modes target
+    moment/nullspace drift, and source/constraint directions target the
+    constraint rows that are not visible to a pure x-block preconditioner.
+    """
+    residual = jnp.asarray(residual, dtype=jnp.float64)
+    total = int(op.total_size)
+    directions: list[tuple[str, jnp.ndarray]] = []
+
+    def _add(name: str, direction: jnp.ndarray) -> None:
+        if len(directions) >= int(max_directions):
+            return
+        vec = jnp.asarray(direction, dtype=jnp.float64).reshape((-1,))
+        if vec.shape != (total,):
+            return
+        try:
+            norm = float(jnp.linalg.norm(vec))
+        except Exception:
+            return
+        if np.isfinite(norm) and norm > 0.0:
+            directions.append((str(name), vec))
+
+    try:
+        _add("preconditioned_residual", preconditioner(residual))
+    except Exception:
+        pass
+    if include_raw:
+        _add("raw_residual", residual)
+
+    f_res = residual[: op.f_size].reshape(op.fblock.f_shape)
+    factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)
+    lmax_use = min(max(0, int(fsavg_lmax)), max(0, int(op.n_xi) - 1))
+    for il in range(lmax_use + 1):
+        if len(directions) >= int(max_directions):
+            break
+        avg = jnp.einsum("tz,sxtz->sx", factor, f_res[:, :, il, :, :])
+        f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+        f_dir = f_dir.at[:, :, il, :, :].set(avg[:, :, None, None])
+        tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+        _add(f"fsavg_l{il}", jnp.concatenate([f_dir.reshape((-1,)), tail]))
+
+    extra_start = int(op.f_size + op.phi1_size)
+    extra_size = int(op.extra_size)
+    if extra_size > 0 and len(directions) < int(max_directions):
+        extra_res = residual[extra_start : extra_start + extra_size]
+        extra_dir = jnp.zeros((total,), dtype=jnp.float64).at[extra_start : extra_start + extra_size].set(extra_res)
+        _add("extra_residual", extra_dir)
+        if extra_size <= int(max_extra_units):
+            for ie in range(extra_size):
+                if len(directions) >= int(max_directions):
+                    break
+                unit = jnp.zeros((total,), dtype=jnp.float64).at[extra_start + ie].set(1.0)
+                _add(f"extra_unit_{ie}", unit)
+
+    if int(op.constraint_scheme) == 1 and len(directions) < int(max_directions):
+        ix0 = _ix_min(bool(op.point_at_x0))
+        source_basis = _source_basis_constraint_scheme_1(op.x)
+        for s in range(int(op.n_species)):
+            for ibasis, basis in enumerate(source_basis):
+                if len(directions) >= int(max_directions):
+                    break
+                f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                f_dir = f_dir.at[s, ix0:, 0, :, :].set(basis[ix0:, None, None])
+                tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                full = jnp.concatenate([f_dir.reshape((-1,)), tail])
+                _add(f"constraint1_source_s{s}_{ibasis}", full)
+
+    return tuple(directions)
+
+
+def _apply_subspace_minres_correction(
+    *,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs: jnp.ndarray,
+    x0: jnp.ndarray,
+    direction_builder: Callable[[jnp.ndarray], Sequence[tuple[str, jnp.ndarray]]],
+    steps: int,
+    max_directions: int,
+    alpha_clip: float = 0.0,
+    rcond: float = 1.0e-12,
+    min_improvement: float = 0.0,
+) -> tuple[jnp.ndarray, jnp.ndarray, tuple[float, ...], tuple[int, ...], tuple[str, ...]]:
+    """Apply accepted least-squares residual corrections over a small basis.
+
+    This is a matrix-free coarse solve: it forms only ``A d_i`` for a bounded
+    number of candidate directions, solves ``min_alpha ||r - A D alpha||_2``,
+    and accepts the update only when the true residual decreases.
+    """
+    rhs = jnp.asarray(rhs, dtype=jnp.float64)
+    x = jnp.asarray(x0, dtype=jnp.float64)
+    residual = rhs - jnp.asarray(matvec(x), dtype=jnp.float64)
+    residual_norm = float(jnp.linalg.norm(residual))
+    history: list[float] = [residual_norm]
+    accepted_counts: list[int] = []
+    accepted_names: list[str] = []
+    steps_use = max(0, int(steps))
+    max_dirs_use = max(1, int(max_directions))
+    alpha_clip_use = max(0.0, float(alpha_clip))
+    rcond_use = max(0.0, float(rcond))
+    min_improvement_use = max(0.0, float(min_improvement))
+
+    for _ in range(steps_use):
+        raw_directions = tuple(direction_builder(residual))[:max_dirs_use]
+        names: list[str] = []
+        basis_cols: list[np.ndarray] = []
+        abasis_cols: list[np.ndarray] = []
+        for name, direction in raw_directions:
+            direction_np = np.asarray(jax.device_get(direction), dtype=np.float64).reshape((-1,))
+            if direction_np.shape != (int(x.size),) or not np.all(np.isfinite(direction_np)):
+                continue
+            norm = float(np.linalg.norm(direction_np))
+            if (not np.isfinite(norm)) or norm <= 0.0:
+                continue
+            direction_np = direction_np / norm
+            a_direction = np.asarray(
+                jax.device_get(matvec(jnp.asarray(direction_np, dtype=jnp.float64))),
+                dtype=np.float64,
+            ).reshape((-1,))
+            if a_direction.shape != direction_np.shape or not np.all(np.isfinite(a_direction)):
+                continue
+            a_norm = float(np.linalg.norm(a_direction))
+            if (not np.isfinite(a_norm)) or a_norm <= 0.0:
+                continue
+            names.append(str(name))
+            basis_cols.append(direction_np)
+            abasis_cols.append(a_direction)
+        if not basis_cols:
+            break
+
+        residual_np = np.asarray(jax.device_get(residual), dtype=np.float64).reshape((-1,))
+        basis = np.column_stack(basis_cols)
+        abasis = np.column_stack(abasis_cols)
+        try:
+            coeff, *_ = np.linalg.lstsq(abasis, residual_np, rcond=rcond_use if rcond_use > 0.0 else None)
+        except np.linalg.LinAlgError:
+            coeff = np.linalg.pinv(abasis, rcond=max(rcond_use, 1.0e-12)) @ residual_np
+        coeff = np.asarray(coeff, dtype=np.float64).reshape((-1,))
+        if alpha_clip_use > 0.0:
+            coeff = np.clip(coeff, -alpha_clip_use, alpha_clip_use)
+        if not np.all(np.isfinite(coeff)):
+            break
+        trial_residual_np = residual_np - abasis @ coeff
+        trial_norm = float(np.linalg.norm(trial_residual_np))
+        if (not np.isfinite(trial_norm)) or trial_norm >= residual_norm * (1.0 - min_improvement_use):
+            break
+        x_np = np.asarray(jax.device_get(x), dtype=np.float64).reshape((-1,)) + basis @ coeff
+        x = jnp.asarray(x_np, dtype=jnp.float64)
+        residual = jnp.asarray(trial_residual_np, dtype=jnp.float64)
+        residual_norm = trial_norm
+        history.append(residual_norm)
+        accepted_counts.append(int(len(basis_cols)))
+        accepted_names.extend(names)
+
+    return x, residual, tuple(history), tuple(accepted_counts), tuple(accepted_names)
+
+
 def _build_rhsmode1_pas_lite_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -12023,6 +12223,51 @@ def solve_v3_full_system_linear_gmres(
             post_minres_alphas: tuple[float, ...] = ()
             post_minres_residual_before: float | None = None
             post_minres_residual_after: float | None = None
+            post_coarse_enabled = _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE", default=False)
+            post_coarse_steps_requested = (
+                _rhs1_int_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_STEPS", default=1, minimum=1)
+                if post_coarse_enabled
+                else 0
+            )
+            post_coarse_max_directions = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_DIRECTIONS",
+                default=16,
+                minimum=1,
+            )
+            post_coarse_max_extra_units = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_EXTRA_UNITS",
+                default=8,
+                minimum=0,
+            )
+            post_coarse_fsavg_lmax = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_FSAVG_LMAX",
+                default=2,
+                minimum=0,
+            )
+            post_coarse_include_raw = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_INCLUDE_RAW",
+                default=True,
+            )
+            post_coarse_alpha_clip = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_ALPHA_CLIP",
+                default=0.0,
+                minimum=0.0,
+            )
+            post_coarse_rcond = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_RCOND",
+                default=1.0e-12,
+                minimum=0.0,
+            )
+            post_coarse_min_improvement = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MIN_IMPROVEMENT",
+                default=0.0,
+                minimum=0.0,
+            )
+            post_coarse_history: tuple[float, ...] = ()
+            post_coarse_direction_counts: tuple[int, ...] = ()
+            post_coarse_direction_names: tuple[str, ...] = ()
+            post_coarse_residual_before: float | None = None
+            post_coarse_residual_after: float | None = None
             if (
                 post_minres_steps_requested > 0
                 and np.isfinite(float(residual_norm_xblock_pc))
@@ -12076,6 +12321,79 @@ def solve_v3_full_system_linear_gmres(
                             f"post-minres failed ({type(exc).__name__}: {exc})",
                         )
                 solve_s += sparse_timer.elapsed_s() - post_minres_start_s
+            if (
+                post_coarse_steps_requested > 0
+                and np.isfinite(float(residual_norm_xblock_pc))
+                and float(residual_norm_xblock_pc) > float(target_xblock)
+            ):
+                post_coarse_residual_before = float(residual_norm_xblock_pc)
+                post_coarse_start_s = sparse_timer.elapsed_s()
+                coarse_preconditioner = precond_xblock if precondition_side != "none" else (lambda v: v)
+
+                def _post_coarse_direction_builder(residual_vec: jnp.ndarray) -> tuple[tuple[str, jnp.ndarray], ...]:
+                    return _rhs1_xblock_post_coarse_directions(
+                        op=op,
+                        residual=residual_vec,
+                        preconditioner=coarse_preconditioner,
+                        include_raw=bool(post_coarse_include_raw),
+                        fsavg_lmax=int(post_coarse_fsavg_lmax),
+                        max_extra_units=int(post_coarse_max_extra_units),
+                        max_directions=int(post_coarse_max_directions),
+                    )
+
+                try:
+                    (
+                        x_coarse,
+                        residual_coarse,
+                        post_coarse_history,
+                        post_coarse_direction_counts,
+                        post_coarse_direction_names,
+                    ) = _apply_subspace_minres_correction(
+                        matvec=_mv_true,
+                        rhs=rhs,
+                        x0=jnp.asarray(x_np, dtype=jnp.float64),
+                        direction_builder=_post_coarse_direction_builder,
+                        steps=post_coarse_steps_requested,
+                        max_directions=post_coarse_max_directions,
+                        alpha_clip=post_coarse_alpha_clip,
+                        rcond=post_coarse_rcond,
+                        min_improvement=post_coarse_min_improvement,
+                    )
+                    post_coarse_residual_after = float(jnp.linalg.norm(residual_coarse))
+                    if (
+                        np.isfinite(float(post_coarse_residual_after))
+                        and float(post_coarse_residual_after) < float(residual_norm_xblock_pc)
+                    ):
+                        x_np = np.asarray(x_coarse, dtype=np.float64)
+                        residual_norm_xblock_pc = float(post_coarse_residual_after)
+                        if emit is not None:
+                            emit(
+                                0,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                f"post-coarse improved residual {post_coarse_residual_before:.6e} "
+                                f"-> {post_coarse_residual_after:.6e} "
+                                f"(steps={len(post_coarse_direction_counts)} "
+                                f"directions={sum(post_coarse_direction_counts)})",
+                            )
+                    elif emit is not None:
+                        after = (
+                            float(post_coarse_residual_after)
+                            if post_coarse_residual_after is not None
+                            else float("nan")
+                        )
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"post-coarse rejected residual {post_coarse_residual_before:.6e} -> {after:.6e}",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"post-coarse failed ({type(exc).__name__}: {exc})",
+                        )
+                solve_s += sparse_timer.elapsed_s() - post_coarse_start_s
             if emit is not None:
                 ksp_suffix = f" ksp_residual={float(history[-1]):.6e}" if history else ""
                 emit(
@@ -12135,6 +12453,14 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_post_minres_residual_after": post_minres_residual_after,
                     "xblock_post_minres_alphas": post_minres_alphas,
                     "xblock_post_minres_history": post_minres_history,
+                    "xblock_post_coarse_steps_requested": int(post_coarse_steps_requested),
+                    "xblock_post_coarse_steps_accepted": int(len(post_coarse_direction_counts)),
+                    "xblock_post_coarse_direction_count": int(sum(post_coarse_direction_counts)),
+                    "xblock_post_coarse_residual_before": post_coarse_residual_before,
+                    "xblock_post_coarse_residual_after": post_coarse_residual_after,
+                    "xblock_post_coarse_history": post_coarse_history,
+                    "xblock_post_coarse_direction_counts": post_coarse_direction_counts,
+                    "xblock_post_coarse_direction_names": post_coarse_direction_names,
                 },
             )
 

@@ -51,6 +51,7 @@ PROGRESS_MARKERS = (
     "sparse_ilu:",
     "sparse_lu:",
     "post-minres",
+    "post-coarse",
     "gmres complete",
     "GMRES complete",
     "residual=",

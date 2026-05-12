@@ -34,7 +34,7 @@
           "path": "docs/_static/qi_seed_robustness_scale050_cpu_probe.json"
         },
         {
-          "claim": "Scale-0.50 QI solver matrix preserves compact failure breadcrumbs for auto, sparse_host_safe, sparse_lsmr, xblock_sparse_pc_gmres, initial-seed, and post-minres probes; all current routes fail, so the next step is a stronger global/coarse correction.",
+          "claim": "Scale-0.50 QI solver matrix preserves compact failure breadcrumbs for auto, sparse_host_safe, sparse_lsmr, xblock_sparse_pc_gmres, initial-seed, post-minres, and post-coarse probes; all current routes fail, so the next step is a different global coupling strategy.",
           "path": "docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json"
         }
       ],
@@ -45,7 +45,7 @@
       ],
       "id": "production_qi_cpu_gpu",
       "next_actions": [
-        "Implement and gate a stronger global/coarse correction after x-block seeding for scale-0.50 QI; do not spend more time on full sparse materialization, timeout-only changes, default initial seeds, or scalar post-minres cleanup.",
+        "Implement and gate a different global coupling strategy for scale-0.50 QI; do not spend more time on full sparse materialization, timeout-only changes, default initial seeds, scalar post-minres cleanup, or the current small post-coarse residual subspace.",
         "Run larger CPU and one-GPU QI seed ladders only after the scale-0.50 residual floor is reduced below the requested gate."
       ],
       "second_push_delta_percent": 9,
