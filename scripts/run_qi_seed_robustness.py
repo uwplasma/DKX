@@ -37,6 +37,7 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_xblock_lu_right_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_auto_cpu_blocker.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
