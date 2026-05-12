@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 
 def test_qi_seed_smoke_artifact_records_passing_default_cli_run() -> None:
     path = Path("docs/_static/qi_seed_robustness_smoke.json")
@@ -333,6 +335,48 @@ def test_qi_seed_scale050_xblock_lu_right_gpu_artifact_passes() -> None:
     assert solver_metadata["accepted_converged"] is True
 
 
+@pytest.mark.parametrize(
+    ("artifact", "backend", "max_elapsed_s"),
+    [
+        ("docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json", "cpu", 15.0),
+        ("docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json", "gpu", 45.0),
+    ],
+)
+def test_qi_seed_scale050_xblock_lu_right_multiseed5_artifacts_pass(
+    artifact: str,
+    backend: str,
+    max_elapsed_s: float,
+) -> None:
+    payload = json.loads(Path(artifact).read_text(encoding="utf-8"))
+
+    assert payload["artifact_kind"] == "qi_seed_execution_summary"
+    assert payload["lane"] == "qi_seed_robustness"
+    assert payload["resolution"] == {"NTHETA": 13, "NZETA": 27, "NX": 4, "NXI": 50}
+    assert payload["public_cli_default_path"] is True
+    assert payload["solve_method_request"] == "auto"
+    assert payload["gates"]["passed"] is True
+    assert payload["execution_summary"]["backends"] == [backend]
+    assert payload["execution_summary"]["attempted"] == 5
+    assert payload["execution_summary"]["process_passed"] == 5
+    assert payload["execution_summary"]["process_failed"] == 0
+    assert payload["execution_summary"]["timed_out"] == 0
+    assert payload["execution_summary"]["outputs_written"] == 5
+    assert payload["execution_summary"]["solver_traces_written"] == 5
+    assert payload["execution_summary"]["accepted_converged"] == 5
+    assert payload["execution_summary"]["max_residual_ratio"] < 1.0
+    assert payload["execution_summary"]["max_elapsed_s"] < max_elapsed_s
+
+    seeds = payload["seeds"]
+    assert len(seeds) == 5
+    assert {seed["seed"] for seed in seeds} == {0, 1, 2, 3, 4}
+    for seed in seeds:
+        assert seed["backend"] == backend
+        assert seed["accepted_converged"] is True
+        assert seed["converged"] is True
+        assert seed["residual_norm"] < seed["residual_target"]
+        assert seed["solver_trace_exists"] is True
+
+
 def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     path = Path("docs/_static/qi_seed_robustness_evidence_manifest.json")
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -352,8 +396,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 10
-    assert current["passing_artifact_count"] == 8
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 12
+    assert current["passing_artifact_count"] == 10
     assert current["nonpassing_artifact_count"] == 2
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 13169
@@ -378,6 +422,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json",
         "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json",
         "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json",
+        "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json",
+        "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json",
     } == source_paths
 
     gates = payload["acceptance_gates"]

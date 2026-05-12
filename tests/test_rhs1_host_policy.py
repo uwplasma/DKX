@@ -15,6 +15,7 @@ from sfincs_jax.rhs1_host_policy import (
     rhs1_dense_fallback_max,
     rhs1_dense_krylov_allowed,
     rhs1_fp_3d_sparse_pc_auto_allowed,
+    rhs1_fp_3d_xblock_sparse_pc_auto_allowed,
     rhs1_explicit_sparse_host_direct_allowed,
     rhs1_host_dense_fallback_allowed,
     rhs1_host_dense_shortcut_allowed,
@@ -37,6 +38,8 @@ def _op(
     include_phi1: bool = False,
     constraint_scheme: int = 1,
     n_xi: int = 100,
+    n_species: int = 1,
+    point_at_x0: bool = False,
 ):
     return SimpleNamespace(
         rhs_mode=rhs_mode,
@@ -44,6 +47,8 @@ def _op(
         constraint_scheme=constraint_scheme,
         n_zeta=5,
         n_xi=n_xi,
+        n_species=n_species,
+        point_at_x0=point_at_x0,
         fblock=SimpleNamespace(fp=object() if has_fp else None, pas=object() if has_pas else None),
     )
 
@@ -363,6 +368,52 @@ def test_rhs1_fp_3d_sparse_pc_auto_targets_measured_cpu_fp_window(monkeypatch) -
         solve_method_kind="auto",
         backend="cpu",
     )
+
+
+def test_rhs1_fp_3d_xblock_sparse_pc_auto_targets_qi_window(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN_NXI", raising=False)
+
+    common = {
+        "op": _op(has_fp=True, constraint_scheme=1, n_xi=50),
+        "active_size": 39_314,
+        "use_implicit": False,
+        "solve_method_kind": "auto",
+        "backend": "cpu",
+        "eparallel_abs": 0.0,
+    }
+
+    assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**common)
+    assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "backend": "gpu"})
+    assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "backend": "cuda"})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 20_000})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 70_000})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "use_implicit": True})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "solve_method_kind": "dense"})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "eparallel_abs": 1.0e-4})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+        **{**common, "op": _op(has_fp=True, has_pas=True, constraint_scheme=1, n_xi=50)}
+    )
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+        **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=50, n_species=2)}
+    )
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+        **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=50, point_at_x0=True)}
+    )
+    low_pitch = _op(has_fp=True, constraint_scheme=1, n_xi=25)
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "op": low_pitch})
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN_NXI", "20")
+    assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "op": low_pitch})
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN_NXI", raising=False)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC", "off")
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**common)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC", "on")
+    assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 1})
 
 
 def test_rhs1_tokamak_er_dense_auto_targets_bounded_cpu_window(monkeypatch) -> None:
