@@ -61,8 +61,8 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   average moved to `79.0%`; the VMEC/Boozer lane saturated its scoped `93%`
   target, the benchmark/docs lane saturated its `98%` target, and the JAX
   ecosystem lane moved to `82%` after measured Lineax/Equinox/JAXopt gates. QI
-  is now `64%` after the scale-0.50 single-seed CPU blocker passed with the
-  promoted right-preconditioned exact-xblock-LU policy. PAS, parallel, and refactor/coverage gained
+  is now `72%` after the scale-0.50 single-seed CPU and one-GPU blockers passed
+  with the promoted right-preconditioned exact-xblock-LU policy. PAS, parallel, and refactor/coverage gained
   fail-fast gates, timeout-safe benchmark plans, and focused coverage, but they
   did not honestly clear a +15 point move from the immediately preceding
   baseline.
@@ -116,7 +116,7 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   the preconditioned Krylov operator or supplies a larger physics-informed
   coarse space before the 32000-iteration floor, not another post-hoc scalar or
   small-subspace cleanup.
-- [x] Closed the scale-0.50 single-seed CPU QI blocker with a promoted
+- [x] Closed the scale-0.50 single-seed CPU and one-GPU QI blocker with a promoted
   preconditioner policy instead of a timeout increase. The successful route is
   right-preconditioned explicit `xblock_sparse_pc_gmres` plus exact sparse LU
   for medium full-FP host x-blocks (`SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`
@@ -125,10 +125,14 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json` converges
   the `13 x 27 x 50 x 4` QI seed in `~12.0 s`, solver time `~11.2 s`, with
   residual `1.04e-12` against target `2.51e-11` and residual ratio `4.16e-2`.
-  The solver trace records `precondition_side=right`, no short-restart cap,
-  `81` iterations, `85` matvecs, and exact `sparse_lu` block factors. This
-  raises the QI lane materially, but wider CPU seeds and one-GPU reproduction
-  remain required before production-resolution QI is declared complete.
+  The matching clean-clone one-GPU artifact
+  `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json` passes in
+  `~44.5 s`, solver time `~43.0 s`, with residual `1.58e-11` and residual ratio
+  `0.63`. The solver traces record `precondition_side=right`, no short-restart
+  cap, exact `sparse_lu` block factors, and compact Krylov counts (`81`/`85`
+  CPU iterations/matvecs and `69`/`72` GPU iterations/matvecs). This
+  raises the QI lane materially, but wider CPU/GPU seed ladders remain required
+  before production-resolution QI is declared complete.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but

@@ -1514,7 +1514,10 @@ Controls:
   because the scale-0.50 QI blocker showed that weak ILU factors caused the
   residual floor. The checked CPU successor artifact
   ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json`` closes
-  the ``13 x 27 x 50 x 4`` seed in ``~12 s`` with residual ratio ``4.16e-2``.
+  the ``13 x 27 x 50 x 4`` seed in ``~12 s`` with residual ratio ``4.16e-2``;
+  the matching one-GPU artifact
+  ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json`` closes
+  the same seed in ``~44.5 s`` with residual ratio ``0.63``.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual

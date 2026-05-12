@@ -254,10 +254,14 @@ def test_qi_seed_scale050_solver_matrix_records_failed_diagnostic_routes() -> No
         "lgmres residual" in event and "falling back to gmres" in event
         for event in runs["xblock_sparse_pc_lgmres_optin"]["progress_events"]
     )
-    assert "closed on CPU" in payload["conclusion"]["scale050_status"]
+    assert "closed on CPU and one GPU" in payload["conclusion"]["scale050_status"]
     assert (
         payload["conclusion"]["successor_cpu_artifact"]
         == "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json"
+    )
+    assert (
+        payload["conclusion"]["successor_gpu_artifact"]
+        == "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json"
     )
 
 
@@ -295,6 +299,40 @@ def test_qi_seed_scale050_xblock_lu_right_cpu_artifact_passes() -> None:
     assert solver_metadata["accepted_converged"] is True
 
 
+def test_qi_seed_scale050_xblock_lu_right_gpu_artifact_passes() -> None:
+    path = Path("docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    assert payload["artifact_kind"] == "qi_seed_execution_summary"
+    assert payload["lane"] == "qi_seed_robustness"
+    assert payload["resolution"] == {"NTHETA": 13, "NZETA": 27, "NX": 4, "NXI": 50}
+    assert payload["gates"]["passed"] is True
+    assert payload["execution_summary"]["backends"] == ["gpu"]
+    assert payload["execution_summary"]["process_passed"] == 1
+    assert payload["execution_summary"]["process_failed"] == 0
+    assert payload["execution_summary"]["accepted_converged"] == 1
+    assert payload["execution_summary"]["max_residual_ratio"] < 1.0
+    assert payload["execution_summary"]["max_elapsed_s"] < 60.0
+
+    seed = payload["seeds"][0]
+    assert seed["backend"] == "gpu"
+    assert seed["accepted_converged"] is True
+    assert seed["residual_norm"] < seed["residual_target"]
+    assert any("sparse_lu:" in event for event in seed["progress_events"])
+
+    trace_path = Path("docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu_solver_trace.json")
+    trace = json.loads(trace_path.read_text(encoding="utf-8"))
+    solver_metadata = trace["metadata"]["solver_metadata"]
+    assert trace["backend"] == "gpu"
+    assert solver_metadata["precondition_side"] == "right"
+    assert solver_metadata["default_right_preconditioned"] is True
+    assert solver_metadata["default_short_restart_capped"] is False
+    assert solver_metadata["gmres_restart"] == 80
+    assert solver_metadata["iterations"] == 69
+    assert solver_metadata["matvecs"] == 72
+    assert solver_metadata["accepted_converged"] is True
+
+
 def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     path = Path("docs/_static/qi_seed_robustness_evidence_manifest.json")
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -314,8 +352,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 9
-    assert current["passing_artifact_count"] == 7
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 10
+    assert current["passing_artifact_count"] == 8
     assert current["nonpassing_artifact_count"] == 2
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 13169
@@ -339,6 +377,7 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale050_cpu_probe.json",
         "docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json",
         "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json",
+        "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json",
     } == source_paths
 
     gates = payload["acceptance_gates"]
