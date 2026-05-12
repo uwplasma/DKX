@@ -159,6 +159,27 @@ def rhs1_dense_auto_fp_accelerator_min() -> int:
     return max(0, _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", 1000))
 
 
+def rhs1_dense_auto_fp_allowed(
+    *,
+    backend: str,
+    active_size: int,
+    dense_active_cutoff: int,
+) -> bool:
+    """Return whether full-FP RHSMode=1 auto mode should start with dense LU.
+
+    CPU defaults use the dense path for all systems below the FP cutoff. On
+    accelerators, keep tiny fixtures on the lower-overhead matrix-free path but
+    use dense LU for moderate systems that otherwise pay a long Krylov/probe
+    ladder before falling back.
+    """
+    cutoff = rhs1_dense_auto_fp_cutoff(dense_active_cutoff=dense_active_cutoff)
+    if cutoff <= 0 or int(active_size) > int(cutoff):
+        return False
+    if str(backend).strip().lower() == "cpu":
+        return True
+    return int(active_size) >= int(rhs1_dense_auto_fp_accelerator_min())
+
+
 def rhs1_dense_krylov_allowed() -> bool:
     """Return whether dense Krylov fallback is enabled."""
     env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV")
@@ -625,6 +646,7 @@ __all__ = [
     "host_sparse_factor_dtype",
     "rhs1_dense_backend_allowed",
     "rhs1_dense_auto_fp_cutoff",
+    "rhs1_dense_auto_fp_allowed",
     "rhs1_dense_auto_fp_accelerator_min",
     "rhs1_dense_fallback_max",
     "rhs1_dense_krylov_allowed",

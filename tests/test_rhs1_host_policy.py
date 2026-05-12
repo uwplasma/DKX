@@ -7,6 +7,7 @@ import numpy as np
 from sfincs_jax.rhs1_host_policy import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,
+    rhs1_dense_auto_fp_allowed,
     rhs1_constrained_pas_sparse_pc_auto_allowed,
     rhs1_dense_auto_fp_accelerator_min,
     rhs1_dense_auto_fp_cutoff,
@@ -164,6 +165,22 @@ def test_rhs1_dense_auto_fp_accelerator_min_is_tunable(monkeypatch) -> None:
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", "bad")
     assert rhs1_dense_auto_fp_accelerator_min() == 1000
+
+
+def test_rhs1_dense_auto_fp_allowed_keeps_tiny_accelerator_off_dense(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", raising=False)
+
+    assert rhs1_dense_auto_fp_allowed(backend="cpu", active_size=500, dense_active_cutoff=6000)
+    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=500, dense_active_cutoff=6000)
+    assert rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=6000)
+    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=7000, dense_active_cutoff=6000)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", "6000")
+    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=6000)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "0")
+    assert not rhs1_dense_auto_fp_allowed(backend="cpu", active_size=500, dense_active_cutoff=6000)
 
 
 def test_rhs1_host_sparse_direct_and_pc_rescue_policy(monkeypatch) -> None:

@@ -156,6 +156,7 @@ from . import solver_path_policy as _solver_path_policy
 from .rhs1_host_policy import (
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
     host_sparse_factor_dtype as _host_sparse_factor_dtype_impl,
+    rhs1_dense_auto_fp_allowed as _rhs1_dense_auto_fp_allowed_impl,
     rhs1_dense_auto_fp_cutoff as _rhs1_dense_auto_fp_cutoff_impl,
     rhs1_dense_backend_allowed as _rhs1_dense_backend_allowed_impl,
     rhs1_dense_fallback_max as _rhs1_dense_fallback_max_impl,
@@ -13631,7 +13632,6 @@ def solve_v3_full_system_linear_gmres(
     if (
         solve_method_kind in {"auto", "default", "incremental"}
         and (not use_implicit)
-        and jax.default_backend() == "cpu"
         and op.fblock.fp is not None
         and op.fblock.pas is None
         and (not bool(op.include_phi1))
@@ -13640,7 +13640,11 @@ def solve_v3_full_system_linear_gmres(
         dense_auto_cutoff = _rhs1_dense_auto_fp_cutoff_impl(
             dense_active_cutoff=_rhsmode1_dense_fallback_max(op),
         )
-        if dense_auto_cutoff > 0 and int(active_size) <= int(dense_auto_cutoff):
+        if _rhs1_dense_auto_fp_allowed_impl(
+            backend=jax.default_backend(),
+            active_size=int(active_size),
+            dense_active_cutoff=_rhsmode1_dense_fallback_max(op),
+        ):
             solve_method = "dense"
             solve_method_kind = "dense"
             if emit is not None:

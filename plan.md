@@ -77,6 +77,16 @@ Current active lane (2026-05-11, validation/docs/release integration):
   `Nxi=25` default-policy failure where `auto` skipped dense, entered a slow
   fallback path, and failed the residual gate. It is not yet a
   production-resolution CPU/GPU QI robustness claim.
+- Bounded GPU QI update: the same `7 x 13 x 25 x 4` three-seed QI ladder now
+  passes on one RTX A4000 through the public `auto` CLI policy. The fix removed
+  the stale CPU-only guard around the full-FP dense-auto selector, so moderate
+  accelerator systems above `SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN` use
+  the dense path before the sparse/fallback ladder. The checked artifact
+  `docs/_static/qi_seed_robustness_multiseed_gpu.json` records `3/3` converged
+  seeds, `0` timeouts, max residual ratio `4.137e-7`, and max elapsed
+  `43.99 s`; before the guard removal, the same default GPU seed produced no
+  solver trace after more than two minutes, while forced dense passed. This is a
+  bounded GPU robustness gate, not a production-resolution claim.
 - Mapped x-grid status: checked JSON/CSV artifacts under `docs/_static/` now
   exercise tiny and reduced PAS RHSMode=2 transport-matrix comparisons. The
   reduced PAS tokamak artifact compares mapped `Nx=7` candidates against an
