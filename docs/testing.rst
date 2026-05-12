@@ -667,23 +667,27 @@ method toggle alone.
 
 The successor
 ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json`` artifact
-closes the same scale-0.50 CPU seed after the solver-policy change. The promoted
-path selects right-preconditioned explicit ``xblock_sparse_pc_gmres`` for 3D
-full-FP full-trajectory systems and raises the non-differentiable full-FP host
-x-block exact-LU cap to ``20000``. The checked run converges at
-``13 x 27 x 50 x 4`` in ``~12 s`` with true residual ``1.04e-12`` against target
-``2.51e-11`` and residual ratio ``4.16e-2``. The companion solver trace
+and ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json``
+artifacts close the same scale-0.50 CPU and one-GPU seed after the solver-policy
+change. The promoted path selects right-preconditioned explicit
+``xblock_sparse_pc_gmres`` for 3D full-FP full-trajectory systems and raises the
+non-differentiable full-FP host x-block exact-LU cap to ``20000``. The checked
+CPU run converges at ``13 x 27 x 50 x 4`` in ``~12 s`` with true residual
+``1.04e-12`` against target ``2.51e-11`` and residual ratio ``4.16e-2``. The
+clean-clone one-GPU run on ``office`` converges in ``~44.5 s`` with residual
+``1.58e-11`` and residual ratio ``0.63``. The companion solver trace
 ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu_solver_trace.json``
 records ``precondition_side=right``, ``gmres_restart=80``, ``81`` Krylov
-iterations, ``85`` matvecs, and exact ``sparse_lu`` block factors. This closes
-the single-seed CPU blocker while leaving wider seed ladders and one-GPU
-reproduction as explicit promotion gates.
+iterations, ``85`` matvecs, and exact ``sparse_lu`` block factors; the GPU trace
+records the same policy with ``69`` iterations and ``72`` matvecs. This closes
+the single-seed CPU/GPU blocker while leaving wider seed ladders as explicit
+promotion gates.
 
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
 passing bounded grid ``70202``, the largest attempted bounded grid ``70202``,
-seven passing artifacts and two non-passing blocker artifacts, a ``50%`` per-axis
+eight passing artifacts and two non-passing blocker artifacts, a ``50%`` per-axis
 lane-completion estimate based only on passing artifacts, and ``93.12%`` of
 production total size still uncovered. The production acceptance gate requires
 five seeds on both CPU and one GPU with ``public_cli_default_path``,

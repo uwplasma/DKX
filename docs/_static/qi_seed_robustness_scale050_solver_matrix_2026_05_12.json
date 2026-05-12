@@ -4,14 +4,16 @@
   "conclusion": {
     "initial_seed_optin_status": "Tested after the first matrix: it was rejected because the x-block seed residual was slightly worse than the RHS norm and the run still stalled at 5.41e-6, so it remains opt-in and is not a default performance path.",
     "lgmres_optin_status": "Tested as a restart-robust Krylov variant. It stalled at 5.577462e-6, fell back to GMRES, and ended at the same 5.413504e-6 residual floor after 65204 matvecs and 299.95 s, so it remains rejected.",
-    "next_algorithmic_need": "wider CPU seed ladder and one-GPU reproduction of the right-preconditioned exact-xblock-LU policy before production-resolution QI is declared complete.",
+    "next_algorithmic_need": "wider CPU/GPU seed ladders at scale 0.50 and then the next bounded scale before production-resolution QI is declared complete.",
     "observed_blocker": "The failed routes in this matrix isolated the blocker to weak ILU x-block factors. The successor CPU artifact closes the same scale-0.50 seed by switching medium full-FP host x-blocks to exact sparse LU and selecting right preconditioning automatically.",
     "post_coarse1_optin_status": "Tested as a stronger multidirectional matrix-free coarse hook. It accepted one 10-direction least-squares step and reduced the residual only from 5.413504e-6 to 5.401187e-6, so it remains opt-in and is not sufficient for closing scale-0.50 QI.",
     "post_minres4_optin_status": "Tested as the first matrix-free correction hook. It accepted two steps and reduced the residual only from 5.413504e-6 to 5.409759e-6, so it remains opt-in and is not sufficient for closing scale-0.50 QI.",
     "scale045_status": "passes in checked artifact docs/_static/qi_seed_robustness_scale045_cpu_probe.json",
-    "scale050_status": "closed on CPU by docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json after promoting right-preconditioned x-block GMRES plus exact sparse LU for medium full-FP host x-blocks; GPU and wider-seed promotion remain separate gates.",
+    "scale050_status": "closed on CPU and one GPU by docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json and docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json after promoting right-preconditioned x-block GMRES plus exact sparse LU for medium full-FP host x-blocks; wider-seed promotion remains a separate gate.",
     "successor_cpu_artifact": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json",
-    "successor_solver_trace": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu_solver_trace.json"
+    "successor_solver_trace": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu_solver_trace.json",
+    "successor_gpu_artifact": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json",
+    "successor_gpu_solver_trace": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu_solver_trace.json"
   },
   "evidence_note": "Historical scale-0.50 QI blocker matrix plus pointer to the successor CPU artifact. The failed rows are kept as diagnostic breadcrumbs; the checked successor artifact records the promoted CPU policy that closes this seed.",
   "execution_summary": {
