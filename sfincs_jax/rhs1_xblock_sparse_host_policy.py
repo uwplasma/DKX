@@ -36,11 +36,13 @@ def rhs1_xblock_sparse_lu_default_max(
     Host SuperLU factors on pure full-FP x-blocks have a measured safe window
     above the generic JAX-factor and PAS paths. Keep the larger cap restricted
     to that narrow host case so medium 3D full-FP blocks avoid weak ILU plateaus
-    without promoting exact LU for PAS or device-resident factor paths.
+    without promoting exact LU for PAS or device-resident factor paths. The
+    30k cutoff covers the bounded scale-0.55 QI x-block probe whose largest
+    per-x block is 23925 DOFs; larger production blocks remain ILU/opt-in work.
     """
 
     if (not bool(build_jax_factors)) and bool(has_fp) and not bool(has_pas):
-        return 20000
+        return 30000
     return 2000
 
 

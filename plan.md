@@ -121,7 +121,7 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   preconditioner policy instead of a timeout increase. The successful route is
   right-preconditioned explicit `xblock_sparse_pc_gmres` plus exact sparse LU
   for medium full-FP host x-blocks (`SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`
-  default raised to `20000` only for the non-differentiable full-FP host path).
+  default raised to `30000` only for the non-differentiable full-FP host path).
   The checked artifact
   `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json` converges
   the `13 x 27 x 50 x 4` QI seed in `~12.0 s`, solver time `~11.2 s`, with
@@ -144,6 +144,17 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   residual ratio `0.963`. This closes the bounded public-auto robustness
   blocker. The remaining QI promotion gates are the next bounded resolution
   scale and finally production resolution.
+- [x] Closed the next CPU scale-0.55 setup cliff without widening the default
+  production claim. The previous
+  `docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json` run timed out
+  because the largest `15 x 29 x 55 x 4` x-block (`23925` DOFs) exceeded the old
+  exact-LU cap and fell into sparse ILU. The new
+  `docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json` successor
+  uses the same public `auto` request plus the widened profiling window, now hits
+  exact `sparse_lu` for all x-blocks, and converges in `~21.5 s` with active size
+  `52637`, residual `2.30e-13`, target `2.79e-11`, and residual ratio `8.25e-3`.
+  Remaining QI work is the matching GPU scale-0.55 ladder and wider seed count
+  before any production-resolution promotion.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
@@ -10139,11 +10150,12 @@ Progress update (2026-05-11): integrated multi-lane release hardening push
 
 Updated lane status after this integrated push:
 
-- Overall open-lane average: `91.3%`. The machine-readable tracker now reflects
+- Overall open-lane average: `91.7%`. The machine-readable tracker now reflects
   release-grade PAS CPU/GPU production-floor evidence, parallel release-audit
-  gates, refactor/CI policy extraction, and optional JAX-ecosystem adoption
-  gates. QI stays at `85%` because the honest next-scale `0.55` CPU probe timed
-  out before output even with a widened x-block sparse-PC cap.
+  gates, refactor/CI policy extraction, optional JAX-ecosystem adoption gates,
+  and the scale-0.55 CPU QI exact-LU successor. QI is still active at `88%`
+  because the matching scale-0.55 GPU ladder and production-resolution CPU/GPU
+  ladders remain open.
 - PAS-heavy memory/runtime: `93%`. The probe/gate layer is now strong enough
   for short real production-floor probes, but a default solver change still
   needs real geometry4/HSX/geometry11 residual/runtime/memory wins.
@@ -10168,7 +10180,7 @@ Updated lane status after this integrated push:
 
 Next concrete actions:
 
-1. Reduce QI scale-0.55 x-block sparse setup/factorization cost before widening
+1. Run the matching scale-0.55 GPU QI seed ladder before widening
    the default auto-policy cap or attempting production-resolution QI.
 2. Profile scale-0.55 x-block sparse LU ordering, memory, and factor reuse so
    the next QI attempt has a concrete algorithmic target.
