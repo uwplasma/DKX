@@ -1516,7 +1516,7 @@ Controls:
   ``*_MIN``, ``*_MAX``, and ``*_MIN_NXI`` environment variables can widen or
   disable the gate for controlled profiling, but larger promotion requires fresh
   CPU/GPU seed-ladder evidence.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`` (default: ``20000`` for
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`` (default: ``30000`` for
   non-differentiable full-FP host x-block factors; ``2000`` otherwise). Medium
   full-FP :math:`(x,\theta,\zeta,L)` blocks now use exact SuperLU instead of ILU
   because the scale-0.50 QI blocker showed that weak ILU factors caused the
@@ -1535,10 +1535,13 @@ Controls:
   ``41.18 s``, and maximum residual ratios ``0.966`` and ``0.963``. This closes
   the bounded public-auto route gate; the production-resolution QI ladder remains
   separate. The next-scale
-  ``docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json`` probe timed
-  out after ``360 s`` at ``15 x 29 x 55 x 4`` even with a widened cap, so the
-  default upper size remains bounded until x-block sparse setup/factorization is
-  made cheaper.
+  ``docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json`` probe showed
+  that the old ``20000`` exact-LU cap sent the largest ``15 x 29 x 55 x 4``
+  block into ILU and timed out. Raising only the full-FP host exact-LU cap to
+  ``30000`` closes the CPU successor
+  ``docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json`` in
+  ``~21.5 s`` with residual ratio ``8.25e-3``. The default upper auto-size
+  window remains bounded until the matching GPU and wider seed ladders pass.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual

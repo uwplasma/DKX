@@ -3,7 +3,7 @@
   "lanes": [
     {
       "before_percent": 23,
-      "current_percent": 85,
+      "current_percent": 88,
       "evidence": [
         {
           "claim": "Production-readiness manifest rolls up all checked QI CPU/GPU seed artifacts and explicitly keeps the gate bounded until production CPU/GPU ladders exist.",
@@ -64,6 +64,10 @@
         {
           "claim": "Scale-0.55 public-auto CPU next-scale probe timed out before output/trace even with a widened x-block sparse-PC cap, so QI production promotion remains blocked by larger-scale sparse factorization cost.",
           "path": "docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json"
+        },
+        {
+          "claim": "Scale-0.55 CPU QI successor converges with the widened profiling window after raising the full-FP host x-block exact-LU cap to 30000; active size 52637, elapsed 21.5 s, residual ratio 8.25e-3.",
+          "path": "docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json"
         }
       ],
       "gates": [
@@ -74,12 +78,12 @@
       ],
       "id": "production_qi_cpu_gpu",
       "next_actions": [
-        "Reduce scale-0.55 x-block sparse setup/factorization cost before widening the default QI auto-policy window.",
-        "Profile host-assembled x-block sparse LU memory and factorization ordering at scale 0.55 before any production-resolution promotion.",
+        "Run the matching scale-0.55 one-GPU seed ladder before widening the default QI auto-policy window.",
+        "Profile host-assembled x-block sparse LU memory and factorization ordering at scale 0.55 and the next bounded scale before any production-resolution promotion.",
         "Refresh the production-resolution readiness estimate only after the next bounded CPU/GPU seed ladders pass."
       ],
-      "second_push_delta_percent": 62,
-      "second_push_result": "scale-0.50 public auto CPU and one-GPU five-seed QI ladders pass; the next scale-0.55 CPU probe timed out before output, so production-resolution promotion remains blocked by larger-scale x-block sparse factorization cost",
+      "second_push_delta_percent": 65,
+      "second_push_result": "scale-0.50 public auto CPU and one-GPU five-seed QI ladders pass; the scale-0.55 CPU setup cliff is now closed by the full-FP host exact-LU cap increase, while GPU scale-0.55 and production-resolution ladders remain open",
       "status": "active",
       "target_percent": 100,
       "title": "Production-resolution QI CPU/GPU robustness"
@@ -448,6 +452,7 @@
     }
   ],
   "minimum_substantial_delta_percent": 10,
+  "overall_average_percent": 91.7,
   "owner_threads": [
     "019e1b62-a2b6-7d82-924c-d3f27b58cc34",
     "019e1b62-ee67-78f3-a63f-06f5623b4217",
@@ -469,6 +474,5 @@
   "purpose": "Machine-readable completion tracker for the coordinated large-push research/performance lanes. Percentages are engineering readiness estimates backed by checked-in evidence, not physics claims by themselves.",
   "requested_second_push_delta_percent": 15,
   "schema_version": 1,
-  "second_push_assessment": "large push reached 91.3% overall: PAS CPU/GPU production-floor artifacts, release-grade parallel audit gates, refactor/CI policy extraction, and optional JAX-ecosystem gates are now reflected in the manifest. QI remains at 85% because the honest scale-0.55 next-step probe timed out, so production QI still needs sparse setup/factorization work before promotion.",
-  "overall_average_percent": 91.3
+  "second_push_assessment": "large push is now at 91.7% overall: PAS CPU/GPU production-floor artifacts, release-grade parallel audit gates, refactor/CI policy extraction, optional JAX-ecosystem gates, and the scale-0.55 CPU QI exact-LU successor are reflected in the manifest. QI remains active at 88% because GPU scale-0.55 and production-resolution CPU/GPU seed ladders are still required before promotion."
 }

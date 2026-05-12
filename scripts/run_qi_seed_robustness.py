@@ -38,6 +38,7 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_auto_cpu_blocker.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_xblock_lu_right_cpu.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
@@ -325,6 +326,8 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
         "solve_method": payload.get("solve_method"),
         "selected_path": payload.get("selected_path"),
         "backend": payload.get("backend"),
+        "active_size": _finite_float_or_none(payload.get("active_size")),
+        "total_size": _finite_float_or_none(payload.get("total_size")),
         "elapsed_s": _finite_float_or_none(payload.get("elapsed_s")),
         "residual_norm": residual_norm,
         "residual_target": residual_target,
@@ -539,6 +542,8 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                 "elapsed_s": result.get("elapsed_s"),
                 "solver_elapsed_s": trace_summary.get("elapsed_s"),
                 "backend": trace_summary.get("backend"),
+                "active_size": trace_summary.get("active_size"),
+                "total_size": trace_summary.get("total_size"),
                 "solve_method": trace_summary.get("solve_method"),
                 "selected_path": trace_summary.get("selected_path"),
                 "converged": trace_summary.get("converged"),
@@ -556,6 +561,11 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
     resolution = first_case.get("resolution") if isinstance(first_case, dict) else None
     source_input = Path(str(manifest["source_input"]))
     solve_method = str(manifest.get("solve_method", ""))
+    active_sizes = [
+        int(seed["active_size"])
+        for seed in seed_summaries
+        if isinstance(seed.get("active_size"), (int, float)) and seed.get("active_size") is not None
+    ]
     return {
         "schema_version": 2,
         "artifact_kind": "qi_seed_execution_summary",
@@ -563,6 +573,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         "source_input": _repo_relative(source_input),
         "resolution_scale": manifest.get("resolution_scale"),
         "resolution": resolution,
+        "active_size": max(active_sizes) if active_sizes else None,
         "total_size_estimate": _total_size_from_resolution(resolution) if isinstance(resolution, dict) else None,
         "case_count": manifest.get("case_count"),
         "public_cli_default_path": solve_method.strip().lower() in {"auto", "default", ""},
