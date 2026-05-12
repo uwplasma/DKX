@@ -640,13 +640,30 @@ blocker evidence only. The evidence manifest records this as the largest
 attempted size but excludes it from the checked-size and lane-completion
 estimate.
 
+The follow-up
+``docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json``
+artifact keeps the scale-0.50 blocker actionable without checking in copied VMEC
+run directories. It compares five bounded CPU routes at the same
+``13 x 27 x 50 x 4`` resolution. The public ``auto`` route still times out after
+``360 s`` after building an explicit FP x-block seed; ``sparse_host_safe`` fails
+host sparse LU on a ``126365616``-entry conservative pattern; ``sparse_lsmr``
+finishes in ``125.9 s`` but stalls at residual ``5.09e-6`` against target
+``2.51e-11``; and ``xblock_sparse_pc_gmres`` reaches the same residual floor
+after ``32000`` GMRES iterations. An opt-in initial x-block seed probe was also
+tested; it was rejected because the seed residual was slightly worse than the
+RHS norm, and the run still stalled at ``5.41e-6``. This makes the next required
+algorithmic step a matrix-free global/coarse correction after x-block seeding,
+not a larger timeout, full sparse materialization, or default initial-seed
+probe.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
-passing bounded grid ``45542``, the largest attempted bounded grid ``70202``, a
-``44%`` per-axis lane-completion estimate based only on passing artifacts, and
-``95.54%`` of production total size still uncovered. The production acceptance
-gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
+passing bounded grid ``45542``, the largest attempted bounded grid ``70202``,
+six passing artifacts and two non-passing blocker artifacts, a ``44%`` per-axis
+lane-completion estimate based only on passing artifacts, and ``95.54%`` of
+production total size still uncovered. The production acceptance gate requires
+five seeds on both CPU and one GPU with ``public_cli_default_path``,
 ``solve_method=auto``, ``process_failed=0``, ``timed_out=0``,
 ``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
 ``max_residual_ratio <= 1``. Treat these as bounded runner and solver-policy
