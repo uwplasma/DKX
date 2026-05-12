@@ -82,7 +82,7 @@ size-capped. Measured GPU tokamak full-FP no-Er/Er production-floor rows
 auto-select structured x-block sparse-PC GMRES when that is the parity-clean,
 lower-memory route; this avoids the global dense-velocity sparse-pattern setup
 that dominated earlier production-floor runs. On the non-differentiable
-full-FP x-block path, per-x/TZ blocks up to size `20000` use exact sparse LU
+full-FP x-block path, per-x/TZ blocks up to size `30000` use exact sparse LU
 before falling back to ILU; this measured policy removes the medium-QI and
 production-floor full-trajectory cliffs without changing PAS or autodiff paths.
 For tokamak full-FP Er and 3D full-FP full-trajectory x-block solves, the same
