@@ -44,6 +44,17 @@ SUITE_STRICT_MISMATCH_FIELDS = (
 )
 
 
+def _repo_stable_path(path: Path) -> str:
+    """Return a reproducible path for checked-in validation metadata."""
+
+    path = Path(path)
+    repo_root = Path(__file__).resolve().parents[1]
+    try:
+        return path.resolve().relative_to(repo_root).as_posix()
+    except ValueError:
+        return str(path)
+
+
 @dataclass(frozen=True)
 class CollisionalityRecord:
     """One transport-matrix row from a literature collisionality scan."""
@@ -1070,8 +1081,8 @@ def build_fortran_suite_benchmark_summary(
                 SFINCS_FORTRAN_REPO_URL,
             ],
             "source_reports": {
-                "cpu": str(cpu_report),
-                "gpu": str(gpu_report),
+                "cpu": _repo_stable_path(cpu_report),
+                "gpu": _repo_stable_path(gpu_report),
             },
             "source_case_counts": {
                 "cpu": int(len(raw_cpu_metrics)),
