@@ -101,6 +101,18 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   diagnostics. The first checked scale-0.50 probe accepted two steps but reduced
   the residual by only `6.9e-4` relative, so the hook remains off by default and
   is recorded as rejected prototype evidence rather than promoted solver policy.
+- [x] Measured the stronger opt-in coarse correction hook. Explicit
+  `xblock_sparse_pc_gmres` now accepts
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE=1`, which solves a bounded
+  matrix-free least-squares residual correction over preconditioned/raw
+  residual, flux-surface-averaged low-L, and source/constraint directions. The
+  hook is off by default. The checked scale-0.50 probe accepted one 10-direction
+  step and improved `5.413504e-6 -> 5.401187e-6`, but the residual ratio remained
+  above `2.1e5`; record it as another rejected prototype. The next QI attempt
+  needs a genuinely different global coupling strategy, likely one that changes
+  the preconditioned Krylov operator or supplies a larger physics-informed
+  coarse space before the 32000-iteration floor, not another post-hoc scalar or
+  small-subspace cleanup.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but

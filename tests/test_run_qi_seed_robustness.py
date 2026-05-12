@@ -431,6 +431,10 @@ def test_qi_seed_runner_keeps_compact_failure_progress(tmp_path: Path, monkeypat
             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
             "post-minres improved residual 5.4e-06 -> 5.3e-06\n"
         )
+        stdout.write(
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            "post-coarse improved residual 5.3e-06 -> 4.0e-06\n"
+        )
         stderr.write("Refusing to write nonconverged RHSMode=1 diagnostics\n")
         return SimpleNamespace(returncode=2)
 
@@ -462,6 +466,8 @@ def test_qi_seed_runner_keeps_compact_failure_progress(tmp_path: Path, monkeypat
         "sparse_lsmr complete elapsed_s=125.0 iters=1000 residual=5.0e-06 target=2.5e-11",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
         "post-minres improved residual 5.4e-06 -> 5.3e-06",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        "post-coarse improved residual 5.3e-06 -> 4.0e-06",
         "Refusing to write nonconverged RHSMode=1 diagnostics",
     ]
     assert result["stderr_tail"] == ["Refusing to write nonconverged RHSMode=1 diagnostics"]

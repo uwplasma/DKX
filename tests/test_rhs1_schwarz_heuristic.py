@@ -293,3 +293,56 @@ def test_preconditioned_minres_correction_accepts_only_residual_improvement() ->
     assert float(history[-1]) < float(history[0])
     assert float(jnp.linalg.norm(residual)) == pytest.approx(float(history[-1]))
     assert float(jnp.linalg.norm(rhs - matvec(x))) == pytest.approx(float(history[-1]))
+
+
+def test_subspace_minres_correction_combines_multiple_directions() -> None:
+    def matvec(v):
+        return jnp.asarray([2.0 * v[0], 5.0 * v[1]], dtype=jnp.float64)
+
+    def directions(_residual):
+        return (
+            ("x0", jnp.asarray([1.0, 0.0], dtype=jnp.float64)),
+            ("x1", jnp.asarray([0.0, 1.0], dtype=jnp.float64)),
+        )
+
+    rhs = jnp.asarray([2.0, 10.0], dtype=jnp.float64)
+    x0 = jnp.zeros((2,), dtype=jnp.float64)
+
+    x, residual, history, counts, names = vd._apply_subspace_minres_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        direction_builder=directions,
+        steps=1,
+        max_directions=2,
+    )
+
+    assert np.allclose(np.asarray(x), np.asarray([1.0, 2.0]))
+    assert float(jnp.linalg.norm(residual)) < 1.0e-12
+    assert history[-1] < history[0]
+    assert counts == (2,)
+    assert names == ("x0", "x1")
+
+
+def test_subspace_minres_correction_rejects_nonimproving_basis() -> None:
+    def matvec(v):
+        return jnp.asarray([v[0], v[1]], dtype=jnp.float64)
+
+    def directions(_residual):
+        return (("zero", jnp.zeros((2,), dtype=jnp.float64)),)
+
+    rhs = jnp.asarray([1.0, 0.0], dtype=jnp.float64)
+    x, residual, history, counts, names = vd._apply_subspace_minres_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=jnp.zeros((2,), dtype=jnp.float64),
+        direction_builder=directions,
+        steps=1,
+        max_directions=4,
+    )
+
+    assert np.allclose(np.asarray(x), np.zeros((2,)))
+    assert np.allclose(np.asarray(residual), np.asarray(rhs))
+    assert history == (1.0,)
+    assert counts == ()
+    assert names == ()

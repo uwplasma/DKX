@@ -1515,6 +1515,15 @@ Controls:
   application. This is the current prototype hook for the scale-0.50 QI residual
   floor; keep it disabled for production claims until a checked artifact shows a
   lower true residual and no runtime regression.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE`` (default: off): opt-in
+  multidirectional post-Krylov coarse correction for explicit
+  ``xblock_sparse_pc_gmres``. When enabled, SFINCS_JAX forms a bounded
+  matrix-free least-squares problem from the preconditioned residual, optional
+  raw residual, flux-surface-averaged low-L residual components, and small
+  source/constraint directions. The update is accepted only if the measured true
+  residual decreases. This is stronger than the scalar post-minres cleanup but
+  remains a diagnostic path until a checked scale-0.50 QI artifact closes the
+  residual gate.
 
 Large geometry-rich PAS closeout:
 

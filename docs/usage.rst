@@ -375,6 +375,13 @@ performance without changing the input file:
   not materialize the full sparse matrix. Leave it off for production unless the
   resulting solver trace shows a lower true residual without runtime regression.
 
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE``: opt-in multidirectional
+  post-Krylov coarse correction for explicit ``xblock_sparse_pc_gmres``. Set to
+  ``1`` to test a small matrix-free least-squares correction over residual,
+  flux-surface-average, and source/constraint directions. Related diagnostic
+  controls include ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_STEPS`` and
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_DIRECTIONS``.
+
 - ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` (GMRES only): optional RHSMode=1 preconditioning.
 
   - ``point`` (or ``1``): point-block Jacobi on local (x,L) unknowns at each :math:`(\theta,\zeta)`.
