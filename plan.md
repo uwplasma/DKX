@@ -87,6 +87,19 @@ Current active lane (2026-05-11, validation/docs/release integration):
   `43.99 s`; before the guard removal, the same default GPU seed produced no
   solver trace after more than two minutes, while forced dense passed. This is a
   bounded GPU robustness gate, not a production-resolution claim.
+- Higher bounded QI accelerator host-sparse update: a `9 x 19 x 35 x 4`
+  single-seed QI probe at `13169` active unknowns reproduced the next failure
+  tier on one RTX A4000. Before this patch, the GPU `auto` path spent `195 s`
+  in the Krylov/strong-preconditioner tail and was rejected with residual ratio
+  `53.9`. The solver policy now allows explicit, non-implicit accelerator
+  output runs below
+  `SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE_MAX=30000` to use the
+  bounded host sparse/x-block rescue. The same GPU probe now converges in
+  `42.8 s` with residual ratio `4.49e-7`; the local CPU check converges in
+  `29.8 s` with residual ratio `1.16e-6`. The checked artifact is
+  `docs/_static/qi_seed_robustness_scale035_cpu_gpu.json`. This closes the
+  immediate bounded QI GPU failure, while production-resolution QI ladders
+  remain a separate validation lane.
 - Mapped x-grid status: checked JSON/CSV artifacts under `docs/_static/` now
   exercise tiny and reduced PAS RHSMode=2 transport-matrix comparisons. The
   reduced PAS tokamak artifact compares mapped `Nx=7` candidates against an

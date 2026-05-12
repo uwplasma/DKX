@@ -1193,6 +1193,7 @@ def test_large_cpu_sparse_rescue_enabled_for_large_fullx_fp_failures(monkeypatch
 def test_large_cpu_sparse_rescue_respects_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FULLX_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", raising=False)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_MAX", "12000")
     monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
     assert not _rhsmode1_large_cpu_sparse_rescue_allowed(
@@ -1223,6 +1224,7 @@ def test_large_cpu_sparse_rescue_respects_guards(monkeypatch) -> None:
         target=1.0e-6,
     )
     monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", "0")
     assert not _rhsmode1_large_cpu_sparse_rescue_allowed(
         op=_op(constraint_scheme=1),
         solve_method_kind="incremental",
@@ -1232,6 +1234,7 @@ def test_large_cpu_sparse_rescue_respects_guards(monkeypatch) -> None:
         residual_norm=1.0,
         target=1.0e-6,
     )
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", raising=False)
 
 
 def test_large_cpu_sparse_rescue_can_depend_on_active_dof_size(monkeypatch) -> None:
@@ -1405,6 +1408,27 @@ def test_fp_xblock_assembled_host_disabled_off_cpu(monkeypatch) -> None:
         preconditioner_species=1,
         preconditioner_xi=1,
         use_implicit=False,
+    )
+
+
+def test_fp_xblock_assembled_host_allows_bounded_accelerator_with_size(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE_MAX", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    assert _rhsmode1_fp_xblock_assembled_host_allowed(
+        op=_op(constraint_scheme=1),
+        preconditioner_species=1,
+        preconditioner_xi=1,
+        use_implicit=False,
+        active_size=13169,
+    )
+    assert not _rhsmode1_fp_xblock_assembled_host_allowed(
+        op=_op(constraint_scheme=1),
+        preconditioner_species=1,
+        preconditioner_xi=1,
+        use_implicit=False,
+        active_size=40000,
     )
     assert not _rhsmode1_sparse_xblock_rescue_allowed(
         op=_op(constraint_scheme=1),

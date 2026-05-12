@@ -587,10 +587,15 @@ The checked summaries in ``docs/_static/qi_seed_robustness_smoke.json`` and
 ``docs/_static/qi_seed_robustness_multiseed.json`` record low-resolution default
 CLI evidence. The multi-seed artifact runs three neighboring seeds at ``7 x 13
 x 25 x 4``, records ``process_failed=0``, public solver method ``auto``, all
-seeds ``converged=true``, and maximum residual ratio below ``1e-6``. Treat this as
-bounded runner and solver-policy evidence, not as a production-resolution QI
-robustness claim. Promote QI robustness only after production-resolution CPU/GPU
-seed ladders are checked with solver traces and release-manifest gates.
+seeds ``converged=true``, and maximum residual ratio below ``1e-6``. The larger
+``docs/_static/qi_seed_robustness_scale035_cpu_gpu.json`` artifact records the
+bounded ``9 x 19 x 35 x 4`` CPU/GPU gate that caught and fixed the accelerator
+Krylov-tail failure: the GPU case moved from a ``195 s`` rejected solve with
+residual ratio ``53.9`` to a ``42.8 s`` converged solve with residual ratio
+``4.49e-7``. Treat these as bounded runner and solver-policy evidence, not as a
+production-resolution QI robustness claim. Promote QI robustness only after
+production-resolution CPU/GPU seed ladders are checked with solver traces and
+release-manifest gates.
 
 The high-collisionality Simakov-Helander lane now has a bounded normalization audit:
 

@@ -1,9 +1,12 @@
-"""RHSMode=1 large-CPU sparse and x-block rescue policy helpers.
+"""RHSMode=1 large host-sparse and x-block rescue policy helpers.
 
-Large explicit full-FP CPU cases need a careful ordering between x-block seeds,
-global sparse rescue, exact sparse LU, and species-x-block rescue.  This module
-keeps those branch-selection rules outside the driver so the runtime-offender
-lanes can be tested without constructing the full kinetic operator.
+Large explicit full-FP cases need a careful ordering between x-block seeds,
+global sparse rescue, exact sparse LU, and species-x-block rescue. CPU solves
+use these host sparse branches directly. Accelerator solves may also use them
+for bounded non-implicit CLI/output lanes when device Krylov is slower or less
+robust than a host sparse factorization. This module keeps those
+branch-selection rules outside the driver so runtime-offender lanes can be
+tested without constructing the full kinetic operator.
 """
 
 from __future__ import annotations
@@ -46,6 +49,27 @@ def _is_explicit_rhs1_fp_only(op: Any) -> bool:
     return _is_explicit_rhs1_fp(op) and getattr(op.fblock, "pas", None) is None
 
 
+def _host_sparse_rescue_backend_allowed(*, backend: str, active_size: int | None = None) -> bool:
+    """Return whether this backend may use non-differentiable host sparse rescue."""
+
+    backend_name = str(backend).strip().lower()
+    if backend_name == "cpu":
+        return True
+
+    env = _env_token("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE")
+    if env in _FALSE_VALUES:
+        return False
+
+    # If the caller cannot provide a size, require an explicit opt-in on
+    # accelerators. Size-aware solver-policy calls get a conservative default
+    # cap so moderate GPU CLI/output cases can avoid fragile device Krylov tails.
+    if active_size is None:
+        return env in _TRUE_VALUES
+
+    rescue_max = _env_int("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE_MAX", 30000)
+    return int(active_size) <= max(1, int(rescue_max))
+
+
 def rhs1_large_cpu_sparse_exact_lu_allowed(*, active_size: int) -> bool:
     """Return whether the large-CPU sparse rescue may use exact sparse LU."""
     env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU")
@@ -70,7 +94,7 @@ def rhs1_large_cpu_sparse_rescue_allowed(
     env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE")
     if env in _FALSE_VALUES:
         return False
-    if str(backend).strip().lower() != "cpu":
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
         return False
     if not _is_explicit_rhs1_fp(op):
         return False
@@ -121,7 +145,7 @@ def rhs1_large_cpu_sparse_exact_lu_xblock_allowed(
     env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK")
     if env in _FALSE_VALUES:
         return False
-    if str(backend).strip().lower() != "cpu":
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
         return False
     if bool(use_implicit):
         return False
@@ -159,7 +183,7 @@ def rhs1_sparse_xblock_rescue_allowed(
     env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE")
     if env in _FALSE_VALUES:
         return False
-    if str(backend).strip().lower() != "cpu":
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
         return False
     if not _is_explicit_rhs1_fp(op):
         return False
@@ -190,6 +214,7 @@ def rhs1_fp_xblock_assembled_host_allowed(
     preconditioner_xi: int,
     use_implicit: bool,
     backend: str,
+    active_size: int | None = None,
 ) -> bool:
     """Return whether an explicit CPU FP x-block seed may use host assembly."""
     env = _env_token("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST")
@@ -197,7 +222,7 @@ def rhs1_fp_xblock_assembled_host_allowed(
         return False
     if bool(use_implicit):
         return False
-    if str(backend).strip().lower() != "cpu":
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=active_size):
         return False
     if not _is_explicit_rhs1_fp_only(op):
         return False
@@ -235,7 +260,7 @@ def rhs1_large_cpu_xblock_skip_primary_allowed(
     env = _env_token("SFINCS_JAX_RHSMODE1_LARGE_CPU_XBLOCK_SKIP_PRIMARY")
     if env in _FALSE_VALUES:
         return False
-    if str(backend).strip().lower() != "cpu":
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
         return False
     if bool(use_implicit):
         return False
@@ -253,6 +278,7 @@ def rhs1_large_cpu_xblock_skip_primary_allowed(
         preconditioner_xi=preconditioner_xi,
         use_implicit=bool(use_implicit),
         backend=backend,
+        active_size=int(active_size),
     )
 
 

@@ -399,6 +399,17 @@ preconditioner factorization time, matvecs, and sparse-pattern row-density
 counters, so large-run regressions can be separated into pre-solve setup and
 Krylov iteration costs.
 
+For explicit non-differentiable accelerator output runs, ``auto`` may route
+moderate full-FP RHSMode=1 systems to the same host sparse rescue when the
+active system is too large for the dense accelerator shortcut and device Krylov
+has a known slow or fragile tail. This is bounded by
+``SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE_MAX`` (default ``30000``
+active unknowns) and can be disabled with
+``SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE=0``. The QI
+``9 x 19 x 35 x 4`` gate records the intended behavior: one RTX A4000 moved
+from a rejected ``195 s`` Krylov-tail solve to a converged ``42.8 s`` host-sparse
+rescue with true residual ratio ``4.49e-7``.
+
 Tokamak full-FP ``N_zeta=1`` production-floor rows are handled by separate,
 narrow GPU/CUDA policies rather than by the CPU 3D full-FP lane above.
 ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` covers no-Er
