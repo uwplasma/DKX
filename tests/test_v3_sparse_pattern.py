@@ -288,6 +288,7 @@ def test_xblock_sparse_pc_gmres_initial_seed_can_be_disabled(monkeypatch) -> Non
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS", "2")
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -300,6 +301,8 @@ def test_xblock_sparse_pc_gmres_initial_seed_can_be_disabled(monkeypatch) -> Non
     assert result.metadata["xblock_initial_seed_used"] is False
     assert result.metadata["xblock_initial_seed_residual_norm"] is None
     assert result.metadata["xblock_initial_seed_residual_ratio"] is None
+    assert result.metadata["xblock_post_minres_steps_requested"] == 2
+    assert result.metadata["xblock_post_minres_steps_accepted"] == 0
 
 
 @pytest.mark.parametrize(

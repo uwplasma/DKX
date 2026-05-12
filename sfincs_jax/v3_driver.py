@@ -11994,6 +11994,88 @@ def solve_v3_full_system_linear_gmres(
                     residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
                 except Exception:
                     residual_norm_xblock_pc = float(residual_norm_xblock_pc)
+            post_minres_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS",
+                "",
+            ).strip()
+            try:
+                post_minres_steps_requested = int(post_minres_env) if post_minres_env else 0
+            except ValueError:
+                post_minres_steps_requested = 0
+            post_minres_steps_requested = max(0, int(post_minres_steps_requested))
+            post_minres_alpha_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_ALPHA_CLIP",
+                "",
+            ).strip()
+            try:
+                post_minres_alpha_clip = float(post_minres_alpha_env) if post_minres_alpha_env else 10.0
+            except ValueError:
+                post_minres_alpha_clip = 10.0
+            post_minres_improve_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_MIN_IMPROVEMENT",
+                "",
+            ).strip()
+            try:
+                post_minres_min_improvement = float(post_minres_improve_env) if post_minres_improve_env else 0.0
+            except ValueError:
+                post_minres_min_improvement = 0.0
+            post_minres_history: tuple[float, ...] = ()
+            post_minres_alphas: tuple[float, ...] = ()
+            post_minres_residual_before: float | None = None
+            post_minres_residual_after: float | None = None
+            if (
+                post_minres_steps_requested > 0
+                and np.isfinite(float(residual_norm_xblock_pc))
+                and float(residual_norm_xblock_pc) > float(target_xblock)
+            ):
+                post_minres_residual_before = float(residual_norm_xblock_pc)
+                post_minres_start_s = sparse_timer.elapsed_s()
+                try:
+                    x_corr, residual_corr, post_history, post_alphas = _apply_preconditioned_minres_correction(
+                        matvec=_mv_true,
+                        rhs=rhs,
+                        x0=jnp.asarray(x_np, dtype=jnp.float64),
+                        preconditioner=precond_xblock if precondition_side != "none" else (lambda v: v),
+                        steps=post_minres_steps_requested,
+                        alpha_clip=post_minres_alpha_clip,
+                        min_improvement=post_minres_min_improvement,
+                    )
+                    post_minres_history = tuple(float(v) for v in post_history)
+                    post_minres_alphas = tuple(float(v) for v in post_alphas)
+                    post_minres_residual_after = float(jnp.linalg.norm(residual_corr))
+                    if (
+                        np.isfinite(float(post_minres_residual_after))
+                        and float(post_minres_residual_after) < float(residual_norm_xblock_pc)
+                    ):
+                        x_np = np.asarray(x_corr, dtype=np.float64)
+                        residual_norm_xblock_pc = float(post_minres_residual_after)
+                        if emit is not None:
+                            emit(
+                                0,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                f"post-minres improved residual {post_minres_residual_before:.6e} "
+                                f"-> {post_minres_residual_after:.6e} "
+                                f"(accepted_steps={len(post_minres_alphas)})",
+                            )
+                    elif emit is not None:
+                        after = (
+                            float(post_minres_residual_after)
+                            if post_minres_residual_after is not None
+                            else float("nan")
+                        )
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"post-minres rejected residual {post_minres_residual_before:.6e} -> {after:.6e}",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"post-minres failed ({type(exc).__name__}: {exc})",
+                        )
+                solve_s += sparse_timer.elapsed_s() - post_minres_start_s
             if emit is not None:
                 ksp_suffix = f" ksp_residual={float(history[-1]):.6e}" if history else ""
                 emit(
@@ -12047,6 +12129,12 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_initial_seed_used": bool(xblock_initial_seed_used),
                     "xblock_initial_seed_residual_norm": xblock_initial_seed_residual_norm,
                     "xblock_initial_seed_residual_ratio": xblock_initial_seed_residual_ratio,
+                    "xblock_post_minres_steps_requested": int(post_minres_steps_requested),
+                    "xblock_post_minres_steps_accepted": int(len(post_minres_alphas)),
+                    "xblock_post_minres_residual_before": post_minres_residual_before,
+                    "xblock_post_minres_residual_after": post_minres_residual_after,
+                    "xblock_post_minres_alphas": post_minres_alphas,
+                    "xblock_post_minres_history": post_minres_history,
                 },
             )
 
