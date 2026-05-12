@@ -274,6 +274,10 @@ def test_fortran_suite_benchmark_summary_records_source_reports_and_gates() -> N
     assert payload["metadata"]["kind"] == "fortran_v3_suite_benchmark_summary"
     assert "https://github.com/landreman/sfincs" in payload["metadata"]["literature"]
     assert payload["metadata"]["source_case_counts"] == {"cpu": 39, "gpu": 39}
+    assert payload["metadata"]["source_reports"] == {
+        "cpu": "tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json",
+        "gpu": "tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas/suite_report.json",
+    }
     assert payload["metadata"]["reported_case_counts"] == {"cpu": 24, "gpu": 24}
     assert payload["metadata"]["min_fortran_runtime_s"] == 10.0
     assert len(payload["metadata"]["excluded_low_fortran_runtime_cases"]) == 15
