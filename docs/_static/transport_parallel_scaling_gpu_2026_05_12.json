@@ -1,0 +1,35 @@
+{
+  "backend": "gpu",
+  "case": "transport_parallel_2min",
+  "ideal_speedup_finite_rhs": [
+    1.0,
+    1.5
+  ],
+  "input": "transport_parallel_2min.input.namelist",
+  "precond": "xmg",
+  "results": [
+    {
+      "mean_s": 351.051,
+      "samples": [
+        351.051
+      ],
+      "speedup": 1.0,
+      "std_s": 0.0,
+      "workers": 1
+    },
+    {
+      "mean_s": 237.74939226399874,
+      "samples": [
+        237.74939226399874
+      ],
+      "speedup": 1.4765589794239737,
+      "std_s": 0.0,
+      "workers": 2
+    }
+  ],
+  "rhs_count": 3,
+  "workers": [
+    1,
+    2
+  ]
+}

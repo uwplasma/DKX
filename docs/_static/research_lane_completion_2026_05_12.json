@@ -207,7 +207,7 @@
         },
         {
           "claim": "Release-facing GPU transport-worker artifact records a measured two-worker speedup above one worker for independent transport tasks.",
-          "path": "examples/performance/output/transport_parallel_scaling_gpu.json"
+          "path": "docs/_static/transport_parallel_scaling_gpu_2026_05_12.json"
         },
         {
           "claim": "Office two-GPU case-throughput artifact is checked as blocker evidence and explicitly fails the speedup gate instead of becoming a release claim.",
