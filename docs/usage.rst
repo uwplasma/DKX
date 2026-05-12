@@ -369,6 +369,13 @@ performance without changing the input file:
   the true residual. It is off by default because current production-floor QI
   probes reject it and need a stronger global/coarse correction instead.
 
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX``: active-size cap for the default
+  right-preconditioned 3D full-FP x-block sparse-PC lane. The default is
+  ``45000`` active unknowns, which keeps the checked scale-0.50 QI window on the
+  faster right-PC path while avoiding the seed-dependent right-PC slow mode seen
+  at scale ``0.55``. Explicit ``SFINCS_JAX_GMRES_PRECONDITION_SIDE=left`` or
+  ``right`` still takes precedence.
+
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS``: opt-in matrix-free
   post-Krylov correction for explicit ``xblock_sparse_pc_gmres``. Set to a small
   integer, for example ``2`` or ``4``, to test residual-polishing steps that do
