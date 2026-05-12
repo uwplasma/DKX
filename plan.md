@@ -201,7 +201,13 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   avoid wasting GPU time. This is now the concrete next algorithmic blocker:
   scale-0.60 needs a stronger seed-robust global-coupling/preconditioner
   correction, adaptive side/ordering by seed metrics, or a tighter restart/seed
-  rescue before the five-seed ladder can be closed.
+  rescue before the five-seed ladder can be closed. A targeted CPU seed `1`
+  manual-right probe did eventually converge in `353.1 s` with residual ratio
+  `9.82e-3`, `3999` iterations, and `4051` matvecs, so the issue is not an
+  impossible system; it is a poor default side/iteration-count prediction for
+  some seeds. A future fix should not simply widen timeouts: it should add a
+  cheap side-selection probe or an early left-to-right/right-to-left rescue
+  based on measured residual decrease per matvec.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
