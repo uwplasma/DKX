@@ -72,6 +72,22 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   ratio `4.96e-7`. The existing scale-0.50 timeout artifact remains checked in
   as blocker evidence and is excluded from completion estimates by
   `scripts/run_qi_seed_robustness.py`.
+- [x] Added compact failure-progress capture to
+  `scripts/run_qi_seed_robustness.py` so failed QI runs preserve bounded
+  stdout/stderr tails and solver-stage breadcrumbs without committing copied
+  VMEC/run directories. The new
+  `docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json`
+  blocker matrix shows that `13 x 27 x 50 x 4` is not fixed by existing solver
+  flags: public `auto` times out after `360 s` after the explicit FP x-block
+  seed, `sparse_host_safe` fails host sparse factorization on a `126365616`-nnz
+  conservative pattern, and `sparse_lsmr` / `xblock_sparse_pc_gmres` both stall
+  near residual `5e-6` against a `2.5e-11` target. A follow-up opt-in
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED=1` probe was intentionally kept
+  off by default after the seed residual was slightly worse than the RHS norm and
+  the solve still stalled at the same floor. Next QI work must therefore
+  implement a matrix-free global/coarse correction after x-block seeding instead
+  of increasing timeouts, materializing the full sparse operator, or enabling a
+  default seed probe.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but

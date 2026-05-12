@@ -372,6 +372,18 @@ def _add_rhsmode1_solver_diagnostics(
         data["linearSolverSparsePCXBlockAssembledHost"] = _fortran_logical(
             bool(solver_metadata["sparse_pc_xblock_assembled_host"])
         )
+    if "xblock_initial_seed_used" in solver_metadata:
+        data["linearSolverXBlockInitialSeedUsed"] = _fortran_logical(
+            bool(solver_metadata["xblock_initial_seed_used"])
+        )
+    if "xblock_initial_seed_residual_norm" in solver_metadata:
+        value = solver_metadata["xblock_initial_seed_residual_norm"]
+        if value is not None:
+            data["linearSolverXBlockInitialSeedResidualNorm"] = np.asarray(float(value), dtype=np.float64)
+    if "xblock_initial_seed_residual_ratio" in solver_metadata:
+        value = solver_metadata["xblock_initial_seed_residual_ratio"]
+        if value is not None:
+            data["linearSolverXBlockInitialSeedResidualRatio"] = np.asarray(float(value), dtype=np.float64)
     if float(residual_target) > 0.0:
         data["linearSolverResidualTargetRatio"] = np.asarray(
             float(residual_norm) / float(residual_target),

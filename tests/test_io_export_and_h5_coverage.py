@@ -118,6 +118,9 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
             "sparse_pc_factor_nnz_estimate": 321,
             "sparse_pc_xblock_preconditioner_xi": 1,
             "sparse_pc_xblock_assembled_host": True,
+            "xblock_initial_seed_used": True,
+            "xblock_initial_seed_residual_norm": 3.0e-8,
+            "xblock_initial_seed_residual_ratio": 0.3,
         },
     )
 
@@ -141,6 +144,9 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverSparsePCFactorNnzEstimate"])) == 321
     assert int(np.asarray(data["linearSolverSparsePCXBlockPreconditionerXi"])) == 1
     assert int(np.asarray(data["linearSolverSparsePCXBlockAssembledHost"])) == 1
+    assert int(np.asarray(data["linearSolverXBlockInitialSeedUsed"])) == 1
+    assert float(np.asarray(data["linearSolverXBlockInitialSeedResidualNorm"])) == pytest.approx(3.0e-8)
+    assert float(np.asarray(data["linearSolverXBlockInitialSeedResidualRatio"])) == pytest.approx(0.3)
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(0.2)
 
 

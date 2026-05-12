@@ -416,6 +416,56 @@ def test_qi_seed_runner_records_timeout_without_crashing(tmp_path: Path, monkeyp
     assert "timed out" in (out_root / result["stderr"]).read_text(encoding="utf-8")
 
 
+def test_qi_seed_runner_keeps_compact_failure_progress(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+    summary_path = tmp_path / "summary.json"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        stdout.write("setup line\n")
+        stdout.write("solve_v3_full_system_linear_gmres: active matrix size=39314 (total=70202)\n")
+        stdout.write("solve_v3_full_system_linear_gmres: strong preconditioner fallback kind=xblock_tz_lmax\n")
+        stdout.write("sparse_lsmr complete elapsed_s=125.0 iters=1000 residual=5.0e-06 target=2.5e-11\n")
+        stderr.write("Refusing to write nonconverged RHSMode=1 diagnostics\n")
+        return SimpleNamespace(returncode=2)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "5",
+                "--execute",
+                "--summary-output",
+                str(summary_path),
+                "--clean",
+            ]
+        )
+        == 1
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    result = manifest["execution"]["results"][0]
+    assert result["progress_events"] == [
+        "solve_v3_full_system_linear_gmres: active matrix size=39314 (total=70202)",
+        "solve_v3_full_system_linear_gmres: strong preconditioner fallback kind=xblock_tz_lmax",
+        "sparse_lsmr complete elapsed_s=125.0 iters=1000 residual=5.0e-06 target=2.5e-11",
+        "Refusing to write nonconverged RHSMode=1 diagnostics",
+    ]
+    assert result["stderr_tail"] == ["Refusing to write nonconverged RHSMode=1 diagnostics"]
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    seed = summary["seeds"][0]
+    assert seed["progress_events"] == result["progress_events"]
+    assert seed["stderr_tail"] == result["stderr_tail"]
+
+
 def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Path) -> None:
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)

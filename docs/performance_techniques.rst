@@ -1502,6 +1502,12 @@ Controls:
   falling back to ``float64`` if the true residual target is not met. This
   prevents weak low-precision preconditioners from consuming the full run
   timeout.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED`` (default: off). Set to ``1``
+  only for controlled diagnostics of explicit ``xblock_sparse_pc_gmres`` runs.
+  It applies the x-block sparse preconditioner once before Krylov and uses that
+  vector as the initial guess only if the true residual is lower than the RHS
+  norm. The scale-0.50 QI blocker probe rejected this seed and therefore this
+  knob is intentionally not a default performance path.
 
 Large geometry-rich PAS closeout:
 

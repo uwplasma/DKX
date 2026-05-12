@@ -11857,6 +11857,46 @@ def solve_v3_full_system_linear_gmres(
                         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres ignoring incompatible x0 "
                         f"shape={tuple(x0_arr.shape)} expected={tuple(rhs.shape)}",
                     )
+            xblock_initial_seed_used = False
+            xblock_initial_seed_residual_norm: float | None = None
+            xblock_initial_seed_residual_ratio: float | None = None
+            seed_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED", "").strip().lower()
+            seed_enabled = seed_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}
+            if x0_full is None and seed_enabled:
+                try:
+                    seed_vec = jnp.asarray(precond_xblock(rhs), dtype=jnp.float64)
+                    if seed_vec.shape == rhs.shape and bool(jnp.all(jnp.isfinite(seed_vec))):
+                        seed_residual = rhs - _mv_true(seed_vec)
+                        seed_residual_norm = float(jnp.linalg.norm(seed_residual))
+                        rhs_norm_float = float(rhs_norm)
+                        xblock_initial_seed_residual_norm = float(seed_residual_norm)
+                        xblock_initial_seed_residual_ratio = (
+                            float(seed_residual_norm) / rhs_norm_float if rhs_norm_float > 0.0 else None
+                        )
+                        if np.isfinite(seed_residual_norm) and seed_residual_norm < rhs_norm_float:
+                            x0_full = seed_vec
+                            xblock_initial_seed_used = True
+                            if emit is not None:
+                                emit(
+                                    0,
+                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                    f"initial x-block seed residual={seed_residual_norm:.6e} "
+                                    f"rhs_norm={rhs_norm_float:.6e}",
+                                )
+                        elif emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                f"initial x-block seed rejected residual={seed_residual_norm:.6e} "
+                                f"rhs_norm={rhs_norm_float:.6e}",
+                            )
+                except Exception as exc:  # noqa: BLE001
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"initial x-block seed failed ({type(exc).__name__}: {exc})",
+                        )
 
             if emit is not None:
                 emit(
@@ -12004,6 +12044,9 @@ def solve_v3_full_system_linear_gmres(
                     "sparse_pc_factor_s": float(pc_factor_s),
                     "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
                     "sparse_pc_xblock_assembled_host": bool(xblock_assembled_host_fp),
+                    "xblock_initial_seed_used": bool(xblock_initial_seed_used),
+                    "xblock_initial_seed_residual_norm": xblock_initial_seed_residual_norm,
+                    "xblock_initial_seed_residual_ratio": xblock_initial_seed_residual_ratio,
                 },
             )
 
