@@ -318,6 +318,14 @@ to about ``1.1e-11`` absolute error, and the bounded ``jaxopt.GradientDescent`` 
 reduced the loss by about ``4.1e-14`` relative to the initial value while recovering
 the target harmonic amplitudes to about ``1.6e-08`` in Euclidean norm.
 
+A no-optional-dependency VMEC/Boozer readiness gate also runs as part of
+``tests/test_optional_ecosystem_gates.py``. It evaluates a small Boozer spectrum
+through ``boozer_spectrum_proxy_transport_objective``, checks the full spectral
+gradient against centered finite differences, and checks a JVP against the
+gradient dot product. This is a proxy transport-objective differentiability gate,
+not execution of ``vmec_jax``, ``booz_xform_jax``, or the kinetic SFINCS transport
+solve.
+
 
 What is differentiable today?
 -----------------------------
@@ -333,7 +341,7 @@ differentiate objectives with respect to them. For example:
 
 - Differentiate a residual norm w.r.t. ``nu_n`` (see ``examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py``).
 - Differentiate a diagnostics functional w.r.t. a differentiable geometry parameter in ``geometryScheme=4`` optimization demos.
-- Differentiate a Boozer-spectrum geometry proxy through the optional
+- Differentiate a Boozer-spectrum proxy transport objective through the optional
   ``vmec_jax -> booz_xform_jax -> sfincs_jax`` handoff in
   ``examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py``.
 - Differentiate **through a linear solve** via implicit differentiation (see
