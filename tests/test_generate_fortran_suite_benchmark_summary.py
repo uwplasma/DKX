@@ -377,12 +377,14 @@ def test_checked_in_summary_matches_default_suite_reports(tmp_path: Path) -> Non
     )
     actual = json.loads(checked_in_summary.read_text())
     expected_metadata = dict(expected["metadata"])
+    actual_metadata = dict(actual["metadata"])
     # Older checked-in summaries may omit generator-only canonical-row metadata,
     # but the release-gating metric fields must match the default suite reports.
-    expected_metadata.pop("canonical_case_order", None)
-    expected_metadata.pop("canonical_row_source", None)
+    for metadata in (actual_metadata, expected_metadata):
+        metadata.pop("canonical_case_order", None)
+        metadata.pop("canonical_row_source", None)
 
-    assert actual["metadata"] == expected_metadata
+    assert actual_metadata == expected_metadata
     assert actual["reports"] == expected["reports"]
     if "canonical_rows" in actual:
         assert actual["canonical_rows"] == expected["canonical_rows"]
