@@ -34,7 +34,7 @@
           "path": "docs/_static/qi_seed_robustness_scale050_cpu_probe.json"
         },
         {
-          "claim": "Scale-0.50 QI solver matrix preserves compact failure breadcrumbs for auto, sparse_host_safe, sparse_lsmr, xblock_sparse_pc_gmres, initial-seed, post-minres, and post-coarse probes; all current routes fail, so the next step is a different global coupling strategy.",
+          "claim": "Scale-0.50 QI solver matrix preserves compact failure breadcrumbs for auto, sparse_host_safe, sparse_lsmr, xblock_sparse_pc_gmres, initial-seed, post-minres, post-coarse, and LGMRES probes; all current routes fail, so the next step is a different global coupling strategy.",
           "path": "docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json"
         }
       ],
@@ -45,11 +45,11 @@
       ],
       "id": "production_qi_cpu_gpu",
       "next_actions": [
-        "Implement and gate a different global coupling strategy for scale-0.50 QI; do not spend more time on full sparse materialization, timeout-only changes, default initial seeds, scalar post-minres cleanup, or the current small post-coarse residual subspace.",
+        "Implement and gate a different global coupling strategy for scale-0.50 QI; do not spend more time on full sparse materialization, timeout-only changes, default initial seeds, scalar post-minres cleanup, the current small post-coarse residual subspace, or x-block Krylov-method toggles.",
         "Run larger CPU and one-GPU QI seed ladders only after the scale-0.50 residual floor is reduced below the requested gate."
       ],
       "second_push_delta_percent": 9,
-      "second_push_result": "bounded CPU probe at scale 0.45 passed; scale 0.50 has a checked solver-matrix blocker showing existing solver flags and first opt-in correction hooks either time out, fail factorization, or stall near residual 5e-6",
+      "second_push_result": "bounded CPU probe at scale 0.45 passed; scale 0.50 has a checked solver-matrix blocker showing existing solver flags, first opt-in correction hooks, and an LGMRES Krylov toggle either time out, fail factorization, or stall near residual 5e-6",
       "status": "active",
       "target_percent": 100,
       "title": "Production-resolution QI CPU/GPU robustness"
@@ -81,6 +81,14 @@
         {
           "claim": "Matrix-free PAS tests cover tiny-update and candidate-size fail-fast gates that avoid wasted candidate matvecs.",
           "path": "tests/test_rhs1_pas_matrixfree.py"
+        },
+        {
+          "claim": "PAS-TZ fallback benchmark rows now require guarded fallback provenance before any candidate can pass all gates or be listed as promotion eligible.",
+          "path": "scripts/benchmark_pas_tz_memory_fallback.py"
+        },
+        {
+          "claim": "Regression tests lock guarded PAS-TZ provenance requirements for benchmark promotion summaries.",
+          "path": "tests/test_benchmark_rhs1_pas_matrixfree.py"
         }
       ],
       "gates": [
@@ -150,6 +158,14 @@
         {
           "claim": "Fresh office two-GPU case-throughput artifact completed under timeout guards but failed the speedup gate at 0.337x, so it is blocker evidence rather than a release claim.",
           "path": "docs/_static/gpu_case_throughput_large_push_2026_05_12.json"
+        },
+        {
+          "claim": "Transport-worker benchmark plans and measured payloads now record compile-amortization metadata before release scaling claims can pass.",
+          "path": "examples/performance/benchmark_transport_parallel_scaling.py"
+        },
+        {
+          "claim": "Pure scaling audit fails explicit release claims that omit compile-amortization evidence and preserves explicit non-release status.",
+          "path": "sfincs_jax/transport_parallel_policy.py"
         }
       ],
       "gates": [
@@ -199,6 +215,14 @@
         {
           "claim": "Residual-gate tests cover env parsing, negative threshold normalization, nonfinite diagnostics, and array failure collection.",
           "path": "tests/test_transport_residual_quality.py"
+        },
+        {
+          "claim": "Fast policy tests now cover dense accelerator guards, sparse-direct eligibility, host-GMRES rejection paths, and sparse factor dtype overrides.",
+          "path": "tests/test_transport_policy_coverage.py"
+        },
+        {
+          "claim": "Release metadata tests cover malformed manifests, invalid status/docs, and non-list manifest failures.",
+          "path": "tests/test_release_gate_metadata.py"
         }
       ],
       "gates": [
@@ -244,6 +268,14 @@
         {
           "claim": "Optional workflow tests cover backend readiness and measured adoption summaries without hard dependencies.",
           "path": "tests/test_optional_ecosystem_gates.py"
+        },
+        {
+          "claim": "Shared pure-JAX Boozer-spectrum proxy transport objective checks full spectral finite-difference gradients and JVP/dot-product consistency without optional dependencies.",
+          "path": "sfincs_jax/jax_geometry_adapters.py"
+        },
+        {
+          "claim": "Optional workflow tests exercise the shared proxy transport gradient gate in default CI.",
+          "path": "tests/test_optional_ecosystem_gates.py"
         }
       ],
       "gates": [
@@ -257,7 +289,7 @@
         "Keep VMEC/Boozer optional dependencies skip-safe in default CI."
       ],
       "second_push_delta_percent": 8,
-      "second_push_result": "target saturated for scoped geometry-proxy workflow; full kinetic transport gradients remain out of scope",
+      "second_push_result": "target saturated for scoped geometry-proxy workflow; shared proxy transport-gradient gate added, while full kinetic transport gradients remain out of scope",
       "status": "evidence_ready",
       "target_percent": 93,
       "title": "vmec_jax to booz_xform_jax to sfincs_jax differentiable workflow"
@@ -369,10 +401,15 @@
     "019e1be4-313d-71a0-94ae-55e86a10f611",
     "019e1be4-6aae-74a2-977d-ed5dbe7a6cc8",
     "019e1be4-b336-7ac1-99cf-e80fbf6b99ed",
-    "019e1be4-ee0b-7fc3-9fbe-3c57cff76809"
+    "019e1be4-ee0b-7fc3-9fbe-3c57cff76809",
+    "019e1c7a-fec7-7070-a2ba-69fe59b682dc",
+    "019e1c7b-3f37-7fd0-9ee4-c68e565ac137",
+    "019e1c7b-7d69-7783-8493-4d410ebde31b",
+    "019e1c7b-be00-7a33-92b9-0870894e145e",
+    "019e1c7b-f59d-7f23-a71d-5b015e962e46"
   ],
   "purpose": "Machine-readable completion tracker for the coordinated large-push research/performance lanes. Percentages are engineering readiness estimates backed by checked-in evidence, not physics claims by themselves.",
   "requested_second_push_delta_percent": 15,
   "schema_version": 1,
-  "second_push_assessment": "partial: target saturation achieved for VMEC/Boozer and benchmark/docs; QI, PAS, parallel, and refactor gained evidence but not all achieved +15pp from the immediately preceding baseline."
+  "second_push_assessment": "partial: target saturation achieved for VMEC/Boozer and benchmark/docs; the follow-up worker pass strengthened QI/PAS/parallel/refactor/VMEC evidence gates, but QI scale-0.50 LGMRES and post-coarse probes remain nonconverged, so the average remains evidence-limited at 79.0% rather than the requested 90%."
 }

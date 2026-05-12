@@ -12,13 +12,14 @@ drift-kinetic calculations in stellarator and tokamak geometry. It combines
 high-fidelity kinetic models, CPU/GPU execution, modern matrix-free numerics,
 parallel workflows, and optional differentiable solve paths in one codebase.
 
-On the current `main` branch, the audited reduced example suite runs cleanly on
-CPU and GPU. A separate production-resolution benchmark tier is now being used
-for public runtime/memory claims and research-scale workloads; those larger
-finite-beta/profile-current cases are tracked separately from the fast smoke
-suite. The default CLI path is tuned for robust explicit solves and practical
-throughput, while the Python API can opt into differentiable solve paths when
-gradients matter.
+On the current `main` branch, the audited 39-case example suite runs cleanly on
+CPU and GPU. Release-facing runtime/memory plots use the canonical
+reference-runtime-window rows from that suite, while research-scale performance
+claims use the separate production-resolution benchmark tier; larger
+finite-beta/profile-current cases remain tracked separately from fast smoke and
+parity checks. The default CLI path is tuned for robust explicit solves and
+practical throughput, while the Python API can opt into differentiable solve
+paths when gradients matter.
 
 It is designed for:
 
