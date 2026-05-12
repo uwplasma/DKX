@@ -12381,6 +12381,145 @@ def solve_v3_full_system_linear_gmres(
                             f"initial x-block seed failed ({type(exc).__name__}: {exc})",
                         )
 
+            target_xblock = max(float(atol), float(tol) * float(rhs_norm))
+            xblock_side_probe_enabled = _rhs1_xblock_policy.rhs1_xblock_side_probe_enabled(
+                env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE", ""),
+                explicit_side_env_value=side_env,
+                full_fp_3d_pc=bool(full_fp_3d_pc),
+                active_size=int(active_size),
+                min_active_size_env_value=os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MIN_ACTIVE",
+                    "",
+                ),
+                krylov_method=str(xblock_krylov_method),
+                precondition_side=str(precondition_side),
+            )
+            xblock_side_probe_used = False
+            xblock_side_probe_switched = False
+            xblock_side_probe_initial_side: str | None = None
+            xblock_side_probe_selected_side: str | None = None
+            xblock_side_probe_initial_method: str | None = None
+            xblock_side_probe_selected_method: str | None = None
+            xblock_side_probe_lgmres_rescue = False
+            xblock_lgmres_rescue_maxiter_capped = False
+            xblock_lgmres_rescue_outer_k: int | None = None
+            xblock_side_probe_residual_norm: float | None = None
+            xblock_side_probe_residual_ratio: float | None = None
+            xblock_side_probe_iterations = 0
+            xblock_side_probe_matvecs = 0
+            xblock_side_probe_s = 0.0
+            if xblock_side_probe_enabled:
+                xblock_side_probe_used = True
+                xblock_side_probe_initial_side = str(precondition_side)
+                xblock_side_probe_initial_method = str(xblock_krylov_method)
+                probe_restart = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_RESTART",
+                    default=int(pc_restart),
+                    minimum=2,
+                )
+                probe_maxiter = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MAXITER",
+                    default=1,
+                    minimum=1,
+                )
+                if emit is not None:
+                    emit(
+                        0,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe start "
+                        f"side={precondition_side} restart={int(probe_restart)} maxiter={int(probe_maxiter)}",
+                    )
+                probe_start_s = sparse_timer.elapsed_s()
+                probe_start_mv = int(mv_count)
+                try:
+                    x_probe, residual_probe, history_probe = gmres_solve_with_history_scipy(
+                        matvec=_mv_true,
+                        b=rhs,
+                        preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
+                        x0=x0_full,
+                        tol=tol,
+                        atol=atol,
+                        restart=probe_restart,
+                        maxiter=probe_maxiter,
+                        precondition_side=precondition_side,
+                    )
+                    xblock_side_probe_s = float(sparse_timer.elapsed_s() - probe_start_s)
+                    xblock_side_probe_matvecs = int(mv_count) - int(probe_start_mv)
+                    xblock_side_probe_iterations = int(len(history_probe or []))
+                    xblock_side_probe_residual_norm = float(residual_probe)
+                    xblock_side_probe_residual_ratio = (
+                        float(residual_probe) / float(target_xblock) if float(target_xblock) > 0.0 else None
+                    )
+                    if str(precondition_side) == "left":
+                        x0_full = jnp.asarray(x_probe, dtype=jnp.float64)
+                    should_switch_side = _rhs1_xblock_policy.rhs1_xblock_side_probe_should_switch(
+                        residual_ratio=xblock_side_probe_residual_ratio,
+                        switch_ratio_env_value=os.environ.get(
+                            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_SWITCH_RATIO",
+                            "",
+                        ),
+                    )
+                    lgmres_rescue_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", "")
+                    lgmres_rescue_forced = lgmres_rescue_env.strip().lower() in {
+                        "1",
+                        "true",
+                        "t",
+                        "yes",
+                        "on",
+                        ".true.",
+                        ".t.",
+                    }
+                    lgmres_rescue_backend_allowed = str(jax.default_backend()).strip().lower() == "cpu"
+                    lgmres_rescue_enabled = _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_enabled(
+                        env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", ""),
+                        krylov_env_value=xblock_krylov_env,
+                    ) and (bool(lgmres_rescue_backend_allowed) or bool(lgmres_rescue_forced))
+                    if should_switch_side and lgmres_rescue_enabled and str(precondition_side) == "left":
+                        # Reuse the physical-space left-probe state: for these
+                        # large 3D full-FP systems the measured slow mode is
+                        # GMRES restart sensitivity, not the x-block factors.
+                        xblock_krylov_method = "lgmres"
+                        xblock_side_probe_lgmres_rescue = True
+                        pc_maxiter, xblock_lgmres_rescue_maxiter_capped = (
+                            _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_maxiter(
+                                os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_MAXITER", ""),
+                                int(pc_maxiter),
+                            )
+                        )
+                        xblock_lgmres_rescue_outer_k = _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_outer_k(
+                            os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_OUTER_K", "")
+                        )
+                    elif should_switch_side:
+                        precondition_side = "right" if str(precondition_side) == "left" else "left"
+                        xblock_side_probe_switched = True
+                        if str(precondition_side) == "right":
+                            x0_full = None
+                    xblock_side_probe_selected_side = str(precondition_side)
+                    xblock_side_probe_selected_method = str(xblock_krylov_method)
+                    if emit is not None:
+                        if xblock_side_probe_lgmres_rescue:
+                            action = "method_rescue"
+                        else:
+                            action = "switch" if xblock_side_probe_switched else "keep"
+                        emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe "
+                            f"{action} side={xblock_side_probe_initial_side}->{xblock_side_probe_selected_side} "
+                            f"method={xblock_side_probe_initial_method}->{xblock_side_probe_selected_method} "
+                            f"iters={xblock_side_probe_iterations} matvecs={xblock_side_probe_matvecs} "
+                            f"residual={float(xblock_side_probe_residual_norm):.6e} "
+                            f"ratio={float(xblock_side_probe_residual_ratio):.6e}",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    xblock_side_probe_s = float(sparse_timer.elapsed_s() - probe_start_s)
+                    xblock_side_probe_selected_side = str(precondition_side)
+                    xblock_side_probe_selected_method = str(xblock_krylov_method)
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"side probe failed ({type(exc).__name__}: {exc}); keeping side={precondition_side}",
+                        )
+
             if emit is not None:
                 emit(
                     0,
@@ -12399,6 +12538,7 @@ def solve_v3_full_system_linear_gmres(
                     atol=atol,
                     restart=pc_restart,
                     maxiter=pc_maxiter,
+                    outer_k=xblock_lgmres_rescue_outer_k,
                     precondition_side=precondition_side,
                 )
             elif xblock_krylov_method == "gcrotmk":
@@ -12436,7 +12576,7 @@ def solve_v3_full_system_linear_gmres(
                     maxiter=pc_maxiter,
                     precondition_side=precondition_side,
                 )
-            solve_s = sparse_timer.elapsed_s() - solve_start_s
+            solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s)
             try:
                 residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
                     jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
@@ -12445,13 +12585,14 @@ def solve_v3_full_system_linear_gmres(
                 residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
             except Exception:
                 residual_norm_xblock_pc = float(residual_norm_xblock_pc)
-            target_xblock = max(float(atol), float(tol) * float(rhs_norm))
             candidate_krylov_method = str(xblock_krylov_method)
             candidate_residual_norm = float(residual_norm_xblock_pc)
             candidate_iterations = int(len(history or []))
             candidate_matvecs = int(mv_count)
             fallback_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FALLBACK_GMRES", "").strip().lower()
             fallback_to_gmres = fallback_env not in {"0", "false", "f", "no", "off", ".false.", ".f."}
+            if xblock_side_probe_lgmres_rescue and not fallback_env:
+                fallback_to_gmres = False
             if (
                 xblock_krylov_method != "gmres"
                 and fallback_to_gmres
@@ -12753,6 +12894,21 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_initial_seed_used": bool(xblock_initial_seed_used),
                     "xblock_initial_seed_residual_norm": xblock_initial_seed_residual_norm,
                     "xblock_initial_seed_residual_ratio": xblock_initial_seed_residual_ratio,
+                    "xblock_side_probe_enabled": bool(xblock_side_probe_enabled),
+                    "xblock_side_probe_used": bool(xblock_side_probe_used),
+                    "xblock_side_probe_switched": bool(xblock_side_probe_switched),
+                    "xblock_side_probe_initial_side": xblock_side_probe_initial_side,
+                    "xblock_side_probe_selected_side": xblock_side_probe_selected_side,
+                    "xblock_side_probe_initial_method": xblock_side_probe_initial_method,
+                    "xblock_side_probe_selected_method": xblock_side_probe_selected_method,
+                    "xblock_side_probe_lgmres_rescue": bool(xblock_side_probe_lgmres_rescue),
+                    "xblock_lgmres_rescue_maxiter_capped": bool(xblock_lgmres_rescue_maxiter_capped),
+                    "xblock_lgmres_rescue_outer_k": xblock_lgmres_rescue_outer_k,
+                    "xblock_side_probe_residual_norm": xblock_side_probe_residual_norm,
+                    "xblock_side_probe_residual_ratio": xblock_side_probe_residual_ratio,
+                    "xblock_side_probe_iterations": int(xblock_side_probe_iterations),
+                    "xblock_side_probe_matvecs": int(xblock_side_probe_matvecs),
+                    "xblock_side_probe_s": float(xblock_side_probe_s),
                     "xblock_post_minres_steps_requested": int(post_minres_steps_requested),
                     "xblock_post_minres_steps_accepted": int(len(post_minres_alphas)),
                     "xblock_post_minres_residual_before": post_minres_residual_before,

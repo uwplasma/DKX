@@ -190,6 +190,7 @@ def lgmres_solve_with_history_scipy(
     atol: float = 0.0,
     restart: int = 50,
     maxiter: int | None = None,
+    outer_k: int | None = None,
     precondition_side: str = "left",
 ) -> tuple[np.ndarray, float, list[float]]:
     """Run SciPy LGMRES for restart-robust host solves on non-differentiable paths."""
@@ -197,12 +198,15 @@ def lgmres_solve_with_history_scipy(
     n = int(b_np.size)
     x0_np = np.array(x0, dtype=np.float64, copy=True).reshape((-1,)) if x0 is not None else None
     restart_use = _maybe_limit_restart(n, int(restart), np.dtype(np.float64))
-    outer_k_env = os.environ.get("SFINCS_JAX_LGMRES_OUTER_K", "").strip()
-    try:
-        outer_k = int(outer_k_env) if outer_k_env else 3
-    except ValueError:
-        outer_k = 3
-    outer_k = max(0, int(outer_k))
+    if outer_k is None:
+        outer_k_env = os.environ.get("SFINCS_JAX_LGMRES_OUTER_K", "").strip()
+        try:
+            outer_k_use = int(outer_k_env) if outer_k_env else 3
+        except ValueError:
+            outer_k_use = 3
+    else:
+        outer_k_use = int(outer_k)
+    outer_k_use = max(0, int(outer_k_use))
 
     def _mv(x_np: np.ndarray) -> np.ndarray:
         return np.array(matvec(jnp.asarray(x_np, dtype=jnp.float64)), dtype=np.float64, copy=True)
@@ -242,7 +246,7 @@ def lgmres_solve_with_history_scipy(
         maxiter=int(maxiter) if maxiter is not None else None,
         M=M,
         inner_m=int(restart_use),
-        outer_k=int(outer_k),
+        outer_k=int(outer_k_use),
         callback=_cb,
     )
 
