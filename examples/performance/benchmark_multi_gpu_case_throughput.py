@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+from sfincs_jax.transport_parallel_policy import audit_multi_gpu_case_throughput_summary
+
 
 def _display_path(path: Path, *, repo_root: Path) -> str:
     try:
@@ -66,27 +68,73 @@ def _case_run_once_command(*, input_path: Path, nsolve: int) -> list[str]:
     ]
 
 
-def _run_case_once(*, input_path: Path, visible_devices: str, nsolve: int, env: dict[str, str]) -> float:
+def _timeout_value(sample_timeout_s: float | None) -> float | None:
+    if sample_timeout_s is None or float(sample_timeout_s) <= 0.0:
+        return None
+    return float(sample_timeout_s)
+
+
+def _run_case_once(
+    *,
+    input_path: Path,
+    visible_devices: str,
+    nsolve: int,
+    env: dict[str, str],
+    sample_timeout_s: float | None,
+) -> float:
     local_env = dict(env)
     local_env["CUDA_VISIBLE_DEVICES"] = visible_devices
     cmd = _case_run_once_command(input_path=input_path, nsolve=int(nsolve))
-    out = subprocess.check_output(cmd, env=local_env, text=True)
+    timeout = _timeout_value(sample_timeout_s)
+    try:
+        out = subprocess.check_output(cmd, env=local_env, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Timed out after {timeout:.1f}s while benchmarking visible_devices={visible_devices}; "
+            "increase --sample-timeout-s or use a smaller case."
+        ) from exc
     return float(out.strip().splitlines()[-1])
 
 
-def _warm_gpu(*, input_path: Path, gpu_id: int, nsolve: int, env: dict[str, str]) -> None:
+def _warm_gpu(
+    *,
+    input_path: Path,
+    gpu_id: int,
+    nsolve: int,
+    env: dict[str, str],
+    sample_timeout_s: float | None,
+) -> None:
     _run_case_once(
         input_path=input_path,
         visible_devices=str(int(gpu_id)),
         nsolve=nsolve,
         env=env,
+        sample_timeout_s=sample_timeout_s,
     )
 
 
-def _sequential_two_cases(*, input_path: Path, nsolve: int, env: dict[str, str]) -> dict[str, float]:
+def _sequential_two_cases(
+    *,
+    input_path: Path,
+    nsolve: int,
+    env: dict[str, str],
+    sample_timeout_s: float | None,
+) -> dict[str, float]:
     t0 = time.perf_counter()
-    dt0 = _run_case_once(input_path=input_path, visible_devices="0", nsolve=nsolve, env=env)
-    dt1 = _run_case_once(input_path=input_path, visible_devices="0", nsolve=nsolve, env=env)
+    dt0 = _run_case_once(
+        input_path=input_path,
+        visible_devices="0",
+        nsolve=nsolve,
+        env=env,
+        sample_timeout_s=sample_timeout_s,
+    )
+    dt1 = _run_case_once(
+        input_path=input_path,
+        visible_devices="0",
+        nsolve=nsolve,
+        env=env,
+        sample_timeout_s=sample_timeout_s,
+    )
     wall = time.perf_counter() - t0
     return {
         "case0_s": float(dt0),
@@ -95,7 +143,13 @@ def _sequential_two_cases(*, input_path: Path, nsolve: int, env: dict[str, str])
     }
 
 
-def _parallel_two_cases(*, input_path: Path, nsolve: int, env: dict[str, str]) -> dict[str, float]:
+def _parallel_two_cases(
+    *,
+    input_path: Path,
+    nsolve: int,
+    env: dict[str, str],
+    sample_timeout_s: float | None,
+) -> dict[str, float]:
     cmd = _case_run_once_command(input_path=input_path, nsolve=int(nsolve))
     env0 = dict(env)
     env1 = dict(env)
@@ -104,8 +158,27 @@ def _parallel_two_cases(*, input_path: Path, nsolve: int, env: dict[str, str]) -
     t0 = time.perf_counter()
     p0 = subprocess.Popen(cmd, env=env0, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     p1 = subprocess.Popen(cmd, env=env1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    out0, err0 = p0.communicate()
-    out1, err1 = p1.communicate()
+    timeout = _timeout_value(sample_timeout_s)
+    deadline = None if timeout is None else t0 + timeout
+
+    def _remaining_timeout() -> float | None:
+        if deadline is None:
+            return None
+        return max(0.0, deadline - time.perf_counter())
+
+    try:
+        out0, err0 = p0.communicate(timeout=_remaining_timeout())
+        out1, err1 = p1.communicate(timeout=_remaining_timeout())
+    except subprocess.TimeoutExpired as exc:
+        for proc in (p0, p1):
+            if proc.poll() is None:
+                proc.kill()
+        p0.communicate()
+        p1.communicate()
+        raise RuntimeError(
+            f"Timed out after {timeout:.1f}s while benchmarking parallel two-GPU throughput; "
+            "increase --sample-timeout-s or use a smaller case."
+        ) from exc
     wall = time.perf_counter() - t0
     if p0.returncode != 0:
         raise RuntimeError(f"GPU0 throughput run failed: {err0.strip()}")
@@ -128,6 +201,7 @@ def _build_case_throughput_plan(
     coarse_levels: int | None,
     out_dir: Path,
     cache_dir: Path | None,
+    sample_timeout_s: float = 300.0,
 ) -> dict[str, object]:
     repo_root = Path(__file__).resolve().parents[2]
     input_display = _display_path(input_path, repo_root=repo_root)
@@ -147,6 +221,8 @@ def _build_case_throughput_plan(
         input_display,
         "--nsolve",
         str(int(nsolve)),
+        "--sample-timeout-s",
+        str(float(sample_timeout_s)),
         "--rhs1-precond",
         str(rhs1_precond),
         "--out-dir",
@@ -166,32 +242,67 @@ def _build_case_throughput_plan(
         "input_path": input_display,
         "case": input_path.stem.replace(".input", ""),
         "nsolve": int(nsolve),
+        "sample_timeout_s": float(sample_timeout_s),
         "rhs1_precond": str(rhs1_precond),
         "schwarz_coarse_levels": coarse_levels,
         "timing_semantics": "cache_warm",
         "env": env,
         "warmup_plan": [
-            {"gpu_id": "0", "visible_devices": "0", "run_once_command": run_once_command},
-            {"gpu_id": "1", "visible_devices": "1", "run_once_command": run_once_command},
+            {
+                "gpu_id": "0",
+                "visible_devices": "0",
+                "sample_timeout_s": float(sample_timeout_s),
+                "run_once_command": run_once_command,
+            },
+            {
+                "gpu_id": "1",
+                "visible_devices": "1",
+                "sample_timeout_s": float(sample_timeout_s),
+                "run_once_command": run_once_command,
+            },
         ],
         "sequential_one_gpu_plan": [
-            {"case_index": 0, "visible_devices": "0", "run_once_command": run_once_command},
-            {"case_index": 1, "visible_devices": "0", "run_once_command": run_once_command},
+            {
+                "case_index": 0,
+                "visible_devices": "0",
+                "sample_timeout_s": float(sample_timeout_s),
+                "run_once_command": run_once_command,
+            },
+            {
+                "case_index": 1,
+                "visible_devices": "0",
+                "sample_timeout_s": float(sample_timeout_s),
+                "run_once_command": run_once_command,
+            },
         ],
         "parallel_two_gpu_plan": [
-            {"case_index": 0, "visible_devices": "0", "run_once_command": run_once_command},
-            {"case_index": 1, "visible_devices": "1", "run_once_command": run_once_command},
+            {
+                "case_index": 0,
+                "visible_devices": "0",
+                "sample_timeout_s": float(sample_timeout_s),
+                "run_once_command": run_once_command,
+            },
+            {
+                "case_index": 1,
+                "visible_devices": "1",
+                "sample_timeout_s": float(sample_timeout_s),
+                "run_once_command": run_once_command,
+            },
         ],
         "estimated_child_process_samples": 6,
         "speedup_gate_semantics": {
             "metric": "sequential_one_gpu.wall_s / parallel_two_gpu.wall_s",
             "greater_than_one_means_throughput_improvement": True,
             "release_gate": False,
+            "evaluated_by": "audit_multi_gpu_case_throughput_summary",
+            "min_throughput_speedup": 1.0,
         },
         "memory_gate_semantics": {
             "gpu_preallocation_disabled": True,
             "gpu_allocator": "cuda_malloc_async",
-            "status": "allocator_defaults_recorded; peak memory is measured externally",
+            "sample_timeout_s": float(sample_timeout_s),
+            "child_process_timeout_enabled": float(sample_timeout_s) > 0.0,
+            "status": "bounded_by_child_timeout_and_allocator_settings",
         },
         "benchmark_command": benchmark_command,
     }
@@ -200,6 +311,17 @@ def _build_case_throughput_plan(
 def _write_plan_json(plan: dict[str, object], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")
+
+
+def _audit_payload_fields(payload: dict[str, object]) -> dict[str, object]:
+    audit = audit_multi_gpu_case_throughput_summary(payload)
+    return {
+        "ci_gate_pass": bool(audit.ci_gate_pass),
+        "release_scaling_claim": bool(audit.release_scaling_claim),
+        "failures": list(audit.failures),
+        "notes": list(audit.notes),
+        "min_throughput_speedup": float(audit.min_throughput_speedup),
+    }
 
 
 def main() -> None:
@@ -242,6 +364,12 @@ def main() -> None:
         help="Persistent JAX cache directory.",
     )
     parser.add_argument(
+        "--sample-timeout-s",
+        type=float,
+        default=300.0,
+        help="Timeout for each child-process sample; 0 disables the timeout.",
+    )
+    parser.add_argument(
         "--plan-only",
         action="store_true",
         help="Write a deterministic benchmark plan JSON without launching GPU child processes.",
@@ -268,6 +396,7 @@ def main() -> None:
             coarse_levels=args.schwarz_coarse_levels,
             out_dir=out_dir,
             cache_dir=args.cache_dir,
+            sample_timeout_s=float(args.sample_timeout_s),
         )
         plan_path = args.plan_json if args.plan_json is not None else out_dir / "gpu_case_throughput_plan.json"
         _write_plan_json(plan, plan_path)
@@ -277,23 +406,52 @@ def main() -> None:
     env = _base_env(args.cache_dir, args.rhs1_precond, args.schwarz_coarse_levels)
 
     # Warm both devices individually before timing steady-state throughput.
-    _warm_gpu(input_path=args.input, gpu_id=0, nsolve=args.nsolve, env=env)
-    _warm_gpu(input_path=args.input, gpu_id=1, nsolve=args.nsolve, env=env)
+    _warm_gpu(
+        input_path=args.input,
+        gpu_id=0,
+        nsolve=args.nsolve,
+        env=env,
+        sample_timeout_s=float(args.sample_timeout_s),
+    )
+    _warm_gpu(
+        input_path=args.input,
+        gpu_id=1,
+        nsolve=args.nsolve,
+        env=env,
+        sample_timeout_s=float(args.sample_timeout_s),
+    )
 
-    sequential = _sequential_two_cases(input_path=args.input, nsolve=args.nsolve, env=env)
-    parallel = _parallel_two_cases(input_path=args.input, nsolve=args.nsolve, env=env)
+    sequential = _sequential_two_cases(
+        input_path=args.input,
+        nsolve=args.nsolve,
+        env=env,
+        sample_timeout_s=float(args.sample_timeout_s),
+    )
+    parallel = _parallel_two_cases(
+        input_path=args.input,
+        nsolve=args.nsolve,
+        env=env,
+        sample_timeout_s=float(args.sample_timeout_s),
+    )
     speedup = sequential["wall_s"] / parallel["wall_s"] if parallel["wall_s"] > 0 else float("nan")
 
     payload = {
+        "benchmark_kind": "multi_gpu_case_throughput",
+        "backend": "gpu",
+        "release_scaling_claim": False,
+        "required_gpu_count": 2,
         "input": args.input.name,
         "case": args.input.stem.replace(".input", ""),
         "nsolve": int(args.nsolve),
+        "sample_timeout_s": float(args.sample_timeout_s),
         "rhs1_precond": str(args.rhs1_precond),
         "schwarz_coarse_levels": int(args.schwarz_coarse_levels),
+        "timing_semantics": "cache_warm",
         "sequential_one_gpu": sequential,
         "parallel_two_gpu": parallel,
         "throughput_speedup": float(speedup),
     }
+    payload["throughput_audit"] = _audit_payload_fields(payload)
     json_path = out_dir / "gpu_case_throughput.json"
     json_path.write_text(json.dumps(payload, indent=2))
 

@@ -30,6 +30,8 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale035_cpu_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed5_cpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale045_cpu_probe.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_cpu_probe.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 
@@ -503,9 +505,10 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         "nu_jitter": manifest.get("nu_jitter"),
         "er_jitter": manifest.get("er_jitter"),
         "evidence_note": (
-            "Bounded five-seed CPU QI robustness evidence generated from the reusable runner "
-            "manifest gate. It extends the low-resolution seed count but remains below "
-            "production resolution."
+            "Bounded QI seed-robustness execution summary generated from the reusable runner "
+            "manifest gate. Passing artifacts provide measured evidence at their recorded "
+            "resolution; failed or timed-out artifacts are blocker evidence and must not be "
+            "used for production promotion."
         ),
         "execution_summary": execution.get("summary"),
         "gates": execution.get("gates"),
@@ -667,28 +670,37 @@ def build_evidence_manifest(
         if isinstance(payload, dict):
             artifacts.append(_summarize_evidence_artifact(resolved_path, payload, production_resolution))
 
+    passed_artifacts = [artifact for artifact in artifacts if artifact.get("passed") is True]
+    nonpassing_artifacts = [artifact for artifact in artifacts if artifact.get("passed") is not True]
     max_total_size = max(
-        (int(artifact["total_size"]) for artifact in artifacts if artifact.get("total_size") is not None),
+        (int(artifact["total_size"]) for artifact in passed_artifacts if artifact.get("total_size") is not None),
         default=0,
     )
     max_active_size = max(
-        (int(artifact["active_size"]) for artifact in artifacts if artifact.get("active_size") is not None),
+        (int(artifact["active_size"]) for artifact in passed_artifacts if artifact.get("active_size") is not None),
         default=0,
     )
     max_per_axis_fraction = max(
         (
             min(float(value) for value in artifact["resolution_fractions"].values())
-            for artifact in artifacts
+            for artifact in passed_artifacts
             if isinstance(artifact.get("resolution_fractions"), dict) and artifact["resolution_fractions"]
         ),
         default=0.0,
+    )
+    largest_attempted_total_size = max(
+        (int(artifact["total_size"]) for artifact in artifacts if artifact.get("total_size") is not None),
+        default=0,
+    )
+    largest_nonpassing_total_size = max(
+        (int(artifact["total_size"]) for artifact in nonpassing_artifacts if artifact.get("total_size") is not None),
+        default=0,
     )
     max_total_fraction = (
         float(max_total_size) / float(production_total_size)
         if production_total_size is not None and production_total_size > 0
         else None
     )
-    passed_artifacts = [artifact for artifact in artifacts if artifact.get("passed") is True]
     checked_backends = sorted(
         {
             str(backend)
@@ -770,15 +782,19 @@ def build_evidence_manifest(
         "current_evidence": {
             "artifact_count": len(artifacts),
             "passing_artifact_count": len(passed_artifacts),
+            "nonpassing_artifact_count": len(nonpassing_artifacts),
             "checked_backends": checked_backends,
             "max_checked_total_size": max_total_size,
             "max_checked_active_size": max_active_size or None,
+            "largest_attempted_total_size": largest_attempted_total_size or None,
+            "largest_nonpassing_total_size": largest_nonpassing_total_size or None,
             "max_checked_total_size_fraction": max_total_fraction,
             "max_checked_per_axis_resolution_fraction": max_per_axis_fraction,
             "bounded_lane_completion_estimate_percent": round(100.0 * max_per_axis_fraction, 1),
             "production_total_size_uncovered_percent": (
                 round(100.0 * (1.0 - max_total_fraction), 2) if max_total_fraction is not None else None
             ),
+            "completion_estimate_basis": "largest passing measured artifact only",
         },
         "production_target": {
             "resolution": production_resolution,

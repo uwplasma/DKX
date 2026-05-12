@@ -44,6 +44,7 @@ DEFAULT_SYSTEMS = (
     "diagonal_keep",
     "coupled_jacobi_keep",
     "zero_update_reject",
+    "tiny_update_reject",
     "nonfinite_candidate_reject",
 )
 SYSTEMS = DEFAULT_SYSTEMS + ("timeout_sleep",)
@@ -110,6 +111,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-residual-reduction", type=float, default=1.0e-3)
     parser.add_argument("--block-size", type=_positive_int, default=64)
     parser.add_argument("--max-update-norm-ratio", type=float, default=10.0)
+    parser.add_argument("--min-update-norm-ratio", type=_nonnegative_float, default=1.0e-12)
+    parser.add_argument("--max-candidate-elements", type=_positive_int, help="Reject candidates above this size.")
     parser.add_argument(
         "--run-production-solve-probe",
         action="store_true",
@@ -324,6 +327,10 @@ def _config_record(args: argparse.Namespace) -> dict[str, Any]:
         "min_residual_reduction": float(args.min_residual_reduction),
         "block_size": int(args.block_size),
         "max_update_norm_ratio": float(args.max_update_norm_ratio),
+        "min_update_norm_ratio": float(args.min_update_norm_ratio),
+        "max_candidate_elements": None
+        if getattr(args, "max_candidate_elements", None) is None
+        else int(args.max_candidate_elements),
     }
 
 
@@ -370,6 +377,17 @@ def _deterministic_case(system: str, args: argparse.Namespace) -> dict[str, Any]
             "size": max(4, min(size, 16)),
             "expected_gate": "reject",
             "expected_reason": "insufficient-residual-improvement",
+            "config": _config_record(args),
+        }
+    if system == "tiny_update_reject":
+        return {
+            "case_id": "tiny_update_reject",
+            "source_type": "synthetic",
+            "system_kind": "tiny_update",
+            "size": max(4, min(size, 16)),
+            "update_scale": 1.0e-14,
+            "expected_gate": "reject",
+            "expected_reason": "update-norm-too-small",
             "config": _config_record(args),
         }
     if system == "nonfinite_candidate_reject":
@@ -1099,6 +1117,20 @@ def _build_probe_system(case: dict[str, Any]) -> tuple[Any, Any, Any, Any, dict[
 
         return rhs, x0, matvec, correction, counters
 
+    if kind == "tiny_update":
+        rhs = _deterministic_vector(jnp, size, phase=phase)
+        update_scale = float(case.get("update_scale", 1.0e-14))
+
+        def matvec(x: Any) -> Any:
+            counters["matvec_calls"] += 1
+            return x
+
+        def correction(residual: Any) -> Any:
+            counters["correction_calls"] += 1
+            return jnp.asarray(update_scale, dtype=residual.dtype) * residual
+
+        return rhs, x0, matvec, correction, counters
+
     if kind == "nonfinite_candidate":
         rhs = _deterministic_vector(jnp, size, phase=phase)
 
@@ -1134,6 +1166,10 @@ def _child_payload(case: dict[str, Any]) -> dict[str, Any]:
             min_residual_reduction=float(config["min_residual_reduction"]),
             block_size=int(config["block_size"]),
             max_update_norm_ratio=float(config["max_update_norm_ratio"]),
+            min_update_norm_ratio=float(config["min_update_norm_ratio"]),
+            max_candidate_elements=None
+            if config.get("max_candidate_elements") is None
+            else int(config["max_candidate_elements"]),
         ),
     )
     elapsed_s = time.perf_counter() - t0

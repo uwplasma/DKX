@@ -192,6 +192,14 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   policy for large explicit full-FP CPU systems.
 - ``sfincs_jax/solve_mode_policy.py``:
   shared implicit/differentiable solve-mode environment resolution.
+- ``sfincs_jax/solver_path_policy.py``:
+  pure solver/preconditioner path policy for JIT admission, RHSMode=1 rescue
+  slack, DKES GMRES budget defaults, sparse-PC defaults, preconditioner dtype,
+  and backend resource-exhaustion classification.
+- ``sfincs_jax/solver_selection_policy.py``:
+  measured candidate acceptance gates used by automatic solver/preconditioner
+  promotions, including residual/parity checks and paired runtime/memory
+  comparisons against an incumbent path.
 - ``sfincs_jax/transport_policy.py``:
   pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
 - ``sfincs_jax/transport_preconditioner_dispatch.py``:
@@ -205,6 +213,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   shared transport retry residual metrics, better-candidate comparisons, and RHSMode=3
   polish threshold/restart/maxiter policy used by the reduced and full transport solve
   branches.
+- ``sfincs_jax/transport_residual_quality.py``:
+  fast transport worker residual-abort threshold parsing and failure-message
+  formatting for absolute and RHS-normalized diagnostics.
 - ``sfincs_jax/transport_dense_lu.py``:
   cached dense-LU solver and preconditioner construction used by bounded transport
   dense fallback and dense-preconditioner paths.

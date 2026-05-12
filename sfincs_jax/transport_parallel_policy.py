@@ -54,6 +54,24 @@ class ShardedSolveScalingAudit:
     deterministic_output_check: bool = False
 
 
+@dataclass(frozen=True)
+class MultiGpuCaseThroughputAudit:
+    """Pure audit result for one-GPU-per-case throughput benchmark summaries."""
+
+    backend: str
+    required_gpu_count: int
+    sequential_wall_s: float
+    parallel_wall_s: float
+    throughput_speedup: float
+    release_scaling_claim: bool
+    ci_gate_pass: bool
+    failures: tuple[str, ...]
+    notes: tuple[str, ...]
+    benchmark_kind: str = "multi_gpu_case_throughput"
+    timing_semantics: str | None = None
+    min_throughput_speedup: float = 1.0
+
+
 def validate_transport_parallel_worker_count(
     parallel_workers: int,
     *,
@@ -451,6 +469,85 @@ def audit_transport_parallel_scaling_summary(
         min_speedup=min_speedup_value,
         min_efficiency=min_efficiency_value,
         min_parallel_workers=min_parallel_workers_value,
+    )
+
+
+def _wall_time_from_mapping(summary: dict[str, object], *, key: str) -> float:
+    raw = summary.get(key)
+    if not isinstance(raw, dict):
+        raise ValueError(f"{key} must be a dictionary containing wall_s")
+    return _finite_positive_float(raw.get("wall_s"), name=f"{key}.wall_s")
+
+
+def audit_multi_gpu_case_throughput_summary(
+    summary: dict[str, object],
+    *,
+    min_throughput_speedup: float = 1.0,
+) -> MultiGpuCaseThroughputAudit:
+    """Audit two-case multi-GPU throughput evidence without making a release claim."""
+    if not isinstance(summary, dict):
+        raise ValueError("multi-GPU case-throughput summary must be a dictionary")
+
+    min_speedup_value = _speedup_threshold(min_throughput_speedup, name="min_throughput_speedup")
+    benchmark_kind = _normalized_benchmark_kind(summary, default="multi_gpu_case_throughput")
+    if benchmark_kind not in {"multi_gpu_case_throughput", "gpu_case_throughput"}:
+        raise ValueError(f"unsupported multi-GPU throughput benchmark_kind={benchmark_kind!r}")
+
+    backend = str(summary.get("backend", "gpu")).strip().lower() or "gpu"
+    timing_semantics, timing_note = _timing_semantics(summary)
+    required_gpu_count = int(
+        _optional_positive_int(summary.get("required_gpu_count", 2), name="required_gpu_count") or 2
+    )
+    requested_release = bool(_optional_bool(summary.get("release_scaling_claim"), name="release_scaling_claim") or False)
+    sequential_wall_s = _wall_time_from_mapping(summary, key="sequential_one_gpu")
+    parallel_wall_s = _wall_time_from_mapping(summary, key="parallel_two_gpu")
+
+    raw_speedup = summary.get("throughput_speedup")
+    computed_speedup = sequential_wall_s / parallel_wall_s
+    throughput_speedup = (
+        _finite_positive_float(raw_speedup, name="throughput_speedup")
+        if raw_speedup is not None
+        else computed_speedup
+    )
+
+    failures: list[str] = []
+    notes: list[str] = []
+    if requested_release:
+        failures.append("multi-GPU case-throughput summaries must not set release_scaling_claim=true")
+    if backend != "gpu":
+        failures.append(f"multi-GPU case-throughput backend must be 'gpu'; got {backend!r}")
+    if required_gpu_count < 2:
+        failures.append(f"required_gpu_count={required_gpu_count} cannot prove two-GPU throughput")
+    if timing_semantics is None:
+        failures.append("timing semantics were not recorded")
+    elif timing_semantics in {"cold", "cold_start", "cold_cache", "mixed", "mixed_warm_cold"}:
+        failures.append(f"timing semantics {timing_semantics!r} cannot support throughput evidence")
+    if throughput_speedup < min_speedup_value:
+        failures.append(
+            f"throughput speedup {throughput_speedup:.3g}x is below evidence gate {min_speedup_value:.3g}x"
+        )
+    if abs(throughput_speedup - computed_speedup) > max(1.0e-9, abs(computed_speedup) * 1.0e-6):
+        failures.append(
+            f"throughput speedup {throughput_speedup:.3g}x does not match wall-time ratio {computed_speedup:.3g}x"
+        )
+    if timing_note is not None:
+        notes.append(timing_note)
+    notes.append("multi-GPU case throughput is evidence for batched case throughput, not single-case strong scaling")
+    notes.append("this audit never converts throughput evidence into a release transport scaling claim")
+
+    return MultiGpuCaseThroughputAudit(
+        backend=backend,
+        required_gpu_count=required_gpu_count,
+        sequential_wall_s=sequential_wall_s,
+        parallel_wall_s=parallel_wall_s,
+        throughput_speedup=throughput_speedup,
+        release_scaling_claim=False,
+        ci_gate_pass=not failures,
+        failures=tuple(failures),
+        notes=tuple(notes),
+        benchmark_kind=benchmark_kind,
+        timing_semantics=timing_semantics,
+        min_throughput_speedup=min_speedup_value,
     )
 
 

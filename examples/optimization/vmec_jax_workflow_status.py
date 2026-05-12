@@ -17,11 +17,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import jax
+import jax.numpy as jnp
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
+    boozer_spectrum_geometry_proxy_objective,
     geometry_proxy_workflow_summary,
     optional_jax_geometry_backend_report,
 )
@@ -56,6 +60,51 @@ def _proxy_gate_command(
     return _command(cmd)
 
 
+def _synthetic_backend_readiness_gate() -> dict[str, Any]:
+    """Run a no-optional-dependency Boozer-proxy autodiff readiness check."""
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, 16, endpoint=False, dtype=jnp.float64)
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / 5.0, 12, endpoint=False, dtype=jnp.float64)
+    base_bmnc = jnp.asarray([1.0, 0.045, -0.021, 0.012, 0.006], dtype=jnp.float64)
+    ixm_b = jnp.asarray([0, 1, 1, 2, 3], dtype=jnp.int32)
+    ixn_b = jnp.asarray([0, 0, 1, -1, 2], dtype=jnp.int32)
+    non_axis = (ixm_b != 0) | (ixn_b != 0)
+    scale0 = jnp.asarray(1.0, dtype=jnp.float64)
+    fd_step = 1.0e-5
+    rtol = 5.0e-4
+    atol = 1.0e-8
+
+    def objective(scale: jnp.ndarray) -> jnp.ndarray:
+        bmnc = jnp.where(non_axis, base_bmnc * scale, base_bmnc)
+        return boozer_spectrum_geometry_proxy_objective(
+            bmnc,
+            ixm_b,
+            ixn_b,
+            theta=theta,
+            zeta=zeta,
+        )
+
+    value, grad = jax.value_and_grad(objective)(scale0)
+    finite_difference = (objective(scale0 + fd_step) - objective(scale0 - fd_step)) / (2.0 * fd_step)
+    abs_error = abs(float(grad) - float(finite_difference))
+    tolerance = atol + rtol * abs(float(finite_difference))
+    return {
+        "status": "pass" if abs_error <= tolerance else "fail",
+        "optional_dependencies_required": False,
+        "claim": "sfincs_jax_boozer_proxy_backend_readiness_only",
+        "not_claimed": "vmec_jax or booz_xform_jax transform execution",
+        "objective": float(value),
+        "autodiff_gradient": float(grad),
+        "finite_difference_gradient": float(finite_difference),
+        "absolute_error": abs_error,
+        "tolerance": tolerance,
+        "finite_difference_step": fd_step,
+        "rtol": rtol,
+        "atol": atol,
+        "grid_shape": {"n_theta": int(theta.size), "n_zeta": int(zeta.size)},
+        "spectrum_modes": int(base_bmnc.size),
+    }
+
+
 def build_status(
     *,
     wout: Path | None = None,
@@ -72,6 +121,7 @@ def build_status(
         "skip_reason": None if not missing else f"missing optional backends: {', '.join(missing)}",
         "optional_backends": dict(report["backends"]),
         "default_ci_requires_optional_backends": False,
+        "backend_readiness_gate": _synthetic_backend_readiness_gate(),
         "differentiability_contract": {
             "differentiated_graph": list(summary["workflow_contract"]["differentiated_graph"]),
             "outside_differentiated_graph": list(summary["workflow_contract"]["outside_differentiated_graph"]),
@@ -118,6 +168,11 @@ def _print_human(status: dict[str, Any]) -> None:
     for name, available in status["optional_backends"].items():
         print(f"  {name}: {'available' if available else 'missing'}")
     print("Differentiability contract:")
+    gate = status["backend_readiness_gate"]
+    print("Backend-readiness gate:")
+    print(f"  status: {gate['status']}")
+    print(f"  optional dependencies required: {str(gate['optional_dependencies_required']).lower()}")
+    print(f"  gradient abs error: {gate['absolute_error']:.3e} <= {gate['tolerance']:.3e}")
     print("  differentiated graph:")
     for stage in status["differentiability_contract"]["differentiated_graph"]:
         print(f"    - {stage}")

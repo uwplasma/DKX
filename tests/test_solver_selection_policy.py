@@ -256,3 +256,122 @@ def test_stricter_criteria_can_block_promotion_regressions() -> None:
 
     assert not gate.accepted
     assert "runtime_regression" in gate.reasons
+
+
+def test_total_time_and_residual_ratio_ignore_nonfinite_measurements() -> None:
+    candidate = SolverCandidateMetrics(
+        name="partial_metrics",
+        residual_norm=float("nan"),
+        target=1.0e-9,
+        setup_s=float("inf"),
+        solve_s=3.0,
+    )
+
+    assert candidate.total_s == 3.0
+    assert candidate.residual_ratio is None
+
+
+def test_gate_reports_nonfinite_and_parity_failures_before_promotion() -> None:
+    candidate = SolverCandidateMetrics(
+        name="bad_candidate",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+        finite=False,
+        parity_failures=2,
+    )
+
+    gate = solver_candidate_gate(candidate)
+
+    assert not gate.accepted
+    assert "nonfinite_candidate" in gate.reasons
+    assert "parity_failures" in gate.reasons
+
+
+def test_failed_baseline_can_require_runtime_and_memory_measurements() -> None:
+    baseline = SolverCandidateMetrics(
+        name="failed_baseline",
+        residual_norm=1.0e-2,
+        target=1.0e-9,
+    )
+    candidate = SolverCandidateMetrics(
+        name="clean_but_unmeasured",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+    )
+    criteria = SolverAcceptanceCriteria(
+        allow_unknown_runtime_when_baseline_failed=False,
+        allow_unknown_memory_when_baseline_failed=False,
+    )
+
+    gate = solver_candidate_gate(candidate, baseline=baseline, criteria=criteria)
+
+    assert not gate.accepted
+    assert "missing_runtime" in gate.reasons
+    assert "missing_memory" in gate.reasons
+
+
+def test_memory_gate_falls_back_to_compiled_temp_before_peak_rss() -> None:
+    baseline = SolverCandidateMetrics(
+        name="baseline",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+        setup_s=1.0,
+        solve_s=1.0,
+        compiled_temp_mb=900.0,
+        peak_rss_mb=100.0,
+    )
+    candidate = SolverCandidateMetrics(
+        name="candidate",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+        setup_s=1.0,
+        solve_s=1.0,
+        compiled_temp_mb=600.0,
+        peak_rss_mb=10_000.0,
+    )
+
+    gate = solver_candidate_gate(candidate, baseline=baseline)
+
+    assert gate.accepted
+    assert gate.memory_metric == "compiled_temp_mb"
+    assert gate.memory_ratio == pytest.approx(2.0 / 3.0)
+
+
+def test_choose_solver_candidate_tie_breaks_by_memory_then_name() -> None:
+    candidates = [
+        SolverCandidateMetrics(
+            name="zeta",
+            residual_norm=1.0e-12,
+            target=1.0e-9,
+            setup_s=1.0,
+            solve_s=1.0,
+            active_rss_mb=400.0,
+        ),
+        SolverCandidateMetrics(
+            name="alpha",
+            residual_norm=1.0e-12,
+            target=1.0e-9,
+            setup_s=1.0,
+            solve_s=1.0,
+            active_rss_mb=300.0,
+        ),
+    ]
+
+    selected = choose_solver_candidate(candidates)
+
+    assert selected is not None
+    assert selected.name == "alpha"
+
+
+def test_choose_solver_candidate_returns_none_when_all_rejected() -> None:
+    selected = choose_solver_candidate(
+        [
+            SolverCandidateMetrics(
+                name="dirty",
+                residual_norm=1.0e-3,
+                target=1.0e-9,
+            )
+        ]
+    )
+
+    assert selected is None

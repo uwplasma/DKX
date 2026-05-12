@@ -49,7 +49,7 @@ The full 39-case suite remains the parity audit, but sub-``10 s`` Fortran rows
 are excluded from the public runtime/memory plot because process launch,
 filesystem overhead, and JIT amortization dominate those measurements.
 The figure itself emphasizes absolute measurements: runtime bars are on the left,
-active-memory bars are on the right, and each plotted production-scale case is
+active-memory bars are on the right, and each plotted reference-runtime-window case is
 shown for SFINCS Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU
 cold/warm. Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran
 v3 runtime. Cold is the first external suite command. Warm runtime uses

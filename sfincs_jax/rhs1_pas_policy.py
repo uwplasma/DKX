@@ -234,17 +234,18 @@ def build_pas_tz_memory_fallback(
             fallback_name="SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP",
             default=1,
         )
-        if not pas_tz_schwarz_fallback_memory_safe(
+        guard = pas_tz_schwarz_fallback_guard(
             op,
             axis=axis,
             block=dd_block,
             overlap=dd_overlap,
-        ):
+        )
+        if not bool(guard["safe"]):
             if collision_builder is not None:
                 precond = collision_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
             else:
                 precond = hybrid_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
-            _mark_pas_tz_guarded_fallback(precond, axis=axis)
+            _mark_pas_tz_guarded_fallback(precond, axis=axis, metadata=guard)
             return precond
         schwarz_builder = theta_schwarz_builder if axis == "theta" else zeta_schwarz_builder
         return schwarz_builder(
@@ -257,22 +258,23 @@ def build_pas_tz_memory_fallback(
     cheap_kind = resolve_pas_tz_cheap_fallback_kind(requested=requested)
     if cheap_kind == "tzfft" and tzfft_builder is not None:
         precond = tzfft_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
-        _mark_pas_tz_guarded_fallback(precond, axis="tzfft")
+        _mark_pas_tz_guarded_fallback(precond, axis="tzfft", metadata={"safe": True, "reason": "cheap-tzfft"})
         return precond
     if cheap_kind == "collision" and collision_builder is not None:
         precond = collision_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
-        _mark_pas_tz_guarded_fallback(precond, axis="collision")
+        _mark_pas_tz_guarded_fallback(precond, axis="collision", metadata={"safe": True, "reason": "cheap-collision"})
         return precond
     precond = hybrid_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
-    _mark_pas_tz_guarded_fallback(precond, axis="hybrid")
+    _mark_pas_tz_guarded_fallback(precond, axis="hybrid", metadata={"safe": True, "reason": "legacy-hybrid"})
     return precond
 
 
-def _mark_pas_tz_guarded_fallback(precond: Callable, *, axis: str) -> None:
+def _mark_pas_tz_guarded_fallback(precond: Callable, *, axis: str, metadata: dict[str, object] | None = None) -> None:
     """Attach best-effort metadata to a guarded PAS-TZ fallback callable."""
     try:
         setattr(precond, "_sfincs_jax_pas_tz_guarded_fallback", True)
         setattr(precond, "_sfincs_jax_pas_tz_guarded_axis", str(axis))
+        setattr(precond, "_sfincs_jax_pas_tz_guarded_metadata", dict(metadata or {}))
     except Exception:
         pass
 
@@ -330,6 +332,17 @@ def pas_tz_schwarz_fallback_memory_safe(
     overlap: int,
 ) -> bool:
     """Return whether a structured PAS-TZ Schwarz fallback should be attempted."""
+    return bool(pas_tz_schwarz_fallback_guard(op, axis=axis, block=block, overlap=overlap)["safe"])
+
+
+def pas_tz_schwarz_fallback_guard(
+    op,
+    *,
+    axis: str,
+    block: int,
+    overlap: int,
+) -> dict[str, object]:
+    """Return structured PAS-TZ Schwarz guard metadata and the final decision."""
     work = estimate_pas_tz_schwarz_fallback_work(op, axis=axis, block=block, overlap=overlap)
     max_patch_unknowns = _parse_nonnegative_env_int(
         "SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_PATCH_UNKNOWNS",
@@ -339,11 +352,21 @@ def pas_tz_schwarz_fallback_memory_safe(
         "SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_MAX_INVERSE_ENTRIES",
         default=100_000_000,
     )
+    failures: list[str] = []
     if max_patch_unknowns > 0 and int(work["max_patch_unknowns"]) > max_patch_unknowns:
-        return False
+        failures.append("max-patch-unknowns-exceeded")
     if max_inverse_entries > 0 and int(work["inverse_entries"]) > max_inverse_entries:
-        return False
-    return True
+        failures.append("max-inverse-entries-exceeded")
+    return {
+        "safe": not failures,
+        "reason": "within-structured-schwarz-guard" if not failures else ",".join(failures),
+        "axis": str(axis),
+        "block": int(max(1, int(block))),
+        "overlap": int(max(0, int(overlap))),
+        "max_patch_unknowns_limit": int(max_patch_unknowns),
+        "max_inverse_entries_limit": int(max_inverse_entries),
+        "work": work,
+    }
 
 
 def _pas_tz_local_velocity_dof(op) -> int:
@@ -466,6 +489,7 @@ __all__ = [
     "estimate_pas_tz_schwarz_fallback_work",
     "pas_tokamak_theta_preconditioner_applicable",
     "pas_tz_preconditioner_applicable",
+    "pas_tz_schwarz_fallback_guard",
     "pas_tz_schwarz_fallback_memory_safe",
     "pas_tz_preconditioner_memory_safe",
     "preferred_pas_tz_schwarz_axis",

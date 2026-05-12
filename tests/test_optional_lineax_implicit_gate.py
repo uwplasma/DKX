@@ -70,6 +70,7 @@ def test_lineax_gate_skips_cleanly_when_lineax_is_not_supplied() -> None:
 def test_optional_lineax_gate_cli_writes_json_for_current_backend(tmp_path: Path) -> None:
     mod = _load_module()
     out_json = tmp_path / "lineax_gate.json"
+    summary_json = tmp_path / "lineax_gate_summary.json"
     rc = mod.main(
         [
             "--backend",
@@ -84,14 +85,52 @@ def test_optional_lineax_gate_cli_writes_json_for_current_backend(tmp_path: Path
             "60",
             "--out-json",
             str(out_json),
+            "--summary-json",
+            str(summary_json),
         ]
     )
     assert rc == 0
     payload = json.loads(out_json.read_text())
+    summary = json.loads(summary_json.read_text())
     assert payload[0]["case"] == "synthetic_nonsymmetric"
     assert payload[0]["backend"] == "current_custom_linear_solve"
     assert payload[0]["status"] == "ok"
     assert payload[0]["relative_residual"] < 1.0e-8
+    assert summary["gate"] == "optional_lineax_implicit_solve"
+    assert summary["measured_rows"] == 1
+    assert summary["adoption_decision"]["production_default"] == "keep_current_custom_linear_solve"
+    assert summary["adoption_decision"]["hard_dependency"] is False
+
+
+def test_lineax_summary_logic_records_missing_dependency_decision() -> None:
+    mod = _load_module()
+    matrix, rhs = mod.make_nonsymmetric_system(4)
+    results = [
+        mod.run_current_gate(
+            case="synthetic_nonsymmetric",
+            matrix=matrix,
+            rhs=rhs,
+            p0=0.2,
+            tol=1.0e-10,
+            restart=4,
+            maxiter=60,
+        ),
+        mod.run_lineax_gate(
+            case="synthetic_nonsymmetric",
+            matrix=matrix,
+            rhs=rhs,
+            p0=0.2,
+            tol=1.0e-10,
+            restart=4,
+            maxiter=60,
+            lineax_module=None,
+        ),
+    ]
+    summary = mod.summarize_gate_results(results)
+    assert summary["status_counts"]["ok"] == 1
+    assert summary["lineax_evidence"]["skipped_rows"] == 1
+    assert summary["adoption_decision"]["lineax"] == "not_evaluated_missing_optional_dependency"
+    assert summary["adoption_decision"]["hard_dependency"] is False
 
 
 def test_load_tiny_sfincs_fixture_returns_scheme5_operator_and_reference_state() -> None:

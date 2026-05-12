@@ -102,6 +102,10 @@ def test_auto_pas_geom4_fp32_preconditioner_is_narrow_and_env_guarded() -> None:
 
 
 def test_rescue_slack_clamps_negative_values_and_keeps_invalid_default() -> None:
+    assert rhs1_residual_needs_rescue(0.0, 1.0, force=True, env={})
+    assert rhs1_residual_needs_rescue(float("inf"), 1.0, env={})
+    assert rhs1_residual_needs_rescue(1.0, 0.0, env={})
+
     assert not rhs1_residual_needs_rescue(1.006e-12, 1.0e-12, env={})
     assert rhs1_residual_needs_rescue(1.02e-12, 1.0e-12, env={})
     assert rhs1_residual_needs_rescue(
@@ -137,6 +141,13 @@ def test_dkes_budget_defaults_cap_restart_without_overriding_forced_values() -> 
         restart_forced=False,
         maxiter_forced=False,
         restart_cap_env="bad",
+    ) == (80, 600, True, True)
+    assert rhs1_dkes_gmres_budget(
+        restart=20,
+        maxiter=300,
+        restart_forced=False,
+        maxiter_forced=False,
+        restart_cap_env="0",
     ) == (80, 600, True, True)
 
 
@@ -195,3 +206,60 @@ def test_sparse_structural_tol_and_resource_errors_cover_invalid_edge_cases() ->
     exc.__cause__ = MemoryError("resource_exhausted during compile")
     assert is_resource_exhausted_error(exc)
     assert not is_resource_exhausted_error(RuntimeError("shape mismatch"))
+
+
+def test_precond_dtype_explicit_aliases_and_geom4_auto_path() -> None:
+    hints = _geom4_pas_schur_hints(size_hint=20_000)
+
+    assert precond_dtype_name(size_hint=None, hints=hints, backend="cpu", env={}) == "float32"
+    assert precond_dtype_name(
+        size_hint=1,
+        hints=hints,
+        backend="cpu",
+        env={"SFINCS_JAX_PRECOND_DTYPE": "fp32"},
+    ) == "float32"
+    assert precond_dtype_name(
+        size_hint=10_000_000,
+        hints=hints,
+        backend="cpu",
+        env={"SFINCS_JAX_PRECOND_DTYPE": "64"},
+    ) == "float64"
+
+
+def test_auto_pas_geom4_fp32_preconditioner_rejects_non_pas_variants() -> None:
+    assert not auto_pas_geom4_fp32_precond_allowed(
+        size_hint=20_000,
+        hints=_geom4_pas_schur_hints(geom_scheme=5),
+        backend="cpu",
+        env={},
+    )
+    assert not auto_pas_geom4_fp32_precond_allowed(
+        size_hint=20_000,
+        hints=_geom4_pas_schur_hints(rhs_mode=2),
+        backend="cpu",
+        env={},
+    )
+    assert not auto_pas_geom4_fp32_precond_allowed(
+        size_hint=20_000,
+        hints=_geom4_pas_schur_hints(has_pas=False),
+        backend="cpu",
+        env={},
+    )
+    assert not auto_pas_geom4_fp32_precond_allowed(
+        size_hint=20_000,
+        hints=_geom4_pas_schur_hints(has_fp=True),
+        backend="cpu",
+        env={},
+    )
+    assert not auto_pas_geom4_fp32_precond_allowed(
+        size_hint=20_000,
+        hints=_geom4_pas_schur_hints(rhs1_precond_kind="collision"),
+        backend="cpu",
+        env={},
+    )
+    assert not auto_pas_geom4_fp32_precond_allowed(
+        size_hint=20_000,
+        hints=_geom4_pas_schur_hints(size_hint=10),
+        backend="cpu",
+        env={"SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_MIN_SIZE": "100"},
+    )

@@ -414,3 +414,73 @@ def test_qi_seed_runner_records_timeout_without_crashing(tmp_path: Path, monkeyp
     assert result["solver_trace_exists"] is False
     assert result["solver_trace_summary"] is None
     assert "timed out" in (out_root / result["stderr"]).read_text(encoding="utf-8")
+
+
+def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    passing_path = tmp_path / "passing.json"
+    failed_path = tmp_path / "failed.json"
+    passing_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "artifact_kind": "qi_seed_execution_summary",
+                "lane": "qi_seed_robustness",
+                "case_count": 1,
+                "public_cli_default_path": True,
+                "resolution": {"NTHETA": 9, "NZETA": 19, "NX": 4, "NXI": 35},
+                "total_size_estimate": 23942,
+                "execution_summary": {
+                    "backends": ["cpu"],
+                    "max_residual_ratio": 1.0e-6,
+                    "process_failed": 0,
+                    "timed_out": 0,
+                },
+                "gates": {"passed": True},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    failed_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "artifact_kind": "qi_seed_execution_summary",
+                "lane": "qi_seed_robustness",
+                "case_count": 1,
+                "public_cli_default_path": True,
+                "resolution": {"NTHETA": 13, "NZETA": 27, "NX": 4, "NXI": 50},
+                "total_size_estimate": 70202,
+                "execution_summary": {
+                    "backends": [],
+                    "max_residual_ratio": None,
+                    "process_failed": 1,
+                    "timed_out": 1,
+                },
+                "gates": {"passed": False, "failures": [{"reason": "process_failed"}]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    manifest = qi_seed.build_evidence_manifest(
+        artifact_paths=[passing_path, failed_path],
+        source_input=input_path,
+        production_seed_count=5,
+        production_timeout_s=3600.0,
+    )
+
+    current = manifest["current_evidence"]
+    assert current["artifact_count"] == 2
+    assert current["passing_artifact_count"] == 1
+    assert current["nonpassing_artifact_count"] == 1
+    assert current["max_checked_total_size"] == 23942
+    assert current["largest_attempted_total_size"] == 70202
+    assert current["largest_nonpassing_total_size"] == 70202
+    assert current["max_checked_per_axis_resolution_fraction"] == 0.35
+    assert current["bounded_lane_completion_estimate_percent"] == 35.0
+    assert current["completion_estimate_basis"] == "largest passing measured artifact only"
+    assert manifest["release_gate"] == "bounded_proxy"
