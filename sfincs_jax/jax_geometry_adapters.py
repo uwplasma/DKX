@@ -464,9 +464,140 @@ def boozer_spectrum_geometry_proxy_objective(
     return jnp.mean(centered**2) + 0.05 * (theta_slope + zeta_slope)
 
 
+def boozer_spectrum_proxy_transport_objective(
+    bmnc_b: Any,
+    ixm_b: Any,
+    ixn_b: Any,
+    *,
+    theta: Any,
+    zeta: Any,
+    thermodynamic_forces: Any | None = None,
+    normalize: bool = True,
+) -> jnp.ndarray:
+    r"""Return a differentiable transport-like proxy from a Boozer spectrum.
+
+    This is not a kinetic SFINCS solve.  It maps normalized field-strength
+    variation and angular roughness into a tiny symmetric proxy transport matrix,
+    then contracts that matrix with thermodynamic forces.  The objective is useful
+    as a fast JAX differentiability gate for optional VMEC/Boozer handoffs because
+    it exercises a spectrum-to-transport-objective shape without requiring
+    ``vmec_jax`` or ``booz_xform_jax`` at import or test time.
+    """
+    forces = (
+        jnp.asarray([1.0, -0.35], dtype=jnp.result_type(jnp.asarray(bmnc_b), jnp.float64))
+        if thermodynamic_forces is None
+        else jnp.asarray(thermodynamic_forces)
+    )
+    if forces.shape != (2,):
+        raise ValueError(f"thermodynamic_forces must have shape (2,), got {forces.shape}")
+
+    bhat = boozer_bhat_from_spectrum(
+        theta,
+        zeta,
+        bmnc_b=bmnc_b,
+        ixm_b=ixm_b,
+        ixn_b=ixn_b,
+        normalize=normalize,
+    )
+    centered = bhat - jnp.mean(bhat)
+    theta_delta = jnp.roll(bhat, -1, axis=0) - bhat
+    zeta_delta = jnp.roll(bhat, -1, axis=1) - bhat
+    variance = jnp.mean(centered**2)
+    theta_roughness = jnp.mean(theta_delta**2)
+    zeta_roughness = jnp.mean(zeta_delta**2)
+    cross_coupling = jnp.mean(centered * (theta_delta - zeta_delta))
+
+    transport_proxy = jnp.asarray(
+        [
+            [variance + 0.10 * theta_roughness, 0.15 * cross_coupling],
+            [0.15 * cross_coupling, 0.65 * variance + 0.10 * zeta_roughness],
+        ],
+        dtype=bhat.dtype,
+    )
+    return forces @ transport_proxy @ forces
+
+
+def boozer_spectrum_proxy_transport_gradient_gate(
+    *,
+    n_theta: int = 16,
+    n_zeta: int = 12,
+    finite_difference_step: float = 1.0e-5,
+    rtol: float = 5.0e-4,
+    atol: float = 1.0e-8,
+) -> dict[str, Any]:
+    """Run a no-optional-dependency gradient gate for the proxy objective."""
+    import jax
+
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, int(n_theta), endpoint=False, dtype=jnp.float64)
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / 5.0, int(n_zeta), endpoint=False, dtype=jnp.float64)
+    coeff0 = jnp.asarray([1.0, 0.045, -0.021, 0.012, 0.006, -0.004], dtype=jnp.float64)
+    ixm_b = jnp.asarray([0, 1, 1, 2, 3, 4], dtype=jnp.int32)
+    ixn_b = jnp.asarray([0, 0, 1, -1, 2, -2], dtype=jnp.int32)
+    forces = jnp.asarray([1.0, -0.35], dtype=jnp.float64)
+    direction = jnp.asarray([0.0, 0.40, -0.30, 0.20, -0.10, 0.05], dtype=jnp.float64)
+    eps = float(finite_difference_step)
+
+    def objective(coeff: jnp.ndarray) -> jnp.ndarray:
+        return boozer_spectrum_proxy_transport_objective(
+            coeff,
+            ixm_b,
+            ixn_b,
+            theta=theta,
+            zeta=zeta,
+            thermodynamic_forces=forces,
+        )
+
+    value, gradient = jax.value_and_grad(objective)(coeff0)
+    basis = jnp.eye(int(coeff0.size), dtype=coeff0.dtype)
+    finite_difference_gradient = jax.vmap(
+        lambda basis_vector: (
+            objective(coeff0 + eps * basis_vector) - objective(coeff0 - eps * basis_vector)
+        )
+        / (2.0 * eps)
+    )(basis)
+    _value, jvp = jax.jvp(objective, (coeff0,), (direction,))
+    directional_from_gradient = jnp.vdot(gradient, direction)
+
+    max_abs_error = float(jnp.max(jnp.abs(gradient - finite_difference_gradient)))
+    gradient_scale = float(jnp.max(jnp.abs(finite_difference_gradient)))
+    tolerance = float(atol) + float(rtol) * gradient_scale
+    jvp_dot_abs_error = abs(float(jvp) - float(directional_from_gradient))
+    jvp_tolerance = float(atol) + float(rtol) * max(abs(float(jvp)), 1.0e-300)
+    gradient_norm = float(jnp.linalg.norm(gradient))
+    objective_value = float(value)
+    passed = (
+        bool(jnp.isfinite(value))
+        and bool(jnp.all(jnp.isfinite(gradient)))
+        and gradient_norm > 1.0e-8
+        and max_abs_error <= tolerance
+        and jvp_dot_abs_error <= jvp_tolerance
+    )
+
+    return {
+        "status": "pass" if passed else "fail",
+        "optional_dependencies_required": False,
+        "claim": "sfincs_jax_boozer_proxy_transport_objective_autodiff_only",
+        "not_claimed": "vmec_jax, booz_xform_jax, or kinetic SFINCS transport solve execution",
+        "objective": objective_value,
+        "gradient_norm": gradient_norm,
+        "max_gradient_abs_error": max_abs_error,
+        "gradient_tolerance": tolerance,
+        "jvp_dot_abs_error": jvp_dot_abs_error,
+        "jvp_tolerance": jvp_tolerance,
+        "finite_difference_step": eps,
+        "rtol": float(rtol),
+        "atol": float(atol),
+        "grid_shape": {"n_theta": int(theta.size), "n_zeta": int(zeta.size)},
+        "spectrum_modes": int(coeff0.size),
+        "transport_forces": [float(value) for value in forces],
+    }
+
+
 __all__ = [
     "boozer_bhat_from_spectrum",
     "boozer_spectrum_geometry_proxy_objective",
+    "boozer_spectrum_proxy_transport_gradient_gate",
+    "boozer_spectrum_proxy_transport_objective",
     "geometry_proxy_workflow_contract",
     "geometry_proxy_workflow_summary",
     "optional_jax_geometry_backend_report",

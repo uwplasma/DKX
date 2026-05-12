@@ -81,3 +81,5 @@ def test_benchmark_artifacts_and_references_are_release_scoped() -> None:
         assert "reference-runtime-window" in text
         assert "production-scale subset" not in text
         assert "plotted production-scale case" not in text
+        assert "audited reduced example suite" not in text
+        assert "production-resolution benchmark tier is now being used for public runtime/memory claims" not in text

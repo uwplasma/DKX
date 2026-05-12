@@ -3,16 +3,16 @@
 This example is deliberately small enough to run as a documentation and CI-adjacent
 gate.  It uses vmec_jax provenance for a VMEC ``wout`` object, transforms one flux
 surface with booz_xform_jax, evaluates a differentiable sfincs_jax Boozer-spectrum
-geometry proxy, checks the gradient against a centered finite difference, and takes a
-few scalar optimization steps.
+proxy transport objective, checks the gradient against a centered finite
+difference, and takes a few scalar optimization steps.
 
 The optimized scalar is a bounded geometry/transport proxy, not a full kinetic solve.
 It is the public handoff point for fully JAX-native geometry workflows while the full
 VMEC-boundary-to-transport-solve objective remains a larger research lane.
 
 Only the in-memory spectral scaling, ``booz_xform_jax`` call, and
-``sfincs_jax`` Boozer-spectrum proxy objective are differentiated here.  VMEC
-file reads, fixed-boundary setup, and the SFINCS kinetic transport solve are
+``sfincs_jax`` Boozer-spectrum proxy transport objective are differentiated here.
+VMEC file reads, fixed-boundary setup, and the SFINCS kinetic transport solve are
 outside this example's differentiated graph.  The ``--check-backends`` and
 ``--summary-json`` modes expose the same machine-readable workflow contract used
 by tests and documentation: optional backend checks are shallow, default CI does
@@ -43,7 +43,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
-    boozer_spectrum_geometry_proxy_objective,
+    boozer_spectrum_proxy_transport_gradient_gate,
+    boozer_spectrum_proxy_transport_objective,
     geometry_proxy_workflow_summary,
     optional_jax_geometry_backend_report,
 )
@@ -96,7 +97,7 @@ def _print_backend_status() -> None:
         "when vmec_jax is installed"
     )
     print("Differentiability boundary:")
-    print("  differentiated: scaled spectral arrays -> booz_xform_jax -> sfincs_jax proxy objective")
+    print("  differentiated: scaled spectral arrays -> booz_xform_jax -> sfincs_jax proxy transport objective")
     print(
         "  file-backed/setup only: VMEC file I/O, vmec_jax example solves, "
         "and sfincs_jax VMEC file adapters"
@@ -112,8 +113,8 @@ def _print_backend_status() -> None:
     print(
         "  backend-readiness gate: "
         f"{readiness['status']} "
-        f"(abs_grad_error={readiness['absolute_error']:.3e}, "
-        f"tol={readiness['tolerance']:.3e}, optional_deps=false)"
+        f"(max_grad_error={readiness['max_gradient_abs_error']:.3e}, "
+        f"tol={readiness['gradient_tolerance']:.3e}, optional_deps=false)"
     )
     print(f"  numerical gradient gate: {summary['numerical_gradient_gate']['status']}")
     print(f"  kinetic transport gradients: {summary['claims']['not_claimed']}")
@@ -129,47 +130,7 @@ def _write_summary_json(path: Path, summary: dict[str, object]) -> None:
 
 def _synthetic_backend_readiness_gate() -> dict[str, object]:
     """Check the local sfincs_jax Boozer-proxy autodiff path without optionals."""
-    theta = jnp.linspace(0.0, 2.0 * jnp.pi, 16, endpoint=False, dtype=jnp.float64)
-    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / 5.0, 12, endpoint=False, dtype=jnp.float64)
-    base_bmnc = jnp.asarray([1.0, 0.045, -0.021, 0.012, 0.006], dtype=jnp.float64)
-    ixm_b = jnp.asarray([0, 1, 1, 2, 3], dtype=jnp.int32)
-    ixn_b = jnp.asarray([0, 0, 1, -1, 2], dtype=jnp.int32)
-    non_axis = (ixm_b != 0) | (ixn_b != 0)
-    scale0 = jnp.asarray(1.0, dtype=jnp.float64)
-    fd_step = 1.0e-5
-    rtol = 5.0e-4
-    atol = 1.0e-8
-
-    def objective(scale: jnp.ndarray) -> jnp.ndarray:
-        bmnc = jnp.where(non_axis, base_bmnc * scale, base_bmnc)
-        return boozer_spectrum_geometry_proxy_objective(
-            bmnc,
-            ixm_b,
-            ixn_b,
-            theta=theta,
-            zeta=zeta,
-        )
-
-    value, grad = jax.value_and_grad(objective)(scale0)
-    finite_difference = (objective(scale0 + fd_step) - objective(scale0 - fd_step)) / (2.0 * fd_step)
-    abs_error = abs(float(grad) - float(finite_difference))
-    tolerance = atol + rtol * abs(float(finite_difference))
-    return {
-        "status": "pass" if abs_error <= tolerance else "fail",
-        "optional_dependencies_required": False,
-        "claim": "sfincs_jax_boozer_proxy_backend_readiness_only",
-        "not_claimed": "vmec_jax or booz_xform_jax transform execution",
-        "objective": float(value),
-        "autodiff_gradient": float(grad),
-        "finite_difference_gradient": float(finite_difference),
-        "absolute_error": abs_error,
-        "tolerance": tolerance,
-        "finite_difference_step": fd_step,
-        "rtol": rtol,
-        "atol": atol,
-        "grid_shape": {"n_theta": int(theta.size), "n_zeta": int(zeta.size)},
-        "spectrum_modes": int(base_bmnc.size),
-    }
+    return boozer_spectrum_proxy_transport_gradient_gate()
 
 
 def _load_wout_from_vmec_case(args: argparse.Namespace):
@@ -331,7 +292,7 @@ def main() -> int:
             asym=bool(bx.asym),
             surface_indices=[surface_index],
         )
-        return boozer_spectrum_geometry_proxy_objective(
+        return boozer_spectrum_proxy_transport_objective(
             out["bmnc_b"][0],
             out["ixm_b"],
             out["ixn_b"],
@@ -361,12 +322,12 @@ def main() -> int:
     print(f"  VMEC provenance: {provenance}")
     print(f"  Boozer surface: requested s={args.surface:.3f}, selected s={selected_surface:.6f}")
     print(f"  Boozer resolution: mboz={bx.mboz}, nboz={bx.nboz}")
-    print(f"  sfincs_jax proxy objective(scale={float(scale0):.6g}) = {float(value):.12e}")
+    print(f"  sfincs_jax proxy transport objective(scale={float(scale0):.6g}) = {float(value):.12e}")
     print(f"  d objective / d scale (JAX) = {float(gradient):.12e}")
     print(f"  d objective / d scale (centered FD) = {float(finite_difference):.12e}")
     print(f"  abs gradient error = {gradient_error:.3e}")
     print(f"  numerical gradient gate: {summary['numerical_gradient_gate']['status']}")
-    print("  differentiated graph: scaled spectral arrays -> booz_xform_jax -> sfincs_jax proxy objective")
+    print("  differentiated graph: scaled spectral arrays -> booz_xform_jax -> sfincs_jax proxy transport objective")
     print(
         "  outside graph: file I/O, VMEC setup, sfincs_jax VMEC file adapters, "
         "and kinetic transport solve"

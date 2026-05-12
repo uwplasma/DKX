@@ -6,8 +6,9 @@ This page is the concrete workflow contract for optional
 geometry package a hard dependency. Default CI must still pass when both packages
 are absent.
 
-The current public lane is a Boozer-spectrum geometry-proxy gradient gate. It is
-not a claim of full VMEC-boundary-to-SFINCS kinetic transport gradients.
+The current public lane is a Boozer-spectrum proxy transport-objective gradient
+gate. It is not a claim of full VMEC-boundary-to-SFINCS kinetic transport
+gradients.
 
 Preflight
 ---------
@@ -30,9 +31,10 @@ The existing end-to-end example has the same skip-safe backend contract:
    python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --check-backends --json
 
 In ``--check-backends`` mode, the JSON payload includes
-``backend_readiness_gate``.  That gate is intentionally synthetic: it scales a
-small Boozer spectrum, evaluates the ``sfincs_jax`` geometry proxy, and checks
-the JAX gradient against a centered finite difference.  It is a local
+``backend_readiness_gate``.  That gate is intentionally synthetic: it evaluates a
+small Boozer spectrum through a ``sfincs_jax`` proxy transport objective, checks
+the full spectral JAX gradient against centered finite differences, and checks a
+JVP against the gradient dot product.  It is a local
 backend-readiness/sensitivity check for the downstream differentiable objective,
 not evidence that ``vmec_jax`` or ``booz_xform_jax`` executed.
 
@@ -100,7 +102,7 @@ Differentiated in this lane:
 
 - scaled VMEC-like magnetic spectral arrays,
 - the ``booz_xform_jax`` transform,
-- ``sfincs_jax.jax_geometry_adapters.boozer_spectrum_geometry_proxy_objective``.
+- ``sfincs_jax.jax_geometry_adapters.boozer_spectrum_proxy_transport_objective``.
 
 Setup or provenance only, not differentiated:
 

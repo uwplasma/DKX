@@ -271,6 +271,19 @@ def test_total_time_and_residual_ratio_ignore_nonfinite_measurements() -> None:
     assert candidate.residual_ratio is None
 
 
+def test_total_time_and_residual_ratio_return_none_without_finite_inputs() -> None:
+    candidate = SolverCandidateMetrics(
+        name="empty_metrics",
+        residual_norm=1.0e-12,
+        target=0.0,
+        setup_s=None,
+        solve_s=float("nan"),
+    )
+
+    assert candidate.total_s is None
+    assert candidate.residual_ratio is None
+
+
 def test_gate_reports_nonfinite_and_parity_failures_before_promotion() -> None:
     candidate = SolverCandidateMetrics(
         name="bad_candidate",
@@ -310,6 +323,32 @@ def test_failed_baseline_can_require_runtime_and_memory_measurements() -> None:
     assert "missing_memory" in gate.reasons
 
 
+def test_clean_baseline_with_zero_runtime_does_not_invent_speedup() -> None:
+    baseline = SolverCandidateMetrics(
+        name="baseline",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+        setup_s=0.0,
+        solve_s=0.0,
+        peak_rss_mb=100.0,
+    )
+    candidate = SolverCandidateMetrics(
+        name="candidate",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+        setup_s=0.0,
+        solve_s=0.0,
+        peak_rss_mb=100.0,
+    )
+
+    gate = solver_candidate_gate(candidate, baseline=baseline)
+
+    assert not gate.accepted
+    assert gate.runtime_ratio is None
+    assert gate.memory_ratio == pytest.approx(1.0)
+    assert "no_measured_promotion_win" in gate.reasons
+
+
 def test_memory_gate_falls_back_to_compiled_temp_before_peak_rss() -> None:
     baseline = SolverCandidateMetrics(
         name="baseline",
@@ -335,6 +374,32 @@ def test_memory_gate_falls_back_to_compiled_temp_before_peak_rss() -> None:
     assert gate.accepted
     assert gate.memory_metric == "compiled_temp_mb"
     assert gate.memory_ratio == pytest.approx(2.0 / 3.0)
+
+
+def test_memory_gate_reports_no_paired_metric_when_measurements_do_not_overlap() -> None:
+    baseline = SolverCandidateMetrics(
+        name="baseline",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+        setup_s=1.0,
+        solve_s=1.0,
+        device_peak_mb=400.0,
+    )
+    candidate = SolverCandidateMetrics(
+        name="candidate",
+        residual_norm=1.0e-12,
+        target=1.0e-9,
+        setup_s=1.0,
+        solve_s=1.0,
+        peak_rss_mb=300.0,
+    )
+
+    gate = solver_candidate_gate(candidate, baseline=baseline)
+
+    assert not gate.accepted
+    assert gate.memory_metric is None
+    assert gate.memory_ratio is None
+    assert "no_measured_promotion_win" in gate.reasons
 
 
 def test_choose_solver_candidate_tie_breaks_by_memory_then_name() -> None:

@@ -33,6 +33,11 @@ MAX_DEFAULT_RUNTIME_S = 600.0
 DEFAULT_MAX_RESIDUAL_NORM = 1.0e-3
 DEFAULT_MIN_PROMOTION_SPEEDUP = 1.05
 DEFAULT_MIN_PROMOTION_MEMORY_REDUCTION = 1.05
+GUARDED_PAS_TZ_MARKERS = (
+    "PAS-TZ structured fallback guarded out",
+    "PAS-TZ guarded",
+    "guarded PAS-TZ fallback",
+)
 BACKEND_ALIASES = {
     "cuda": "gpu",
     "gpu": "gpu",
@@ -330,6 +335,37 @@ def _variant_provenance(variant: str, default_solve_method: str) -> dict[str, An
     }
 
 
+def _guarded_pas_tz_evidence_from_messages(messages: list[str]) -> list[str]:
+    """Return compact messages proving the forced guarded PAS-TZ path ran."""
+    evidence: list[str] = []
+    for message in messages:
+        message_s = str(message)
+        if any(marker in message_s for marker in GUARDED_PAS_TZ_MARKERS):
+            evidence.append(message_s)
+    return evidence
+
+
+def _guarded_pas_tz_evidence(row: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Return whether a benchmark row contains guarded PAS-TZ path evidence."""
+    if row.get("guarded_pas_tz_seen") is True:
+        tail = row.get("guarded_pas_tz_evidence_tail", [])
+        if isinstance(tail, list):
+            return True, [str(item) for item in tail]
+        return True, ["guarded_pas_tz_seen"]
+
+    messages: list[str] = []
+    row_messages = row.get("messages_tail", [])
+    if isinstance(row_messages, list):
+        messages.extend(str(message) for message in row_messages)
+    for key in ("stdout_tail", "stderr_tail"):
+        tail = row.get(key)
+        if tail:
+            messages.extend(str(tail).splitlines())
+
+    evidence = _guarded_pas_tz_evidence_from_messages(messages)
+    return bool(evidence), evidence[-5:]
+
+
 def _phase_record(name: str, start_s: float, end_s: float, *, status: str = "ok") -> dict[str, Any]:
     """Build a compact phase timing record for benchmark JSON."""
     return {
@@ -374,6 +410,7 @@ def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
     usage = resource.getrusage(resource.RUSAGE_SELF)
     max_rss_mb = _resource_maxrss_to_mb(float(usage.ru_maxrss))
     metadata = dict(result.metadata or {})
+    guarded_evidence = _guarded_pas_tz_evidence_from_messages(messages)
     observed_krylov = (
         _last_ksp_solver(messages)
         or metadata.get("krylov_method")
@@ -389,6 +426,9 @@ def _child_payload(args: argparse.Namespace) -> dict[str, Any]:
         "residual_norm": float(result.residual_norm),
         "rhs_norm": rhs_norm,
         "target_residual_norm": target_residual_norm,
+        "guarded_pas_tz_seen": bool(guarded_evidence),
+        "guarded_pas_tz_evidence_count": len(guarded_evidence),
+        "guarded_pas_tz_evidence_tail": guarded_evidence[-5:],
         "phase_metadata": phases,
         "tail_metadata": {
             "messages_tail_count": len(messages[-40:]),
@@ -576,6 +616,23 @@ def result_gates(args: argparse.Namespace, row: dict[str, Any], variant: str) ->
     else:
         solver_gate = _gate("pass", "solver-path-stable", expected_solver=expected_solver, observed_solver=observed_solver)
 
+    guarded_seen, guarded_evidence = _guarded_pas_tz_evidence(row)
+    if status != "ok":
+        guarded_pas_tz_gate = _gate("fail", "non-ok-status", status=status)
+    elif guarded_seen:
+        guarded_pas_tz_gate = _gate(
+            "pass",
+            "guarded-pas-tz-evidence-recorded",
+            evidence_tail=guarded_evidence[-5:],
+        )
+    else:
+        guarded_pas_tz_gate = _gate(
+            "fail",
+            "missing-guarded-pas-tz-evidence",
+            variant=str(variant),
+            required_markers=list(GUARDED_PAS_TZ_MARKERS),
+        )
+
     if not bool(getattr(args, "require_default_promotion_gate", False)):
         default_promotion_gate = _gate("pass", "default-promotion-gate-not-requested")
     elif status != "ok":
@@ -669,6 +726,7 @@ def result_gates(args: argparse.Namespace, row: dict[str, Any], variant: str) ->
         "memory": memory_gate,
         "backend": backend_gate,
         "solver_path": solver_gate,
+        "guarded_pas_tz": guarded_pas_tz_gate,
         "default_promotion": default_promotion_gate,
         "variant": _gate("pass", "variant-recorded", variant=str(variant)),
     }
@@ -803,6 +861,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "max_residual_norm": float(getattr(args, "max_residual_norm", DEFAULT_MAX_RESIDUAL_NORM)),
             "expected_backend": str(getattr(args, "expected_backend", "auto")),
             "allow_solver_churn": bool(getattr(args, "allow_solver_churn", False)),
+            "guarded_pas_tz_required": True,
+            "guarded_pas_tz_markers": list(GUARDED_PAS_TZ_MARKERS),
             "default_promotion_required": bool(getattr(args, "require_default_promotion_gate", False)),
             "baseline_elapsed_s": _optional_float(getattr(args, "baseline_elapsed_s", None)),
             "baseline_rss_mb": _optional_float(getattr(args, "baseline_rss_mb", None)),
@@ -839,7 +899,7 @@ def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(gates, dict):
             promotion_gate = gates.get("default_promotion", {})
             if isinstance(promotion_gate, dict) and promotion_gate.get("status") == "pass":
-                if promotion_gate.get("reason") == "promotion-win-recorded":
+                if gate == "pass" and promotion_gate.get("reason") == "promotion-win-recorded":
                     promotion_eligible_variants.append(str(row.get("variant", "unknown")))
     return {
         "result_count": len(results),

@@ -1524,6 +1524,11 @@ Controls:
   residual decreases. This is stronger than the scalar post-minres cleanup but
   remains a diagnostic path until a checked scale-0.50 QI artifact closes the
   residual gate.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=lgmres`` remains a diagnostic-only
+  Krylov-method toggle. On the scale-0.50 QI blocker it stalled at a slightly
+  worse residual than GMRES, fell back to GMRES, doubled the matrix-vector count,
+  and ended at the same residual floor. Do not use this as a default memory or
+  robustness fix without a new checked artifact.
 
 Large geometry-rich PAS closeout:
 
@@ -1703,6 +1708,11 @@ with hard timeouts.
 The companion ``scripts/benchmark_rhs1_pas_matrixfree.py`` production-solve
 planner can pass the same default-promotion baseline gate into those subprocess
 runs via the ``--production-solve-require-default-promotion-gate`` controls.
+The fallback benchmark also requires provenance that the guarded PAS-TZ fallback
+path actually ran. Rows must contain a guarded PAS-TZ message such as the
+structured-fallback guard, guarded correction, or guarded retry-skip trace before
+they can pass all gates or appear as promotion-eligible variants. This blocks
+false-positive runtime/residual wins from unrelated dispatch paths.
 The checked smoke artifact
 ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
 records the intended guard behavior on the geometryScheme=4 PAS deck. The
