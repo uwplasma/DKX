@@ -39,6 +39,7 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_auto_cpu_blocker.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_xblock_lu_right_cpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
@@ -335,7 +336,11 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
         "converged": payload.get("converged"),
         "accepted_converged": solver_metadata.get("accepted_converged"),
         "acceptance_criterion": solver_metadata.get("acceptance_criterion"),
+        "precondition_side": solver_metadata.get("precondition_side"),
+        "default_right_preconditioned": solver_metadata.get("default_right_preconditioned"),
+        "gmres_restart": solver_metadata.get("gmres_restart"),
         "iterations": solver_metadata.get("iterations"),
+        "matvecs": solver_metadata.get("matvecs"),
         "solver_kind": solver_metadata.get("solver_kind"),
     }
 
@@ -551,6 +556,11 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                 "residual_norm": trace_summary.get("residual_norm"),
                 "residual_target": trace_summary.get("residual_target"),
                 "residual_ratio": trace_summary.get("residual_ratio"),
+                "precondition_side": trace_summary.get("precondition_side"),
+                "default_right_preconditioned": trace_summary.get("default_right_preconditioned"),
+                "gmres_restart": trace_summary.get("gmres_restart"),
+                "iterations": trace_summary.get("iterations"),
+                "matvecs": trace_summary.get("matvecs"),
                 "resolution": case.get("resolution") if isinstance(case, dict) else None,
                 "progress_events": result.get("progress_events"),
                 "stderr_tail": result.get("stderr_tail"),

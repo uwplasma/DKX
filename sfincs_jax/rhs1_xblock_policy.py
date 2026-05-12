@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE = 45_000
+
 
 @dataclass(frozen=True)
 class RHS1XBlockSparsePCPolicy:
@@ -17,30 +19,62 @@ class RHS1XBlockSparsePCPolicy:
     restart_capped: bool
 
 
+def _full_fp_3d_right_pc_max_active_size(env_value: str) -> int:
+    """Return the full-FP 3D active-size limit for default right preconditioning."""
+    raw = str(env_value).strip()
+    if not raw:
+        return DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE
+
+
+def _active_size_allows_full_fp_3d_right_pc(active_size: int | None, max_active_size: int) -> bool:
+    """Gate right-PC defaults to the measured full-FP 3D window."""
+    if active_size is None:
+        return True
+    try:
+        return int(active_size) <= int(max_active_size)
+    except (TypeError, ValueError):
+        return True
+
+
 def rhs1_xblock_precondition_side(
     *,
     env_value: str,
     tokamak_fp_er_pc: bool,
     full_fp_3d_pc: bool = False,
+    active_size: int | None = None,
+    full_fp_3d_right_pc_max_env_value: str = "",
     use_dkes: bool,
     include_xdot: bool,
     include_electric_field_xi: bool,
 ) -> tuple[str, bool]:
     """Return the x-block sparse-PC side and whether right-PC was auto-selected.
 
-    The measured production-floor GPU tokamak full-FP Er full-trajectory row is
-    Krylov dominated and benefits from right preconditioning. DKES-trajectory
-    Er rows do not, so the default is deliberately narrow and remains
-    overrideable through ``SFINCS_JAX_GMRES_PRECONDITION_SIDE``.
+    The measured production-floor GPU tokamak full-FP Er full-trajectory row
+    and the bounded scale-0.50 3D full-FP QI lane are Krylov dominated and
+    benefit from right preconditioning. Larger 3D full-FP QI cases can enter a
+    seed-dependent right-PC slow mode, so the 3D default is capped by active
+    system size and remains overrideable through
+    ``SFINCS_JAX_GMRES_PRECONDITION_SIDE``.
     """
     env_side = str(env_value).strip().lower()
     if env_side in {"left", "right", "none"}:
         return env_side, False
     full_trajectory = bool(include_xdot) or bool(include_electric_field_xi)
+    base_path = bool((not bool(use_dkes)) and full_trajectory)
+    full_fp_3d_right_pc_max = _full_fp_3d_right_pc_max_active_size(full_fp_3d_right_pc_max_env_value)
     default_right = bool(
-        (tokamak_fp_er_pc or full_fp_3d_pc)
-        and (not bool(use_dkes))
-        and full_trajectory
+        base_path
+        and (
+            bool(tokamak_fp_er_pc)
+            or (
+                bool(full_fp_3d_pc)
+                and _active_size_allows_full_fp_3d_right_pc(active_size, full_fp_3d_right_pc_max)
+            )
+        )
     )
     return ("right" if default_right else "left"), default_right
 
@@ -105,6 +139,8 @@ def resolve_rhs1_xblock_sparse_pc_policy(
     restart_env_value: str,
     tokamak_fp_er_pc: bool,
     full_fp_3d_pc: bool = False,
+    active_size: int | None = None,
+    full_fp_3d_right_pc_max_env_value: str = "",
     use_dkes: bool,
     include_xdot: bool,
     include_electric_field_xi: bool,
@@ -114,6 +150,8 @@ def resolve_rhs1_xblock_sparse_pc_policy(
         env_value=precondition_side_env_value,
         tokamak_fp_er_pc=tokamak_fp_er_pc,
         full_fp_3d_pc=full_fp_3d_pc,
+        active_size=active_size,
+        full_fp_3d_right_pc_max_env_value=full_fp_3d_right_pc_max_env_value,
         use_dkes=use_dkes,
         include_xdot=include_xdot,
         include_electric_field_xi=include_electric_field_xi,
@@ -137,6 +175,7 @@ def resolve_rhs1_xblock_sparse_pc_policy(
 
 
 __all__ = [
+    "DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE",
     "RHS1XBlockSparsePCPolicy",
     "resolve_rhs1_xblock_sparse_pc_policy",
     "rhs1_xblock_gmres_restart",

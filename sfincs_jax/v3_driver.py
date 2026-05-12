@@ -347,6 +347,8 @@ def _rhs1_xblock_precondition_side(
     env_value: str,
     tokamak_fp_er_pc: bool,
     full_fp_3d_pc: bool = False,
+    active_size: int | None = None,
+    full_fp_3d_right_pc_max_env_value: str = "",
     use_dkes: bool,
     include_xdot: bool,
     include_electric_field_xi: bool,
@@ -356,6 +358,8 @@ def _rhs1_xblock_precondition_side(
         env_value=env_value,
         tokamak_fp_er_pc=tokamak_fp_er_pc,
         full_fp_3d_pc=full_fp_3d_pc,
+        active_size=active_size,
+        full_fp_3d_right_pc_max_env_value=full_fp_3d_right_pc_max_env_value,
         use_dkes=use_dkes,
         include_xdot=include_xdot,
         include_electric_field_xi=include_electric_field_xi,
@@ -12206,6 +12210,9 @@ def solve_v3_full_system_linear_gmres(
             setup_s = sparse_timer.elapsed_s()
 
             side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
+            full_fp_3d_right_pc_max_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX", ""
+            ).strip()
             xblock_krylov_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "").strip().lower()
             full_fp_3d_pc = bool(
                 op.fblock.fp is not None
@@ -12219,6 +12226,8 @@ def solve_v3_full_system_linear_gmres(
                 restart_env_value=pc_restart_env,
                 tokamak_fp_er_pc=bool(tokamak_fp_er_pc),
                 full_fp_3d_pc=bool(full_fp_3d_pc),
+                active_size=int(active_size),
+                full_fp_3d_right_pc_max_env_value=full_fp_3d_right_pc_max_env,
                 use_dkes=bool(use_dkes),
                 include_xdot=bool(include_xdot_sparse_pc),
                 include_electric_field_xi=bool(include_electric_field_xi_sparse_pc),

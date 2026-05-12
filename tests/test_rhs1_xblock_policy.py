@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sfincs_jax.rhs1_xblock_policy import (
+    DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE,
     resolve_rhs1_xblock_sparse_pc_policy,
     rhs1_xblock_gmres_restart,
     rhs1_xblock_krylov_method,
@@ -57,6 +58,70 @@ def test_precondition_side_defaults_right_only_for_measured_full_fp_er_path() ->
     for kwargs in churn_guards:
         side, auto_right = rhs1_xblock_precondition_side(env_value="", **kwargs)
         assert (side, auto_right) == ("left", False)
+
+
+def test_precondition_side_uses_size_window_for_full_fp_3d_path() -> None:
+    side, auto_right = rhs1_xblock_precondition_side(
+        env_value="",
+        tokamak_fp_er_pc=False,
+        full_fp_3d_pc=True,
+        active_size=DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE,
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=False,
+    )
+    assert (side, auto_right) == ("right", True)
+
+    side, auto_right = rhs1_xblock_precondition_side(
+        env_value="",
+        tokamak_fp_er_pc=False,
+        full_fp_3d_pc=True,
+        active_size=DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE + 1,
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=False,
+    )
+    assert (side, auto_right) == ("left", False)
+
+
+def test_precondition_side_allows_full_fp_3d_size_window_override() -> None:
+    side, auto_right = rhs1_xblock_precondition_side(
+        env_value="",
+        tokamak_fp_er_pc=False,
+        full_fp_3d_pc=True,
+        active_size=52_637,
+        full_fp_3d_right_pc_max_env_value="70000",
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=False,
+    )
+    assert (side, auto_right) == ("right", True)
+
+    side, auto_right = rhs1_xblock_precondition_side(
+        env_value="",
+        tokamak_fp_er_pc=False,
+        full_fp_3d_pc=True,
+        active_size=39_314,
+        full_fp_3d_right_pc_max_env_value="not-an-int",
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=False,
+    )
+    assert (side, auto_right) == ("right", True)
+
+
+def test_precondition_side_keeps_tokamak_er_right_pc_independent_of_size_window() -> None:
+    side, auto_right = rhs1_xblock_precondition_side(
+        env_value="",
+        tokamak_fp_er_pc=True,
+        full_fp_3d_pc=False,
+        active_size=1_000_000,
+        full_fp_3d_right_pc_max_env_value="0",
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=True,
+    )
+    assert (side, auto_right) == ("right", True)
 
 
 def test_invalid_precondition_side_falls_back_to_default_policy() -> None:
@@ -156,6 +221,7 @@ def test_resolve_xblock_sparse_pc_policy_combines_driver_decisions() -> None:
         requested_restart=80,
         restart_env_value="",
         tokamak_fp_er_pc=True,
+        active_size=1_000_000,
         use_dkes=False,
         include_xdot=True,
         include_electric_field_xi=False,

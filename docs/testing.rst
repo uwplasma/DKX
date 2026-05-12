@@ -708,11 +708,22 @@ of ``30000``. It writes output and solver trace in ``~21.5 s`` with active size
 scale ``0.55``; it is still bounded evidence, not a production QI claim, because
 the matching GPU and wider multi-seed ladders have not been checked in.
 
+The hard-seed follow-up
+``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json``
+checks the same ``15 x 29 x 55 x 4`` bounded scale on seed ``3``. That seed was
+the right-preconditioned slow-mode outlier in the five-seed CPU/GPU probes, so
+the default policy now keeps right-PC only below the measured 3D full-FP
+active-size window and switches this larger 3D full-FP case to left-PC. The
+artifact records ``precondition_side=left``, zero process failures, output and
+solver trace written, residual ratio ``2.98e-3``, and elapsed time ``~47 s``.
+This is a solver-policy robustness gate; it does not by itself promote the
+production-resolution QI target.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
 passing bounded grid ``95702``, the largest attempted bounded grid ``95702``,
-eleven passing artifacts and three non-passing blocker artifacts, a ``50%``
+twelve passing artifacts and three non-passing blocker artifacts, a ``50%``
 per-axis lane-completion estimate based only on passing artifacts, and
 ``90.62%`` of production total size still uncovered. The production acceptance
 gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
