@@ -1508,6 +1508,14 @@ Controls:
   vector as the initial guess only if the true residual is lower than the RHS
   norm. The scale-0.50 QI blocker probe rejected this seed and therefore this
   knob is intentionally not a default performance path.
+- ``SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC`` (default: ``auto``). Controls
+  the bounded public-auto promotion for non-differentiable 3D full-FP
+  ``RHSMode=1`` output/CLI solves. The default gate is restricted to one-species,
+  no-``Phi1``, no-PAS, ``constraintScheme=1`` systems with
+  ``Nxi >= 50`` and active size between ``30000`` and ``45000``. The matching
+  ``*_MIN``, ``*_MAX``, and ``*_MIN_NXI`` environment variables can widen or
+  disable the gate for controlled profiling, but larger promotion requires fresh
+  CPU/GPU seed-ladder evidence.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`` (default: ``20000`` for
   non-differentiable full-FP host x-block factors; ``2000`` otherwise). Medium
   full-FP :math:`(x,\theta,\zeta,L)` blocks now use exact SuperLU instead of ILU
@@ -1517,7 +1525,16 @@ Controls:
   the ``13 x 27 x 50 x 4`` seed in ``~12 s`` with residual ratio ``4.16e-2``;
   the matching one-GPU artifact
   ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json`` closes
-  the same seed in ``~44.5 s`` with residual ratio ``0.63``.
+  the same seed in ``~44.5 s`` with residual ratio ``0.63``. The five-seed
+  follow-up artifacts
+  ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json``
+  and
+  ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json``
+  pass the public ``auto`` path for seeds ``0..4`` on CPU and one GPU with all
+  outputs and solver traces written, maximum elapsed times ``11.58 s`` and
+  ``41.18 s``, and maximum residual ratios ``0.966`` and ``0.963``. This closes
+  the bounded public-auto route gate; the production-resolution QI ladder remains
+  separate.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual

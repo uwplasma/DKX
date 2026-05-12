@@ -536,6 +536,61 @@ def rhs1_fp_3d_sparse_pc_auto_allowed(
     return int(active_size) >= max(0, int(min_size))
 
 
+def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    eparallel_abs: float = 0.0,
+) -> bool:
+    """Return whether 3D full-FP RHSMode=1 should use x-block sparse-PC GMRES.
+
+    The scale-0.50 QI CPU/GPU ladder is too large for dense fallback and too
+    stiff for the active-DOF XMG/strong-preconditioner route, but it converges
+    quickly with host-assembled x-block sparse LU as a right preconditioner.
+    Keep this as a bounded non-differentiable output/CLI route until larger QI
+    ladders are checked.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC")
+    if env is False:
+        return False
+    if str(backend).strip().lower() not in {"cpu", "gpu", "cuda"}:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 1:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    if int(getattr(op, "n_species", 1)) != 1:
+        return False
+    if int(getattr(op, "n_zeta", 1)) <= 1:
+        return False
+    if bool(getattr(op, "point_at_x0", False)):
+        return False
+    if abs(float(eparallel_abs)) > 0.0:
+        return False
+
+    min_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN_NXI", 50)
+    if int(getattr(op, "n_xi", max(0, int(min_nxi)))) < max(0, int(min_nxi)):
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN", 30_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MAX", 45_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
 def rhs1_tokamak_er_dense_auto_allowed(
     *,
     op: Any,
@@ -657,6 +712,7 @@ __all__ = [
     "rhs1_host_sparse_skip_dense_ratio",
     "rhs1_constrained_pas_sparse_pc_auto_allowed",
     "rhs1_fp_3d_sparse_pc_auto_allowed",
+    "rhs1_fp_3d_xblock_sparse_pc_auto_allowed",
     "rhs1_tokamak_er_dense_auto_allowed",
     "rhs1_tokamak_fp_er_sparse_pc_auto_allowed",
     "rhs1_tokamak_fp_noer_sparse_pc_auto_allowed",

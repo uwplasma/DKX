@@ -58,14 +58,15 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   `tests/test_research_lane_policy.py`.
 - [x] Integrated second-push worker results into
   `docs/_static/research_lane_completion_2026_05_12.json`. The overall lane
-  average moved to `79.0%`; the VMEC/Boozer lane saturated its scoped `93%`
+  average moved to `84.9%`; the VMEC/Boozer lane saturated its scoped `93%`
   target, the benchmark/docs lane saturated its `98%` target, and the JAX
   ecosystem lane moved to `82%` after measured Lineax/Equinox/JAXopt gates. QI
-  is now `72%` after the scale-0.50 single-seed CPU and one-GPU blockers passed
-  with the promoted right-preconditioned exact-xblock-LU policy. PAS, parallel, and refactor/coverage gained
-  fail-fast gates, timeout-safe benchmark plans, and focused coverage, but they
-  did not honestly clear a +15 point move from the immediately preceding
-  baseline.
+  is now `85%` after the scale-0.50 public `auto` path selected the
+  right-preconditioned exact-xblock-LU route and passed five CPU seeds plus five
+  one-GPU seeds. PAS, parallel, and
+  refactor/coverage gained fail-fast gates, timeout-safe benchmark plans, and
+  focused coverage, but they did not honestly clear a +15 point move from the
+  immediately preceding baseline.
 - [x] Added a passing larger QI CPU artifact at
   `docs/_static/qi_seed_robustness_scale045_cpu_probe.json`: `11 x 23 x 45 x 4`,
   public `auto` solver, output and solver trace written, `106.0 s`, and residual
@@ -133,6 +134,16 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   CPU iterations/matvecs and `69`/`72` GPU iterations/matvecs). This
   raises the QI lane materially, but wider CPU/GPU seed ladders remain required
   before production-resolution QI is declared complete.
+- [x] Extended that scale-0.50 route to the public `auto` path across five CPU
+  seeds and five one-GPU seeds:
+  `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json`
+  passes seeds `0..4` with all outputs and solver traces written, zero failures,
+  maximum elapsed time `11.58 s`, and maximum residual ratio `0.966`; the
+  matching `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json`
+  passes on `office` GPU 0 with maximum elapsed time `41.18 s` and maximum
+  residual ratio `0.963`. This closes the bounded public-auto robustness
+  blocker. The remaining QI promotion gates are the next bounded resolution
+  scale and finally production resolution.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
@@ -10153,9 +10164,11 @@ Updated lane status after this integrated push:
 
 Next concrete actions:
 
-1. Commit, push, and verify remote CI/docs for this integrated push.
-2. On `office`, pull the committed state into a clean checkout and run a
-   bounded GPU smoke of the new probe/audit lanes.
+1. Advance the QI ladder to the next bounded resolution scale with public
+   `solve_method=auto`, solver traces, and residual ratios checked on CPU and
+   one GPU.
+2. Profile the next QI scale before production promotion so any memory growth
+   from host-assembled x-block sparse LU is bounded and documented.
 3. Run the first short real-solve PAS production-floor probe selected by the
    preflight, requiring a residual/runtime/memory win before any solver-default
    promotion.

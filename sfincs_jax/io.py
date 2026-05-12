@@ -38,6 +38,7 @@ from .rhs1_host_policy import (
     rhs1_dense_auto_fp_cutoff,
     rhs1_dense_backend_allowed,
     rhs1_fp_3d_sparse_pc_auto_allowed,
+    rhs1_fp_3d_xblock_sparse_pc_auto_allowed,
     rhs1_tokamak_er_dense_auto_allowed,
     rhs1_tokamak_fp_er_sparse_pc_auto_allowed,
     rhs1_tokamak_fp_noer_sparse_pc_auto_allowed,
@@ -3534,6 +3535,24 @@ def write_sfincs_jax_output_h5(
                 emit(
                     1,
                     "write_sfincs_jax_output_h5: tokamak full-FP no-Er RHSMode=1 "
+                    "-> using x-block sparse-PC GMRES host solve",
+                )
+        elif (
+            (not force_krylov)
+            and rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+                op=op0,
+                active_size=int(active_total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind=solve_method,
+                backend=str(dense_auto_backend),
+                eparallel_abs=float(epar_abs),
+            )
+        ):
+            solve_method = "xblock_sparse_pc_gmres"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: bounded 3D full-FP RHSMode=1 "
                     "-> using x-block sparse-PC GMRES host solve",
                 )
         elif (
