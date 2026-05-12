@@ -34,7 +34,7 @@
           "path": "docs/_static/qi_seed_robustness_scale050_cpu_probe.json"
         },
         {
-          "claim": "Scale-0.50 QI solver matrix preserves compact failure breadcrumbs for auto, sparse_host_safe, sparse_lsmr, and xblock_sparse_pc_gmres; all current routes fail, so the next step is a new matrix-free global/coarse correction.",
+          "claim": "Scale-0.50 QI solver matrix preserves compact failure breadcrumbs for auto, sparse_host_safe, sparse_lsmr, xblock_sparse_pc_gmres, initial-seed, and post-minres probes; all current routes fail, so the next step is a stronger global/coarse correction.",
           "path": "docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json"
         }
       ],
@@ -45,11 +45,11 @@
       ],
       "id": "production_qi_cpu_gpu",
       "next_actions": [
-        "Implement and gate a matrix-free global/coarse correction after x-block seeding for scale-0.50 QI; do not spend more time on full sparse materialization or timeout-only changes.",
+        "Implement and gate a stronger global/coarse correction after x-block seeding for scale-0.50 QI; do not spend more time on full sparse materialization, timeout-only changes, default initial seeds, or scalar post-minres cleanup.",
         "Run larger CPU and one-GPU QI seed ladders only after the scale-0.50 residual floor is reduced below the requested gate."
       ],
       "second_push_delta_percent": 9,
-      "second_push_result": "bounded CPU probe at scale 0.45 passed; scale 0.50 has a checked solver-matrix blocker showing existing solver flags either time out, fail factorization, or stall near residual 5e-6",
+      "second_push_result": "bounded CPU probe at scale 0.45 passed; scale 0.50 has a checked solver-matrix blocker showing existing solver flags and first opt-in correction hooks either time out, fail factorization, or stall near residual 5e-6",
       "status": "active",
       "target_percent": 100,
       "title": "Production-resolution QI CPU/GPU robustness"
