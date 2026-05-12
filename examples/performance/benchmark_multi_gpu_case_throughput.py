@@ -8,7 +8,11 @@ import sys
 import time
 from pathlib import Path
 
-from sfincs_jax.transport_parallel_policy import audit_multi_gpu_case_throughput_summary
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from sfincs_jax.transport_parallel_policy import audit_multi_gpu_case_throughput_summary  # noqa: E402
 
 
 def _display_path(path: Path, *, repo_root: Path) -> str:
@@ -205,8 +209,9 @@ def _build_case_throughput_plan(
 ) -> dict[str, object]:
     repo_root = Path(__file__).resolve().parents[2]
     input_display = _display_path(input_path, repo_root=repo_root)
+    python_executable = Path(sys.executable).name or "python"
     run_once_command = [
-        "python",
+        python_executable,
         "examples/performance/benchmark_sharded_solve_scaling.py",
         *_case_run_once_args(input_path=input_display, nsolve=int(nsolve)),
     ]
@@ -215,7 +220,7 @@ def _build_case_throughput_plan(
     if cache_dir is not None:
         env["JAX_COMPILATION_CACHE_DIR"] = _display_path(cache_dir, repo_root=repo_root)
     benchmark_command = [
-        "python",
+        python_executable,
         "examples/performance/benchmark_multi_gpu_case_throughput.py",
         "--input",
         input_display,
@@ -324,6 +329,56 @@ def _audit_payload_fields(payload: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _base_measured_payload(args: argparse.Namespace) -> dict[str, object]:
+    return {
+        "benchmark_kind": "multi_gpu_case_throughput",
+        "backend": "gpu",
+        "release_scaling_claim": False,
+        "required_gpu_count": 2,
+        "input": args.input.name,
+        "case": args.input.stem.replace(".input", ""),
+        "nsolve": int(args.nsolve),
+        "sample_timeout_s": float(args.sample_timeout_s),
+        "rhs1_precond": str(args.rhs1_precond),
+        "schwarz_coarse_levels": int(args.schwarz_coarse_levels),
+        "timing_semantics": "cache_warm",
+        "warmup": [],
+    }
+
+
+def _record_warmup(
+    payload: dict[str, object],
+    *,
+    input_path: Path,
+    gpu_id: int,
+    nsolve: int,
+    env: dict[str, str],
+    sample_timeout_s: float | None,
+) -> None:
+    t0 = time.perf_counter()
+    _warm_gpu(
+        input_path=input_path,
+        gpu_id=gpu_id,
+        nsolve=nsolve,
+        env=env,
+        sample_timeout_s=sample_timeout_s,
+    )
+    warmup = payload.setdefault("warmup", [])
+    assert isinstance(warmup, list)
+    warmup.append(
+        {
+            "gpu_id": int(gpu_id),
+            "visible_devices": str(int(gpu_id)),
+            "wall_s": float(time.perf_counter() - t0),
+        }
+    )
+
+
+def _write_payload(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description="Benchmark one-GPU-per-case throughput on a 2-GPU node.")
@@ -404,56 +459,74 @@ def main() -> None:
         return
 
     env = _base_env(args.cache_dir, args.rhs1_precond, args.schwarz_coarse_levels)
+    json_path = out_dir / "gpu_case_throughput.json"
+    payload = _base_measured_payload(args)
+    phase = "startup"
+    try:
+        # Warm both devices individually before timing steady-state throughput.
+        phase = "warmup_gpu0"
+        _record_warmup(
+            payload,
+            input_path=args.input,
+            gpu_id=0,
+            nsolve=args.nsolve,
+            env=env,
+            sample_timeout_s=float(args.sample_timeout_s),
+        )
+        phase = "warmup_gpu1"
+        _record_warmup(
+            payload,
+            input_path=args.input,
+            gpu_id=1,
+            nsolve=args.nsolve,
+            env=env,
+            sample_timeout_s=float(args.sample_timeout_s),
+        )
 
-    # Warm both devices individually before timing steady-state throughput.
-    _warm_gpu(
-        input_path=args.input,
-        gpu_id=0,
-        nsolve=args.nsolve,
-        env=env,
-        sample_timeout_s=float(args.sample_timeout_s),
-    )
-    _warm_gpu(
-        input_path=args.input,
-        gpu_id=1,
-        nsolve=args.nsolve,
-        env=env,
-        sample_timeout_s=float(args.sample_timeout_s),
-    )
+        phase = "sequential_one_gpu"
+        sequential = _sequential_two_cases(
+            input_path=args.input,
+            nsolve=args.nsolve,
+            env=env,
+            sample_timeout_s=float(args.sample_timeout_s),
+        )
+        payload["sequential_one_gpu"] = sequential
+        phase = "parallel_two_gpu"
+        parallel = _parallel_two_cases(
+            input_path=args.input,
+            nsolve=args.nsolve,
+            env=env,
+            sample_timeout_s=float(args.sample_timeout_s),
+        )
+        payload["parallel_two_gpu"] = parallel
+    except Exception as exc:
+        payload["status"] = "failed"
+        payload["failed_phase"] = phase
+        payload["error_type"] = type(exc).__name__
+        payload["error"] = str(exc)
+        payload["throughput_audit"] = {
+            "ci_gate_pass": False,
+            "release_scaling_claim": False,
+            "failures": [f"{phase} failed: {type(exc).__name__}: {exc}"],
+            "notes": [
+                "partial benchmark payload written for timeout-safe profiling",
+                "no throughput speedup claim is made for failed payloads",
+            ],
+        }
+        _write_payload(json_path, payload)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        raise
 
-    sequential = _sequential_two_cases(
-        input_path=args.input,
-        nsolve=args.nsolve,
-        env=env,
-        sample_timeout_s=float(args.sample_timeout_s),
-    )
-    parallel = _parallel_two_cases(
-        input_path=args.input,
-        nsolve=args.nsolve,
-        env=env,
-        sample_timeout_s=float(args.sample_timeout_s),
-    )
-    speedup = sequential["wall_s"] / parallel["wall_s"] if parallel["wall_s"] > 0 else float("nan")
-
-    payload = {
-        "benchmark_kind": "multi_gpu_case_throughput",
-        "backend": "gpu",
-        "release_scaling_claim": False,
-        "required_gpu_count": 2,
-        "input": args.input.name,
-        "case": args.input.stem.replace(".input", ""),
-        "nsolve": int(args.nsolve),
-        "sample_timeout_s": float(args.sample_timeout_s),
-        "rhs1_precond": str(args.rhs1_precond),
-        "schwarz_coarse_levels": int(args.schwarz_coarse_levels),
-        "timing_semantics": "cache_warm",
-        "sequential_one_gpu": sequential,
-        "parallel_two_gpu": parallel,
-        "throughput_speedup": float(speedup),
-    }
+    sequential = payload["sequential_one_gpu"]
+    parallel = payload["parallel_two_gpu"]
+    assert isinstance(sequential, dict)
+    assert isinstance(parallel, dict)
+    speedup = float(sequential["wall_s"]) / float(parallel["wall_s"]) if float(parallel["wall_s"]) > 0 else float("nan")
+    payload["throughput_speedup"] = float(speedup)
+    payload["status"] = "ok"
     payload["throughput_audit"] = _audit_payload_fields(payload)
     json_path = out_dir / "gpu_case_throughput.json"
-    json_path.write_text(json.dumps(payload, indent=2))
+    _write_payload(json_path, payload)
 
     try:
         import matplotlib

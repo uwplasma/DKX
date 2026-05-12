@@ -81,6 +81,14 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   benchmarking and a pure audit that rejects release overclaims, non-GPU
   payloads, cold/mixed timing, and sub-unity speedups. This improves the GPU
   campaign workflow but does not close single-case strong scaling.
+- [x] Follow-up office GPU result on commit `39e1e2f`: the timeout-safe
+  two-GPU case-throughput benchmark completed with `nsolve=1` and a `180 s`
+  child timeout, wrote
+  `docs/_static/gpu_case_throughput_large_push_2026_05_12.json`, and failed the
+  throughput gate honestly (`59.18 s` sequential one-GPU two-case wall time vs
+  `175.77 s` two-GPU concurrent wall time, speedup `0.337x`). This keeps the
+  parallel lane at `82%` and confirms that this path is setup/compile dominated
+  on office rather than release-grade scaling evidence.
 - [x] Refactor/coverage second-push result: added focused fast tests around
   solver-candidate promotion, residual diagnostics, and policy docstrings.
   Focused helper coverage improved, but package-wide `95%` still requires more

@@ -162,6 +162,10 @@
         {
           "path": "sfincs_jax/transport_parallel_policy.py",
           "claim": "Pure multi-GPU case-throughput audit rejects cold/mixed timing, non-GPU payloads, release overclaims, and sub-unity speedups."
+        },
+        {
+          "path": "docs/_static/gpu_case_throughput_large_push_2026_05_12.json",
+          "claim": "Fresh office two-GPU case-throughput artifact completed under timeout guards but failed the speedup gate at 0.337x, so it is blocker evidence rather than a release claim."
         }
       ],
       "gates": [
@@ -170,11 +174,11 @@
         "Single-case multi-GPU remains experimental unless a measured publication-grade artifact improves wall time."
       ],
       "next_actions": [
-        "Run the timeout-safe two-GPU throughput command on office and check the throughput audit payload.",
+        "Treat two-GPU case throughput as setup/compile dominated on office until the benchmark can reuse compiled executables across concurrent workers.",
         "Keep single-case strong scaling experimental until a measured warm artifact beats one device."
       ],
       "second_push_delta_percent": 4,
-      "second_push_result": "timeout-safe two-GPU throughput audit landed; measured release-grade speedup remains missing"
+      "second_push_result": "timeout-safe two-GPU throughput audit landed and fresh office artifact measured 0.337x speedup, so the lane remains non-release-facing"
     },
     {
       "id": "refactor_coverage_ci",
