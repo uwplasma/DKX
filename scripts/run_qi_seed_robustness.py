@@ -32,8 +32,33 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_multiseed5_cpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale045_cpu_probe.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_cpu_probe.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_solver_matrix_2026_05_12.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
+LOG_TAIL_LINES = 16
+PROGRESS_EVENT_LIMIT = 24
+PROGRESS_MARKERS = (
+    "active matrix size=",
+    "active-DOF mode enabled",
+    "RHSMode=1 BiCGStab",
+    "building RHSMode=1 preconditioner",
+    "strong preconditioner fallback",
+    "targeted sparse",
+    "xblock factorization",
+    "explicit FP x-block seed",
+    "sparse_host pattern",
+    "sparse_lsmr complete",
+    "sparse_ilu:",
+    "sparse_lu:",
+    "gmres complete",
+    "GMRES complete",
+    "residual=",
+    "residual_norm=",
+    "Refusing to write nonconverged",
+    "Host sparse factorization failed",
+    "timed out",
+    "CUDA_ERROR",
+)
 
 
 def _read_resolution(text: str) -> dict[str, int]:
@@ -305,6 +330,34 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
     }
 
 
+def _tail_lines(path: Path, *, max_lines: int = LOG_TAIL_LINES) -> list[str]:
+    """Return a compact tail from a runner log file."""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    return [line.rstrip() for line in lines[-max(1, int(max_lines)) :]]
+
+
+def _extract_progress_events(*paths: Path, max_events: int = PROGRESS_EVENT_LIMIT) -> list[str]:
+    """Extract solver-stage breadcrumbs from stdout/stderr without preserving bulky logs."""
+    events: list[str] = []
+    for path in paths:
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            clean = line.strip()
+            if not clean:
+                continue
+            if any(marker in clean for marker in PROGRESS_MARKERS):
+                events.append(clean)
+    if len(events) > int(max_events):
+        return events[-int(max_events) :]
+    return events
+
+
 def _execute_cases(out_root: Path, cases: Iterable[dict[str, object]], *, timeout_s: float, fail_fast: bool) -> list[dict[str, object]]:
     results: list[dict[str, object]] = []
     for case in cases:
@@ -342,6 +395,9 @@ def _execute_cases(out_root: Path, cases: Iterable[dict[str, object]], *, timeou
             "output_exists": (case_dir / "sfincsOutput_jax.h5").exists(),
             "solver_trace_exists": trace_path.exists(),
             "solver_trace_summary": _solver_trace_summary(trace_path),
+            "progress_events": _extract_progress_events(stdout_path, stderr_path),
+            "stdout_tail": _tail_lines(stdout_path),
+            "stderr_tail": _tail_lines(stderr_path),
         }
         results.append(result)
         if returncode != 0 and fail_fast:
@@ -484,6 +540,8 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                 "residual_target": trace_summary.get("residual_target"),
                 "residual_ratio": trace_summary.get("residual_ratio"),
                 "resolution": case.get("resolution") if isinstance(case, dict) else None,
+                "progress_events": result.get("progress_events"),
+                "stderr_tail": result.get("stderr_tail"),
             }
         )
 

@@ -259,6 +259,7 @@ def test_xblock_sparse_pc_gmres_solve_method_solves_fp_rhs1_system(monkeypatch) 
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED", "1")
     messages: list[str] = []
 
     result = solve_v3_full_system_linear_gmres(
@@ -276,7 +277,29 @@ def test_xblock_sparse_pc_gmres_solve_method_solves_fp_rhs1_system(monkeypatch) 
     assert result.metadata["setup_s"] >= 0.0
     assert result.metadata["solve_s"] >= 0.0
     assert result.metadata["elapsed_s"] >= result.metadata["setup_s"]
+    assert result.metadata["xblock_initial_seed_used"] in {True, False}
+    assert result.metadata["xblock_initial_seed_residual_norm"] >= 0.0
+    assert any("initial x-block seed" in msg for msg in messages)
     assert any("xblock_sparse_pc_gmres complete" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_gmres_initial_seed_can_be_disabled(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED", "0")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_initial_seed_used"] is False
+    assert result.metadata["xblock_initial_seed_residual_norm"] is None
+    assert result.metadata["xblock_initial_seed_residual_ratio"] is None
 
 
 @pytest.mark.parametrize(
