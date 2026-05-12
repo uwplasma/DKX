@@ -405,6 +405,16 @@ resource-exhaustion error classification. These tests do not prove convergence o
 new large cases; they keep solver-path decisions reproducible and inspectable so a
 future performance promotion is not hidden inside driver control flow.
 
+The measured solver-candidate gates are covered separately in
+``tests/test_solver_selection_policy.py``. Those tests exercise residual/parity
+rejection, baseline-clean promotion requirements, failed-baseline rescue
+allowances, paired memory metrics, tie-breaking, and missing-measurement guards.
+Transport worker residual abort formatting is covered in
+``tests/test_transport_residual_quality.py``, including custom environment names,
+negative/invalid threshold normalization, nonfinite residual diagnostics, and
+array-to-message collection. These are intentionally fast policy checks; they
+protect solver-path diagnostics without launching transport solves.
+
 The output/helper layer is kept under small, direct tests rather than only
 end-to-end HDF5 comparisons. ``tests/test_io_export_and_h5_coverage.py`` covers
 Fortran-layout HDF5 round trips, export-``f`` identity, nearest-neighbor, periodic
@@ -497,7 +507,9 @@ unit/regression suite:
   and next actions for the current large-push cycle. ``scripts/check_research_lanes.py``
   and ``tests/test_research_lane_policy.py`` enforce that those percentages are
   evidence-backed and that active lanes record substantial measured progress
-  before their completion estimate is increased.
+  before their completion estimate is increased. The policy is target-capped:
+  if a lane has fewer percentage points remaining than the current push target,
+  it must reach its checked target rather than overclaiming beyond it.
 
 The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep family:
 
@@ -614,11 +626,26 @@ Krylov-tail failure: the GPU case moved from a ``195 s`` rejected solve with
 residual ratio ``53.9`` to a ``42.8 s`` converged solve with residual ratio
 ``4.49e-7``.
 
+The bounded ``docs/_static/qi_seed_robustness_scale045_cpu_probe.json`` artifact
+records the largest checked passing CPU probe in this lane so far:
+``11 x 23 x 45 x 4`` completed in ``106.1 s`` with public ``auto`` solver
+selection, output and solver trace written, ``converged=true``, and residual
+ratio ``4.96e-7``. It raises the passing per-axis readiness estimate while still
+remaining below the production CPU/GPU five-seed requirement.
+
+The bounded ``docs/_static/qi_seed_robustness_scale050_cpu_probe.json`` artifact
+records a deliberately timeout-capped CPU probe at ``13 x 27 x 50 x 4``. It
+timed out after ``180 s`` before writing an output or solver trace, so it is
+blocker evidence only. The evidence manifest records this as the largest
+attempted size but excludes it from the checked-size and lane-completion
+estimate.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
-bounded grid ``23942``, a ``35%`` per-axis lane-completion estimate, and
-``97.65%`` of production total size still uncovered. The production acceptance
+passing bounded grid ``45542``, the largest attempted bounded grid ``70202``, a
+``44%`` per-axis lane-completion estimate based only on passing artifacts, and
+``95.54%`` of production total size still uncovered. The production acceptance
 gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
 ``solve_method=auto``, ``process_failed=0``, ``timed_out=0``,
 ``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
