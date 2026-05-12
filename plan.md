@@ -84,10 +84,23 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   near residual `5e-6` against a `2.5e-11` target. A follow-up opt-in
   `SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED=1` probe was intentionally kept
   off by default after the seed residual was slightly worse than the RHS norm and
-  the solve still stalled at the same floor. Next QI work must therefore
-  implement a matrix-free global/coarse correction after x-block seeding instead
-  of increasing timeouts, materializing the full sparse operator, or enabling a
-  default seed probe.
+  the solve still stalled at the same floor. A second opt-in
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS=4` probe accepted two
+  post-GMRES matrix-free minimum-residual corrections but only improved
+  `5.413504e-6 -> 5.409759e-6`, leaving the residual ratio above `2.1e5`.
+  Next QI work must therefore implement a stronger global/coarse correction
+  after x-block seeding instead of increasing timeouts, materializing the full
+  sparse operator, enabling a default seed probe, or relying on scalar
+  post-minres cleanup.
+- [x] Implemented the first gated matrix-free correction hook for that next
+  step: explicit `xblock_sparse_pc_gmres` now accepts opt-in
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`, which applies bounded
+  preconditioned minimum-residual corrections after a stalled Krylov solve
+  without assembling a global sparse matrix. The hook records requested/accepted
+  steps, before/after residuals, and alphas in solver metadata and HDF5
+  diagnostics. The first checked scale-0.50 probe accepted two steps but reduced
+  the residual by only `6.9e-4` relative, so the hook remains off by default and
+  is recorded as rejected prototype evidence rather than promoted solver policy.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but

@@ -1508,6 +1508,13 @@ Controls:
   vector as the initial guess only if the true residual is lower than the RHS
   norm. The scale-0.50 QI blocker probe rejected this seed and therefore this
   knob is intentionally not a default performance path.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
+  matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
+  Each accepted step applies the x-block preconditioner to the current residual
+  and chooses a scalar minimum-residual step using one extra operator
+  application. This is the current prototype hook for the scale-0.50 QI residual
+  floor; keep it disabled for production claims until a checked artifact shows a
+  lower true residual and no runtime regression.
 
 Large geometry-rich PAS closeout:
 
