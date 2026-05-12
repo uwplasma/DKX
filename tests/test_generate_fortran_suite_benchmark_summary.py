@@ -357,3 +357,32 @@ def test_checked_in_readme_table_matches_canonical_benchmark_rows(tmp_path: Path
 
     assert actual[:2] == expected[:2]
     assert _row_map(actual[2:]) == _row_map(expected[2:])
+
+
+def test_checked_in_summary_matches_default_suite_reports(tmp_path: Path) -> None:
+    mod = _load_module()
+    repo = Path(__file__).resolve().parents[1]
+    checked_in_summary = (
+        repo
+        / "examples"
+        / "publication_figures"
+        / "artifacts"
+        / "sfincs_jax_fortran_suite_benchmark_summary.json"
+    )
+    expected = mod.write_benchmark_summary(
+        cpu_report=mod.DEFAULT_CPU_REPORT,
+        gpu_report=mod.DEFAULT_GPU_REPORT,
+        summary_json=tmp_path / "summary.json",
+        min_fortran_runtime_s=10.0,
+    )
+    actual = json.loads(checked_in_summary.read_text())
+    expected_metadata = dict(expected["metadata"])
+    # Older checked-in summaries may omit generator-only canonical-row metadata,
+    # but the release-gating metric fields must match the default suite reports.
+    expected_metadata.pop("canonical_case_order", None)
+    expected_metadata.pop("canonical_row_source", None)
+
+    assert actual["metadata"] == expected_metadata
+    assert actual["reports"] == expected["reports"]
+    if "canonical_rows" in actual:
+        assert actual["canonical_rows"] == expected["canonical_rows"]

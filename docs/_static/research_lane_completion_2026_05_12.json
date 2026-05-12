@@ -8,15 +8,21 @@
     "019e1b62-ee67-78f3-a63f-06f5623b4217",
     "019e1b63-2170-7de2-8d6d-42c5602359d3",
     "019e1b63-5db0-7030-a631-140cdfeccfb4",
-    "019e1b63-9ded-7893-a9d8-51e4b2a0b2df"
+    "019e1b63-9ded-7893-a9d8-51e4b2a0b2df",
+    "019e1be2-d4c0-7312-b72b-0a145e63d54c",
+    "019e1be3-f10e-70b2-83d7-415c5274c825",
+    "019e1be4-313d-71a0-94ae-55e86a10f611",
+    "019e1be4-6aae-74a2-977d-ed5dbe7a6cc8",
+    "019e1be4-b336-7ac1-99cf-e80fbf6b99ed",
+    "019e1be4-ee0b-7fc3-9fbe-3c57cff76809"
   ],
   "lanes": [
     {
       "id": "production_qi_cpu_gpu",
       "title": "Production-resolution QI CPU/GPU robustness",
-      "status": "evidence_ready",
+      "status": "active",
       "before_percent": 23,
-      "current_percent": 35,
+      "current_percent": 44,
       "target_percent": 100,
       "evidence": [
         {
@@ -38,6 +44,14 @@
         {
           "path": "tests/test_run_qi_seed_robustness.py",
           "claim": "CI-fast runner tests lock deterministic generation and gate semantics."
+        },
+        {
+          "path": "docs/_static/qi_seed_robustness_scale045_cpu_probe.json",
+          "claim": "New scale-0.45 CPU QI probe passes at 11 x 23 x 45 x 4 in 106.0 s with public auto path and residual ratio below 5e-7."
+        },
+        {
+          "path": "docs/_static/qi_seed_robustness_scale050_cpu_probe.json",
+          "claim": "Scale-0.50 CPU QI probe is checked in as timeout blocker evidence and is excluded from completion estimates."
         }
       ],
       "gates": [
@@ -46,16 +60,18 @@
         "No QI-specific default branch may bypass the public auto solver policy."
       ],
       "next_actions": [
-        "Run the worker-generated production QI ladder artifacts and promote only if all seeds converge.",
-        "Add the production QI figure to the validation dashboard after CPU/GPU artifacts agree."
-      ]
+        "Investigate why scale-0.50 public-auto QI times out after the scale-0.45 CPU success.",
+        "Run larger CPU and one-GPU QI seed ladders only after the timeout boundary is reduced or the solver policy is improved."
+      ],
+      "second_push_delta_percent": 9,
+      "second_push_result": "bounded CPU probe at scale 0.45 passed; scale 0.50 timed out, so production CPU/GPU remains blocked"
     },
     {
       "id": "pas_geometry_runtime_memory",
       "title": "PAS and geometry-rich runtime/memory offenders",
       "status": "active",
       "before_percent": 53,
-      "current_percent": 65,
+      "current_percent": 72,
       "target_percent": 97,
       "evidence": [
         {
@@ -73,6 +89,14 @@
         {
           "path": "docs/performance_techniques.rst",
           "claim": "Docs now distinguish promoted PAS memory routes from rejected experimental routes."
+        },
+        {
+          "path": "sfincs_jax/rhs1_pas_policy.py",
+          "claim": "Structured PAS-TZ guard metadata records production-grid memory rejection estimates without allocating dense guards."
+        },
+        {
+          "path": "tests/test_rhs1_pas_matrixfree.py",
+          "claim": "Matrix-free PAS tests cover tiny-update and candidate-size fail-fast gates that avoid wasted candidate matvecs."
         }
       ],
       "gates": [
@@ -81,16 +105,18 @@
         "CPU and GPU default policy changes require bounded artifacts before README-facing claims."
       ],
       "next_actions": [
-        "Integrate worker PAS matrix-free/structured-candidate results if they clear the medium gate.",
-        "Regenerate the production benchmark summary after the accepted PAS policy is stable."
-      ]
+        "Run a bounded production geometry-rich solve that exercises the new PAS guard metadata and candidate-size gates.",
+        "Promote defaults only after residual, runtime, and peak-RSS gates all improve on geometry-rich CPU and GPU targets."
+      ],
+      "second_push_delta_percent": 7,
+      "second_push_result": "bounded PAS fail-fast gates and metadata landed; production residual-clean default-promotion evidence still missing"
     },
     {
       "id": "parallel_scaling",
       "title": "Executable parallelism and strong-scaling evidence",
       "status": "active",
       "before_percent": 66,
-      "current_percent": 78,
+      "current_percent": 82,
       "target_percent": 92,
       "evidence": [
         {
@@ -132,6 +158,10 @@
         {
           "path": "sfincs_jax/transport_parallel_runtime.py",
           "claim": "Runtime policy module owns worker-count and backend decisions."
+        },
+        {
+          "path": "sfincs_jax/transport_parallel_policy.py",
+          "claim": "Pure multi-GPU case-throughput audit rejects cold/mixed timing, non-GPU payloads, release overclaims, and sub-unity speedups."
         }
       ],
       "gates": [
@@ -140,16 +170,18 @@
         "Single-case multi-GPU remains experimental unless a measured publication-grade artifact improves wall time."
       ],
       "next_actions": [
-        "Merge worker parallel manifest checks and bounded CPU/GPU scaling tables.",
-        "Keep single-case multi-GPU as an explicit experimental lane until speedup is measured."
-      ]
+        "Run the timeout-safe two-GPU throughput command on office and check the throughput audit payload.",
+        "Keep single-case strong scaling experimental until a measured warm artifact beats one device."
+      ],
+      "second_push_delta_percent": 4,
+      "second_push_result": "timeout-safe two-GPU throughput audit landed; measured release-grade speedup remains missing"
     },
     {
       "id": "refactor_coverage_ci",
       "title": "Refactor, source map, coverage, and CI readiness",
       "status": "evidence_ready",
       "before_percent": 63,
-      "current_percent": 75,
+      "current_percent": 82,
       "target_percent": 95,
       "evidence": [
         {
@@ -171,6 +203,14 @@
         {
           "path": "sfincs_jax/host_refinement.py",
           "claim": "Host refinement logic was split out of the driver and became directly testable."
+        },
+        {
+          "path": "tests/test_solver_selection_policy.py",
+          "claim": "Fast tests cover measured candidate promotion, memory metric ordering, failed-baseline rescue, and tie-breaking."
+        },
+        {
+          "path": "tests/test_transport_residual_quality.py",
+          "claim": "Residual-gate tests cover env parsing, negative threshold normalization, nonfinite diagnostics, and array failure collection."
         }
       ],
       "gates": [
@@ -179,16 +219,18 @@
         "CI-fast checks must remain within the documented time budget."
       ],
       "next_actions": [
-        "Integrate worker module-docstring and source-map checks.",
-        "Continue splitting v3_driver only at tested policy or math boundaries."
-      ]
+        "Continue splitting pure solver/path/diagnostic helpers from v3_driver.py with fast focused tests.",
+        "Move package coverage to a JAX-safe CI coverage environment before claiming 95%."
+      ],
+      "second_push_delta_percent": 7,
+      "second_push_result": "focused solver-policy/residual coverage improved; package-wide 95% remains blocked by broader driver decomposition and JAX-safe coverage"
     },
     {
       "id": "vmec_booz_sfincs_workflow",
       "title": "vmec_jax to booz_xform_jax to sfincs_jax differentiable workflow",
       "status": "evidence_ready",
       "before_percent": 73,
-      "current_percent": 85,
+      "current_percent": 93,
       "target_percent": 93,
       "evidence": [
         {
@@ -210,6 +252,10 @@
         {
           "path": "sfincs_jax/jax_geometry_adapters.py",
           "claim": "Adapter module isolates JAX-native geometry inputs from file-backed VMEC loading."
+        },
+        {
+          "path": "tests/test_optional_ecosystem_gates.py",
+          "claim": "Optional workflow tests cover backend readiness and measured adoption summaries without hard dependencies."
         }
       ],
       "gates": [
@@ -218,16 +264,18 @@
         "Profile-current and ambipolar outputs must pass convergence gates before publication claims."
       ],
       "next_actions": [
-        "Merge worker updates that add a public end-to-end example gate if they stay lightweight.",
-        "Add a bounded autodiff sensitivity test over a reduced geometry contract."
-      ]
+        "Add a pure-JAX scheme-5 transport-objective gradient gate before claiming full kinetic transport gradients.",
+        "Keep VMEC/Boozer optional dependencies skip-safe in default CI."
+      ],
+      "second_push_delta_percent": 8,
+      "second_push_result": "target saturated for scoped geometry-proxy workflow; full kinetic transport gradients remain out of scope"
     },
     {
       "id": "jax_ecosystem_solver_evaluation",
       "title": "JAX ecosystem solver/preconditioner evaluation",
       "status": "evidence_ready",
       "before_percent": 50,
-      "current_percent": 65,
+      "current_percent": 82,
       "target_percent": 88,
       "evidence": [
         {
@@ -245,6 +293,14 @@
         {
           "path": "sfincs_jax/solver_selection_policy.py",
           "claim": "Solver-selection policy is isolated enough to host future lineax/equinox experiments behind gates."
+        },
+        {
+          "path": "examples/performance/benchmark_optional_lineax_implicit_solve.py",
+          "claim": "Lineax benchmark now writes adoption summaries that separate synthetic speedups from real SFINCS solver-error statuses."
+        },
+        {
+          "path": "examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py",
+          "claim": "Equinox/JAXopt gate now reports measured directional-gradient and optimization summary decisions."
         }
       ],
       "gates": [
@@ -253,16 +309,18 @@
         "Hard-coded branch thresholds should move to measured policy gates when evidence exists."
       ],
       "next_actions": [
-        "Run bounded lineax/equinox feasibility probes through worker-owned policy surfaces.",
-        "Document rejected dependency experiments so they do not reappear as unmeasured defaults."
-      ]
+        "Resolve Lineax real-SFINCS solver error statuses before any solver promotion.",
+        "Keep Equinox/JAXopt examples as optional bounded optimization workflows rather than hard dependencies."
+      ],
+      "second_push_delta_percent": 17,
+      "second_push_result": "measured Lineax/Equinox/JAXopt adoption summaries landed; Lineax remains unpromoted on real SFINCS error statuses"
     },
     {
       "id": "benchmark_parity_docs",
       "title": "Benchmark, parity, README, and documentation publication surface",
       "status": "evidence_ready",
       "before_percent": 78,
-      "current_percent": 90,
+      "current_percent": 98,
       "target_percent": 98,
       "evidence": [
         {
@@ -284,6 +342,14 @@
         {
           "path": "scripts/check_benchmark_artifacts.py",
           "claim": "Benchmark artifact policy prevents stale or inconsistent runtime/memory claims."
+        },
+        {
+          "path": "tests/test_benchmark_doc_claims.py",
+          "claim": "New doc-claim tests prevent stale benchmark ratio, figure, and scope wording from shipping."
+        },
+        {
+          "path": "tests/test_generate_fortran_suite_benchmark_summary.py",
+          "claim": "Benchmark-summary tests check the checked-in report against default regeneration output."
         }
       ],
       "gates": [
@@ -292,9 +358,13 @@
         "Low-resolution CI smoke rows must not be promoted into runtime comparison claims."
       ],
       "next_actions": [
-        "Regenerate final plots after worker lane changes are integrated.",
-        "Run benchmark-artifact and docs checks before commit and push."
-      ]
+        "Regenerate final plots only after accepted performance-policy changes alter benchmark data.",
+        "Keep README/docs scope language tied to canonical checked benchmark rows."
+      ],
+      "second_push_delta_percent": 8,
+      "second_push_result": "target saturated for docs/release consistency gates; no benchmark data regenerated in this push"
     }
-  ]
+  ],
+  "requested_second_push_delta_percent": 15,
+  "second_push_assessment": "partial: target saturation achieved for VMEC/Boozer and benchmark/docs; QI, PAS, parallel, and refactor gained evidence but not all achieved +15pp from the immediately preceding baseline."
 }
