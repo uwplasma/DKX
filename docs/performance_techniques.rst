@@ -1540,8 +1540,19 @@ Controls:
   block into ILU and timed out. Raising only the full-FP host exact-LU cap to
   ``30000`` closes the CPU successor
   ``docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json`` in
-  ``~21.5 s`` with residual ratio ``8.25e-3``. The default upper auto-size
-  window remains bounded until the matching GPU and wider seed ladders pass.
+  ``~21.5 s`` with residual ratio ``8.25e-3``.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX`` (default: ``45000`` active
+  unknowns for 3D full-FP lanes only). The scale-0.50 QI evidence remains
+  faster with right preconditioning, but the harder scale-0.55 seed ``3`` probe
+  showed a seed-dependent right-PC slow mode. The size-aware default therefore
+  keeps right-PC for the checked scale-0.50 window and automatically uses
+  left-PC for larger 3D full-FP active systems unless the user explicitly sets
+  ``SFINCS_JAX_GMRES_PRECONDITION_SIDE``. The checked
+  ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json``
+  artifact closes that hard CPU seed in ``~47 s`` with residual ratio
+  ``2.98e-3`` and records ``precondition_side=left``. The default upper
+  auto-size window remains bounded until the matching GPU and wider seed ladders
+  pass.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual
