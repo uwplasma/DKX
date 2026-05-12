@@ -58,6 +58,8 @@ DEFAULT_PRODUCTION_SOLVE_GRID = {
 }
 DEFAULT_PRODUCTION_SOLVE_MAX_RSS_MB = 4096.0
 DEFAULT_PRODUCTION_SOLVE_MAX_RESIDUAL_NORM = 1.0e-3
+DEFAULT_PRODUCTION_SOLVE_MIN_PROMOTION_SPEEDUP = 1.05
+DEFAULT_PRODUCTION_SOLVE_MIN_PROMOTION_MEMORY_REDUCTION = 1.05
 
 
 def _positive_float(value: str) -> float:
@@ -157,6 +159,35 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("auto", "cpu", "gpu"),
         default="auto",
         help="Optional CPU/GPU backend gate passed to the real-solve harness.",
+    )
+    parser.add_argument(
+        "--production-solve-require-default-promotion-gate",
+        action="store_true",
+        help="Require opt-in real-solve candidates to pass the default-promotion gate.",
+    )
+    parser.add_argument(
+        "--production-solve-baseline-elapsed-s",
+        type=_positive_float,
+        default=None,
+        help="Baseline elapsed time passed to the opt-in real-solve promotion gate.",
+    )
+    parser.add_argument(
+        "--production-solve-baseline-rss-mb",
+        type=_positive_float,
+        default=None,
+        help="Baseline peak RSS passed to the opt-in real-solve promotion gate.",
+    )
+    parser.add_argument(
+        "--production-solve-min-runtime-speedup",
+        type=_positive_float,
+        default=DEFAULT_PRODUCTION_SOLVE_MIN_PROMOTION_SPEEDUP,
+        help="Minimum runtime speedup passed to the opt-in real-solve promotion gate.",
+    )
+    parser.add_argument(
+        "--production-solve-min-memory-reduction",
+        type=_positive_float,
+        default=DEFAULT_PRODUCTION_SOLVE_MIN_PROMOTION_MEMORY_REDUCTION,
+        help="Minimum RSS reduction passed to the opt-in real-solve promotion gate.",
     )
     parser.add_argument(
         "--allow-long-production-solve",
@@ -462,6 +493,17 @@ def _requested_production_solve_targets(args: argparse.Namespace) -> list[str]:
 
 def _validate_production_solve_bounds(args: argparse.Namespace) -> None:
     _requested_production_solve_targets(args)
+    if bool(getattr(args, "production_solve_require_default_promotion_gate", False)):
+        if getattr(args, "production_solve_baseline_elapsed_s", None) is None:
+            raise ValueError(
+                "--production-solve-baseline-elapsed-s is required with "
+                "--production-solve-require-default-promotion-gate"
+            )
+        if getattr(args, "production_solve_baseline_rss_mb", None) is None:
+            raise ValueError(
+                "--production-solve-baseline-rss-mb is required with "
+                "--production-solve-require-default-promotion-gate"
+            )
     if bool(args.allow_long_production_solve):
         return
     timeout_s = float(args.production_solve_timeout_s)
@@ -538,6 +580,20 @@ def build_bounded_real_solve_probe(
                 "--expected-backend",
                 str(args.production_solve_expected_backend),
             ]
+            if bool(args.production_solve_require_default_promotion_gate):
+                command.extend(
+                    [
+                        "--require-default-promotion-gate",
+                        "--baseline-elapsed-s",
+                        str(float(args.production_solve_baseline_elapsed_s)),
+                        "--baseline-rss-mb",
+                        str(float(args.production_solve_baseline_rss_mb)),
+                        "--min-runtime-speedup",
+                        str(float(args.production_solve_min_runtime_speedup)),
+                        "--min-memory-reduction",
+                        str(float(args.production_solve_min_memory_reduction)),
+                    ]
+                )
             if bool(args.allow_long_production_solve):
                 command.append("--allow-long-run")
         requested = target in requested_targets
@@ -595,6 +651,15 @@ def build_bounded_real_solve_probe(
             "max_residual_norm": float(args.production_solve_max_residual_norm),
             "expected_backend": str(args.production_solve_expected_backend),
             "solver_path_churn_allowed": False,
+            "default_promotion_required": bool(args.production_solve_require_default_promotion_gate),
+            "baseline_elapsed_s": _json_float(args.production_solve_baseline_elapsed_s),
+            "baseline_rss_mb": _json_float(args.production_solve_baseline_rss_mb),
+            "min_runtime_speedup": float(args.production_solve_min_runtime_speedup),
+            "min_memory_reduction": float(args.production_solve_min_memory_reduction),
+            "promotion_policy": (
+                "real-solve candidates must not regress elapsed_s or max_rss_mb "
+                "against baseline when default promotion is required"
+            ),
         },
         "targets": targets,
     }

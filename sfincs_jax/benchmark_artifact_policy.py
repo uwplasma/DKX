@@ -1,3 +1,5 @@
+"""Fast benchmark-artifact schema and release-gate policy helpers."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping

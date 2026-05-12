@@ -1,3 +1,5 @@
+"""Pure formatting and threshold policy for solver progress messages."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

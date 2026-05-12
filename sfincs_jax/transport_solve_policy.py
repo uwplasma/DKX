@@ -12,6 +12,8 @@ import numpy as np
 
 @dataclass(frozen=True)
 class TransportActiveDOFDecision:
+    """Resolved active-DOF routing decision for one transport solve."""
+
     use_active_dof_mode: bool
     reason: str | None
     solve_method_use: str
@@ -20,6 +22,8 @@ class TransportActiveDOFDecision:
 
 @dataclass(frozen=True)
 class TransportActiveDOFState:
+    """Active-index arrays and size metadata used by reduced transport solves."""
+
     active_idx_np: np.ndarray | None
     active_idx_jnp: jnp.ndarray | None
     full_to_active_jnp: jnp.ndarray | None
@@ -28,6 +32,8 @@ class TransportActiveDOFState:
 
 @dataclass(frozen=True)
 class TransportDensePolicy:
+    """Resolved dense fallback and dense-preconditioner policy."""
+
     solve_method_use: str
     dense_fallback: bool
     dense_retry_max: int
@@ -90,6 +96,7 @@ def resolve_transport_active_dof_mode(
     solve_method: str,
     active_dof_env: str,
 ) -> TransportActiveDOFDecision:
+    """Resolve whether transport should compact to the active pitch-angle DOFs."""
     env = str(active_dof_env).strip().lower()
     reason: str | None = None
     if env in {"0", "false", "no", "off"}:
@@ -126,6 +133,7 @@ def build_transport_active_dof_state(
     use_active_dof_mode: bool,
     active_dof_indices,
 ) -> TransportActiveDOFState:
+    """Build active-DOF indexing state or a full-size no-op state."""
     if not use_active_dof_mode:
         return TransportActiveDOFState(
             active_idx_np=None,
@@ -164,6 +172,7 @@ def resolve_transport_dense_policy(
     dense_backend_allowed: bool,
     dense_precond_default: bool,
 ) -> TransportDensePolicy:
+    """Resolve dense fallback/preconditioner admission under memory caps."""
     dense_mem_est_active_mb64 = (int(active_size) ** 2) * 8.0 / 1.0e6
     dense_mem_est_active_mb32 = (int(active_size) ** 2) * 4.0 / 1.0e6
     dense_mem_block_active32 = bool(dense_mem_max_mb > 0.0 and dense_mem_est_active_mb32 > dense_mem_max_mb)

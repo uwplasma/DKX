@@ -254,6 +254,68 @@ Legacy JSON files that predate the stronger schema may still be useful for
 figures, but they should not be used as release gates until regenerated with
 explicit timing, device, task, and payload-coverage metadata.
 
+Deterministic benchmark plans
+-----------------------------
+
+The parallel benchmark drivers can now write deterministic no-run plan artifacts
+for CI and launch review. These commands validate CLI wiring, worker/device
+allocation, warm/cold timing metadata, finite-task speedup limits, and memory
+allocator/timeout semantics without launching SFINCS solves:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_transport_parallel_scaling.py \
+     --input examples/performance/transport_parallel_2min.input.namelist \
+     --workers 1 2 4 \
+     --backend gpu \
+     --global-warmup 1 \
+     --plan-only
+
+   python examples/performance/benchmark_sharded_solve_scaling.py \
+     --backend cpu \
+     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
+     --devices 1 2 4 \
+     --inner-warmup-solves 1 \
+     --sample-timeout-s 300 \
+     --rhs1-precond theta_schwarz \
+     --schwarz-coarse-levels 2 \
+     --plan-only
+
+   python examples/performance/benchmark_multi_gpu_case_throughput.py \
+     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
+     --nsolve 4 \
+     --rhs1-precond theta_schwarz \
+     --schwarz-coarse-levels 2 \
+     --plan-only
+
+   python examples/performance/benchmark_sharded_matvec_scaling.py \
+     --input examples/performance/transport_parallel_sharded.input.namelist \
+     --axis theta \
+     --pad \
+     --devices 1 2 4 \
+     --plan-only
+
+Plan JSON files are written under the selected ``--out-dir`` unless
+``--plan-json`` is supplied. The artifacts are intentionally marked
+``launches_solves=false``. They are not performance results; they are executable
+contracts for the benchmark run that will follow.
+
+Gate semantics are explicit in the plans:
+
+- Transport-worker plans name
+  ``audit_transport_parallel_scaling_summary`` as the release speedup gate and
+  record that cold-start timings are rejected for warm scaling claims.
+- Sharded-solve plans are marked
+  ``benchmark_kind="single_case_sharded_solve"`` and
+  ``release_scaling_claim=false``; their audit is a schema/honesty gate, not a
+  release strong-scaling gate.
+- Multi-GPU case-throughput plans define throughput speedup as
+  ``sequential_one_gpu.wall_s / parallel_two_gpu.wall_s`` but keep it
+  non-release until measured wall time improves.
+- Memory metadata in plans records bounded child timeouts and allocator choices
+  such as ``XLA_PYTHON_CLIENT_PREALLOCATE=false`` and ``cuda_malloc_async``.
+  Peak RSS/GPU memory remains a measured-run artifact, not a plan-only claim.
+
 Earlier runs (smaller grids)
 ----------------------------
 

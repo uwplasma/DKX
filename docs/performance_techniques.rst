@@ -1093,6 +1093,14 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_PRECOND_DTYPE`` (default ``auto``; ``float32`` or ``float64`` to override)
 - ``SFINCS_JAX_PRECOND_FP32_MIN_SIZE`` (threshold for auto mixed precision)
 
+The PAS benchmark promotion gate is intentionally stricter than a single
+threshold comparison. When ``scripts/benchmark_pas_tz_memory_fallback.py`` is
+run with ``--require-default-promotion-gate``, a residual-clean candidate must
+not regress either elapsed time or peak RSS against the supplied baseline, and
+must still show a material runtime or memory win. This prevents a PAS policy
+from being promoted when it is faster but higher-memory, or lower-memory but
+slower.
+
 **PAS-lite / PAS-hybrid / PAS-Schur preconditioners.** For PAS-only RHSMode=1
 systems, ``sfincs_jax`` now defaults to lightweight PAS-specific preconditioners
 before attempting expensive global Schur or dense fallbacks:
@@ -1670,6 +1678,9 @@ route clears both runtime and residual gates. Use
 ``scripts/benchmark_pas_tz_memory_fallback.py`` to run forced ``collision``,
 ``hybrid``, ``theta``, ``zeta``, and ``tzfft`` fallback variants in subprocesses
 with hard timeouts.
+The companion ``scripts/benchmark_rhs1_pas_matrixfree.py`` production-solve
+planner can pass the same default-promotion baseline gate into those subprocess
+runs via the ``--production-solve-require-default-promotion-gate`` controls.
 The checked smoke artifact
 ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
 records the intended guard behavior on the geometryScheme=4 PAS deck. The
@@ -1690,6 +1701,10 @@ geometryScheme=4 smoke it returned in about ``2.0 s`` and lowered the residual
 from ``6.4e5`` to ``1.3e5`` with RSS about ``728 MB``. Increasing the correction
 steps to ``10`` did not materially improve the residual. This is therefore kept
 as an explicit profiling tool, not as a promoted default.
+The helper rejects exactly zero updates and zero-relaxation attempts before
+running a candidate residual matvec, so no-op PAS correction probes now spend one
+matrix-free operator application instead of two while preserving the same reject
+reason and residual history.
 
 The same fail-fast rule is now applied to forced weak PAS baselines at
 astronomical residual ratios, with a cheap accept-only minres correction before
@@ -1720,6 +1735,65 @@ The remaining high-impact memory lanes are algorithmic:
 - evaluate Lineax/Equinox operators only behind the same gate, since their main
   value here is a cleaner matrix-free operator abstraction and differentiable
   solver state, not automatic memory reduction.
+
+JAX ecosystem gates
+-------------------
+
+External JAX libraries stay behind measured gates until they show a real
+reliability or performance advantage on SFINCS-owned workloads. These gates are
+optional and must degrade to skipped rows when their packages are unavailable.
+
+Lineax is currently a candidate for differentiable linear-solve experiments, not
+a production CLI backend. The lightweight synthetic gate is:
+
+.. code-block:: bash
+
+   python examples/performance/benchmark_optional_lineax_implicit_solve.py \
+     --backend all \
+     --suite synthetic \
+     --size 4 \
+     --restart 4 \
+     --maxiter 60 \
+     --out-json /tmp/sfincs_lineax_synthetic_gate.json
+
+On the local 2026-05-12 smoke, the in-tree solve row was residual-clean
+(``relative_residual ~= 1.6e-16``) with gradient error about ``7.8e-12`` and
+elapsed time about ``0.89 s``. The Lineax row was also residual-clean
+(``relative_residual = 0``) with gradient error about ``2.3e-12`` and elapsed
+time about ``0.36 s``. This supports keeping Lineax under evaluation, but it
+does not promote it to production because the real tiny SFINCS gate still has to
+stay status-clean, parity-clean, and faster or lower-memory.
+
+Equinox and JAXopt are checked as objective-wrapper tooling around a real
+``geometryScheme=4`` differentiable objective:
+
+.. code-block:: bash
+
+   python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py \
+     --backend all \
+     --n-theta 17 \
+     --n-zeta 17 \
+     --maxiter 5 \
+     --stepsize 0.1 \
+     --out-json /tmp/sfincs_eqx_jaxopt_gate.json
+
+On the local 2026-05-12 smoke, the Equinox wrapper matched a centered
+finite-difference directional derivative with about ``1.1e-11`` absolute error
+and elapsed time about ``0.038 s``. The JAXopt gradient-descent row reduced the
+loss to a ratio of about ``4.1e-14`` and recovered the target harmonic
+amplitudes to about ``1.6e-08`` in Euclidean norm with elapsed time about
+``0.15 s``.
+
+The focused regression test for the measured summaries is:
+
+.. code-block:: bash
+
+   python -m pytest tests/test_optional_ecosystem_gates.py -q
+
+Promotion rule: optional ecosystem libraries may only move closer to production
+when the JSON gate contains measured ``ok`` rows for the relevant real SFINCS
+case, clean residual or gradient metrics, and no hard dependency on the optional
+package in default installs.
 
 Geometry parsing cache
 ----------------------

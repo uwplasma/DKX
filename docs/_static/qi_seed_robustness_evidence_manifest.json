@@ -1,0 +1,202 @@
+{
+  "acceptance_gates": {
+    "converged": 5,
+    "max_residual_ratio": 1.0,
+    "outputs_written": 5,
+    "process_failed": 0,
+    "public_cli_default_path": true,
+    "required_artifacts": [
+      "docs/_static/qi_seed_robustness_prod_cpu.json",
+      "docs/_static/qi_seed_robustness_prod_gpu0.json"
+    ],
+    "required_backends": [
+      "cpu",
+      "gpu"
+    ],
+    "solve_method": "auto",
+    "solver_traces_written": 5,
+    "timed_out": 0
+  },
+  "artifact_kind": "qi_seed_production_gate_manifest",
+  "current_evidence": {
+    "artifact_count": 5,
+    "bounded_lane_completion_estimate_percent": 35.0,
+    "checked_backends": [
+      "cpu",
+      "gpu"
+    ],
+    "max_checked_active_size": 13169,
+    "max_checked_per_axis_resolution_fraction": 0.35,
+    "max_checked_total_size": 23942,
+    "max_checked_total_size_fraction": 0.023472502995092168,
+    "passing_artifact_count": 5,
+    "production_total_size_uncovered_percent": 97.65
+  },
+  "lane": "qi_seed_robustness",
+  "open_blockers": [
+    "Run and check in production-resolution CPU multi-seed summary artifact.",
+    "Run and check in production-resolution GPU0 multi-seed summary artifact.",
+    "Promote release_gate only after both production artifacts pass the residual and convergence gates."
+  ],
+  "production_target": {
+    "required_backends": [
+      "cpu",
+      "gpu"
+    ],
+    "resolution": {
+      "NTHETA": 25,
+      "NX": 8,
+      "NXI": 100,
+      "NZETA": 51
+    },
+    "seed_count": 5,
+    "total_size_estimate": 1020002
+  },
+  "regeneration_commands": {
+    "production_cpu_seed_ladder": "JAX_PLATFORM_NAME=cpu python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_prod_cpu --seeds 0 1 2 3 4 --resolution-scale 1.0 --min-ntheta 25 --min-nzeta 51 --min-nx 8 --min-nxi 100 --execute --timeout-s 3600.0 --max-residual-ratio 1 --require-converged --summary-output docs/_static/qi_seed_robustness_prod_cpu.json --clean",
+    "production_gpu0_seed_ladder": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_prod_gpu0 --seeds 0 1 2 3 4 --resolution-scale 1.0 --min-ntheta 25 --min-nzeta 51 --min-nx 8 --min-nxi 100 --execute --timeout-s 3600.0 --max-residual-ratio 1 --require-converged --summary-output docs/_static/qi_seed_robustness_prod_gpu0.json --clean",
+    "refresh_evidence_manifest": "python scripts/run_qi_seed_robustness.py --summarize-artifacts-only --evidence-manifest-output docs/_static/qi_seed_robustness_evidence_manifest.json"
+  },
+  "release_gate": "bounded_proxy",
+  "release_gate_reason": "Bounded CPU/GPU QI artifacts pass, but no production-resolution CPU/GPU multi-seed ladder has been checked in yet.",
+  "schema_version": 1,
+  "source_artifacts": [
+    {
+      "active_size": null,
+      "artifact_kind": "legacy_qi_seed_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 2.256354791999911,
+      "max_residual_ratio": 5.722997708962263e-07,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_smoke.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 7,
+        "NX": 4,
+        "NXI": 15,
+        "NZETA": 11
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.28,
+        "NX": 0.5,
+        "NXI": 0.15,
+        "NZETA": 0.21568627450980393
+      },
+      "schema_version": 1,
+      "total_size": 4622
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "legacy_qi_seed_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 3,
+      "max_elapsed_s": 3.1873671249995823,
+      "max_residual_ratio": 7.872442389293008e-07,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_multiseed.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 7,
+        "NX": 4,
+        "NXI": 25,
+        "NZETA": 13
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.28,
+        "NX": 0.5,
+        "NXI": 0.25,
+        "NZETA": 0.2549019607843137
+      },
+      "schema_version": 1,
+      "total_size": 9102
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "legacy_qi_seed_summary",
+      "backends": [
+        "gpu"
+      ],
+      "case_count": 3,
+      "max_elapsed_s": 43.9851692779921,
+      "max_residual_ratio": 4.1369261488340126e-07,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_multiseed_gpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 7,
+        "NX": 4,
+        "NXI": 25,
+        "NZETA": 13
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.28,
+        "NX": 0.5,
+        "NXI": 0.25,
+        "NZETA": 0.2549019607843137
+      },
+      "schema_version": 1,
+      "total_size": 9102
+    },
+    {
+      "active_size": 13169,
+      "artifact_kind": "legacy_qi_seed_summary",
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 42.79372702119872,
+      "max_residual_ratio": 1.1645862228278504e-06,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale035_cpu_gpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 9,
+        "NX": 4,
+        "NXI": 35,
+        "NZETA": 19
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.36,
+        "NX": 0.5,
+        "NXI": 0.35,
+        "NZETA": 0.37254901960784315
+      },
+      "schema_version": 1,
+      "total_size": 23942
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 5,
+      "max_elapsed_s": 4.88127904200519,
+      "max_residual_ratio": 7.872442389293008e-07,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_multiseed5_cpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 7,
+        "NX": 4,
+        "NXI": 25,
+        "NZETA": 13
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.28,
+        "NX": 0.5,
+        "NXI": 0.25,
+        "NZETA": 0.2549019607843137
+      },
+      "schema_version": 2,
+      "total_size": 9102
+    }
+  ],
+  "source_input": "examples/additional_examples/input.namelist"
+}

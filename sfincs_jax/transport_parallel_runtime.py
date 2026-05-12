@@ -153,6 +153,65 @@ def _coalesce_transport_payloads(
     return scheduled
 
 
+def plan_transport_parallel_gpu_subprocesses(
+    *,
+    payloads: list[dict[str, object]],
+    parallel_workers: int,
+    visible_gpu_ids: list[str],
+) -> dict[str, object]:
+    """Return a deterministic GPU transport worker schedule without launching it."""
+
+    requested_workers = validate_transport_parallel_worker_count(
+        parallel_workers,
+        context="GPU transport",
+    )
+    if not payloads:
+        return {
+            "requested_workers": requested_workers,
+            "active_workers": 0,
+            "raw_visible_gpu_ids": [str(gpu_id) for gpu_id in visible_gpu_ids],
+            "unique_visible_gpu_ids": [],
+            "capped": False,
+            "cap_reasons": [],
+            "worker_assignments": [],
+        }
+
+    gpu_ids = _unique_gpu_ids(visible_gpu_ids)
+    if not gpu_ids:
+        raise RuntimeError("GPU transport parallel backend requested but no visible GPU ids were found.")
+
+    unique_gpu_count = len(gpu_ids)
+    use_workers = min(requested_workers, len(payloads), unique_gpu_count)
+    cap_reasons: list[str] = []
+    if len(payloads) < requested_workers:
+        cap_reasons.append(f"independent RHS chunks={len(payloads)}")
+    if unique_gpu_count < requested_workers:
+        cap_reasons.append(f"unique visible GPU ids={unique_gpu_count}")
+
+    scheduled_payloads = _coalesce_transport_payloads(payloads, use_workers)
+    assignments: list[dict[str, object]] = []
+    for i, payload in enumerate(scheduled_payloads):
+        rhs_values = [int(v) for v in payload.get("which_rhs_values", [])]
+        assignments.append(
+            {
+                "worker_index": i,
+                "gpu_id": gpu_ids[i],
+                "which_rhs_values": rhs_values,
+                "payload": dict(payload),
+            }
+        )
+
+    return {
+        "requested_workers": requested_workers,
+        "active_workers": use_workers,
+        "raw_visible_gpu_ids": [str(gpu_id) for gpu_id in visible_gpu_ids],
+        "unique_visible_gpu_ids": gpu_ids[:use_workers],
+        "capped": use_workers < requested_workers,
+        "cap_reasons": cap_reasons,
+        "worker_assignments": assignments,
+    }
+
+
 def run_transport_parallel_gpu_subprocesses(
     *,
     payloads: list[dict[str, object]],
@@ -167,36 +226,33 @@ def run_transport_parallel_gpu_subprocesses(
     )
     if not payloads:
         return []
-    gpu_ids = _unique_gpu_ids(visible_gpu_ids(requested_workers))
-    if not gpu_ids:
-        raise RuntimeError("GPU transport parallel backend requested but no visible GPU ids were found.")
-    unique_gpu_count = len(gpu_ids)
-    use_workers = min(requested_workers, len(payloads), unique_gpu_count)
-    gpu_ids = gpu_ids[:use_workers]
-    if emit is not None and use_workers < requested_workers:
-        cap_reasons: list[str] = []
-        if len(payloads) < requested_workers:
-            cap_reasons.append(f"independent RHS chunks={len(payloads)}")
-        if unique_gpu_count < requested_workers:
-            cap_reasons.append(f"unique visible GPU ids={unique_gpu_count}")
+    plan = plan_transport_parallel_gpu_subprocesses(
+        payloads=payloads,
+        parallel_workers=requested_workers,
+        visible_gpu_ids=visible_gpu_ids(requested_workers),
+    )
+    use_workers = int(plan["active_workers"])
+    assignments = list(plan["worker_assignments"])  # type: ignore[arg-type]
+    if emit is not None and bool(plan["capped"]):
+        cap_reasons = [str(reason) for reason in plan["cap_reasons"]]  # type: ignore[union-attr]
         reason = ", ".join(cap_reasons) if cap_reasons else "available work/devices"
         emit(
             1,
             "solve_v3_transport_matrix_linear_gmres: GPU transport worker plan capped "
             f"(active={use_workers} requested={requested_workers}; {reason})",
         )
-    scheduled_payloads = _coalesce_transport_payloads(payloads, use_workers)
 
     results: list[dict[str, object]] = []
     with tempfile.TemporaryDirectory(prefix="sfincs_jax_transport_gpu_") as tmpdir:
         tmpdir_path = Path(tmpdir)
         procs: list[tuple[subprocess.Popen[str], Path, list[int], str]] = []
-        for i, payload in enumerate(scheduled_payloads):
+        for i, assignment in enumerate(assignments):
+            payload = dict(assignment["payload"])  # type: ignore[index]
             rhs_vals = [int(v) for v in payload.get("which_rhs_values", [])]
             payload_path = tmpdir_path / f"payload_{i}.json"
             output_path = tmpdir_path / f"result_{i}.npz"
             payload_path.write_text(json.dumps(payload))
-            gpu_id = gpu_ids[i]
+            gpu_id = str(assignment["gpu_id"])  # type: ignore[index]
             env = gpu_worker_env(gpu_id=gpu_id)
             cmd = [
                 sys.executable,

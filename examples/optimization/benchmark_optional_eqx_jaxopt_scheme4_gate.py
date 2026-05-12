@@ -24,13 +24,12 @@ import time
 from typing import Any
 
 import jax.numpy as jnp
-import numpy as np
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.geometry import boozer_geometry_scheme4
+from sfincs_jax.geometry import boozer_geometry_scheme4  # noqa: E402
 
 
 _AUTO_IMPORT = object()
@@ -63,7 +62,6 @@ def make_scheme4_problem(
     theta = jnp.linspace(0.0, 2.0 * jnp.pi, int(n_theta), endpoint=False, dtype=jnp.float64)
     zeta = jnp.linspace(0.0, 2.0 * jnp.pi / 5.0, int(n_zeta), endpoint=False, dtype=jnp.float64)
     amps_target = jnp.asarray([0.05645, -0.05351, -0.01402], dtype=jnp.float64)
-    amps0 = jnp.zeros_like(amps_target)
     bhat_target = boozer_geometry_scheme4(theta=theta, zeta=zeta, harmonics_amp0=amps_target).b_hat
     return theta, zeta, amps_target, bhat_target
 

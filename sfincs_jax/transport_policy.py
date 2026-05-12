@@ -1,3 +1,10 @@
+"""Pure transport backend and sparse-host policy helpers.
+
+The transport driver owns operator assembly and residual evaluation; this module
+only decides whether specific dense, sparse-direct, host-GMRES, and recycling
+paths are eligible for a bounded transport solve.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -7,12 +14,24 @@ from typing import Any
 import numpy as np
 
 
-def transport_dense_backend_allowed(*, backend: str) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", "").strip().lower()
-    if env in {"1", "true", "yes", "on"}:
+_TRUE_ENV = {"1", "true", "yes", "on"}
+_FALSE_ENV = {"0", "false", "no", "off"}
+
+
+def _env_flag(name: str) -> bool | None:
+    raw = os.environ.get(name, "").strip().lower()
+    if raw in _TRUE_ENV:
         return True
-    if env in {"0", "false", "no", "off"}:
+    if raw in _FALSE_ENV:
         return False
+    return None
+
+
+def transport_dense_backend_allowed(*, backend: str) -> bool:
+    """Return whether the dense transport path is allowed on this backend."""
+    env = _env_flag("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR")
+    if env is not None:
+        return env
     return str(backend).strip().lower() == "cpu"
 
 
@@ -28,11 +47,9 @@ def transport_dense_accelerator_auto_allowed(
         return False
     if backend_key not in {"gpu", "cuda"}:
         return False
-    broad_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", "").strip().lower()
-    if broad_env in {"0", "false", "no", "off"}:
+    if _env_flag("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR") is False:
         return False
-    auto_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO", "").strip().lower()
-    if auto_env in {"0", "false", "no", "off"}:
+    if _env_flag("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO") is False:
         return False
     if bool(getattr(op, "include_phi1", False)):
         return False
@@ -71,11 +88,10 @@ def transport_dense_accelerator_auto_allowed(
 
 
 def transport_tzfft_backend_allowed(*, backend: str) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_ALLOW_ACCELERATOR", "").strip().lower()
-    if env in {"1", "true", "yes", "on"}:
-        return True
-    if env in {"0", "false", "no", "off"}:
-        return False
+    """Return whether the structured ``theta,zeta`` FFT path may run here."""
+    env = _env_flag("SFINCS_JAX_TRANSPORT_TZFFT_ALLOW_ACCELERATOR")
+    if env is not None:
+        return env
     return str(backend).strip().lower() == "cpu"
 
 
@@ -115,8 +131,8 @@ def transport_sparse_direct_rescue_allowed(
     use_implicit: bool,
     backend: str,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
+    """Return whether sparse-direct transport rescue is admissible."""
+    if _env_flag("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT") is False:
         return False
     if bool(use_implicit):
         return False
@@ -158,8 +174,8 @@ def transport_sparse_direct_rescue_allowed(
 
 
 def transport_sparse_direct_rescue_first(*, sparse_direct_rescue: bool) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
+    """Return whether an admitted sparse-direct rescue should run first."""
+    if _env_flag("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST") is False:
         return False
     return bool(sparse_direct_rescue)
 
@@ -171,6 +187,7 @@ def transport_sparse_direct_first_attempt_allowed(
     use_implicit: bool,
     backend: str,
 ) -> bool:
+    """Return whether sparse-direct should be the first transport attempt."""
     if bool(use_implicit):
         return False
     if int(op.rhs_mode) not in {2, 3} or bool(op.include_phi1):
@@ -229,8 +246,8 @@ def transport_host_gmres_first_attempt_allowed(
     use_implicit: bool,
     backend: str,
 ) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
+    """Return whether CPU host-GMRES should be attempted before device GMRES."""
+    if _env_flag("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST") is False:
         return False
     if bool(use_implicit):
         return False
@@ -270,6 +287,7 @@ def transport_host_gmres_accepts_preconditioned_residual(
     true_residual_norm: float,
     target_true: float,
 ) -> bool:
+    """Return whether host GMRES may accept a preconditioned-residual success."""
     env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_TRUE_RATIO", "").strip()
     try:
         if env:
@@ -299,6 +317,7 @@ def transport_host_gmres_accepts_preconditioned_residual(
 
 
 def transport_precondition_side(*, op: Any, use_implicit: bool) -> str:
+    """Resolve the transport preconditioner side without inspecting operators."""
     del op, use_implicit
     env = os.environ.get("SFINCS_JAX_TRANSPORT_PRECONDITION_SIDE", "").strip().lower()
     if env in {"left", "right", "none"}:
@@ -307,11 +326,10 @@ def transport_precondition_side(*, op: Any, use_implicit: bool) -> str:
 
 
 def transport_disable_auto_recycle(*, op: Any, use_implicit: bool, backend: str) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_DISABLE_AUTO_RECYCLE", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if env in {"1", "true", "yes", "on"}:
-        return True
+    """Return whether transport Krylov-state auto-recycling should be disabled."""
+    env = _env_flag("SFINCS_JAX_TRANSPORT_DISABLE_AUTO_RECYCLE")
+    if env is not None:
+        return env
     return bool(
         (not bool(use_implicit))
         and str(backend).strip().lower() == "cpu"
@@ -328,6 +346,7 @@ def transport_sparse_direct_needs_float64_retry(
     residual_norm: float,
     target_true: float,
 ) -> bool:
+    """Return whether a float32 sparse-direct factor needs a float64 retry."""
     if np.dtype(factor_dtype) != np.dtype(np.float32):
         return False
     if not np.isfinite(float(residual_norm)):
@@ -348,6 +367,7 @@ def transport_sparse_factor_dtype(
     backend: str,
     host_sparse_factor_dtype: Callable[..., np.dtype],
 ) -> np.dtype:
+    """Resolve the sparse transport LU factor dtype for host fallback paths."""
     env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE", "").strip().lower()
     if env == "float64":
         return np.dtype(np.float64)
@@ -374,11 +394,10 @@ def transport_sparse_factor_dtype(
 
 
 def transport_sparse_direct_use_explicit_helper(*, size: int, backend: str) -> bool:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", "").strip().lower()
-    if env in {"0", "false", "no", "off"}:
-        return False
-    if env in {"1", "true", "yes", "on"}:
-        return True
+    """Return whether the explicit sparse host helper should materialize CSR."""
+    env = _env_flag("SFINCS_JAX_TRANSPORT_SPARSE_HELPER")
+    if env is not None:
+        return env
     min_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CPU_MIN", "").strip()
     try:
         cpu_min = int(min_env) if min_env else 12000

@@ -1,3 +1,5 @@
+"""Pure nonlinear Phi1 Newton and line-search policy helpers."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +13,7 @@ def phi1_use_active_dof_mode(
     has_reduced_modes: bool,
     env_value: str,
 ) -> bool:
+    """Return whether Phi1 solves should compact to active DOFs."""
     env = str(env_value).strip().lower()
     if env in {"1", "true", "yes", "on"}:
         return True
@@ -20,6 +23,7 @@ def phi1_use_active_dof_mode(
 
 
 def phi1_gmres_restart(active_size: int, gmres_restart: int) -> int:
+    """Cap GMRES restart for small Phi1 active systems."""
     restart = int(gmres_restart)
     if int(active_size) <= 1000:
         restart = min(restart, 200)
@@ -28,6 +32,8 @@ def phi1_gmres_restart(active_size: int, gmres_restart: int) -> int:
 
 @dataclass(frozen=True)
 class Phi1FrozenJacobianPolicy:
+    """Resolved frozen-Jacobian cache policy for the nonlinear Phi1 path."""
+
     mode: str
     use_cache: bool
     every: int
@@ -37,6 +43,7 @@ def phi1_frozen_jacobian_policy(
     *,
     include_phi1: bool,
 ) -> Phi1FrozenJacobianPolicy:
+    """Resolve the frozen-Jacobian mode and cache cadence from env settings."""
     jac_mode = os.environ.get("SFINCS_JAX_PHI1_FROZEN_JAC_MODE", "").strip().lower()
     if jac_mode not in {"frozen", "frozen_rhs", "frozen_op"}:
         jac_mode = "frozen" if bool(include_phi1) else "frozen_rhs"
@@ -59,6 +66,8 @@ def phi1_frozen_jacobian_policy(
 
 @dataclass(frozen=True)
 class Phi1LineSearchPolicy:
+    """Resolved nonlinear Phi1 line-search constants and mode."""
+
     step_scale: float
     factor: float | None
     c1: float
@@ -71,6 +80,7 @@ def phi1_line_search_policy(
     use_frozen_linearization: bool,
     include_phi1: bool,
 ) -> Phi1LineSearchPolicy:
+    """Resolve the Phi1 line-search mode, constants, and iteration cap."""
     step_scale_env = os.environ.get("SFINCS_JAX_PHI1_STEP_SCALE", "").strip()
     try:
         step_scale = float(step_scale_env) if step_scale_env else 1.0

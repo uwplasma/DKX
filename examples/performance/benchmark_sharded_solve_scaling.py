@@ -96,6 +96,18 @@ def _configure_benchmark_subprocess_env(env: dict[str, str]) -> None:
         env[key] = str(max(current, 2))
 
 
+def _display_path(path: Path, *, repo_root: Path) -> str:
+    try:
+        return str(Path(path).resolve().relative_to(repo_root))
+    except ValueError:
+        return str(path)
+
+
+def _normalize_device_counts(requested_devices: list[int]) -> list[int]:
+    devices = sorted({int(d) for d in requested_devices if int(d) >= 1})
+    return devices or [1]
+
+
 def _timing_semantics(
     *,
     global_warmup: int,
@@ -120,6 +132,343 @@ def _run_scaling_audit(payload: dict[str, object]) -> None:
         return
     failures = "\n".join(f"- {failure}" for failure in audit.failures)
     raise SystemExit(f"Sharded-solve scaling audit failed:\n{failures}")
+
+
+def _run_once_args(
+    *,
+    input_path: Path | str,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    nsolve: int,
+    inner_warmup_solves: int,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+) -> list[str]:
+    args = [
+        "--run-once",
+        "--input",
+        str(input_path),
+        "--nsolve",
+        str(int(nsolve)),
+        "--inner-warmup-solves",
+        str(int(inner_warmup_solves)),
+        "--shard-axis",
+        str(shard_axis),
+        "--gmres-distributed",
+        str(gmres_distributed),
+        "--distributed-krylov",
+        str(distributed_krylov),
+        "--periodic-stencil-on-sharded",
+        str(periodic_stencil_on_sharded),
+        "--backend",
+        str(backend),
+    ]
+    if rhs1_precond:
+        args.extend(["--rhs1-precond", str(rhs1_precond)])
+    if schwarz_coarse_levels is not None:
+        args.extend(["--schwarz-coarse-levels", str(int(schwarz_coarse_levels))])
+    if schwarz_coarse_steps is not None:
+        args.extend(["--schwarz-coarse-steps", str(int(schwarz_coarse_steps))])
+    if schwarz_coarse_damp is not None:
+        args.extend(["--schwarz-coarse-damp", str(float(schwarz_coarse_damp))])
+    return args
+
+
+def _run_once_command(
+    *,
+    input_path: Path,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    nsolve: int,
+    inner_warmup_solves: int,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+) -> list[str]:
+    return [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        *_run_once_args(
+            input_path=input_path,
+            shard_axis=shard_axis,
+            gmres_distributed=gmres_distributed,
+            distributed_krylov=distributed_krylov,
+            periodic_stencil_on_sharded=periodic_stencil_on_sharded,
+            nsolve=nsolve,
+            inner_warmup_solves=inner_warmup_solves,
+            rhs1_precond=rhs1_precond,
+            backend=backend,
+            schwarz_coarse_levels=schwarz_coarse_levels,
+            schwarz_coarse_steps=schwarz_coarse_steps,
+            schwarz_coarse_damp=schwarz_coarse_damp,
+        ),
+    ]
+
+
+def _benchmark_command(
+    *,
+    input_path: Path,
+    devices: list[int],
+    warmup: int,
+    repeats: int,
+    nsolve: int,
+    inner_warmup_solves: int,
+    sample_timeout_s: float,
+    global_warmup: int,
+    out_dir: Path,
+    cache_dir: Path,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+    audit: bool,
+    repo_root: Path,
+) -> list[str]:
+    cmd = [
+        "python",
+        "examples/performance/benchmark_sharded_solve_scaling.py",
+        "--input",
+        _display_path(input_path, repo_root=repo_root),
+        "--devices",
+        *[str(int(d)) for d in devices],
+        "--warmup",
+        str(int(warmup)),
+        "--repeats",
+        str(int(repeats)),
+        "--nsolve",
+        str(int(nsolve)),
+        "--inner-warmup-solves",
+        str(int(inner_warmup_solves)),
+        "--sample-timeout-s",
+        str(float(sample_timeout_s)),
+        "--global-warmup",
+        str(int(global_warmup)),
+        "--out-dir",
+        _display_path(out_dir, repo_root=repo_root),
+        "--cache-dir",
+        _display_path(cache_dir, repo_root=repo_root),
+        "--shard-axis",
+        str(shard_axis),
+        "--gmres-distributed",
+        str(gmres_distributed),
+        "--distributed-krylov",
+        str(distributed_krylov),
+        "--periodic-stencil-on-sharded",
+        str(periodic_stencil_on_sharded),
+        "--backend",
+        str(backend),
+    ]
+    if rhs1_precond:
+        cmd.extend(["--rhs1-precond", str(rhs1_precond)])
+    if schwarz_coarse_levels is not None:
+        cmd.extend(["--schwarz-coarse-levels", str(int(schwarz_coarse_levels))])
+    if schwarz_coarse_steps is not None:
+        cmd.extend(["--schwarz-coarse-steps", str(int(schwarz_coarse_steps))])
+    if schwarz_coarse_damp is not None:
+        cmd.extend(["--schwarz-coarse-damp", str(float(schwarz_coarse_damp))])
+    if audit:
+        cmd.append("--audit")
+    return cmd
+
+
+def _device_env_preview(
+    *,
+    devices: int,
+    cache_dir: Path | None,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+    repo_root: Path,
+) -> dict[str, str]:
+    env: dict[str, str] = {}
+    _configure_benchmark_subprocess_env(env)
+    _configure_backend_env(env=env, devices=int(devices), backend=backend)
+    _configure_solver_env(
+        env=env,
+        shard_axis=shard_axis,
+        gmres_distributed=gmres_distributed,
+        distributed_krylov=distributed_krylov,
+        periodic_stencil_on_sharded=periodic_stencil_on_sharded,
+        rhs1_precond=rhs1_precond,
+        schwarz_coarse_levels=schwarz_coarse_levels,
+        schwarz_coarse_steps=schwarz_coarse_steps,
+        schwarz_coarse_damp=schwarz_coarse_damp,
+    )
+    if cache_dir is not None:
+        env["JAX_COMPILATION_CACHE_DIR"] = _display_path(cache_dir, repo_root=repo_root)
+    return env
+
+
+def _build_sharded_solve_benchmark_plan(
+    *,
+    input_path: Path,
+    devices: list[int],
+    warmup: int,
+    repeats: int,
+    nsolve: int,
+    inner_warmup_solves: int,
+    sample_timeout_s: float,
+    global_warmup: int,
+    out_dir: Path,
+    cache_dir: Path,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+    audit: bool = False,
+) -> dict[str, object]:
+    repo_root = Path(__file__).resolve().parents[2]
+    normalized_devices = _normalize_device_counts(devices)
+    input_display = _display_path(input_path, repo_root=repo_root)
+    timing_semantics = _timing_semantics(
+        global_warmup=int(global_warmup),
+        per_device_warmup=int(warmup),
+        inner_warmup_solves=int(inner_warmup_solves),
+    )
+    device_plan = []
+    for d in normalized_devices:
+        env = _device_env_preview(
+            devices=d,
+            cache_dir=cache_dir,
+            shard_axis=str(shard_axis),
+            gmres_distributed=str(gmres_distributed),
+            distributed_krylov=str(distributed_krylov),
+            periodic_stencil_on_sharded=str(periodic_stencil_on_sharded),
+            rhs1_precond=str(rhs1_precond),
+            backend=str(backend),
+            schwarz_coarse_levels=schwarz_coarse_levels,
+            schwarz_coarse_steps=schwarz_coarse_steps,
+            schwarz_coarse_damp=schwarz_coarse_damp,
+            repo_root=repo_root,
+        )
+        device_plan.append(
+            {
+                "devices": int(d),
+                "warmup_runs": max(int(warmup), 0),
+                "timed_repeats": max(int(repeats), 1),
+                "nsolve_per_sample": max(int(nsolve), 1),
+                "inner_warmup_solves": max(int(inner_warmup_solves), 0),
+                "sample_timeout_s": float(sample_timeout_s),
+                "env": env,
+                "run_once_command": [
+                    "python",
+                    "examples/performance/benchmark_sharded_solve_scaling.py",
+                    *_run_once_args(
+                        input_path=input_display,
+                        shard_axis=str(shard_axis),
+                        gmres_distributed=str(gmres_distributed),
+                        distributed_krylov=str(distributed_krylov),
+                        periodic_stencil_on_sharded=str(periodic_stencil_on_sharded),
+                        nsolve=int(nsolve),
+                        inner_warmup_solves=int(inner_warmup_solves),
+                        rhs1_precond=str(rhs1_precond),
+                        backend=str(backend),
+                        schwarz_coarse_levels=schwarz_coarse_levels,
+                        schwarz_coarse_steps=schwarz_coarse_steps,
+                        schwarz_coarse_damp=schwarz_coarse_damp,
+                    ),
+                ],
+            }
+        )
+    return {
+        "artifact_kind": "benchmark_plan",
+        "benchmark_kind": "single_case_sharded_solve",
+        "scaling_status": "experimental_single_case_sharding",
+        "experimental_single_case_scaling": True,
+        "release_scaling_claim": False,
+        "launches_solves": False,
+        "input": input_path.name,
+        "input_path": input_display,
+        "case": input_path.stem.replace(".input", ""),
+        "task_count": 1,
+        "devices": normalized_devices,
+        "device_plan": device_plan,
+        "shard_axis": str(shard_axis),
+        "gmres_distributed": str(gmres_distributed),
+        "distributed_krylov": str(distributed_krylov),
+        "periodic_stencil_on_sharded": str(periodic_stencil_on_sharded),
+        "nsolve": int(nsolve),
+        "inner_warmup_solves": int(inner_warmup_solves),
+        "sample_timeout_s": float(sample_timeout_s),
+        "rhs1_precond": str(rhs1_precond),
+        "backend": str(backend),
+        "schwarz_coarse_levels": schwarz_coarse_levels,
+        "schwarz_coarse_steps": schwarz_coarse_steps,
+        "schwarz_coarse_damp": schwarz_coarse_damp,
+        "timing_semantics": timing_semantics,
+        "global_warmup": int(global_warmup),
+        "per_device_warmup": int(warmup),
+        "repeats": int(repeats),
+        "deterministic_output_check": False,
+        "estimated_child_process_samples": int(max(global_warmup, 0))
+        + len(normalized_devices) * (max(int(warmup), 0) + max(int(repeats), 1)),
+        "speedup_gate_semantics": {
+            "release_scaling_claim": False,
+            "evaluated_by": "audit_sharded_solve_scaling_summary",
+            "gate_scope": "schema_and_honesty_only",
+            "single_case_strong_scaling_is_experimental": True,
+        },
+        "memory_gate_semantics": {
+            "status": "bounded_by_child_timeout_and_allocator_settings",
+            "sample_timeout_s": float(sample_timeout_s),
+            "child_process_timeout_enabled": float(sample_timeout_s) > 0.0,
+            "gpu_preallocation_disabled": _normalized_backend(backend) == "gpu",
+            "gpu_allocator": "cuda_malloc_async" if _normalized_backend(backend) == "gpu" else None,
+        },
+        "benchmark_command": _benchmark_command(
+            input_path=input_path,
+            devices=normalized_devices,
+            warmup=int(warmup),
+            repeats=int(repeats),
+            nsolve=int(nsolve),
+            inner_warmup_solves=int(inner_warmup_solves),
+            sample_timeout_s=float(sample_timeout_s),
+            global_warmup=int(global_warmup),
+            out_dir=out_dir,
+            cache_dir=cache_dir,
+            shard_axis=str(shard_axis),
+            gmres_distributed=str(gmres_distributed),
+            distributed_krylov=str(distributed_krylov),
+            periodic_stencil_on_sharded=str(periodic_stencil_on_sharded),
+            rhs1_precond=str(rhs1_precond),
+            backend=str(backend),
+            schwarz_coarse_levels=schwarz_coarse_levels,
+            schwarz_coarse_steps=schwarz_coarse_steps,
+            schwarz_coarse_damp=schwarz_coarse_damp,
+            audit=bool(audit),
+            repo_root=repo_root,
+        ),
+    }
+
+
+def _write_plan_json(plan: dict[str, object], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")
 
 
 def _run_once(
@@ -201,35 +550,20 @@ def _run_once_subprocess(
     if cache_dir is not None:
         env["JAX_COMPILATION_CACHE_DIR"] = str(cache_dir)
 
-    cmd = [
-        sys.executable,
-        str(Path(__file__).resolve()),
-        "--run-once",
-        "--input",
-        str(input_path),
-        "--nsolve",
-        str(int(nsolve)),
-        "--inner-warmup-solves",
-        str(int(inner_warmup_solves)),
-        "--shard-axis",
-        str(shard_axis),
-        "--gmres-distributed",
-        str(gmres_distributed),
-        "--distributed-krylov",
-        str(distributed_krylov),
-        "--periodic-stencil-on-sharded",
-        str(periodic_stencil_on_sharded),
-        "--backend",
-        str(backend),
-    ]
-    if rhs1_precond:
-        cmd.extend(["--rhs1-precond", str(rhs1_precond)])
-    if schwarz_coarse_levels is not None:
-        cmd.extend(["--schwarz-coarse-levels", str(int(schwarz_coarse_levels))])
-    if schwarz_coarse_steps is not None:
-        cmd.extend(["--schwarz-coarse-steps", str(int(schwarz_coarse_steps))])
-    if schwarz_coarse_damp is not None:
-        cmd.extend(["--schwarz-coarse-damp", str(float(schwarz_coarse_damp))])
+    cmd = _run_once_command(
+        input_path=input_path,
+        shard_axis=str(shard_axis),
+        gmres_distributed=str(gmres_distributed),
+        distributed_krylov=str(distributed_krylov),
+        periodic_stencil_on_sharded=str(periodic_stencil_on_sharded),
+        nsolve=int(nsolve),
+        inner_warmup_solves=int(inner_warmup_solves),
+        rhs1_precond=str(rhs1_precond),
+        backend=str(backend),
+        schwarz_coarse_levels=schwarz_coarse_levels,
+        schwarz_coarse_steps=schwarz_coarse_steps,
+        schwarz_coarse_damp=schwarz_coarse_damp,
+    )
     timeout = None if sample_timeout_s is None or sample_timeout_s <= 0 else float(sample_timeout_s)
     try:
         out = subprocess.check_output(cmd, env=env, text=True, timeout=timeout)
@@ -370,6 +704,17 @@ def main() -> None:
         action="store_true",
         help="Fail fast if the saved payload does not pass the sharded-solve schema/honesty gate.",
     )
+    parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="Write a deterministic benchmark plan JSON without launching child solve processes.",
+    )
+    parser.add_argument(
+        "--plan-json",
+        type=Path,
+        default=None,
+        help="Path for --plan-only JSON (default: --out-dir/sharded_solve_benchmark_plan.json).",
+    )
     args = parser.parse_args()
 
     input_path = args.input
@@ -397,9 +742,38 @@ def main() -> None:
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = args.cache_dir
-    cache_dir.mkdir(parents=True, exist_ok=True)
 
-    devices = sorted({int(d) for d in args.devices if int(d) >= 1})
+    devices = _normalize_device_counts([int(d) for d in args.devices])
+
+    if args.plan_only:
+        plan = _build_sharded_solve_benchmark_plan(
+            input_path=input_path,
+            devices=devices,
+            warmup=int(args.warmup),
+            repeats=int(args.repeats),
+            nsolve=int(args.nsolve),
+            inner_warmup_solves=int(args.inner_warmup_solves),
+            sample_timeout_s=float(args.sample_timeout_s),
+            global_warmup=int(args.global_warmup),
+            out_dir=out_dir,
+            cache_dir=cache_dir,
+            shard_axis=str(args.shard_axis),
+            gmres_distributed=str(args.gmres_distributed),
+            distributed_krylov=str(args.distributed_krylov),
+            periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
+            rhs1_precond=str(args.rhs1_precond),
+            backend=str(args.backend),
+            schwarz_coarse_levels=args.schwarz_coarse_levels,
+            schwarz_coarse_steps=args.schwarz_coarse_steps,
+            schwarz_coarse_damp=args.schwarz_coarse_damp,
+            audit=bool(args.audit),
+        )
+        plan_path = args.plan_json if args.plan_json is not None else out_dir / "sharded_solve_benchmark_plan.json"
+        _write_plan_json(plan, plan_path)
+        print(json.dumps(plan, indent=2, sort_keys=True))
+        return
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
     if args.global_warmup and args.global_warmup > 0:
         for _ in range(int(args.global_warmup)):
