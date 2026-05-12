@@ -1154,6 +1154,7 @@ def _rhsmode1_fp_xblock_assembled_host_allowed(
     preconditioner_species: int,
     preconditioner_xi: int,
     use_implicit: bool,
+    active_size: int | None = None,
 ) -> bool:
     return _rhs1_fp_xblock_assembled_host_allowed_impl(
         op=op,
@@ -1161,6 +1162,7 @@ def _rhsmode1_fp_xblock_assembled_host_allowed(
         preconditioner_xi=int(preconditioner_xi),
         use_implicit=bool(use_implicit),
         backend=jax.default_backend(),
+        active_size=None if active_size is None else int(active_size),
     )
 
 
@@ -15348,7 +15350,12 @@ def solve_v3_full_system_linear_gmres(
                     if gpu_dkes_sparse_shortcut:
                         reason = "GPU DKES auto sparse shortcut"
                     elif cpu_large_xblock_shortcut:
-                        reason = "CPU large FP x-block shortcut"
+                        backend_name = str(jax.default_backend()).strip().lower()
+                        reason = (
+                            "CPU large FP x-block shortcut"
+                            if backend_name == "cpu"
+                            else f"{backend_name} host-sparse FP x-block shortcut"
+                        )
                     emit(
                         0,
                         "solve_v3_full_system_linear_gmres: skipping initial Krylov "
@@ -16048,9 +16055,11 @@ def solve_v3_full_system_linear_gmres(
             )
         if strong_control.reason_large_cpu_sparse_first and emit is not None:
             if emit is not None:
+                backend_name = str(jax.default_backend()).strip().lower()
+                sparse_label = "large CPU" if backend_name == "cpu" else f"{backend_name} host-sparse"
                 emit(
                     1,
-                    "solve_v3_full_system_linear_gmres: large CPU sparse rescue-first "
+                    f"solve_v3_full_system_linear_gmres: {sparse_label} rescue-first "
                     "auto mode -> defer strong preconditioner until after sparse LU",
                 )
         if strong_control.reason_pas_auto_skip and emit is not None:
@@ -16513,9 +16522,11 @@ def solve_v3_full_system_linear_gmres(
         if sparse_order.reason_size_large_cpu:
             sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size))
             if emit is not None:
+                backend_name = str(jax.default_backend()).strip().lower()
+                sparse_label = "large CPU sparse" if backend_name == "cpu" else f"{backend_name} host-sparse"
                 emit(
                     0,
-                    f"solve_v3_full_system_linear_gmres: large CPU sparse {'LU' if sparse_exact_lu else 'ILU'} rescue "
+                    f"solve_v3_full_system_linear_gmres: {sparse_label} {'LU' if sparse_exact_lu else 'ILU'} rescue "
                     f"(size={int(active_size)} > max={int(sparse_max_size)})",
                 )
         elif sparse_order.reason_size_exact_direct and emit is not None:
@@ -16592,6 +16603,7 @@ def solve_v3_full_system_linear_gmres(
                         preconditioner_species=preconditioner_species,
                         preconditioner_xi=sparse_xblock_preconditioner_xi,
                         use_implicit=bool(use_implicit),
+                        active_size=int(active_size),
                     )
                     _mark("rhs1_sparse_precond_build_start")
                     precond_sparse_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
@@ -16605,6 +16617,7 @@ def solve_v3_full_system_linear_gmres(
                         drop_rel=sparse_drop_rel,
                         ilu_drop_tol=sparse_ilu_drop_tol,
                         fill_factor=sparse_ilu_fill,
+                        force_assembled_host_fp=bool(assembled_host_fp),
                         emit=emit,
                     )
                     precond_sparse_xblock_current = precond_sparse_xblock

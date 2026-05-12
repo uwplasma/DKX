@@ -55,6 +55,7 @@ def test_large_cpu_sparse_rescue_defaults_for_large_fullx_fp(monkeypatch) -> Non
 def test_large_cpu_sparse_rescue_respects_backend_size_and_residual_guards(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FULLX_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", raising=False)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_MAX", "12000")
     assert not rhs1_large_cpu_sparse_rescue_allowed(
         op=_op(),
@@ -66,6 +67,7 @@ def test_large_cpu_sparse_rescue_respects_backend_size_and_residual_guards(monke
         target=1.0e-6,
         backend="cpu",
     )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", "0")
     assert not rhs1_large_cpu_sparse_rescue_allowed(
         op=_op(),
         solve_method_kind="incremental",
@@ -96,6 +98,7 @@ def test_large_cpu_sparse_rescue_respects_backend_size_and_residual_guards(monke
         target=1.0e-6,
         backend="gpu",
     )
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", raising=False)
     assert not rhs1_large_cpu_sparse_rescue_allowed(
         op=_op(),
         solve_method_kind="incremental",
@@ -123,6 +126,45 @@ def test_large_cpu_sparse_rescue_allows_moderate_fullx_with_exact_lu(monkeypatch
         residual_norm=1.0,
         target=1.0e-6,
         backend="cpu",
+    )
+
+
+def test_large_cpu_sparse_rescue_allows_bounded_accelerator_host_rescue(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FULLX_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE_MAX", raising=False)
+    assert rhs1_large_cpu_sparse_rescue_allowed(
+        op=_op(),
+        solve_method_kind="incremental",
+        active_size=13169,
+        sparse_max_size=6000,
+        preconditioner_x=1,
+        residual_norm=1.0,
+        target=1.0e-6,
+        backend="gpu",
+    )
+    assert not rhs1_large_cpu_sparse_rescue_allowed(
+        op=_op(),
+        solve_method_kind="incremental",
+        active_size=40000,
+        sparse_max_size=6000,
+        preconditioner_x=1,
+        residual_norm=1.0,
+        target=1.0e-6,
+        backend="gpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE", "0")
+    assert not rhs1_large_cpu_sparse_rescue_allowed(
+        op=_op(),
+        solve_method_kind="incremental",
+        active_size=13169,
+        sparse_max_size=6000,
+        preconditioner_x=1,
+        residual_norm=1.0,
+        target=1.0e-6,
+        backend="gpu",
     )
 
 
@@ -164,6 +206,9 @@ def test_exact_lu_xblock_promotion_requires_good_explicit_cpu_seed(monkeypatch) 
     )
     assert rhs1_large_cpu_sparse_exact_lu_xblock_allowed(**kwargs)
     assert not rhs1_large_cpu_sparse_exact_lu_xblock_allowed(**{**kwargs, "backend": "gpu"})
+    assert rhs1_large_cpu_sparse_exact_lu_xblock_allowed(
+        **{**kwargs, "active_size": 20000, "backend": "gpu"},
+    )
     assert not rhs1_large_cpu_sparse_exact_lu_xblock_allowed(
         **{**kwargs, "used_large_cpu_xblock_shortcut": False},
     )
@@ -196,6 +241,7 @@ def test_sparse_xblock_rescue_defaults_and_guards(monkeypatch) -> None:
     assert not rhs1_sparse_xblock_rescue_allowed(**{**kwargs, "preconditioner_x": 0})
     assert not rhs1_sparse_xblock_rescue_allowed(**{**kwargs, "pre_theta": 1})
     assert not rhs1_sparse_xblock_rescue_allowed(**{**kwargs, "backend": "gpu"})
+    assert rhs1_sparse_xblock_rescue_allowed(**{**kwargs, "active_size": 20000, "backend": "gpu"})
 
 
 def test_fp_xblock_host_assembly_and_primary_skip(monkeypatch) -> None:
@@ -229,6 +275,21 @@ def test_fp_xblock_host_assembly_and_primary_skip(monkeypatch) -> None:
         use_implicit=False,
         backend="cpu",
     )
+    assert rhs1_fp_xblock_assembled_host_allowed(
+        op=_op(),
+        preconditioner_species=1,
+        preconditioner_xi=1,
+        use_implicit=False,
+        backend="gpu",
+        active_size=13169,
+    )
+    assert not rhs1_fp_xblock_assembled_host_allowed(
+        op=_op(),
+        preconditioner_species=1,
+        preconditioner_xi=1,
+        use_implicit=False,
+        backend="gpu",
+    )
     assert rhs1_large_cpu_xblock_skip_primary_allowed(
         op=_op(),
         solve_method_kind="incremental",
@@ -242,6 +303,20 @@ def test_fp_xblock_host_assembly_and_primary_skip(monkeypatch) -> None:
         use_implicit=False,
         rhs1_precond_env="",
         backend="cpu",
+    )
+    assert rhs1_large_cpu_xblock_skip_primary_allowed(
+        op=_op(),
+        solve_method_kind="incremental",
+        active_size=13169,
+        sparse_max_size=6000,
+        preconditioner_species=1,
+        preconditioner_x=1,
+        preconditioner_xi=1,
+        pre_theta=0,
+        pre_zeta=0,
+        use_implicit=False,
+        rhs1_precond_env="",
+        backend="gpu",
     )
     assert not rhs1_large_cpu_xblock_skip_primary_allowed(
         op=_op(),
