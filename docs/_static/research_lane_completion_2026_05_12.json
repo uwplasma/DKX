@@ -3,7 +3,7 @@
   "lanes": [
     {
       "before_percent": 23,
-      "current_percent": 72,
+      "current_percent": 85,
       "evidence": [
         {
           "claim": "Production-readiness manifest rolls up all checked QI CPU/GPU seed artifacts and explicitly keeps the gate bounded until production CPU/GPU ladders exist.",
@@ -42,7 +42,7 @@
           "path": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json"
         },
         {
-          "claim": "Companion solver trace records the automatic policy: precondition_side=right, gmres_restart=80, 81 iterations, 85 matvecs, exact sparse_lu block factors.",
+          "claim": "Companion solver trace records the corrected explicit route: precondition_side=right, gmres_restart=80, 81 iterations, 85 matvecs, exact sparse_lu block factors.",
           "path": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu_solver_trace.json"
         },
         {
@@ -52,6 +52,14 @@
         {
           "claim": "GPU companion solver trace records precondition_side=right, gmres_restart=80, 69 iterations, 72 matvecs, exact sparse_lu block factors.",
           "path": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu_solver_trace.json"
+        },
+        {
+          "claim": "Scale-0.50 CPU five-seed QI ladder passes public solve_method=auto for seeds 0..4 with zero process failures, all outputs and solver traces written, max elapsed time 11.58 s, and max residual ratio 0.966.",
+          "path": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json"
+        },
+        {
+          "claim": "Scale-0.50 one-GPU five-seed QI ladder passes public solve_method=auto for seeds 0..4 on office GPU 0 with zero process failures, all outputs and solver traces written, max elapsed time 41.18 s, and max residual ratio 0.963.",
+          "path": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json"
         }
       ],
       "gates": [
@@ -62,12 +70,12 @@
       ],
       "id": "production_qi_cpu_gpu",
       "next_actions": [
-        "Run the promoted policy over wider CPU and one-GPU QI seed ladders at scale 0.50.",
-        "Advance to the next bounded QI scale only after CPU and GPU seed ladders keep residual ratio <= 1 with stable wall time and memory.",
+        "Advance to the next bounded QI scale with public solve_method=auto only after CPU and GPU seed ladders keep residual ratio <= 1 with stable wall time and memory.",
+        "Profile host-assembled x-block sparse LU memory at the next QI scale before production-resolution promotion.",
         "Refresh the production-resolution readiness estimate after wider seed ladders pass."
       ],
-      "second_push_delta_percent": 37,
-      "second_push_result": "scale-0.50 single-seed CPU and one-GPU QI blocker now pass with right-preconditioned x-block GMRES and exact sparse LU for medium full-FP host x-blocks; wider-seed production promotion remains open",
+      "second_push_delta_percent": 62,
+      "second_push_result": "scale-0.50 public auto CPU and one-GPU five-seed QI ladders now pass with right-preconditioned x-block GMRES and exact sparse LU for medium full-FP host x-blocks; next-scale and production-resolution promotion remain open",
       "status": "active",
       "target_percent": 100,
       "title": "Production-resolution QI CPU/GPU robustness"
@@ -429,6 +437,6 @@
   "purpose": "Machine-readable completion tracker for the coordinated large-push research/performance lanes. Percentages are engineering readiness estimates backed by checked-in evidence, not physics claims by themselves.",
   "requested_second_push_delta_percent": 15,
   "schema_version": 1,
-  "second_push_assessment": "partial but materially advanced: QI scale-0.50 single-seed CPU and one-GPU now pass with the promoted right-preconditioned exact-xblock-LU policy. The average is now 83.0%; wider QI seed ladders, PAS memory/runtime, parallel scaling, and coverage/refactor lanes remain evidence-gated before claiming 90%+.",
-  "overall_average_percent": 83.0
+  "second_push_assessment": "partial but materially advanced: QI scale-0.50 public auto CPU and one-GPU five-seed ladders now pass through the corrected right-preconditioned exact-xblock-LU route. The average is now 84.9%; next-scale QI evidence, PAS memory/runtime, parallel scaling, and coverage/refactor lanes remain evidence-gated before claiming 90%+.",
+  "overall_average_percent": 84.9
 }
