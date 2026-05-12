@@ -55,8 +55,40 @@ def test_research_lane_policy_rejects_overclaiming() -> None:
 
     errors = research_lane_completion_errors(payload, repo_root=_repo_root())
 
-    assert "pas_geometry_runtime_memory: active/evidence_ready lane delta must be >= 10 percentage points" in errors
+    assert (
+        "pas_geometry_runtime_memory: active/evidence_ready lane delta must be >= 10 "
+        "percentage points or saturate target_percent"
+    ) in errors
     assert "pas_geometry_runtime_memory: field evidence must be a non-empty list" in errors
+
+
+def test_research_lane_policy_accepts_target_saturation_for_large_push() -> None:
+    payload = copy.deepcopy(_valid_payload())
+    payload["minimum_substantial_delta_percent"] = 15
+    lane = payload["lanes"][0]  # type: ignore[index]
+    lane["before_percent"] = 85  # type: ignore[index]
+    lane["current_percent"] = 93  # type: ignore[index]
+    lane["target_percent"] = 93  # type: ignore[index]
+
+    errors = research_lane_completion_errors(payload, repo_root=_repo_root())
+
+    assert errors == []
+
+
+def test_research_lane_policy_rejects_unfinished_target_saturation() -> None:
+    payload = copy.deepcopy(_valid_payload())
+    payload["minimum_substantial_delta_percent"] = 15
+    lane = payload["lanes"][0]  # type: ignore[index]
+    lane["before_percent"] = 85  # type: ignore[index]
+    lane["current_percent"] = 92  # type: ignore[index]
+    lane["target_percent"] = 93  # type: ignore[index]
+
+    errors = research_lane_completion_errors(payload, repo_root=_repo_root())
+
+    assert (
+        "pas_geometry_runtime_memory: active/evidence_ready lane delta must be >= 8 "
+        "percentage points or saturate target_percent"
+    ) in errors
 
 
 def test_checked_in_research_lane_manifest_is_consistent() -> None:
