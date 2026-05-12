@@ -118,6 +118,34 @@ def test_transport_accelerator_auto_guards_parse_geometry_and_caps(
     )
 
 
+def test_transport_accelerator_auto_rejects_unbounded_dense_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ACCELERATOR_AUTO", raising=False)
+
+    assert not transport_dense_accelerator_auto_allowed(
+        _op(rhs_mode=3, include_phi1=True),
+        backend="gpu",
+        geometry_scheme=1,
+    )
+    assert not transport_dense_accelerator_auto_allowed(
+        _op(rhs_mode=3, has_fp=True),
+        backend="gpu",
+        geometry_scheme=1,
+    )
+    assert not transport_dense_accelerator_auto_allowed(
+        _op(rhs_mode=3, n_x=3),
+        backend="gpu",
+        geometry_scheme=1,
+    )
+    assert not transport_dense_accelerator_auto_allowed(
+        _op(rhs_mode=3, n_theta=4, n_zeta=4),
+        backend="gpu",
+        geometry_scheme=1,
+    )
+
+
 def test_transport_sparse_direct_and_host_gmres_first_attempts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -205,6 +233,24 @@ def test_transport_sparse_direct_and_host_gmres_first_attempts(
         use_implicit=False,
         backend="cpu",
     )
+    assert not transport_sparse_direct_first_attempt_allowed(
+        op=op,
+        size=12_000,
+        use_implicit=True,
+        backend="cpu",
+    )
+    assert not transport_sparse_direct_first_attempt_allowed(
+        op=_op(rhs_mode=1),
+        size=12_000,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not transport_sparse_direct_first_attempt_allowed(
+        op=_op(rhs_mode=2, include_phi1=True),
+        size=12_000,
+        use_implicit=False,
+        backend="cpu",
+    )
 
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST_MAX", "bad")
     assert transport_host_gmres_first_attempt_allowed(
@@ -222,6 +268,99 @@ def test_transport_sparse_direct_and_host_gmres_first_attempts(
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST", "off")
     assert not transport_host_gmres_first_attempt_allowed(
         op=_op(rhs_mode=3),
+        size=1,
+        use_implicit=False,
+        backend="cpu",
+    )
+
+
+def test_transport_sparse_and_host_gmres_reject_ineligible_shapes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST", raising=False)
+
+    assert not transport_sparse_direct_rescue_allowed(
+        op=_op(rhs_mode=2),
+        size=100,
+        residual_norm=float("nan"),
+        target=1.0,
+        use_implicit=True,
+        backend="cpu",
+    )
+    assert not transport_sparse_direct_rescue_allowed(
+        op=_op(rhs_mode=1),
+        size=100,
+        residual_norm=float("nan"),
+        target=1.0,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not transport_sparse_direct_rescue_allowed(
+        op=_op(rhs_mode=2, include_phi1=True),
+        size=100,
+        residual_norm=float("nan"),
+        target=1.0,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert transport_sparse_direct_rescue_allowed(
+        op=_op(rhs_mode=3),
+        size=80_000,
+        residual_norm=1.1e4,
+        target=1.0,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not transport_sparse_direct_rescue_allowed(
+        op=_op(rhs_mode=3),
+        size=80_001,
+        residual_norm=float("nan"),
+        target=1.0,
+        use_implicit=False,
+        backend="cpu",
+    )
+
+    assert transport_sparse_direct_rescue_first(sparse_direct_rescue=False) is False
+    assert transport_sparse_direct_first_attempt_allowed(
+        op=_op(rhs_mode=3, n_theta=4, n_zeta=4),
+        size=100,
+        use_implicit=False,
+        backend="gpu",
+    )
+
+    assert not transport_host_gmres_first_attempt_allowed(
+        op=_op(rhs_mode=3),
+        size=1,
+        use_implicit=True,
+        backend="cpu",
+    )
+    assert not transport_host_gmres_first_attempt_allowed(
+        op=_op(rhs_mode=3),
+        size=1,
+        use_implicit=False,
+        backend="gpu",
+    )
+    assert not transport_host_gmres_first_attempt_allowed(
+        op=_op(rhs_mode=1),
+        size=1,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not transport_host_gmres_first_attempt_allowed(
+        op=_op(rhs_mode=3, include_phi1=True),
+        size=1,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not transport_host_gmres_first_attempt_allowed(
+        op=_op(rhs_mode=3, has_fp=True),
+        size=1,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not transport_host_gmres_first_attempt_allowed(
+        op=_op(rhs_mode=3, n_x=3),
         size=1,
         use_implicit=False,
         backend="cpu",
@@ -285,6 +424,13 @@ def test_transport_residual_dtype_recycle_and_helper_policy(
         backend="cpu",
         host_sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float32),
     ) == np.dtype(np.float64)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE", "float32")
+    assert transport_sparse_factor_dtype(
+        size=1,
+        use_implicit=False,
+        backend="cpu",
+        host_sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float64),
+    ) == np.dtype(np.float32)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE", raising=False)
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_FLOAT64_MIN", "bad")
     assert transport_sparse_factor_dtype(

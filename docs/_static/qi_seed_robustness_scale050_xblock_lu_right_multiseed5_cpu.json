@@ -1,0 +1,212 @@
+{
+  "artifact_kind": "qi_seed_execution_summary",
+  "case_count": 5,
+  "er_jitter": 0.02,
+  "evidence_note": "Bounded QI seed-robustness execution summary generated from the reusable runner manifest gate. Passing artifacts provide measured evidence at their recorded resolution; failed or timed-out artifacts are blocker evidence and must not be used for production promotion.",
+  "execution_summary": {
+    "accepted_converged": 5,
+    "attempted": 5,
+    "backends": [
+      "cpu"
+    ],
+    "converged": 5,
+    "max_elapsed_s": 11.578921292006271,
+    "max_residual_ratio": 0.9660860967111728,
+    "outputs_written": 5,
+    "process_failed": 0,
+    "process_passed": 5,
+    "selected_paths": [
+      "rhsmode1_solution"
+    ],
+    "solve_methods": [
+      "xblock_sparse_pc_gmres"
+    ],
+    "solver_traces_written": 5,
+    "timed_out": 0
+  },
+  "fail_fast": false,
+  "gates": {
+    "failures": [],
+    "max_residual_ratio": 1.0,
+    "passed": true,
+    "require_accepted_converged": false,
+    "require_converged": true
+  },
+  "lane": "qi_seed_robustness",
+  "nu_jitter": 0.05,
+  "public_cli_default_path": true,
+  "resolution": {
+    "NTHETA": 13,
+    "NX": 4,
+    "NXI": 50,
+    "NZETA": 27
+  },
+  "resolution_scale": 0.5,
+  "schema_version": 2,
+  "seeds": [
+    {
+      "accepted_converged": true,
+      "backend": "cpu",
+      "case": "qi_seed_0000",
+      "converged": true,
+      "elapsed_s": 11.578921292006271,
+      "output_exists": true,
+      "progress_events": [
+        "sparse_lu: nnz=69134 (8.768e-03 density)",
+        "sparse_lu: nnz=173359 (3.898e-03 density)",
+        "sparse_lu: nnz=324959 (2.153e-03 density)",
+        "sparse_lu: nnz=467084 (1.516e-03 density)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=gmres elapsed_s=10.493 iters=81 matvecs=85 residual=1.044218e-12 target=2.510072e-11 ksp_residual=4.161357e-08"
+      ],
+      "residual_norm": 1.044218495665198e-12,
+      "residual_ratio": 0.04160113059715732,
+      "residual_target": 2.510072396293363e-11,
+      "resolution": {
+        "NTHETA": 13,
+        "NX": 4,
+        "NXI": 50,
+        "NZETA": 27
+      },
+      "returncode": 0,
+      "seed": 0,
+      "selected_path": "rhsmode1_solution",
+      "solve_method": "xblock_sparse_pc_gmres",
+      "solver_elapsed_s": 10.857335665990831,
+      "solver_trace_exists": true,
+      "stderr_tail": [],
+      "timed_out": false
+    },
+    {
+      "accepted_converged": true,
+      "backend": "cpu",
+      "case": "qi_seed_0001",
+      "converged": true,
+      "elapsed_s": 11.231621457991423,
+      "output_exists": true,
+      "progress_events": [
+        "sparse_lu: nnz=69134 (8.768e-03 density)",
+        "sparse_lu: nnz=173359 (3.898e-03 density)",
+        "sparse_lu: nnz=324959 (2.153e-03 density)",
+        "sparse_lu: nnz=467084 (1.516e-03 density)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=gmres elapsed_s=10.151 iters=73 matvecs=76 residual=2.377500e-11 target=2.534995e-11 ksp_residual=9.375551e-07"
+      ],
+      "residual_norm": 2.3775002013084855e-11,
+      "residual_ratio": 0.9378716870192514,
+      "residual_target": 2.5349951749419676e-11,
+      "resolution": {
+        "NTHETA": 13,
+        "NX": 4,
+        "NXI": 50,
+        "NZETA": 27
+      },
+      "returncode": 0,
+      "seed": 1,
+      "selected_path": "rhsmode1_solution",
+      "solve_method": "xblock_sparse_pc_gmres",
+      "solver_elapsed_s": 10.51037666600314,
+      "solver_trace_exists": true,
+      "stderr_tail": [],
+      "timed_out": false
+    },
+    {
+      "accepted_converged": true,
+      "backend": "cpu",
+      "case": "qi_seed_0002",
+      "converged": true,
+      "elapsed_s": 11.39047058399592,
+      "output_exists": true,
+      "progress_events": [
+        "sparse_lu: nnz=69134 (8.768e-03 density)",
+        "sparse_lu: nnz=173359 (3.898e-03 density)",
+        "sparse_lu: nnz=324959 (2.153e-03 density)",
+        "sparse_lu: nnz=467084 (1.516e-03 density)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=gmres elapsed_s=10.229 iters=72 matvecs=75 residual=2.450005e-11 target=2.536011e-11 ksp_residual=9.660533e-07"
+      ],
+      "residual_norm": 2.4500050944176954e-11,
+      "residual_ratio": 0.9660860967111728,
+      "residual_target": 2.536011130641666e-11,
+      "resolution": {
+        "NTHETA": 13,
+        "NX": 4,
+        "NXI": 50,
+        "NZETA": 27
+      },
+      "returncode": 0,
+      "seed": 2,
+      "selected_path": "rhsmode1_solution",
+      "solve_method": "xblock_sparse_pc_gmres",
+      "solver_elapsed_s": 10.60880833400006,
+      "solver_trace_exists": true,
+      "stderr_tail": [],
+      "timed_out": false
+    },
+    {
+      "accepted_converged": true,
+      "backend": "cpu",
+      "case": "qi_seed_0003",
+      "converged": true,
+      "elapsed_s": 11.311155082992627,
+      "output_exists": true,
+      "progress_events": [
+        "sparse_lu: nnz=69134 (8.768e-03 density)",
+        "sparse_lu: nnz=173359 (3.898e-03 density)",
+        "sparse_lu: nnz=324959 (2.153e-03 density)",
+        "sparse_lu: nnz=467084 (1.516e-03 density)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=gmres elapsed_s=10.075 iters=72 matvecs=75 residual=2.146886e-11 target=2.537995e-11 ksp_residual=8.458850e-07"
+      ],
+      "residual_norm": 2.1468859828640058e-11,
+      "residual_ratio": 0.8458983085632757,
+      "residual_target": 2.5379953608258248e-11,
+      "resolution": {
+        "NTHETA": 13,
+        "NX": 4,
+        "NXI": 50,
+        "NZETA": 27
+      },
+      "returncode": 0,
+      "seed": 3,
+      "selected_path": "rhsmode1_solution",
+      "solve_method": "xblock_sparse_pc_gmres",
+      "solver_elapsed_s": 10.47968012499041,
+      "solver_trace_exists": true,
+      "stderr_tail": [],
+      "timed_out": false
+    },
+    {
+      "accepted_converged": true,
+      "backend": "cpu",
+      "case": "qi_seed_0004",
+      "converged": true,
+      "elapsed_s": 11.233566750001046,
+      "output_exists": true,
+      "progress_events": [
+        "sparse_lu: nnz=69134 (8.768e-03 density)",
+        "sparse_lu: nnz=173359 (3.898e-03 density)",
+        "sparse_lu: nnz=324959 (2.153e-03 density)",
+        "sparse_lu: nnz=467084 (1.516e-03 density)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=gmres elapsed_s=10.131 iters=71 matvecs=74 residual=2.376376e-11 target=2.515797e-11 ksp_residual=9.400332e-07"
+      ],
+      "residual_norm": 2.37637603654326e-11,
+      "residual_ratio": 0.9445819482926683,
+      "residual_target": 2.5157965815867637e-11,
+      "resolution": {
+        "NTHETA": 13,
+        "NX": 4,
+        "NXI": 50,
+        "NZETA": 27
+      },
+      "returncode": 0,
+      "seed": 4,
+      "selected_path": "rhsmode1_solution",
+      "solve_method": "xblock_sparse_pc_gmres",
+      "solver_elapsed_s": 10.501779375001206,
+      "solver_trace_exists": true,
+      "stderr_tail": [],
+      "timed_out": false
+    }
+  ],
+  "solve_method_request": "auto",
+  "source_input": "examples/additional_examples/input.namelist",
+  "timeout_s": 180.0,
+  "total_size_estimate": 70202
+}

@@ -13,6 +13,7 @@ from sfincs_jax.solver import (
     dense_krylov_solve_from_matrix,
     dense_solve_from_matrix,
     explicit_left_preconditioned_gmres_scipy,
+    gcrotmk_solve_with_history_scipy,
     gmres_solve_jit,
     gmres_solve,
     gmres_solve_with_residual,
@@ -39,6 +40,34 @@ def test_gmres_solve_matches_numpy_for_spd_matrix() -> None:
 
     np.testing.assert_allclose(x, x_ref, rtol=1e-8, atol=1e-8)
     assert float(result.residual_norm) < 1e-8
+
+
+def test_gcrotmk_solve_with_history_scipy_matches_numpy_for_small_system() -> None:
+    a = np.array(
+        [
+            [4.0, -1.0, 0.0],
+            [1.0, 3.0, -1.0],
+            [0.0, -0.5, 2.0],
+        ],
+        dtype=np.float64,
+    )
+    b = np.array([1.0, -2.0, 0.5], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+
+    def mv(x):
+        return jnp.asarray(a) @ x
+
+    x, residual_norm, history = gcrotmk_solve_with_history_scipy(
+        matvec=mv,
+        b=jnp.asarray(b),
+        tol=1.0e-12,
+        restart=3,
+        maxiter=20,
+    )
+
+    np.testing.assert_allclose(x, x_ref, rtol=1.0e-10, atol=1.0e-10)
+    assert residual_norm < 1.0e-10
+    assert history
 
 
 def test_dense_solve_from_matrix_supports_multiple_rhs() -> None:

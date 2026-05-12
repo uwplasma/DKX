@@ -8,6 +8,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from sfincs_jax.jax_geometry_adapters import boozer_spectrum_proxy_transport_gradient_gate
+
 
 _REPO = Path(__file__).resolve().parents[1]
 _LINEAX_SCRIPT = _REPO / "examples" / "performance" / "benchmark_optional_lineax_implicit_solve.py"
@@ -36,6 +38,20 @@ def _measured_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "measured_rows": len(measured_rows),
         "backends": sorted(str(row["backend"]) for row in rows),
     }
+
+
+def test_pure_jax_boozer_proxy_transport_gradient_gate_is_skip_safe() -> None:
+    gate = boozer_spectrum_proxy_transport_gradient_gate()
+
+    assert gate["status"] == "pass"
+    assert gate["optional_dependencies_required"] is False
+    assert gate["objective"] > 0.0
+    assert gate["gradient_norm"] > 1.0e-8
+    assert gate["max_gradient_abs_error"] <= gate["gradient_tolerance"]
+    assert gate["jvp_dot_abs_error"] <= gate["jvp_tolerance"]
+    assert gate["spectrum_modes"] == 6
+    assert gate["grid_shape"] == {"n_theta": 16, "n_zeta": 12}
+    assert "kinetic SFINCS transport solve" in gate["not_claimed"]
 
 
 def test_optional_lineax_synthetic_gate_emits_measured_summary(tmp_path: Path) -> None:

@@ -232,14 +232,22 @@ audits the saved payload:
 - payload chunks for the claimed worker count cover each ``whichRHS`` exactly
   once;
 - deterministic output/merge coverage is recorded.
+- new or explicit release-claim payloads record a compile-amortization gate, so
+  warm/cache timing evidence states how compile/setup work was kept out of the
+  timed repeats.
 
 The returned ``TransportParallelScalingAudit`` includes ``release_scaling_claim``,
 ``failures``, and ``notes`` so benchmark scripts can separate malformed payloads
-from valid-but-weak measurements. This gate is intentionally scoped to
-transport-worker scaling: it supports claims such as "two GPU workers solve
-three independent transport RHS tasks with about 1.48x speedup." It does not
-upgrade single-case multi-GPU or sharded RHSMode=1 benchmarks into release-facing
-strong-scaling claims; those remain a separate experimental lane below.
+from valid-but-weak measurements. If a saved payload explicitly records
+``release_scaling_claim=false``, the audit preserves that non-release status even
+when the measured gates pass. If a payload explicitly records
+``release_scaling_claim=true``, the audit requires compile-amortization metadata
+in addition to the speedup, efficiency, timing, task-count, and deterministic
+coverage gates. This gate is intentionally scoped to transport-worker scaling:
+it supports claims such as "two GPU workers solve three independent transport RHS
+tasks with about 1.48x speedup." It does not upgrade single-case multi-GPU or
+sharded RHSMode=1 benchmarks into release-facing strong-scaling claims; those
+remain a separate experimental lane below.
 
 The benchmark driver records these fields in new JSON outputs and can run the
 gate directly:
@@ -305,6 +313,11 @@ Gate semantics are explicit in the plans:
 - Transport-worker plans name
   ``audit_transport_parallel_scaling_summary`` as the release speedup gate and
   record that cold-start timings are rejected for warm scaling claims.
+- Transport-worker plans include ``compile_amortization_gate`` with
+  ``passes``, warmup counts, timed-repeat counts, persistent-cache status, and
+  ``compile_in_timed_region=false``. This is plan-only evidence that the measured
+  run is intended to amortize compile/setup before timing; it is not itself a
+  speedup result.
 - Sharded-solve plans are marked
   ``benchmark_kind="single_case_sharded_solve"`` and
   ``release_scaling_claim=false``; their audit is a schema/honesty gate, not a
@@ -365,6 +378,11 @@ To avoid skew from compilation:
 - To reproduce, either run once with ``--workers 1`` before timing or set
   ``--global-warmup 1`` and keep ``--warmup 0`` for the timed measurements.
 - A persistent `JAX_CACHE_DIR` is used so processes can reuse compiled kernels.
+- New transport-worker benchmark JSON records ``compile_amortization_gate``.
+  The gate passes when either per-worker warmups are run before timed repeats or
+  a global warmup plus persistent compilation cache is configured. If an artifact
+  explicitly requests ``release_scaling_claim=true`` without this metadata, the
+  pure audit fails closed.
 
 
 Step (2): Parallel cases / scans
@@ -1054,6 +1072,23 @@ single-node GPU parallel path is still not publication-grade from a scaling
 standpoint. That is why the release-facing recommendation stays conservative:
 use GPU acceleration per case today, and treat multi-GPU parallelism as an
 active research path rather than a proven default.
+
+The 2026-05-12 timeout-safe rerun of the same audit on commit ``39e1e2f``
+kept the benchmark bounded and wrote the checked artifact
+``docs/_static/gpu_case_throughput_large_push_2026_05_12.json``. With
+``nsolve=1`` and a ``180 s`` child timeout, the run completed but failed the
+throughput gate:
+
+- GPU warmups: ``39.79 s`` and ``30.00 s``
+- sequential 1-GPU execution of two cases: ``59.18 s`` wall time
+- two concurrent 1-GPU runs on two GPUs: ``175.77 s`` wall time
+- measured throughput speedup: ``0.337x``
+- audit result: ``ci_gate_pass=false`` because the speedup is below ``1x``
+
+This is an intentionally non-promoting artifact. It proves the timeout-safe
+measurement path works on a clean checkout and confirms that this particular
+case-throughput lane is currently setup/compile dominated on office. It should
+not be used as a release scaling claim.
 
 Fresh two-GPU transport-worker rerun
 ------------------------------------

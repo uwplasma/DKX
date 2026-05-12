@@ -12,13 +12,14 @@ drift-kinetic calculations in stellarator and tokamak geometry. It combines
 high-fidelity kinetic models, CPU/GPU execution, modern matrix-free numerics,
 parallel workflows, and optional differentiable solve paths in one codebase.
 
-On the current `main` branch, the audited reduced example suite runs cleanly on
-CPU and GPU. A separate production-resolution benchmark tier is now being used
-for public runtime/memory claims and research-scale workloads; those larger
-finite-beta/profile-current cases are tracked separately from the fast smoke
-suite. The default CLI path is tuned for robust explicit solves and practical
-throughput, while the Python API can opt into differentiable solve paths when
-gradients matter.
+On the current `main` branch, the audited 39-case example suite runs cleanly on
+CPU and GPU. Release-facing runtime/memory plots use the canonical
+reference-runtime-window rows from that suite, while research-scale performance
+claims use the separate production-resolution benchmark tier; larger
+finite-beta/profile-current cases remain tracked separately from fast smoke and
+parity checks. The default CLI path is tuned for robust explicit solves and
+practical throughput, while the Python API can opt into differentiable solve
+paths when gradients matter.
 
 It is designed for:
 
@@ -81,13 +82,14 @@ size-capped. Measured GPU tokamak full-FP no-Er/Er production-floor rows
 auto-select structured x-block sparse-PC GMRES when that is the parity-clean,
 lower-memory route; this avoids the global dense-velocity sparse-pattern setup
 that dominated earlier production-floor runs. On the non-differentiable
-full-FP x-block path, per-x/TZ blocks up to size `3000` use exact sparse LU
-before falling back to ILU; this measured policy removes the remaining
-production-floor full-trajectory cliff without changing PAS or autodiff paths.
-For tokamak full-FP Er x-block solves, the same path is now the default on CPU
-and GPU. For one-species decks, the Fortran-style
-`preconditioner_species = 0` setting is treated as equivalent to the compact
-per-species x-block because there is no inter-species coupling to preserve. The
+full-FP x-block path, per-x/TZ blocks up to size `20000` use exact sparse LU
+before falling back to ILU; this measured policy removes the medium-QI and
+production-floor full-trajectory cliffs without changing PAS or autodiff paths.
+For tokamak full-FP Er and 3D full-FP full-trajectory x-block solves, the same
+right-preconditioned path is now the default on CPU and GPU. For one-species
+decks, the Fortran-style `preconditioner_species = 0` setting is treated as
+equivalent to the compact per-species x-block because there is no inter-species
+coupling to preserve. The
 production-floor CPU Er rows now run in about `1 s` logged / `1.7-1.9 s` cold
 external time with about `0.42-0.44 GB` RSS instead of multi-GB dense-assembly
 setup. On an RTX A4000, the same rows are residual-clean at about `23.3 s` for

@@ -21,6 +21,7 @@ def rhs1_xblock_precondition_side(
     *,
     env_value: str,
     tokamak_fp_er_pc: bool,
+    full_fp_3d_pc: bool = False,
     use_dkes: bool,
     include_xdot: bool,
     include_electric_field_xi: bool,
@@ -35,10 +36,11 @@ def rhs1_xblock_precondition_side(
     env_side = str(env_value).strip().lower()
     if env_side in {"left", "right", "none"}:
         return env_side, False
+    full_trajectory = bool(include_xdot) or bool(include_electric_field_xi)
     default_right = bool(
-        tokamak_fp_er_pc
+        (tokamak_fp_er_pc or full_fp_3d_pc)
         and (not bool(use_dkes))
-        and (bool(include_xdot) or bool(include_electric_field_xi))
+        and full_trajectory
     )
     return ("right" if default_right else "left"), default_right
 
@@ -58,6 +60,8 @@ def rhs1_xblock_krylov_method(env_value: str) -> tuple[str, bool]:
         return "bicgstab", False
     if method == "lgmres_scipy":
         return "lgmres", False
+    if method in {"gcrot", "gcrotmk", "gcrot_mk"}:
+        return "gcrotmk", False
     if method in {"gmres", "lgmres", "bicgstab"}:
         return method, False
     return "gmres", bool(env_method)
@@ -69,6 +73,7 @@ def rhs1_xblock_gmres_restart(
     restart_env_value: str,
     krylov_method: str,
     default_right_preconditioned: bool,
+    short_restart_default: bool | None = None,
 ) -> tuple[int, bool]:
     """Return the x-block sparse-PC GMRES restart and whether it was auto-capped.
 
@@ -83,7 +88,10 @@ def rhs1_xblock_gmres_restart(
         return restart_use, False
     if str(krylov_method).strip().lower() != "gmres":
         return restart_use, False
-    if not bool(default_right_preconditioned):
+    short_restart_default = bool(default_right_preconditioned) if short_restart_default is None else bool(
+        short_restart_default
+    )
+    if not short_restart_default:
         return restart_use, False
     capped = min(restart_use, 20)
     return capped, bool(capped != restart_use)
@@ -96,6 +104,7 @@ def resolve_rhs1_xblock_sparse_pc_policy(
     requested_restart: int,
     restart_env_value: str,
     tokamak_fp_er_pc: bool,
+    full_fp_3d_pc: bool = False,
     use_dkes: bool,
     include_xdot: bool,
     include_electric_field_xi: bool,
@@ -104,6 +113,7 @@ def resolve_rhs1_xblock_sparse_pc_policy(
     precondition_side, default_right_preconditioned = rhs1_xblock_precondition_side(
         env_value=precondition_side_env_value,
         tokamak_fp_er_pc=tokamak_fp_er_pc,
+        full_fp_3d_pc=full_fp_3d_pc,
         use_dkes=use_dkes,
         include_xdot=include_xdot,
         include_electric_field_xi=include_electric_field_xi,
@@ -114,6 +124,7 @@ def resolve_rhs1_xblock_sparse_pc_policy(
         restart_env_value=restart_env_value,
         krylov_method=krylov_method,
         default_right_preconditioned=default_right_preconditioned,
+        short_restart_default=bool(tokamak_fp_er_pc),
     )
     return RHS1XBlockSparsePCPolicy(
         precondition_side=precondition_side,

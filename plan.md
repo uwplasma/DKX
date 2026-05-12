@@ -58,33 +58,132 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   `tests/test_research_lane_policy.py`.
 - [x] Integrated second-push worker results into
   `docs/_static/research_lane_completion_2026_05_12.json`. The overall lane
-  average moved to `79.0%`; the VMEC/Boozer lane saturated its scoped `93%`
+  average moved to `84.9%`; the VMEC/Boozer lane saturated its scoped `93%`
   target, the benchmark/docs lane saturated its `98%` target, and the JAX
   ecosystem lane moved to `82%` after measured Lineax/Equinox/JAXopt gates. QI
-  moved only to `44%` after the new scale-0.45 CPU success because the scale-0.50
-  public-auto probe timed out. PAS, parallel, and refactor/coverage gained
-  fail-fast gates, timeout-safe benchmark plans, and focused coverage, but they
-  did not honestly clear a +15 point move from the immediately preceding
-  baseline.
+  is now `85%` after the scale-0.50 public `auto` path selected the
+  right-preconditioned exact-xblock-LU route and passed five CPU seeds plus five
+  one-GPU seeds. PAS, parallel, and
+  refactor/coverage gained fail-fast gates, timeout-safe benchmark plans, and
+  focused coverage, but they did not honestly clear a +15 point move from the
+  immediately preceding baseline.
 - [x] Added a passing larger QI CPU artifact at
   `docs/_static/qi_seed_robustness_scale045_cpu_probe.json`: `11 x 23 x 45 x 4`,
   public `auto` solver, output and solver trace written, `106.0 s`, and residual
   ratio `4.96e-7`. The existing scale-0.50 timeout artifact remains checked in
   as blocker evidence and is excluded from completion estimates by
   `scripts/run_qi_seed_robustness.py`.
+- [x] Added compact failure-progress capture to
+  `scripts/run_qi_seed_robustness.py` so failed QI runs preserve bounded
+  stdout/stderr tails and solver-stage breadcrumbs without committing copied
+  VMEC/run directories. The new
+  `docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json`
+  historical blocker matrix shows that `13 x 27 x 50 x 4` was not fixed by existing solver
+  flags: public `auto` times out after `360 s` after the explicit FP x-block
+  seed, `sparse_host_safe` fails host sparse factorization on a `126365616`-nnz
+  conservative pattern, and `sparse_lsmr` / `xblock_sparse_pc_gmres` both stall
+  near residual `5e-6` against a `2.5e-11` target. A follow-up opt-in
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED=1` probe was intentionally kept
+  off by default after the seed residual was slightly worse than the RHS norm and
+  the solve still stalled at the same floor. A second opt-in
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS=4` probe accepted two
+  post-GMRES matrix-free minimum-residual corrections but only improved
+  `5.413504e-6 -> 5.409759e-6`, leaving the residual ratio above `2.1e5`.
+  A third opt-in `SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=lgmres` probe was also
+  rejected: LGMRES stalled at `5.577462e-6`, fell back to GMRES, doubled the
+  matvec count to `65204`, and ended at the same `5.413504e-6` floor after
+  about `300 s`.
+  That matrix motivated the promoted exact-xblock-LU/right-PC policy below;
+  those rejected probes remain useful diagnostic evidence but are no longer the
+  active scale-0.50 CPU blocker.
+- [x] Implemented the first gated matrix-free correction hook for that next
+  step: explicit `xblock_sparse_pc_gmres` now accepts opt-in
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`, which applies bounded
+  preconditioned minimum-residual corrections after a stalled Krylov solve
+  without assembling a global sparse matrix. The hook records requested/accepted
+  steps, before/after residuals, and alphas in solver metadata and HDF5
+  diagnostics. The first checked scale-0.50 probe accepted two steps but reduced
+  the residual by only `6.9e-4` relative, so the hook remains off by default and
+  is recorded as rejected prototype evidence rather than promoted solver policy.
+- [x] Measured the stronger opt-in coarse correction hook. Explicit
+  `xblock_sparse_pc_gmres` now accepts
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE=1`, which solves a bounded
+  matrix-free least-squares residual correction over preconditioned/raw
+  residual, flux-surface-averaged low-L, and source/constraint directions. The
+  hook is off by default. The checked scale-0.50 probe accepted one 10-direction
+  step and improved `5.413504e-6 -> 5.401187e-6`, but the residual ratio remained
+  above `2.1e5`; record it as another rejected prototype. The next QI attempt
+  needs a genuinely different global coupling strategy, likely one that changes
+  the preconditioned Krylov operator or supplies a larger physics-informed
+  coarse space before the 32000-iteration floor, not another post-hoc scalar or
+  small-subspace cleanup.
+- [x] Closed the scale-0.50 single-seed CPU and one-GPU QI blocker with a promoted
+  preconditioner policy instead of a timeout increase. The successful route is
+  right-preconditioned explicit `xblock_sparse_pc_gmres` plus exact sparse LU
+  for medium full-FP host x-blocks (`SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`
+  default raised to `20000` only for the non-differentiable full-FP host path).
+  The checked artifact
+  `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json` converges
+  the `13 x 27 x 50 x 4` QI seed in `~12.0 s`, solver time `~11.2 s`, with
+  residual `1.04e-12` against target `2.51e-11` and residual ratio `4.16e-2`.
+  The matching clean-clone one-GPU artifact
+  `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json` passes in
+  `~44.5 s`, solver time `~43.0 s`, with residual `1.58e-11` and residual ratio
+  `0.63`. The solver traces record `precondition_side=right`, no short-restart
+  cap, exact `sparse_lu` block factors, and compact Krylov counts (`81`/`85`
+  CPU iterations/matvecs and `69`/`72` GPU iterations/matvecs). This
+  raises the QI lane materially, but wider CPU/GPU seed ladders remain required
+  before production-resolution QI is declared complete.
+- [x] Extended that scale-0.50 route to the public `auto` path across five CPU
+  seeds and five one-GPU seeds:
+  `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json`
+  passes seeds `0..4` with all outputs and solver traces written, zero failures,
+  maximum elapsed time `11.58 s`, and maximum residual ratio `0.966`; the
+  matching `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json`
+  passes on `office` GPU 0 with maximum elapsed time `41.18 s` and maximum
+  residual ratio `0.963`. This closes the bounded public-auto robustness
+  blocker. The remaining QI promotion gates are the next bounded resolution
+  scale and finally production resolution.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
   a production residual-clean geometry-rich default-promotion artifact is still
   required before claiming the lane closed.
+- [x] PAS/memory follow-up: fallback benchmark rows now require explicit
+  guarded-PAS-TZ provenance before any candidate can pass all gates or appear as
+  promotion eligible. This closes a false-positive benchmark loophole without
+  changing default solver policy.
 - [x] Parallel second-push result: added timeout-safe two-GPU case-throughput
   benchmarking and a pure audit that rejects release overclaims, non-GPU
   payloads, cold/mixed timing, and sub-unity speedups. This improves the GPU
   campaign workflow but does not close single-case strong scaling.
+- [x] Parallel follow-up: transport-worker benchmark plans and measured payloads
+  now include a compile-amortization gate. Release scaling claims fail closed if
+  they request `release_scaling_claim=true` without evidence that compilation and
+  setup were excluded from timed repeats.
+- [x] Follow-up office GPU result on commit `39e1e2f`: the timeout-safe
+  two-GPU case-throughput benchmark completed with `nsolve=1` and a `180 s`
+  child timeout, wrote
+  `docs/_static/gpu_case_throughput_large_push_2026_05_12.json`, and failed the
+  throughput gate honestly (`59.18 s` sequential one-GPU two-case wall time vs
+  `175.77 s` two-GPU concurrent wall time, speedup `0.337x`). This keeps the
+  parallel lane at `82%` and confirms that this path is setup/compile dominated
+  on office rather than release-grade scaling evidence.
 - [x] Refactor/coverage second-push result: added focused fast tests around
   solver-candidate promotion, residual diagnostics, and policy docstrings.
   Focused helper coverage improved, but package-wide `95%` still requires more
   driver decomposition and a JAX-safe coverage environment.
+- [x] Refactor/coverage follow-up: added CI-fast branch coverage for dense
+  accelerator guards, sparse-direct eligibility, host-GMRES rejection paths,
+  sparse-factor dtype overrides, metric edge cases, and malformed release
+  manifests. This reduces policy-helper risk but does not justify a package-wide
+  threshold increase by itself.
+- [x] VMEC/Boozer/JAX-ecosystem follow-up: added a shared pure-JAX
+  Boozer-spectrum proxy transport objective with a full spectral finite-
+  difference gradient check and JVP/dot-product consistency gate. The status and
+  handoff CLIs now use this shared gate; it strengthens default-CI
+  differentiability coverage while remaining explicitly a proxy, not a full
+  VMEC-boundary-to-kinetic-transport gradient claim.
 - [x] Spawned workers across the active QI, PAS/runtime-memory, parallelism,
   refactor/coverage/CI, and VMEC/JAX-ecosystem lanes rather than continuing with
   single-file incremental work.
@@ -10065,9 +10164,11 @@ Updated lane status after this integrated push:
 
 Next concrete actions:
 
-1. Commit, push, and verify remote CI/docs for this integrated push.
-2. On `office`, pull the committed state into a clean checkout and run a
-   bounded GPU smoke of the new probe/audit lanes.
+1. Advance the QI ladder to the next bounded resolution scale with public
+   `solve_method=auto`, solver traces, and residual ratios checked on CPU and
+   one GPU.
+2. Profile the next QI scale before production promotion so any memory growth
+   from host-assembled x-block sparse LU is bounded and documented.
 3. Run the first short real-solve PAS production-floor probe selected by the
    preflight, requiring a residual/runtime/memory win before any solver-default
    promotion.

@@ -641,19 +641,76 @@ blocker evidence only. The evidence manifest records this as the largest
 attempted size but excludes it from the checked-size and lane-completion
 estimate.
 
+The follow-up
+``docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json``
+artifact keeps the scale-0.50 blocker actionable without checking in copied VMEC
+run directories. It compares eight bounded CPU routes at the same
+``13 x 27 x 50 x 4`` resolution. The public ``auto`` route still times out after
+``360 s`` after building an explicit FP x-block seed; ``sparse_host_safe`` fails
+host sparse LU on a ``126365616``-entry conservative pattern; ``sparse_lsmr``
+finishes in ``125.9 s`` but stalls at residual ``5.09e-6`` against target
+``2.51e-11``; and ``xblock_sparse_pc_gmres`` reaches the same residual floor
+after ``32000`` GMRES iterations. An opt-in initial x-block seed probe was also
+tested; it was rejected because the seed residual was slightly worse than the
+RHS norm, and the run still stalled at ``5.41e-6``. A first opt-in post-GMRES
+matrix-free minimum-residual hook was then tested with four requested steps; it
+accepted two corrections but only changed the true residual from
+``5.413504e-6`` to ``5.409759e-6``. A stronger opt-in 10-direction coarse
+least-squares correction improved the same floor only to ``5.401187e-6``. An
+opt-in LGMRES variant was also tested as a restart-robust Krylov alternative; it
+stalled at ``5.577462e-6``, fell back to GMRES, doubled the matrix-vector count
+to ``65204``, and ended at the original ``5.413504e-6`` floor after about
+``300 s``. This
+makes the next required algorithmic step a different global coupling strategy,
+not a larger timeout, full sparse materialization, default initial-seed probe,
+scalar post-minres cleanup, the current small residual subspace, or a Krylov
+method toggle alone.
+
+The successor
+``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json`` artifact
+and ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json``
+artifacts close the same scale-0.50 CPU and one-GPU seed through the promoted
+right-preconditioned explicit ``xblock_sparse_pc_gmres`` route. That route uses
+exact sparse LU for medium non-differentiable full-FP host x-block factors with
+the cap raised to ``20000``. The checked CPU run converges at
+``13 x 27 x 50 x 4`` in ``~12 s`` with true residual ``1.04e-12`` against target
+``2.51e-11`` and residual ratio ``4.16e-2``. The clean-clone one-GPU run on
+``office`` converges in ``~44.5 s`` with residual ``1.58e-11`` and residual
+ratio ``0.63``. The companion solver trace
+``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu_solver_trace.json``
+records ``precondition_side=right``, ``gmres_restart=80``, ``81`` Krylov
+iterations, ``85`` matvecs, and exact ``sparse_lu`` block factors; the GPU trace
+records the same policy with ``69`` iterations and ``72`` matvecs.
+
+The follow-up
+``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json``
+and
+``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json``
+artifacts extend that route to seeds ``0..4`` on CPU and one GPU. Both ladders
+use the public ``solve_method=auto`` path, select ``xblock_sparse_pc_gmres``
+internally, write all five outputs and solver traces, have zero process failures
+and zero timeouts, and keep ``max_residual_ratio < 1``. The CPU ladder completes
+with maximum elapsed time ``11.58 s`` and maximum residual ratio ``0.966``. The
+one-GPU ``office`` ladder completes with maximum elapsed time ``41.18 s`` and
+maximum residual ratio ``0.963``. These artifacts close the bounded public-auto
+solver-route robustness blocker, but they are not yet a production-resolution QI
+claim.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
-passing bounded grid ``45542``, the largest attempted bounded grid ``70202``, a
-``44%`` per-axis lane-completion estimate based only on passing artifacts, and
-``95.54%`` of production total size still uncovered. The production acceptance
-gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
+passing bounded grid ``70202``, the largest attempted bounded grid ``70202``,
+ten passing artifacts and two non-passing blocker artifacts, a ``50%`` per-axis
+lane-completion estimate based only on passing artifacts, and ``93.12%`` of
+production total size still uncovered. The production acceptance gate requires
+five seeds on both CPU and one GPU with ``public_cli_default_path``,
 ``solve_method=auto``, ``process_failed=0``, ``timed_out=0``,
 ``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
 ``max_residual_ratio <= 1``. Treat these as bounded runner and solver-policy
 evidence, not as a production-resolution QI robustness claim. Promote QI
-robustness only after production-resolution CPU/GPU seed ladders are checked
-with solver traces and the evidence manifest is regenerated.
+robustness only after the next bounded scale and production-resolution CPU/GPU
+seed ladders are checked with solver traces and the evidence manifest is
+regenerated.
 
 The high-collisionality Simakov-Helander lane now has a bounded normalization audit:
 

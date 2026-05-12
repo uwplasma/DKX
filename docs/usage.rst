@@ -363,6 +363,25 @@ performance without changing the input file:
   those GPU tokamak full-FP sparse-PC GMRES auto lanes. Defaults are ``10000``
   and ``60000``.
 
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED``: opt-in diagnostic for
+  explicit ``xblock_sparse_pc_gmres``. Set to ``1`` to test an x-block
+  preconditioner-derived initial guess; the guess is used only when it lowers
+  the true residual. It is off by default because current production-floor QI
+  probes reject it and need a stronger global/coarse correction instead.
+
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS``: opt-in matrix-free
+  post-Krylov correction for explicit ``xblock_sparse_pc_gmres``. Set to a small
+  integer, for example ``2`` or ``4``, to test residual-polishing steps that do
+  not materialize the full sparse matrix. Leave it off for production unless the
+  resulting solver trace shows a lower true residual without runtime regression.
+
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE``: opt-in multidirectional
+  post-Krylov coarse correction for explicit ``xblock_sparse_pc_gmres``. Set to
+  ``1`` to test a small matrix-free least-squares correction over residual,
+  flux-surface-average, and source/constraint directions. Related diagnostic
+  controls include ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_STEPS`` and
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_DIRECTIONS``.
+
 - ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` (GMRES only): optional RHSMode=1 preconditioning.
 
   - ``point`` (or ``1``): point-block Jacobi on local (x,L) unknowns at each :math:`(\theta,\zeta)`.

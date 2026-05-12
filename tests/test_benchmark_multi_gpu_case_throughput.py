@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
+
+import examples.performance.benchmark_multi_gpu_case_throughput as mgpu
 from examples.performance.benchmark_multi_gpu_case_throughput import (
     _base_env,
     _build_case_throughput_plan,
@@ -103,3 +107,66 @@ def test_multi_gpu_case_throughput_audit_rejects_non_improving_or_release_payloa
     assert release.release_scaling_claim is False
     assert release.ci_gate_pass is False
     assert any("release_scaling_claim=true" in failure for failure in release.failures)
+
+
+def test_measured_benchmark_writes_partial_payload_on_timeout(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&resolutionParameters\n/\n", encoding="utf-8")
+    out_dir = tmp_path / "out"
+
+    def fake_record_warmup(payload, *, gpu_id, **_kwargs):  # noqa: ANN001
+        payload.setdefault("warmup", []).append(
+            {"gpu_id": int(gpu_id), "visible_devices": str(int(gpu_id)), "wall_s": 0.1}
+        )
+
+    monkeypatch.setattr(mgpu, "_record_warmup", fake_record_warmup)
+    monkeypatch.setattr(
+        mgpu,
+        "_sequential_two_cases",
+        lambda **_kwargs: {"case0_s": 1.0, "case1_s": 1.0, "wall_s": 2.0},
+    )
+    monkeypatch.setattr(
+        mgpu,
+        "_parallel_two_cases",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("parallel timeout")),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "benchmark_multi_gpu_case_throughput.py",
+            "--input",
+            str(input_path),
+            "--out-dir",
+            str(out_dir),
+            "--sample-timeout-s",
+            "3",
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="parallel timeout"):
+        mgpu.main()
+
+    payload = json.loads((out_dir / "gpu_case_throughput.json").read_text(encoding="utf-8"))
+    assert payload["status"] == "failed"
+    assert payload["failed_phase"] == "parallel_two_gpu"
+    assert payload["sequential_one_gpu"]["wall_s"] == 2.0
+    assert payload["throughput_audit"]["ci_gate_pass"] is False
+    assert "no throughput speedup claim" in payload["throughput_audit"]["notes"][1]
+
+
+def test_checked_office_two_gpu_artifact_is_non_promoting() -> None:
+    path = Path("docs/_static/gpu_case_throughput_large_push_2026_05_12.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    assert payload["status"] == "ok"
+    assert payload["benchmark_kind"] == "multi_gpu_case_throughput"
+    assert payload["release_scaling_claim"] is False
+    assert payload["required_gpu_count"] == 2
+    assert payload["sample_timeout_s"] == 180.0
+    assert payload["timing_semantics"] == "cache_warm"
+    assert payload["throughput_speedup"] < 1.0
+    assert payload["throughput_audit"]["ci_gate_pass"] is False
+    assert any("below evidence gate" in failure for failure in payload["throughput_audit"]["failures"])

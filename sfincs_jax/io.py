@@ -38,6 +38,7 @@ from .rhs1_host_policy import (
     rhs1_dense_auto_fp_cutoff,
     rhs1_dense_backend_allowed,
     rhs1_fp_3d_sparse_pc_auto_allowed,
+    rhs1_fp_3d_xblock_sparse_pc_auto_allowed,
     rhs1_tokamak_er_dense_auto_allowed,
     rhs1_tokamak_fp_er_sparse_pc_auto_allowed,
     rhs1_tokamak_fp_noer_sparse_pc_auto_allowed,
@@ -359,6 +360,11 @@ def _add_rhsmode1_solver_diagnostics(
         "sparse_pc_factor_nbytes_estimate": "linearSolverSparsePCFactorNbytesEstimate",
         "sparse_pc_factor_nnz_estimate": "linearSolverSparsePCFactorNnzEstimate",
         "sparse_pc_xblock_preconditioner_xi": "linearSolverSparsePCXBlockPreconditionerXi",
+        "xblock_post_minres_steps_requested": "linearSolverXBlockPostMinresStepsRequested",
+        "xblock_post_minres_steps_accepted": "linearSolverXBlockPostMinresStepsAccepted",
+        "xblock_post_coarse_steps_requested": "linearSolverXBlockPostCoarseStepsRequested",
+        "xblock_post_coarse_steps_accepted": "linearSolverXBlockPostCoarseStepsAccepted",
+        "xblock_post_coarse_direction_count": "linearSolverXBlockPostCoarseDirectionCount",
     }
     for metadata_key, output_key in int_fields.items():
         if metadata_key in solver_metadata:
@@ -372,6 +378,34 @@ def _add_rhsmode1_solver_diagnostics(
         data["linearSolverSparsePCXBlockAssembledHost"] = _fortran_logical(
             bool(solver_metadata["sparse_pc_xblock_assembled_host"])
         )
+    if "xblock_initial_seed_used" in solver_metadata:
+        data["linearSolverXBlockInitialSeedUsed"] = _fortran_logical(
+            bool(solver_metadata["xblock_initial_seed_used"])
+        )
+    if "xblock_initial_seed_residual_norm" in solver_metadata:
+        value = solver_metadata["xblock_initial_seed_residual_norm"]
+        if value is not None:
+            data["linearSolverXBlockInitialSeedResidualNorm"] = np.asarray(float(value), dtype=np.float64)
+    if "xblock_initial_seed_residual_ratio" in solver_metadata:
+        value = solver_metadata["xblock_initial_seed_residual_ratio"]
+        if value is not None:
+            data["linearSolverXBlockInitialSeedResidualRatio"] = np.asarray(float(value), dtype=np.float64)
+    if "xblock_post_minres_residual_before" in solver_metadata:
+        value = solver_metadata["xblock_post_minres_residual_before"]
+        if value is not None:
+            data["linearSolverXBlockPostMinresResidualBefore"] = np.asarray(float(value), dtype=np.float64)
+    if "xblock_post_minres_residual_after" in solver_metadata:
+        value = solver_metadata["xblock_post_minres_residual_after"]
+        if value is not None:
+            data["linearSolverXBlockPostMinresResidualAfter"] = np.asarray(float(value), dtype=np.float64)
+    if "xblock_post_coarse_residual_before" in solver_metadata:
+        value = solver_metadata["xblock_post_coarse_residual_before"]
+        if value is not None:
+            data["linearSolverXBlockPostCoarseResidualBefore"] = np.asarray(float(value), dtype=np.float64)
+    if "xblock_post_coarse_residual_after" in solver_metadata:
+        value = solver_metadata["xblock_post_coarse_residual_after"]
+        if value is not None:
+            data["linearSolverXBlockPostCoarseResidualAfter"] = np.asarray(float(value), dtype=np.float64)
     if float(residual_target) > 0.0:
         data["linearSolverResidualTargetRatio"] = np.asarray(
             float(residual_norm) / float(residual_target),
@@ -3501,6 +3535,24 @@ def write_sfincs_jax_output_h5(
                 emit(
                     1,
                     "write_sfincs_jax_output_h5: tokamak full-FP no-Er RHSMode=1 "
+                    "-> using x-block sparse-PC GMRES host solve",
+                )
+        elif (
+            (not force_krylov)
+            and rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+                op=op0,
+                active_size=int(active_total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind=solve_method,
+                backend=str(dense_auto_backend),
+                eparallel_abs=float(epar_abs),
+            )
+        ):
+            solve_method = "xblock_sparse_pc_gmres"
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: bounded 3D full-FP RHSMode=1 "
                     "-> using x-block sparse-PC GMRES host solve",
                 )
         elif (

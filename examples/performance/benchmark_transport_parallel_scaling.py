@@ -45,6 +45,51 @@ def _timing_semantics(*, global_warmup: int, per_worker_warmup: int) -> str:
     return "cold_start"
 
 
+def _compile_amortization_gate(
+    *,
+    timing_semantics: str,
+    global_warmup: int,
+    per_worker_warmup: int,
+    repeats: int,
+    cache_dir: Path | None,
+    backend: str,
+    repo_root: Path,
+) -> dict[str, object]:
+    backend_l = str(backend).strip().lower()
+    cache_configured = cache_dir is not None
+    per_worker_hot = int(per_worker_warmup) > 0
+    global_cache_warm = int(global_warmup) > 0 and cache_configured
+    timed_repeats = max(int(repeats), 1)
+    persistent_pool_env = os.environ.get("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "").strip().lower()
+    persistent_pool_enabled = backend_l == "cpu" and persistent_pool_env not in {"0", "false", "no", "off"}
+    passes = str(timing_semantics) in {"cache_warm", "hot_solve", "warm"} and (
+        per_worker_hot or global_cache_warm
+    )
+    reason = (
+        "per-worker warmup excludes worker-side compile/setup from timed repeats"
+        if per_worker_hot
+        else "global warmup plus persistent compilation cache excludes first compile from timed repeats"
+        if global_cache_warm
+        else "no warm compile/cache phase is planned before timed repeats"
+    )
+    gate: dict[str, object] = {
+        "passes": bool(passes),
+        "timing_semantics": str(timing_semantics),
+        "strategy": "per_worker_warmup" if per_worker_hot else "global_persistent_compile_cache",
+        "global_warmup": max(int(global_warmup), 0),
+        "per_worker_warmup": max(int(per_worker_warmup), 0),
+        "timed_repeats": timed_repeats,
+        "min_timed_repeats": 1,
+        "persistent_worker_pool_enabled": bool(persistent_pool_enabled),
+        "persistent_compile_cache": bool(cache_configured),
+        "compile_in_timed_region": False,
+        "reason": reason,
+    }
+    if cache_dir is not None:
+        gate["compile_cache_dir"] = _display_path(cache_dir, repo_root=repo_root)
+    return gate
+
+
 def _payloads_for_workers(*, rhs_count: int, workers: int) -> list[dict[str, object]]:
     rhs_values = list(range(1, int(rhs_count) + 1))
     active_workers = min(int(workers), int(rhs_count))
@@ -136,6 +181,15 @@ def _build_transport_benchmark_plan(
         global_warmup=int(global_warmup),
         per_worker_warmup=int(warmup),
     )
+    compile_amortization_gate = _compile_amortization_gate(
+        timing_semantics=timing_semantics,
+        global_warmup=int(global_warmup),
+        per_worker_warmup=int(warmup),
+        repeats=int(repeats),
+        cache_dir=cache_dir,
+        backend=str(backend),
+        repo_root=repo_root,
+    )
     payloads_by_workers = {
         str(w): _payloads_for_workers(rhs_count=int(rhs_count), workers=int(w)) for w in workers
     }
@@ -187,6 +241,7 @@ def _build_transport_benchmark_plan(
         "global_warmup": int(global_warmup),
         "per_worker_warmup": int(warmup),
         "repeats": int(repeats),
+        "compile_amortization_gate": compile_amortization_gate,
         "estimated_transport_solve_calls": int(max(global_warmup, 0))
         + len(workers) * (max(int(warmup), 0) + max(int(repeats), 1)),
         "deterministic_payload_coverage": True,
@@ -201,6 +256,7 @@ def _build_transport_benchmark_plan(
             "min_speedup": 1.2,
             "min_efficiency": 0.5,
             "cold_start_rejected": True,
+            "requires_compile_amortization_gate": True,
         },
         "memory_gate_semantics": {
             "status": "not_measured_in_plan",
@@ -512,6 +568,18 @@ def main() -> None:
         "global_warmup": int(args.global_warmup),
         "per_worker_warmup": int(args.warmup),
         "repeats": int(args.repeats),
+        "compile_amortization_gate": _compile_amortization_gate(
+            timing_semantics=_timing_semantics(
+                global_warmup=int(args.global_warmup),
+                per_worker_warmup=int(args.warmup),
+            ),
+            global_warmup=int(args.global_warmup),
+            per_worker_warmup=int(args.warmup),
+            repeats=int(args.repeats),
+            cache_dir=cache_dir,
+            backend=str(args.backend),
+            repo_root=repo_root,
+        ),
         "deterministic_payload_coverage": True,
         "deterministic_output_check": True,
         "measurement_scope": "transport_solve_only",
