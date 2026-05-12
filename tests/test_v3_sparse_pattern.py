@@ -14,6 +14,7 @@ from sfincs_jax.explicit_sparse import build_operator_from_pattern
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_mat_aij
+from sfincs_jax.rhs1_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
 from sfincs_jax.v3_sparse_pattern import summarize_v3_sparse_pattern, v3_full_system_conservative_sparsity_pattern
 from sfincs_jax.v3_driver import (
     _rhs1_xblock_gmres_restart,
@@ -41,6 +42,7 @@ def test_xblock_precondition_side_defaults_right_only_for_full_fp_er() -> None:
     side, auto_right = _rhs1_xblock_precondition_side(
         env_value="",
         tokamak_fp_er_pc=True,
+        full_fp_3d_pc=False,
         use_dkes=False,
         include_xdot=True,
         include_electric_field_xi=True,
@@ -49,7 +51,18 @@ def test_xblock_precondition_side_defaults_right_only_for_full_fp_er() -> None:
 
     side, auto_right = _rhs1_xblock_precondition_side(
         env_value="",
+        tokamak_fp_er_pc=False,
+        full_fp_3d_pc=True,
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=False,
+    )
+    assert (side, auto_right) == ("right", True)
+
+    side, auto_right = _rhs1_xblock_precondition_side(
+        env_value="",
         tokamak_fp_er_pc=True,
+        full_fp_3d_pc=False,
         use_dkes=True,
         include_xdot=False,
         include_electric_field_xi=False,
@@ -59,6 +72,7 @@ def test_xblock_precondition_side_defaults_right_only_for_full_fp_er() -> None:
     side, auto_right = _rhs1_xblock_precondition_side(
         env_value="left",
         tokamak_fp_er_pc=True,
+        full_fp_3d_pc=True,
         use_dkes=False,
         include_xdot=True,
         include_electric_field_xi=True,
@@ -82,6 +96,22 @@ def test_xblock_gmres_restart_caps_only_auto_right_preconditioned_path() -> None
         default_right_preconditioned=True,
     )
     assert (restart, capped) == (80, False)
+
+    policy = resolve_rhs1_xblock_sparse_pc_policy(
+        precondition_side_env_value="",
+        krylov_env_value="",
+        requested_restart=80,
+        restart_env_value="",
+        tokamak_fp_er_pc=False,
+        full_fp_3d_pc=True,
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=False,
+    )
+    assert policy.precondition_side == "right"
+    assert policy.default_right_preconditioned is True
+    assert policy.gmres_restart == 80
+    assert policy.restart_capped is False
 
     restart, capped = _rhs1_xblock_gmres_restart(
         requested_restart=80,
@@ -307,6 +337,34 @@ def test_xblock_sparse_pc_gmres_initial_seed_can_be_disabled(monkeypatch) -> Non
     assert result.metadata["xblock_post_coarse_steps_requested"] == 1
     assert result.metadata["xblock_post_coarse_steps_accepted"] == 0
     assert result.metadata["xblock_post_coarse_direction_count"] == 0
+
+
+def test_xblock_sparse_pc_two_level_preconditioner_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS", "10")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_FSAVG_LMAX", "2")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_gmres"
+    assert result.metadata["xblock_two_level_enabled"] is True
+    assert result.metadata["xblock_two_level_built"] is True
+    assert result.metadata["xblock_two_level_mode"] == "additive"
+    assert 1 <= result.metadata["xblock_two_level_rank"] <= result.metadata["xblock_two_level_basis_size"] <= 10
+    assert result.metadata["xblock_two_level_applies"] > 0
+    assert result.metadata["xblock_two_level_coarse_applies"] == result.metadata["xblock_two_level_applies"]
+    assert any("two-level coarse built" in msg for msg in messages)
 
 
 @pytest.mark.parametrize(
