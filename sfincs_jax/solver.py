@@ -28,6 +28,7 @@ except Exception:  # noqa: BLE001
 from scipy.sparse.linalg import LinearOperator as _LinearOperator
 from scipy.sparse.linalg import gmres as _scipy_gmres
 from scipy.sparse.linalg import bicgstab as _scipy_bicgstab
+from scipy.sparse.linalg import gcrotmk as _scipy_gcrotmk
 from scipy.sparse.linalg import lgmres as _scipy_lgmres
 
 from .memory_model import gmres_restart_for_budget
@@ -243,6 +244,89 @@ def lgmres_solve_with_history_scipy(
         inner_m=int(restart_use),
         outer_k=int(outer_k),
         callback=_cb,
+    )
+
+    if side == "right" and preconditioner is not None:
+        x_np = _prec(x_np)
+
+    res = b_np - _mv(x_np)
+    rn = float(np.linalg.norm(res))
+    return x_np, rn, history
+
+
+def gcrotmk_solve_with_history_scipy(
+    *,
+    matvec,
+    b: jnp.ndarray,
+    preconditioner=None,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1e-10,
+    atol: float = 0.0,
+    restart: int = 50,
+    maxiter: int | None = None,
+    precondition_side: str = "left",
+) -> tuple[np.ndarray, float, list[float]]:
+    """Run SciPy GCROT(m,k) for flexible global-Krylov host solves.
+
+    GCROT keeps a small recycled correction subspace in addition to the inner
+    Krylov basis. It is useful for production host fallback paths that plateau
+    under restarted GMRES but do not justify assembling a larger dense coarse
+    correction.
+    """
+    b_np = np.array(b, dtype=np.float64, copy=True).reshape((-1,))
+    n = int(b_np.size)
+    x0_np = np.array(x0, dtype=np.float64, copy=True).reshape((-1,)) if x0 is not None else None
+    restart_use = _maybe_limit_restart(n, int(restart), np.dtype(np.float64))
+
+    outer_k_env = os.environ.get("SFINCS_JAX_GCROTMK_OUTER_K", "").strip()
+    try:
+        outer_k = int(outer_k_env) if outer_k_env else min(20, max(1, int(restart_use) // 2))
+    except ValueError:
+        outer_k = min(20, max(1, int(restart_use) // 2))
+    outer_k = max(0, int(outer_k))
+
+    def _mv(x_np: np.ndarray) -> np.ndarray:
+        return np.array(matvec(jnp.asarray(x_np, dtype=jnp.float64)), dtype=np.float64, copy=True)
+
+    def _prec(x_np: np.ndarray) -> np.ndarray:
+        if preconditioner is None:
+            return np.array(x_np, dtype=np.float64, copy=True)
+        return np.array(preconditioner(jnp.asarray(x_np, dtype=jnp.float64)), dtype=np.float64, copy=True)
+
+    side = str(precondition_side).strip().lower()
+    if side not in {"left", "right", "none"}:
+        side = "left"
+
+    if side == "right" and preconditioner is not None:
+
+        def _mv_right(y_np: np.ndarray) -> np.ndarray:
+            return _mv(_prec(y_np))
+
+        A = _LinearOperator((n, n), matvec=_mv_right, dtype=np.float64)
+        M = None
+    else:
+        A = _LinearOperator((n, n), matvec=_mv, dtype=np.float64)
+        M = _LinearOperator((n, n), matvec=_prec, dtype=np.float64) if preconditioner is not None else None
+
+    history: list[float] = []
+
+    def _cb(xk: np.ndarray) -> None:
+        x_state = _prec(xk) if side == "right" and preconditioner is not None else xk
+        history.append(float(np.linalg.norm(b_np - _mv(x_state))))
+
+    x_np, _info = _scipy_gcrotmk(
+        A,
+        b_np,
+        x0=x0_np,
+        rtol=float(tol),
+        atol=float(atol),
+        maxiter=int(maxiter) if maxiter is not None else None,
+        M=M,
+        callback=_cb,
+        m=int(restart_use),
+        k=outer_k,
+        discard_C=False,
+        truncate="oldest",
     )
 
     if side == "right" and preconditioner is not None:

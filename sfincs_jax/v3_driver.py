@@ -43,6 +43,7 @@ from .solver import (
     distributed_gmres_enabled,
     explicit_left_preconditioned_gmres_scipy,
     gmres_solve_with_history_scipy,
+    gcrotmk_solve_with_history_scipy,
     lgmres_solve_with_history_scipy,
 )
 from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
@@ -345,6 +346,7 @@ def _rhs1_xblock_precondition_side(
     *,
     env_value: str,
     tokamak_fp_er_pc: bool,
+    full_fp_3d_pc: bool = False,
     use_dkes: bool,
     include_xdot: bool,
     include_electric_field_xi: bool,
@@ -353,6 +355,7 @@ def _rhs1_xblock_precondition_side(
     return _rhs1_xblock_policy.rhs1_xblock_precondition_side(
         env_value=env_value,
         tokamak_fp_er_pc=tokamak_fp_er_pc,
+        full_fp_3d_pc=full_fp_3d_pc,
         use_dkes=use_dkes,
         include_xdot=include_xdot,
         include_electric_field_xi=include_electric_field_xi,
@@ -8578,6 +8581,205 @@ def _rhs1_xblock_post_coarse_directions(
     return tuple(directions)
 
 
+def _rhs1_xblock_global_coarse_basis(
+    *,
+    op: V3FullSystemOperator,
+    rhs: jnp.ndarray,
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    include_rhs: bool,
+    fsavg_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+) -> tuple[tuple[str, jnp.ndarray], ...]:
+    """Build a fixed low-dimensional RHSMode=1 coarse basis.
+
+    Unlike the post-Krylov residual basis above, this basis is fixed for the
+    solve, so it can be used inside a linear two-level preconditioner. The
+    directions target the global pieces an x-block preconditioner cannot remove:
+    RHS-like components, flux-surface-averaged low-L moments across x, and
+    constraint/source rows.
+    """
+    rhs = jnp.asarray(rhs, dtype=jnp.float64).reshape((-1,))
+    total = int(op.total_size)
+    directions: list[tuple[str, jnp.ndarray]] = []
+
+    def _add(name: str, direction: jnp.ndarray) -> None:
+        if len(directions) >= int(max_directions):
+            return
+        vec = jnp.asarray(direction, dtype=jnp.float64).reshape((-1,))
+        if vec.shape != (total,):
+            return
+        try:
+            norm = float(jnp.linalg.norm(vec))
+        except Exception:
+            return
+        if np.isfinite(norm) and norm > 0.0:
+            directions.append((str(name), vec))
+
+    if include_rhs:
+        try:
+            _add("preconditioned_rhs", preconditioner(rhs))
+        except Exception:
+            pass
+        _add("raw_rhs", rhs)
+
+    extra_start = int(op.f_size + op.phi1_size)
+    extra_size = int(op.extra_size)
+    if extra_size > 0:
+        rhs_extra = rhs[extra_start : extra_start + extra_size]
+        extra_dir = jnp.zeros((total,), dtype=jnp.float64).at[extra_start : extra_start + extra_size].set(rhs_extra)
+        _add("extra_rhs", extra_dir)
+        if extra_size <= int(max_extra_units):
+            for ie in range(extra_size):
+                if len(directions) >= int(max_directions):
+                    break
+                unit = jnp.zeros((total,), dtype=jnp.float64).at[extra_start + ie].set(1.0)
+                _add(f"extra_unit_{ie}", unit)
+
+    if int(op.constraint_scheme) == 1:
+        ix0 = _ix_min(bool(op.point_at_x0))
+        source_basis = _source_basis_constraint_scheme_1(op.x)
+        for s in range(int(op.n_species)):
+            for ibasis, basis in enumerate(source_basis):
+                if len(directions) >= int(max_directions):
+                    break
+                f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                f_dir = f_dir.at[s, ix0:, 0, :, :].set(basis[ix0:, None, None])
+                tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                _add(f"constraint1_source_s{s}_{ibasis}", jnp.concatenate([f_dir.reshape((-1,)), tail]))
+
+    lmax_use = min(max(0, int(fsavg_lmax)), max(0, int(op.n_xi) - 1))
+    angular_norm = float(max(1, int(op.n_theta) * int(op.n_zeta))) ** -0.5
+    for il in range(lmax_use + 1):
+        for s in range(int(op.n_species)):
+            for ix in range(int(op.n_x)):
+                if len(directions) >= int(max_directions):
+                    return tuple(directions)
+                f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                f_dir = f_dir.at[s, ix, il, :, :].set(angular_norm)
+                tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                _add(f"fsavg_s{s}_x{ix}_l{il}", jnp.concatenate([f_dir.reshape((-1,)), tail]))
+
+    return tuple(directions)
+
+
+def _build_rhs1_xblock_two_level_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    base_preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    mode: str,
+    fsavg_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+    rcond: float,
+    include_rhs: bool,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], dict[str, object], dict[str, int]]:
+    """Wrap the x-block preconditioner with a fixed two-level coarse inverse."""
+    from scipy.linalg import qr, solve_triangular  # noqa: PLC0415
+
+    mode_use = str(mode).strip().lower().replace("-", "_")
+    if mode_use not in {"additive", "multiplicative"}:
+        mode_use = "additive"
+    max_dirs_use = max(1, int(max_directions))
+    raw_directions = _rhs1_xblock_global_coarse_basis(
+        op=op,
+        rhs=rhs,
+        preconditioner=base_preconditioner,
+        include_rhs=bool(include_rhs),
+        fsavg_lmax=int(fsavg_lmax),
+        max_extra_units=int(max_extra_units),
+        max_directions=max_dirs_use,
+    )
+    basis_cols: list[np.ndarray] = []
+    abasis_cols: list[np.ndarray] = []
+    names: list[str] = []
+    for name, direction in raw_directions[:max_dirs_use]:
+        direction_np = np.asarray(jax.device_get(direction), dtype=np.float64).reshape((-1,))
+        if direction_np.shape != (int(op.total_size),) or not np.all(np.isfinite(direction_np)):
+            continue
+        norm = float(np.linalg.norm(direction_np))
+        if (not np.isfinite(norm)) or norm <= 0.0:
+            continue
+        direction_np = direction_np / norm
+        a_direction = np.asarray(
+            jax.device_get(matvec(jnp.asarray(direction_np, dtype=jnp.float64))),
+            dtype=np.float64,
+        ).reshape((-1,))
+        if a_direction.shape != direction_np.shape or not np.all(np.isfinite(a_direction)):
+            continue
+        a_norm = float(np.linalg.norm(a_direction))
+        if (not np.isfinite(a_norm)) or a_norm <= 0.0:
+            continue
+        names.append(str(name))
+        basis_cols.append(direction_np)
+        abasis_cols.append(a_direction)
+
+    if not basis_cols:
+        raise RuntimeError("two-level x-block preconditioner found no valid coarse directions")
+
+    basis = np.column_stack(basis_cols)
+    abasis = np.column_stack(abasis_cols)
+    q, r, piv = qr(abasis, mode="economic", pivoting=True)
+    diag = np.abs(np.diag(r))
+    if diag.size == 0:
+        raise RuntimeError("two-level x-block preconditioner coarse QR is empty")
+    threshold = max(float(rcond), 0.0) * max(float(diag[0]), 1.0)
+    rank = int(np.count_nonzero(diag > threshold))
+    if rank <= 0:
+        raise RuntimeError("two-level x-block preconditioner coarse QR is rank deficient")
+    piv_use = np.asarray(piv[:rank], dtype=np.int32)
+    q_use = np.asarray(q[:, :rank], dtype=np.float64)
+    r_use = np.asarray(r[:rank, :rank], dtype=np.float64)
+    basis_use = np.asarray(basis[:, piv_use], dtype=np.float64)
+    names_use = tuple(names[int(i)] for i in piv_use)
+    stats = {"applies": 0, "coarse_applies": 0}
+
+    def _coarse_correction(vec_np: np.ndarray) -> np.ndarray:
+        rhs_small = q_use.T @ np.asarray(vec_np, dtype=np.float64).reshape((-1,))
+        coeff = solve_triangular(r_use, rhs_small, lower=False, check_finite=False)
+        return basis_use @ np.asarray(coeff, dtype=np.float64).reshape((-1,))
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        stats["applies"] += 1
+        v_np = np.asarray(jax.device_get(v), dtype=np.float64).reshape((-1,))
+        base = np.asarray(
+            jax.device_get(base_preconditioner(jnp.asarray(v_np, dtype=jnp.float64))),
+            dtype=np.float64,
+        ).reshape((-1,))
+        if mode_use == "multiplicative":
+            abase = np.asarray(
+                jax.device_get(matvec(jnp.asarray(base, dtype=jnp.float64))),
+                dtype=np.float64,
+            ).reshape((-1,))
+            coarse_input = v_np - abase
+        else:
+            coarse_input = v_np
+        correction = _coarse_correction(coarse_input)
+        stats["coarse_applies"] += 1
+        return jnp.asarray(base + correction, dtype=jnp.float64)
+
+    metadata: dict[str, object] = {
+        "mode": mode_use,
+        "basis_size": int(len(basis_cols)),
+        "rank": int(rank),
+        "requested_max_directions": int(max_dirs_use),
+        "fsavg_lmax": int(fsavg_lmax),
+        "include_rhs": bool(include_rhs),
+        "rcond": float(rcond),
+        "basis_names": names_use,
+    }
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres two-level coarse "
+            f"built mode={mode_use} basis={len(basis_cols)} rank={rank}",
+        )
+    return _apply, metadata, stats
+
+
 def _apply_subspace_minres_correction(
     *,
     matvec: Callable[[jnp.ndarray], jnp.ndarray],
@@ -12005,12 +12207,18 @@ def solve_v3_full_system_linear_gmres(
 
             side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
             xblock_krylov_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "").strip().lower()
+            full_fp_3d_pc = bool(
+                op.fblock.fp is not None
+                and op.fblock.pas is None
+                and int(getattr(op, "n_zeta", 1)) > 1
+            )
             xblock_policy = resolve_rhs1_xblock_sparse_pc_policy(
                 precondition_side_env_value=side_env,
                 krylov_env_value=xblock_krylov_env,
                 requested_restart=int(pc_restart),
                 restart_env_value=pc_restart_env,
                 tokamak_fp_er_pc=bool(tokamak_fp_er_pc),
+                full_fp_3d_pc=bool(full_fp_3d_pc),
                 use_dkes=bool(use_dkes),
                 include_xdot=bool(include_xdot_sparse_pc),
                 include_electric_field_xi=bool(include_electric_field_xi_sparse_pc),
@@ -12046,6 +12254,72 @@ def solve_v3_full_system_linear_gmres(
                     )
                 return apply_v3_full_system_operator_cached(op, jnp.asarray(v, dtype=rhs.dtype))
 
+            precond_xblock_krylov = precond_xblock
+            two_level_enabled = _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", default=False)
+            two_level_built = False
+            two_level_metadata: dict[str, object] = {}
+            two_level_stats = {"applies": 0, "coarse_applies": 0}
+            if two_level_enabled and precondition_side != "none":
+                two_level_start_s = sparse_timer.elapsed_s()
+                two_level_mode = os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MODE",
+                    "additive",
+                ).strip()
+                two_level_max_directions = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS",
+                    default=48,
+                    minimum=1,
+                )
+                two_level_fsavg_lmax = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_FSAVG_LMAX",
+                    default=8,
+                    minimum=0,
+                )
+                two_level_max_extra_units = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_EXTRA_UNITS",
+                    default=8,
+                    minimum=0,
+                )
+                two_level_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_RCOND",
+                    default=1.0e-11,
+                    minimum=0.0,
+                )
+                two_level_include_rhs = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_INCLUDE_RHS",
+                    default=True,
+                )
+                try:
+                    precond_xblock_krylov, two_level_metadata, two_level_stats = (
+                        _build_rhs1_xblock_two_level_preconditioner(
+                            op=op,
+                            rhs=rhs,
+                            matvec=_mv_true,
+                            base_preconditioner=precond_xblock,
+                            mode=two_level_mode,
+                            fsavg_lmax=two_level_fsavg_lmax,
+                            max_extra_units=two_level_max_extra_units,
+                            max_directions=two_level_max_directions,
+                            rcond=two_level_rcond,
+                            include_rhs=two_level_include_rhs,
+                            emit=emit,
+                        )
+                    )
+                    two_level_built = True
+                    two_level_metadata["setup_s"] = float(sparse_timer.elapsed_s() - two_level_start_s)
+                    pc_factor_s += float(two_level_metadata["setup_s"])
+                except Exception as exc:  # noqa: BLE001
+                    two_level_metadata = {
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "setup_s": float(sparse_timer.elapsed_s() - two_level_start_s),
+                    }
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"two-level coarse disabled after build failure ({type(exc).__name__}: {exc})",
+                        )
+
             x0_full = None
             if x0 is not None:
                 x0_arr = jnp.asarray(x0, dtype=jnp.float64)
@@ -12064,7 +12338,7 @@ def solve_v3_full_system_linear_gmres(
             seed_enabled = seed_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}
             if x0_full is None and seed_enabled:
                 try:
-                    seed_vec = jnp.asarray(precond_xblock(rhs), dtype=jnp.float64)
+                    seed_vec = jnp.asarray(precond_xblock_krylov(rhs), dtype=jnp.float64)
                     if seed_vec.shape == rhs.shape and bool(jnp.all(jnp.isfinite(seed_vec))):
                         seed_residual = rhs - _mv_true(seed_vec)
                         seed_residual_norm = float(jnp.linalg.norm(seed_residual))
@@ -12110,7 +12384,19 @@ def solve_v3_full_system_linear_gmres(
                 x_np, residual_norm_xblock_pc, history = lgmres_solve_with_history_scipy(
                     matvec=_mv_true,
                     b=rhs,
-                    preconditioner=precond_xblock if precondition_side != "none" else None,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
+                    x0=x0_full,
+                    tol=tol,
+                    atol=atol,
+                    restart=pc_restart,
+                    maxiter=pc_maxiter,
+                    precondition_side=precondition_side,
+                )
+            elif xblock_krylov_method == "gcrotmk":
+                x_np, residual_norm_xblock_pc, history = gcrotmk_solve_with_history_scipy(
+                    matvec=_mv_true,
+                    b=rhs,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
                     tol=tol,
                     atol=atol,
@@ -12122,7 +12408,7 @@ def solve_v3_full_system_linear_gmres(
                 x_np, residual_norm_xblock_pc, history = bicgstab_solve_with_history_scipy(
                     matvec=_mv_true,
                     b=rhs,
-                    preconditioner=precond_xblock if precondition_side != "none" else None,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
                     tol=tol,
                     atol=atol,
@@ -12133,7 +12419,7 @@ def solve_v3_full_system_linear_gmres(
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
                     matvec=_mv_true,
                     b=rhs,
-                    preconditioner=precond_xblock if precondition_side != "none" else None,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
                     tol=tol,
                     atol=atol,
@@ -12176,7 +12462,7 @@ def solve_v3_full_system_linear_gmres(
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
                     matvec=_mv_true,
                     b=rhs,
-                    preconditioner=precond_xblock if precondition_side != "none" else None,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
                     tol=tol,
                     atol=atol,
@@ -12280,7 +12566,7 @@ def solve_v3_full_system_linear_gmres(
                         matvec=_mv_true,
                         rhs=rhs,
                         x0=jnp.asarray(x_np, dtype=jnp.float64),
-                        preconditioner=precond_xblock if precondition_side != "none" else (lambda v: v),
+                        preconditioner=precond_xblock_krylov if precondition_side != "none" else (lambda v: v),
                         steps=post_minres_steps_requested,
                         alpha_clip=post_minres_alpha_clip,
                         min_improvement=post_minres_min_improvement,
@@ -12328,7 +12614,7 @@ def solve_v3_full_system_linear_gmres(
             ):
                 post_coarse_residual_before = float(residual_norm_xblock_pc)
                 post_coarse_start_s = sparse_timer.elapsed_s()
-                coarse_preconditioner = precond_xblock if precondition_side != "none" else (lambda v: v)
+                coarse_preconditioner = precond_xblock_krylov if precondition_side != "none" else (lambda v: v)
 
                 def _post_coarse_direction_builder(residual_vec: jnp.ndarray) -> tuple[tuple[str, jnp.ndarray], ...]:
                     return _rhs1_xblock_post_coarse_directions(
@@ -12444,6 +12730,17 @@ def solve_v3_full_system_linear_gmres(
                     "sparse_pc_factor_s": float(pc_factor_s),
                     "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
                     "sparse_pc_xblock_assembled_host": bool(xblock_assembled_host_fp),
+                    "xblock_two_level_enabled": bool(two_level_enabled),
+                    "xblock_two_level_built": bool(two_level_built),
+                    "xblock_two_level_mode": two_level_metadata.get("mode"),
+                    "xblock_two_level_basis_size": two_level_metadata.get("basis_size"),
+                    "xblock_two_level_rank": two_level_metadata.get("rank"),
+                    "xblock_two_level_setup_s": two_level_metadata.get("setup_s"),
+                    "xblock_two_level_rcond": two_level_metadata.get("rcond"),
+                    "xblock_two_level_basis_names": two_level_metadata.get("basis_names", ()),
+                    "xblock_two_level_error": two_level_metadata.get("error"),
+                    "xblock_two_level_applies": int(two_level_stats.get("applies", 0)),
+                    "xblock_two_level_coarse_applies": int(two_level_stats.get("coarse_applies", 0)),
                     "xblock_initial_seed_used": bool(xblock_initial_seed_used),
                     "xblock_initial_seed_residual_norm": xblock_initial_seed_residual_norm,
                     "xblock_initial_seed_residual_ratio": xblock_initial_seed_residual_ratio,

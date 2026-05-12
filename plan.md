@@ -61,8 +61,8 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   average moved to `79.0%`; the VMEC/Boozer lane saturated its scoped `93%`
   target, the benchmark/docs lane saturated its `98%` target, and the JAX
   ecosystem lane moved to `82%` after measured Lineax/Equinox/JAXopt gates. QI
-  moved only to `44%` after the new scale-0.45 CPU success because the scale-0.50
-  public-auto probe timed out. PAS, parallel, and refactor/coverage gained
+  is now `64%` after the scale-0.50 single-seed CPU blocker passed with the
+  promoted right-preconditioned exact-xblock-LU policy. PAS, parallel, and refactor/coverage gained
   fail-fast gates, timeout-safe benchmark plans, and focused coverage, but they
   did not honestly clear a +15 point move from the immediately preceding
   baseline.
@@ -77,7 +77,7 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   stdout/stderr tails and solver-stage breadcrumbs without committing copied
   VMEC/run directories. The new
   `docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json`
-  blocker matrix shows that `13 x 27 x 50 x 4` is not fixed by existing solver
+  historical blocker matrix shows that `13 x 27 x 50 x 4` was not fixed by existing solver
   flags: public `auto` times out after `360 s` after the explicit FP x-block
   seed, `sparse_host_safe` fails host sparse factorization on a `126365616`-nnz
   conservative pattern, and `sparse_lsmr` / `xblock_sparse_pc_gmres` both stall
@@ -92,11 +92,9 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   rejected: LGMRES stalled at `5.577462e-6`, fell back to GMRES, doubled the
   matvec count to `65204`, and ended at the same `5.413504e-6` floor after
   about `300 s`.
-  Next QI work must therefore implement a stronger global/coarse correction
-  after x-block seeding instead of increasing timeouts, materializing the full
-  sparse operator, enabling a default seed probe, or relying on scalar
-  post-minres cleanup, the current small post-coarse space, or a Krylov-method
-  toggle.
+  That matrix motivated the promoted exact-xblock-LU/right-PC policy below;
+  those rejected probes remain useful diagnostic evidence but are no longer the
+  active scale-0.50 CPU blocker.
 - [x] Implemented the first gated matrix-free correction hook for that next
   step: explicit `xblock_sparse_pc_gmres` now accepts opt-in
   `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`, which applies bounded
@@ -118,6 +116,19 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   the preconditioned Krylov operator or supplies a larger physics-informed
   coarse space before the 32000-iteration floor, not another post-hoc scalar or
   small-subspace cleanup.
+- [x] Closed the scale-0.50 single-seed CPU QI blocker with a promoted
+  preconditioner policy instead of a timeout increase. The successful route is
+  right-preconditioned explicit `xblock_sparse_pc_gmres` plus exact sparse LU
+  for medium full-FP host x-blocks (`SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`
+  default raised to `20000` only for the non-differentiable full-FP host path).
+  The checked artifact
+  `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json` converges
+  the `13 x 27 x 50 x 4` QI seed in `~12.0 s`, solver time `~11.2 s`, with
+  residual `1.04e-12` against target `2.51e-11` and residual ratio `4.16e-2`.
+  The solver trace records `precondition_side=right`, no short-restart cap,
+  `81` iterations, `85` matvecs, and exact `sparse_lu` block factors. This
+  raises the QI lane materially, but wider CPU seeds and one-GPU reproduction
+  remain required before production-resolution QI is declared complete.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but

@@ -1508,27 +1508,42 @@ Controls:
   vector as the initial guess only if the true residual is lower than the RHS
   norm. The scale-0.50 QI blocker probe rejected this seed and therefore this
   knob is intentionally not a default performance path.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`` (default: ``20000`` for
+  non-differentiable full-FP host x-block factors; ``2000`` otherwise). Medium
+  full-FP :math:`(x,\theta,\zeta,L)` blocks now use exact SuperLU instead of ILU
+  because the scale-0.50 QI blocker showed that weak ILU factors caused the
+  residual floor. The checked CPU successor artifact
+  ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json`` closes
+  the ``13 x 27 x 50 x 4`` seed in ``~12 s`` with residual ratio ``4.16e-2``.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual
   and chooses a scalar minimum-residual step using one extra operator
-  application. This is the current prototype hook for the scale-0.50 QI residual
-  floor; keep it disabled for production claims until a checked artifact shows a
-  lower true residual and no runtime regression.
+  application. It did not materially reduce the scale-0.50 QI residual floor
+  and remains diagnostic-only.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE`` (default: off): opt-in
   multidirectional post-Krylov coarse correction for explicit
   ``xblock_sparse_pc_gmres``. When enabled, SFINCS_JAX forms a bounded
   matrix-free least-squares problem from the preconditioned residual, optional
   raw residual, flux-surface-averaged low-L residual components, and small
   source/constraint directions. The update is accepted only if the measured true
-  residual decreases. This is stronger than the scalar post-minres cleanup but
-  remains a diagnostic path until a checked scale-0.50 QI artifact closes the
-  residual gate.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=lgmres`` remains a diagnostic-only
-  Krylov-method toggle. On the scale-0.50 QI blocker it stalled at a slightly
-  worse residual than GMRES, fell back to GMRES, doubled the matrix-vector count,
-  and ended at the same residual floor. Do not use this as a default memory or
-  robustness fix without a new checked artifact.
+  residual decreases. This is stronger than the scalar post-minres cleanup, but
+  it also did not close the QI floor; the exact-xblock-LU policy above is the
+  promoted route.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL`` (default: off): opt-in two-level
+  global-coupling preconditioner for explicit ``xblock_sparse_pc_gmres``. It
+  builds a fixed low-dimensional coarse basis from RHS-like directions,
+  constraint/source rows, and flux-surface-averaged low-L moments, forms
+  ``A Z`` once, and wraps the x-block preconditioner with a coarse inverse during
+  Krylov rather than applying a post-hoc cleanup after Krylov stalls. The default
+  mode is additive; ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MODE`` can be set
+  to ``multiplicative`` for diagnostics. The scale-0.50 QI probes rejected both
+  modes, so this remains off by default.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=lgmres`` or ``gcrotmk`` remains a
+  diagnostic-only Krylov-method toggle. On the scale-0.50 QI blocker, LGMRES
+  stalled at a slightly worse residual than GMRES, fell back to GMRES, doubled
+  the matrix-vector count, and ended at the same residual floor. GCROT(m,k) also
+  underperformed right-preconditioned GMRES on the checked QI probe.
 
 Large geometry-rich PAS closeout:
 

@@ -3,7 +3,7 @@
   "lanes": [
     {
       "before_percent": 23,
-      "current_percent": 44,
+      "current_percent": 64,
       "evidence": [
         {
           "claim": "Production-readiness manifest rolls up all checked QI CPU/GPU seed artifacts and explicitly keeps the gate bounded until production CPU/GPU ladders exist.",
@@ -36,20 +36,30 @@
         {
           "claim": "Scale-0.50 QI solver matrix preserves compact failure breadcrumbs for auto, sparse_host_safe, sparse_lsmr, xblock_sparse_pc_gmres, initial-seed, post-minres, post-coarse, and LGMRES probes; all current routes fail, so the next step is a different global coupling strategy.",
           "path": "docs/_static/qi_seed_robustness_scale050_solver_matrix_2026_05_12.json"
+        },
+        {
+          "claim": "Scale-0.50 CPU QI seed now converges with promoted right-preconditioned x-block GMRES plus exact sparse LU block factors in about 12 s, residual ratio 4.16e-2.",
+          "path": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json"
+        },
+        {
+          "claim": "Companion solver trace records the automatic policy: precondition_side=right, gmres_restart=80, 81 iterations, 85 matvecs, exact sparse_lu block factors.",
+          "path": "docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu_solver_trace.json"
         }
       ],
       "gates": [
         "Residual ratio must remain below the requested gate on CPU and GPU.",
         "Production-resolution promotion still requires wider seeds and wall-time/memory budgets.",
-        "No QI-specific default branch may bypass the public auto solver policy."
+        "No QI-specific default branch may bypass the public auto solver policy.",
+        "The exact-xblock-LU cap must remain scoped to non-differentiable full-FP host x-block factors."
       ],
       "id": "production_qi_cpu_gpu",
       "next_actions": [
-        "Implement and gate a different global coupling strategy for scale-0.50 QI; do not spend more time on full sparse materialization, timeout-only changes, default initial seeds, scalar post-minres cleanup, the current small post-coarse residual subspace, or x-block Krylov-method toggles.",
-        "Run larger CPU and one-GPU QI seed ladders only after the scale-0.50 residual floor is reduced below the requested gate."
+        "Run the promoted right-preconditioned exact-xblock-LU policy over a wider CPU QI seed ladder at scale 0.50 and then at the next bounded scale.",
+        "Reproduce the scale-0.50 QI seed on one GPU and compare residual, runtime, and memory against the CPU trace before declaring CPU/GPU production QI complete.",
+        "Only after CPU and GPU seed ladders pass, refresh the QI evidence manifest and production-resolution readiness estimate."
       ],
-      "second_push_delta_percent": 9,
-      "second_push_result": "bounded CPU probe at scale 0.45 passed; scale 0.50 has a checked solver-matrix blocker showing existing solver flags, first opt-in correction hooks, and an LGMRES Krylov toggle either time out, fail factorization, or stall near residual 5e-6",
+      "second_push_delta_percent": 29,
+      "second_push_result": "scale-0.50 single-seed CPU QI blocker now passes in ~12 s with right-preconditioned x-block GMRES and exact sparse LU for medium full-FP host x-blocks; GPU and wider-seed production promotion remain open",
       "status": "active",
       "target_percent": 100,
       "title": "Production-resolution QI CPU/GPU robustness"
@@ -411,5 +421,6 @@
   "purpose": "Machine-readable completion tracker for the coordinated large-push research/performance lanes. Percentages are engineering readiness estimates backed by checked-in evidence, not physics claims by themselves.",
   "requested_second_push_delta_percent": 15,
   "schema_version": 1,
-  "second_push_assessment": "partial: target saturation achieved for VMEC/Boozer and benchmark/docs; the follow-up worker pass strengthened QI/PAS/parallel/refactor/VMEC evidence gates, but QI scale-0.50 LGMRES and post-coarse probes remain nonconverged, so the average remains evidence-limited at 79.0% rather than the requested 90%."
+  "second_push_assessment": "partial but materially advanced: QI scale-0.50 single-seed CPU now passes with the promoted right-preconditioned exact-xblock-LU policy, while GPU/wider-seed QI promotion, PAS memory/runtime, parallel scaling, and coverage/refactor lanes remain evidence-gated. The average is now 81.9%, not yet the requested 90% because production CPU/GPU ladders are still open.",
+  "overall_average_percent": 81.9
 }

@@ -34,12 +34,13 @@ def rhs1_xblock_sparse_lu_default_max(
     """Return the default exact-LU cap for x-block sparse preconditioners.
 
     Host SuperLU factors on pure full-FP x-blocks have a measured safe window
-    above the generic JAX-factor and PAS paths, so only that narrow host case
-    receives the larger default cap.
+    above the generic JAX-factor and PAS paths. Keep the larger cap restricted
+    to that narrow host case so medium 3D full-FP blocks avoid weak ILU plateaus
+    without promoting exact LU for PAS or device-resident factor paths.
     """
 
     if (not bool(build_jax_factors)) and bool(has_fp) and not bool(has_pas):
-        return 3000
+        return 20000
     return 2000
 
 
