@@ -1055,6 +1055,23 @@ standpoint. That is why the release-facing recommendation stays conservative:
 use GPU acceleration per case today, and treat multi-GPU parallelism as an
 active research path rather than a proven default.
 
+The 2026-05-12 timeout-safe rerun of the same audit on commit ``39e1e2f``
+kept the benchmark bounded and wrote the checked artifact
+``docs/_static/gpu_case_throughput_large_push_2026_05_12.json``. With
+``nsolve=1`` and a ``180 s`` child timeout, the run completed but failed the
+throughput gate:
+
+- GPU warmups: ``39.79 s`` and ``30.00 s``
+- sequential 1-GPU execution of two cases: ``59.18 s`` wall time
+- two concurrent 1-GPU runs on two GPUs: ``175.77 s`` wall time
+- measured throughput speedup: ``0.337x``
+- audit result: ``ci_gate_pass=false`` because the speedup is below ``1x``
+
+This is an intentionally non-promoting artifact. It proves the timeout-safe
+measurement path works on a clean checkout and confirms that this particular
+case-throughput lane is currently setup/compile dominated on office. It should
+not be used as a release scaling claim.
+
 Fresh two-GPU transport-worker rerun
 ------------------------------------
 

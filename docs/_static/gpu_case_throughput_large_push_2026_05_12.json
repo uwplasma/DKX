@@ -1,0 +1,49 @@
+{
+  "backend": "gpu",
+  "benchmark_kind": "multi_gpu_case_throughput",
+  "case": "rhsmode1_sharded_scaling",
+  "input": "rhsmode1_sharded_scaling.input.namelist",
+  "nsolve": 1,
+  "parallel_two_gpu": {
+    "case0_s": 174.182883,
+    "case1_s": 174.360466,
+    "wall_s": 175.76581302797422
+  },
+  "release_scaling_claim": false,
+  "required_gpu_count": 2,
+  "rhs1_precond": "theta_schwarz",
+  "sample_timeout_s": 180.0,
+  "schwarz_coarse_levels": 2,
+  "sequential_one_gpu": {
+    "case0_s": 28.524152,
+    "case1_s": 28.076572,
+    "wall_s": 59.17610580986366
+  },
+  "status": "ok",
+  "throughput_audit": {
+    "ci_gate_pass": false,
+    "failures": [
+      "throughput speedup 0.337x is below evidence gate 1x"
+    ],
+    "min_throughput_speedup": 1.0,
+    "notes": [
+      "multi-GPU case throughput is evidence for batched case throughput, not single-case strong scaling",
+      "this audit never converts throughput evidence into a release transport scaling claim"
+    ],
+    "release_scaling_claim": false
+  },
+  "throughput_speedup": 0.3366758574401804,
+  "timing_semantics": "cache_warm",
+  "warmup": [
+    {
+      "gpu_id": 0,
+      "visible_devices": "0",
+      "wall_s": 39.792566197924316
+    },
+    {
+      "gpu_id": 1,
+      "visible_devices": "1",
+      "wall_s": 30.00129297794774
+    }
+  ]
+}
