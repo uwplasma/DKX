@@ -315,6 +315,13 @@ policy modules and checks that their explanatory module docstrings are real
 keeps the source map and generated API documentation useful as the large driver is
 split into manageable pieces.
 
+QI seed-robustness artifacts are also checked as data, not only as scripts.
+``tests/test_qi_seed_smoke_artifact.py`` verifies the one-seed smoke artifact,
+the three-seed CPU artifact, and the three-seed one-GPU artifact. The GPU
+artifact protects the moderate full-FP accelerator auto-dense policy that avoids
+the slow sparse/fallback ladder for the fragile ``Nxi=25`` QI window while
+keeping tiny GPU fixtures on the matrix-free path.
+
 The scan/CLI progress surface is also guarded without running expensive scan
 points.  ``tests/test_scans_progress_and_recycle.py`` covers duration formatting,
 ETA/reused-output messages, radial-gradient variable selection, namelist scalar
