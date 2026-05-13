@@ -227,9 +227,22 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   `docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json`
   and
   `docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json`.
-  The next GPU algorithmic step is not another timeout increase; it needs a
-  GPU-native Krylov/preconditioner path or an explicit CPU-offload policy for
-  host-Krylov QI hard seeds.
+  A 2026-05-13 bounded follow-up rejected several tempting but insufficient
+  solver toggles: the existing two-level coarse preconditioner was slower on
+  CPU (`320.8 s` vs the kept `307.9 s`) and timed out on GPU; GCROT(m,k)
+  timed out on CPU and GPU; BiCGStab plus GMRES fallback timed out; BiCGStab
+  plus post-minres/post-coarse correction finished but remained nonconverged
+  (`1.21e-4` CPU and `6.70e-5` GPU residual norms); and an experimental
+  JAX-factor/device-BiCGStab x-block prototype timed out with a worse residual
+  and was removed rather than kept as dead complexity. The rejected-probe
+  summary is checked in as
+  `docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json`.
+  The only code retained from this pass is a safe GMRES fallback guard: a
+  failed non-GMRES candidate may seed fallback GMRES only when it improves the
+  RHS norm and is not a right-preconditioned coordinate state. The next GPU
+  algorithmic step is not another timeout increase or Krylov-name toggle; it
+  needs a stronger GPU-compatible global-coupling preconditioner or a real
+  assembled/operator-reuse path for host-Krylov QI hard seeds.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but

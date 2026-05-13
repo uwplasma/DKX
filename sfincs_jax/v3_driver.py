@@ -8503,6 +8503,39 @@ def _rhs1_float_env(name: str, *, default: float, minimum: float = 0.0) -> float
     return max(float(minimum), float(value))
 
 
+def _rhs1_xblock_fallback_initial_guess(
+    *,
+    candidate: np.ndarray,
+    original_x0: jnp.ndarray | None,
+    rhs_shape: tuple[int, ...],
+    candidate_residual_norm: float,
+    rhs_norm: float,
+    precondition_side: str,
+) -> tuple[jnp.ndarray | None, bool, bool]:
+    """Return the safe GMRES fallback initial guess for x-block Krylov rescues.
+
+    Non-GMRES host Krylov methods may produce a useful physical-space state
+    before failing the strict true-residual gate. Reusing that state is safe for
+    left/no preconditioning when it improves over the zero-state RHS norm. It is
+    deliberately disabled for right preconditioning because SciPy's right-PC
+    iteration state lives in preconditioned coordinates.
+    """
+    candidate_improved_rhs = bool(
+        np.isfinite(float(candidate_residual_norm))
+        and np.isfinite(float(rhs_norm))
+        and float(candidate_residual_norm) < float(rhs_norm)
+    )
+    if (not candidate_improved_rhs) or str(precondition_side).strip().lower() == "right":
+        return original_x0, False, candidate_improved_rhs
+    try:
+        candidate_x0 = jnp.asarray(candidate, dtype=jnp.float64)
+        if candidate_x0.shape == tuple(rhs_shape) and bool(jnp.all(jnp.isfinite(candidate_x0))):
+            return candidate_x0, True, candidate_improved_rhs
+    except Exception:
+        pass
+    return original_x0, False, candidate_improved_rhs
+
+
 def _rhs1_xblock_post_coarse_directions(
     *,
     op: V3FullSystemOperator,
@@ -12589,6 +12622,8 @@ def solve_v3_full_system_linear_gmres(
             candidate_residual_norm = float(residual_norm_xblock_pc)
             candidate_iterations = int(len(history or []))
             candidate_matvecs = int(mv_count)
+            fallback_started_from_candidate = False
+            fallback_candidate_improved_rhs = False
             fallback_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FALLBACK_GMRES", "").strip().lower()
             fallback_to_gmres = fallback_env not in {"0", "false", "f", "no", "off", ".false.", ".f."}
             if xblock_side_probe_lgmres_rescue and not fallback_env:
@@ -12608,12 +12643,24 @@ def solve_v3_full_system_linear_gmres(
                         f"{xblock_krylov_method} residual={float(residual_norm_xblock_pc):.6e} "
                         f"> target={float(target_xblock):.6e}; falling back to gmres",
                     )
+                (
+                    fallback_x0,
+                    fallback_started_from_candidate,
+                    fallback_candidate_improved_rhs,
+                ) = _rhs1_xblock_fallback_initial_guess(
+                    candidate=np.asarray(x_np, dtype=np.float64),
+                    original_x0=x0_full,
+                    rhs_shape=tuple(rhs.shape),
+                    candidate_residual_norm=float(candidate_residual_norm),
+                    rhs_norm=float(rhs_norm),
+                    precondition_side=str(precondition_side),
+                )
                 fallback_start_s = sparse_timer.elapsed_s()
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
                     matvec=_mv_true,
                     b=rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    x0=fallback_x0,
                     tol=tol,
                     atol=atol,
                     restart=pc_restart,
@@ -12869,6 +12916,8 @@ def solve_v3_full_system_linear_gmres(
                     "fallback_from_krylov_method": (
                         str(candidate_krylov_method) if candidate_krylov_method != str(xblock_krylov_method) else None
                     ),
+                    "fallback_started_from_candidate": bool(fallback_started_from_candidate),
+                    "fallback_candidate_improved_rhs": bool(fallback_candidate_improved_rhs),
                     "precondition_side": str(precondition_side),
                     "default_right_preconditioned": bool(xblock_default_right_pc),
                     "default_short_restart_capped": bool(xblock_default_restart_capped),
