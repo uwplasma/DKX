@@ -515,6 +515,42 @@ def test_qi_seed_scale050_xblock_lu_right_multiseed5_artifacts_pass(
         assert seed["solver_trace_exists"] is True
 
 
+def test_qi_seed_scale060_rejected_solver_probe_artifact_records_blockers() -> None:
+    payload = json.loads(
+        Path("docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert payload["artifact_kind"] == "qi_seed_rejected_solver_probe_summary"
+    assert payload["resolution"] == {"NTHETA": 15, "NZETA": 31, "NXI": 60, "NX": 5}
+    assert payload["active_size"] == 81377
+    rejected = payload["rejected_probes"]
+    assert any(probe["backend"] == "gpu" and probe["outcome"] == "timeout" for probe in rejected)
+    assert any("JAX-factor" in probe["policy"] for probe in rejected)
+    assert "default-off blocker evidence" in payload["code_rejected"][0]["reason"]
+
+
+def test_qi_seed_scale060_global_coupling_rejected_artifact_records_blockers() -> None:
+    payload = json.loads(
+        Path("docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert payload["artifact_kind"] == "qi_seed_rejected_solver_probe_summary"
+    assert payload["resolution"] == {"NTHETA": 15, "NZETA": 31, "NXI": 60, "NX": 5}
+    assert payload["active_size"] == 81377
+    assert payload["total_size_estimate"] == 139502
+    assert payload["conclusion"]["defaults_changed"] is False
+    assert payload["conclusion"]["hard_seed_closed"] is False
+    assert "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING" in payload["implemented_opt_in_controls"]
+    gpu_probes = [probe for probe in payload["probes"] if probe.get("backend") == "gpu"]
+    assert gpu_probes
+    assert all(probe["timed_out"] is True for probe in gpu_probes)
+    assert any("keep_global_coupling" in " ".join(probe["observed_progress"]) for probe in gpu_probes)
+
+
 def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     path = Path("docs/_static/qi_seed_robustness_evidence_manifest.json")
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -534,9 +570,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 22
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 24
     assert current["passing_artifact_count"] == 17
-    assert current["nonpassing_artifact_count"] == 5
+    assert current["nonpassing_artifact_count"] == 7
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -572,7 +608,19 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
+        "docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
+        "docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json",
     } == source_paths
+
+    rejected_global = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"] == "docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json"
+    )
+    assert rejected_global["passed"] is False
+    assert rejected_global["active_size"] == 81377
+    assert rejected_global["total_size"] == 139502
+    assert rejected_global["resolution_fractions"]["NTHETA"] == 0.6
 
     gates = payload["acceptance_gates"]
     assert gates["public_cli_default_path"] is True

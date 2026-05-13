@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 22,
+    "artifact_count": 24,
     "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
@@ -32,7 +32,7 @@
     "max_checked_per_axis_resolution_fraction": 0.6,
     "max_checked_total_size": 139502,
     "max_checked_total_size_fraction": 0.13676639849725786,
-    "nonpassing_artifact_count": 5,
+    "nonpassing_artifact_count": 7,
     "passing_artifact_count": 17,
     "production_total_size_uncovered_percent": 86.32
   },
@@ -648,6 +648,62 @@
         "NZETA": 0.6078431372549019
       },
       "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_rejected_solver_probe_summary",
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case_count": 0,
+      "max_elapsed_s": null,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
+      "public_cli_default_path": null,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": null,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_rejected_solver_probe_summary",
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case_count": 0,
+      "max_elapsed_s": null,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json",
+      "public_cli_default_path": null,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 1,
       "total_size": 139502
     }
   ],

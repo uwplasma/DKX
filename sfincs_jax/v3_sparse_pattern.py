@@ -213,6 +213,87 @@ def _append_constraint_candidates(*, op: Any, rows: list[int], cols: list[int]) 
     raise NotImplementedError(f"constraintScheme={constraint_scheme} is not supported by the sparse pattern builder.")
 
 
+def estimate_v3_full_system_conservative_sparsity_summary(
+    op: Any,
+    *,
+    fp_dense_velocity_block: bool | None = None,
+) -> V3SparsePatternSummary:
+    """Return a cheap upper-bound summary before materializing the pattern.
+
+    The estimate intentionally overcounts duplicate row/column entries. It is
+    used as a memory-safety preflight for experimental assembled-operator paths,
+    where constructing Python row/column lists for a clearly infeasible pattern
+    would itself be the failure mode.
+    """
+
+    n_total = int(op.total_size)
+    if n_total <= 0:
+        return V3SparsePatternSummary(
+            shape=(0, 0),
+            nnz=0,
+            avg_row_nnz=0.0,
+            max_row_nnz=0,
+            include_phi1=bool(op.include_phi1),
+            constraint_scheme=int(op.constraint_scheme),
+            has_fp=op.fblock.fp is not None,
+            has_pas=op.fblock.pas is not None,
+        )
+
+    if fp_dense_velocity_block is None:
+        fp_dense_velocity_block = op.fblock.fp is not None
+
+    theta_supports = _ddtheta_supports(op)
+    zeta_supports = _ddzeta_supports(op)
+    theta_max = max((len(support) + 1 for support in theta_supports), default=1)
+    zeta_max = max((len(support) + 1 for support in zeta_supports), default=1)
+    has_fp = op.fblock.fp is not None
+    has_xdot = op.fblock.er_xdot is not None or op.fblock.magdrift_xidot is not None
+    species_cols = int(op.n_species) if has_fp else 1
+    x_cols = int(op.n_x) if bool(fp_dense_velocity_block or has_xdot) else 1
+    l_cols = int(op.n_xi) if bool(fp_dense_velocity_block) else min(int(op.n_xi), 5)
+    f_rows = int(op.f_size)
+    f_row_nnz = max(1, species_cols * x_cols * l_cols * (theta_max + zeta_max))
+    nnz_estimate = int(f_rows * f_row_nnz)
+    max_row_nnz = int(f_row_nnz)
+
+    if bool(op.include_phi1):
+        qn_rows = int(op.n_theta) * int(op.n_zeta)
+        qn_row_nnz = int(op.n_species) * int(op.n_x) + 2
+        nnz_estimate += int(qn_rows * qn_row_nnz)
+        nnz_estimate += int(op.n_theta) * int(op.n_zeta)
+        max_row_nnz = max(max_row_nnz, qn_row_nnz, int(op.n_theta) * int(op.n_zeta))
+        if bool(op.include_phi1_in_kinetic):
+            nnz_estimate += int(op.n_species) * int(op.n_x) * int(op.n_theta) * int(op.n_zeta) * (
+                theta_max + zeta_max
+            )
+
+    ix0 = 1 if bool(op.point_at_x0) else 0
+    if int(op.constraint_scheme) == 2:
+        active_x = max(0, int(op.n_x) - ix0)
+        nnz_estimate += int(op.n_species) * active_x * int(op.n_theta) * int(op.n_zeta)
+        extra_row_nnz = int(op.n_theta) * int(op.n_zeta) + (1 if bool(op.point_at_x0) else 0)
+        nnz_estimate += int(op.n_species) * int(op.n_x) * extra_row_nnz
+        max_row_nnz = max(max_row_nnz, extra_row_nnz)
+    elif int(op.constraint_scheme) in {1, 3, 4}:
+        active_x = max(0, int(op.n_x) - ix0)
+        nnz_estimate += int(op.n_species) * active_x * int(op.n_theta) * int(op.n_zeta) * 2
+        moment_row_nnz = int(op.n_x) * int(op.n_theta) * int(op.n_zeta)
+        nnz_estimate += int(op.n_species) * 2 * moment_row_nnz
+        max_row_nnz = max(max_row_nnz, moment_row_nnz)
+
+    avg_row_nnz = float(nnz_estimate) / float(max(n_total, 1))
+    return V3SparsePatternSummary(
+        shape=(n_total, n_total),
+        nnz=int(nnz_estimate),
+        avg_row_nnz=float(avg_row_nnz),
+        max_row_nnz=int(max_row_nnz),
+        include_phi1=bool(op.include_phi1),
+        constraint_scheme=int(op.constraint_scheme),
+        has_fp=op.fblock.fp is not None,
+        has_pas=op.fblock.pas is not None,
+    )
+
+
 def v3_full_system_conservative_sparsity_pattern(
     op: Any,
     *,

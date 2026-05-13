@@ -256,6 +256,22 @@ def test_build_operator_from_pattern_can_fall_back_to_operator_only_when_budgete
     np.testing.assert_allclose(bundle.matvec(np.array([1.0, 2.0, 3.0])), np.array([1.0, 2.0, 3.0]))
 
 
+def test_build_operator_from_pattern_enforces_csr_budget_when_materializing() -> None:
+    pattern = sp.eye(3, format="csr")
+
+    def mv(x):
+        return np.asarray(x)
+
+    with pytest.raises(MemoryError, match="pattern CSR estimate would exceed budget"):
+        build_operator_from_pattern(
+            mv,
+            pattern=pattern,
+            backend="cpu",
+            csr_max_mb=0.0,
+            allow_operator_only=False,
+        )
+
+
 def test_factorize_host_sparse_operator_solves_exactly() -> None:
     dense = np.array([[4.0, 1.0], [2.0, 3.0]])
     bundle = build_operator_from_dense(dense, backend="cpu", force_sparse=True)

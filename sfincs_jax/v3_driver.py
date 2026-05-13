@@ -290,7 +290,11 @@ from .v3_system import (
     rhs_v3_full_system_jit,
     with_transport_rhs_settings,
 )
-from .v3_sparse_pattern import summarize_v3_sparse_pattern, v3_full_system_conservative_sparsity_pattern
+from .v3_sparse_pattern import (
+    estimate_v3_full_system_conservative_sparsity_summary,
+    summarize_v3_sparse_pattern,
+    v3_full_system_conservative_sparsity_pattern,
+)
 from .profiling import _rss_mb, maybe_profiler
 
 _HOST_SCIPY_KRYLOV_METHODS = frozenset({"lgmres", "lgmres_scipy"})
@@ -8928,6 +8932,8 @@ def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
     rhs: jnp.ndarray,
     matvec: Callable[[jnp.ndarray], jnp.ndarray],
     base_preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    direction_projector: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expected_size: int | None = None,
     mode: str,
     fsavg_lmax: int,
     angular_lmax: int,
@@ -8951,6 +8957,7 @@ def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
     if mode_use not in {"additive", "multiplicative"}:
         mode_use = "additive"
     max_dirs_use = max(1, int(max_directions))
+    expected_size_use = int(op.total_size) if expected_size is None else int(expected_size)
     raw_loads = _rhs1_xblock_global_coupling_load_basis(
         op=op,
         rhs=rhs,
@@ -8964,8 +8971,10 @@ def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
     az_cols: list[np.ndarray] = []
     names: list[str] = []
     for name, load in raw_loads[:max_dirs_use]:
+        if direction_projector is not None:
+            load = direction_projector(load)
         load_np = np.asarray(jax.device_get(load), dtype=np.float64).reshape((-1,))
-        if load_np.shape != (int(op.total_size),) or not np.all(np.isfinite(load_np)):
+        if load_np.shape != (expected_size_use,) or not np.all(np.isfinite(load_np)):
             continue
         load_norm = float(np.linalg.norm(load_np))
         if (not np.isfinite(load_norm)) or load_norm <= 0.0:
@@ -11879,6 +11888,10 @@ def solve_v3_full_system_linear_gmres(
         or sparse_pc_gmres_requested
         or sparse_minimum_norm_requested
     )
+    xblock_active_dof_requested = (
+        solve_method_kind_requested in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+        and _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", default=False)
+    )
 
     recycle_k_env = os.environ.get("SFINCS_JAX_RHSMODE1_RECYCLE_K", "").strip()
     try:
@@ -12014,7 +12027,7 @@ def solve_v3_full_system_linear_gmres(
         use_active_dof_mode = has_reduced_modes and (
             int(op.rhs_mode) in {2, 3} or (int(op.rhs_mode) == 1 and (not bool(op.include_phi1)))
         )
-        if sparse_host_like_requested:
+        if sparse_host_like_requested and not xblock_active_dof_requested:
             use_active_dof_mode = False
         # Upstream v3 always drops inactive (x,L) modes when `Nxi_for_x` truncation is
         # active. Keep this reduction on for DKES trajectories as well to match v3's
@@ -12383,11 +12396,19 @@ def solve_v3_full_system_linear_gmres(
             )
             and (not sparse_pc_active_forced_off)
         )
-        if use_active_dof_mode and not sparse_pc_use_active_dof:
+        xblock_use_active_dof = bool(
+            xblock_sparse_pc
+            and use_active_dof_mode
+            and bool(xblock_active_dof_requested)
+            and active_idx_jnp is not None
+            and full_to_active_jnp is not None
+        )
+        if use_active_dof_mode and not (sparse_pc_use_active_dof or xblock_use_active_dof):
             raise NotImplementedError(
                 "solve_method='sparse_pc_gmres'/'xblock_sparse_pc_gmres' active-DOF mode is only implemented "
-                "for the generic sparse_pc_gmres branch. Set SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF=1 "
-                "or SFINCS_JAX_ACTIVE_DOF=0."
+                "for the generic sparse_pc_gmres branch or opt-in x-block branch. Set "
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF=1, "
+                "SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1, or SFINCS_JAX_ACTIVE_DOF=0."
             )
         fp_dense_velocity_env = os.environ.get(
             "SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK",
@@ -12531,6 +12552,41 @@ def solve_v3_full_system_linear_gmres(
             progress_every = max(0, int(progress_every))
             mv_count = 0
 
+            xblock_linear_size = int(op.total_size)
+            xblock_active_idx_np: np.ndarray | None = None
+            xblock_rhs = rhs
+            if xblock_use_active_dof:
+                assert active_idx_jnp is not None
+                assert full_to_active_jnp is not None
+                xblock_active_idx_np = np.asarray(jax.device_get(active_idx_jnp), dtype=np.int32)
+                xblock_linear_size = int(xblock_active_idx_np.shape[0])
+                xblock_rhs = rhs[active_idx_jnp]
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres active-DOF reduction "
+                        f"enabled (size={int(xblock_linear_size)}/{int(op.total_size)})",
+                    )
+
+            def _xblock_reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
+                if not xblock_use_active_dof:
+                    return v_full
+                assert active_idx_jnp is not None
+                return v_full[active_idx_jnp]
+
+            def _xblock_expand_reduced(v_vec: jnp.ndarray) -> jnp.ndarray:
+                if not xblock_use_active_dof:
+                    return v_vec
+                assert full_to_active_jnp is not None
+                z0 = jnp.zeros((1,), dtype=v_vec.dtype)
+                padded = jnp.concatenate([z0, v_vec], axis=0)
+                return padded[full_to_active_jnp]
+
+            def _mv_true_no_count(v: jnp.ndarray) -> jnp.ndarray:
+                x_full = _xblock_expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
+                y_full = apply_v3_full_system_operator_cached(op, x_full)
+                return _xblock_reduce_full(y_full)
+
             def _mv_true(v: jnp.ndarray) -> jnp.ndarray:
                 nonlocal mv_count
                 mv_count += 1
@@ -12540,9 +12596,16 @@ def solve_v3_full_system_linear_gmres(
                         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                         f"matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
                     )
-                return apply_v3_full_system_operator_cached(op, jnp.asarray(v, dtype=rhs.dtype))
+                return _mv_true_no_count(v)
 
             _mv_xblock_krylov = _mv_true
+
+            def _precond_xblock_krylov_base(v: jnp.ndarray) -> jnp.ndarray:
+                if not xblock_use_active_dof:
+                    return precond_xblock(v)
+                z_full = precond_xblock(_xblock_expand_reduced(jnp.asarray(v, dtype=rhs.dtype)))
+                return _xblock_reduce_full(z_full)
+
             assembled_operator_enabled = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR",
                 default=False,
@@ -12558,11 +12621,6 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                             "building assembled operator for Krylov matvec reuse",
                         )
-                    assembled_pattern = v3_full_system_conservative_sparsity_pattern(
-                        op,
-                        fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
-                    )
-                    assembled_summary = summarize_v3_sparse_pattern(op, assembled_pattern)
                     assembled_csr_max_mb = _rhs1_float_env(
                         "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB",
                         default=2048.0,
@@ -12578,14 +12636,45 @@ def solve_v3_full_system_linear_gmres(
                         default=512,
                         minimum=1,
                     )
+                    assembled_preflight = estimate_v3_full_system_conservative_sparsity_summary(
+                        op,
+                        fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                    )
+                    assembled_preflight_csr_nbytes = int(
+                        int(assembled_preflight.nnz) * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize)
+                        + (int(assembled_preflight.shape[0]) + 1) * np.dtype(np.int32).itemsize
+                    )
+                    assembled_preflight_peak_nbytes = int(3 * assembled_preflight_csr_nbytes)
+                    assembled_csr_cap_nbytes = int(max(0.0, float(assembled_csr_max_mb)) * 1.0e6)
+                    assembled_operator_metadata.update(
+                        {
+                            "preflight_pattern_nnz_estimate": int(assembled_preflight.nnz),
+                            "preflight_pattern_max_row_nnz_estimate": int(assembled_preflight.max_row_nnz),
+                            "preflight_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
+                            "preflight_peak_nbytes_estimate": int(assembled_preflight_peak_nbytes),
+                            "preflight_csr_max_mb": float(assembled_csr_max_mb),
+                            "preflight_rejected": False,
+                        }
+                    )
+                    if assembled_csr_cap_nbytes <= 0 or assembled_preflight_csr_nbytes > assembled_csr_cap_nbytes:
+                        assembled_operator_metadata["preflight_rejected"] = True
+                        raise MemoryError(
+                            "assembled x-block operator preflight rejected CSR estimate "
+                            f"{assembled_preflight_csr_nbytes / 1.0e6:.3g} MB > "
+                            f"{float(assembled_csr_max_mb):.3g} MB"
+                        )
+                    assembled_pattern = v3_full_system_conservative_sparsity_pattern(
+                        op,
+                        fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                    )
+                    if xblock_active_idx_np is not None:
+                        assembled_pattern = assembled_pattern[xblock_active_idx_np, :][:, xblock_active_idx_np].tocsr()
+                    assembled_summary = summarize_v3_sparse_pattern(op, assembled_pattern)
 
                     def _matvec_np_no_count(x_np: np.ndarray) -> np.ndarray:
                         return np.asarray(
                             jax.device_get(
-                                apply_v3_full_system_operator_cached(
-                                    op,
-                                    jnp.asarray(np.asarray(x_np, dtype=np.float64), dtype=rhs.dtype),
-                                )
+                                _mv_true_no_count(jnp.asarray(np.asarray(x_np, dtype=np.float64), dtype=rhs.dtype))
                             ),
                             dtype=np.float64,
                         ).reshape((-1,))
@@ -12616,7 +12705,7 @@ def solve_v3_full_system_linear_gmres(
                     validation_errors: list[float] = []
                     rng = np.random.default_rng(1729)
                     for _ in range(int(validation_samples)):
-                        probe = rng.standard_normal(int(op.total_size)).astype(np.float64)
+                        probe = rng.standard_normal(int(xblock_linear_size)).astype(np.float64)
                         probe_norm = float(np.linalg.norm(probe))
                         if np.isfinite(probe_norm) and probe_norm > 0.0:
                             probe /= probe_norm
@@ -12651,6 +12740,7 @@ def solve_v3_full_system_linear_gmres(
                     else:
                         assembled_matrix_nnz = int(np.count_nonzero(np.asarray(assembled_matrix)))
                     assembled_operator_metadata = {
+                        **assembled_operator_metadata,
                         "setup_s": float(sparse_timer.elapsed_s() - assembled_operator_start_s),
                         "pattern_nnz": int(assembled_summary.nnz),
                         "pattern_avg_row_nnz": float(assembled_summary.avg_row_nnz),
@@ -12672,6 +12762,7 @@ def solve_v3_full_system_linear_gmres(
                         )
                 except Exception as exc:  # noqa: BLE001
                     assembled_operator_metadata = {
+                        **assembled_operator_metadata,
                         "error": f"{type(exc).__name__}: {exc}",
                         "setup_s": float(sparse_timer.elapsed_s() - assembled_operator_start_s),
                     }
@@ -12682,12 +12773,23 @@ def solve_v3_full_system_linear_gmres(
                             f"assembled operator disabled after build failure ({type(exc).__name__}: {exc})",
                         )
 
-            precond_xblock_krylov = precond_xblock
+            precond_xblock_krylov = _precond_xblock_krylov_base
             two_level_enabled = _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", default=False)
             two_level_built = False
             two_level_metadata: dict[str, object] = {}
             two_level_stats = {"applies": 0, "coarse_applies": 0}
-            if two_level_enabled and precondition_side != "none":
+            if two_level_enabled and xblock_use_active_dof:
+                two_level_metadata = {
+                    "error": "active-DOF x-block two-level preconditioner is not implemented",
+                    "setup_s": 0.0,
+                }
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "two-level coarse disabled for active-DOF x-block solve",
+                    )
+            elif two_level_enabled and precondition_side != "none":
                 two_level_start_s = sparse_timer.elapsed_s()
                 two_level_mode = os.environ.get(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MODE",
@@ -12723,7 +12825,7 @@ def solve_v3_full_system_linear_gmres(
                             op=op,
                             rhs=rhs,
                             matvec=_mv_xblock_krylov,
-                            base_preconditioner=precond_xblock,
+                            base_preconditioner=precond_xblock_krylov,
                             mode=two_level_mode,
                             fsavg_lmax=two_level_fsavg_lmax,
                             max_extra_units=two_level_max_extra_units,
@@ -12797,6 +12899,8 @@ def solve_v3_full_system_linear_gmres(
                             rhs=rhs,
                             matvec=_mv_xblock_krylov,
                             base_preconditioner=precond_xblock_krylov,
+                            direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
+                            expected_size=int(xblock_linear_size),
                             mode=global_coupling_mode,
                             fsavg_lmax=global_coupling_fsavg_lmax,
                             angular_lmax=global_coupling_angular_lmax,
@@ -12826,13 +12930,16 @@ def solve_v3_full_system_linear_gmres(
             x0_full = None
             if x0 is not None:
                 x0_arr = jnp.asarray(x0, dtype=jnp.float64)
-                if x0_arr.shape == rhs.shape:
+                if x0_arr.shape == xblock_rhs.shape:
                     x0_full = x0_arr
+                elif xblock_use_active_dof and x0_arr.shape == rhs.shape:
+                    x0_full = _xblock_reduce_full(x0_arr)
                 elif emit is not None:
                     emit(
                         1,
                         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres ignoring incompatible x0 "
-                        f"shape={tuple(x0_arr.shape)} expected={tuple(rhs.shape)}",
+                        f"shape={tuple(x0_arr.shape)} expected={tuple(xblock_rhs.shape)}"
+                        + (f" or {tuple(rhs.shape)}" if xblock_use_active_dof else ""),
                     )
             xblock_initial_seed_used = False
             xblock_initial_seed_residual_norm: float | None = None
@@ -12841,11 +12948,11 @@ def solve_v3_full_system_linear_gmres(
             seed_enabled = seed_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}
             if x0_full is None and seed_enabled:
                 try:
-                    seed_vec = jnp.asarray(precond_xblock_krylov(rhs), dtype=jnp.float64)
-                    if seed_vec.shape == rhs.shape and bool(jnp.all(jnp.isfinite(seed_vec))):
-                        seed_residual = rhs - _mv_true(seed_vec)
+                    seed_vec = jnp.asarray(precond_xblock_krylov(xblock_rhs), dtype=jnp.float64)
+                    if seed_vec.shape == xblock_rhs.shape and bool(jnp.all(jnp.isfinite(seed_vec))):
+                        seed_residual = xblock_rhs - _mv_true(seed_vec)
                         seed_residual_norm = float(jnp.linalg.norm(seed_residual))
-                        rhs_norm_float = float(rhs_norm)
+                        rhs_norm_float = float(jnp.linalg.norm(xblock_rhs))
                         xblock_initial_seed_residual_norm = float(seed_residual_norm)
                         xblock_initial_seed_residual_ratio = (
                             float(seed_residual_norm) / rhs_norm_float if rhs_norm_float > 0.0 else None
@@ -12875,7 +12982,8 @@ def solve_v3_full_system_linear_gmres(
                             f"initial x-block seed failed ({type(exc).__name__}: {exc})",
                         )
 
-            target_xblock = max(float(atol), float(tol) * float(rhs_norm))
+            xblock_rhs_norm = float(jnp.linalg.norm(xblock_rhs))
+            target_xblock = max(float(atol), float(tol) * float(xblock_rhs_norm))
             xblock_side_probe_enabled = _rhs1_xblock_policy.rhs1_xblock_side_probe_enabled(
                 env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE", ""),
                 explicit_side_env_value=side_env,
@@ -12928,7 +13036,7 @@ def solve_v3_full_system_linear_gmres(
                 try:
                     x_probe, residual_probe, history_probe = gmres_solve_with_history_scipy(
                         matvec=_mv_xblock_krylov,
-                        b=rhs,
+                        b=xblock_rhs,
                         preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                         x0=x0_full,
                         tol=tol,
@@ -13046,7 +13154,7 @@ def solve_v3_full_system_linear_gmres(
             if xblock_krylov_method == "lgmres":
                 x_np, residual_norm_xblock_pc, history = lgmres_solve_with_history_scipy(
                     matvec=_mv_xblock_krylov,
-                    b=rhs,
+                    b=xblock_rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
                     tol=tol,
@@ -13059,7 +13167,7 @@ def solve_v3_full_system_linear_gmres(
             elif xblock_krylov_method == "gcrotmk":
                 x_np, residual_norm_xblock_pc, history = gcrotmk_solve_with_history_scipy(
                     matvec=_mv_xblock_krylov,
-                    b=rhs,
+                    b=xblock_rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
                     tol=tol,
@@ -13071,7 +13179,7 @@ def solve_v3_full_system_linear_gmres(
             elif xblock_krylov_method == "bicgstab":
                 x_np, residual_norm_xblock_pc, history = bicgstab_solve_with_history_scipy(
                     matvec=_mv_xblock_krylov,
-                    b=rhs,
+                    b=xblock_rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
                     tol=tol,
@@ -13082,7 +13190,7 @@ def solve_v3_full_system_linear_gmres(
             else:
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
                     matvec=_mv_xblock_krylov,
-                    b=rhs,
+                    b=xblock_rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
                     tol=tol,
@@ -13093,7 +13201,7 @@ def solve_v3_full_system_linear_gmres(
                 )
             solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s)
             try:
-                residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
+                residual_true = np.asarray(xblock_rhs, dtype=np.float64) - np.asarray(
                     jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
                     dtype=np.float64,
                 )
@@ -13134,13 +13242,13 @@ def solve_v3_full_system_linear_gmres(
                     original_x0=x0_full,
                     rhs_shape=tuple(rhs.shape),
                     candidate_residual_norm=float(candidate_residual_norm),
-                    rhs_norm=float(rhs_norm),
+                    rhs_norm=float(xblock_rhs_norm),
                     precondition_side=str(precondition_side),
                 )
                 fallback_start_s = sparse_timer.elapsed_s()
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
                     matvec=_mv_xblock_krylov,
-                    b=rhs,
+                    b=xblock_rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=fallback_x0,
                     tol=tol,
@@ -13152,7 +13260,7 @@ def solve_v3_full_system_linear_gmres(
                 solve_s += sparse_timer.elapsed_s() - fallback_start_s
                 xblock_krylov_method = "gmres"
                 try:
-                    residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
+                    residual_true = np.asarray(xblock_rhs, dtype=np.float64) - np.asarray(
                         jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
                         dtype=np.float64,
                     )
@@ -13243,7 +13351,7 @@ def solve_v3_full_system_linear_gmres(
                 try:
                     x_corr, residual_corr, post_history, post_alphas = _apply_preconditioned_minres_correction(
                         matvec=_mv_true,
-                        rhs=rhs,
+                        rhs=xblock_rhs,
                         x0=jnp.asarray(x_np, dtype=jnp.float64),
                         preconditioner=precond_xblock_krylov if precondition_side != "none" else (lambda v: v),
                         steps=post_minres_steps_requested,
@@ -13315,7 +13423,7 @@ def solve_v3_full_system_linear_gmres(
                         post_coarse_direction_names,
                     ) = _apply_subspace_minres_correction(
                         matvec=_mv_true,
-                        rhs=rhs,
+                        rhs=xblock_rhs,
                         x0=jnp.asarray(x_np, dtype=jnp.float64),
                         direction_builder=_post_coarse_direction_builder,
                         steps=post_coarse_steps_requested,
@@ -13378,7 +13486,7 @@ def solve_v3_full_system_linear_gmres(
                 op=op,
                 rhs=rhs,
                 gmres=GMRESSolveResult(
-                    x=jnp.asarray(x_np, dtype=jnp.float64),
+                    x=_xblock_expand_reduced(jnp.asarray(x_np, dtype=jnp.float64)),
                     residual_norm=jnp.asarray(residual_norm_xblock_pc, dtype=jnp.float64),
                 ),
                 metadata={
@@ -13412,9 +13520,21 @@ def solve_v3_full_system_linear_gmres(
                     "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
                     "sparse_pc_xblock_assembled_host": bool(xblock_assembled_host_fp),
                     "sparse_pc_xblock_jax_factors": bool(xblock_jax_factors),
+                    "xblock_active_dof": bool(xblock_use_active_dof),
+                    "xblock_linear_size": int(xblock_linear_size),
+                    "xblock_full_size": int(op.total_size),
                     "xblock_assembled_operator_enabled": bool(assembled_operator_enabled),
                     "xblock_assembled_operator_built": bool(assembled_operator_built),
                     "xblock_assembled_operator_setup_s": assembled_operator_metadata.get("setup_s"),
+                    "xblock_assembled_operator_preflight_rejected": assembled_operator_metadata.get(
+                        "preflight_rejected", False
+                    ),
+                    "xblock_assembled_operator_preflight_pattern_nnz_estimate": assembled_operator_metadata.get(
+                        "preflight_pattern_nnz_estimate"
+                    ),
+                    "xblock_assembled_operator_preflight_peak_nbytes_estimate": assembled_operator_metadata.get(
+                        "preflight_peak_nbytes_estimate"
+                    ),
                     "xblock_assembled_operator_pattern_nnz": assembled_operator_metadata.get("pattern_nnz"),
                     "xblock_assembled_operator_matrix_nnz": assembled_operator_metadata.get("matrix_nnz"),
                     "xblock_assembled_operator_csr_nbytes_estimate": assembled_operator_metadata.get(

@@ -1595,8 +1595,19 @@ Controls:
   aborts as soon as the color count exceeds
   ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS`` so large
   QI/PAS geometries do not spend minutes discovering an already-infeasible
-  operator. This remains diagnostic-only until a large case shows both strict
-  residual parity and lower wall time/memory.
+  operator. The CSR memory budget
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB`` is now enforced
+  as a hard cap when materialization is required. This remains diagnostic-only
+  until a large case shows both strict residual parity and lower wall
+  time/memory.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF`` (default: off): opt-in active-DOF
+  reduction for explicit ``xblock_sparse_pc_gmres``. When ``Nxi_for_x`` truncates
+  the pitch basis, this route solves the x-block Krylov system on the active
+  unknowns and expands the final state back to the full SFINCS vector. This is
+  intended as a memory-safety prerequisite for future assembled/operator-reuse
+  experiments on large QI grids; it is not enabled by default because the
+  release-facing exact-xblock path is already parity-clean on its current
+  bounded evidence set.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS`` (default: off): opt-in
   device-factor x-block preconditioner experiment. It exposes the existing JAX
   padded triangular-factor path through the explicit x-block solver so GPU

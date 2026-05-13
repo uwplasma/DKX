@@ -4,14 +4,14 @@
   "lane": "qi_seed_robustness",
   "created_utc": "2026-05-13T00:00:00Z",
   "resolution": {
-    "Ntheta": 15,
-    "Nzeta": 31,
-    "Nxi": 60,
-    "Nx": 5
+    "NTHETA": 15,
+    "NZETA": 31,
+    "NXI": 60,
+    "NX": 5
   },
   "seed": 3,
   "total_size_estimate": 139502,
-  "active_size_estimate": 81377,
+  "active_size": 81377,
   "summary": "Opt-in smoothed global-coupling and assembled/operator-reuse probes were implemented and tested, but the scale-0.60 QI GPU hard seed remains unclosed. These probes are blocker evidence and must not support a production default or release performance claim.",
   "implemented_opt_in_controls": [
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING",
