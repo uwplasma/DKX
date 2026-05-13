@@ -10755,3 +10755,79 @@ Next best steps:
    side probe, while keeping the setup matrix-free and bounded.
 3. Continue PAS production-floor memory/runtime probes independently; the
    active two-level change is opt-in and should not alter public defaults.
+
+## 2026-05-13 probe-coarse QI hard-seed push
+
+Goal: try the next matrix-free QI hard-seed step after active assembled
+materialization rejected the color budget and the fixed active two-level basis
+timed out.
+
+Implementation:
+
+- Added an opt-in pre-Krylov seed-correction hook controlled by
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE`.
+- The hook reuses the post-coarse bounded least-squares basis, but applies it to
+  the side-probe or user-supplied initial state before the expensive full Krylov
+  solve.
+- Fixed active-DOF coarse direction construction: residuals are expanded to full
+  coordinates for physics-aware flux-surface/source basis construction, and each
+  candidate direction is projected back to the active `Nxi_for_x` coordinate set
+  before the least-squares correction is formed.
+- Added solver metadata for `xblock_probe_coarse_*` residuals, direction counts,
+  accepted steps, elapsed setup time, and direction names.
+- Added a focused active-DOF regression that passes a zero physical initial
+  guess, enables probe-coarse, verifies a strict solve, and checks that one
+  projected seed correction is accepted.
+
+Validation:
+
+- `python -m pytest tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_probe_coarse_uses_active_projected_directions tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_two_level_active_dof_projects_coarse_basis -q`:
+  `2 passed in 3.71 s`.
+- `python -m ruff check tests/test_v3_sparse_pattern.py`: passed.
+- `python -m py_compile sfincs_jax/v3_driver.py`: passed.
+- Bounded CPU scale-0.60 seed-3 QI probe with
+  `SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE=1`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS=32`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX=4`,
+  `solve_method=xblock_sparse_pc_gmres`, and `timeout_s=240`: passed.
+  Summary artifact:
+  `docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_cpu.json`.
+  Solver trace:
+  `docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_cpu_solver_trace.json`.
+- Probe-coarse accepted one 12-direction correction, reducing side-probe seed
+  residual `2.5721269e-8 -> 1.4264660e-8` in `0.287 s`.
+- The full hard-seed solve converged on CPU in `222.5 s` elapsed, `35`
+  LGMRES iterations, `2403` matvecs, residual `1.0360e-13`, target
+  `3.0215e-11`, residual ratio `3.43e-3`, with HDF5 output and solver trace
+  written.
+
+Updated lane status:
+
+- QI seed-robustness / hard-seed solver lane: `99%` for bounded CPU
+  infrastructure. The scale-0.60 CPU hard seed that previously timed out now
+  passes, but the one-GPU hard seed and production-resolution multi-seed CPU/GPU
+  ladders remain open before production QI robustness can be claimed.
+- Assembled/operator-reuse lane: `95%`; unchanged. The active assembled route
+  remains a bounded rejected diagnostic because graph coloring exceeds the
+  production color budget.
+- Active coarse/preconditioning lane: `97%`; probe-coarse gives a measurable
+  residual-seed improvement and closes the bounded CPU hard seed. It remains
+  opt-in until GPU and wider-seed evidence are available.
+- PAS-heavy memory/runtime: `94%`; unchanged in this pass.
+- Parallel transport workers: `92%`; unchanged in this pass.
+- Coverage/refactor path: `93.5%`; one more focused solver-regression test and
+  manifest update landed, but the package is still not at the deferred 95%
+  meaningful coverage target.
+
+Next best steps:
+
+1. Run the same scale-0.60 seed-3 probe-coarse policy on one office GPU with a
+   bounded timeout and device-memory profiling. Promote it only if it converges
+   without illegal-address failures and improves over the checked GPU timeouts.
+2. If the one-GPU hard seed passes, run a small CPU/GPU multi-seed scale-0.60
+   probe-coarse ladder and update the QI evidence manifest.
+3. If GPU still fails or times out, keep probe-coarse as a CPU rescue and move
+   the GPU lane to a true device-resident coarse/preconditioner implementation.
+4. Continue the PAS memory/runtime and refactor/coverage lanes independently;
+   this QI hook is opt-in and does not alter public default solver selection.

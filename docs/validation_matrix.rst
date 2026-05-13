@@ -340,12 +340,14 @@ Scope and status:
   public method ``auto``, all seeds ``converged=true``, and maximum residual
   ratio below ``1e-6``. Treat it as runner and default-solver-policy evidence
   only, not a production-resolution robustness claim.
-- The current production-readiness manifest rolls in 25 checked artifacts:
-  17 passing bounded artifacts and 8 non-passing blocker artifacts. The largest
+- The current production-readiness manifest rolls in 26 checked artifacts:
+  18 passing bounded artifacts and 8 non-passing blocker artifacts. The largest
   passing and attempted bounded grid is ``15 x 31 x 60 x 5`` with active size
-  ``81377`` and total size ``139502``. The remaining hard blocker is the
-  scale-0.60 one-GPU seed-3 solve; solver-toggle, global-coupling/operator-reuse,
-  and device-Krylov probes are documented as rejected evidence.
+  ``81377`` and total size ``139502``. A bounded CPU scale-0.60 seed-3
+  probe-coarse artifact now passes after reducing the side-probe seed residual
+  before LGMRES. The remaining hard blocker is the scale-0.60 one-GPU seed-3
+  solve; solver-toggle, global-coupling/operator-reuse, fixed two-level, and
+  device-Krylov probes are documented as rejected evidence.
 
 Promotion gates:
 

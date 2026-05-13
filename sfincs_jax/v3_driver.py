@@ -8547,6 +8547,8 @@ def _rhs1_xblock_post_coarse_directions(
     op: V3FullSystemOperator,
     residual: jnp.ndarray,
     preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    direction_projector: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expected_size: int | None = None,
     include_raw: bool,
     fsavg_lmax: int,
     max_extra_units: int,
@@ -8561,6 +8563,7 @@ def _rhs1_xblock_post_coarse_directions(
     """
     residual = jnp.asarray(residual, dtype=jnp.float64)
     total = int(op.total_size)
+    expected_size_use = total if expected_size is None else int(expected_size)
     directions: list[tuple[str, jnp.ndarray]] = []
 
     def _add(name: str, direction: jnp.ndarray) -> None:
@@ -8568,6 +8571,10 @@ def _rhs1_xblock_post_coarse_directions(
             return
         vec = jnp.asarray(direction, dtype=jnp.float64).reshape((-1,))
         if vec.shape != (total,):
+            return
+        if direction_projector is not None:
+            vec = jnp.asarray(direction_projector(vec), dtype=jnp.float64).reshape((-1,))
+        if vec.shape != (expected_size_use,):
             return
         try:
             norm = float(jnp.linalg.norm(vec))
@@ -13342,6 +13349,168 @@ def solve_v3_full_system_linear_gmres(
                             f"side probe failed ({type(exc).__name__}: {exc}); keeping side={precondition_side}",
                         )
 
+            if precondition_side != "none":
+                if xblock_use_active_dof:
+
+                    def _coarse_preconditioner_for_basis(v_full: jnp.ndarray) -> jnp.ndarray:
+                        reduced = _xblock_reduce_full(jnp.asarray(v_full, dtype=jnp.float64))
+                        return _xblock_expand_reduced(precond_xblock_krylov(reduced))
+
+                else:
+                    _coarse_preconditioner_for_basis = precond_xblock_krylov
+            else:
+
+                def _coarse_preconditioner_for_basis(v_full: jnp.ndarray) -> jnp.ndarray:
+                    return jnp.asarray(v_full, dtype=jnp.float64)
+
+            def _xblock_coarse_direction_builder(
+                residual_vec: jnp.ndarray,
+                *,
+                include_raw: bool,
+                fsavg_lmax: int,
+                max_extra_units: int,
+                max_directions: int,
+            ) -> tuple[tuple[str, jnp.ndarray], ...]:
+                residual_for_basis = (
+                    _xblock_expand_reduced(jnp.asarray(residual_vec, dtype=jnp.float64))
+                    if xblock_use_active_dof
+                    else jnp.asarray(residual_vec, dtype=jnp.float64)
+                )
+                return _rhs1_xblock_post_coarse_directions(
+                    op=op,
+                    residual=residual_for_basis,
+                    preconditioner=_coarse_preconditioner_for_basis,
+                    direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
+                    expected_size=int(xblock_linear_size),
+                    include_raw=bool(include_raw),
+                    fsavg_lmax=int(fsavg_lmax),
+                    max_extra_units=int(max_extra_units),
+                    max_directions=int(max_directions),
+                )
+
+            probe_coarse_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE",
+                default=False,
+            )
+            probe_coarse_steps_requested = (
+                _rhs1_int_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_STEPS", default=1, minimum=1)
+                if probe_coarse_enabled
+                else 0
+            )
+            probe_coarse_max_directions = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS",
+                default=16,
+                minimum=1,
+            )
+            probe_coarse_max_extra_units = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_EXTRA_UNITS",
+                default=8,
+                minimum=0,
+            )
+            probe_coarse_fsavg_lmax = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX",
+                default=2,
+                minimum=0,
+            )
+            probe_coarse_include_raw = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_INCLUDE_RAW",
+                default=True,
+            )
+            probe_coarse_alpha_clip = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ALPHA_CLIP",
+                default=0.0,
+                minimum=0.0,
+            )
+            probe_coarse_rcond = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_RCOND",
+                default=1.0e-12,
+                minimum=0.0,
+            )
+            probe_coarse_min_improvement = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MIN_IMPROVEMENT",
+                default=0.0,
+                minimum=0.0,
+            )
+            probe_coarse_s = 0.0
+            probe_coarse_history: tuple[float, ...] = ()
+            probe_coarse_direction_counts: tuple[int, ...] = ()
+            probe_coarse_direction_names: tuple[str, ...] = ()
+            probe_coarse_residual_before: float | None = None
+            probe_coarse_residual_after: float | None = None
+            if probe_coarse_steps_requested > 0 and x0_full is not None:
+                probe_coarse_start_s = sparse_timer.elapsed_s()
+
+                def _probe_coarse_direction_builder(
+                    residual_vec: jnp.ndarray,
+                ) -> tuple[tuple[str, jnp.ndarray], ...]:
+                    return _xblock_coarse_direction_builder(
+                        residual_vec,
+                        include_raw=bool(probe_coarse_include_raw),
+                        fsavg_lmax=int(probe_coarse_fsavg_lmax),
+                        max_extra_units=int(probe_coarse_max_extra_units),
+                        max_directions=int(probe_coarse_max_directions),
+                    )
+
+                try:
+                    seed_residual = xblock_rhs - jnp.asarray(_mv_true(jnp.asarray(x0_full, dtype=jnp.float64)))
+                    probe_coarse_residual_before = float(jnp.linalg.norm(seed_residual))
+                    if (
+                        np.isfinite(float(probe_coarse_residual_before))
+                        and float(probe_coarse_residual_before) > float(target_xblock)
+                    ):
+                        (
+                            x_probe_coarse,
+                            residual_probe_coarse,
+                            probe_coarse_history,
+                            probe_coarse_direction_counts,
+                            probe_coarse_direction_names,
+                        ) = _apply_subspace_minres_correction(
+                            matvec=_mv_true,
+                            rhs=xblock_rhs,
+                            x0=jnp.asarray(x0_full, dtype=jnp.float64),
+                            direction_builder=_probe_coarse_direction_builder,
+                            steps=probe_coarse_steps_requested,
+                            max_directions=probe_coarse_max_directions,
+                            alpha_clip=probe_coarse_alpha_clip,
+                            rcond=probe_coarse_rcond,
+                            min_improvement=probe_coarse_min_improvement,
+                        )
+                        probe_coarse_residual_after = float(jnp.linalg.norm(residual_probe_coarse))
+                        if (
+                            np.isfinite(float(probe_coarse_residual_after))
+                            and float(probe_coarse_residual_after) < float(probe_coarse_residual_before)
+                        ):
+                            x0_full = jnp.asarray(x_probe_coarse, dtype=jnp.float64)
+                            if emit is not None:
+                                emit(
+                                    0,
+                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                    f"probe-coarse improved seed residual {probe_coarse_residual_before:.6e} "
+                                    f"-> {probe_coarse_residual_after:.6e} "
+                                    f"(steps={len(probe_coarse_direction_counts)} "
+                                    f"directions={sum(probe_coarse_direction_counts)})",
+                                )
+                        elif emit is not None:
+                            after = (
+                                float(probe_coarse_residual_after)
+                                if probe_coarse_residual_after is not None
+                                else float("nan")
+                            )
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                f"probe-coarse rejected seed residual {probe_coarse_residual_before:.6e} "
+                                f"-> {after:.6e}",
+                            )
+                except Exception as exc:  # noqa: BLE001
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"probe-coarse failed ({type(exc).__name__}: {exc})",
+                        )
+                probe_coarse_s = float(sparse_timer.elapsed_s() - probe_coarse_start_s)
+
             if emit is not None:
                 emit(
                     0,
@@ -13434,7 +13603,7 @@ def solve_v3_full_system_linear_gmres(
                     maxiter=pc_maxiter,
                     precondition_side=precondition_side,
                 )
-            solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s)
+            solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s) + float(probe_coarse_s)
             try:
                 residual_true = np.asarray(xblock_rhs, dtype=np.float64) - np.asarray(
                     jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
@@ -13638,13 +13807,10 @@ def solve_v3_full_system_linear_gmres(
             ):
                 post_coarse_residual_before = float(residual_norm_xblock_pc)
                 post_coarse_start_s = sparse_timer.elapsed_s()
-                coarse_preconditioner = precond_xblock_krylov if precondition_side != "none" else (lambda v: v)
 
                 def _post_coarse_direction_builder(residual_vec: jnp.ndarray) -> tuple[tuple[str, jnp.ndarray], ...]:
-                    return _rhs1_xblock_post_coarse_directions(
-                        op=op,
-                        residual=residual_vec,
-                        preconditioner=coarse_preconditioner,
+                    return _xblock_coarse_direction_builder(
+                        residual_vec,
                         include_raw=bool(post_coarse_include_raw),
                         fsavg_lmax=int(post_coarse_fsavg_lmax),
                         max_extra_units=int(post_coarse_max_extra_units),
@@ -13872,6 +14038,15 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_side_probe_iterations": int(xblock_side_probe_iterations),
                     "xblock_side_probe_matvecs": int(xblock_side_probe_matvecs),
                     "xblock_side_probe_s": float(xblock_side_probe_s),
+                    "xblock_probe_coarse_steps_requested": int(probe_coarse_steps_requested),
+                    "xblock_probe_coarse_steps_accepted": int(len(probe_coarse_direction_counts)),
+                    "xblock_probe_coarse_direction_count": int(sum(probe_coarse_direction_counts)),
+                    "xblock_probe_coarse_residual_before": probe_coarse_residual_before,
+                    "xblock_probe_coarse_residual_after": probe_coarse_residual_after,
+                    "xblock_probe_coarse_s": float(probe_coarse_s),
+                    "xblock_probe_coarse_history": probe_coarse_history,
+                    "xblock_probe_coarse_direction_counts": probe_coarse_direction_counts,
+                    "xblock_probe_coarse_direction_names": probe_coarse_direction_names,
                     "xblock_post_minres_steps_requested": int(post_minres_steps_requested),
                     "xblock_post_minres_steps_accepted": int(len(post_minres_alphas)),
                     "xblock_post_minres_residual_before": post_minres_residual_before,
