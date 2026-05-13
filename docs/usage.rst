@@ -376,6 +376,15 @@ performance without changing the input file:
   at scale ``0.55``. Explicit ``SFINCS_JAX_GMRES_PRECONDITION_SIDE=left`` or
   ``right`` still takes precedence.
 
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_HOST_KRYLOV_CPU_OFFLOAD``: controls the
+  accelerator hard-seed host-Krylov offload. In ``auto`` mode, a large 3D
+  full-FP x-block side probe that promotes from GMRES to LGMRES on a GPU/CUDA
+  backend runs the host LGMRES phase on a CPU device instead of calling
+  accelerator matvecs from SciPy. Set to ``0`` to disable, or ``1`` to force for
+  explicit supported host-Krylov methods. The default active-size floor follows
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MIN_ACTIVE`` and can be overridden
+  with ``SFINCS_JAX_RHSMODE1_XBLOCK_HOST_KRYLOV_CPU_OFFLOAD_MIN_ACTIVE``.
+
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS``: opt-in matrix-free
   post-Krylov correction for explicit ``xblock_sparse_pc_gmres``. Set to a small
   integer, for example ``2`` or ``4``, to test residual-polishing steps that do

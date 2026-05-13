@@ -10,6 +10,9 @@ DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO = 5_000.0
 DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER = 80
 DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K = 10
 
+_ACCELERATOR_BACKENDS = frozenset({"cuda", "gpu", "rocm", "tpu"})
+_HOST_KRYLOV_CPU_OFFLOAD_METHODS = frozenset({"gcrotmk", "lgmres"})
+
 
 @dataclass(frozen=True)
 class RHS1XBlockSparsePCPolicy:
@@ -21,6 +24,15 @@ class RHS1XBlockSparsePCPolicy:
     ignored_krylov_env: bool
     gmres_restart: int
     restart_capped: bool
+
+
+@dataclass(frozen=True)
+class RHS1XBlockHostKrylovCPUOffloadDecision:
+    """Resolved CPU-offload decision for accelerator host-Krylov rescues."""
+
+    use_cpu: bool
+    reason: str
+    fail_closed: bool = False
 
 
 def _full_fp_3d_right_pc_max_active_size(env_value: str) -> int:
@@ -160,6 +172,75 @@ def rhs1_xblock_lgmres_rescue_outer_k(env_value: str) -> int:
         except ValueError:
             return DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
     return DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
+
+
+def rhs1_xblock_host_krylov_cpu_offload_decision(
+    *,
+    env_value: str,
+    backend: str,
+    krylov_method: str,
+    full_fp_3d_pc: bool,
+    active_size: int | None,
+    min_active_size_env_value: str,
+    explicit_krylov_env_value: str,
+    side_probe_lgmres_rescue: bool,
+    differentiable: bool,
+    cpu_device_count: int,
+    two_level_built: bool,
+) -> RHS1XBlockHostKrylovCPUOffloadDecision:
+    """Return whether a large accelerator host-Krylov rescue should run on CPU.
+
+    The scale-0.60 QI hard-seed evidence shows that the restart-robust LGMRES
+    rescue is viable on CPU but can spend the entire bounded GPU window in
+    host callbacks to accelerator matvecs. Keep the default offload deliberately
+    narrow: only automatic large 3D full-FP LGMRES rescues on accelerator
+    backends qualify. Unsupported or opt-in-complex cases fail closed.
+    """
+    raw = str(env_value).strip().lower()
+    if raw in {"0", "false", "f", "no", "off", ".false.", ".f."}:
+        return RHS1XBlockHostKrylovCPUOffloadDecision(False, "disabled_by_env")
+    forced = raw in {"1", "true", "t", "yes", "on", ".true.", ".t."}
+    if raw not in {"", "auto", "default"} and not forced:
+        return RHS1XBlockHostKrylovCPUOffloadDecision(False, "invalid_env", fail_closed=True)
+
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in _ACCELERATOR_BACKENDS:
+        return RHS1XBlockHostKrylovCPUOffloadDecision(False, "backend_not_accelerator")
+
+    method = str(krylov_method).strip().lower().replace("-", "_")
+    if method == "lgmres_scipy":
+        method = "lgmres"
+    if method in {"gcrot", "gcrot_mk"}:
+        method = "gcrotmk"
+    if method not in _HOST_KRYLOV_CPU_OFFLOAD_METHODS:
+        return RHS1XBlockHostKrylovCPUOffloadDecision(False, "method_not_host_krylov")
+
+    if bool(differentiable):
+        return RHS1XBlockHostKrylovCPUOffloadDecision(False, "differentiable_path", fail_closed=True)
+    if not bool(full_fp_3d_pc):
+        return RHS1XBlockHostKrylovCPUOffloadDecision(False, "not_full_fp_3d")
+    if int(cpu_device_count) <= 0:
+        return RHS1XBlockHostKrylovCPUOffloadDecision(False, "cpu_backend_unavailable", fail_closed=True)
+
+    min_active_size = rhs1_xblock_side_probe_min_active_size(min_active_size_env_value)
+    try:
+        active = int(active_size)
+    except (TypeError, ValueError):
+        return RHS1XBlockHostKrylovCPUOffloadDecision(False, "unknown_active_size", fail_closed=True)
+    if active < int(min_active_size):
+        return RHS1XBlockHostKrylovCPUOffloadDecision(False, "below_large_fp3d_window")
+
+    explicit_method = str(explicit_krylov_env_value).strip().lower().replace("-", "_")
+    explicit_method_requested = explicit_method not in {"", "auto", "default"}
+    if not forced:
+        if explicit_method_requested:
+            return RHS1XBlockHostKrylovCPUOffloadDecision(False, "explicit_krylov_method", fail_closed=True)
+        if method != "lgmres" or not bool(side_probe_lgmres_rescue):
+            return RHS1XBlockHostKrylovCPUOffloadDecision(False, "not_auto_lgmres_rescue")
+        if bool(two_level_built):
+            return RHS1XBlockHostKrylovCPUOffloadDecision(False, "two_level_preconditioner", fail_closed=True)
+
+    return RHS1XBlockHostKrylovCPUOffloadDecision(True, "large_fp3d_lgmres_rescue")
 
 
 def rhs1_xblock_precondition_side(
@@ -302,9 +383,11 @@ __all__ = [
     "DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K",
     "DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE",
     "DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO",
+    "RHS1XBlockHostKrylovCPUOffloadDecision",
     "RHS1XBlockSparsePCPolicy",
     "resolve_rhs1_xblock_sparse_pc_policy",
     "rhs1_xblock_gmres_restart",
+    "rhs1_xblock_host_krylov_cpu_offload_decision",
     "rhs1_xblock_krylov_method",
     "rhs1_xblock_lgmres_rescue_enabled",
     "rhs1_xblock_lgmres_rescue_maxiter",

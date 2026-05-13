@@ -8415,6 +8415,17 @@ def _safe_preconditioner(
     return _apply
 
 
+def _device_put_pytree(tree, device):
+    """Materialize JAX/NumPy leaves on a specific device for host-Krylov offload."""
+
+    def _put_leaf(leaf):
+        if hasattr(leaf, "shape") and hasattr(leaf, "dtype"):
+            return jax.device_put(jax.device_get(leaf), device)
+        return leaf
+
+    return jtu.tree_map(_put_leaf, tree)
+
+
 def _apply_preconditioned_minres_correction(
     *,
     matvec: Callable[[jnp.ndarray], jnp.ndarray],
@@ -12403,6 +12414,10 @@ def solve_v3_full_system_linear_gmres(
             xblock_side_probe_lgmres_rescue = False
             xblock_lgmres_rescue_maxiter_capped = False
             xblock_lgmres_rescue_outer_k: int | None = None
+            xblock_host_krylov_cpu_offload_used = False
+            xblock_host_krylov_cpu_offload_reason: str | None = None
+            xblock_host_krylov_cpu_offload_fail_closed = False
+            xblock_host_krylov_cpu_offload_backend: str | None = None
             xblock_side_probe_residual_norm: float | None = None
             xblock_side_probe_residual_ratio: float | None = None
             xblock_side_probe_iterations = 0
@@ -12468,17 +12483,50 @@ def solve_v3_full_system_linear_gmres(
                         ".true.",
                         ".t.",
                     }
-                    lgmres_rescue_backend_allowed = str(jax.default_backend()).strip().lower() == "cpu"
+                    try:
+                        cpu_device_count = len(jax.devices("cpu"))
+                    except Exception:
+                        cpu_device_count = 0
+                    accelerator_backend = str(jax.default_backend()).strip().lower()
+                    lgmres_rescue_backend_allowed = accelerator_backend == "cpu"
+                    host_krylov_cpu_offload_min_active_env = os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_HOST_KRYLOV_CPU_OFFLOAD_MIN_ACTIVE",
+                        "",
+                    ).strip() or os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MIN_ACTIVE",
+                        "",
+                    ).strip()
+                    cpu_offload_decision = _rhs1_xblock_policy.rhs1_xblock_host_krylov_cpu_offload_decision(
+                        env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_HOST_KRYLOV_CPU_OFFLOAD", ""),
+                        backend=accelerator_backend,
+                        krylov_method="lgmres",
+                        full_fp_3d_pc=bool(full_fp_3d_pc),
+                        active_size=int(active_size),
+                        min_active_size_env_value=host_krylov_cpu_offload_min_active_env,
+                        explicit_krylov_env_value=xblock_krylov_env,
+                        side_probe_lgmres_rescue=bool(should_switch_side and str(precondition_side) == "left"),
+                        differentiable=bool(differentiable is True),
+                        cpu_device_count=int(cpu_device_count),
+                        two_level_built=bool(two_level_built),
+                    )
+                    xblock_host_krylov_cpu_offload_reason = cpu_offload_decision.reason
+                    xblock_host_krylov_cpu_offload_fail_closed = bool(cpu_offload_decision.fail_closed)
+                    xblock_host_krylov_cpu_offload_backend = accelerator_backend
                     lgmres_rescue_enabled = _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_enabled(
                         env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", ""),
                         krylov_env_value=xblock_krylov_env,
-                    ) and (bool(lgmres_rescue_backend_allowed) or bool(lgmres_rescue_forced))
+                    ) and (
+                        bool(lgmres_rescue_backend_allowed)
+                        or bool(lgmres_rescue_forced)
+                        or bool(cpu_offload_decision.use_cpu)
+                    )
                     if should_switch_side and lgmres_rescue_enabled and str(precondition_side) == "left":
                         # Reuse the physical-space left-probe state: for these
                         # large 3D full-FP systems the measured slow mode is
                         # GMRES restart sensitivity, not the x-block factors.
                         xblock_krylov_method = "lgmres"
                         xblock_side_probe_lgmres_rescue = True
+                        xblock_host_krylov_cpu_offload_used = bool(cpu_offload_decision.use_cpu)
                         pc_maxiter, xblock_lgmres_rescue_maxiter_capped = (
                             _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_maxiter(
                                 os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_MAXITER", ""),
@@ -12520,6 +12568,84 @@ def solve_v3_full_system_linear_gmres(
                             f"side probe failed ({type(exc).__name__}: {exc}); keeping side={precondition_side}",
                         )
 
+            solve_matvec = _mv_true
+            solve_rhs = rhs
+            solve_preconditioner = precond_xblock_krylov
+            solve_x0 = x0_full
+            solve_op = op
+            if not xblock_host_krylov_cpu_offload_used:
+                try:
+                    cpu_device_count_final = len(jax.devices("cpu"))
+                except Exception:
+                    cpu_device_count_final = 0
+                final_backend = str(jax.default_backend()).strip().lower()
+                host_krylov_cpu_offload_min_active_env = os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_HOST_KRYLOV_CPU_OFFLOAD_MIN_ACTIVE",
+                    "",
+                ).strip() or os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MIN_ACTIVE",
+                    "",
+                ).strip()
+                cpu_offload_decision_final = _rhs1_xblock_policy.rhs1_xblock_host_krylov_cpu_offload_decision(
+                    env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_HOST_KRYLOV_CPU_OFFLOAD", ""),
+                    backend=final_backend,
+                    krylov_method=str(xblock_krylov_method),
+                    full_fp_3d_pc=bool(full_fp_3d_pc),
+                    active_size=int(active_size),
+                    min_active_size_env_value=host_krylov_cpu_offload_min_active_env,
+                    explicit_krylov_env_value=xblock_krylov_env,
+                    side_probe_lgmres_rescue=bool(xblock_side_probe_lgmres_rescue),
+                    differentiable=bool(differentiable is True),
+                    cpu_device_count=int(cpu_device_count_final),
+                    two_level_built=bool(two_level_built),
+                )
+                xblock_host_krylov_cpu_offload_used = bool(cpu_offload_decision_final.use_cpu)
+                xblock_host_krylov_cpu_offload_reason = cpu_offload_decision_final.reason
+                xblock_host_krylov_cpu_offload_fail_closed = bool(cpu_offload_decision_final.fail_closed)
+                xblock_host_krylov_cpu_offload_backend = final_backend
+
+            if xblock_host_krylov_cpu_offload_used:
+                try:
+                    cpu_device = jax.devices("cpu")[0]
+                    solve_op = _device_put_pytree(op, cpu_device)
+                    solve_rhs = jax.device_put(jax.device_get(rhs), cpu_device)
+                    solve_x0 = None if x0_full is None else jax.device_put(jax.device_get(x0_full), cpu_device)
+
+                    def _mv_true_cpu(v: jnp.ndarray) -> jnp.ndarray:
+                        nonlocal mv_count
+                        mv_count += 1
+                        if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                f"cpu-offload matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
+                            )
+                        with jax.default_device(cpu_device):
+                            return apply_v3_full_system_operator_cached(
+                                solve_op,
+                                jnp.asarray(v, dtype=rhs.dtype),
+                            )
+
+                    def _precond_xblock_cpu(v: jnp.ndarray) -> jnp.ndarray:
+                        with jax.default_device(cpu_device):
+                            out = precond_xblock_krylov(jnp.asarray(v, dtype=rhs.dtype))
+                        return jax.device_put(jax.device_get(out), cpu_device)
+
+                    solve_matvec = _mv_true_cpu
+                    solve_preconditioner = _precond_xblock_cpu
+                    if emit is not None:
+                        emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "offloading host Krylov rescue to CPU "
+                            f"(backend={xblock_host_krylov_cpu_offload_backend} "
+                            f"reason={xblock_host_krylov_cpu_offload_reason})",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    raise RuntimeError(
+                        "xblock_sparse_pc_gmres CPU offload policy selected but CPU setup failed"
+                    ) from exc
+
             if emit is not None:
                 emit(
                     0,
@@ -12530,10 +12656,10 @@ def solve_v3_full_system_linear_gmres(
             solve_start_s = sparse_timer.elapsed_s()
             if xblock_krylov_method == "lgmres":
                 x_np, residual_norm_xblock_pc, history = lgmres_solve_with_history_scipy(
-                    matvec=_mv_true,
-                    b=rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner if precondition_side != "none" else None,
+                    x0=solve_x0,
                     tol=tol,
                     atol=atol,
                     restart=pc_restart,
@@ -12543,10 +12669,10 @@ def solve_v3_full_system_linear_gmres(
                 )
             elif xblock_krylov_method == "gcrotmk":
                 x_np, residual_norm_xblock_pc, history = gcrotmk_solve_with_history_scipy(
-                    matvec=_mv_true,
-                    b=rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner if precondition_side != "none" else None,
+                    x0=solve_x0,
                     tol=tol,
                     atol=atol,
                     restart=pc_restart,
@@ -12555,10 +12681,10 @@ def solve_v3_full_system_linear_gmres(
                 )
             elif xblock_krylov_method == "bicgstab":
                 x_np, residual_norm_xblock_pc, history = bicgstab_solve_with_history_scipy(
-                    matvec=_mv_true,
-                    b=rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner if precondition_side != "none" else None,
+                    x0=solve_x0,
                     tol=tol,
                     atol=atol,
                     maxiter=pc_maxiter,
@@ -12566,10 +12692,10 @@ def solve_v3_full_system_linear_gmres(
                 )
             else:
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
-                    matvec=_mv_true,
-                    b=rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner if precondition_side != "none" else None,
+                    x0=solve_x0,
                     tol=tol,
                     atol=atol,
                     restart=pc_restart,
@@ -12578,8 +12704,8 @@ def solve_v3_full_system_linear_gmres(
                 )
             solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s)
             try:
-                residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
-                    jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
+                residual_true = np.asarray(jax.device_get(solve_rhs), dtype=np.float64) - np.asarray(
+                    jax.device_get(solve_matvec(jnp.asarray(x_np, dtype=jnp.float64))),
                     dtype=np.float64,
                 )
                 residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
@@ -12610,10 +12736,10 @@ def solve_v3_full_system_linear_gmres(
                     )
                 fallback_start_s = sparse_timer.elapsed_s()
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
-                    matvec=_mv_true,
-                    b=rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner if precondition_side != "none" else None,
+                    x0=solve_x0,
                     tol=tol,
                     atol=atol,
                     restart=pc_restart,
@@ -12623,8 +12749,8 @@ def solve_v3_full_system_linear_gmres(
                 solve_s += sparse_timer.elapsed_s() - fallback_start_s
                 xblock_krylov_method = "gmres"
                 try:
-                    residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
-                        jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
+                    residual_true = np.asarray(jax.device_get(solve_rhs), dtype=np.float64) - np.asarray(
+                        jax.device_get(solve_matvec(jnp.asarray(x_np, dtype=jnp.float64))),
                         dtype=np.float64,
                     )
                     residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
@@ -12713,10 +12839,10 @@ def solve_v3_full_system_linear_gmres(
                 post_minres_start_s = sparse_timer.elapsed_s()
                 try:
                     x_corr, residual_corr, post_history, post_alphas = _apply_preconditioned_minres_correction(
-                        matvec=_mv_true,
-                        rhs=rhs,
+                        matvec=solve_matvec,
+                        rhs=solve_rhs,
                         x0=jnp.asarray(x_np, dtype=jnp.float64),
-                        preconditioner=precond_xblock_krylov if precondition_side != "none" else (lambda v: v),
+                        preconditioner=solve_preconditioner if precondition_side != "none" else (lambda v: v),
                         steps=post_minres_steps_requested,
                         alpha_clip=post_minres_alpha_clip,
                         min_improvement=post_minres_min_improvement,
@@ -12764,11 +12890,11 @@ def solve_v3_full_system_linear_gmres(
             ):
                 post_coarse_residual_before = float(residual_norm_xblock_pc)
                 post_coarse_start_s = sparse_timer.elapsed_s()
-                coarse_preconditioner = precond_xblock_krylov if precondition_side != "none" else (lambda v: v)
+                coarse_preconditioner = solve_preconditioner if precondition_side != "none" else (lambda v: v)
 
                 def _post_coarse_direction_builder(residual_vec: jnp.ndarray) -> tuple[tuple[str, jnp.ndarray], ...]:
                     return _rhs1_xblock_post_coarse_directions(
-                        op=op,
+                        op=solve_op,
                         residual=residual_vec,
                         preconditioner=coarse_preconditioner,
                         include_raw=bool(post_coarse_include_raw),
@@ -12785,8 +12911,8 @@ def solve_v3_full_system_linear_gmres(
                         post_coarse_direction_counts,
                         post_coarse_direction_names,
                     ) = _apply_subspace_minres_correction(
-                        matvec=_mv_true,
-                        rhs=rhs,
+                        matvec=solve_matvec,
+                        rhs=solve_rhs,
                         x0=jnp.asarray(x_np, dtype=jnp.float64),
                         direction_builder=_post_coarse_direction_builder,
                         steps=post_coarse_steps_requested,
@@ -12904,6 +13030,12 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_side_probe_lgmres_rescue": bool(xblock_side_probe_lgmres_rescue),
                     "xblock_lgmres_rescue_maxiter_capped": bool(xblock_lgmres_rescue_maxiter_capped),
                     "xblock_lgmres_rescue_outer_k": xblock_lgmres_rescue_outer_k,
+                    "xblock_host_krylov_cpu_offload_used": bool(xblock_host_krylov_cpu_offload_used),
+                    "xblock_host_krylov_cpu_offload_reason": xblock_host_krylov_cpu_offload_reason,
+                    "xblock_host_krylov_cpu_offload_fail_closed": bool(
+                        xblock_host_krylov_cpu_offload_fail_closed
+                    ),
+                    "xblock_host_krylov_cpu_offload_backend": xblock_host_krylov_cpu_offload_backend,
                     "xblock_side_probe_residual_norm": xblock_side_probe_residual_norm,
                     "xblock_side_probe_residual_ratio": xblock_side_probe_residual_ratio,
                     "xblock_side_probe_iterations": int(xblock_side_probe_iterations),

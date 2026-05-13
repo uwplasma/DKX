@@ -9,6 +9,7 @@ from sfincs_jax.rhs1_xblock_policy import (
     DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE,
     resolve_rhs1_xblock_sparse_pc_policy,
     rhs1_xblock_gmres_restart,
+    rhs1_xblock_host_krylov_cpu_offload_decision,
     rhs1_xblock_krylov_method,
     rhs1_xblock_lgmres_rescue_enabled,
     rhs1_xblock_lgmres_rescue_maxiter,
@@ -208,6 +209,81 @@ def test_lgmres_rescue_respects_explicit_krylov_method_and_caps_maxiter() -> Non
     assert rhs1_xblock_lgmres_rescue_outer_k("") == DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
     assert rhs1_xblock_lgmres_rescue_outer_k("12") == 12
     assert rhs1_xblock_lgmres_rescue_outer_k("bad") == DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
+
+
+def test_host_krylov_cpu_offload_targets_scale060_hard_seed_regime() -> None:
+    decision = rhs1_xblock_host_krylov_cpu_offload_decision(
+        env_value="",
+        backend="gpu",
+        krylov_method="lgmres",
+        full_fp_3d_pc=True,
+        active_size=81_377,
+        min_active_size_env_value="",
+        explicit_krylov_env_value="",
+        side_probe_lgmres_rescue=True,
+        differentiable=False,
+        cpu_device_count=1,
+        two_level_built=False,
+    )
+
+    assert decision.use_cpu
+    assert decision.reason == "large_fp3d_lgmres_rescue"
+    assert not decision.fail_closed
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"backend": "cpu", "reason": "backend_not_accelerator"},
+        {"krylov_method": "gmres", "reason": "method_not_host_krylov"},
+        {"full_fp_3d_pc": False, "reason": "not_full_fp_3d"},
+        {"active_size": DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE - 1, "reason": "below_large_fp3d_window"},
+        {"side_probe_lgmres_rescue": False, "reason": "not_auto_lgmres_rescue"},
+        {"explicit_krylov_env_value": "lgmres", "reason": "explicit_krylov_method", "fail_closed": True},
+        {"cpu_device_count": 0, "reason": "cpu_backend_unavailable", "fail_closed": True},
+        {"two_level_built": True, "reason": "two_level_preconditioner", "fail_closed": True},
+    ],
+)
+def test_host_krylov_cpu_offload_fails_closed_for_unsupported_cases(override: dict[str, object]) -> None:
+    base = {
+        "env_value": "",
+        "backend": "gpu",
+        "krylov_method": "lgmres",
+        "full_fp_3d_pc": True,
+        "active_size": DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE,
+        "min_active_size_env_value": "",
+        "explicit_krylov_env_value": "",
+        "side_probe_lgmres_rescue": True,
+        "differentiable": False,
+        "cpu_device_count": 1,
+        "two_level_built": False,
+    }
+    expected_reason = str(override["reason"])
+    expected_fail_closed = bool(override.get("fail_closed", False))
+    inputs = {key: value for key, value in override.items() if key not in {"reason", "fail_closed"}}
+    decision = rhs1_xblock_host_krylov_cpu_offload_decision(**{**base, **inputs})
+
+    assert not decision.use_cpu
+    assert decision.reason == expected_reason
+    assert decision.fail_closed is expected_fail_closed
+
+
+def test_host_krylov_cpu_offload_force_env_allows_explicit_host_method() -> None:
+    decision = rhs1_xblock_host_krylov_cpu_offload_decision(
+        env_value="1",
+        backend="cuda",
+        krylov_method="gcrotmk",
+        full_fp_3d_pc=True,
+        active_size=90_000,
+        min_active_size_env_value="",
+        explicit_krylov_env_value="gcrotmk",
+        side_probe_lgmres_rescue=False,
+        differentiable=False,
+        cpu_device_count=1,
+        two_level_built=False,
+    )
+
+    assert decision.use_cpu
 
 
 def test_invalid_precondition_side_falls_back_to_default_policy() -> None:
