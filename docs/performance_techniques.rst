@@ -1617,9 +1617,12 @@ Controls:
   from a 4.52 GB full CSR estimate and ``250.0 s`` full-pattern build, through a
   ``174.6 s`` Python active-loop build, to a ``1.19 s`` structured active build
   for the same 1.54 GB active CSR pattern. A bounded dummy-matvec probe then
-  rejected ``max_colors=64`` graph coloring in ``0.88 s``, so infeasible
-  materialization attempts fail quickly. This remains diagnostic-only until a
-  large case shows both strict residual parity and lower wall time/memory.
+  rejected ``max_colors=64`` graph coloring in ``0.88 s``. A follow-up
+  production-color probe on the same active system built the pattern in
+  ``1.44 s`` and rejected ``max_colors=512`` coloring in ``2.04 s``. This keeps
+  infeasible materialization attempts bounded, but it also means the active
+  assembled path remains diagnostic-only until a large case shows strict
+  residual parity and lower wall time/memory.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF`` (default: off): opt-in active-DOF
   reduction for explicit ``xblock_sparse_pc_gmres``. When ``Nxi_for_x`` truncates
   the pitch basis, this route solves the x-block Krylov system on the active
@@ -1671,8 +1674,17 @@ Controls:
   ``A Z`` once, and wraps the x-block preconditioner with a coarse inverse during
   Krylov rather than applying a post-hoc cleanup after Krylov stalls. The default
   mode is additive; ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MODE`` can be set
-  to ``multiplicative`` for diagnostics. The scale-0.50 QI probes rejected both
-  modes, so this remains off by default.
+  to ``multiplicative`` for diagnostics. When
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1`` is also enabled, the same active
+  index projector is applied to each coarse vector before ``A Z`` is formed, so
+  the two-level wrapper now works on reduced ``Nxi_for_x`` systems instead of
+  disabling itself. The scale-0.50 QI probes rejected both historical modes, so
+  this remains off by default until a larger active-DOF QI/PAS probe demonstrates
+  lower true residual and lower wall time. A bounded scale-0.60 seed-3 CPU probe
+  with active DOFs and ``48`` requested directions built a rank-``45`` coarse
+  basis in about ``23 s``, but the solve still timed out at ``240 s`` after
+  ``2725`` reported matvecs without output, so the current fixed basis is kept
+  as opt-in infrastructure rather than a promoted QI hard-seed fix.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=lgmres`` or ``gcrotmk`` remains a
   diagnostic-only Krylov-method toggle. On the scale-0.50 QI blocker, LGMRES
   stalled at a slightly worse residual than GMRES, fell back to GMRES, doubled

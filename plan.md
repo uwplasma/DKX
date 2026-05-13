@@ -10676,3 +10676,82 @@ Next best steps:
 3. If active assembled materialization is infeasible or does not reduce true
    residual, keep it diagnostic and move to the stronger physics coarse-space
    correction rather than adding more Krylov toggles.
+
+## 2026-05-13 active two-level x-block preconditioner push
+
+Goal: continue the scale-0.60 QI hard-seed lane after the active assembled
+operator path reached a fast, bounded graph-coloring rejection rather than a
+feasible production solve.
+
+Evidence from the bounded materialization probe:
+
+- Scale-0.60 QI seed-3 at `15 x 31 x 60 x 5`, active size `81377`, total size
+  `139502`, active conservative pattern `128174925` nonzeros, active CSR
+  estimate `1538.42 MB`.
+- Structured active pattern build: `1.44 s`.
+- Graph-coloring probe with production `max_colors=512`: rejected in `2.04 s`
+  with `pattern probing would require more than max_colors=512 colors`.
+- Conclusion: active assembled/operator reuse is now safe and bounded, but it is
+  not the next production path for this QI hard seed. The next useful algorithmic
+  step is a stronger matrix-free/coarse preconditioner.
+
+Implementation:
+
+- Removed the previous `active-DOF x-block two-level preconditioner is not
+  implemented` branch for explicit `xblock_sparse_pc_gmres`.
+- `_build_rhs1_xblock_two_level_preconditioner` now accepts an optional
+  active-DOF projector and expected reduced size. Each coarse basis vector is
+  projected before validation, `A Z` construction, and QR rank selection.
+- Solver metadata now records `xblock_two_level_active_projected` and
+  `xblock_two_level_expected_size`, so future QI/PAS benchmark artifacts show
+  whether the two-level wrapper acted on full or reduced coordinates.
+- Added a focused regression that enables `SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF`
+  and `SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL` on a reduced-pitch RHSMode=1
+  fixture, then verifies strict residual, projected metadata, and preconditioner
+  application.
+
+Validation:
+
+- `python -m pytest tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_two_level_active_dof_projects_coarse_basis -q`:
+  `1 passed in 2.98 s`.
+- `python -m pytest tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_two_level_preconditioner_records_metadata tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_global_coupling_preconditioner_records_metadata tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_assembled_operator_active_dof_uses_sliced_budget -q`:
+  `4 passed in 5.50 s`.
+- `python -m pytest tests/test_v3_sparse_pattern.py -q`: `31 passed in
+  134.57 s`.
+- `python -m ruff check tests/test_v3_sparse_pattern.py`: passed. A full-file
+  Ruff check on `sfincs_jax/v3_driver.py` still reports pre-existing style debt
+  unrelated to this patch, so it was not used as a gate for this large module.
+- Bounded CPU scale-0.60 seed-3 QI probe with
+  `SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL=1`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS=48`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_FSAVG_LMAX=8`,
+  `solve_method=xblock_sparse_pc_gmres`, and `timeout_s=240`: failed by timeout.
+  The two-level coarse basis did build (`basis=47`, `rank=45`) at `~22.9 s`,
+  but the side probe still selected `lgmres` with residual ratio `1.12e5`, and
+  the process timed out after `240.06 s`, `2725` reported matvecs, no HDF5
+  output, and no solver trace. This rejects the current active two-level basis
+  as a promoted scale-0.60 QI fix.
+
+Updated lane status:
+
+- QI seed-robustness / hard-seed solver lane: `98.5%` infrastructure complete.
+  The hard seed remains open. The new active two-level implementation is useful
+  infrastructure, but the current basis is rejected for the scale-0.60 seed-3
+  promotion gate.
+- Assembled/operator-reuse lane: `95%`; bounded rejection with production
+  color budget is now recorded. No default promotion.
+- Active two-level/coarse preconditioning lane: `96%`; active-DOF support is
+  implemented and regression-tested. The existing fixed coarse basis is rejected
+  for the QI hard seed, so the next residual-improvement attempt needs a richer
+  physics coarse space rather than only toggling Krylov methods or side choices.
+
+Next best steps:
+
+1. Do not run the same active two-level policy on GPU; CPU already rejected it.
+2. Design the next QI hard-seed attempt around a richer physics coarse basis
+   that includes low-order theta/zeta harmonics after x-block smoothing,
+   drive/source directions, and near-null residual directions from the failed
+   side probe, while keeping the setup matrix-free and bounded.
+3. Continue PAS production-floor memory/runtime probes independently; the
+   active two-level change is opt-in and should not alter public defaults.
