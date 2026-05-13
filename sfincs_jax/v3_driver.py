@@ -8817,6 +8817,8 @@ def _build_rhs1_xblock_two_level_preconditioner(
     rhs: jnp.ndarray,
     matvec: Callable[[jnp.ndarray], jnp.ndarray],
     base_preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    direction_projector: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expected_size: int | None = None,
     mode: str,
     fsavg_lmax: int,
     max_extra_units: int,
@@ -8832,6 +8834,7 @@ def _build_rhs1_xblock_two_level_preconditioner(
     if mode_use not in {"additive", "multiplicative"}:
         mode_use = "additive"
     max_dirs_use = max(1, int(max_directions))
+    expected_size_use = int(op.total_size) if expected_size is None else int(expected_size)
     raw_directions = _rhs1_xblock_global_coarse_basis(
         op=op,
         rhs=rhs,
@@ -8845,8 +8848,10 @@ def _build_rhs1_xblock_two_level_preconditioner(
     abasis_cols: list[np.ndarray] = []
     names: list[str] = []
     for name, direction in raw_directions[:max_dirs_use]:
+        if direction_projector is not None:
+            direction = direction_projector(direction)
         direction_np = np.asarray(jax.device_get(direction), dtype=np.float64).reshape((-1,))
-        if direction_np.shape != (int(op.total_size),) or not np.all(np.isfinite(direction_np)):
+        if direction_np.shape != (expected_size_use,) or not np.all(np.isfinite(direction_np)):
             continue
         norm = float(np.linalg.norm(direction_np))
         if (not np.isfinite(norm)) or norm <= 0.0:
@@ -8918,6 +8923,8 @@ def _build_rhs1_xblock_two_level_preconditioner(
         "include_rhs": bool(include_rhs),
         "rcond": float(rcond),
         "basis_names": names_use,
+        "active_projected": bool(direction_projector is not None),
+        "expected_size": int(expected_size_use),
     }
     if emit is not None:
         emit(
@@ -12974,18 +12981,7 @@ def solve_v3_full_system_linear_gmres(
             two_level_built = False
             two_level_metadata: dict[str, object] = {}
             two_level_stats = {"applies": 0, "coarse_applies": 0}
-            if two_level_enabled and xblock_use_active_dof:
-                two_level_metadata = {
-                    "error": "active-DOF x-block two-level preconditioner is not implemented",
-                    "setup_s": 0.0,
-                }
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        "two-level coarse disabled for active-DOF x-block solve",
-                    )
-            elif two_level_enabled and precondition_side != "none":
+            if two_level_enabled and precondition_side != "none":
                 two_level_start_s = sparse_timer.elapsed_s()
                 two_level_mode = os.environ.get(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MODE",
@@ -13022,6 +13018,8 @@ def solve_v3_full_system_linear_gmres(
                             rhs=rhs,
                             matvec=_mv_xblock_krylov,
                             base_preconditioner=precond_xblock_krylov,
+                            direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
+                            expected_size=int(xblock_linear_size),
                             mode=two_level_mode,
                             fsavg_lmax=two_level_fsavg_lmax,
                             max_extra_units=two_level_max_extra_units,
@@ -13831,6 +13829,8 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_two_level_setup_s": two_level_metadata.get("setup_s"),
                     "xblock_two_level_rcond": two_level_metadata.get("rcond"),
                     "xblock_two_level_basis_names": two_level_metadata.get("basis_names", ()),
+                    "xblock_two_level_active_projected": bool(two_level_metadata.get("active_projected", False)),
+                    "xblock_two_level_expected_size": two_level_metadata.get("expected_size"),
                     "xblock_two_level_error": two_level_metadata.get("error"),
                     "xblock_two_level_applies": int(two_level_stats.get("applies", 0)),
                     "xblock_two_level_coarse_applies": int(two_level_stats.get("coarse_applies", 0)),
