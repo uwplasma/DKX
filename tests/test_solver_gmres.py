@@ -13,6 +13,8 @@ from sfincs_jax.solver import (
     dense_krylov_solve_from_matrix,
     dense_solve_from_matrix,
     explicit_left_preconditioned_gmres_scipy,
+    fgmres_solve_with_residual,
+    fgmres_solve_with_residual_jit,
     gcrotmk_solve_with_history_scipy,
     gmres_solve_jit,
     gmres_solve,
@@ -204,6 +206,169 @@ def test_gmres_solve_with_residual_matches_matvec() -> None:
         rtol=1e-12,
         atol=1e-12,
     )
+
+
+def test_fgmres_solve_with_residual_matches_numpy_for_nonsymmetric_matrix() -> None:
+    rng = np.random.default_rng(101)
+    n = 18
+    a = rng.normal(size=(n, n)).astype(np.float64)
+    a += 7.0 * np.eye(n)
+    b = rng.normal(size=(n,)).astype(np.float64)
+    x_ref = np.linalg.solve(a, b)
+    a_j = jnp.asarray(a)
+    b_j = jnp.asarray(b)
+    inv_diag = jnp.asarray(1.0 / np.diag(a), dtype=jnp.float64)
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x):
+        return inv_diag * x
+
+    result, residual = fgmres_solve_with_residual(
+        matvec=mv,
+        b=b_j,
+        preconditioner=precond,
+        tol=1.0e-12,
+        restart=8,
+        maxiter=80,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(residual), b - a @ np.asarray(result.x), rtol=1.0e-10, atol=1.0e-10)
+    assert float(result.residual_norm) < 1.0e-8
+    assert bool(result.converged)
+    assert int(result.n_iterations) <= 80
+    assert np.asarray(result.residual_history).ndim == 1
+    assert float(np.asarray(result.residual_history)[-1]) == pytest.approx(float(result.residual_norm), rel=1.0e-10)
+
+
+def test_fgmres_accepts_iteration_dependent_preconditioner() -> None:
+    a = np.array(
+        [
+            [5.0, -1.0, 0.5],
+            [2.0, 4.0, -0.25],
+            [0.0, 1.0, 3.0],
+        ],
+        dtype=np.float64,
+    )
+    b = np.array([1.0, -2.0, 0.5], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    a_j = jnp.asarray(a)
+    b_j = jnp.asarray(b)
+    inv_diag = jnp.asarray(1.0 / np.diag(a), dtype=jnp.float64)
+    calls: list[int] = []
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x, iteration: int):
+        calls.append(int(iteration))
+        # Vary the smoothing weight to exercise the flexible-preconditioner path.
+        omega = 0.85 + 0.05 * (int(iteration) % 3)
+        return omega * inv_diag * x
+
+    result, _residual = fgmres_solve_with_residual(
+        matvec=mv,
+        b=b_j,
+        preconditioner=precond,
+        tol=1.0e-12,
+        restart=3,
+        maxiter=12,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1.0e-8, atol=1.0e-8)
+    assert calls
+    assert calls == sorted(calls)
+    assert int(result.n_iterations) >= 1
+    assert int(result.n_restarts) >= 0
+
+
+def test_fgmres_jit_matches_numpy_without_host_iteration_state() -> None:
+    rng = np.random.default_rng(103)
+    n = 6
+    a = rng.normal(size=(n, n)).astype(np.float64)
+    a += 4.0 * np.eye(n)
+    b = rng.normal(size=(n,)).astype(np.float64)
+    x_ref = np.linalg.solve(a, b)
+    a_j = jnp.asarray(a)
+    b_j = jnp.asarray(b)
+    inv_diag = jnp.asarray(1.0 / np.diag(a), dtype=jnp.float64)
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x):
+        return inv_diag * x
+
+    result, residual = fgmres_solve_with_residual_jit(
+        matvec=mv,
+        b=b_j,
+        preconditioner=precond,
+        tol=1.0e-12,
+        restart=n,
+        maxiter=n,
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1.0e-7, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(residual), b - a @ np.asarray(result.x), rtol=1.0e-10, atol=1.0e-10)
+    assert bool(result.converged)
+
+
+def test_fgmres_reports_first_converged_iteration_for_identity() -> None:
+    b = jnp.asarray([1.0, -2.0, 0.5], dtype=jnp.float64)
+
+    result, residual = fgmres_solve_with_residual(
+        matvec=lambda x: x,
+        b=b,
+        preconditioner=None,
+        tol=1.0e-12,
+        restart=3,
+        maxiter=9,
+        precondition_side="none",
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(b), rtol=1.0e-12, atol=1.0e-12)
+    np.testing.assert_allclose(np.asarray(residual), np.zeros(3), rtol=1.0e-12, atol=1.0e-12)
+    assert bool(result.converged)
+    assert int(result.n_iterations) == 1
+
+
+def test_fgmres_left_preconditioning_matches_numpy() -> None:
+    a = np.array(
+        [
+            [5.0, -1.0, 0.5, 0.0],
+            [2.0, 4.0, -0.25, 0.5],
+            [0.0, 1.0, 3.0, -1.0],
+            [0.25, 0.0, 1.0, 2.5],
+        ],
+        dtype=np.float64,
+    )
+    b = np.array([1.0, -2.0, 0.5, 3.0], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    a_j = jnp.asarray(a)
+    b_j = jnp.asarray(b)
+    inv_diag = jnp.asarray(1.0 / np.diag(a), dtype=jnp.float64)
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x):
+        return inv_diag * x
+
+    result, residual = fgmres_solve_with_residual(
+        matvec=mv,
+        b=b_j,
+        preconditioner=precond,
+        tol=1.0e-12,
+        restart=4,
+        maxiter=8,
+        precondition_side="left",
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1.0e-8, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(residual), b - a @ np.asarray(result.x), rtol=1.0e-10, atol=1.0e-10)
+    assert bool(result.converged)
 
 
 def test_bicgstab_solve_with_residual_matches_matvec() -> None:

@@ -10454,3 +10454,152 @@ Next best steps:
 4. In parallel, start the PAS memory lane from a streaming PAS-TZ factorization
    design with gates: `>=50%` estimated build-byte reduction, no parity loss,
    and no runtime regression on geometry4/HSX/geometry11 floor artifacts.
+
+Progress update (2026-05-13): device FGMRES/global-coupling and PAS guarded-FFT fallback
+
+- Confirmed CI for `f68f8bc` passed on GitHub:
+  - tests shards, optional ecosystem gates, examples-smoke, coverage, and docs
+    all completed successfully for the active x-block/preflight/evidence commit.
+- Added the first real device-Krylov implementation step for the QI hard-seed
+  lane:
+  - `fgmres_solve_with_residual` and `fgmres_solve_with_residual_jit` now provide
+    a fixed-shape JAX flexible-GMRES primitive with residual history,
+    iteration/restart metadata, right preconditioning, and optional
+    iteration-dependent preconditioner application;
+  - `SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres` is now recognized as
+    `fgmres_jax` for explicit `xblock_sparse_pc_gmres`;
+  - the x-block driver forces JAX x-block factors and right preconditioning for
+    this experimental route, disables implicit host-GMRES fallback unless the
+    user explicitly requests it, and records device-FGMRES metadata.
+- Added a JAX-array global-coupling preconditioner variant for the device
+  FGMRES route:
+  - the physics-aware load basis is still smoothed through the x-block
+    preconditioner, but `Z`, `A Z`, and the ridge-regularized coarse inverse are
+    retained as JAX arrays;
+  - each coarse correction applies with `jnp` operations instead of host QR,
+    SciPy triangular solves, or per-iteration `device_get`;
+  - this closes the immediate host-global-coupling apply bottleneck as an
+    implementation blocker, but the scale-0.60 hard seed still needs the real
+    GPU rerun before promotion.
+- Added a PAS memory-safety improvement:
+  - when explicit theta/zeta PAS-TZ Schwarz fallback is rejected by the memory
+    guard and a `tzfft` builder is available, the policy now chooses guarded
+    `tzfft` before collision/hybrid fallback;
+  - this avoids dense `(Ntheta*Nzeta)^2` angular-block inverse storage on
+    research-floor `25 x 51 x 100 x 4` PAS shapes while preserving the existing
+    true-residual gate.
+- Focused verification:
+  - `python -m pytest -q tests/test_rhs1_pas_policy.py tests/test_solver_gmres.py tests/test_rhs1_xblock_policy.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_device_krylov_records_experimental_metadata`: passed in the first focused local check;
+  - `python -m ruff check --select F821 ...`: passed on the touched source and
+    test files;
+  - `python -m py_compile sfincs_jax/solver.py sfincs_jax/v3_driver.py sfincs_jax/rhs1_xblock_policy.py sfincs_jax/rhs1_pas_policy.py`: passed.
+
+Updated lane status:
+
+- QI seed-robustness / hard-seed solver lane: `98%` infrastructure and
+  implementation surface complete, but not closed. The missing gate is the
+  actual scale-0.60 one-GPU seed-3 rerun with `fgmres_jax`, JAX factors,
+  device global coupling, active-DOF if needed, and strict true-residual
+  acceptance.
+- Assembled/operator-reuse lane: `88%`. The device-Krylov/global-coupling path
+  removes the main per-iteration host-transfer blocker; true assembled
+  operator reuse still needs a device sparse/active-pattern implementation
+  before a large QI claim.
+- PAS-heavy memory/runtime: `94%`. Guarded FFT fallback is now preferred before
+  collision/hybrid when dense Schwarz is rejected. The remaining larger step is
+  a production benchmark showing memory/runtime improvement on geometry4/HSX/
+  geometry11 without residual regression.
+- Parallel transport workers: still `92%`; no change in this pass.
+- Coverage/refactor path: `93%`; solver primitives and policy seams gained
+  focused tests, but `v3_driver.py` remains the main refactor/coverage blocker.
+
+Next best steps:
+
+1. Run the expanded focused suite, Sphinx docs, and full local tests.
+2. Run the real scale-0.60 QI seed-3 GPU probe on `office` with
+   `SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres`,
+   `SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING=1`, bounded directions, and
+   strict residual acceptance.
+3. Run the PAS production-floor fallback probe to quantify the new guarded
+   `tzfft` preference against collision/hybrid on CPU and GPU.
+4. If those pass, regenerate evidence artifacts/docs/plots; if they do not,
+   keep the routes opt-in and record blocker artifacts before the next
+   algorithmic step.
+
+Progress update (2026-05-13): device-Krylov audit fixes and GPU rejected evidence
+
+- Addressed the read-only audit blockers before committing the device-Krylov
+  implementation:
+  - `fgmres_solve_with_residual` now reports the first converged iteration
+    instead of making driver metadata look like every solve used the full
+    `maxiter` budget;
+  - trace-safe/device preconditioners skip expensive preconditioner/matvec work
+    after convergence, while legacy host wrappers such as the old two-level
+    preconditioner disable that skip to avoid tracing through `device_get`;
+  - device-Krylov metadata now distinguishes
+    `xblock_device_krylov_forced_jax_factors` and
+    `xblock_device_krylov_host_transfer_free`, while the legacy
+    `xblock_device_fgmres_*` keys remain for compatibility;
+  - host-transfer-free metadata is false when the host two-level wrapper is
+    present;
+  - the device global-coupling builder now filters non-finite/zero load,
+    smoothed, and `A Z` directions before forming the ridge coarse inverse.
+- Tightened the PAS memory fallback scope:
+  - explicit unsafe `theta`, `zeta`, or `schwarz` requests can demote to
+    matrix-free `tzfft` when available;
+  - implicit sharded defaults remain bounded and fall back to collision/hybrid
+    instead of silently selecting the experimental `tzfft` route.
+- Ran the actual scale-0.60 seed-3 one-GPU hard-seed probes on `office` with
+  JAX `0.6.2`, `JAX_ENABLE_X64=True`, active DOF, JAX x-block factors, device
+  global coupling, and strict output acceptance:
+  - `fgmres` right-preconditioned device route: finished before the `620 s`
+    timeout in `217.5 s`, used about `3.9 GB` RSS, built the device global
+    coupling basis with `loads=24 basis=24 rank=22`, but failed the output gate
+    with residual `3.021487e-05` against target `3.021487e-13`;
+  - `gmres-jax` left-preconditioned device route: finished before timeout in
+    `252.3 s`, used about `4.3 GB` RSS, but failed the output gate with residual
+    `1.307111e+01` against target `3.021487e-13`.
+- Recorded these probes in
+  `docs/_static/qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json`
+  and regenerated
+  `docs/_static/qi_seed_robustness_evidence_manifest.json`:
+  - evidence artifacts: `25`;
+  - passing artifacts: `17`;
+  - non-passing blocker artifacts: `8`;
+  - largest passing bounded grid remains `139502` unknowns, so the QI
+    production gate remains `bounded_proxy`.
+- Verification after the audit fixes:
+  - `python -m pytest -q tests/test_solver_gmres.py`: `29 passed in 12.68 s`;
+  - focused policy/full-system/evidence suite: `81 passed in 114.45 s`;
+  - `python -m py_compile ...`: passed on touched Python files;
+  - `python -m ruff check --select F821 ...`: passed on touched source, scripts,
+    and tests;
+  - `python scripts/check_research_lanes.py && python scripts/check_release_gates.py && git diff --check`: passed;
+  - `python -m sphinx -W -b html docs build/sphinx-html`: passed.
+
+Updated lane status after this pass:
+
+- QI seed-robustness / hard-seed solver lane: `98%` implementation
+  infrastructure, still not closed. The remaining gap is numerical convergence
+  of the scale-0.60 GPU hard seed, not runtime/timeout/illegal-address
+  robustness.
+- Assembled/operator-reuse lane: `89%`. The device Krylov and device
+  global-coupling surfaces remove the host-transfer implementation blocker for
+  opt-in probes, but true active sparse operator reuse is still needed before a
+  release-grade hard-seed closure.
+- PAS-heavy memory/runtime: `94%`. Scope is now safer: explicit `tzfft` is
+  benchmark-only and implicit sharded fallbacks remain conservative.
+- Parallel transport workers: `92%`; no direct change in this pass.
+- Coverage/refactor path: `93%`; additional solver, policy, metadata, and
+  evidence tests were added, but `v3_driver.py` still needs further splitting.
+
+Next best steps:
+
+1. Run the full local pytest suite once this commit is ready.
+2. Commit and push the opt-in device-Krylov/global-coupling and PAS-scope
+   safety work if the full suite passes.
+3. Start the next real QI algorithmic lane: active assembled sparse operator
+   reuse or a stronger physics coarse space that reduces the true residual on
+   the hard seed, rather than more Krylov-method or side-selection toggles.
+4. Run a bounded PAS production-floor benchmark for the explicit `tzfft`
+   demotion and guarded correction paths before any performance claim.

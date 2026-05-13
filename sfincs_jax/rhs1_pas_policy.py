@@ -216,6 +216,17 @@ def build_pas_tz_memory_fallback(
     collision preconditioner when it is available.
     """
     requested = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "")
+    requested_key = str(requested or "").strip().lower().replace("-", "_")
+    explicit_structured_request = requested_key in {
+        "theta",
+        "theta_schwarz",
+        "zeta",
+        "zeta_schwarz",
+        "schwarz",
+        "structured",
+        "structured_schwarz",
+        "auto_schwarz",
+    }
     shard_axis = matvec_shard_axis(op)
     axis = resolve_pas_tz_memory_fallback_axis(
         op=op,
@@ -241,11 +252,18 @@ def build_pas_tz_memory_fallback(
             overlap=dd_overlap,
         )
         if not bool(guard["safe"]):
-            if collision_builder is not None:
+            if tzfft_builder is not None and explicit_structured_request:
+                metadata = dict(guard)
+                metadata["reason"] = f"{guard.get('reason', 'schwarz-unsafe')}; using tzfft"
+                metadata["requested_axis"] = axis
+                precond = tzfft_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+                _mark_pas_tz_guarded_fallback(precond, axis="tzfft", metadata=metadata)
+            elif collision_builder is not None:
                 precond = collision_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+                _mark_pas_tz_guarded_fallback(precond, axis=axis, metadata=guard)
             else:
                 precond = hybrid_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
-            _mark_pas_tz_guarded_fallback(precond, axis=axis, metadata=guard)
+                _mark_pas_tz_guarded_fallback(precond, axis=axis, metadata=guard)
             return precond
         schwarz_builder = theta_schwarz_builder if axis == "theta" else zeta_schwarz_builder
         return schwarz_builder(

@@ -49,6 +49,7 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
@@ -744,6 +745,14 @@ def _artifact_max_residual_ratio(payload: dict[str, object]) -> float | None:
             value = _finite_float_or_none(run.get("residual_ratio"))
             if value is not None:
                 candidates.append(value)
+    probes = payload.get("probes")
+    if isinstance(probes, list):
+        for probe in probes:
+            if not isinstance(probe, dict):
+                continue
+            value = _finite_float_or_none(probe.get("residual_ratio"))
+            if value is not None:
+                candidates.append(value)
     return max(candidates) if candidates else None
 
 
@@ -765,6 +774,14 @@ def _artifact_max_elapsed_s(payload: dict[str, object]) -> float | None:
             if not isinstance(run, dict) or str(run_name).endswith("before_patch"):
                 continue
             value = _finite_float_or_none(run.get("elapsed_s"))
+            if value is not None:
+                candidates.append(value)
+    probes = payload.get("probes")
+    if isinstance(probes, list):
+        for probe in probes:
+            if not isinstance(probe, dict):
+                continue
+            value = _finite_float_or_none(probe.get("elapsed_s"))
             if value is not None:
                 candidates.append(value)
     return max(candidates) if candidates else None

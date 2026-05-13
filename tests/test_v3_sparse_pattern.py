@@ -529,6 +529,70 @@ def test_xblock_sparse_pc_gmres_opt_in_krylov_method_records_realized_solver(
     assert result.metadata["matvecs"] >= result.metadata["candidate_matvecs"]
 
 
+@pytest.mark.parametrize(
+    ("method", "expected_kind", "expected_metadata_key"),
+    [
+        ("fgmres", "xblock_sparse_pc_fgmres_jax", "xblock_device_fgmres_enabled"),
+        ("gmres-jax", "xblock_sparse_pc_gmres_jax", "xblock_device_gmres_enabled"),
+    ],
+)
+def test_xblock_sparse_pc_device_krylov_records_experimental_metadata(
+    monkeypatch,
+    method: str,
+    expected_kind: str,
+    expected_metadata_key: str,
+) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", method)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "4")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-3,
+        maxiter=20,
+    )
+
+    assert float(result.residual_norm) < 1.0e-3
+    expected_method = "fgmres_jax" if method == "fgmres" else "gmres_jax"
+    assert result.metadata["solver_kind"] == expected_kind
+    assert result.metadata["krylov_method"] == expected_method
+    assert result.metadata["candidate_krylov_method"] == expected_method
+    assert result.metadata["sparse_pc_xblock_jax_factors"] is True
+    assert result.metadata["xblock_device_krylov_method"] == expected_method
+    assert result.metadata[expected_metadata_key] is True
+    assert result.metadata["xblock_device_fgmres_forced_jax_factors"] is True
+    if method == "fgmres":
+        assert result.metadata["precondition_side"] == "right"
+    assert result.metadata["xblock_global_coupling_built"] is True
+    assert result.metadata["xblock_global_coupling_device_resident"] is True
+
+
+def test_xblock_sparse_pc_device_krylov_marks_host_two_level_transfer(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS", "2")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-3,
+        maxiter=20,
+    )
+
+    assert float(result.residual_norm) < 1.0e-3
+    assert result.metadata["xblock_device_krylov_method"] == "fgmres_jax"
+    assert result.metadata["xblock_two_level_built"] is True
+    assert result.metadata["xblock_device_krylov_host_transfer_free"] is False
+    assert result.metadata["xblock_device_fgmres_host_transfer_free"] is False
+
+
 def test_xblock_sparse_pc_candidate_falls_back_to_gmres_when_residual_is_bad(monkeypatch) -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")

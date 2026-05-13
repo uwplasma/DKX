@@ -763,11 +763,26 @@ keeps the lane honest: the next closing step must be a genuinely device-resident
 or differently structured preconditioner/Krylov formulation, not another
 threshold-only side-selection tweak.
 
+The current development branch adds that next formulation as an opt-in test
+surface, not a promoted claim: ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres``
+selects a JAX-native flexible GMRES primitive, while ``gmres-jax`` selects the
+same fixed-shape Arnoldi/least-squares primitive with a fixed left
+preconditioner so left-preconditioned device probes can be tested without SciPy
+Krylov. Both routes force JAX x-block factors and use a device-resident
+global-coupling coarse correction when global coupling is enabled. The checked
+device-Krylov rejection artifact shows a useful robustness improvement on the
+scale-0.60 GPU hard seed: the route finishes before the timeout and avoids the
+earlier CUDA illegal-address failure, but it still fails strict true-residual
+acceptance. Unit tests cover the solver primitive, JIT tracing, policy parsing,
+small full-system metadata, and host-transfer-free metadata boundaries, while
+the production QI gate above remains unchanged until the scale-0.60 seed-3 and
+production-resolution CPU/GPU ladders pass.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
 passing bounded grid ``139502``, the largest attempted bounded grid ``139502``,
-17 passing artifacts and 7 non-passing blocker artifacts, a ``60%``
+17 passing artifacts and 8 non-passing blocker artifacts, a ``60%``
 per-axis lane-completion estimate based only on passing artifacts, and
 ``86.32%`` of production total size still uncovered. The production acceptance
 gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,

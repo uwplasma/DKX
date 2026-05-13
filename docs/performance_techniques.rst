@@ -1037,11 +1037,12 @@ so scan points can reuse the same preconditioner blocks. Controls:
 - ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK`` (route for memory-unsafe
   ``pas_tz`` builds; default uses the cheap collision fallback when available
   so rejected ``pas_tz`` attempts fail fast, ``hybrid`` restores the historical
-  ``pas_hybrid`` fallback for A/B profiling, and ``theta``, ``zeta``, or
-  ``schwarz`` force a structured additive-Schwarz fallback for bounded
-  geometry-rich PAS experiments; ``tzfft`` selects an experimental matrix-free
-  angular-streaming fallback that improves the smoke residual but is not yet a
-  promoted production route)
+  ``pas_hybrid`` fallback for A/B profiling, ``theta``, ``zeta``, or
+  ``schwarz`` request a structured additive-Schwarz fallback for bounded
+  geometry-rich PAS experiments, and unsafe explicit structured requests are
+  demoted to ``tzfft`` only when that experimental builder is available;
+  ``tzfft`` itself selects the matrix-free angular-streaming fallback directly
+  and remains benchmark-only)
 - ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK`` /
   ``SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP`` (shared block and overlap used
   by the opt-in structured PAS-TZ Schwarz fallback when axis-specific
@@ -1581,6 +1582,13 @@ Controls:
   ``A Z`` coarse solve inside each preconditioner application. This is more
   physics-aware than the older fixed two-level basis, and it records rank,
   setup time, basis names, and side-probe switch suppression metadata. The
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres`` and ``gmres-jax``
+  experimental routes now use a JAX-array global-coupling variant for this
+  wrapper: ``Z``, ``A Z``, and the small ridge-regularized coarse inverse stay
+  in JAX arrays during the Krylov apply path, so the coarse correction no longer
+  requires host QR/SciPy calls on every iteration. This is still opt-in and does
+  not change default solver selection.
+  The
   scale-0.60 hard-seed probe
   ``docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json``
   rejected it for defaults: CPU reached a near residual only after ``539 s`` and
@@ -1615,6 +1623,20 @@ Controls:
   convergence. The 2026-05-13 bounded probe did not promote it: even a small
   local full-FP RHSMode=1 opt-in run was manually killed after about ``76 s`` of
   setup/test time, so this path is evidence-gathering only.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres`` or ``gmres-jax`` (default:
+  off): opt-in JAX-native device Krylov routes for the explicit x-block path.
+  ``fgmres`` uses fixed-shape JAX Arnoldi/Hessenberg work arrays, supports
+  iteration-dependent right preconditioners, and avoids per-iteration residual
+  conversion to Python scalars. ``gmres-jax`` uses the same fixed-shape
+  Arnoldi/least-squares primitive with a fixed left preconditioner so measured
+  left-preconditioned QI side choices can be tested without SciPy Krylov. Both
+  routes force the JAX-factor x-block apply path and can use the device-resident
+  global-coupling correction above. Current tests cover the solver primitive,
+  JIT tracing, policy parsing, and small full-system metadata. The checked
+  ``docs/_static/qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json``
+  artifact shows why these routes remain experimental: the one-GPU hard seed no
+  longer times out or triggers the earlier illegal-address failure, but it still
+  fails strict true-residual acceptance.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual
@@ -1659,6 +1681,12 @@ Large geometry-rich PAS closeout:
   implementation needs a new structured/chunked geometry-aware PAS
   preconditioner that avoids both global conservative sparse patterns and dense
   angular-block storage at ``Ntheta*Nzeta=1275``.
+- Dense PAS-TZ memory fallback now prefers the structured ``tzfft`` fallback
+  when an explicitly requested theta/zeta Schwarz fallback is rejected by the
+  memory guard and the FFT fallback builder is available. This keeps the solve
+  on the existing guarded true-residual path while avoiding dense
+  ``(Ntheta*Nzeta)^2`` angular-block inverse storage for research-floor
+  ``25 x 51 x 100 x 4`` PAS shapes.
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` and
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC`` (default: auto). On CPU and
   GPU/CUDA, non-differentiable tokamak full-FP RHSMode=1 rows in the measured

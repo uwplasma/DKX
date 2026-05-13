@@ -42,6 +42,7 @@ from .solver import (
     gmres_solve_with_residual_distributed,
     distributed_gmres_enabled,
     explicit_left_preconditioned_gmres_scipy,
+    fgmres_solve_with_residual,
     gmres_solve_with_history_scipy,
     gcrotmk_solve_with_history_scipy,
     lgmres_solve_with_history_scipy,
@@ -9067,6 +9068,136 @@ def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
     return _apply, metadata, stats
 
 
+def _build_rhs1_xblock_device_global_coupling_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    base_preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    direction_projector: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expected_size: int | None = None,
+    mode: str,
+    fsavg_lmax: int,
+    angular_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+    rcond: float,
+    include_rhs: bool,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], dict[str, object], dict[str, int]]:
+    """Build a JAX-array global-coupling correction for device Krylov paths.
+
+    The host global-coupling helper above is useful for SciPy Krylov probes but
+    applies a coarse correction through host QR factors on every Krylov step.
+    This variant performs the same physics-aware load smoothing, then stores
+    ``Z`` and ``A Z`` as JAX arrays and applies a small ridge-regularized normal
+    equation entirely with ``jnp`` operations.
+    """
+
+    mode_use = str(mode).strip().lower().replace("-", "_")
+    if mode_use not in {"additive", "multiplicative"}:
+        mode_use = "additive"
+    expected_size_use = int(op.total_size) if expected_size is None else int(expected_size)
+    max_dirs_use = max(1, int(max_directions))
+    raw_loads = _rhs1_xblock_global_coupling_load_basis(
+        op=op,
+        rhs=rhs,
+        include_rhs=bool(include_rhs),
+        fsavg_lmax=int(fsavg_lmax),
+        angular_lmax=int(angular_lmax),
+        max_extra_units=int(max_extra_units),
+        max_directions=max_dirs_use,
+    )
+    z_cols: list[jnp.ndarray] = []
+    az_cols: list[jnp.ndarray] = []
+    names: list[str] = []
+    for name, load in raw_loads[:max_dirs_use]:
+        if direction_projector is not None:
+            load = direction_projector(load)
+        load_j = jnp.asarray(load, dtype=jnp.float64).reshape((-1,))
+        if load_j.shape != (expected_size_use,):
+            continue
+        load_np = np.asarray(jax.device_get(load_j), dtype=np.float64)
+        if not np.all(np.isfinite(load_np)):
+            continue
+        load_norm = float(np.linalg.norm(load_np))
+        if (not np.isfinite(load_norm)) or load_norm <= 0.0:
+            continue
+        load_unit = jnp.asarray(load_np / load_norm, dtype=jnp.float64)
+        z = jnp.asarray(base_preconditioner(load_unit), dtype=jnp.float64).reshape((-1,))
+        z_np = np.asarray(jax.device_get(z), dtype=np.float64)
+        if z_np.shape != load_np.shape or not np.all(np.isfinite(z_np)):
+            continue
+        z_norm = float(np.linalg.norm(z_np))
+        if (not np.isfinite(z_norm)) or z_norm <= 0.0:
+            continue
+        z = jnp.asarray(z_np / z_norm, dtype=jnp.float64)
+        az = jnp.asarray(matvec(z), dtype=jnp.float64).reshape((-1,))
+        az_np = np.asarray(jax.device_get(az), dtype=np.float64)
+        if az_np.shape != z_np.shape or not np.all(np.isfinite(az_np)):
+            continue
+        az_norm = float(np.linalg.norm(az_np))
+        if (not np.isfinite(az_norm)) or az_norm <= 0.0:
+            continue
+        names.append(str(name))
+        z_cols.append(z)
+        az_cols.append(az)
+
+    if not z_cols:
+        raise RuntimeError("device global-coupling x-block preconditioner found no valid smoothed directions")
+
+    z_basis = jnp.stack(z_cols, axis=1)
+    az_basis = jnp.stack(az_cols, axis=1)
+    gram = az_basis.T @ az_basis
+    diag_scale = jnp.maximum(jnp.max(jnp.abs(jnp.diag(gram))), jnp.asarray(1.0, dtype=jnp.float64))
+    ridge = jnp.asarray(max(float(rcond), 1.0e-14), dtype=jnp.float64) * diag_scale
+    coarse_inv = jnp.linalg.inv(gram + ridge * jnp.eye(int(gram.shape[0]), dtype=jnp.float64))
+    gram_eigs = jnp.maximum(jnp.linalg.eigvalsh(gram), jnp.asarray(0.0, dtype=jnp.float64))
+    singular_values = np.asarray(jax.device_get(jnp.sqrt(gram_eigs[::-1])), dtype=np.float64)
+    if singular_values.size == 0 or not np.all(np.isfinite(singular_values)):
+        raise RuntimeError("device global-coupling x-block preconditioner coarse spectrum is invalid")
+    rank_threshold = max(float(rcond), 0.0) * max(float(np.max(singular_values, initial=0.0)), 1.0)
+    rank = int(np.count_nonzero(singular_values > rank_threshold))
+    if rank <= 0:
+        raise RuntimeError("device global-coupling x-block preconditioner coarse system is rank deficient")
+    stats = {"applies": 0, "coarse_applies": 0}
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        stats["applies"] += 1
+        v_j = jnp.asarray(v, dtype=jnp.float64)
+        base = jnp.asarray(base_preconditioner(v_j), dtype=jnp.float64)
+        if mode_use == "multiplicative":
+            coarse_input = v_j - jnp.asarray(matvec(base), dtype=jnp.float64)
+        else:
+            coarse_input = v_j
+        coeff = coarse_inv @ (az_basis.T @ coarse_input)
+        stats["coarse_applies"] += 1
+        return base + z_basis @ coeff
+
+    metadata: dict[str, object] = {
+        "mode": mode_use,
+        "load_basis_size": int(len(raw_loads)),
+        "basis_size": int(z_basis.shape[1]),
+        "rank": int(rank),
+        "requested_max_directions": int(max_dirs_use),
+        "fsavg_lmax": int(fsavg_lmax),
+        "angular_lmax": int(angular_lmax),
+        "include_rhs": bool(include_rhs),
+        "rcond": float(rcond),
+        "ridge": float(jax.device_get(ridge)),
+        "basis_names": tuple(names),
+        "device_resident": True,
+        "singular_values": tuple(float(v) for v in singular_values[: min(int(singular_values.size), 16)]),
+    }
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres device global-coupling "
+            f"built mode={mode_use} loads={len(raw_loads)} basis={int(z_basis.shape[1])} rank={rank}",
+        )
+    return _apply, metadata, stats
+
+
 def _apply_subspace_minres_correction(
     *,
     matvec: Callable[[jnp.ndarray], jnp.ndarray],
@@ -12482,16 +12613,30 @@ def solve_v3_full_system_linear_gmres(
                     use_implicit=False,
                 )
             )
+            xblock_krylov_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "").strip().lower()
+            xblock_krylov_requested, _xblock_krylov_unknown_early = _rhs1_xblock_policy.rhs1_xblock_krylov_method(
+                xblock_krylov_env
+            )
+            xblock_device_fgmres_requested = str(xblock_krylov_requested) == "fgmres_jax"
+            xblock_device_gmres_requested = str(xblock_krylov_requested) == "gmres_jax"
+            xblock_device_krylov_requested = bool(xblock_device_fgmres_requested or xblock_device_gmres_requested)
+            xblock_jax_factors_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS", "").strip().lower()
             xblock_jax_factors = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS",
                 default=False,
+            ) or bool(xblock_device_krylov_requested)
+            xblock_device_krylov_forced_jax_factors = bool(
+                xblock_device_krylov_requested
+                and xblock_jax_factors_env not in {"1", "true", "t", "yes", "on", ".true.", ".t."}
             )
             if emit is not None:
                 factor_backend = "jax" if bool(xblock_jax_factors) else "host"
+                factor_reason = " device-krylov" if bool(xblock_device_krylov_forced_jax_factors) else ""
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building "
-                    f"{factor_backend} x-block preconditioner preconditioner_xi={int(xblock_preconditioner_xi)}",
+                    f"{factor_backend} x-block preconditioner preconditioner_xi={int(xblock_preconditioner_xi)}"
+                    f"{factor_reason}",
                 )
             factor_start_s = sparse_timer.elapsed_s()
             precond_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
@@ -12513,7 +12658,6 @@ def solve_v3_full_system_linear_gmres(
             full_fp_3d_right_pc_max_env = os.environ.get(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX", ""
             ).strip()
-            xblock_krylov_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "").strip().lower()
             full_fp_3d_pc = bool(
                 op.fblock.fp is not None
                 and op.fblock.pas is None
@@ -12535,6 +12679,10 @@ def solve_v3_full_system_linear_gmres(
             precondition_side = xblock_policy.precondition_side
             xblock_default_right_pc = xblock_policy.default_right_preconditioned
             xblock_krylov_method = xblock_policy.krylov_method
+            xblock_device_fgmres_forced_right_pc = False
+            if str(xblock_krylov_method) == "fgmres_jax" and str(precondition_side) == "left":
+                precondition_side = "right"
+                xblock_device_fgmres_forced_right_pc = True
             pc_restart = xblock_policy.gmres_restart
             xblock_default_restart_capped = xblock_policy.restart_capped
             if xblock_policy.ignored_krylov_env:
@@ -12893,8 +13041,13 @@ def solve_v3_full_system_linear_gmres(
                     default=True,
                 )
                 try:
+                    global_builder = (
+                        _build_rhs1_xblock_device_global_coupling_preconditioner
+                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        else _build_rhs1_xblock_smoothed_global_coupling_preconditioner
+                    )
                     precond_xblock_krylov, global_coupling_metadata, global_coupling_stats = (
-                        _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
+                        global_builder(
                             op=op,
                             rhs=rhs,
                             matvec=_mv_xblock_krylov,
@@ -13164,6 +13317,42 @@ def solve_v3_full_system_linear_gmres(
                     outer_k=xblock_lgmres_rescue_outer_k,
                     precondition_side=precondition_side,
                 )
+            elif xblock_krylov_method == "gmres_jax":
+                gmres_jax_result, _gmres_jax_residual = fgmres_solve_with_residual(
+                    matvec=_mv_xblock_krylov,
+                    b=xblock_rhs,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
+                    x0=x0_full,
+                    tol=tol,
+                    atol=atol,
+                    restart=pc_restart,
+                    maxiter=pc_maxiter,
+                    precondition_side=precondition_side,
+                    skip_inactive_work=not bool(two_level_built),
+                )
+                x_np = np.asarray(jax.device_get(gmres_jax_result.x), dtype=np.float64)
+                residual_norm_xblock_pc = float(jax.device_get(gmres_jax_result.residual_norm))
+                history_arr = np.asarray(jax.device_get(gmres_jax_result.residual_history), dtype=np.float64)
+                n_iterations = int(jax.device_get(gmres_jax_result.n_iterations))
+                history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
+            elif xblock_krylov_method == "fgmres_jax":
+                fgmres_result, _fgmres_residual = fgmres_solve_with_residual(
+                    matvec=_mv_xblock_krylov,
+                    b=xblock_rhs,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
+                    x0=x0_full,
+                    tol=tol,
+                    atol=atol,
+                    restart=pc_restart,
+                    maxiter=pc_maxiter,
+                    precondition_side=precondition_side,
+                    skip_inactive_work=not bool(two_level_built),
+                )
+                x_np = np.asarray(jax.device_get(fgmres_result.x), dtype=np.float64)
+                residual_norm_xblock_pc = float(jax.device_get(fgmres_result.residual_norm))
+                history_arr = np.asarray(jax.device_get(fgmres_result.residual_history), dtype=np.float64)
+                n_iterations = int(jax.device_get(fgmres_result.n_iterations))
+                history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
             elif xblock_krylov_method == "gcrotmk":
                 x_np, residual_norm_xblock_pc, history = gcrotmk_solve_with_history_scipy(
                     matvec=_mv_xblock_krylov,
@@ -13217,6 +13406,8 @@ def solve_v3_full_system_linear_gmres(
             fallback_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FALLBACK_GMRES", "").strip().lower()
             fallback_to_gmres = fallback_env not in {"0", "false", "f", "no", "off", ".false.", ".f."}
             if xblock_side_probe_lgmres_rescue and not fallback_env:
+                fallback_to_gmres = False
+            if xblock_krylov_method in {"fgmres_jax", "gmres_jax"} and not fallback_env:
                 fallback_to_gmres = False
             if (
                 xblock_krylov_method != "gmres"
@@ -13520,6 +13711,36 @@ def solve_v3_full_system_linear_gmres(
                     "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
                     "sparse_pc_xblock_assembled_host": bool(xblock_assembled_host_fp),
                     "sparse_pc_xblock_jax_factors": bool(xblock_jax_factors),
+                    "xblock_device_krylov_method": (
+                        str(xblock_krylov_method)
+                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        else None
+                    ),
+                    "xblock_device_gmres_enabled": bool(str(xblock_krylov_method) == "gmres_jax"),
+                    "xblock_device_fgmres_enabled": bool(str(xblock_krylov_method) == "fgmres_jax"),
+                    "xblock_device_krylov_forced_jax_factors": bool(xblock_device_krylov_forced_jax_factors),
+                    "xblock_device_fgmres_forced_jax_factors": bool(xblock_device_krylov_forced_jax_factors),
+                    "xblock_device_fgmres_forced_right_pc": bool(xblock_device_fgmres_forced_right_pc),
+                    "xblock_device_krylov_host_transfer_free": bool(
+                        str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        and bool(xblock_jax_factors)
+                        and not bool(assembled_operator_built)
+                        and not bool(two_level_built)
+                        and (
+                            not bool(global_coupling_built)
+                            or bool(global_coupling_metadata.get("device_resident", False))
+                        )
+                    ),
+                    "xblock_device_fgmres_host_transfer_free": bool(
+                        str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        and bool(xblock_jax_factors)
+                        and not bool(assembled_operator_built)
+                        and not bool(two_level_built)
+                        and (
+                            not bool(global_coupling_built)
+                            or bool(global_coupling_metadata.get("device_resident", False))
+                        )
+                    ),
                     "xblock_active_dof": bool(xblock_use_active_dof),
                     "xblock_linear_size": int(xblock_linear_size),
                     "xblock_full_size": int(op.total_size),
@@ -13565,6 +13786,9 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_global_coupling_rank": global_coupling_metadata.get("rank"),
                     "xblock_global_coupling_setup_s": global_coupling_metadata.get("setup_s"),
                     "xblock_global_coupling_rcond": global_coupling_metadata.get("rcond"),
+                    "xblock_global_coupling_device_resident": bool(
+                        global_coupling_metadata.get("device_resident", False)
+                    ),
                     "xblock_global_coupling_fsavg_lmax": global_coupling_metadata.get("fsavg_lmax"),
                     "xblock_global_coupling_angular_lmax": global_coupling_metadata.get("angular_lmax"),
                     "xblock_global_coupling_basis_names": global_coupling_metadata.get("basis_names", ()),
