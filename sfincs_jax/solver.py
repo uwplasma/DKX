@@ -185,7 +185,13 @@ def gmres_solve_with_history_scipy(
     maxiter: int | None = None,
     precondition_side: str = "left",
 ) -> tuple[np.ndarray, float, list[float]]:
-    """Run SciPy GMRES to collect residual history for Fortran-style logging."""
+    """Run SciPy GMRES to collect residual history for Fortran-style logging.
+
+    ``x0`` is always interpreted as a physical-space initial guess. For right
+    preconditioning this means solving a correction equation
+    ``A M^{-1} y = b - A x0`` and returning ``x0 + M^{-1} y``. This preserves
+    useful states from left-preconditioned probes when a policy switches sides.
+    """
     b_np = np.array(b, dtype=np.float64, copy=True).reshape((-1,))
     n = int(b_np.size)
     x0_np = np.array(x0, dtype=np.float64, copy=True).reshape((-1,)) if x0 is not None else None
@@ -203,12 +209,18 @@ def gmres_solve_with_history_scipy(
     if side not in {"left", "right", "none"}:
         side = "left"
 
+    x0_physical = x0_np if x0_np is not None else None
+    b_solve = b_np
+    x0_solve = x0_np
     if side == "right" and preconditioner is not None:
         def _mv_right(y_np: np.ndarray) -> np.ndarray:
             return _mv(_prec(y_np))
 
         A = _LinearOperator((n, n), matvec=_mv_right, dtype=np.float64)
         M = None
+        if x0_physical is not None:
+            b_solve = b_np - _mv(x0_physical)
+            x0_solve = None
     else:
         A = _LinearOperator((n, n), matvec=_mv, dtype=np.float64)
         M = _LinearOperator((n, n), matvec=_prec, dtype=np.float64) if preconditioner is not None else None
@@ -224,8 +236,8 @@ def gmres_solve_with_history_scipy(
 
     x_np, info = _scipy_gmres(
         A,
-        b_np,
-        x0=x0_np,
+        b_solve,
+        x0=x0_solve,
         rtol=float(tol),
         atol=float(atol),
         restart=int(restart_use),
@@ -237,6 +249,8 @@ def gmres_solve_with_history_scipy(
 
     if side == "right" and preconditioner is not None:
         x_np = _prec(x_np)
+        if x0_physical is not None:
+            x_np = x0_physical + x_np
 
     res = b_np - _mv(x_np)
     rn = float(np.linalg.norm(res))
@@ -256,7 +270,11 @@ def lgmres_solve_with_history_scipy(
     outer_k: int | None = None,
     precondition_side: str = "left",
 ) -> tuple[np.ndarray, float, list[float]]:
-    """Run SciPy LGMRES for restart-robust host solves on non-differentiable paths."""
+    """Run SciPy LGMRES for restart-robust host solves on non-differentiable paths.
+
+    As in :func:`gmres_solve_with_history_scipy`, ``x0`` is a physical-space
+    initial guess even for right preconditioning.
+    """
     b_np = np.array(b, dtype=np.float64, copy=True).reshape((-1,))
     n = int(b_np.size)
     x0_np = np.array(x0, dtype=np.float64, copy=True).reshape((-1,)) if x0 is not None else None
@@ -283,6 +301,9 @@ def lgmres_solve_with_history_scipy(
     if side not in {"left", "right", "none"}:
         side = "left"
 
+    x0_physical = x0_np if x0_np is not None else None
+    b_solve = b_np
+    x0_solve = x0_np
     if side == "right" and preconditioner is not None:
 
         def _mv_right(y_np: np.ndarray) -> np.ndarray:
@@ -290,6 +311,9 @@ def lgmres_solve_with_history_scipy(
 
         A = _LinearOperator((n, n), matvec=_mv_right, dtype=np.float64)
         M = None
+        if x0_physical is not None:
+            b_solve = b_np - _mv(x0_physical)
+            x0_solve = None
     else:
         A = _LinearOperator((n, n), matvec=_mv, dtype=np.float64)
         M = _LinearOperator((n, n), matvec=_prec, dtype=np.float64) if preconditioner is not None else None
@@ -297,13 +321,18 @@ def lgmres_solve_with_history_scipy(
     history: list[float] = []
 
     def _cb(xk: np.ndarray) -> None:
-        x_state = _prec(xk) if side == "right" and preconditioner is not None else xk
+        if side == "right" and preconditioner is not None:
+            x_state = _prec(xk)
+            if x0_physical is not None:
+                x_state = x0_physical + x_state
+        else:
+            x_state = xk
         history.append(float(np.linalg.norm(b_np - _mv(x_state))))
 
     x_np, _info = _scipy_lgmres(
         A,
-        b_np,
-        x0=x0_np,
+        b_solve,
+        x0=x0_solve,
         rtol=float(tol),
         atol=float(atol),
         maxiter=int(maxiter) if maxiter is not None else None,
@@ -315,6 +344,8 @@ def lgmres_solve_with_history_scipy(
 
     if side == "right" and preconditioner is not None:
         x_np = _prec(x_np)
+        if x0_physical is not None:
+            x_np = x0_physical + x_np
 
     res = b_np - _mv(x_np)
     rn = float(np.linalg.norm(res))
@@ -364,6 +395,9 @@ def gcrotmk_solve_with_history_scipy(
     if side not in {"left", "right", "none"}:
         side = "left"
 
+    x0_physical = x0_np if x0_np is not None else None
+    b_solve = b_np
+    x0_solve = x0_np
     if side == "right" and preconditioner is not None:
 
         def _mv_right(y_np: np.ndarray) -> np.ndarray:
@@ -371,6 +405,9 @@ def gcrotmk_solve_with_history_scipy(
 
         A = _LinearOperator((n, n), matvec=_mv_right, dtype=np.float64)
         M = None
+        if x0_physical is not None:
+            b_solve = b_np - _mv(x0_physical)
+            x0_solve = None
     else:
         A = _LinearOperator((n, n), matvec=_mv, dtype=np.float64)
         M = _LinearOperator((n, n), matvec=_prec, dtype=np.float64) if preconditioner is not None else None
@@ -378,13 +415,18 @@ def gcrotmk_solve_with_history_scipy(
     history: list[float] = []
 
     def _cb(xk: np.ndarray) -> None:
-        x_state = _prec(xk) if side == "right" and preconditioner is not None else xk
+        if side == "right" and preconditioner is not None:
+            x_state = _prec(xk)
+            if x0_physical is not None:
+                x_state = x0_physical + x_state
+        else:
+            x_state = xk
         history.append(float(np.linalg.norm(b_np - _mv(x_state))))
 
     x_np, _info = _scipy_gcrotmk(
         A,
-        b_np,
-        x0=x0_np,
+        b_solve,
+        x0=x0_solve,
         rtol=float(tol),
         atol=float(atol),
         maxiter=int(maxiter) if maxiter is not None else None,
@@ -398,6 +440,8 @@ def gcrotmk_solve_with_history_scipy(
 
     if side == "right" and preconditioner is not None:
         x_np = _prec(x_np)
+        if x0_physical is not None:
+            x_np = x0_physical + x_np
 
     res = b_np - _mv(x_np)
     rn = float(np.linalg.norm(res))
@@ -495,12 +539,18 @@ def bicgstab_solve_with_history_scipy(
     if side not in {"left", "right", "none"}:
         side = "left"
 
+    x0_physical = x0_np if x0_np is not None else None
+    b_solve = b_np
+    x0_solve = x0_np
     if side == "right" and preconditioner is not None:
         def _mv_right(y_np: np.ndarray) -> np.ndarray:
             return _mv(_prec(y_np))
 
         A = _LinearOperator((n, n), matvec=_mv_right, dtype=np.float64)
         M = None
+        if x0_physical is not None:
+            b_solve = b_np - _mv(x0_physical)
+            x0_solve = None
     else:
         A = _LinearOperator((n, n), matvec=_mv, dtype=np.float64)
         M = _LinearOperator((n, n), matvec=_prec, dtype=np.float64) if preconditioner is not None and side == "left" else None
@@ -508,13 +558,19 @@ def bicgstab_solve_with_history_scipy(
     history: list[float] = []
 
     def _cb(xk: np.ndarray) -> None:
-        rk = b_np - _mv(xk if side != "right" else _prec(xk))
+        if side == "right" and preconditioner is not None:
+            x_state = _prec(xk)
+            if x0_physical is not None:
+                x_state = x0_physical + x_state
+        else:
+            x_state = xk
+        rk = b_np - _mv(x_state)
         history.append(float(np.linalg.norm(rk)))
 
     x_np, _info = _scipy_bicgstab(
         A,
-        b_np,
-        x0=x0_np,
+        b_solve,
+        x0=x0_solve,
         rtol=float(tol),
         atol=float(atol),
         maxiter=int(maxiter) if maxiter is not None else None,
@@ -524,6 +580,8 @@ def bicgstab_solve_with_history_scipy(
 
     if side == "right" and preconditioner is not None:
         x_np = _prec(x_np)
+        if x0_physical is not None:
+            x_np = x0_physical + x_np
 
     res = b_np - _mv(x_np)
     rn = float(np.linalg.norm(res))

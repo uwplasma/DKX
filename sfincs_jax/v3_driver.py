@@ -13217,6 +13217,7 @@ def solve_v3_full_system_linear_gmres(
             xblock_side_probe_matvecs = 0
             xblock_side_probe_s = 0.0
             xblock_side_probe_switch_suppressed_by_global_coupling = False
+            xblock_side_probe_physical_seed_preserved_after_switch = False
             if xblock_side_probe_enabled:
                 xblock_side_probe_used = True
                 xblock_side_probe_initial_side = str(precondition_side)
@@ -13318,8 +13319,8 @@ def solve_v3_full_system_linear_gmres(
                     elif should_switch_side:
                         precondition_side = "right" if str(precondition_side) == "left" else "left"
                         xblock_side_probe_switched = True
-                        if str(precondition_side) == "right":
-                            x0_full = None
+                        if str(precondition_side) == "right" and x0_full is not None:
+                            xblock_side_probe_physical_seed_preserved_after_switch = True
                     xblock_side_probe_selected_side = str(precondition_side)
                     xblock_side_probe_selected_method = str(xblock_krylov_method)
                     if emit is not None:
@@ -13336,7 +13337,12 @@ def solve_v3_full_system_linear_gmres(
                             f"method={xblock_side_probe_initial_method}->{xblock_side_probe_selected_method} "
                             f"iters={xblock_side_probe_iterations} matvecs={xblock_side_probe_matvecs} "
                             f"residual={float(xblock_side_probe_residual_norm):.6e} "
-                            f"ratio={float(xblock_side_probe_residual_ratio):.6e}",
+                            f"ratio={float(xblock_side_probe_residual_ratio):.6e}"
+                            + (
+                                " preserved_physical_seed=1"
+                                if xblock_side_probe_physical_seed_preserved_after_switch
+                                else ""
+                            ),
                         )
                 except Exception as exc:  # noqa: BLE001
                     xblock_side_probe_s = float(sparse_timer.elapsed_s() - probe_start_s)
@@ -14025,6 +14031,9 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_side_probe_switched": bool(xblock_side_probe_switched),
                     "xblock_side_probe_switch_suppressed_by_global_coupling": bool(
                         xblock_side_probe_switch_suppressed_by_global_coupling
+                    ),
+                    "xblock_side_probe_physical_seed_preserved_after_switch": bool(
+                        xblock_side_probe_physical_seed_preserved_after_switch
                     ),
                     "xblock_side_probe_initial_side": xblock_side_probe_initial_side,
                     "xblock_side_probe_selected_side": xblock_side_probe_selected_side,

@@ -527,6 +527,39 @@ def test_xblock_sparse_pc_probe_coarse_uses_active_projected_directions(monkeypa
     assert any("probe-coarse improved seed residual" in msg for msg in messages)
 
 
+def test_xblock_side_probe_switch_preserves_physical_seed_for_right_pc(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("physicsParameters")["includeXDotTerm"] = False
+    nml.group("physicsParameters")["includeElectricFieldTermInXiDot"] = False
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_RESTART", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", "0")
+    monkeypatch.setattr(
+        v3_driver_module._rhs1_xblock_policy,
+        "rhs1_xblock_side_probe_should_switch",
+        lambda *, residual_ratio, switch_ratio_env_value: True,
+    )
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_side_probe_used"] is True
+    assert result.metadata["xblock_side_probe_switched"] is True
+    assert result.metadata["xblock_side_probe_initial_side"] == "left"
+    assert result.metadata["xblock_side_probe_selected_side"] == "right"
+    assert result.metadata["xblock_side_probe_physical_seed_preserved_after_switch"] is True
+    assert any("preserved_physical_seed=1" in msg for msg in messages)
+
+
 def test_xblock_sparse_pc_two_level_active_dof_projects_coarse_basis(monkeypatch) -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")

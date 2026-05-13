@@ -88,6 +88,41 @@ def test_gmres_history_scipy_supports_right_preconditioning() -> None:
     assert history
 
 
+def test_gmres_history_scipy_right_preconditioning_uses_physical_x0() -> None:
+    a = np.array(
+        [
+            [4.0, -1.0, 0.25],
+            [0.5, 3.0, -0.75],
+            [0.0, 1.0, 2.5],
+        ],
+        dtype=np.float64,
+    )
+    b = np.array([2.0, -1.0, 0.5], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    inv_diag = 1.0 / np.diag(a)
+    a_j = jnp.asarray(a)
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x):
+        return jnp.asarray(inv_diag, dtype=jnp.float64) * x
+
+    x, rn, _history = gmres_solve_with_history_scipy(
+        matvec=mv,
+        b=jnp.asarray(b),
+        preconditioner=precond,
+        x0=jnp.asarray(x_ref),
+        tol=1e-12,
+        restart=1,
+        maxiter=1,
+        precondition_side="right",
+    )
+
+    np.testing.assert_allclose(x, x_ref, rtol=1e-12, atol=1e-12)
+    assert rn < 1e-12
+
+
 def test_bicgstab_history_scipy_returns_solution_and_history() -> None:
     a = np.array(
         [
