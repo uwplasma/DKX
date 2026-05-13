@@ -10278,3 +10278,116 @@ Next concrete actions:
    promotion.
 4. Wire the artifact indexer into release CI once the release artifact set is
    finalized.
+
+Progress update (2026-05-13): QI hard-seed global-coupling and operator-reuse push
+
+- Spawned parallel audits for the remaining lanes. The consensus was that
+  transport-worker parallelism is release-facing but does not solve the
+  single-RHS QI hard seed; the next meaningful QI step had to be a stronger
+  x-block/global preconditioner or a bounded assembled/operator-reuse path.
+- Implemented opt-in smoothed global-coupling preconditioning for explicit
+  `xblock_sparse_pc_gmres`:
+  - new load basis: RHS/source rows, low-L flux-surface-average modes, and
+    low theta/zeta Fourier components;
+  - smoothing: `Z = B^{-1} P` using the existing x-block preconditioner;
+  - coarse correction: rank-revealed `A Z` solve applied inside the
+    preconditioner;
+  - metadata: load count, retained basis size/rank, setup time, basis names,
+    apply counts, and errors.
+- Implemented a guarded assembled/operator-reuse path for the same x-block
+  solve:
+  - conservative sparse pattern probing can materialize a full-system CSR
+    operator and reuse it for Krylov matvecs;
+  - sampled validation checks the assembled matvec against the matrix-free
+    operator before use;
+  - color-count preflight now aborts early when
+    `SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS` is exceeded, so
+    infeasible large patterns do not spend minutes coloring/probing.
+- Added an opt-in `SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS` switch so the
+  existing padded JAX triangular-factor path is reachable from the explicit
+  x-block solver for diagnostics. This is not promoted.
+- Added a global-coupling side-probe guard:
+  - when global coupling is built, LGMRES rescue is unavailable, and the left
+    side probe is already within
+    `SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_KEEP_LEFT_RATIO`, the solver
+    can keep the physical left-probe state instead of switching to the
+    historically slow right-preconditioned continuation;
+  - metadata records whether the switch was suppressed.
+- Added tests:
+  - explicit sparse color preflight max-color rejection;
+  - global-coupling x-block metadata and convergence on the small full-FP
+    RHSMode=1 reference case;
+  - assembled-operator x-block metadata and convergence on the small full-FP
+    RHSMode=1 reference case;
+  - additional safe GMRES fallback initial-guess guards.
+- Bounded hard-seed results:
+  - CPU scale-0.60 seed 3 with global coupling, 96 directions:
+    `539.5 s`, `6671` matvecs, residual `3.898e-11`, but strict
+    production-sized output acceptance still failed. Rejected as too slow and
+    not strictly accepted.
+  - Office GPU scale-0.60 seed 3 with global coupling, 48 directions:
+    side probe reached residual `1.522e-08` and ratio `5.038e4`, then the old
+    left-to-right switch timed out at `620 s`. Rejected.
+  - Office GPU scale-0.60 seed 3 with the keep-left guard:
+    side probe kept left with the same residual/ratio and still timed out at
+    `620 s`. Rejected.
+  - Local small opt-in JAX-factor test was manually killed after about `76 s`;
+    this path is diagnostic-only.
+- Checked-in blocker artifact:
+  `docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json`.
+- Documentation updates:
+  - `docs/performance_techniques.rst` documents the new opt-in controls and
+    explicitly marks them rejected for defaults on the scale-0.60 QI hard seed;
+  - `docs/testing.rst` records the new negative gate and the required next
+    algorithmic step.
+- Verification:
+  - `python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/explicit_sparse.py`:
+    passed;
+  - focused new/nearby tests:
+    `50 passed in 22.80 s`;
+  - fallback initial-guess tests:
+    `9 passed in 0.56 s`;
+  - focused global-coupling/JAX fallback tests:
+    `10 passed in 3.16 s`.
+  - full local suite:
+    `1476 passed in 583.68 s`;
+  - docs build:
+    `python -m sphinx -W -b html docs build/sphinx-html` passed;
+  - changed-file lint/static checks:
+    `python -m ruff check --select F821 sfincs_jax/v3_driver.py` and
+    `python -m ruff check` on changed non-legacy modules/tests passed;
+  - `git diff --check`:
+    passed.
+
+Updated lane status after this push:
+
+- QI seed-robustness / hard-seed solver lane: `96%` infrastructure complete,
+  but the scale-0.60 seed-3 one-GPU hard seed remains open. The new evidence
+  rules out host low-rank global coupling, side-switch suppression, and current
+  exposed JAX factors as sufficient default fixes.
+- Solver-path churn lane: `95%`. The collaborator-reported aggressive
+  side/path selection issue is now directly visible in metadata and has a
+  guarded opt-in suppression, but no default change is made because the hard
+  GPU run still timed out.
+- Assembled/operator-reuse lane: `82%`. The safe preflight and small-case
+  implementation are landed. Large QI/PAS promotion requires a feasible
+  pattern/color/memory result and strict residual parity.
+- PAS-heavy memory/runtime: unchanged at `93%`; this push did not touch PAS
+  defaults.
+- Parallel transport workers: unchanged at `92%`; still release-facing only
+  for independent case/RHS throughput, not single-case QI sharding.
+- Coverage/refactor path: `91%`; more solver behavior is now testable, but
+  `v3_driver.py` still needs deeper decomposition before the 95% coverage
+  target is honestly reachable.
+
+Best next steps:
+
+1. Do not widen QI defaults from this evidence. Keep the new controls opt-in.
+2. Build the next QI algorithm around a device-resident preconditioner/Krylov
+   formulation or a different structured global solve that avoids host SuperLU
+   application inside SciPy iterations.
+3. If continuing operator reuse, first implement a plan-only pattern/color/RSS
+   preflight for the scale-0.60 and production QI grids, and only then attempt
+   materialization.
+4. Continue the non-QI lanes in parallel: PAS production-floor probes,
+   benchmark artifact CI wiring, and further driver refactoring.

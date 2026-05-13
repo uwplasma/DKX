@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from sfincs_jax.v3_driver import _rhs1_xblock_fallback_initial_guess
 
@@ -80,3 +81,32 @@ def test_fallback_initial_guess_rejects_bad_shape_or_nonfinite_candidate():
     assert x0_bad_shape is original
     assert started_nonfinite is False
     assert x0_nonfinite is original
+
+
+@pytest.mark.parametrize(
+    ("candidate_residual_norm", "rhs_norm"),
+    [
+        (np.inf, 1.0),
+        (np.nan, 1.0),
+        (0.1, np.inf),
+        (0.1, np.nan),
+        (1.0, 1.0),
+    ],
+)
+def test_fallback_initial_guess_requires_finite_strict_rhs_improvement(
+    candidate_residual_norm, rhs_norm
+):
+    original = jnp.array([3.0, 4.0])
+
+    x0, started_from_candidate, improved_rhs = _rhs1_xblock_fallback_initial_guess(
+        candidate=np.array([1.0, -2.0]),
+        original_x0=original,
+        rhs_shape=(2,),
+        candidate_residual_norm=candidate_residual_norm,
+        rhs_norm=rhs_norm,
+        precondition_side="left",
+    )
+
+    assert started_from_candidate is False
+    assert improved_rhs is False
+    assert x0 is original

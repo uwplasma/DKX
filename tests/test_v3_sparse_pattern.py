@@ -380,6 +380,61 @@ def test_xblock_sparse_pc_two_level_preconditioner_records_metadata(monkeypatch)
     assert any("two-level coarse built" in msg for msg in messages)
 
 
+def test_xblock_sparse_pc_global_coupling_preconditioner_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "12")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_FSAVG_LMAX", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_ANGULAR_LMAX", "1")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_gmres"
+    assert result.metadata["xblock_global_coupling_enabled"] is True
+    assert result.metadata["xblock_global_coupling_built"] is True
+    assert result.metadata["xblock_global_coupling_mode"] == "additive"
+    assert 1 <= result.metadata["xblock_global_coupling_rank"] <= result.metadata["xblock_global_coupling_basis_size"] <= 12
+    assert result.metadata["xblock_global_coupling_applies"] > 0
+    assert result.metadata["xblock_global_coupling_coarse_applies"] == result.metadata["xblock_global_coupling_applies"]
+    assert any("global-coupling built" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_assembled_operator_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_gmres"
+    assert result.metadata["xblock_assembled_operator_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is True
+    assert result.metadata["xblock_assembled_operator_matrix_nnz"] > 0
+    assert result.metadata["xblock_assembled_operator_error"] is None
+    assert any("assembled operator built" in msg for msg in messages)
+
+
 @pytest.mark.parametrize(
     ("method", "expected_solver_kind"),
     [

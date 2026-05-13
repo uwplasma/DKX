@@ -173,6 +173,15 @@ def test_color_pattern_columns_groups_disjoint_row_supports() -> None:
             rows_seen.update(rows)
 
 
+def test_color_pattern_columns_honors_max_colors_preflight() -> None:
+    pattern = sp.eye(4, format="csr")
+    assert color_pattern_columns(pattern, max_colors=1) == [[0, 1, 2, 3, 4][:4]]
+
+    dense_pattern = sp.csr_matrix(np.ones((4, 4), dtype=bool))
+    with pytest.raises(ValueError, match="max_colors=1"):
+        color_pattern_columns(dense_pattern, max_colors=1)
+
+
 def test_build_operator_from_pattern_uses_one_probe_for_diagonal_pattern() -> None:
     a = np.diag([2.0, 3.0, 5.0, 7.0])
     calls: list[np.ndarray] = []

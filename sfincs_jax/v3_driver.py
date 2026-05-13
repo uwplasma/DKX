@@ -8700,6 +8700,111 @@ def _rhs1_xblock_global_coarse_basis(
     return tuple(directions)
 
 
+def _rhs1_xblock_global_coupling_load_basis(
+    *,
+    op: V3FullSystemOperator,
+    rhs: jnp.ndarray,
+    include_rhs: bool,
+    fsavg_lmax: int,
+    angular_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+) -> tuple[tuple[str, jnp.ndarray], ...]:
+    """Build load vectors for a smoothed global-coupling x-block correction.
+
+    The vectors represent the low-dimensional error channels that a per-x block
+    inverse cannot see: conserved-source rows, low-L flux-surface averages, and
+    the lowest theta/zeta Fourier components. The actual correction subspace is
+    obtained by applying the base x-block preconditioner to these loads.
+    """
+    rhs = jnp.asarray(rhs, dtype=jnp.float64).reshape((-1,))
+    total = int(op.total_size)
+    directions: list[tuple[str, jnp.ndarray]] = []
+
+    def _add(name: str, direction: jnp.ndarray) -> None:
+        if len(directions) >= int(max_directions):
+            return
+        vec = jnp.asarray(direction, dtype=jnp.float64).reshape((-1,))
+        if vec.shape != (total,):
+            return
+        try:
+            norm = float(jnp.linalg.norm(vec))
+        except Exception:
+            return
+        if np.isfinite(norm) and norm > 0.0:
+            directions.append((str(name), vec))
+
+    if include_rhs:
+        _add("raw_rhs", rhs)
+
+    extra_start = int(op.f_size + op.phi1_size)
+    extra_size = int(op.extra_size)
+    if extra_size > 0:
+        rhs_extra = rhs[extra_start : extra_start + extra_size]
+        extra_dir = jnp.zeros((total,), dtype=jnp.float64).at[extra_start : extra_start + extra_size].set(rhs_extra)
+        _add("extra_rhs", extra_dir)
+        if extra_size <= int(max_extra_units):
+            for ie in range(extra_size):
+                if len(directions) >= int(max_directions):
+                    break
+                unit = jnp.zeros((total,), dtype=jnp.float64).at[extra_start + ie].set(1.0)
+                _add(f"extra_unit_{ie}", unit)
+
+    if int(op.constraint_scheme) == 1:
+        ix0 = _ix_min(bool(op.point_at_x0))
+        source_basis = _source_basis_constraint_scheme_1(op.x)
+        for s in range(int(op.n_species)):
+            for ibasis, basis in enumerate(source_basis):
+                if len(directions) >= int(max_directions):
+                    break
+                f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                f_dir = f_dir.at[s, ix0:, 0, :, :].set(basis[ix0:, None, None])
+                tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                _add(f"constraint1_source_s{s}_{ibasis}", jnp.concatenate([f_dir.reshape((-1,)), tail]))
+
+    lmax_use = min(max(0, int(fsavg_lmax)), max(0, int(op.n_xi) - 1))
+    angular_norm = float(max(1, int(op.n_theta) * int(op.n_zeta))) ** -0.5
+    for il in range(lmax_use + 1):
+        for s in range(int(op.n_species)):
+            for ix in range(int(op.n_x)):
+                if len(directions) >= int(max_directions):
+                    return tuple(directions)
+                f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                f_dir = f_dir.at[s, ix, il, :, :].set(angular_norm)
+                tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                _add(f"fsavg_s{s}_x{ix}_l{il}", jnp.concatenate([f_dir.reshape((-1,)), tail]))
+
+    angular_l_use = min(max(0, int(angular_lmax)), max(0, int(op.n_xi) - 1))
+    if angular_l_use >= 0 and int(op.n_theta) > 1 and int(op.n_zeta) > 1:
+        theta = jnp.arange(int(op.n_theta), dtype=jnp.float64)
+        zeta = jnp.arange(int(op.n_zeta), dtype=jnp.float64)
+        two_pi = float(2.0 * np.pi)
+        mode_pairs = ((1, 0), (0, 1), (1, 1), (1, -1), (2, 0), (0, 2), (2, 1), (1, 2))
+        for il in range(angular_l_use + 1):
+            for m_mode, n_mode in mode_pairs:
+                phase = two_pi * (
+                    float(m_mode) * theta[:, None] / float(max(1, int(op.n_theta)))
+                    + float(n_mode) * zeta[None, :] / float(max(1, int(op.n_zeta)))
+                )
+                for parity, pattern in (("cos", jnp.cos(phase)), ("sin", jnp.sin(phase))):
+                    pattern_norm = float(jnp.linalg.norm(pattern))
+                    if (not np.isfinite(pattern_norm)) or pattern_norm <= 0.0:
+                        continue
+                    pattern = pattern / pattern_norm
+                    for s in range(int(op.n_species)):
+                        if len(directions) >= int(max_directions):
+                            return tuple(directions)
+                        f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                        f_dir = f_dir.at[s, :, il, :, :].set(pattern[None, :, :])
+                        tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                        _add(
+                            f"angular_s{s}_allx_l{il}_m{m_mode}_n{n_mode}_{parity}",
+                            jnp.concatenate([f_dir.reshape((-1,)), tail]),
+                        )
+
+    return tuple(directions)
+
+
 def _build_rhs1_xblock_two_level_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -8813,6 +8918,142 @@ def _build_rhs1_xblock_two_level_preconditioner(
             0,
             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres two-level coarse "
             f"built mode={mode_use} basis={len(basis_cols)} rank={rank}",
+        )
+    return _apply, metadata, stats
+
+
+def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    base_preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    mode: str,
+    fsavg_lmax: int,
+    angular_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+    rcond: float,
+    include_rhs: bool,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], dict[str, object], dict[str, int]]:
+    """Wrap x-block LU with a smoothed low-rank global-coupling correction.
+
+    This is a constrained two-level method. The load basis ``P`` is deliberately
+    low rank and physics-aware, the correction basis is ``Z = B^{-1} P`` using
+    the already-built per-x preconditioner, and the coarse solve minimizes
+    ``||r - A Z c||``. It keeps setup bounded while giving GMRES a fixed global
+    subspace for flux-surface, source, and low Fourier coupling modes.
+    """
+    from scipy.linalg import qr, solve_triangular  # noqa: PLC0415
+
+    mode_use = str(mode).strip().lower().replace("-", "_")
+    if mode_use not in {"additive", "multiplicative"}:
+        mode_use = "additive"
+    max_dirs_use = max(1, int(max_directions))
+    raw_loads = _rhs1_xblock_global_coupling_load_basis(
+        op=op,
+        rhs=rhs,
+        include_rhs=bool(include_rhs),
+        fsavg_lmax=int(fsavg_lmax),
+        angular_lmax=int(angular_lmax),
+        max_extra_units=int(max_extra_units),
+        max_directions=max_dirs_use,
+    )
+    z_cols: list[np.ndarray] = []
+    az_cols: list[np.ndarray] = []
+    names: list[str] = []
+    for name, load in raw_loads[:max_dirs_use]:
+        load_np = np.asarray(jax.device_get(load), dtype=np.float64).reshape((-1,))
+        if load_np.shape != (int(op.total_size),) or not np.all(np.isfinite(load_np)):
+            continue
+        load_norm = float(np.linalg.norm(load_np))
+        if (not np.isfinite(load_norm)) or load_norm <= 0.0:
+            continue
+        smoothed = np.asarray(
+            jax.device_get(base_preconditioner(jnp.asarray(load_np / load_norm, dtype=jnp.float64))),
+            dtype=np.float64,
+        ).reshape((-1,))
+        if smoothed.shape != load_np.shape or not np.all(np.isfinite(smoothed)):
+            continue
+        z_norm = float(np.linalg.norm(smoothed))
+        if (not np.isfinite(z_norm)) or z_norm <= 0.0:
+            continue
+        smoothed = smoothed / z_norm
+        a_smoothed = np.asarray(
+            jax.device_get(matvec(jnp.asarray(smoothed, dtype=jnp.float64))),
+            dtype=np.float64,
+        ).reshape((-1,))
+        if a_smoothed.shape != smoothed.shape or not np.all(np.isfinite(a_smoothed)):
+            continue
+        a_norm = float(np.linalg.norm(a_smoothed))
+        if (not np.isfinite(a_norm)) or a_norm <= 0.0:
+            continue
+        names.append(str(name))
+        z_cols.append(smoothed)
+        az_cols.append(a_smoothed)
+
+    if not z_cols:
+        raise RuntimeError("global-coupling x-block preconditioner found no valid smoothed directions")
+
+    z_basis = np.column_stack(z_cols)
+    az_basis = np.column_stack(az_cols)
+    q, r, piv = qr(az_basis, mode="economic", pivoting=True)
+    diag = np.abs(np.diag(r))
+    if diag.size == 0:
+        raise RuntimeError("global-coupling x-block preconditioner coarse QR is empty")
+    threshold = max(float(rcond), 0.0) * max(float(diag[0]), 1.0)
+    rank = int(np.count_nonzero(diag > threshold))
+    if rank <= 0:
+        raise RuntimeError("global-coupling x-block preconditioner coarse QR is rank deficient")
+    piv_use = np.asarray(piv[:rank], dtype=np.int32)
+    q_use = np.asarray(q[:, :rank], dtype=np.float64)
+    r_use = np.asarray(r[:rank, :rank], dtype=np.float64)
+    z_use = np.asarray(z_basis[:, piv_use], dtype=np.float64)
+    names_use = tuple(names[int(i)] for i in piv_use)
+    stats = {"applies": 0, "coarse_applies": 0}
+
+    def _coarse_correction(vec_np: np.ndarray) -> np.ndarray:
+        rhs_small = q_use.T @ np.asarray(vec_np, dtype=np.float64).reshape((-1,))
+        coeff = solve_triangular(r_use, rhs_small, lower=False, check_finite=False)
+        return z_use @ np.asarray(coeff, dtype=np.float64).reshape((-1,))
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        stats["applies"] += 1
+        v_np = np.asarray(jax.device_get(v), dtype=np.float64).reshape((-1,))
+        base = np.asarray(
+            jax.device_get(base_preconditioner(jnp.asarray(v_np, dtype=jnp.float64))),
+            dtype=np.float64,
+        ).reshape((-1,))
+        if mode_use == "multiplicative":
+            abase = np.asarray(
+                jax.device_get(matvec(jnp.asarray(base, dtype=jnp.float64))),
+                dtype=np.float64,
+            ).reshape((-1,))
+            coarse_input = v_np - abase
+        else:
+            coarse_input = v_np
+        correction = _coarse_correction(coarse_input)
+        stats["coarse_applies"] += 1
+        return jnp.asarray(base + correction, dtype=jnp.float64)
+
+    metadata: dict[str, object] = {
+        "mode": mode_use,
+        "load_basis_size": int(len(raw_loads)),
+        "basis_size": int(len(z_cols)),
+        "rank": int(rank),
+        "requested_max_directions": int(max_dirs_use),
+        "fsavg_lmax": int(fsavg_lmax),
+        "angular_lmax": int(angular_lmax),
+        "include_rhs": bool(include_rhs),
+        "rcond": float(rcond),
+        "basis_names": names_use,
+    }
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres global-coupling "
+            f"built mode={mode_use} loads={len(raw_loads)} basis={len(z_cols)} rank={rank}",
         )
     return _apply, metadata, stats
 
@@ -12220,16 +12461,21 @@ def solve_v3_full_system_linear_gmres(
                     use_implicit=False,
                 )
             )
+            xblock_jax_factors = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS",
+                default=False,
+            )
             if emit is not None:
+                factor_backend = "jax" if bool(xblock_jax_factors) else "host"
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building "
-                    f"host x-block preconditioner preconditioner_xi={int(xblock_preconditioner_xi)}",
+                    f"{factor_backend} x-block preconditioner preconditioner_xi={int(xblock_preconditioner_xi)}",
                 )
             factor_start_s = sparse_timer.elapsed_s()
             precond_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
                 op=op,
-                build_jax_factors=False,
+                build_jax_factors=bool(xblock_jax_factors),
                 preconditioner_species=preconditioner_species,
                 preconditioner_xi=xblock_preconditioner_xi,
                 drop_tol=xblock_drop_tol,
@@ -12296,6 +12542,146 @@ def solve_v3_full_system_linear_gmres(
                     )
                 return apply_v3_full_system_operator_cached(op, jnp.asarray(v, dtype=rhs.dtype))
 
+            _mv_xblock_krylov = _mv_true
+            assembled_operator_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR",
+                default=False,
+            )
+            assembled_operator_built = False
+            assembled_operator_metadata: dict[str, object] = {}
+            if assembled_operator_enabled:
+                assembled_operator_start_s = sparse_timer.elapsed_s()
+                try:
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "building assembled operator for Krylov matvec reuse",
+                        )
+                    assembled_pattern = v3_full_system_conservative_sparsity_pattern(
+                        op,
+                        fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                    )
+                    assembled_summary = summarize_v3_sparse_pattern(op, assembled_pattern)
+                    assembled_csr_max_mb = _rhs1_float_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB",
+                        default=2048.0,
+                        minimum=0.0,
+                    )
+                    assembled_drop_tol = _rhs1_float_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DROP_TOL",
+                        default=0.0,
+                        minimum=0.0,
+                    )
+                    assembled_max_colors = _rhs1_int_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS",
+                        default=512,
+                        minimum=1,
+                    )
+
+                    def _matvec_np_no_count(x_np: np.ndarray) -> np.ndarray:
+                        return np.asarray(
+                            jax.device_get(
+                                apply_v3_full_system_operator_cached(
+                                    op,
+                                    jnp.asarray(np.asarray(x_np, dtype=np.float64), dtype=rhs.dtype),
+                                )
+                            ),
+                            dtype=np.float64,
+                        ).reshape((-1,))
+
+                    assembled_bundle = build_operator_from_pattern(
+                        _matvec_np_no_count,
+                        pattern=assembled_pattern,
+                        dtype=np.float64,
+                        backend=jax.default_backend(),
+                        csr_max_mb=float(assembled_csr_max_mb),
+                        drop_tol=float(assembled_drop_tol),
+                        allow_operator_only=False,
+                        max_colors=int(assembled_max_colors),
+                    )
+                    assembled_matrix = assembled_bundle.matrix
+                    if assembled_matrix is None:
+                        raise RuntimeError("assembled x-block operator materialization returned no matrix")
+                    validation_samples = _rhs1_int_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_VALIDATE",
+                        default=1,
+                        minimum=0,
+                    )
+                    validation_tol = _rhs1_float_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_VALIDATE_RTOL",
+                        default=1.0e-8,
+                        minimum=0.0,
+                    )
+                    validation_errors: list[float] = []
+                    rng = np.random.default_rng(1729)
+                    for _ in range(int(validation_samples)):
+                        probe = rng.standard_normal(int(op.total_size)).astype(np.float64)
+                        probe_norm = float(np.linalg.norm(probe))
+                        if np.isfinite(probe_norm) and probe_norm > 0.0:
+                            probe /= probe_norm
+                        ref = _matvec_np_no_count(probe)
+                        got = np.asarray(assembled_bundle.matvec(probe), dtype=np.float64).reshape((-1,))
+                        denom = max(float(np.linalg.norm(ref)), 1.0e-300)
+                        rel = float(np.linalg.norm(got - ref) / denom)
+                        validation_errors.append(rel)
+                    max_validation_error = max(validation_errors, default=0.0)
+                    if max_validation_error > float(validation_tol):
+                        raise RuntimeError(
+                            "assembled x-block operator validation failed "
+                            f"max_rel_error={max_validation_error:.3e} > {float(validation_tol):.3e}"
+                        )
+
+                    def _mv_assembled(v: jnp.ndarray) -> jnp.ndarray:
+                        nonlocal mv_count
+                        mv_count += 1
+                        if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                f"assembled_matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
+                            )
+                        v_np = np.asarray(jax.device_get(v), dtype=np.float64).reshape((-1,))
+                        return jnp.asarray(assembled_bundle.matvec(v_np), dtype=jnp.float64)
+
+                    _mv_xblock_krylov = _mv_assembled
+                    assembled_operator_built = True
+                    if hasattr(assembled_matrix, "nnz"):
+                        assembled_matrix_nnz = int(assembled_matrix.nnz)
+                    else:
+                        assembled_matrix_nnz = int(np.count_nonzero(np.asarray(assembled_matrix)))
+                    assembled_operator_metadata = {
+                        "setup_s": float(sparse_timer.elapsed_s() - assembled_operator_start_s),
+                        "pattern_nnz": int(assembled_summary.nnz),
+                        "pattern_avg_row_nnz": float(assembled_summary.avg_row_nnz),
+                        "pattern_max_row_nnz": int(assembled_summary.max_row_nnz),
+                        "storage_kind": assembled_bundle.metadata.storage_kind,
+                        "reason": assembled_bundle.metadata.reason,
+                        "matrix_nnz": int(assembled_matrix_nnz),
+                        "csr_nbytes_estimate": int(assembled_bundle.metadata.csr_nbytes_estimate),
+                        "max_colors": int(assembled_max_colors),
+                        "validation_rel_errors": tuple(float(v) for v in validation_errors),
+                    }
+                    pc_factor_s += float(assembled_operator_metadata["setup_s"])
+                    if emit is not None:
+                        emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator "
+                            f"built nnz={assembled_operator_metadata['matrix_nnz']} "
+                            f"setup_s={assembled_operator_metadata['setup_s']:.3f}",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    assembled_operator_metadata = {
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "setup_s": float(sparse_timer.elapsed_s() - assembled_operator_start_s),
+                    }
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"assembled operator disabled after build failure ({type(exc).__name__}: {exc})",
+                        )
+
             precond_xblock_krylov = precond_xblock
             two_level_enabled = _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", default=False)
             two_level_built = False
@@ -12336,7 +12722,7 @@ def solve_v3_full_system_linear_gmres(
                         _build_rhs1_xblock_two_level_preconditioner(
                             op=op,
                             rhs=rhs,
-                            matvec=_mv_true,
+                            matvec=_mv_xblock_krylov,
                             base_preconditioner=precond_xblock,
                             mode=two_level_mode,
                             fsavg_lmax=two_level_fsavg_lmax,
@@ -12362,6 +12748,81 @@ def solve_v3_full_system_linear_gmres(
                             f"two-level coarse disabled after build failure ({type(exc).__name__}: {exc})",
                         )
 
+            global_coupling_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING",
+                default=False,
+            )
+            global_coupling_built = False
+            global_coupling_metadata: dict[str, object] = {}
+            global_coupling_stats = {"applies": 0, "coarse_applies": 0}
+            if global_coupling_enabled and precondition_side != "none":
+                global_coupling_start_s = sparse_timer.elapsed_s()
+                global_coupling_mode = os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MODE",
+                    "additive",
+                ).strip()
+                global_coupling_max_directions = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS",
+                    default=96,
+                    minimum=1,
+                )
+                global_coupling_fsavg_lmax = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_FSAVG_LMAX",
+                    default=12,
+                    minimum=0,
+                )
+                global_coupling_angular_lmax = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_ANGULAR_LMAX",
+                    default=2,
+                    minimum=0,
+                )
+                global_coupling_max_extra_units = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_EXTRA_UNITS",
+                    default=8,
+                    minimum=0,
+                )
+                global_coupling_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_RCOND",
+                    default=1.0e-11,
+                    minimum=0.0,
+                )
+                global_coupling_include_rhs = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_INCLUDE_RHS",
+                    default=True,
+                )
+                try:
+                    precond_xblock_krylov, global_coupling_metadata, global_coupling_stats = (
+                        _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
+                            op=op,
+                            rhs=rhs,
+                            matvec=_mv_xblock_krylov,
+                            base_preconditioner=precond_xblock_krylov,
+                            mode=global_coupling_mode,
+                            fsavg_lmax=global_coupling_fsavg_lmax,
+                            angular_lmax=global_coupling_angular_lmax,
+                            max_extra_units=global_coupling_max_extra_units,
+                            max_directions=global_coupling_max_directions,
+                            rcond=global_coupling_rcond,
+                            include_rhs=global_coupling_include_rhs,
+                            emit=emit,
+                        )
+                    )
+                    global_coupling_built = True
+                    global_coupling_metadata["setup_s"] = float(sparse_timer.elapsed_s() - global_coupling_start_s)
+                    pc_factor_s += float(global_coupling_metadata["setup_s"])
+                except Exception as exc:  # noqa: BLE001
+                    global_coupling_metadata = {
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "setup_s": float(sparse_timer.elapsed_s() - global_coupling_start_s),
+                    }
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"global-coupling disabled after build failure ({type(exc).__name__}: {exc})",
+                        )
+
+            setup_s = sparse_timer.elapsed_s()
             x0_full = None
             if x0 is not None:
                 x0_arr = jnp.asarray(x0, dtype=jnp.float64)
@@ -12441,6 +12902,7 @@ def solve_v3_full_system_linear_gmres(
             xblock_side_probe_iterations = 0
             xblock_side_probe_matvecs = 0
             xblock_side_probe_s = 0.0
+            xblock_side_probe_switch_suppressed_by_global_coupling = False
             if xblock_side_probe_enabled:
                 xblock_side_probe_used = True
                 xblock_side_probe_initial_side = str(precondition_side)
@@ -12465,7 +12927,7 @@ def solve_v3_full_system_linear_gmres(
                 probe_start_mv = int(mv_count)
                 try:
                     x_probe, residual_probe, history_probe = gmres_solve_with_history_scipy(
-                        matvec=_mv_true,
+                        matvec=_mv_xblock_krylov,
                         b=rhs,
                         preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                         x0=x0_full,
@@ -12506,6 +12968,24 @@ def solve_v3_full_system_linear_gmres(
                         env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", ""),
                         krylov_env_value=xblock_krylov_env,
                     ) and (bool(lgmres_rescue_backend_allowed) or bool(lgmres_rescue_forced))
+                    if (
+                        should_switch_side
+                        and bool(global_coupling_built)
+                        and (not bool(lgmres_rescue_enabled))
+                        and str(precondition_side) == "left"
+                    ):
+                        keep_left_ratio = _rhs1_float_env(
+                            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_KEEP_LEFT_RATIO",
+                            default=1.0e6,
+                            minimum=1.0,
+                        )
+                        if (
+                            xblock_side_probe_residual_ratio is not None
+                            and np.isfinite(float(xblock_side_probe_residual_ratio))
+                            and float(xblock_side_probe_residual_ratio) <= float(keep_left_ratio)
+                        ):
+                            should_switch_side = False
+                            xblock_side_probe_switch_suppressed_by_global_coupling = True
                     if should_switch_side and lgmres_rescue_enabled and str(precondition_side) == "left":
                         # Reuse the physical-space left-probe state: for these
                         # large 3D full-FP systems the measured slow mode is
@@ -12531,6 +13011,8 @@ def solve_v3_full_system_linear_gmres(
                     if emit is not None:
                         if xblock_side_probe_lgmres_rescue:
                             action = "method_rescue"
+                        elif xblock_side_probe_switch_suppressed_by_global_coupling:
+                            action = "keep_global_coupling"
                         else:
                             action = "switch" if xblock_side_probe_switched else "keep"
                         emit(
@@ -12563,7 +13045,7 @@ def solve_v3_full_system_linear_gmres(
             solve_start_s = sparse_timer.elapsed_s()
             if xblock_krylov_method == "lgmres":
                 x_np, residual_norm_xblock_pc, history = lgmres_solve_with_history_scipy(
-                    matvec=_mv_true,
+                    matvec=_mv_xblock_krylov,
                     b=rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
@@ -12576,7 +13058,7 @@ def solve_v3_full_system_linear_gmres(
                 )
             elif xblock_krylov_method == "gcrotmk":
                 x_np, residual_norm_xblock_pc, history = gcrotmk_solve_with_history_scipy(
-                    matvec=_mv_true,
+                    matvec=_mv_xblock_krylov,
                     b=rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
@@ -12588,7 +13070,7 @@ def solve_v3_full_system_linear_gmres(
                 )
             elif xblock_krylov_method == "bicgstab":
                 x_np, residual_norm_xblock_pc, history = bicgstab_solve_with_history_scipy(
-                    matvec=_mv_true,
+                    matvec=_mv_xblock_krylov,
                     b=rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
@@ -12599,7 +13081,7 @@ def solve_v3_full_system_linear_gmres(
                 )
             else:
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
-                    matvec=_mv_true,
+                    matvec=_mv_xblock_krylov,
                     b=rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=x0_full,
@@ -12657,7 +13139,7 @@ def solve_v3_full_system_linear_gmres(
                 )
                 fallback_start_s = sparse_timer.elapsed_s()
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
-                    matvec=_mv_true,
+                    matvec=_mv_xblock_krylov,
                     b=rhs,
                     preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
                     x0=fallback_x0,
@@ -12929,6 +13411,21 @@ def solve_v3_full_system_linear_gmres(
                     "sparse_pc_factor_s": float(pc_factor_s),
                     "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
                     "sparse_pc_xblock_assembled_host": bool(xblock_assembled_host_fp),
+                    "sparse_pc_xblock_jax_factors": bool(xblock_jax_factors),
+                    "xblock_assembled_operator_enabled": bool(assembled_operator_enabled),
+                    "xblock_assembled_operator_built": bool(assembled_operator_built),
+                    "xblock_assembled_operator_setup_s": assembled_operator_metadata.get("setup_s"),
+                    "xblock_assembled_operator_pattern_nnz": assembled_operator_metadata.get("pattern_nnz"),
+                    "xblock_assembled_operator_matrix_nnz": assembled_operator_metadata.get("matrix_nnz"),
+                    "xblock_assembled_operator_csr_nbytes_estimate": assembled_operator_metadata.get(
+                        "csr_nbytes_estimate"
+                    ),
+                    "xblock_assembled_operator_max_colors": assembled_operator_metadata.get("max_colors"),
+                    "xblock_assembled_operator_validation_rel_errors": assembled_operator_metadata.get(
+                        "validation_rel_errors",
+                        (),
+                    ),
+                    "xblock_assembled_operator_error": assembled_operator_metadata.get("error"),
                     "xblock_two_level_enabled": bool(two_level_enabled),
                     "xblock_two_level_built": bool(two_level_built),
                     "xblock_two_level_mode": two_level_metadata.get("mode"),
@@ -12940,12 +13437,29 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_two_level_error": two_level_metadata.get("error"),
                     "xblock_two_level_applies": int(two_level_stats.get("applies", 0)),
                     "xblock_two_level_coarse_applies": int(two_level_stats.get("coarse_applies", 0)),
+                    "xblock_global_coupling_enabled": bool(global_coupling_enabled),
+                    "xblock_global_coupling_built": bool(global_coupling_built),
+                    "xblock_global_coupling_mode": global_coupling_metadata.get("mode"),
+                    "xblock_global_coupling_load_basis_size": global_coupling_metadata.get("load_basis_size"),
+                    "xblock_global_coupling_basis_size": global_coupling_metadata.get("basis_size"),
+                    "xblock_global_coupling_rank": global_coupling_metadata.get("rank"),
+                    "xblock_global_coupling_setup_s": global_coupling_metadata.get("setup_s"),
+                    "xblock_global_coupling_rcond": global_coupling_metadata.get("rcond"),
+                    "xblock_global_coupling_fsavg_lmax": global_coupling_metadata.get("fsavg_lmax"),
+                    "xblock_global_coupling_angular_lmax": global_coupling_metadata.get("angular_lmax"),
+                    "xblock_global_coupling_basis_names": global_coupling_metadata.get("basis_names", ()),
+                    "xblock_global_coupling_error": global_coupling_metadata.get("error"),
+                    "xblock_global_coupling_applies": int(global_coupling_stats.get("applies", 0)),
+                    "xblock_global_coupling_coarse_applies": int(global_coupling_stats.get("coarse_applies", 0)),
                     "xblock_initial_seed_used": bool(xblock_initial_seed_used),
                     "xblock_initial_seed_residual_norm": xblock_initial_seed_residual_norm,
                     "xblock_initial_seed_residual_ratio": xblock_initial_seed_residual_ratio,
                     "xblock_side_probe_enabled": bool(xblock_side_probe_enabled),
                     "xblock_side_probe_used": bool(xblock_side_probe_used),
                     "xblock_side_probe_switched": bool(xblock_side_probe_switched),
+                    "xblock_side_probe_switch_suppressed_by_global_coupling": bool(
+                        xblock_side_probe_switch_suppressed_by_global_coupling
+                    ),
                     "xblock_side_probe_initial_side": xblock_side_probe_initial_side,
                     "xblock_side_probe_selected_side": xblock_side_probe_selected_side,
                     "xblock_side_probe_initial_method": xblock_side_probe_initial_method,
