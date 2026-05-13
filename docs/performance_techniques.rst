@@ -1516,7 +1516,7 @@ Controls:
   ``*_MIN``, ``*_MAX``, and ``*_MIN_NXI`` environment variables can widen or
   disable the gate for controlled profiling, but larger promotion requires fresh
   CPU/GPU seed-ladder evidence.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`` (default: ``20000`` for
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`` (default: ``30000`` for
   non-differentiable full-FP host x-block factors; ``2000`` otherwise). Medium
   full-FP :math:`(x,\theta,\zeta,L)` blocks now use exact SuperLU instead of ILU
   because the scale-0.50 QI blocker showed that weak ILU factors caused the
@@ -1534,7 +1534,38 @@ Controls:
   outputs and solver traces written, maximum elapsed times ``11.58 s`` and
   ``41.18 s``, and maximum residual ratios ``0.966`` and ``0.963``. This closes
   the bounded public-auto route gate; the production-resolution QI ladder remains
-  separate.
+  separate. The next-scale
+  ``docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json`` probe showed
+  that the old ``20000`` exact-LU cap sent the largest ``15 x 29 x 55 x 4``
+  block into ILU and timed out. Raising only the full-FP host exact-LU cap to
+  ``30000`` closes the CPU successor
+  ``docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json`` in
+  ``~21.5 s`` with residual ratio ``8.25e-3``.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX`` (default: ``45000`` active
+  unknowns for 3D full-FP lanes only). The scale-0.50 QI evidence remains
+  faster with right preconditioning, but the harder scale-0.55 seed ``3`` probe
+  showed a seed-dependent right-PC slow mode. The size-aware default therefore
+  keeps right-PC for the checked scale-0.50 window and automatically uses
+  left-PC for larger 3D full-FP active systems unless the user explicitly sets
+  ``SFINCS_JAX_GMRES_PRECONDITION_SIDE``. The checked
+  ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json``
+  artifact closes that hard CPU seed in ``~47 s`` with residual ratio
+  ``2.98e-3`` and records ``precondition_side=left``. The matching five-seed
+  CPU and one-GPU artifacts
+  ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_cpu.json``
+  and
+  ``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json``
+  pass seeds ``0..4`` with all outputs and solver traces written, maximum
+  elapsed times ``44.5 s`` and ``206.7 s``, and maximum residual ratios below
+  ``8.3e-3``. The default upper auto-size window remains bounded until the
+  next-size and production-resolution ladders pass. The first next-size
+  ``15 x 31 x 60 x 5`` seed-0 artifacts
+  ``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json``
+  and
+  ``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json``
+  also pass at active size ``81377`` with elapsed times ``42.2 s`` and
+  ``145.1 s`` and residual ratios below ``4.7e-3``; this is a bounded seed-0
+  probe, not a production-resolution five-seed claim.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual

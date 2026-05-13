@@ -19,22 +19,22 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 15,
-    "bounded_lane_completion_estimate_percent": 50.0,
+    "artifact_count": 25,
+    "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
       "gpu"
     ],
     "completion_estimate_basis": "largest passing measured artifact only",
-    "largest_attempted_total_size": 123977,
-    "largest_nonpassing_total_size": 123977,
-    "max_checked_active_size": 13169,
-    "max_checked_per_axis_resolution_fraction": 0.5,
-    "max_checked_total_size": 70202,
-    "max_checked_total_size_fraction": 0.06882535524440148,
-    "nonpassing_artifact_count": 3,
-    "passing_artifact_count": 12,
-    "production_total_size_uncovered_percent": 93.12
+    "largest_attempted_total_size": 139502,
+    "largest_nonpassing_total_size": 139502,
+    "max_checked_active_size": 81377,
+    "max_checked_per_axis_resolution_fraction": 0.6,
+    "max_checked_total_size": 139502,
+    "max_checked_total_size_fraction": 0.13676639849725786,
+    "nonpassing_artifact_count": 6,
+    "passing_artifact_count": 19,
+    "production_total_size_uncovered_percent": 86.32
   },
   "lane": "qi_seed_robustness",
   "open_blockers": [
@@ -444,6 +444,139 @@
       "active_size": null,
       "artifact_kind": "qi_seed_execution_summary",
       "backends": [],
+      "case_count": 1,
+      "max_elapsed_s": 360.0315613330022,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 4,
+        "NXI": 55,
+        "NZETA": 29
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.5,
+        "NXI": 0.55,
+        "NZETA": 0.5686274509803921
+      },
+      "schema_version": 2,
+      "total_size": 95702
+    },
+    {
+      "active_size": 52637,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 21.506245583004784,
+      "max_residual_ratio": 0.008246668487484142,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 4,
+        "NXI": 55,
+        "NZETA": 29
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.5,
+        "NXI": 0.55,
+        "NZETA": 0.5686274509803921
+      },
+      "schema_version": 2,
+      "total_size": 95702
+    },
+    {
+      "active_size": 52637,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 47.69785641699855,
+      "max_residual_ratio": 0.0029834587195199077,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 4,
+        "NXI": 55,
+        "NZETA": 29
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.5,
+        "NXI": 0.55,
+        "NZETA": 0.5686274509803921
+      },
+      "schema_version": 2,
+      "total_size": 95702
+    },
+    {
+      "active_size": 52637,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 5,
+      "max_elapsed_s": 44.482512000002316,
+      "max_residual_ratio": 0.005879187421488486,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_cpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 4,
+        "NXI": 55,
+        "NZETA": 29
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.5,
+        "NXI": 0.55,
+        "NZETA": 0.5686274509803921
+      },
+      "schema_version": 2,
+      "total_size": 95702
+    },
+    {
+      "active_size": 52637,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "gpu"
+      ],
+      "case_count": 5,
+      "max_elapsed_s": 206.66298650670797,
+      "max_residual_ratio": 0.008283950277956835,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 4,
+        "NXI": 55,
+        "NZETA": 29
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.5,
+        "NXI": 0.55,
+        "NZETA": 0.5686274509803921
+      },
+      "schema_version": 2,
+      "total_size": 95702
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
       "case_count": 3,
       "max_elapsed_s": 240.08158116717823,
       "max_residual_ratio": null,
@@ -464,6 +597,137 @@
       },
       "schema_version": 2,
       "total_size": 123977
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 42.22416179199354,
+      "max_residual_ratio": 0.0034244033649593573,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "gpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 145.12792229279876,
+      "max_residual_ratio": 0.004681809477851663,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 5,
+      "max_elapsed_s": 307.9242784590024,
+      "max_residual_ratio": 0.008418516668128892,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "max_elapsed_s": 620.2589297131635,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "max_elapsed_s": 620.2690431359224,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
     }
   ],
   "source_input": "examples/additional_examples/input.namelist"

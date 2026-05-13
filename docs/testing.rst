@@ -672,7 +672,7 @@ and ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_gpu.json``
 artifacts close the same scale-0.50 CPU and one-GPU seed through the promoted
 right-preconditioned explicit ``xblock_sparse_pc_gmres`` route. That route uses
 exact sparse LU for medium non-differentiable full-FP host x-block factors with
-the cap raised to ``20000``. The checked CPU run converges at
+the cap raised to ``30000``. The checked CPU run converges at
 ``13 x 27 x 50 x 4`` in ``~12 s`` with true residual ``1.04e-12`` against target
 ``2.51e-11`` and residual ratio ``4.16e-2``. The clean-clone one-GPU run on
 ``office`` converges in ``~44.5 s`` with residual ``1.58e-11`` and residual
@@ -696,14 +696,60 @@ maximum residual ratio ``0.963``. These artifacts close the bounded public-auto
 solver-route robustness blocker, but they are not yet a production-resolution QI
 claim.
 
+The next-scale
+``docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json`` artifact keeps
+that boundary honest. It raises the public-auto CPU grid to
+``15 x 29 x 55 x 4`` with the bounded x-block sparse-PC window widened for the
+probe, but the old exact-LU cap sent the largest x-block into ILU and timed out
+after ``360 s`` before writing output or a solver trace. The successor
+``docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json`` artifact
+keeps the same widened auto window while using the new full-FP host exact-LU cap
+of ``30000``. It writes output and solver trace in ``~21.5 s`` with active size
+``52637`` and residual ratio ``8.25e-3``. This closes the CPU setup cliff at
+scale ``0.55``; it is still bounded evidence, not a production QI claim, because
+the matching GPU and wider multi-seed ladders have not been checked in.
+
+The hard-seed follow-up
+``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json``
+checks the same ``15 x 29 x 55 x 4`` bounded scale on seed ``3``. That seed was
+the right-preconditioned slow-mode outlier in the five-seed CPU/GPU probes, so
+the default policy now keeps right-PC only below the measured 3D full-FP
+active-size window and switches this larger 3D full-FP case to left-PC. The
+artifact records ``precondition_side=left``, zero process failures, output and
+solver trace written, residual ratio ``2.98e-3``, and elapsed time ``~47 s``.
+This is a solver-policy robustness gate; it does not by itself promote the
+production-resolution QI target.
+
+The matching
+``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_cpu.json``
+and
+``docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json``
+artifacts extend the adaptive-side policy to seeds ``0..4`` on CPU and one
+``office`` GPU. Both use the public ``solve_method=auto`` path, select
+left-preconditioned ``xblock_sparse_pc_gmres`` internally, write all five
+outputs and solver traces, and have zero process failures or timeouts. The CPU
+ladder completes with maximum elapsed time ``44.5 s`` and maximum residual
+ratio ``5.88e-3``; the one-GPU ladder completes with maximum elapsed time
+``206.7 s`` and maximum residual ratio ``8.28e-3``.
+
+The next-size seed-0 artifacts
+``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json`` and
+``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json``
+raise the bounded grid to ``15 x 31 x 60 x 5`` with active size ``81377`` and
+total size ``139502``. Both pass with left-preconditioned exact-xblock-LU GMRES,
+zero process failures, output and solver trace written, residual ratios below
+``4.7e-3``, and elapsed times ``42.2 s`` on CPU and ``145.1 s`` on one GPU. This
+is used only to advance the next-size readiness estimate; production promotion
+still requires multi-seed CPU/GPU evidence at the larger target.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
-passing bounded grid ``70202``, the largest attempted bounded grid ``70202``,
-ten passing artifacts and two non-passing blocker artifacts, a ``50%`` per-axis
-lane-completion estimate based only on passing artifacts, and ``93.12%`` of
-production total size still uncovered. The production acceptance gate requires
-five seeds on both CPU and one GPU with ``public_cli_default_path``,
+passing bounded grid ``139502``, the largest attempted bounded grid ``139502``,
+sixteen passing artifacts and three non-passing blocker artifacts, a ``60%``
+per-axis lane-completion estimate based only on passing artifacts, and
+``86.32%`` of production total size still uncovered. The production acceptance
+gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
 ``solve_method=auto``, ``process_failed=0``, ``timed_out=0``,
 ``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
 ``max_residual_ratio <= 1``. Treat these as bounded runner and solver-policy

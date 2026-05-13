@@ -121,7 +121,7 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   preconditioner policy instead of a timeout increase. The successful route is
   right-preconditioned explicit `xblock_sparse_pc_gmres` plus exact sparse LU
   for medium full-FP host x-blocks (`SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`
-  default raised to `20000` only for the non-differentiable full-FP host path).
+  default raised to `30000` only for the non-differentiable full-FP host path).
   The checked artifact
   `docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json` converges
   the `13 x 27 x 50 x 4` QI seed in `~12.0 s`, solver time `~11.2 s`, with
@@ -156,6 +156,92 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   evidence: the robust scale-0.50 path is seed-stable, while the next
   resolution jump needs a better global coupling/preconditioner strategy before
   production-resolution claims.
+- [x] Closed the next CPU scale-0.55 setup cliff without widening the default
+  production claim. The previous
+  `docs/_static/qi_seed_robustness_scale055_auto_cpu_blocker.json` run timed out
+  because the largest `15 x 29 x 55 x 4` x-block (`23925` DOFs) exceeded the old
+  exact-LU cap and fell into sparse ILU. The new
+  `docs/_static/qi_seed_robustness_scale055_xblock_lu_right_cpu.json` successor
+  uses the same public `auto` request plus the widened profiling window, now hits
+  exact `sparse_lu` for all x-blocks, and converges in `~21.5 s` with active size
+  `52637`, residual `2.30e-13`, target `2.79e-11`, and residual ratio `8.25e-3`.
+  Remaining QI work is the matching GPU scale-0.55 ladder and wider seed count
+  before any production-resolution promotion.
+- [x] Closed the scale-0.55 hard-seed CPU right-PC slow mode with a size-aware
+  3D full-FP x-block precondition-side policy. The default keeps right
+  preconditioning for the measured scale-0.50 window but switches larger 3D
+  full-FP active systems to left preconditioning above
+  `SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX=45000` unless the user explicitly
+  overrides `SFINCS_JAX_GMRES_PRECONDITION_SIDE`. The hard seed `3` artifact
+  `docs/_static/qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json`
+  now passes the public `auto` request at active size `52637` in `~47 s`, records
+  `precondition_side=left`, uses exact `sparse_lu` x-block factors, and reaches
+  residual ratio `2.98e-3`. The previous right-PC five-seed probe had seed `3`
+  still progressing at hundreds to thousands of matvecs and timing out on one
+  GPU, so the next gate is to rerun the matching GPU hard seed and then the
+  five-seed GPU ladder from a clean checkout.
+- [x] Closed the bounded scale-0.55 CPU/GPU five-seed QI ladder with the new
+  adaptive-side default. The CPU artifact
+  `docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_cpu.json`
+  passes seeds `0..4` with zero process failures/timeouts, all outputs and
+  solver traces written, maximum elapsed time `44.5 s`, and maximum residual
+  ratio `5.88e-3`. The clean `office` GPU artifact
+  `docs/_static/qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json`
+  passes the same seeds with maximum elapsed time `206.7 s`, maximum residual
+  ratio `8.28e-3`, and hard seed `3` reduced from the previous right-PC GPU
+  timeout to `~206 s`. This closes the next bounded QI CPU/GPU robustness gate;
+  remaining QI promotion now requires a next-size bounded ladder or
+  production-resolution ladder, not another scale-0.55 rerun.
+- [x] Advanced the next-size QI gate beyond scale `0.55` with bounded seed-0
+  CPU/GPU probes at scale `0.60`. The artifacts
+  `docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json`
+  and `docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json`
+  pass at `15 x 31 x 60 x 5`, active size `81377`, total size `139502`, with
+  left-preconditioned exact-xblock-LU GMRES. CPU elapsed time is `42.2 s` with
+  residual ratio `3.42e-3`; one-GPU elapsed time is `145.1 s` with residual
+  ratio `4.68e-3`. This increases the bounded QI readiness estimate to `60%`
+  per-axis and `13.7%` of production total size, while keeping promotion honest:
+  scale `0.60` still needs a CPU/GPU five-seed ladder before widening the public
+  auto window toward production.
+- [ ] Resolve the scale-0.60 multi-seed slow mode before promoting the next
+  QI window. A first bounded five-seed attempt showed seed `0` passing on CPU
+  in `41.5 s` and on one `office` GPU in `137.9 s`, but CPU seed `1` timed out
+  after `420 s` while still progressing through left-preconditioned GMRES
+  (`4500` matvecs at `404.6 s`), CPU seed `2` showed the same pattern (`3600`
+  matvecs at `319.3 s` when the run was stopped), and GPU seed `1` was also
+  slow (`1200` matvecs at `545.9 s`) before the remote ladder was stopped to
+  avoid wasting GPU time. This is now the concrete next algorithmic blocker:
+  scale-0.60 needs a stronger seed-robust global-coupling/preconditioner
+  correction, adaptive side/ordering by seed metrics, or a tighter restart/seed
+  rescue before the five-seed ladder can be closed. A targeted CPU seed `1`
+  manual-right probe did eventually converge in `353.1 s` with residual ratio
+  `9.82e-3`, `3999` iterations, and `4051` matvecs, so the issue is not an
+  impossible system; it is a poor default side/iteration-count prediction for
+  some seeds. A future fix should not simply widen timeouts: it should add a
+  cheap side-selection probe or an early left-to-right/right-to-left rescue
+  based on measured residual decrease per matvec.
+- [x] Closed the CPU half of the scale-0.60 multi-seed QI blocker with a
+  bounded side-probe plus LGMRES rescue, without widening blind timeouts. The
+  driver now runs one default-side GMRES restart on large 3D full-FP x-block
+  systems; if the true-residual ratio remains above `5e3` on the CPU default
+  route, it reuses the left-probe state and switches to LGMRES with
+  `outer_k=10` and a capped `80` outer iterations. The checked artifact
+  `docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json`
+  passes seeds `0..4` at `15 x 31 x 60 x 5`, active size `81377`, with
+  `accepted_converged=true`, zero timeouts, max elapsed `307.9 s`, and max
+  residual ratio `8.42e-3`. This replaces the old seed `1`/`2` CPU timeout
+  behavior with a measured, progress-logged rescue.
+- [ ] Keep the scale-0.60 GPU QI hard-seed lane open. The same LGMRES rescue is
+  CPU-default only because an `office` GPU seed `3` probe timed out at `620 s`
+  after selecting the LGMRES rescue, with low accelerator utilization and no
+  solver trace. The side-switched right-GMRES GPU probe also timed out at
+  `620 s`. These blocker artifacts are checked in as
+  `docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json`
+  and
+  `docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json`.
+  The next GPU algorithmic step is not another timeout increase; it needs a
+  GPU-native Krylov/preconditioner path or an explicit CPU-offload policy for
+  host-Krylov QI hard seeds.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
@@ -10151,36 +10237,41 @@ Progress update (2026-05-11): integrated multi-lane release hardening push
 
 Updated lane status after this integrated push:
 
+- Overall open-lane average: `92.7%`. The machine-readable tracker now reflects
+  release-grade PAS CPU/GPU production-floor evidence, parallel release-audit
+  gates, refactor/CI policy extraction, optional JAX-ecosystem adoption gates,
+  the scale-0.55 CPU QI exact-LU successor, the adaptive-side scale-0.55
+  CPU/GPU five-seed successors, and the scale-0.60 seed-0 CPU/GPU probes. QI is
+  still active at `95%` because the scale-0.60 five-seed ladder and
+  production-resolution CPU/GPU ladders remain open.
 - PAS-heavy memory/runtime: `93%`. The probe/gate layer is now strong enough
   for short real production-floor probes, but a default solver change still
   needs real geometry4/HSX/geometry11 residual/runtime/memory wins.
-- Benchmark artifact reproducibility gates: `99%`. Canonical plot/table rows
+- Benchmark/parity/docs lane: `98%`. Canonical plot/table rows
   and Fortran-suite summary release gates are in place; remaining work is
   release CI wiring and regeneration of any artifacts promoted beyond
   historical provenance.
-- FP production-floor memory/runtime: `95%`. No default behavior changed.
-- CPU/GPU parity for documented workflows: `100%` for touched lanes; parity
-  remains protected by existing fixture and suite tests.
-- CI/docs health: `100%` locally; remote CI/docs still need confirmation after
-  push.
-- Coverage/refactor path: `73%`. One more policy slice is now outside
-  `v3_driver.py`; reaching much higher coverage still requires continued
-  driver decomposition, not slow full-solve tests.
-- Parallel transport workers: `88%`. Release claims are now strongly audited.
-  Single-case multi-GPU strong scaling remains experimental and unclaimed.
-- `vmec_jax` / `booz_xform_jax` workflow: `72%` for public workflow/provenance
-  and proxy-gradient UX; full differentiable kinetic transport remains deferred.
-- Deferred manuscript physics lanes: `58%`. Figure/gate metadata is stronger,
-  but W7-X ambipolar and full Simakov-Helander high-`nu` claims still require
-  checked-in converged artifacts.
+- Coverage/refactor path: `90%`. More solver dispatch is now in directly tested
+  policy helpers, release metadata checks are CI-fast, and public-auto QI route
+  evidence is covered by artifact tests. The explicit 95% package-coverage target
+  still requires a JAX-safe coverage job and more driver decomposition.
+- Parallel transport workers: `92%`. Release-facing transport-worker claims are
+  now audit-gated and have GPU throughput evidence. Setup-dominated two-GPU
+  case-throughput and single-case sharded solves remain experimental and
+  unclaimed.
+- `vmec_jax` / `booz_xform_jax` workflow: `93%`, saturating the scoped release
+  target for public workflow/provenance and proxy-gradient UX. Full
+  differentiable kinetic transport remains deferred outside this target.
+- Optional JAX ecosystem solver evaluation: `88%` target-saturated for release.
+  Lineax/Equinox/JAXopt gates are documented and tested, with Lineax kept
+  unpromoted for real SFINCS error statuses.
 
 Next concrete actions:
 
-1. Advance the QI ladder to the next bounded resolution scale with public
-   `solve_method=auto`, solver traces, and residual ratios checked on CPU and
-   one GPU.
-2. Profile the next QI scale before production promotion so any memory growth
-   from host-assembled x-block sparse LU is bounded and documented.
+1. Run the scale-0.60 CPU/GPU five-seed ladder before widening the default
+   auto-policy cap or attempting production-resolution QI.
+2. Profile scale-0.55 x-block sparse LU ordering, memory, and factor reuse so
+   the next QI attempt has a concrete algorithmic target.
 3. Run the first short real-solve PAS production-floor probe selected by the
    preflight, requiring a residual/runtime/memory win before any solver-default
    promotion.

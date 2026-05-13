@@ -53,11 +53,23 @@ def test_xblock_precondition_side_defaults_right_only_for_full_fp_er() -> None:
         env_value="",
         tokamak_fp_er_pc=False,
         full_fp_3d_pc=True,
+        active_size=39_314,
         use_dkes=False,
         include_xdot=True,
         include_electric_field_xi=False,
     )
     assert (side, auto_right) == ("right", True)
+
+    side, auto_right = _rhs1_xblock_precondition_side(
+        env_value="",
+        tokamak_fp_er_pc=False,
+        full_fp_3d_pc=True,
+        active_size=52_637,
+        use_dkes=False,
+        include_xdot=True,
+        include_electric_field_xi=False,
+    )
+    assert (side, auto_right) == ("left", False)
 
     side, auto_right = _rhs1_xblock_precondition_side(
         env_value="",
@@ -104,6 +116,7 @@ def test_xblock_gmres_restart_caps_only_auto_right_preconditioned_path() -> None
         restart_env_value="",
         tokamak_fp_er_pc=False,
         full_fp_3d_pc=True,
+        active_size=39_314,
         use_dkes=False,
         include_xdot=True,
         include_electric_field_xi=False,

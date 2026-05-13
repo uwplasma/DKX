@@ -39,7 +39,17 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_xblock_lu_right_multiseed5_cpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_xblock_lu_right_multiseed5_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale050_cpu_multiseed10.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_auto_cpu_blocker.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_xblock_lu_right_cpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_xblock_auto_side_seed3_cpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_xblock_auto_side_multiseed5_cpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale055_xblock_auto_side_multiseed5_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale057_cpu_multiseed3.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
@@ -327,6 +337,8 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
         "solve_method": payload.get("solve_method"),
         "selected_path": payload.get("selected_path"),
         "backend": payload.get("backend"),
+        "active_size": _finite_float_or_none(payload.get("active_size")),
+        "total_size": _finite_float_or_none(payload.get("total_size")),
         "elapsed_s": _finite_float_or_none(payload.get("elapsed_s")),
         "residual_norm": residual_norm,
         "residual_target": residual_target,
@@ -334,7 +346,22 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
         "converged": payload.get("converged"),
         "accepted_converged": solver_metadata.get("accepted_converged"),
         "acceptance_criterion": solver_metadata.get("acceptance_criterion"),
+        "precondition_side": solver_metadata.get("precondition_side"),
+        "default_right_preconditioned": solver_metadata.get("default_right_preconditioned"),
+        "gmres_restart": solver_metadata.get("gmres_restart"),
         "iterations": solver_metadata.get("iterations"),
+        "matvecs": solver_metadata.get("matvecs"),
+        "xblock_side_probe_used": solver_metadata.get("xblock_side_probe_used"),
+        "xblock_side_probe_switched": solver_metadata.get("xblock_side_probe_switched"),
+        "xblock_side_probe_initial_side": solver_metadata.get("xblock_side_probe_initial_side"),
+        "xblock_side_probe_selected_side": solver_metadata.get("xblock_side_probe_selected_side"),
+        "xblock_side_probe_initial_method": solver_metadata.get("xblock_side_probe_initial_method"),
+        "xblock_side_probe_selected_method": solver_metadata.get("xblock_side_probe_selected_method"),
+        "xblock_side_probe_lgmres_rescue": solver_metadata.get("xblock_side_probe_lgmres_rescue"),
+        "xblock_lgmres_rescue_outer_k": solver_metadata.get("xblock_lgmres_rescue_outer_k"),
+        "xblock_side_probe_residual_ratio": solver_metadata.get("xblock_side_probe_residual_ratio"),
+        "xblock_side_probe_iterations": solver_metadata.get("xblock_side_probe_iterations"),
+        "xblock_side_probe_matvecs": solver_metadata.get("xblock_side_probe_matvecs"),
         "solver_kind": solver_metadata.get("solver_kind"),
     }
 
@@ -541,6 +568,8 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                 "elapsed_s": result.get("elapsed_s"),
                 "solver_elapsed_s": trace_summary.get("elapsed_s"),
                 "backend": trace_summary.get("backend"),
+                "active_size": trace_summary.get("active_size"),
+                "total_size": trace_summary.get("total_size"),
                 "solve_method": trace_summary.get("solve_method"),
                 "selected_path": trace_summary.get("selected_path"),
                 "converged": trace_summary.get("converged"),
@@ -548,6 +577,22 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                 "residual_norm": trace_summary.get("residual_norm"),
                 "residual_target": trace_summary.get("residual_target"),
                 "residual_ratio": trace_summary.get("residual_ratio"),
+                "precondition_side": trace_summary.get("precondition_side"),
+                "default_right_preconditioned": trace_summary.get("default_right_preconditioned"),
+                "gmres_restart": trace_summary.get("gmres_restart"),
+                "iterations": trace_summary.get("iterations"),
+                "matvecs": trace_summary.get("matvecs"),
+                "xblock_side_probe_used": trace_summary.get("xblock_side_probe_used"),
+                "xblock_side_probe_switched": trace_summary.get("xblock_side_probe_switched"),
+                "xblock_side_probe_initial_side": trace_summary.get("xblock_side_probe_initial_side"),
+                "xblock_side_probe_selected_side": trace_summary.get("xblock_side_probe_selected_side"),
+                "xblock_side_probe_initial_method": trace_summary.get("xblock_side_probe_initial_method"),
+                "xblock_side_probe_selected_method": trace_summary.get("xblock_side_probe_selected_method"),
+                "xblock_side_probe_lgmres_rescue": trace_summary.get("xblock_side_probe_lgmres_rescue"),
+                "xblock_lgmres_rescue_outer_k": trace_summary.get("xblock_lgmres_rescue_outer_k"),
+                "xblock_side_probe_residual_ratio": trace_summary.get("xblock_side_probe_residual_ratio"),
+                "xblock_side_probe_iterations": trace_summary.get("xblock_side_probe_iterations"),
+                "xblock_side_probe_matvecs": trace_summary.get("xblock_side_probe_matvecs"),
                 "resolution": case.get("resolution") if isinstance(case, dict) else None,
                 "progress_events": result.get("progress_events"),
                 "stderr_tail": result.get("stderr_tail"),
@@ -558,6 +603,11 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
     resolution = first_case.get("resolution") if isinstance(first_case, dict) else None
     source_input = Path(str(manifest["source_input"]))
     solve_method = str(manifest.get("solve_method", ""))
+    active_sizes = [
+        int(seed["active_size"])
+        for seed in seed_summaries
+        if isinstance(seed.get("active_size"), (int, float)) and seed.get("active_size") is not None
+    ]
     return {
         "schema_version": 2,
         "artifact_kind": "qi_seed_execution_summary",
@@ -565,6 +615,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         "source_input": _repo_relative(source_input),
         "resolution_scale": manifest.get("resolution_scale"),
         "resolution": resolution,
+        "active_size": max(active_sizes) if active_sizes else None,
         "total_size_estimate": _total_size_from_resolution(resolution) if isinstance(resolution, dict) else None,
         "case_count": manifest.get("case_count"),
         "public_cli_default_path": solve_method.strip().lower() in {"auto", "default", ""},

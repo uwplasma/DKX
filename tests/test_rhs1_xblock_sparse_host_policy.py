@@ -11,7 +11,7 @@ def test_xblock_sparse_lu_default_max_only_expands_pure_fp_host_path() -> None:
         has_fp=True,
         has_pas=False,
         build_jax_factors=False,
-    ) == 20000
+    ) == 30000
     assert rhs1_xblock_sparse_lu_default_max(
         has_fp=True,
         has_pas=False,

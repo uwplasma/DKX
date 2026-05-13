@@ -189,7 +189,7 @@ Solving a supported v3 linear run (matrix-free)
    sparse-PC GMRES in a narrow ``N_zeta=1`` size window. This avoids the
    global dense-velocity sparse-pattern setup from the older sparse-PC path
    while preserving the true-residual and Fortran-parity gates. On that
-   non-differentiable full-FP x-block path, per-x/TZ blocks up to size ``3000``
+   non-differentiable full-FP x-block path, per-x/TZ blocks up to size ``30000``
    use exact sparse LU before falling back to ILU; PAS and autodiff paths keep
    their stricter caps. For PAS tokamak-like ``N_zeta=1`` cases with
    constraint projection enabled, ``sfincs_jax`` upgrades to the ``xblock_tz`` preconditioner by
@@ -368,6 +368,13 @@ performance without changing the input file:
   preconditioner-derived initial guess; the guess is used only when it lowers
   the true residual. It is off by default because current production-floor QI
   probes reject it and need a stronger global/coarse correction instead.
+
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX``: active-size cap for the default
+  right-preconditioned 3D full-FP x-block sparse-PC lane. The default is
+  ``45000`` active unknowns, which keeps the checked scale-0.50 QI window on the
+  faster right-PC path while avoiding the seed-dependent right-PC slow mode seen
+  at scale ``0.55``. Explicit ``SFINCS_JAX_GMRES_PRECONDITION_SIDE=left`` or
+  ``right`` still takes precedence.
 
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS``: opt-in matrix-free
   post-Krylov correction for explicit ``xblock_sparse_pc_gmres``. Set to a small
