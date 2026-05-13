@@ -1605,9 +1605,21 @@ Controls:
   QI/PAS geometries do not spend minutes discovering an already-infeasible
   operator. The CSR memory budget
   ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB`` is now enforced
-  as a hard cap when materialization is required. This remains diagnostic-only
-  until a large case shows both strict residual parity and lower wall
-  time/memory.
+  as a hard cap when materialization is required. When
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1`` is also enabled, the preflight
+  builds the conservative pattern in active ``Nxi_for_x`` coordinates before
+  applying the cap, and records both full-system and active-DOF byte estimates
+  in solver metadata. This prevents reduced QI/PAS systems from rejecting a
+  feasible assembled Krylov operator because of inactive pitch modes.
+  Large active FP/QI patterns use a structured ``velocity ⊗ angular`` builder
+  rather than materializing the full inactive pattern and slicing it. On the
+  documented scale-0.60 QI seed-3 preflight, this changed pattern construction
+  from a 4.52 GB full CSR estimate and ``250.0 s`` full-pattern build, through a
+  ``174.6 s`` Python active-loop build, to a ``1.19 s`` structured active build
+  for the same 1.54 GB active CSR pattern. A bounded dummy-matvec probe then
+  rejected ``max_colors=64`` graph coloring in ``0.88 s``, so infeasible
+  materialization attempts fail quickly. This remains diagnostic-only until a
+  large case shows both strict residual parity and lower wall time/memory.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF`` (default: off): opt-in active-DOF
   reduction for explicit ``xblock_sparse_pc_gmres``. When ``Nxi_for_x`` truncates
   the pitch basis, this route solves the x-block Krylov system on the active

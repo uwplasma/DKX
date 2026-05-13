@@ -19,6 +19,7 @@ from sfincs_jax.v3_sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,
     summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern,
+    v3_full_system_conservative_sparsity_pattern_for_indices,
 )
 from sfincs_jax.v3_driver import (
     _rhs1_xblock_gmres_restart,
@@ -495,6 +496,46 @@ def test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size(monkeypatch) ->
     assert result.metadata["xblock_active_dof"] is True
     assert result.metadata["xblock_linear_size"] < result.metadata["xblock_full_size"]
     assert result.gmres.x.shape == result.rhs.shape
+
+
+def test_xblock_sparse_pc_assembled_operator_active_dof_uses_sliced_budget(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    active_idx = v3_driver_module._transport_active_dof_indices(op)
+    full_summary = estimate_v3_full_system_conservative_sparsity_summary(op)
+    full_csr_nbytes = int(full_summary.nnz * 12 + (full_summary.shape[0] + 1) * 4)
+    full_sliced_pattern = v3_full_system_conservative_sparsity_pattern(op)[active_idx, :][:, active_idx].tocsr()
+    active_pattern = v3_full_system_conservative_sparsity_pattern_for_indices(op, active_idx)
+    assert (active_pattern != full_sliced_pattern).nnz == 0
+    active_csr_nbytes = int(active_pattern.nnz * 12 + (active_pattern.shape[0] + 1) * 4)
+    assert active_csr_nbytes < full_csr_nbytes
+
+    cap_mb = 1.2 * active_csr_nbytes / 1.0e6
+    assert full_csr_nbytes > cap_mb * 1.0e6
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", f"{cap_mb:.6f}")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_active_dof"] is True
+    assert result.metadata["xblock_assembled_operator_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is True
+    assert result.metadata["xblock_assembled_operator_active_dof"] is True
+    assert result.metadata["xblock_assembled_operator_preflight_scope"] == "active_dof"
+    assert result.metadata["xblock_assembled_operator_preflight_active_csr_nbytes_estimate"] <= cap_mb * 1.0e6
+    assert result.metadata["xblock_assembled_operator_preflight_full_csr_nbytes_estimate"] > cap_mb * 1.0e6
+    assert result.metadata["xblock_assembled_operator_error"] is None
 
 
 @pytest.mark.parametrize(

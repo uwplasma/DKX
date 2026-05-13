@@ -295,6 +295,7 @@ from .v3_sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,
     summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern,
+    v3_full_system_conservative_sparsity_pattern_for_indices,
 )
 from .profiling import _rss_mb, maybe_profiler
 
@@ -12784,39 +12785,86 @@ def solve_v3_full_system_linear_gmres(
                         default=512,
                         minimum=1,
                     )
+                    def _csr_storage_nbytes(*, nnz: int, n_rows: int) -> int:
+                        return int(
+                            int(nnz) * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize)
+                            + (int(n_rows) + 1) * np.dtype(np.int32).itemsize
+                        )
+
                     assembled_preflight = estimate_v3_full_system_conservative_sparsity_summary(
                         op,
                         fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
                     )
-                    assembled_preflight_csr_nbytes = int(
-                        int(assembled_preflight.nnz) * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize)
-                        + (int(assembled_preflight.shape[0]) + 1) * np.dtype(np.int32).itemsize
+                    assembled_preflight_csr_nbytes = _csr_storage_nbytes(
+                        nnz=int(assembled_preflight.nnz),
+                        n_rows=int(assembled_preflight.shape[0]),
                     )
                     assembled_preflight_peak_nbytes = int(3 * assembled_preflight_csr_nbytes)
                     assembled_csr_cap_nbytes = int(max(0.0, float(assembled_csr_max_mb)) * 1.0e6)
+                    assembled_pattern = None
+                    assembled_preflight_scope = "full"
                     assembled_operator_metadata.update(
                         {
+                            "active_dof": bool(xblock_active_idx_np is not None),
+                            "preflight_scope": assembled_preflight_scope,
                             "preflight_pattern_nnz_estimate": int(assembled_preflight.nnz),
                             "preflight_pattern_max_row_nnz_estimate": int(assembled_preflight.max_row_nnz),
                             "preflight_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
                             "preflight_peak_nbytes_estimate": int(assembled_preflight_peak_nbytes),
+                            "preflight_full_pattern_nnz_estimate": int(assembled_preflight.nnz),
+                            "preflight_full_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
                             "preflight_csr_max_mb": float(assembled_csr_max_mb),
                             "preflight_rejected": False,
                         }
                     )
-                    if assembled_csr_cap_nbytes <= 0 or assembled_preflight_csr_nbytes > assembled_csr_cap_nbytes:
+                    if assembled_csr_cap_nbytes <= 0:
                         assembled_operator_metadata["preflight_rejected"] = True
                         raise MemoryError(
-                            "assembled x-block operator preflight rejected CSR estimate "
+                            "assembled x-block operator preflight rejected non-positive CSR memory budget "
+                            f"{float(assembled_csr_max_mb):.3g} MB"
+                        )
+                    if xblock_active_idx_np is not None:
+                        # The full-system conservative estimate can be several times
+                        # larger than the actual active-DOF Krylov operator when
+                        # ``Nxi_for_x`` truncation is enabled. Build the reduced
+                        # structural pattern directly and apply the memory gate to
+                        # the matrix that will actually be probed.
+                        assembled_pattern = v3_full_system_conservative_sparsity_pattern_for_indices(
+                            op,
+                            xblock_active_idx_np,
+                            fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                        )
+                        active_preflight = summarize_v3_sparse_pattern(op, assembled_pattern)
+                        assembled_preflight_scope = "active_dof"
+                        assembled_preflight_csr_nbytes = _csr_storage_nbytes(
+                            nnz=int(active_preflight.nnz),
+                            n_rows=int(active_preflight.shape[0]),
+                        )
+                        assembled_preflight_peak_nbytes = int(3 * assembled_preflight_csr_nbytes)
+                        assembled_operator_metadata.update(
+                            {
+                                "preflight_scope": assembled_preflight_scope,
+                                "preflight_pattern_nnz_estimate": int(active_preflight.nnz),
+                                "preflight_pattern_max_row_nnz_estimate": int(active_preflight.max_row_nnz),
+                                "preflight_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
+                                "preflight_peak_nbytes_estimate": int(assembled_preflight_peak_nbytes),
+                                "preflight_active_pattern_nnz_estimate": int(active_preflight.nnz),
+                                "preflight_active_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
+                            }
+                        )
+                    if assembled_preflight_csr_nbytes > assembled_csr_cap_nbytes:
+                        assembled_operator_metadata["preflight_rejected"] = True
+                        raise MemoryError(
+                            "assembled x-block operator preflight rejected "
+                            f"{assembled_preflight_scope} CSR estimate "
                             f"{assembled_preflight_csr_nbytes / 1.0e6:.3g} MB > "
                             f"{float(assembled_csr_max_mb):.3g} MB"
                         )
-                    assembled_pattern = v3_full_system_conservative_sparsity_pattern(
-                        op,
-                        fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
-                    )
-                    if xblock_active_idx_np is not None:
-                        assembled_pattern = assembled_pattern[xblock_active_idx_np, :][:, xblock_active_idx_np].tocsr()
+                    if assembled_pattern is None:
+                        assembled_pattern = v3_full_system_conservative_sparsity_pattern(
+                            op,
+                            fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                        )
                     assembled_summary = summarize_v3_sparse_pattern(op, assembled_pattern)
 
                     def _matvec_np_no_count(x_np: np.ndarray) -> np.ndarray:
@@ -13746,6 +13794,8 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_full_size": int(op.total_size),
                     "xblock_assembled_operator_enabled": bool(assembled_operator_enabled),
                     "xblock_assembled_operator_built": bool(assembled_operator_built),
+                    "xblock_assembled_operator_active_dof": assembled_operator_metadata.get("active_dof", False),
+                    "xblock_assembled_operator_preflight_scope": assembled_operator_metadata.get("preflight_scope"),
                     "xblock_assembled_operator_setup_s": assembled_operator_metadata.get("setup_s"),
                     "xblock_assembled_operator_preflight_rejected": assembled_operator_metadata.get(
                         "preflight_rejected", False
@@ -13755,6 +13805,12 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     "xblock_assembled_operator_preflight_peak_nbytes_estimate": assembled_operator_metadata.get(
                         "preflight_peak_nbytes_estimate"
+                    ),
+                    "xblock_assembled_operator_preflight_full_csr_nbytes_estimate": assembled_operator_metadata.get(
+                        "preflight_full_csr_nbytes_estimate"
+                    ),
+                    "xblock_assembled_operator_preflight_active_csr_nbytes_estimate": assembled_operator_metadata.get(
+                        "preflight_active_csr_nbytes_estimate"
                     ),
                     "xblock_assembled_operator_pattern_nnz": assembled_operator_metadata.get("pattern_nnz"),
                     "xblock_assembled_operator_matrix_nnz": assembled_operator_metadata.get("matrix_nnz"),
