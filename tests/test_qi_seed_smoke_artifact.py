@@ -594,9 +594,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 25
-    assert current["passing_artifact_count"] == 17
-    assert current["nonpassing_artifact_count"] == 8
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 27
+    assert current["passing_artifact_count"] == 18
+    assert current["nonpassing_artifact_count"] == 9
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -630,6 +630,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json",
+        "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_cpu.json",
+        "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
@@ -654,6 +656,24 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert rejected_device["passed"] is False
     assert rejected_device["backends"] == ["gpu"]
     assert rejected_device["max_elapsed_s"] > 250.0
+    probe_coarse_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"] == "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_cpu.json"
+    )
+    assert probe_coarse_cpu["passed"] is True
+    assert probe_coarse_cpu["backends"] == ["cpu"]
+    assert probe_coarse_cpu["active_size"] == 81377
+    assert probe_coarse_cpu["total_size"] == 139502
+    assert probe_coarse_cpu["max_residual_ratio"] < 0.01
+    probe_coarse_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"] == "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json"
+    )
+    assert probe_coarse_gpu["passed"] is False
+    assert probe_coarse_gpu["total_size"] == 139502
+    assert probe_coarse_gpu["max_elapsed_s"] > 350.0
 
     gates = payload["acceptance_gates"]
     assert gates["public_cli_default_path"] is True
