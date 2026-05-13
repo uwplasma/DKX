@@ -10801,6 +10801,14 @@ Validation:
   LGMRES iterations, `2403` matvecs, residual `1.0360e-13`, target
   `3.0215e-11`, residual ratio `3.43e-3`, with HDF5 output and solver trace
   written.
+- Matching one-GPU office probe from a clean checkout at commit `689ea32`, using
+  JAX `0.6.2` on GPU 0 and `timeout_s=360`: failed by timeout. Artifact:
+  `docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json`.
+  The process reached the side probe and then switched `left -> right`, so the
+  physical side-probe state was discarded before probe-coarse could apply. It
+  advanced to about `700` reported matvecs by `347 s`, wrote no HDF5 output and
+  no solver trace, and used about `3.1 GB` max host RSS. No CUDA illegal-address
+  crash occurred in this run.
 
 Updated lane status:
 
@@ -10813,7 +10821,8 @@ Updated lane status:
   production color budget.
 - Active coarse/preconditioning lane: `97%`; probe-coarse gives a measurable
   residual-seed improvement and closes the bounded CPU hard seed. It remains
-  opt-in until GPU and wider-seed evidence are available.
+  opt-in and CPU-rescue-only until a GPU-compatible device-resident variant is
+  implemented and passes the hard seed.
 - PAS-heavy memory/runtime: `94%`; unchanged in this pass.
 - Parallel transport workers: `92%`; unchanged in this pass.
 - Coverage/refactor path: `93.5%`; one more focused solver-regression test and
@@ -10822,12 +10831,12 @@ Updated lane status:
 
 Next best steps:
 
-1. Run the same scale-0.60 seed-3 probe-coarse policy on one office GPU with a
-   bounded timeout and device-memory profiling. Promote it only if it converges
-   without illegal-address failures and improves over the checked GPU timeouts.
-2. If the one-GPU hard seed passes, run a small CPU/GPU multi-seed scale-0.60
-   probe-coarse ladder and update the QI evidence manifest.
-3. If GPU still fails or times out, keep probe-coarse as a CPU rescue and move
-   the GPU lane to a true device-resident coarse/preconditioner implementation.
+1. Do not retry the same GPU probe-coarse policy unchanged; the one-GPU run
+   already timed out and did not apply the seed correction after side switching.
+2. Implement a GPU-compatible probe/coarse route that either keeps the left
+   physical seed long enough for correction or makes the correction device
+   resident and compatible with right-preconditioned coordinates.
+3. After that implementation, rerun the one-GPU scale-0.60 seed-3 hard seed and
+   only then attempt a small CPU/GPU multi-seed ladder.
 4. Continue the PAS memory/runtime and refactor/coverage lanes independently;
    this QI hook is opt-in and does not alter public default solver selection.
