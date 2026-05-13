@@ -1565,7 +1565,45 @@ Controls:
   ``docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json``
   also pass at active size ``81377`` with elapsed times ``42.2 s`` and
   ``145.1 s`` and residual ratios below ``4.7e-3``; this is a bounded seed-0
-  probe, not a production-resolution five-seed claim.
+  probe, not a production-resolution five-seed claim. The harder scale-0.60
+  seed-3 rejected-probe summary
+  ``docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json``
+  keeps two-level x-block, GCROT(m,k), BiCGStab fallback, post-correction-only
+  BiCGStab, and JAX-factor/device-Krylov variants out of the default policy; the
+  only kept fallback behavior is reusing a non-GMRES candidate as a GMRES initial
+  guess when it strictly improves the finite RHS norm and is not a
+  right-preconditioned coordinate state.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING`` (default: off): opt-in
+  smoothed global-coupling wrapper for explicit ``xblock_sparse_pc_gmres``. It
+  builds low-rank load vectors from RHS/source rows, low-L flux-surface-average
+  moments, and the lowest theta/zeta Fourier components, applies the existing
+  x-block preconditioner to form ``Z = B^{-1}P``, then uses a rank-revealed
+  ``A Z`` coarse solve inside each preconditioner application. This is more
+  physics-aware than the older fixed two-level basis, and it records rank,
+  setup time, basis names, and side-probe switch suppression metadata. The
+  scale-0.60 hard-seed probe
+  ``docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json``
+  rejected it for defaults: CPU reached a near residual only after ``539 s`` and
+  ``6671`` matvecs without strict output acceptance, while one-GPU runs timed out
+  at ``620 s`` whether the side probe switched right or kept the left
+  global-coupling state.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR`` (default: off): opt-in
+  assembled/operator-reuse path for explicit ``xblock_sparse_pc_gmres``. It
+  materializes a conservative sparse full-system operator by graph-colored
+  pattern probing, validates sampled matvecs against the matrix-free operator,
+  and then reuses the assembled operator for Krylov matvecs. The preflight now
+  aborts as soon as the color count exceeds
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS`` so large
+  QI/PAS geometries do not spend minutes discovering an already-infeasible
+  operator. This remains diagnostic-only until a large case shows both strict
+  residual parity and lower wall time/memory.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS`` (default: off): opt-in
+  device-factor x-block preconditioner experiment. It exposes the existing JAX
+  padded triangular-factor path through the explicit x-block solver so GPU
+  diagnostics can distinguish host-SuperLU application overhead from Krylov
+  convergence. The 2026-05-13 bounded probe did not promote it: even a small
+  local full-FP RHSMode=1 opt-in run was manually killed after about ``76 s`` of
+  setup/test time, so this path is evidence-gathering only.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual

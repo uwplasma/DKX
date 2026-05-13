@@ -741,6 +741,28 @@ zero process failures, output and solver trace written, residual ratios below
 is used only to advance the next-size readiness estimate; production promotion
 still requires multi-seed CPU/GPU evidence at the larger target.
 
+The scale-0.60 seed-3 follow-up
+``docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json``
+keeps the GPU hard-seed blocker actionable without promoting another solver
+toggle. It records rejected two-level x-block, GCROT(m,k), BiCGStab fallback,
+post-correction-only BiCGStab, and experimental JAX-factor/device-Krylov probes.
+The only retained code policy from that pass is the safe GMRES fallback guard:
+a non-GMRES candidate may seed fallback GMRES only when it strictly improves the
+finite RHS norm and is not a right-preconditioned coordinate state.
+
+The subsequent global-coupling/operator-reuse probe summary
+``docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json``
+adds another negative gate. It verifies that the newly implemented opt-in
+smoothed global-coupling preconditioner, assembled-operator matvec reuse
+preflight, side-probe keep-left guard, and JAX-factor switch are wired and
+metadata-covered, but it rejects all of them for default promotion on the
+scale-0.60 seed-3 hard case. The important behavioral result is that the GPU
+left side probe reached a finite near residual, while both the old right-switch
+continuation and the new keep-left continuation timed out at ``620 s``. This
+keeps the lane honest: the next closing step must be a genuinely device-resident
+or differently structured preconditioner/Krylov formulation, not another
+threshold-only side-selection tweak.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
