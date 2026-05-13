@@ -15,7 +15,11 @@ from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_mat_aij
 from sfincs_jax.rhs1_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
-from sfincs_jax.v3_sparse_pattern import summarize_v3_sparse_pattern, v3_full_system_conservative_sparsity_pattern
+from sfincs_jax.v3_sparse_pattern import (
+    estimate_v3_full_system_conservative_sparsity_summary,
+    summarize_v3_sparse_pattern,
+    v3_full_system_conservative_sparsity_pattern,
+)
 from sfincs_jax.v3_driver import (
     _rhs1_xblock_gmres_restart,
     _rhs1_xblock_precondition_side,
@@ -170,6 +174,20 @@ def test_conservative_sparse_pattern_covers_fp_fortran_matrix() -> None:
     summary = summarize_v3_sparse_pattern(op, pattern)
     assert summary.has_fp
     assert summary.avg_row_nnz > 0.0
+
+
+def test_conservative_sparse_pattern_preflight_estimate_bounds_materialized_pattern() -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    pattern = v3_full_system_conservative_sparsity_pattern(op)
+    summary = summarize_v3_sparse_pattern(op, pattern)
+    estimate = estimate_v3_full_system_conservative_sparsity_summary(op)
+
+    assert estimate.shape == summary.shape
+    assert estimate.nnz >= summary.nnz
+    assert estimate.max_row_nnz >= summary.max_row_nnz
+    assert estimate.has_fp is True
 
 
 def test_fp_sparse_pc_can_use_local_velocity_pattern() -> None:
@@ -433,6 +451,50 @@ def test_xblock_sparse_pc_assembled_operator_records_metadata(monkeypatch) -> No
     assert result.metadata["xblock_assembled_operator_matrix_nnz"] > 0
     assert result.metadata["xblock_assembled_operator_error"] is None
     assert any("assembled operator built" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_assembled_operator_records_budget_rejection(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "0")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_assembled_operator_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is False
+    assert "MemoryError" in str(result.metadata["xblock_assembled_operator_error"])
+    assert result.metadata["xblock_assembled_operator_preflight_rejected"] is True
+    assert result.metadata["xblock_assembled_operator_preflight_pattern_nnz_estimate"] > 0
+    assert any("assembled operator disabled after build failure" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_active_dof"] is True
+    assert result.metadata["xblock_linear_size"] < result.metadata["xblock_full_size"]
+    assert result.gmres.x.shape == result.rhs.shape
 
 
 @pytest.mark.parametrize(

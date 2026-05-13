@@ -192,14 +192,14 @@ norm, residual target, residual ratio, and convergence flags.
 
 The checked production-readiness manifest is
 ``docs/_static/qi_seed_robustness_evidence_manifest.json``. It keeps the lane at
-``bounded_proxy`` because the largest checked passing grid is still ``45542``
+``bounded_proxy`` because the largest checked passing grid is still ``139502``
 estimated unknowns versus ``1020002`` at the authored production resolution
-``25 x 51 x 100 x 8``. The largest attempted bounded grid is ``70202`` estimated
-unknowns; it is retained only as scale-0.50 blocker evidence after ``auto``,
-``sparse_host_safe``, ``sparse_lsmr``, and ``xblock_sparse_pc_gmres`` all failed
-their convergence/runtime gates. The bounded lane-completion estimate is
-therefore ``44%`` by the smallest per-axis resolution fraction of the largest
-passing artifact, while ``95.54%`` of the production total-size estimate remains
+``25 x 51 x 100 x 8``. The largest attempted bounded grid is also ``139502``
+estimated unknowns; it includes passing scale-0.60 CPU/GPU seed-0 evidence,
+passing scale-0.60 CPU five-seed evidence, and rejected scale-0.60 GPU hard-seed
+solver/global-coupling probes. The bounded lane-completion estimate is therefore
+``60%`` by the smallest per-axis resolution fraction of the largest passing
+artifact, while ``86.32%`` of the production total-size estimate remains
 uncovered.
 
 Production-resolution promotion requires both scheduled ladders below to pass

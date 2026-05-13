@@ -105,7 +105,7 @@
   "code_rejected": [
     {
       "change": "opt-in JAX-factor/device-Krylov x-block path",
-      "reason": "failed the bounded GPU gate and was removed instead of carrying dead complexity"
+      "reason": "failed the bounded GPU gate and remains default-off blocker evidence rather than a production path"
     }
   ],
   "next_algorithmic_need": "A stronger GPU-compatible global-coupling preconditioner or a real assembled/operator-reuse path is required; further Krylov-method toggles and timeout increases are not justified by these probes."

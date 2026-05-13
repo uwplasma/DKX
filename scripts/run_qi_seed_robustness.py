@@ -47,6 +47,8 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
@@ -139,6 +141,37 @@ def _total_size_from_resolution(resolution: dict[str, object]) -> int | None:
     except (KeyError, TypeError, ValueError):
         return None
     return product + 2
+
+
+def _canonical_resolution(resolution: object) -> dict[str, int]:
+    """Return resolution with canonical SFINCS upper-case keys when possible."""
+    if not isinstance(resolution, dict):
+        return {}
+    key_aliases = {
+        "NTHETA": "NTHETA",
+        "NTHEETA": "NTHETA",
+        "Ntheta": "NTHETA",
+        "ntheta": "NTHETA",
+        "NZETA": "NZETA",
+        "Nzeta": "NZETA",
+        "nzeta": "NZETA",
+        "NX": "NX",
+        "Nx": "NX",
+        "nx": "NX",
+        "NXI": "NXI",
+        "Nxi": "NXI",
+        "nxi": "NXI",
+    }
+    out: dict[str, int] = {}
+    for key, value in resolution.items():
+        canonical = key_aliases.get(str(key), str(key).upper())
+        if canonical not in RESOLUTION_KEYS:
+            continue
+        try:
+            out[canonical] = int(round(float(value)))
+        except (TypeError, ValueError):
+            continue
+    return out
 
 
 def _resolution_fractions(resolution: dict[str, object], production_resolution: dict[str, int]) -> dict[str, float]:
@@ -668,6 +701,24 @@ def _artifact_backends(payload: dict[str, object]) -> list[str]:
             if isinstance(run, dict) and run.get("backend") and run.get("process_passed") is not False:
                 backends.add(str(run["backend"]))
         return sorted(backends)
+
+    probes = payload.get("probes")
+    if isinstance(probes, list):
+        backends = {
+            str(probe.get("backend"))
+            for probe in probes
+            if isinstance(probe, dict) and probe.get("backend")
+        }
+        return sorted(backends)
+
+    rejected = payload.get("rejected_probes")
+    if isinstance(rejected, list):
+        backends = {
+            str(probe.get("backend"))
+            for probe in rejected
+            if isinstance(probe, dict) and probe.get("backend")
+        }
+        return sorted(backends)
     return []
 
 
@@ -730,13 +781,16 @@ def _artifact_case_count(payload: dict[str, object]) -> int:
 
 
 def _summarize_evidence_artifact(path: Path, payload: dict[str, object], production_resolution: dict[str, int]) -> dict[str, object]:
-    resolution = payload.get("resolution")
-    resolution_dict = resolution if isinstance(resolution, dict) else {}
+    resolution_dict = _canonical_resolution(payload.get("resolution"))
     total_size = _finite_float_or_none(payload.get("total_size"))
+    if total_size is None:
+        total_size = _finite_float_or_none(payload.get("total_size_estimate"))
     if total_size is None:
         estimate = _total_size_from_resolution(resolution_dict)
         total_size = float(estimate) if estimate is not None else None
     active_size = _finite_float_or_none(payload.get("active_size"))
+    if active_size is None:
+        active_size = _finite_float_or_none(payload.get("active_size_estimate"))
     return {
         "path": _repo_relative(path),
         "schema_version": payload.get("schema_version"),
@@ -745,7 +799,7 @@ def _summarize_evidence_artifact(path: Path, payload: dict[str, object], product
         "case_count": _artifact_case_count(payload),
         "backends": _artifact_backends(payload),
         "public_cli_default_path": payload.get("public_cli_default_path"),
-        "resolution": resolution,
+        "resolution": resolution_dict or payload.get("resolution"),
         "resolution_fractions": _resolution_fractions(resolution_dict, production_resolution),
         "total_size": int(total_size) if total_size is not None else None,
         "active_size": int(active_size) if active_size is not None else None,

@@ -100,6 +100,14 @@
         {
           "claim": "Scale-0.60 GPU seed3 right-preconditioned GMRES side-switch probe also times out at 620 s, keeping the hard-seed GPU lane open.",
           "path": "docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json"
+        },
+        {
+          "claim": "Scale-0.60 GPU hard-seed rejected-probe summary records failed two-level x-block, GCROT(m,k), BiCGStab, post-correction-only, and JAX-factor attempts as blocker evidence.",
+          "path": "docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json"
+        },
+        {
+          "claim": "Scale-0.60 global-coupling/operator-reuse rejected-probe summary records opt-in smoothed global coupling, assembled-operator reuse, keep-left side probing, and JAX-factor exposure as implemented but not default-promoted.",
+          "path": "docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json"
         }
       ],
       "gates": [

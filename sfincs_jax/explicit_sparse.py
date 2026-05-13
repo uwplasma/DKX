@@ -514,6 +514,11 @@ def build_operator_from_pattern(
     dense_nbytes = estimate_dense_nbytes((n_rows, n_cols), dtype_np)
     csr_nbytes_estimate = estimate_csr_nbytes((n_rows, n_cols), int(pattern_csr.nnz), data_dtype=dtype_np)
     csr_cap = int(max(0.0, float(csr_max_mb)) * 1e6)
+    if (not allow_operator_only) and (csr_cap <= 0 or csr_nbytes_estimate > csr_cap):
+        raise MemoryError(
+            "pattern CSR estimate would exceed budget "
+            f"({csr_nbytes_estimate / 1.0e6:.3g} MB > {float(csr_max_mb):.3g} MB)"
+        )
     if allow_operator_only and (csr_cap <= 0 or csr_nbytes_estimate > csr_cap):
         decision = SparseDecision(
             storage_kind="linear_operator",

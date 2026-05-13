@@ -10391,3 +10391,66 @@ Best next steps:
    materialization.
 4. Continue the non-QI lanes in parallel: PAS production-floor probes,
    benchmark artifact CI wiring, and further driver refactoring.
+
+Progress update (2026-05-13): active x-block memory gate and QI evidence-manifest hardening
+
+- Followed up the global-coupling/operator-reuse push after CI passed on
+  `a66d099`.
+- Added an opt-in active-DOF path for explicit `xblock_sparse_pc_gmres`:
+  - `SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1` allows the x-block Krylov
+    system to run on the reduced active `Nxi_for_x` unknown set and expands the
+    final state back to the full SFINCS vector;
+  - metadata records `xblock_active_dof`, `xblock_linear_size`, and
+    `xblock_full_size`;
+  - the path remains default-off and is intended as a memory-safety prerequisite
+    for future QI assembled/operator-reuse experiments, not a promoted QI fix.
+- Hardened assembled/operator-reuse memory gates:
+  - `build_operator_from_pattern(..., allow_operator_only=False)` now enforces
+    the CSR memory budget as a hard cap instead of materializing over budget;
+  - added a cheap conservative sparsity preflight summary so experimental
+    x-block assembled-operator reuse can reject infeasible full-system patterns
+    before building Python row/column lists;
+  - metadata now records assembled-operator preflight rejection and estimated
+    pattern/peak bytes.
+- Corrected the QI evidence surface:
+  - added both scale-0.60 rejected-probe artifacts to the default QI evidence
+    manifest;
+  - normalized rejected-summary resolution/active-size handling;
+  - regenerated `docs/_static/qi_seed_robustness_evidence_manifest.json`, which
+    now records `24` artifacts, `17` passing artifacts, `7` non-passing blocker
+    artifacts, largest passing/attempted total size `139502`, and active size
+    `81377`;
+  - updated docs and the research-lane manifest so the latest negative
+    global-coupling/operator-reuse evidence is not only mentioned in prose but
+    participates in the checked release gate.
+- Focused verification:
+  - `python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/explicit_sparse.py sfincs_jax/v3_sparse_pattern.py scripts/run_qi_seed_robustness.py`: passed;
+  - `python -m pytest -q tests/test_explicit_sparse.py tests/test_v3_sparse_pattern.py tests/test_qi_seed_smoke_artifact.py`: `66 passed in 23.84 s`.
+
+Updated lane status:
+
+- QI seed-robustness / hard-seed solver lane: `97%` infrastructure/evidence
+  complete, hard seed still open. The active-DOF x-block route reduces the
+  future operator-reuse target but does not yet solve the scale-0.60 one-GPU
+  seed-3 blocker.
+- Assembled/operator-reuse lane: `87%`. Safety gates are materially stronger;
+  large-case promotion still requires a feasible active/direct pattern and a
+  device-resident or otherwise non-host-bottlenecked Krylov path.
+- PAS-heavy memory/runtime: still `93%`. The audit confirms the next PAS step is
+  a streaming/block PAS-TZ factor or matrix-free PAS correction, not more Schur
+  or restart sweeps.
+- Parallel transport workers: still `92%`; no change in this follow-up.
+- Coverage/refactor path: `92%`; new tests cover the active x-block and
+  assembled-preflight seams, but deeper `v3_driver.py` decomposition remains
+  needed for the 95% package coverage target.
+
+Next best steps:
+
+1. Run the expanded focused test/docs/lint set, then full local suite if clean.
+2. Push this safety/evidence follow-up once CI-fast checks pass.
+3. Start the next real QI algorithm as a device-resident FGMRES/global-coupling
+   path or active direct-pattern assembled path; do not spend more effort on
+   host low-rank or side-threshold tuning.
+4. In parallel, start the PAS memory lane from a streaming PAS-TZ factorization
+   design with gates: `>=50%` estimated build-byte reduction, no parity loss,
+   and no runtime regression on geometry4/HSX/geometry11 floor artifacts.
