@@ -254,6 +254,34 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   LGMRES GPU toggles; the remaining QI GPU closure must be a device-resident
   or assembled/reused active operator correction that makes the true residual
   fall before the expensive Krylov loop.
+- [x] 2026-05-13 side-switch correctness fix: right-preconditioned host Krylov
+  wrappers now interpret `x0` as a physical-space initial guess by solving the
+  correction equation `A M^{-1} y = b - A x0` and returning `x0 + M^{-1} y`.
+  The x-block side probe now preserves the physical left-probe seed when it
+  switches to right preconditioning instead of discarding it. Targeted local
+  checks passed:
+  `tests/test_solver_heavy_helper_coverage.py::test_gmres_history_scipy_right_preconditioning_uses_physical_x0`,
+  `tests/test_v3_sparse_pattern.py::test_xblock_side_probe_switch_preserves_physical_seed_for_right_pc`,
+  the full `tests/test_v3_sparse_pattern.py` module, and the right-PC LGMRES
+  API test. CI and Docs passed on commit `5ef9d86`.
+- [ ] 2026-05-13 GPU follow-up after that fix: the preserved-seed right-PC
+  `office` GPU gate reached the intended policy path (`side=left->right` with
+  `preserved_physical_seed=1`) but still timed out at `420 s`, using about
+  `16.8` effective CPU cores and `3.14 GB` max RSS while GPU 0 stayed idle.
+  This proves the fix is mathematically necessary but not sufficient for
+  GPU-performance closure because the promoted path is still host-Krylov.
+- [ ] 2026-05-13 device-factor probes: device FGMRES with JAX x-block factors,
+  global coupling, and exact-LU opt-in completed bounded GPU runs but remained
+  nonconverged. With exact-LU cap `30000` and padded row cap `64`, elapsed time
+  was `307 s`, max RSS `9.94 GB`, and residual stayed at `3.0215e-05`
+  (`target=3.0215e-13`). Increasing the padded row cap to `128` reduced elapsed
+  time to `282 s` with similar max RSS (`9.92 GB`) but again left the residual
+  at the RHS norm. This rejects simple exact-vs-ILU and row-cap widening as the
+  remaining GPU fix. The next algorithmic step must change the preconditioner
+  structure, for example a true active-operator reuse/assembled sparse matvec
+  with a device-compatible coarse solve, or a block-Jacobi/Schwarz formulation
+  whose quality can be verified by applying `A M^{-1}` to physics load bases
+  before launching the full Krylov loop.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
