@@ -218,6 +218,10 @@ def rhs1_xblock_krylov_method(env_value: str) -> tuple[str, bool]:
         return "lgmres", False
     if method in {"gcrot", "gcrotmk", "gcrot_mk"}:
         return "gcrotmk", False
+    if method in {"gmres_jax", "jax_gmres", "device_gmres"}:
+        return "gmres_jax", False
+    if method in {"fgmres", "fgmres_jax", "flexible_gmres", "flexiblegmres"}:
+        return "fgmres_jax", False
     if method in {"gmres", "lgmres", "bicgstab"}:
         return method, False
     return "gmres", bool(env_method)

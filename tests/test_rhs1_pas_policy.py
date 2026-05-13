@@ -246,6 +246,92 @@ def test_build_pas_tz_memory_fallback_uses_collision_when_schwarz_guard_fails(mo
     assert calls == ["collision"]
 
 
+def test_build_pas_tz_memory_fallback_prefers_tzfft_when_schwarz_guard_fails(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def unused_builder(**_kwargs):
+        calls.append("schwarz")
+        return "schwarz-preconditioner"
+
+    def hybrid_builder(**_kwargs):
+        calls.append("hybrid")
+        return "hybrid-preconditioner"
+
+    def collision_builder(**_kwargs):
+        calls.append("collision")
+        return "collision-preconditioner"
+
+    def tzfft_builder(**_kwargs):
+        calls.append("tzfft")
+
+        def _apply(value):
+            return value
+
+        return _apply
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "zeta")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK", "3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP", "1")
+    result = build_pas_tz_memory_fallback(
+        op=_op(n_species=2, n_theta=25, n_zeta=51, n_x=4, n_xi=100),
+        matvec_shard_axis=lambda _op: None,
+        device_count=lambda: 1,
+        theta_schwarz_builder=unused_builder,
+        zeta_schwarz_builder=unused_builder,
+        hybrid_builder=hybrid_builder,
+        collision_builder=collision_builder,
+        tzfft_builder=tzfft_builder,
+    )
+
+    assert calls == ["tzfft"]
+    assert getattr(result, "_sfincs_jax_pas_tz_guarded_fallback") is True
+    assert getattr(result, "_sfincs_jax_pas_tz_guarded_axis") == "tzfft"
+    metadata = getattr(result, "_sfincs_jax_pas_tz_guarded_metadata")
+    assert metadata["requested_axis"] == "zeta"
+    assert "using tzfft" in metadata["reason"]
+
+
+def test_build_pas_tz_memory_fallback_keeps_implicit_sharded_default_bounded(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", raising=False)
+    calls: list[str] = []
+
+    def unused_builder(**_kwargs):
+        calls.append("schwarz")
+        return "schwarz-preconditioner"
+
+    def hybrid_builder(**_kwargs):
+        calls.append("hybrid")
+        return "hybrid-preconditioner"
+
+    def collision_builder(**_kwargs):
+        calls.append("collision")
+        return "collision-preconditioner"
+
+    def tzfft_builder(**_kwargs):
+        calls.append("tzfft")
+
+        def _apply(value):
+            return value
+
+        return _apply
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_BLOCK", "3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_SCHWARZ_OVERLAP", "1")
+    result = build_pas_tz_memory_fallback(
+        op=_op(n_species=2, n_theta=25, n_zeta=51, n_x=4, n_xi=100),
+        matvec_shard_axis=lambda _op: "zeta",
+        device_count=lambda: 2,
+        theta_schwarz_builder=unused_builder,
+        zeta_schwarz_builder=unused_builder,
+        hybrid_builder=hybrid_builder,
+        collision_builder=collision_builder,
+        tzfft_builder=tzfft_builder,
+    )
+
+    assert result == "collision-preconditioner"
+    assert calls == ["collision"]
+
+
 def test_build_pas_tz_memory_fallback_defaults_to_collision_on_single_device(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", raising=False)
     calls: list[str] = []
