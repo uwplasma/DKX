@@ -498,6 +498,35 @@ def test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size(monkeypatch) ->
     assert result.gmres.x.shape == result.rhs.shape
 
 
+def test_xblock_sparse_pc_probe_coarse_uses_active_projected_directions(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX", "2")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        x0=jnp.zeros((op.total_size,)),
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_active_dof"] is True
+    assert result.metadata["xblock_probe_coarse_steps_requested"] == 1
+    assert result.metadata["xblock_probe_coarse_steps_accepted"] == 1
+    assert result.metadata["xblock_probe_coarse_direction_count"] == 8
+    assert result.metadata["xblock_probe_coarse_residual_after"] < result.metadata["xblock_probe_coarse_residual_before"]
+    assert any("probe-coarse improved seed residual" in msg for msg in messages)
+
+
 def test_xblock_sparse_pc_two_level_active_dof_projects_coarse_basis(monkeypatch) -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")

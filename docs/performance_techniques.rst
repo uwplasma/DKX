@@ -1667,6 +1667,21 @@ Controls:
   residual decreases. This is stronger than the scalar post-minres cleanup, but
   it also did not close the QI floor; the exact-xblock-LU policy above is the
   promoted route.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE`` (default: off): opt-in
+  pre-Krylov seed correction for explicit ``xblock_sparse_pc_gmres``. This uses
+  the same bounded least-squares correction basis as post-coarse, but applies it
+  to the side-probe or user-supplied initial state before the full Krylov solve.
+  On active-DOF solves the residual is expanded to full coordinates for
+  physics-aware basis construction and every candidate direction is projected
+  back to the active ``Nxi_for_x`` coordinate set before acceptance. The
+  scale-0.60 QI seed-3 CPU probe
+  ``docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_cpu.json`` used
+  this hook with ``32`` requested directions and ``fsavg_lmax=4``. The accepted
+  correction reduced the side-probe seed residual from ``2.57e-8`` to
+  ``1.43e-8`` in ``0.29 s``; the full solve then converged in ``222.5 s`` with
+  residual ratio ``3.43e-3``. This closes the bounded CPU hard-seed timeout, but
+  it remains off by default until the matching one-GPU hard-seed and wider
+  multi-seed gates pass.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL`` (default: off): opt-in two-level
   global-coupling preconditioner for explicit ``xblock_sparse_pc_gmres``. It
   builds a fixed low-dimensional coarse basis from RHS-like directions,

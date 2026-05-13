@@ -45,6 +45,7 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_auto_side_seed0_cpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_probe_coarse_seed3_cpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
