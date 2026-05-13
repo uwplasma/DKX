@@ -389,6 +389,14 @@ performance without changing the input file:
   controls include ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_STEPS`` and
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_DIRECTIONS``.
 
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE``: opt-in pre-Krylov seed
+  correction for explicit ``xblock_sparse_pc_gmres``. Set to ``1`` to apply the
+  same bounded coarse correction basis to a side-probe or supplied initial state
+  before the full Krylov solve. Related diagnostic controls include
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS`` and
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX``. This remains off by
+  default until both CPU and GPU QI hard-seed gates pass.
+
 - ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` (GMRES only): optional RHSMode=1 preconditioning.
 
   - ``point`` (or ``1``): point-block Jacobi on local (x,L) unknowns at each :math:`(\theta,\zeta)`.
