@@ -1680,8 +1680,13 @@ Controls:
   correction reduced the side-probe seed residual from ``2.57e-8`` to
   ``1.43e-8`` in ``0.29 s``; the full solve then converged in ``222.5 s`` with
   residual ratio ``3.43e-3``. This closes the bounded CPU hard-seed timeout, but
-  it remains off by default until the matching one-GPU hard-seed and wider
-  multi-seed gates pass.
+  it remains off by default. The matching one-GPU probe
+  ``docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json``
+  still timed out at ``360 s``: the side probe switched from left to right,
+  probe-coarse did not apply to a physical seed, and the GPU path advanced only
+  to about ``700`` matvecs before the timeout. The remaining GPU blocker is
+  therefore a device-resident/preconditioner-application issue, not an illegal
+  address crash or CPU convergence issue.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL`` (default: off): opt-in two-level
   global-coupling preconditioner for explicit ``xblock_sparse_pc_gmres``. It
   builds a fixed low-dimensional coarse basis from RHS-like directions,

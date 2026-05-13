@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 26,
+    "artifact_count": 27,
     "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
@@ -32,7 +32,7 @@
     "max_checked_per_axis_resolution_fraction": 0.6,
     "max_checked_total_size": 139502,
     "max_checked_total_size_fraction": 0.13676639849725786,
-    "nonpassing_artifact_count": 8,
+    "nonpassing_artifact_count": 9,
     "passing_artifact_count": 18,
     "production_total_size_uncovered_percent": 86.32
   },
@@ -611,6 +611,31 @@
       "max_residual_ratio": 0.003428864047793342,
       "passed": true,
       "path": "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_cpu.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "max_elapsed_s": 360.2497052932158,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json",
       "public_cli_default_path": false,
       "resolution": {
         "NTHETA": 15,
