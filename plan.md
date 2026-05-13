@@ -243,6 +243,17 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   algorithmic step is not another timeout increase or Krylov-name toggle; it
   needs a stronger GPU-compatible global-coupling preconditioner or a real
   assembled/operator-reuse path for host-Krylov QI hard seeds.
+- [ ] 2026-05-13 follow-up: a forced `office` GPU probe with
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE=1` plus the new probe-coarse
+  seed correction also timed out at `420 s`. The run selected the
+  left-preconditioned LGMRES rescue (`80` side-probe iterations, `82` matvecs,
+  residual ratio `8.51e4`) but never reached a solver trace or output. Process
+  telemetry showed about `20` CPU cores busy, `3.17 GB` RSS, and essentially
+  idle RTX A4000 memory/utilization, so this confirms forced host-LGMRES is
+  not a viable GPU-performance path. Do not spend more time on SciPy-host
+  LGMRES GPU toggles; the remaining QI GPU closure must be a device-resident
+  or assembled/reused active operator correction that makes the true residual
+  fall before the expensive Krylov loop.
 - [x] PAS/memory second-push result: added opt-in matrix-free tiny-update and
   candidate-size fail-fast gates, storage metadata, structured PAS-TZ guard
   metadata, and tests. This reduces wasted candidate work in bounded probes, but
