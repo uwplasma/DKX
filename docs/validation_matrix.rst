@@ -325,6 +325,7 @@ Current smoke artifact:
 - ``docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json``
 - ``docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json``
 - ``docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json``
+- ``docs/_static/qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json``
 
 Scope and status:
 
@@ -339,12 +340,12 @@ Scope and status:
   public method ``auto``, all seeds ``converged=true``, and maximum residual
   ratio below ``1e-6``. Treat it as runner and default-solver-policy evidence
   only, not a production-resolution robustness claim.
-- The current production-readiness manifest rolls in 24 checked artifacts:
-  17 passing bounded artifacts and 7 non-passing blocker artifacts. The largest
+- The current production-readiness manifest rolls in 25 checked artifacts:
+  17 passing bounded artifacts and 8 non-passing blocker artifacts. The largest
   passing and attempted bounded grid is ``15 x 31 x 60 x 5`` with active size
   ``81377`` and total size ``139502``. The remaining hard blocker is the
-  scale-0.60 one-GPU seed-3 solve; both solver-toggle probes and the newer
-  global-coupling/operator-reuse probes are documented as rejected evidence.
+  scale-0.60 one-GPU seed-3 solve; solver-toggle, global-coupling/operator-reuse,
+  and device-Krylov probes are documented as rejected evidence.
 
 Promotion gates:
 
