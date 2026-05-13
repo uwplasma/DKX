@@ -10603,3 +10603,76 @@ Next best steps:
    the hard seed, rather than more Krylov-method or side-selection toggles.
 4. Run a bounded PAS production-floor benchmark for the explicit `tzfft`
    demotion and guarded correction paths before any performance claim.
+
+## 2026-05-13 active assembled/operator-reuse push
+
+Goal: remove the implementation blocker where the opt-in RHSMode=1 x-block
+assembled/operator-reuse path rejected active-DOF systems using the full-system
+conservative CSR budget before slicing inactive `Nxi_for_x` modes.
+
+Implementation:
+
+- `SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR=1` now applies
+  `SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB` to the active
+  sliced operator when `SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1`.
+- Solver metadata now records whether the assembled preflight used `full` or
+  `active_dof` scope, plus both full-system and active-DOF CSR byte estimates
+  when the active route is used.
+- Added a regression that reproduces the prior failure mode: the full-system
+  CSR estimate exceeds the configured budget, the active sliced operator fits,
+  and the assembled operator is built and validated.
+- Added a structured active transport pattern builder that recognizes the
+  `_transport_active_dof_indices` ordering and builds the kinetic block as
+  `velocity_graph ⊗ angular_stencil`, appending Phi1/constraint tails
+  afterwards. This avoids materializing inactive pitch rows/columns and avoids
+  Python appends over every `(velocity, theta, zeta)` candidate on large reduced
+  FP/QI grids.
+
+Current evidence:
+
+- `pytest -q tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_assembled_operator_active_dof_uses_sliced_budget`:
+  `1 passed in 4.37 s` after the structured builder landed.
+- `ruff check sfincs_jax/v3_sparse_pattern.py tests/test_v3_sparse_pattern.py`: passed.
+- `python -m py_compile sfincs_jax/v3_sparse_pattern.py sfincs_jax/v3_driver.py`: passed.
+- Scale-0.60 QI seed-3 structural preflight at `15 x 31 x 60 x 5`, active size
+  `81377`, total size `139502`:
+  - old full-pattern build then slice: `250.04 s`, full pattern `376659300`
+    nonzeros, full CSR estimate `4520.47 MB`;
+  - active sliced pattern: `128174925` nonzeros, active CSR estimate
+    `1538.42 MB`;
+  - first active-only Python-loop builder: `174.56 s`;
+  - structured `velocity_graph ⊗ angular_stencil` builder: `1.19 s` for the
+    same active pattern and nonzero count.
+- Bounded dummy-matvec materialization preflight on the same active pattern:
+  `pattern_s=1.23 s`; graph coloring rejected in `0.88 s` with
+  `max_colors=64`. This is useful safety evidence: the code now reaches a fast
+  bounded rejection instead of spending minutes building the full inactive
+  pattern, but it also means a production assembled QI solve still needs a
+  defensible color/materialization policy before being promoted.
+
+Updated lane status:
+
+- QI seed-robustness / hard-seed solver lane: `98%`; unchanged until a hard-seed
+  residual run shows strict acceptance.
+- Assembled/operator-reuse lane: `94%`; active-DOF operator reuse is now
+  implemented, unit-tested, and no longer blocked by full-pattern materialization
+  on the scale-0.60 QI preflight. Remaining work is the actual graph-colored
+  numerical materialization/solve keep-drop gate: the active CSR pattern is still
+  large (`1.54 GB`), so the next probe must verify color count, matvec
+  materialization time, true residual, and memory before any production claim.
+- PAS-heavy memory/runtime: `94%`; no direct change in this pass.
+- Parallel transport workers: `92%`; no direct change in this pass.
+- Coverage/refactor path: `93%`; one focused solver-regression test added.
+
+Next best steps:
+
+1. Run one bounded scale-0.60 QI active assembled/operator-reuse materialization
+   probe with production `max_colors` and a strict 10-minute ceiling on CPU.
+   Abort before solve if graph coloring or numerical probing exceeds the
+   memory/time gate.
+2. If active assembled materialization is feasible, run the one-seed solve and
+   compare true residual/runtime/memory with the current LGMRES-rescue CPU
+   artifact. Only run GPU if CPU materially improves true residual or memory.
+3. If active assembled materialization is infeasible or does not reduce true
+   residual, keep it diagnostic and move to the stronger physics coarse-space
+   correction rather than adding more Krylov toggles.
