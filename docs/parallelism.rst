@@ -310,6 +310,24 @@ contracts for the benchmark run that will follow.
 
 Gate semantics are explicit in the plans:
 
+- All parallel benchmark plans include ``parallel_claim_scope`` from
+  ``audit_parallel_scaling_claim_scope``. This pure CI-safe audit labels the
+  artifact as independent ``whichRHS`` throughput, independent case throughput,
+  or experimental single-case sharding before any runtime/speedup claim is
+  considered.
+- The scope audit records whether the artifact is plan-only
+  (``artifact_kind="benchmark_plan"`` or ``launches_solves=false``), whether
+  measured timing results are present, and which follow-up speedup gate is
+  required. A plan-only artifact can prove launch semantics and claim scope, but
+  it cannot by itself prove runtime speedup or memory scaling. In JSON terms,
+  plan-only independent-work artifacts may set
+  ``claim_scope_release_eligible=true`` while keeping
+  ``release_scaling_supported=false`` until measured timing results pass the
+  named speedup gate.
+- Ambiguous artifacts fail closed. In particular, missing ``benchmark_kind``,
+  conflicting declared ``claim_scope``, or ``release_scaling_claim=true`` on a
+  plan-only artifact all produce explicit failures before any public scaling
+  claim can be made.
 - Transport-worker plans name
   ``audit_transport_parallel_scaling_summary`` as the release speedup gate and
   record that cold-start timings are rejected for warm scaling claims.
@@ -322,6 +340,11 @@ Gate semantics are explicit in the plans:
   ``benchmark_kind="single_case_sharded_solve"`` and
   ``release_scaling_claim=false``; their audit is a schema/honesty gate, not a
   release strong-scaling gate.
+- If a single-case sharded artifact sets ``release_scaling_claim=true``, the
+  scope audit fails before speedup is inspected. This keeps the public claim
+  precise: current production scaling is independent-work throughput; single
+  RHSMode=1 strong scaling remains experimental until it has reproducible
+  speedup, parity, and memory gates.
 - Multi-GPU case-throughput plans define throughput speedup as
   ``sequential_one_gpu.wall_s / parallel_two_gpu.wall_s`` but keep it
   non-release until measured wall time improves.

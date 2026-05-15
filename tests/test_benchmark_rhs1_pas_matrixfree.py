@@ -67,32 +67,39 @@ def _write_artifact(
     residual_norm: object = 1.0e-4,
     elapsed_s: float = 4.5,
     max_rss_mb: float = 123.0,
+    summary: dict[str, object] | None = None,
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
+    payload = {
+        "schema_version": 1,
+        "kind": "pas_tz_memory_fallback_benchmark",
+        "plan": {"input": target_input, "variants": ["tzfft_lgmres"]},
+        "results": [
             {
-                "schema_version": 1,
-                "kind": "pas_tz_memory_fallback_benchmark",
-                "plan": {"input": target_input, "variants": ["tzfft_lgmres"]},
-                "results": [
-                    {
-                        "status": "ok",
-                        "variant": "tzfft_lgmres",
-                        "residual_norm": residual_norm,
-                        "max_rss_mb": max_rss_mb,
-                        "elapsed_s": elapsed_s,
-                        "messages_tail": [
-                            "solve_v3_full_system_linear_gmres: total_size=1024",
-                            "solve_v3_full_system_linear_gmres: PAS constraint projection enabled (size=512/1024)",
-                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s)",
-                        ],
-                    }
+                "status": "ok",
+                "variant": "tzfft_lgmres",
+                "residual_norm": residual_norm,
+                "max_rss_mb": max_rss_mb,
+                "elapsed_s": elapsed_s,
+                "messages_tail": [
+                    "solve_v3_full_system_linear_gmres: total_size=1024",
+                    "solve_v3_full_system_linear_gmres: PAS constraint projection enabled (size=512/1024)",
+                    "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s)",
                 ],
-            },
-            allow_nan=True,
-        )
+            }
+        ],
+    }
+    payload["summary"] = (
+        {
+            "all_gates_passed": True,
+            "failed_variants": [],
+            "promotion_eligible_variants": ["tzfft_lgmres"],
+            "failure_reasons": {},
+        }
+        if summary is None
+        else summary
     )
+    path.write_text(json.dumps(payload, allow_nan=True))
     return path
 
 
@@ -133,10 +140,13 @@ def test_dry_run_writes_json_schema_without_subprocess(
     assert payload["plan"]["bounded_real_solve_probe"]["total_wall_timeout_budget_s"] <= 600.0
     assert payload["plan"]["bounded_real_solve_probe"]["gates"]["max_rss_mb"] == 4096.0
     assert payload["plan"]["bounded_real_solve_probe"]["gates"]["default_promotion_required"] is False
+    assert payload["plan"]["bounded_real_solve_probe"]["gates"]["candidate_byte_preflight_required"] is False
     assert payload["plan"]["bounded_real_solve_probe"]["safety_policy"]["invalid_targets_fail_closed"] is True
     assert set(payload["plan"]["gates"]) == {"keep", "reject"}
     assert payload["plan"]["cases"][0]["case_id"] == "diagonal_keep"
     assert payload["plan"]["cases"][0]["source_type"] == "synthetic"
+    assert payload["plan"]["cases"][0]["byte_preflight"]["preflight_kind"] == "rhs1_pas_matrixfree_candidate"
+    assert payload["plan"]["cases"][0]["byte_preflight"]["candidate_byte_budget_configured"] is False
     assert payload["plan"]["cases"][1]["expected_gate"] == "reject"
 
 
@@ -190,6 +200,34 @@ def test_child_payload_tiny_update_rejects_before_candidate_matvec() -> None:
     assert row["metrics"]["matvec_calls"] == 1
     assert row["metrics"]["correction_calls"] == 1
     assert row["gate_diagnostics"]["matrix_free_metadata"]["candidate_matvecs"] == 0
+
+
+def test_child_payload_candidate_budget_rejects_before_correction() -> None:
+    args = _parse_args(
+        [
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+            "--max-candidate-bytes",
+            "319",
+        ]
+    )
+    case = build_probe_cases(args)[0]
+
+    row = _child_payload(case)
+
+    assert row["status"] == "ok"
+    assert row["gate"] == "reject"
+    assert row["gate_reason"] == "candidate-memory-limit-exceeded"
+    assert row["byte_preflight"]["candidate_byte_budget_configured"] is True
+    assert row["byte_preflight"]["safe"] is False
+    assert row["byte_preflight"]["candidate_byte_budget_margin"] == -1
+    assert row["metrics"]["matvec_calls"] == 1
+    assert row["metrics"]["correction_calls"] == 0
+    metadata = row["gate_diagnostics"]["matrix_free_metadata"]
+    assert metadata["estimated_live_array_bytes"] == 320
+    assert metadata["max_candidate_bytes"] == 319
+    assert metadata["candidate_matvecs"] == 0
 
 
 def test_child_payload_rejects_nonfinite_candidate_with_json_safe_history() -> None:
@@ -297,6 +335,12 @@ def test_build_plan_includes_capped_geometry_metadata(tmp_path: Path) -> None:
     assert source["production_floor_target"] == "geometry11"
     assert source["species_count"] == 2
     assert source["estimated_full_unknowns"] == 19 * 59 * 60 * 5 * 2
+    assert metadata_case["production_floor_byte_preflight"]["dtype_assumption"] == (
+        "float64_conservative_production_floor"
+    )
+    assert metadata_case["production_floor_byte_preflight"]["estimated_live_array_bytes"] == (
+        19 * 59 * 60 * 5 * 2 * 8 * 5
+    )
 
 
 def test_production_floor_preflight_ready_from_metadata_and_checked_in_artifacts(
@@ -343,7 +387,12 @@ def test_production_floor_preflight_ready_from_metadata_and_checked_in_artifacts
     preflight = payload["plan"]["production_floor_preflight"]
     assert preflight["all_required_targets_ready"] is True
     assert set(preflight["ready_targets"]) == {"geometry4", "hsx", "geometry11"}
+    assert preflight["targets"]["geometry4"]["gates"]["candidate_byte_preflight"]["status"] == "pass"
+    assert preflight["targets"]["geometry4"]["gates"]["candidate_byte_preflight"][
+        "promotion_gate_passed"
+    ] is False
     assert payload["summary"]["production_floor_probe_ready"] is True
+    assert payload["summary"]["candidate_byte_preflight"]["promotion_safe_target_count"] == 0
     assert payload["summary"]["next_real_solve_recommendation"] == "proceed_to_short_real_solve_probe"
     real_solve = payload["plan"]["bounded_real_solve_probe"]
     assert real_solve["run_requested"] is False
@@ -424,6 +473,92 @@ def test_production_floor_preflight_requires_residual_runtime_memory_artifact_ga
     assert geom4_preflight["gates"]["checked_artifact_evidence"]["status"] == "fail"
 
 
+def test_production_floor_preflight_rejects_residual_clean_row_gate_failure(
+    tmp_path: Path,
+) -> None:
+    geom4 = _write_input(tmp_path, geometry_scheme=4, case_name="geometryScheme4_2species_PAS_noEr")
+    artifact = _write_artifact(
+        tmp_path / "artifacts" / "geometry4_residual_clean_but_slower.json",
+        target_input=str(geom4),
+        residual_norm=5.87e-8,
+        elapsed_s=12.0,
+        max_rss_mb=512.0,
+        summary={
+            "all_gates_passed": False,
+            "failed_variants": ["tzfft"],
+            "promotion_eligible_variants": [],
+            "failure_reasons": {"default_promotion:runtime-regression": 1},
+        },
+    )
+    args = _parse_args(
+        [
+            "--dry-run",
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+            str(geom4),
+            "--artifact-inputs",
+            str(artifact),
+        ]
+    )
+
+    plan = build_plan(args)
+
+    artifact_record = plan["artifact_probe"]["artifacts"][0]
+    row_gate = artifact_record["artifact_gates"]["row_gates"]
+    assert artifact_record["artifact_gates"]["residual"]["status"] == "pass"
+    assert artifact_record["artifact_gates"]["runtime"]["status"] == "pass"
+    assert artifact_record["artifact_gates"]["memory"]["status"] == "pass"
+    assert row_gate["status"] == "fail"
+    assert row_gate["reason"] == "artifact row gates failed"
+    assert row_gate["failed_variants"] == ["tzfft"]
+    assert row_gate["promotion_eligible_variants"] == []
+    assert row_gate["failure_reasons"] == {"default_promotion:runtime-regression": 1}
+    assert artifact_record["ready_evidence"] is False
+    geom4_preflight = plan["production_floor_preflight"]["targets"]["geometry4"]
+    assert geom4_preflight["ready"] is False
+    assert geom4_preflight["gates"]["checked_artifact_evidence"]["status"] == "fail"
+
+
+def test_artifact_probe_requires_row_gate_summary_for_ready_evidence(tmp_path: Path) -> None:
+    artifact = tmp_path / "artifacts" / "geometry4_legacy_without_summary.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "kind": "pas_tz_memory_fallback_benchmark",
+                "plan": {
+                    "input": "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+                    "variants": ["tzfft"],
+                },
+                "results": [
+                    {
+                        "status": "ok",
+                        "variant": "tzfft",
+                        "residual_norm": 5.87e-8,
+                        "max_rss_mb": 512.0,
+                        "elapsed_s": 12.0,
+                        "messages_tail": [
+                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded fallback active"
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+
+    probe = build_artifact_probe([artifact])
+
+    row = probe["artifacts"][0]
+    assert row["artifact_gates"]["residual"]["status"] == "pass"
+    assert row["artifact_gates"]["runtime"]["status"] == "pass"
+    assert row["artifact_gates"]["memory"]["status"] == "pass"
+    assert row["artifact_gates"]["row_gates"]["status"] == "fail"
+    assert row["artifact_gates"]["row_gates"]["reason"] == "missing-artifact-row-gate-summary"
+    assert row["ready_evidence"] is False
+
+
 def test_artifact_probe_is_json_safe_for_nonfinite_residual(tmp_path: Path) -> None:
     artifact = _write_artifact(
         tmp_path / "artifacts" / "geometry4_nan.json",
@@ -477,6 +612,8 @@ def test_opt_in_production_real_solve_probe_runs_ready_targets_with_parent_bound
             *(str(path) for path in artifacts),
             "--production-solve-timeout-s",
             "30",
+            "--max-candidate-bytes",
+            "1000000000",
         ]
     )
     plan = build_plan(args)
@@ -529,6 +666,8 @@ def test_opt_in_production_real_solve_probe_caps_selected_targets_to_total_budge
             str(hsx),
             "--artifact-inputs",
             *(str(path) for path in artifacts),
+            "--max-candidate-bytes",
+            "1000000000",
         ]
     )
 
@@ -580,6 +719,8 @@ def test_opt_in_production_real_solve_probe_selects_requested_target_aliases(
                 str(geom11),
                 "--artifact-inputs",
                 *(str(path) for path in artifacts),
+                "--max-candidate-bytes",
+                "1000000000",
                 "--production-solve-targets",
                 requested,
             ]
@@ -621,6 +762,8 @@ def test_production_real_solve_probe_propagates_default_promotion_gate(
             "--production-solve-targets",
             "geometry4",
             "--production-solve-require-default-promotion-gate",
+            "--max-candidate-bytes",
+            "1000000",
             "--production-solve-baseline-elapsed-s",
             "50",
             "--production-solve-baseline-rss-mb",
@@ -637,6 +780,7 @@ def test_production_real_solve_probe_propagates_default_promotion_gate(
     command = real_solve["targets"]["geometry4"]["command"]
 
     assert real_solve["gates"]["default_promotion_required"] is True
+    assert real_solve["gates"]["candidate_byte_preflight_required"] is True
     assert real_solve["gates"]["baseline_elapsed_s"] == 50.0
     assert real_solve["gates"]["baseline_rss_mb"] == 4000.0
     assert "--require-default-promotion-gate" in command
@@ -662,6 +806,113 @@ def test_production_real_solve_promotion_gate_requires_baselines(tmp_path: Path)
         assert exc.code == 2
     else:
         raise AssertionError("expected parser failure for missing promotion baselines")
+
+
+def test_production_real_solve_promotion_gate_requires_candidate_byte_budget(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "probe.json"
+
+    try:
+        main(
+            [
+                "--dry-run",
+                "--out",
+                str(out),
+                "--production-solve-require-default-promotion-gate",
+                "--production-solve-baseline-elapsed-s",
+                "50",
+                "--production-solve-baseline-rss-mb",
+                "4000",
+            ]
+        )
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected parser failure for missing candidate-byte promotion budget")
+
+
+def test_production_real_solve_probe_requires_candidate_byte_budget_by_default(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "probe.json"
+
+    try:
+        main(
+            [
+                "--dry-run",
+                "--out",
+                str(out),
+                "--run-production-solve-probe",
+            ]
+        )
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected parser failure for missing candidate-byte budget")
+
+
+def test_production_real_solve_probe_can_explicitly_allow_unbudgeted_candidates(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "probe.json"
+
+    rc = main(
+        [
+            "--dry-run",
+            "--out",
+            str(out),
+            "--run-production-solve-probe",
+            "--production-solve-allow-unbudgeted-candidate",
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(out.read_text())
+    real_solve = payload["plan"]["bounded_real_solve_probe"]
+    assert real_solve["safety_policy"]["requires_candidate_byte_budget_by_default"] is True
+    assert real_solve["safety_policy"]["allow_unbudgeted_candidate"] is True
+    assert real_solve["gates"]["candidate_byte_preflight_required"] is False
+
+
+def test_production_real_solve_promotion_gate_refuses_unsafe_byte_preflight(
+    tmp_path: Path,
+) -> None:
+    geom4 = _write_input(tmp_path, geometry_scheme=4, case_name="geometryScheme4_2species_PAS_noEr")
+    artifact = _write_artifact(tmp_path / "artifacts" / "geometry4.json", target_input=str(geom4))
+    args = _parse_args(
+        [
+            "--run-production-solve-probe",
+            "--out",
+            str(tmp_path / "probe.json"),
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+            str(geom4),
+            "--artifact-inputs",
+            str(artifact),
+            "--production-solve-targets",
+            "geometry4",
+            "--production-solve-require-default-promotion-gate",
+            "--production-solve-baseline-elapsed-s",
+            "50",
+            "--production-solve-baseline-rss-mb",
+            "4000",
+            "--max-candidate-bytes",
+            "1",
+        ]
+    )
+
+    plan = build_plan(args)
+    gate = plan["production_floor_preflight"]["targets"]["geometry4"]["gates"]["candidate_byte_preflight"]
+    real_solve = plan["bounded_real_solve_probe"]
+
+    assert gate["status"] == "fail"
+    assert gate["promotion_gate_passed"] is False
+    assert gate["unsafe_count"] == 1
+    assert real_solve["targets"]["geometry4"]["selected_by_budget"] is False
+    assert real_solve["targets"]["geometry4"]["will_run"] is False
+    assert real_solve["targets"]["geometry4"]["skip_reason"] == "candidate-byte-preflight-not-promotion-safe"
 
 
 def test_production_real_solve_probe_rejects_unknown_target_without_fallback(
@@ -705,6 +956,8 @@ def test_dry_run_never_launches_opt_in_production_real_solve(tmp_path: Path, mon
             "--systems",
             "diagonal_keep",
             "--metadata-inputs",
+            "--max-candidate-bytes",
+            "1000000",
         ]
     )
 

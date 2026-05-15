@@ -575,6 +575,260 @@ def test_qi_seed_scale060_device_krylov_rejected_artifact_records_blockers() -> 
     assert any("method=fgmres_jax" in " ".join(probe["observed_progress"]) for probe in probes)
 
 
+def test_qi_seed_scale060_device_operator_rejected_artifact_records_blocker() -> None:
+    payload = json.loads(
+        Path("docs/_static/qi_seed_robustness_scale060_device_operator_rejected_2026_05_13.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert payload["artifact_kind"] == "qi_seed_device_operator_rejected_probe"
+    assert payload["lane"] == "qi_seed_robustness"
+    assert payload["resolution"] == {"NTHETA": 15, "NZETA": 31, "NXI": 60, "NX": 5}
+    assert payload["active_size"] == 81377
+    assert payload["total_size"] == 139502
+    probe = payload["device_operator_probe"]
+    assert probe["backend"] == "gpu"
+    assert probe["operator_device_resident"] is True
+    assert probe["assembled_operator_nnz"] == 2884321
+    assert probe["assembled_operator_setup_s"] == pytest.approx(83.587)
+    assert probe["matvec_progress"][-1] == {"matvecs": 400, "elapsed_s": pytest.approx(505.695)}
+    assert probe["output_written"] is False
+    assert probe["solver_trace_written"] is False
+    assert probe["promotion_decision"] == "rejected_timeout_after_device_operator_build"
+    short_recurrence = payload["bicgstab_device_probe"]
+    assert short_recurrence["backend"] == "gpu"
+    assert short_recurrence["operator_device_resident"] is True
+    assert short_recurrence["assembled_operator_nnz"] == 2884321
+    assert short_recurrence["assembled_operator_setup_s"] == pytest.approx(84.767)
+    assert short_recurrence["output_written"] is False
+    assert short_recurrence["solver_trace_written"] is False
+    assert short_recurrence["promotion_decision"] == "rejected_divergent_short_recurrence"
+    assert short_recurrence["reported_residual_norm"] > 1.0e100
+    assert short_recurrence["memory_reduction_vs_device_fgmres_percent"] > 60.0
+    tfqmr = payload["tfqmr_device_probe"]
+    assert tfqmr["backend"] == "gpu"
+    assert tfqmr["operator_device_resident"] is True
+    assert tfqmr["assembled_operator_nnz"] == 2884321
+    assert tfqmr["krylov_method"] == "tfqmr_jax"
+    assert tfqmr["residual_replacement_interval"] == 0
+    assert tfqmr["reported_iterations"] == 401
+    assert tfqmr["output_written"] is False
+    assert tfqmr["promotion_decision"] == "rejected_divergent_tfqmr"
+    assert tfqmr["reported_residual_norm"] > 1.0e100
+    tfqmr_replaced = payload["tfqmr_replacement20_device_probe"]
+    assert tfqmr_replaced["backend"] == "gpu"
+    assert tfqmr_replaced["operator_device_resident"] is True
+    assert tfqmr_replaced["krylov_method"] == "tfqmr_jax"
+    assert tfqmr_replaced["residual_replacement_interval"] == 20
+    assert tfqmr_replaced["reported_iterations"] == 21
+    assert tfqmr_replaced["outer_elapsed_s"] < tfqmr["outer_elapsed_s"]
+    assert tfqmr_replaced["output_written"] is False
+    assert tfqmr_replaced["promotion_decision"] == "rejected_divergent_tfqmr_residual_replacement"
+    assert tfqmr_replaced["reported_residual_norm"] > 1.0e100
+    qr_global = payload["device_global_qr_fgmres_probe"]
+    assert qr_global["backend"] == "gpu"
+    assert qr_global["operator_device_resident"] is True
+    assert qr_global["coarse_solver"] == "qr"
+    assert qr_global["global_coupling_rank"] == 20
+    assert qr_global["global_coupling_basis_size"] == 20
+    assert qr_global["reported_matvecs"] == 475
+    assert qr_global["timed_out"] is True
+    assert qr_global["output_written"] is False
+    assert qr_global["promotion_decision"] == "rejected_timeout_device_global_qr_fgmres"
+    qr_identity = payload["device_global_qr_identity_probe_coarse_probe"]
+    assert qr_identity["backend"] == "gpu"
+    assert qr_identity["operator_device_resident"] is True
+    assert qr_identity["coarse_solver"] == "qr"
+    assert qr_identity["global_coupling_smoother"] == "identity"
+    assert qr_identity["global_coupling_rank"] == 30
+    assert qr_identity["probe_coarse_seed_initialized"] is True
+    assert qr_identity["probe_coarse_residual_after"] < qr_identity["probe_coarse_residual_before"]
+    assert qr_identity["reported_matvecs"] == 400
+    assert qr_identity["timed_out"] is True
+    assert qr_identity["output_written"] is False
+    assert qr_identity["promotion_decision"] == "rejected_timeout_identity_global_qr_probe_coarse_fgmres"
+    restarted = payload["fgmres_restart20_device_probe"]
+    assert restarted["backend"] == "gpu"
+    assert restarted["operator_device_resident"] is True
+    assert restarted["assembled_operator_nnz"] == 2884321
+    assert restarted["assembled_operator_setup_s"] == pytest.approx(83.809)
+    assert restarted["krylov_method"] == "fgmres_jax"
+    assert restarted["restart"] == 20
+    assert restarted["reported_matvecs"] == 500
+    assert restarted["output_written"] is False
+    assert restarted["solver_trace_written"] is False
+    assert restarted["promotion_decision"] == "rejected_timeout_restart20_host_memory_regression"
+    assert restarted["memory_change_vs_device_fgmres_percent"] > 0.0
+    synchronized = payload["fgmres_restart20_cycle_sync_device_probe"]
+    assert synchronized["backend"] == "gpu"
+    assert synchronized["operator_device_resident"] is True
+    assert synchronized["block_between_cycles"] is True
+    assert synchronized["assembled_operator_nnz"] == 2884321
+    assert synchronized["assembled_operator_setup_s"] == pytest.approx(82.525)
+    assert synchronized["krylov_method"] == "fgmres_jax"
+    assert synchronized["restart"] == 20
+    assert synchronized["reported_matvecs"] == 500
+    assert synchronized["output_written"] is False
+    assert synchronized["solver_trace_written"] is False
+    assert synchronized["promotion_decision"] == "rejected_timeout_cycle_sync_no_memory_gain"
+    assert synchronized["memory_change_vs_restart20_percent"] > 0.0
+    compact = payload["device_compact_csr_exact_xblock_probe"]
+    assert compact["backend"] == "gpu"
+    assert compact["factor_format"] == "compact_csr"
+    assert compact["krylov_method"] == "gmres_jax"
+    assert compact["precondition_side"] == "left"
+    assert compact["xblock_lu_max"] == 30000
+    assert compact["xblock_factor_row_cap"] == 0
+    assert compact["lower_factor_nnz"] == 110063331
+    assert compact["upper_factor_nnz"] == 119280365
+    assert compact["factor_nbytes_estimate"] == 2755472392
+    assert compact["assembled_operator_reuse"] == "requested_but_rejected_max_colors_512"
+    assert compact["timed_out"] is True
+    assert compact["output_written"] is False
+    assert compact["solver_trace_written"] is False
+    assert compact["reported_residual_norm"] is None
+    assert compact["promotion_decision"] == "rejected"
+    assert "memory improvement, not QI closure" in compact["conclusion"]
+    assert payload["execution_summary"]["timed_out"] == 1
+    assert any("assembled operator built location=device" in line for line in payload["observed_progress"])
+    assert any("method=bicgstab_jax" in line for line in payload["observed_progress"])
+    assert any("method=tfqmr_jax" in line for line in payload["observed_progress"])
+    assert any("coarse_solver=qr" in line for line in payload["observed_progress"])
+    assert any("cycle-boundary synchronization enabled" in line for line in payload["observed_progress"])
+
+
+def test_qi_seed_scale060_no_lgmres_gpu_timeout_artifact_records_blocker() -> None:
+    payload = json.loads(
+        Path("docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_no_lgmres_timeout_2026_05_14.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert payload["artifact_kind"] == "qi_seed_execution_summary"
+    assert payload["gates"]["passed"] is False
+    assert payload["resolution"] == {"NTHETA": 15, "NZETA": 31, "NXI": 60, "NX": 5}
+    assert payload["active_size"] == 81377
+    assert payload["total_size_estimate"] == 139502
+    seed = payload["seeds"][0]
+    assert seed["timed_out"] is True
+    assert seed["heartbeat_count"] == 31
+    assert seed["last_matvecs"] == 900
+    assert seed["last_matvec_elapsed_s"] == pytest.approx(412.719)
+    assert seed["output_exists"] is False
+    assert seed["solver_trace_exists"] is False
+    assert any("side probe switch side=left->right method=gmres->gmres" in line for line in seed["progress_events"])
+    assert any("probe-coarse improved seed residual" in line for line in seed["progress_events"])
+
+
+def test_qi_seed_scale060_angular_residual_cpu_artifact_passes() -> None:
+    payload = json.loads(
+        Path(
+            "docs/_static/"
+            "qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert payload["artifact_kind"] == "qi_seed_execution_summary"
+    assert payload["gates"]["passed"] is True
+    assert payload["active_size"] == 81377
+    assert payload["total_size_estimate"] == 139502
+    assert payload["execution_summary"]["backends"] == ["cpu"]
+    assert payload["execution_summary"]["process_passed"] == 1
+    assert payload["execution_summary"]["accepted_converged"] == 1
+    assert payload["execution_summary"]["max_elapsed_s"] < 180.0
+    assert payload["execution_summary"]["max_residual_ratio"] < 0.003
+    seed = payload["seeds"][0]
+    assert seed["last_matvecs"] == 2024
+    assert seed["xblock_side_probe_selected_method"] == "lgmres"
+    assert seed["xblock_lgmres_rescue_status"] == "used"
+    assert any("probe-coarse improved seed residual" in line for line in seed["progress_events"])
+
+
+def test_qi_seed_scale060_device_host_fallback_cpu_artifact_passes() -> None:
+    payload = json.loads(
+        Path("docs/_static/qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert payload["artifact_kind"] == "qi_seed_execution_summary"
+    assert payload["gates"]["passed"] is True
+    assert payload["active_size"] == 81377
+    assert payload["total_size_estimate"] == 139502
+    assert payload["execution_summary"]["backends"] == ["cpu"]
+    assert payload["execution_summary"]["process_passed"] == 1
+    assert payload["execution_summary"]["accepted_converged"] == 1
+    assert payload["execution_summary"]["max_elapsed_s"] < 180.0
+    assert payload["execution_summary"]["max_residual_ratio"] < 0.01
+    seed = payload["seeds"][0]
+    assert seed["last_matvecs"] == 1789
+    assert seed["xblock_side_probe_selected_method"] == "lgmres"
+    assert seed["xblock_lgmres_rescue_status"] == "used"
+    assert seed["xblock_device_host_fallback_used"] is True
+    assert seed["xblock_device_host_fallback_reason"] == "large-qi-full-fp-3d"
+    assert seed["xblock_device_host_fallback_requested_method"] == "gmres_jax"
+    assert seed["xblock_device_host_fallback_effective_krylov_env_value"] == "auto"
+    assert seed["xblock_device_host_fallback_non_autodiff"] is True
+    assert any("using non-autodiff host x-block fallback" in line for line in seed["progress_events"])
+
+
+def test_qi_seed_scale060_lower_fill_artifacts_record_memory_convergence_tradeoff() -> None:
+    for artifact in (
+        "docs/_static/qi_seed_robustness_scale060_lower_fill_seed3_cpu_rejected_2026_05_14.json",
+        "docs/_static/qi_seed_robustness_scale060_lower_fill8_seed3_cpu_rejected_2026_05_14.json",
+    ):
+        payload = json.loads(Path(artifact).read_text(encoding="utf-8"))
+        assert payload["artifact_kind"] == "qi_seed_execution_summary"
+        assert payload["gates"]["passed"] is False
+        assert payload["active_size"] == 81377
+        assert payload["total_size_estimate"] == 139502
+        seed = payload["seeds"][0]
+        assert seed["returncode"] == 2
+        assert seed["output_exists"] is False
+        assert seed["solver_trace_exists"] is False
+        assert seed["last_matvecs"] == 14835
+        assert seed["xblock_lgmres_rescue_status"] == "used"
+        assert any("sparse_ilu:" in line for line in seed["progress_events"])
+        assert any("Refusing to write nonconverged" in line for line in seed["progress_events"])
+
+
+def test_qi_seed_scale060_enriched_and_device_krylov_artifacts_remain_rejected() -> None:
+    enriched_cpu = json.loads(
+        Path(
+            "docs/_static/qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert enriched_cpu["gates"]["passed"] is False
+    assert "performance_regression" in enriched_cpu["performance_rejection"]
+    assert enriched_cpu["execution_summary"]["process_passed"] == 1
+    assert enriched_cpu["execution_summary"]["max_elapsed_s"] > 250.0
+    assert enriched_cpu["seeds"][0]["last_matvecs"] == 3298
+
+    gpu_no_lgmres = json.loads(
+        Path(
+            "docs/_static/"
+            "qi_seed_robustness_scale060_enriched_angular_seed3_gpu0_no_lgmres_timeout_2026_05_14.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert gpu_no_lgmres["gates"]["passed"] is False
+    assert gpu_no_lgmres["active_size"] == 81377
+    assert gpu_no_lgmres["seeds"][0]["timed_out"] is True
+    assert gpu_no_lgmres["seeds"][0]["last_matvecs"] == 925
+    assert gpu_no_lgmres["seeds"][0]["xblock_lgmres_rescue_status"] == "not_selected"
+
+    device_krylov = json.loads(
+        Path(
+            "docs/_static/qi_seed_robustness_scale060_device_krylov_enriched_seed3_gpu1_timeout_2026_05_14.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert device_krylov["gates"]["passed"] is False
+    assert device_krylov["active_size"] == 81377
+    assert device_krylov["seeds"][0]["timed_out"] is True
+    assert device_krylov["seeds"][0]["last_matvecs"] is None
+    assert any("QI coarse seed improved residual" in line for line in device_krylov["seeds"][0]["progress_events"])
+
+
 def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     path = Path("docs/_static/qi_seed_robustness_evidence_manifest.json")
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -594,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 27
-    assert current["passing_artifact_count"] == 18
-    assert current["nonpassing_artifact_count"] == 9
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 51
+    assert current["passing_artifact_count"] == 21
+    assert current["nonpassing_artifact_count"] == 30
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -631,12 +885,36 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json",
         "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_cpu.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_cpu_2026_05_14.json",
+        "docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json",
+        "docs/_static/qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json",
+        "docs/_static/qi_seed_robustness_scale060_lower_fill_seed3_cpu_rejected_2026_05_14.json",
+        "docs/_static/qi_seed_robustness_scale060_lower_fill8_seed3_cpu_rejected_2026_05_14.json",
         "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_heartbeat_timeout_2026_05_14.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_no_lgmres_timeout_2026_05_14.json",
+        "docs/_static/qi_seed_robustness_scale060_enriched_angular_seed3_gpu0_no_lgmres_timeout_2026_05_14.json",
+        "docs/_static/qi_seed_robustness_scale060_device_krylov_enriched_seed3_gpu1_timeout_2026_05_14.json",
+        "docs/_static/qi_seed_robustness_scale060_device_krylov_skip_side_probe_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_device_krylov_compact_no_moment_seed3_gpu1_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_device_krylov_compact_right_restart20_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_restart20_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_restart4_diag_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_diag_factor_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_diag_exact_lu_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_exact_cap16_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_diag_left_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_diag_left_gmres_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_galerkin_failclosed_seed3_gpu0_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_galerkin_forced_xblock_seed3_gpu1_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu0_2026_05_15_retry.json",
         "docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
         "docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json",
         "docs/_static/qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json",
+        "docs/_static/qi_seed_robustness_scale060_device_operator_rejected_2026_05_13.json",
     } == source_paths
 
     rejected_global = next(
@@ -656,6 +934,16 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert rejected_device["passed"] is False
     assert rejected_device["backends"] == ["gpu"]
     assert rejected_device["max_elapsed_s"] > 250.0
+    rejected_device_operator = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"] == "docs/_static/qi_seed_robustness_scale060_device_operator_rejected_2026_05_13.json"
+    )
+    assert rejected_device_operator["passed"] is False
+    assert rejected_device_operator["backends"] == ["gpu"]
+    assert rejected_device_operator["active_size"] == 81377
+    assert rejected_device_operator["total_size"] == 139502
+    assert rejected_device_operator["max_elapsed_s"] > 500.0
     probe_coarse_cpu = next(
         artifact
         for artifact in payload["source_artifacts"]
@@ -666,6 +954,46 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert probe_coarse_cpu["active_size"] == 81377
     assert probe_coarse_cpu["total_size"] == 139502
     assert probe_coarse_cpu["max_residual_ratio"] < 0.01
+    qi_coarse_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"] == "docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_cpu_2026_05_14.json"
+    )
+    assert qi_coarse_cpu["passed"] is True
+    assert qi_coarse_cpu["backends"] == ["cpu"]
+    assert qi_coarse_cpu["active_size"] == 81377
+    assert qi_coarse_cpu["total_size"] == 139502
+    assert qi_coarse_cpu["max_residual_ratio"] < 0.01
+    angular_residual_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json"
+    )
+    assert angular_residual_cpu["passed"] is True
+    assert angular_residual_cpu["active_size"] == 81377
+    assert angular_residual_cpu["total_size"] == 139502
+    assert angular_residual_cpu["max_elapsed_s"] < qi_coarse_cpu["max_elapsed_s"]
+    host_fallback_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json"
+    )
+    assert host_fallback_cpu["passed"] is True
+    assert host_fallback_cpu["backends"] == ["cpu"]
+    assert host_fallback_cpu["active_size"] == 81377
+    assert host_fallback_cpu["total_size"] == 139502
+    assert host_fallback_cpu["max_elapsed_s"] < 180.0
+    assert host_fallback_cpu["max_residual_ratio"] < 0.01
+    lower_fill = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"] == "docs/_static/qi_seed_robustness_scale060_lower_fill_seed3_cpu_rejected_2026_05_14.json"
+    )
+    assert lower_fill["passed"] is False
+    assert lower_fill["active_size"] == 81377
+    assert lower_fill["total_size"] == 139502
     probe_coarse_gpu = next(
         artifact
         for artifact in payload["source_artifacts"]
@@ -674,6 +1002,75 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert probe_coarse_gpu["passed"] is False
     assert probe_coarse_gpu["total_size"] == 139502
     assert probe_coarse_gpu["max_elapsed_s"] > 350.0
+    qi_coarse_gpu_timeout = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_heartbeat_timeout_2026_05_14.json"
+    )
+    assert qi_coarse_gpu_timeout["passed"] is False
+    assert qi_coarse_gpu_timeout["active_size"] == 81377
+    assert qi_coarse_gpu_timeout["total_size"] == 139502
+    assert qi_coarse_gpu_timeout["max_elapsed_s"] > 420.0
+    qi_coarse_gpu_no_lgmres_timeout = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_no_lgmres_timeout_2026_05_14.json"
+    )
+    assert qi_coarse_gpu_no_lgmres_timeout["passed"] is False
+    assert qi_coarse_gpu_no_lgmres_timeout["active_size"] == 81377
+    assert qi_coarse_gpu_no_lgmres_timeout["total_size"] == 139502
+    assert qi_coarse_gpu_no_lgmres_timeout["max_elapsed_s"] > 420.0
+    enriched_gpu_timeout = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_enriched_angular_seed3_gpu0_no_lgmres_timeout_2026_05_14.json"
+    )
+    assert enriched_gpu_timeout["passed"] is False
+    assert enriched_gpu_timeout["active_size"] == 81377
+    assert enriched_gpu_timeout["total_size"] == 139502
+    compact_no_moment_timeout = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_device_krylov_compact_no_moment_seed3_gpu1_2026_05_15.json"
+    )
+    assert compact_no_moment_timeout["passed"] is False
+    assert compact_no_moment_timeout["active_size"] == 81377
+    assert compact_no_moment_timeout["total_size"] == 139502
+    assert compact_no_moment_timeout["max_elapsed_s"] > 470.0
+    cycle_restart4_timeout = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_restart4_diag_seed3_gpu0_2026_05_15.json"
+    )
+    assert cycle_restart4_timeout["passed"] is False
+    assert cycle_restart4_timeout["active_size"] == 81377
+    assert cycle_restart4_timeout["total_size"] == 139502
+    assert cycle_restart4_timeout["max_elapsed_s"] > 350.0
+    diag_factor_rejected = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_diag_factor_seed3_gpu0_2026_05_15.json"
+    )
+    assert diag_factor_rejected["passed"] is False
+    assert diag_factor_rejected["active_size"] == 81377
+    assert diag_factor_rejected["total_size"] == 139502
+    assert 120.0 < diag_factor_rejected["max_elapsed_s"] < 180.0
+    exact_cap16_rejected = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_device_cycle_jit_exact_cap16_seed3_gpu0_2026_05_15.json"
+    )
+    assert exact_cap16_rejected["passed"] is False
+    assert exact_cap16_rejected["active_size"] == 81377
+    assert exact_cap16_rejected["total_size"] == 139502
+    assert exact_cap16_rejected["max_elapsed_s"] > diag_factor_rejected["max_elapsed_s"]
 
     gates = payload["acceptance_gates"]
     assert gates["public_cli_default_path"] is True

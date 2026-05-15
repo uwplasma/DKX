@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from sfincs_jax.transport_parallel_policy import (
+    audit_parallel_scaling_claim_scope,
     audit_sharded_solve_scaling_summary,
     audit_transport_parallel_scaling_summary,
 )
@@ -97,6 +98,91 @@ def test_audit_transport_parallel_scaling_summary_accepts_release_grade_gpu_work
     assert audit.deterministic_output_check
     assert audit.timing_semantics == "cache_warm"
     assert audit.failures == ()
+
+
+def test_parallel_scaling_claim_scope_distinguishes_throughput_from_single_case() -> None:
+    transport_scope = audit_parallel_scaling_claim_scope(
+        {
+            "benchmark_kind": "transport_worker_scaling",
+            "backend": "cpu",
+            "rhs_count": 3,
+            "workers": [1, 2],
+        }
+    )
+    assert transport_scope.claim_scope == "independent_transport_worker_throughput"
+    assert transport_scope.claim_scope_release_eligible
+    assert not transport_scope.release_scaling_supported
+    assert not transport_scope.unsupported_single_case_strong_scaling
+    assert transport_scope.release_gate_required == "audit_transport_parallel_scaling_summary"
+
+    sharded_scope = audit_parallel_scaling_claim_scope(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "backend": "gpu",
+            "scaling_status": "experimental_single_case_sharding",
+            "release_scaling_claim": True,
+            "devices": [1, 2],
+        }
+    )
+    assert sharded_scope.claim_scope == "single_case_sharded_solve_experimental"
+    assert not sharded_scope.release_scaling_supported
+    assert sharded_scope.unsupported_single_case_strong_scaling
+    assert any("release_scaling_claim=true" in failure for failure in sharded_scope.failures)
+
+    throughput_scope = audit_parallel_scaling_claim_scope(
+        {
+            "benchmark_kind": "multi_gpu_case_throughput",
+            "backend": "gpu",
+            "required_gpu_count": 2,
+            "release_scaling_claim": False,
+        }
+    )
+    assert throughput_scope.claim_scope == "independent_case_throughput_non_release"
+    assert not throughput_scope.release_scaling_supported
+    assert not throughput_scope.unsupported_single_case_strong_scaling
+
+
+def test_parallel_scaling_claim_scope_fails_closed_for_ambiguous_or_overclaimed_artifacts() -> None:
+    ambiguous = audit_parallel_scaling_claim_scope(
+        {
+            "backend": "cpu",
+            "rhs_count": 3,
+            "workers": [1, 2],
+        }
+    )
+    assert not ambiguous.release_scaling_supported
+    assert any("explicit benchmark_kind" in failure for failure in ambiguous.failures)
+
+    plan_overclaim = audit_parallel_scaling_claim_scope(
+        {
+            "artifact_kind": "benchmark_plan",
+            "benchmark_kind": "transport_worker_scaling",
+            "backend": "cpu",
+            "launches_solves": False,
+            "release_scaling_claim": True,
+            "rhs_count": 3,
+            "workers": [1, 2],
+        }
+    )
+    assert plan_overclaim.plan_only_scope_evidence
+    assert not plan_overclaim.measured_results_present
+    assert not plan_overclaim.claim_scope_release_eligible
+    assert not plan_overclaim.release_scaling_supported
+    assert any("plan-only" in failure for failure in plan_overclaim.failures)
+    assert any("measured timing results" in failure for failure in plan_overclaim.failures)
+
+    conflicting_scope = audit_parallel_scaling_claim_scope(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "backend": "gpu",
+            "claim_scope": "independent_transport_worker_throughput",
+            "scaling_status": "experimental_single_case_sharding",
+            "release_scaling_claim": False,
+            "devices": [1, 2],
+        }
+    )
+    assert conflicting_scope.claim_scope == "single_case_sharded_solve_experimental"
+    assert any("conflicts" in failure for failure in conflicting_scope.failures)
 
 
 def test_audit_transport_parallel_scaling_summary_reports_weak_claim_gates() -> None:

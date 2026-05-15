@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import json
 import os
 import subprocess
@@ -12,7 +13,10 @@ import jax
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.transport_parallel_policy import audit_sharded_solve_scaling_summary
+from sfincs_jax.transport_parallel_policy import (
+    audit_parallel_scaling_claim_scope,
+    audit_sharded_solve_scaling_summary,
+)
 from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
 
 
@@ -395,7 +399,7 @@ def _build_sharded_solve_benchmark_plan(
                 ],
             }
         )
-    return {
+    plan = {
         "artifact_kind": "benchmark_plan",
         "benchmark_kind": "single_case_sharded_solve",
         "scaling_status": "experimental_single_case_sharding",
@@ -464,6 +468,8 @@ def _build_sharded_solve_benchmark_plan(
             repo_root=repo_root,
         ),
     }
+    plan["parallel_claim_scope"] = asdict(audit_parallel_scaling_claim_scope(plan))
+    return plan
 
 
 def _write_plan_json(plan: dict[str, object], path: Path) -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import json
 import os
 import time
@@ -11,7 +12,10 @@ import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.transport_matrix import transport_matrix_size_from_rhs_mode
-from sfincs_jax.transport_parallel_policy import audit_transport_parallel_scaling_summary
+from sfincs_jax.transport_parallel_policy import (
+    audit_parallel_scaling_claim_scope,
+    audit_transport_parallel_scaling_summary,
+)
 from sfincs_jax.transport_parallel_runtime import partition_transport_rhs
 from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
 
@@ -219,7 +223,7 @@ def _build_transport_benchmark_plan(
         audit=bool(audit),
     )
     backend_l = str(backend).strip().lower()
-    return {
+    plan = {
         "artifact_kind": "benchmark_plan",
         "benchmark_kind": "transport_worker_scaling",
         "launches_solves": False,
@@ -266,6 +270,8 @@ def _build_transport_benchmark_plan(
         },
         "benchmark_command": benchmark_command,
     }
+    plan["parallel_claim_scope"] = asdict(audit_parallel_scaling_claim_scope(plan))
+    return plan
 
 
 def _write_plan_json(plan: dict[str, object], path: Path) -> None:

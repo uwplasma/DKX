@@ -98,6 +98,16 @@ def test_build_transport_benchmark_plan_records_capped_workers_and_gate_semantic
     assert plan["release_gate_semantics"]["cold_start_rejected"] is True
     assert plan["release_gate_semantics"]["requires_compile_amortization_gate"] is True
     assert plan["memory_gate_semantics"]["gpu_preallocation_disabled"] is True
+    assert plan["parallel_claim_scope"]["claim_scope"] == "independent_transport_worker_throughput"
+    assert plan["parallel_claim_scope"]["claim_scope_release_eligible"] is True
+    assert plan["parallel_claim_scope"]["release_scaling_supported"] is False
+    assert plan["parallel_claim_scope"]["unsupported_single_case_strong_scaling"] is False
+    assert plan["parallel_claim_scope"]["backend"] == "gpu"
+    assert plan["parallel_claim_scope"]["artifact_kind"] == "benchmark_plan"
+    assert plan["parallel_claim_scope"]["launches_solves"] is False
+    assert plan["parallel_claim_scope"]["plan_only_scope_evidence"] is True
+    assert plan["parallel_claim_scope"]["measured_results_present"] is False
+    assert plan["parallel_claim_scope"]["release_gate_required"] == "audit_transport_parallel_scaling_summary"
     assert "--audit" in plan["benchmark_command"]
 
 

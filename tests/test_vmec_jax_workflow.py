@@ -41,9 +41,28 @@ def test_vmec_jax_workflow_status_scaffold_is_skip_safe(tmp_path: Path) -> None:
     assert payload["status"] in {"ready", "skipped"}
     assert set(payload["optional_backends"]) == {"vmec_jax", "booz_xform_jax"}
     assert payload["default_ci_requires_optional_backends"] is False
+    assert payload["no_solve_provenance_gate"]["status"] == "pass"
+    assert payload["no_solve_provenance_gate"]["kinetic_solve_executed"] is False
+    assert payload["no_solve_provenance_gate"]["requires_file_provenance"] is False
+    assert (
+        payload["no_solve_provenance_gate"]["kinetic_transport_scalar_contract_gate"]["status"]
+        == "pass"
+    )
+    assert "linear_kinetic_solve" in payload["no_solve_provenance_gate"][
+        "required_kinetic_transport_scalar_stages"
+    ]
+    assert "kinetic_operator_assembly" in payload["no_solve_provenance_gate"][
+        "differentiability_boundary"
+    ]["not_covered_stage_names"]
     assert "booz_xform_jax" in payload["differentiability_contract"]["differentiated_graph"]
     assert "SFINCS kinetic transport solve" in payload["differentiability_contract"]["outside_differentiated_graph"]
     assert payload["differentiability_contract"]["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
+    assert (
+        payload["differentiability_contract"]["kinetic_transport_scalar_contract"][
+            "no_overclaim_gate"
+        ]["status"]
+        == "pass"
+    )
     assert payload["differentiability_contract"]["not_claimed"] == (
         "full VMEC-boundary-to-SFINCS kinetic transport gradients"
     )
@@ -62,6 +81,9 @@ def test_vmec_jax_workflow_docs_are_indexed_and_command_complete() -> None:
     assert "python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py" in page
     assert "--check-backends" in page
     assert "--summary-json workflow-summary.json" in page
+    assert "no_solve_provenance_gate" in page
+    assert "kinetic_transport_scalar_contract" in page
+    assert "required_kinetic_transport_scalar_stages" in page
     assert "no full VMEC-boundary-to-SFINCS kinetic transport gradients" in page
     assert "tests/test_optional_ecosystem_gates.py" in page
 
@@ -117,6 +139,23 @@ def test_vmec_jax_boozer_proxy_gate_passes_or_skips_cleanly(tmp_path: Path) -> N
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert "numerical gradient gate: pass" in result.stdout
     assert summary["numerical_gradient_gate"]["status"] == "pass"
+    assert summary["no_solve_provenance_gate"]["status"] == "pass"
+    assert summary["no_solve_provenance_gate"]["kinetic_solve_executed"] is False
+    assert summary["no_solve_provenance_gate"]["missing_file_provenance_fields"] == []
+    assert (
+        summary["no_solve_provenance_gate"]["kinetic_transport_scalar_contract_gate"]["status"]
+        == "pass"
+    )
+    assert "gradient_validation" in summary["no_solve_provenance_gate"][
+        "required_kinetic_transport_scalar_stages"
+    ]
+    assert set(summary["no_solve_provenance_gate"]["present_file_provenance_fields"]) == {
+        "source",
+        "selected_surface",
+        "boozer_resolution",
+        "grid_shape",
+        "scale",
+    }
     assert summary["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
     assert summary["claims"]["not_claimed"] == (
         "full VMEC-boundary-to-SFINCS kinetic transport gradients"

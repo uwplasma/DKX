@@ -9,6 +9,7 @@ import multiprocessing as mp
 import subprocess
 import sys
 import tempfile
+import time
 
 from jax import config as _jax_config
 
@@ -42,16 +43,34 @@ from .solver import (
     gmres_solve_with_residual_distributed,
     distributed_gmres_enabled,
     explicit_left_preconditioned_gmres_scipy,
+    fgmres_cycle_jit_solve_with_residual,
     fgmres_solve_with_residual,
+    fgmres_solve_with_residual_jit,
     gmres_solve_with_history_scipy,
     gcrotmk_solve_with_history_scipy,
     lgmres_solve_with_history_scipy,
+    tfqmr_solve_with_residual,
 )
 from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
 from .structured_velocity import factor_block_tridiagonal
 from .pas_smoother import adaptive_pas_smoother
 from .explicit_sparse import build_operator_from_matvec, build_operator_from_pattern, factorize_host_sparse_operator
-from .memory_model import estimate_sparse_pc_memory
+from .rhs1_device_operator import device_csr_from_matrix, validate_device_csr_matvec
+from .rhs1_qi_coarse import (
+    RHS1QICoarseBasis,
+    RHS1QICoarseBlockLayout,
+    apply_rhs1_qi_coarse_correction,
+    build_rhs1_qi_galerkin_preconditioner,
+    build_rhs1_qi_coarse_basis,
+    build_rhs1_qi_xblock_hard_seed_basis,
+)
+from .rhs1_qi_galerkin_policy import (
+    RHS1QIGalerkinProbeCandidate,
+    parse_rhs1_qi_galerkin_dampings,
+    parse_rhs1_qi_galerkin_modes,
+    select_rhs1_qi_galerkin_probe_candidate,
+)
+from .memory_model import bicgstab_work_nbytes, estimate_sparse_pc_memory, gmres_basis_nbytes, tfqmr_work_nbytes
 from .rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
@@ -1643,6 +1662,39 @@ _RHSMODE1_SPARSE_XBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _RHSMode1SparseX
 
 
 @dataclass(frozen=True)
+class _RHSMode1SparseXBlockCSRPrecondCache:
+    """Compact CSR SuperLU factors for device-side x-block preconditioning.
+
+    The older JAX factor path pads every row to the largest lower/upper row fill
+    across every block. That is simple and fast for weak ILU factors, but exact
+    LU factors on QI/FP blocks can have a few very wide rows that make the
+    padded representation expensive. This cache stores the same triangular
+    factors in concatenated CSR rows and lets the JAX apply loop traverse only
+    actual nonzeros.
+    """
+
+    perm_r_sx: jnp.ndarray  # (S,X,N)
+    inv_perm_c_sx: jnp.ndarray  # (S,X,N)
+    lower_indptr: jnp.ndarray  # flattened per-block row pointers, absolute offsets
+    lower_indices: jnp.ndarray
+    lower_val: jnp.ndarray
+    upper_indptr: jnp.ndarray
+    upper_indices: jnp.ndarray
+    upper_val: jnp.ndarray
+    upper_diag_sx: jnp.ndarray  # (S,X,N)
+    extra_idx_jnp: jnp.ndarray
+    extra_inv_jnp: jnp.ndarray | None
+    lower_nnz: int
+    upper_nnz: int
+    nbytes_estimate: int
+
+
+_RHSMODE1_SPARSE_XBLOCK_CSR_PRECOND_CACHE: dict[
+    tuple[object, ...], _RHSMode1SparseXBlockCSRPrecondCache
+] = {}
+
+
+@dataclass(frozen=True)
 class _RHSMode1SparseXBlockHostPrecondCache:
     """Host sparse per-(species,x) block-Jacobi preconditioner cache for explicit solves."""
 
@@ -3096,6 +3148,71 @@ def _triangular_solve_upper_padded(
         contrib = jnp.sum(jnp.where(mask, val * x_vec[idx_safe], 0.0))
         xi = (b[row] - contrib) / upper_diag[row]
         return x_vec.at[row].set(xi, unique_indices=True)
+
+    return jax.lax.fori_loop(0, n, _body, x)
+
+
+def _triangular_solve_lower_csr_rows(
+    *,
+    indptr: jnp.ndarray,
+    indices: jnp.ndarray,
+    data: jnp.ndarray,
+    b: jnp.ndarray,
+    row_base: jnp.ndarray,
+) -> jnp.ndarray:
+    """Solve a unit-lower triangular block stored as compact CSR rows.
+
+    ``row_base`` points to the first row pointer for this block inside a
+    concatenated per-block CSR table. Column indices are local to the block.
+    """
+    b = jnp.asarray(b, dtype=jnp.float64)
+    n = int(b.shape[0])
+    y = jnp.zeros_like(b)
+    if data.size == 0:
+        return b
+
+    def _body(i, y_vec):
+        row = row_base + i
+        start = indptr[row]
+        end = indptr[row + 1]
+
+        def _accumulate(k, acc):
+            return acc + data[k] * y_vec[indices[k]]
+
+        contrib = jax.lax.fori_loop(start, end, _accumulate, jnp.asarray(0.0, dtype=b.dtype))
+        return y_vec.at[i].set(b[i] - contrib, unique_indices=True)
+
+    return jax.lax.fori_loop(0, n, _body, y)
+
+
+def _triangular_solve_upper_csr_rows(
+    *,
+    indptr: jnp.ndarray,
+    indices: jnp.ndarray,
+    data: jnp.ndarray,
+    upper_diag: jnp.ndarray,
+    b: jnp.ndarray,
+    row_base: jnp.ndarray,
+) -> jnp.ndarray:
+    """Solve an upper triangular block stored as compact CSR rows."""
+    b = jnp.asarray(b, dtype=jnp.float64)
+    n = int(b.shape[0])
+    x = jnp.zeros_like(b)
+    if data.size == 0:
+        return b / upper_diag
+
+    def _body(i, x_vec):
+        row_local = n - 1 - i
+        row = row_base + row_local
+        start = indptr[row]
+        end = indptr[row + 1]
+
+        def _accumulate(k, acc):
+            return acc + data[k] * x_vec[indices[k]]
+
+        contrib = jax.lax.fori_loop(start, end, _accumulate, jnp.asarray(0.0, dtype=b.dtype))
+        xi = (b[row_local] - contrib) / upper_diag[row_local]
+        return x_vec.at[row_local].set(xi, unique_indices=True)
 
     return jax.lax.fori_loop(0, n, _body, x)
 
@@ -8553,13 +8670,18 @@ def _rhs1_xblock_post_coarse_directions(
     fsavg_lmax: int,
     max_extra_units: int,
     max_directions: int,
+    angular_lmax: int = -1,
+    include_angular_residual: bool = False,
 ) -> tuple[tuple[str, jnp.ndarray], ...]:
     """Build a small physics-aware correction basis for stalled RHSMode=1 solves.
 
     The basis is intentionally low-dimensional and matrix-free: residual-like
     directions handle generic error, flux-surface-averaged low-L modes target
-    moment/nullspace drift, and source/constraint directions target the
-    constraint rows that are not visible to a pure x-block preconditioner.
+    moment/nullspace drift, low Fourier angular modes target global coupling
+    missed by an x-local inverse, residual-weighted angular/radial projections
+    capture Fourier error with x-dependent amplitudes, and source/constraint
+    directions target the constraint rows that are not visible to a pure x-block
+    preconditioner.
     """
     residual = jnp.asarray(residual, dtype=jnp.float64)
     total = int(op.total_size)
@@ -8602,6 +8724,58 @@ def _rhs1_xblock_post_coarse_directions(
         tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
         _add(f"fsavg_l{il}", jnp.concatenate([f_dir.reshape((-1,)), tail]))
 
+    angular_l_use = min(int(angular_lmax), max(0, int(op.n_xi) - 1))
+    if angular_l_use >= 0 and int(op.n_theta) > 1 and int(op.n_zeta) > 1:
+        theta = jnp.arange(int(op.n_theta), dtype=jnp.float64)
+        zeta = jnp.arange(int(op.n_zeta), dtype=jnp.float64)
+        two_pi = float(2.0 * np.pi)
+        mode_pairs = ((1, 0), (0, 1), (1, 1), (1, -1), (2, 0), (0, 2), (2, 1), (1, 2))
+        for il in range(angular_l_use + 1):
+            for m_mode, n_mode in mode_pairs:
+                if len(directions) >= int(max_directions):
+                    break
+                phase = two_pi * (
+                    float(m_mode) * theta[:, None] / float(max(1, int(op.n_theta)))
+                    + float(n_mode) * zeta[None, :] / float(max(1, int(op.n_zeta)))
+                )
+                for parity, pattern in (("cos", jnp.cos(phase)), ("sin", jnp.sin(phase))):
+                    pattern_norm = float(jnp.linalg.norm(pattern))
+                    if (not np.isfinite(pattern_norm)) or pattern_norm <= 0.0:
+                        continue
+                    pattern = pattern / pattern_norm
+                    if include_angular_residual:
+                        weighted_pattern = factor * pattern
+                        denom = float(jnp.sum(weighted_pattern * pattern))
+                        if np.isfinite(denom) and abs(denom) > 0.0:
+                            for s in range(int(op.n_species)):
+                                if len(directions) >= int(max_directions):
+                                    break
+                                coeff = (
+                                    jnp.einsum(
+                                        "tz,xtz->x",
+                                        weighted_pattern,
+                                        f_res[s, :, il, :, :],
+                                    )
+                                    / float(denom)
+                                )
+                                f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                                f_dir = f_dir.at[s, :, il, :, :].set(coeff[:, None, None] * pattern[None, :, :])
+                                tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                                _add(
+                                    f"angular_residual_s{s}_l{il}_m{m_mode}_n{n_mode}_{parity}",
+                                    jnp.concatenate([f_dir.reshape((-1,)), tail]),
+                                )
+                    for s in range(int(op.n_species)):
+                        if len(directions) >= int(max_directions):
+                            break
+                        f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                        f_dir = f_dir.at[s, :, il, :, :].set(pattern[None, :, :])
+                        tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                        _add(
+                            f"angular_s{s}_allx_l{il}_m{m_mode}_n{n_mode}_{parity}",
+                            jnp.concatenate([f_dir.reshape((-1,)), tail]),
+                        )
+
     extra_start = int(op.f_size + op.phi1_size)
     extra_size = int(op.extra_size)
     if extra_size > 0 and len(directions) < int(max_directions):
@@ -8629,6 +8803,98 @@ def _rhs1_xblock_post_coarse_directions(
                 _add(f"constraint1_source_s{s}_{ibasis}", full)
 
     return tuple(directions)
+
+
+def _rhs1_xblock_qi_coarse_basis(
+    *,
+    op: V3FullSystemOperator,
+    active_dof: bool,
+    linear_size: int,
+    max_rank: int,
+    rank_rtol: float,
+    include_angular: bool,
+    include_blocks: bool,
+    basis_kind: str = "legacy",
+    max_candidates: int = 96,
+    max_angular_mode: int = 2,
+    include_radial: bool = True,
+    include_radial_angular: bool = True,
+    include_constraint_moments: bool = True,
+    include_schur: bool = True,
+) -> RHS1QICoarseBasis:
+    """Build a padded QI coarse basis in the current x-block Krylov space.
+
+    ``basis_kind='enriched'`` is intended for A/B testing the hard QI seed lane.  It adds
+    radial moments, angular harmonics, constraint-like moments, and local
+    block-Schur contrast vectors before rank truncation.  The legacy basis is
+    still available for A/B tests and reproducibility.
+    """
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_l = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    block_sizes: list[int] = []
+    block_x: list[int] = []
+    block_species: list[int] = []
+    for s in range(n_species):
+        for ix in range(n_x):
+            n_lx = int(nxi_for_x[ix]) if bool(active_dof) else n_l
+            size = int(max(0, n_lx) * n_theta * n_zeta)
+            if size <= 0:
+                continue
+            block_sizes.append(size)
+            block_x.append(ix)
+            block_species.append(s)
+    if not block_sizes:
+        raise RuntimeError("QI coarse seed found no active f blocks")
+
+    layout = RHS1QICoarseBlockLayout(
+        block_sizes=tuple(block_sizes),
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        block_x=tuple(block_x),
+        block_species=tuple(block_species),
+    )
+    basis_kind_norm = str(basis_kind).strip().lower().replace("-", "_")
+    if basis_kind_norm in {"enriched", "hard_seed", "xblock_hard_seed", "schur"}:
+        basis = build_rhs1_qi_xblock_hard_seed_basis(
+            layout,
+            max_candidates=max(1, int(max_candidates)),
+            max_rank=max(1, int(max_rank)),
+            max_angular_mode=max(0, int(max_angular_mode)),
+            rtol=float(rank_rtol),
+            include_radial=bool(include_radial),
+            include_angular=bool(include_angular),
+            include_radial_angular=bool(include_radial_angular),
+            include_constraint_moments=bool(include_constraint_moments),
+            include_schur=bool(include_schur),
+            include_blocks=bool(include_blocks),
+        )
+    elif basis_kind_norm in {"legacy", "basic", "coarse"}:
+        basis = build_rhs1_qi_coarse_basis(
+            layout,
+            max_rank=max(1, int(max_rank)),
+            rtol=float(rank_rtol),
+            include_angular=bool(include_angular),
+            include_blocks=bool(include_blocks),
+        )
+    else:
+        raise ValueError(f"Unknown QI coarse seed basis kind: {basis_kind!r}")
+    basis_vectors = jnp.asarray(basis.vectors, dtype=jnp.float64)
+    tail_size = int(linear_size) - int(basis_vectors.shape[0])
+    if tail_size < 0:
+        raise RuntimeError(
+            "QI coarse seed basis is larger than the active x-block space "
+            f"({basis_vectors.shape[0]} > {int(linear_size)})"
+        )
+    if tail_size > 0:
+        basis_vectors = jnp.concatenate(
+            [basis_vectors, jnp.zeros((tail_size, int(basis_vectors.shape[1])), dtype=jnp.float64)],
+            axis=0,
+        )
+    return RHS1QICoarseBasis(vectors=basis_vectors, metadata=basis.metadata)
 
 
 def _rhs1_xblock_global_coarse_basis(
@@ -8957,6 +9223,7 @@ def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
     max_directions: int,
     rcond: float,
     include_rhs: bool,
+    max_setup_s: float = 0.0,
     emit: Callable[[int, str], None] | None = None,
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], dict[str, object], dict[str, int]]:
     """Wrap x-block LU with a smoothed low-rank global-coupling correction.
@@ -8972,7 +9239,22 @@ def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
     mode_use = str(mode).strip().lower().replace("-", "_")
     if mode_use not in {"additive", "multiplicative"}:
         mode_use = "additive"
+    smoother = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SMOOTHER", "base")
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
+    if smoother in {"none", "raw", "identity", "load", "loads"}:
+        smoother = "identity"
+    elif smoother in {"preconditioner", "preconditioned"}:
+        smoother = "base"
+    elif smoother != "base":
+        smoother = "base"
     max_dirs_use = max(1, int(max_directions))
+    max_setup_s_use = max(0.0, float(max_setup_s))
+    setup_deadline = time.perf_counter() + max_setup_s_use if max_setup_s_use > 0.0 else None
+    setup_budget_reached = False
     expected_size_use = int(op.total_size) if expected_size is None else int(expected_size)
     raw_loads = _rhs1_xblock_global_coupling_load_basis(
         op=op,
@@ -8995,10 +9277,13 @@ def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
         load_norm = float(np.linalg.norm(load_np))
         if (not np.isfinite(load_norm)) or load_norm <= 0.0:
             continue
-        smoothed = np.asarray(
-            jax.device_get(base_preconditioner(jnp.asarray(load_np / load_norm, dtype=jnp.float64))),
-            dtype=np.float64,
-        ).reshape((-1,))
+        if smoother == "identity":
+            smoothed = np.asarray(load_np / load_norm, dtype=np.float64)
+        else:
+            smoothed = np.asarray(
+                jax.device_get(base_preconditioner(jnp.asarray(load_np / load_norm, dtype=jnp.float64))),
+                dtype=np.float64,
+            ).reshape((-1,))
         if smoothed.shape != load_np.shape or not np.all(np.isfinite(smoothed)):
             continue
         z_norm = float(np.linalg.norm(smoothed))
@@ -9017,6 +9302,16 @@ def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
         names.append(str(name))
         z_cols.append(smoothed)
         az_cols.append(a_smoothed)
+        if setup_deadline is not None and time.perf_counter() >= setup_deadline:
+            setup_budget_reached = True
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres global-coupling "
+                    f"setup budget reached after basis={len(z_cols)}/{len(raw_loads)} "
+                    f"max_setup_s={max_setup_s_use:.3f}; using partial basis",
+                )
+            break
 
     if not z_cols:
         raise RuntimeError("global-coupling x-block preconditioner found no valid smoothed directions")
@@ -9072,13 +9367,16 @@ def _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
         "angular_lmax": int(angular_lmax),
         "include_rhs": bool(include_rhs),
         "rcond": float(rcond),
+        "smoother": smoother,
+        "setup_budget_s": float(max_setup_s_use),
+        "setup_budget_reached": bool(setup_budget_reached),
         "basis_names": names_use,
     }
     if emit is not None:
         emit(
             0,
             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres global-coupling "
-            f"built mode={mode_use} loads={len(raw_loads)} basis={len(z_cols)} rank={rank}",
+            f"built mode={mode_use} smoother={smoother} loads={len(raw_loads)} basis={len(z_cols)} rank={rank}",
         )
     return _apply, metadata, stats
 
@@ -9098,6 +9396,7 @@ def _build_rhs1_xblock_device_global_coupling_preconditioner(
     max_directions: int,
     rcond: float,
     include_rhs: bool,
+    max_setup_s: float = 0.0,
     emit: Callable[[int, str], None] | None = None,
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], dict[str, object], dict[str, int]]:
     """Build a JAX-array global-coupling correction for device Krylov paths.
@@ -9105,15 +9404,42 @@ def _build_rhs1_xblock_device_global_coupling_preconditioner(
     The host global-coupling helper above is useful for SciPy Krylov probes but
     applies a coarse correction through host QR factors on every Krylov step.
     This variant performs the same physics-aware load smoothing, then stores
-    ``Z`` and ``A Z`` as JAX arrays and applies a small ridge-regularized normal
-    equation entirely with ``jnp`` operations.
+    ``Z`` and the rank-revealed coarse least-squares factors as JAX arrays so
+    Krylov iterations remain device-resident. The default QR path avoids the
+    squared conditioning of the older normal-equation correction.
     """
+    from scipy.linalg import qr  # noqa: PLC0415
 
     mode_use = str(mode).strip().lower().replace("-", "_")
     if mode_use not in {"additive", "multiplicative"}:
         mode_use = "additive"
+    coarse_solver = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_DEVICE_SOLVER", "qr")
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
+    if coarse_solver in {"normal", "normal_equation", "normal_equations", "ridge"}:
+        coarse_solver = "normal_equations"
+    elif coarse_solver not in {"qr", "pivoted_qr"}:
+        coarse_solver = "qr"
+    smoother = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SMOOTHER", "identity")
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
+    if smoother in {"none", "raw", "identity", "load", "loads"}:
+        smoother = "identity"
+    elif smoother in {"base", "preconditioner", "preconditioned"}:
+        smoother = "base"
+    else:
+        smoother = "identity"
     expected_size_use = int(op.total_size) if expected_size is None else int(expected_size)
     max_dirs_use = max(1, int(max_directions))
+    max_setup_s_use = max(0.0, float(max_setup_s))
+    setup_deadline = time.perf_counter() + max_setup_s_use if max_setup_s_use > 0.0 else None
+    setup_budget_reached = False
     raw_loads = _rhs1_xblock_global_coupling_load_basis(
         op=op,
         rhs=rhs,
@@ -9139,7 +9465,10 @@ def _build_rhs1_xblock_device_global_coupling_preconditioner(
         if (not np.isfinite(load_norm)) or load_norm <= 0.0:
             continue
         load_unit = jnp.asarray(load_np / load_norm, dtype=jnp.float64)
-        z = jnp.asarray(base_preconditioner(load_unit), dtype=jnp.float64).reshape((-1,))
+        if smoother == "identity":
+            z = load_unit
+        else:
+            z = jnp.asarray(base_preconditioner(load_unit), dtype=jnp.float64).reshape((-1,))
         z_np = np.asarray(jax.device_get(z), dtype=np.float64)
         if z_np.shape != load_np.shape or not np.all(np.isfinite(z_np)):
             continue
@@ -9157,24 +9486,71 @@ def _build_rhs1_xblock_device_global_coupling_preconditioner(
         names.append(str(name))
         z_cols.append(z)
         az_cols.append(az)
+        if setup_deadline is not None and time.perf_counter() >= setup_deadline:
+            setup_budget_reached = True
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres device global-coupling "
+                    f"setup budget reached after basis={len(z_cols)}/{len(raw_loads)} "
+                    f"max_setup_s={max_setup_s_use:.3f}; using partial basis",
+                )
+            break
 
     if not z_cols:
         raise RuntimeError("device global-coupling x-block preconditioner found no valid smoothed directions")
 
-    z_basis = jnp.stack(z_cols, axis=1)
-    az_basis = jnp.stack(az_cols, axis=1)
-    gram = az_basis.T @ az_basis
-    diag_scale = jnp.maximum(jnp.max(jnp.abs(jnp.diag(gram))), jnp.asarray(1.0, dtype=jnp.float64))
-    ridge = jnp.asarray(max(float(rcond), 1.0e-14), dtype=jnp.float64) * diag_scale
-    coarse_inv = jnp.linalg.inv(gram + ridge * jnp.eye(int(gram.shape[0]), dtype=jnp.float64))
-    gram_eigs = jnp.maximum(jnp.linalg.eigvalsh(gram), jnp.asarray(0.0, dtype=jnp.float64))
-    singular_values = np.asarray(jax.device_get(jnp.sqrt(gram_eigs[::-1])), dtype=np.float64)
-    if singular_values.size == 0 or not np.all(np.isfinite(singular_values)):
-        raise RuntimeError("device global-coupling x-block preconditioner coarse spectrum is invalid")
-    rank_threshold = max(float(rcond), 0.0) * max(float(np.max(singular_values, initial=0.0)), 1.0)
-    rank = int(np.count_nonzero(singular_values > rank_threshold))
-    if rank <= 0:
-        raise RuntimeError("device global-coupling x-block preconditioner coarse system is rank deficient")
+    z_basis_np = np.column_stack([np.asarray(jax.device_get(col), dtype=np.float64) for col in z_cols])
+    az_basis_np = np.column_stack([np.asarray(jax.device_get(col), dtype=np.float64) for col in az_cols])
+    if not np.all(np.isfinite(z_basis_np)) or not np.all(np.isfinite(az_basis_np)):
+        raise RuntimeError("device global-coupling x-block preconditioner found non-finite coarse columns")
+
+    ridge_value = 0.0
+    names_use = tuple(names)
+    singular_values: np.ndarray
+    r_diag: np.ndarray
+    if coarse_solver == "normal_equations":
+        z_basis = jnp.asarray(z_basis_np, dtype=jnp.float64)
+        az_basis = jnp.asarray(az_basis_np, dtype=jnp.float64)
+        gram = az_basis.T @ az_basis
+        diag_scale = jnp.maximum(jnp.max(jnp.abs(jnp.diag(gram))), jnp.asarray(1.0, dtype=jnp.float64))
+        ridge = jnp.asarray(max(float(rcond), 1.0e-14), dtype=jnp.float64) * diag_scale
+        coarse_inv = jnp.linalg.inv(gram + ridge * jnp.eye(int(gram.shape[0]), dtype=jnp.float64))
+        gram_eigs = jnp.maximum(jnp.linalg.eigvalsh(gram), jnp.asarray(0.0, dtype=jnp.float64))
+        singular_values = np.asarray(jax.device_get(jnp.sqrt(gram_eigs[::-1])), dtype=np.float64)
+        if singular_values.size == 0 or not np.all(np.isfinite(singular_values)):
+            raise RuntimeError("device global-coupling x-block preconditioner coarse spectrum is invalid")
+        rank_threshold = max(float(rcond), 0.0) * max(float(np.max(singular_values, initial=0.0)), 1.0)
+        rank = int(np.count_nonzero(singular_values > rank_threshold))
+        if rank <= 0:
+            raise RuntimeError("device global-coupling x-block preconditioner coarse system is rank deficient")
+        ridge_value = float(jax.device_get(ridge))
+        r_diag = singular_values
+
+        def _coarse_coeff(coarse_input: jnp.ndarray) -> jnp.ndarray:
+            return coarse_inv @ (az_basis.T @ coarse_input)
+
+    else:
+        q, r, piv = qr(az_basis_np, mode="economic", pivoting=True)
+        diag = np.abs(np.diag(r))
+        if diag.size == 0 or not np.all(np.isfinite(diag)):
+            raise RuntimeError("device global-coupling x-block preconditioner coarse QR is empty")
+        rank_threshold = max(float(rcond), 0.0) * max(float(diag[0]), 1.0)
+        rank = int(np.count_nonzero(diag > rank_threshold))
+        if rank <= 0:
+            raise RuntimeError("device global-coupling x-block preconditioner coarse QR is rank deficient")
+        piv_use = np.asarray(piv[:rank], dtype=np.int32)
+        q_use = jnp.asarray(q[:, :rank], dtype=jnp.float64)
+        r_use = jnp.asarray(r[:rank, :rank], dtype=jnp.float64)
+        z_basis = jnp.asarray(z_basis_np[:, piv_use], dtype=jnp.float64)
+        # The diagonal of pivoted R is a cheap, rank-revealed singular-value proxy.
+        r_diag = np.asarray(diag[:rank], dtype=np.float64)
+        singular_values = r_diag
+        names_use = tuple(names[int(i)] for i in piv_use)
+
+        def _coarse_coeff(coarse_input: jnp.ndarray) -> jnp.ndarray:
+            return jnp.linalg.solve(r_use, q_use.T @ coarse_input)
+
     stats = {"applies": 0, "coarse_applies": 0}
 
     def _apply(v: jnp.ndarray) -> jnp.ndarray:
@@ -9185,7 +9561,7 @@ def _build_rhs1_xblock_device_global_coupling_preconditioner(
             coarse_input = v_j - jnp.asarray(matvec(base), dtype=jnp.float64)
         else:
             coarse_input = v_j
-        coeff = coarse_inv @ (az_basis.T @ coarse_input)
+        coeff = _coarse_coeff(coarse_input)
         stats["coarse_applies"] += 1
         return base + z_basis @ coeff
 
@@ -9199,16 +9575,157 @@ def _build_rhs1_xblock_device_global_coupling_preconditioner(
         "angular_lmax": int(angular_lmax),
         "include_rhs": bool(include_rhs),
         "rcond": float(rcond),
-        "ridge": float(jax.device_get(ridge)),
-        "basis_names": tuple(names),
+        "coarse_solver": coarse_solver,
+        "smoother": smoother,
+        "ridge": float(ridge_value),
+        "setup_budget_s": float(max_setup_s_use),
+        "setup_budget_reached": bool(setup_budget_reached),
+        "basis_names": names_use,
         "device_resident": True,
         "singular_values": tuple(float(v) for v in singular_values[: min(int(singular_values.size), 16)]),
+        "r_diag": tuple(float(v) for v in r_diag[: min(int(r_diag.size), 16)]),
     }
     if emit is not None:
         emit(
             0,
             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres device global-coupling "
-            f"built mode={mode_use} loads={len(raw_loads)} basis={int(z_basis.shape[1])} rank={rank}",
+            f"built mode={mode_use} smoother={smoother} coarse_solver={coarse_solver} "
+            f"loads={len(raw_loads)} basis={int(z_basis.shape[1])} rank={rank}",
+        )
+    return _apply, metadata, stats
+
+
+def _build_rhs1_xblock_constraint1_moment_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    base_preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    rcond: float = 1.0e-12,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], dict[str, object], dict[str, int]]:
+    """Wrap an x-block preconditioner with a constraintScheme=1 moment Schur solve.
+
+    The constraintScheme=1 system has source unknowns that enforce density and
+    pressure moments. Per-x block preconditioners leave these global rows as a
+    slow saddle-point mode. This wrapper builds the small dense approximation
+    ``S = C M^{-1} B`` once, where ``B`` injects particle/energy sources and
+    ``C`` returns density/pressure moments, then applies the block inverse using
+    the supplied preconditioner as ``M^{-1}``.
+    """
+    from scipy.linalg import qr  # noqa: PLC0415
+
+    if int(op.rhs_mode) != 1 or int(op.constraint_scheme) != 1:
+        raise RuntimeError("constraint1 moment Schur requires RHSMode=1 constraintScheme=1")
+    if int(op.phi1_size) != 0:
+        raise RuntimeError("constraint1 moment Schur currently requires includePhi1=false")
+    extra_size = int(op.extra_size)
+    n_species = int(op.n_species)
+    if extra_size != 2 * n_species or extra_size <= 0:
+        raise RuntimeError("constraint1 moment Schur expected two source unknowns per species")
+
+    reduced_probe = (
+        jnp.zeros((op.total_size,), dtype=jnp.float64)
+        if reduce_full is None
+        else reduce_full(jnp.zeros((op.total_size,), dtype=jnp.float64))
+    )
+    expected_size = int(reduced_probe.size)
+    f_size = int(op.f_size)
+    zeros_extra = jnp.zeros((extra_size,), dtype=jnp.float64)
+    rcond_use = max(0.0, float(rcond))
+
+    def _to_full(v: jnp.ndarray) -> jnp.ndarray:
+        v = jnp.asarray(v, dtype=jnp.float64).reshape((-1,))
+        if expand_reduced is None:
+            return v
+        return jnp.asarray(expand_reduced(v), dtype=jnp.float64).reshape((-1,))
+
+    def _from_full(v: jnp.ndarray) -> jnp.ndarray:
+        v = jnp.asarray(v, dtype=jnp.float64).reshape((-1,))
+        if reduce_full is None:
+            return v
+        return jnp.asarray(reduce_full(v), dtype=jnp.float64).reshape((-1,))
+
+    def _base_full(v_full: jnp.ndarray) -> jnp.ndarray:
+        v_full = jnp.asarray(v_full, dtype=jnp.float64).reshape((-1,))
+        if reduce_full is None or expand_reduced is None:
+            return jnp.asarray(base_preconditioner(v_full), dtype=jnp.float64).reshape((-1,))
+        z_reduced = base_preconditioner(reduce_full(v_full))
+        return jnp.asarray(expand_reduced(z_reduced), dtype=jnp.float64).reshape((-1,))
+
+    s_mat = np.zeros((extra_size, extra_size), dtype=np.float64)
+    for j in range(extra_size):
+        src = np.zeros((n_species, 2), dtype=np.float64)
+        src.reshape((-1,))[j] = 1.0
+        f_src = _constraint_scheme1_inject_source(op, jnp.asarray(src, dtype=jnp.float64))
+        y_full = _base_full(jnp.concatenate([f_src, zeros_extra], axis=0))
+        y_f = y_full[:f_size].reshape(op.fblock.f_shape)
+        s_col = _constraint_scheme1_moments_from_f(op, y_f).reshape((-1,))
+        s_mat[:, j] = np.asarray(jax.device_get(s_col), dtype=np.float64)
+
+    if not np.all(np.isfinite(s_mat)):
+        raise RuntimeError("constraint1 moment Schur matrix contains non-finite values")
+    _q, r, _piv = qr(s_mat, mode="economic", pivoting=True)
+    diag = np.abs(np.diag(r))
+    if diag.size == 0:
+        raise RuntimeError("constraint1 moment Schur QR is empty")
+    threshold = rcond_use * max(float(diag[0]), 1.0)
+    rank = int(np.count_nonzero(diag > threshold))
+    if rank <= 0:
+        raise RuntimeError("constraint1 moment Schur is rank deficient")
+    allow_rank_deficient_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_ALLOW_RANK_DEFICIENT",
+        "",
+    ).strip().lower()
+    allow_rank_deficient = allow_rank_deficient_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}
+    if rank < extra_size and not allow_rank_deficient:
+        raise RuntimeError(
+            "constraint1 moment Schur is numerically rank deficient "
+            f"(rank={rank} < extra={extra_size}); refusing unstable pseudo-inverse"
+        )
+    if rank == extra_size:
+        try:
+            schur_inv_np = np.linalg.inv(s_mat)
+        except np.linalg.LinAlgError:
+            schur_inv_np = np.linalg.pinv(s_mat, rcond=max(rcond_use, 1.0e-12))
+    else:
+        schur_inv_np = np.linalg.pinv(s_mat, rcond=max(rcond_use, 1.0e-12))
+    if not np.all(np.isfinite(schur_inv_np)):
+        raise RuntimeError("constraint1 moment Schur inverse contains non-finite values")
+    schur_inv = jnp.asarray(schur_inv_np, dtype=jnp.float64)
+    stats = {"applies": 0, "base_applies": 0}
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        stats["applies"] += 1
+        r_full = _to_full(v)
+        r_f = r_full[:f_size]
+        r_e = r_full[f_size : f_size + extra_size]
+        y_full = _base_full(jnp.concatenate([r_f, zeros_extra], axis=0))
+        stats["base_applies"] += 1
+        y_f = y_full[:f_size].reshape(op.fblock.f_shape)
+        c_y = _constraint_scheme1_moments_from_f(op, y_f).reshape((-1,))
+        x_e = schur_inv @ (c_y - r_e)
+        f_corr = _constraint_scheme1_inject_source(op, x_e.reshape((n_species, 2)))
+        y_corr = _base_full(jnp.concatenate([r_f - f_corr, zeros_extra], axis=0))
+        stats["base_applies"] += 1
+        out_full = jnp.concatenate([y_corr[:f_size], x_e], axis=0)
+        return _from_full(out_full)
+
+    metadata: dict[str, object] = {
+        "mode": "constraint1_moment_schur",
+        "extra_size": int(extra_size),
+        "rank": int(rank),
+        "rcond": float(rcond_use),
+        "expected_size": int(expected_size),
+        "singular_value_proxy": tuple(float(v) for v in diag[: min(int(diag.size), 16)]),
+        "device_resident": True,
+        "rank_deficient_allowed": bool(allow_rank_deficient),
+    }
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            f"constraint1 moment-Schur built extra={extra_size} rank={rank}",
         )
     return _apply, metadata, stats
 
@@ -10068,6 +10585,43 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     except ValueError:
         row_cap = 64
     row_cap = max(0, int(row_cap))
+    jax_factor_format_env = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT", "padded")
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
+    xblock_jax_factor_format = (
+        "csr"
+        if jax_factor_format_env in {"csr", "compact", "compact_csr", "ragged_csr"}
+        else "padded"
+    )
+    jax_factor_apply_env = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_APPLY", "exact")
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
+    xblock_jax_factor_apply = (
+        "diagonal"
+        if jax_factor_apply_env in {"diag", "diagonal", "jacobi", "factor_diag", "factor_diagonal"}
+        else "identity"
+        if jax_factor_apply_env in {"identity", "none", "skip"}
+        else "upper"
+        if jax_factor_apply_env in {"upper", "upper_only", "u", "u_only"}
+        else "lower"
+        if jax_factor_apply_env in {"lower", "lower_only", "l", "l_only"}
+        else "exact"
+    )
+    compact_row_cap_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_COMPACT_ROW_NNZ_MAX",
+        "",
+    ).strip()
+    try:
+        compact_row_cap = int(compact_row_cap_env) if compact_row_cap_env else 0
+    except ValueError:
+        compact_row_cap = 0
+    compact_row_cap = max(0, int(compact_row_cap))
     n_species = int(op.n_species)
     n_x = int(op.n_x)
     n_l = int(op.n_xi)
@@ -10083,6 +10637,57 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     except ValueError:
         lu_max = default_lu_max
     lu_max = max(0, int(lu_max))
+    lower_fill_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL", "").strip()
+    lower_fill_drop_tol_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_DROP_TOL",
+        "",
+    ).strip()
+    lower_fill_drop_rel_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_DROP_REL",
+        "",
+    ).strip()
+    lower_fill_ilu_drop_tol_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_ILU_DROP_TOL",
+        "",
+    ).strip()
+    lower_fill_factor_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_FACTOR",
+        "",
+    ).strip()
+    lower_fill_row_cap_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_ROW_NNZ_MAX",
+        "",
+    ).strip()
+    lower_fill_compact_row_cap_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_COMPACT_ROW_NNZ_MAX",
+        "",
+    ).strip()
+    lower_fill_max_block_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_MAX_BLOCK_SIZE",
+        "",
+    ).strip()
+    lower_fill_mode, lower_fill_ignored_env = _rhs1_xblock_policy.rhs1_xblock_lower_fill_mode(lower_fill_env)
+
+    def _local_factor_candidate(block_size: int) -> _rhs1_xblock_policy.RHS1XBlockLocalSolveCandidate:
+        return _rhs1_xblock_policy.rhs1_xblock_local_solve_candidate(
+            block_size=int(block_size),
+            lu_max=int(lu_max),
+            lower_fill_env_value=lower_fill_env,
+            drop_tol_env_value=str(drop_tol),
+            drop_rel_env_value=str(drop_rel),
+            ilu_drop_tol_env_value=str(ilu_drop_tol),
+            fill_factor_env_value=str(fill_factor),
+            row_nnz_cap_env_value=str(row_cap),
+            compact_row_nnz_cap_env_value=str(compact_row_cap),
+            lower_fill_drop_tol_env_value=lower_fill_drop_tol_env,
+            lower_fill_drop_rel_env_value=lower_fill_drop_rel_env,
+            lower_fill_ilu_drop_tol_env_value=lower_fill_ilu_drop_tol_env,
+            lower_fill_factor_env_value=lower_fill_factor_env,
+            lower_fill_row_nnz_cap_env_value=lower_fill_row_cap_env,
+            lower_fill_compact_row_nnz_cap_env_value=lower_fill_compact_row_cap_env,
+            lower_fill_max_block_size_env_value=lower_fill_max_block_env,
+        )
+
     cache_key = (
         *_rhsmode1_precond_cache_key(op, "xblock_tz_sparse"),
         bool(build_jax_factors),
@@ -10091,12 +10696,27 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         float(ilu_drop_tol),
         float(fill_factor),
         int(row_cap),
+        str(xblock_jax_factor_format) if build_jax_factors else "host",
+        int(compact_row_cap) if build_jax_factors and xblock_jax_factor_format == "csr" else 0,
+        str(xblock_jax_factor_apply) if build_jax_factors else "host",
         int(lu_max),
         bool(force_assembled_host_fp),
+        str(lower_fill_mode),
+        bool(lower_fill_ignored_env),
+        lower_fill_drop_tol_env,
+        lower_fill_drop_rel_env,
+        lower_fill_ilu_drop_tol_env,
+        lower_fill_factor_env,
+        lower_fill_row_cap_env,
+        lower_fill_compact_row_cap_env,
+        lower_fill_max_block_env,
     )
 
     if build_jax_factors:
-        cached = _RHSMODE1_SPARSE_XBLOCK_PRECOND_CACHE.get(cache_key)
+        if xblock_jax_factor_format == "csr":
+            cached = _RHSMODE1_SPARSE_XBLOCK_CSR_PRECOND_CACHE.get(cache_key)
+        else:
+            cached = _RHSMODE1_SPARSE_XBLOCK_PRECOND_CACHE.get(cache_key)
     else:
         cached = _RHSMODE1_SPARSE_XBLOCK_HOST_PRECOND_CACHE.get(cache_key)
 
@@ -10130,7 +10750,253 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         )
         assembled_host_cache = _get_rhsmode1_fp_xblock_assembled_host_cache(op=op) if assembled_host_fp else None
 
-        if build_jax_factors:
+        if build_jax_factors and xblock_jax_factor_format == "csr":
+            perm_r_blocks: list[np.ndarray] = []
+            inv_perm_c_blocks: list[np.ndarray] = []
+            upper_diag_blocks: list[np.ndarray] = []
+            lower_indptr_parts: list[np.ndarray] = []
+            lower_indices_parts: list[np.ndarray] = []
+            lower_val_parts: list[np.ndarray] = []
+            upper_indptr_parts: list[np.ndarray] = []
+            upper_indices_parts: list[np.ndarray] = []
+            upper_val_parts: list[np.ndarray] = []
+            lower_nnz_total = 0
+            upper_nnz_total = 0
+            csr_index_limit = int(np.iinfo(np.int32).max)
+
+            for s in range(n_species):
+                for ix in range(n_x):
+                    n_lx = int(nxi_for_x[ix])
+                    block_size = int(n_lx * n_theta * n_zeta)
+                    start = int((((s * n_x + ix) * n_l) * n_theta) * n_zeta)
+
+                    perm_r_full = np.arange(block_size_max, dtype=np.int32)
+                    inv_perm_c_full = np.arange(block_size_max, dtype=np.int32)
+                    upper_diag_full = np.ones((block_size_max,), dtype=np.float64)
+                    lower_indptr_full = np.empty((block_size_max + 1,), dtype=np.int32)
+                    upper_indptr_full = np.empty((block_size_max + 1,), dtype=np.int32)
+                    lower_indptr_full[0] = int(lower_nnz_total)
+                    upper_indptr_full[0] = int(upper_nnz_total)
+
+                    fac_cache = None
+                    if block_size > 0:
+                        block_slice = slice(start, start + block_size)
+
+                        def _mv_block(v_block: jnp.ndarray, *, _block_slice=block_slice) -> jnp.ndarray:
+                            x_full = jnp.zeros((total_size,), dtype=v_block.dtype)
+                            x_full = x_full.at[_block_slice].set(v_block)
+                            y_full = apply_v3_full_system_operator_cached(op, x_full)
+                            return y_full[_block_slice]
+
+                        block_cache_key = (cache_key, "csr", int(s), int(ix), int(block_size))
+                        local_candidate = _local_factor_candidate(block_size)
+                        block_compact_row_cap = int(local_candidate.tuning.compact_row_nnz_cap)
+                        if local_candidate.lower_fill and emit is not None:
+                            emit(
+                                1,
+                                "xblock_sparse_csr: lower-fill local factor "
+                                f"(species={int(s)} x={int(ix)} size={int(block_size)} "
+                                f"drop_tol={local_candidate.tuning.ilu_drop_tol:.1e} "
+                                f"fill={local_candidate.tuning.fill_factor:.1f} "
+                                f"row_cap={int(local_candidate.tuning.row_nnz_cap)} "
+                                f"compact_row_cap={int(block_compact_row_cap)})",
+                            )
+                        try:
+                            _build_sparse_ilu_from_matvec(
+                                matvec=_mv_block,
+                                n=int(block_size),
+                                dtype=jnp.float64,
+                                cache_key=block_cache_key,
+                                drop_tol=local_candidate.tuning.drop_tol,
+                                drop_rel=local_candidate.tuning.drop_rel,
+                                ilu_drop_tol=local_candidate.tuning.ilu_drop_tol,
+                                fill_factor=local_candidate.tuning.fill_factor,
+                                build_dense_factors=False,
+                                build_jax_factors=False,
+                                build_ilu=True,
+                                store_dense=False,
+                                factorization=local_candidate.factorization,
+                                row_nnz_cap=0,
+                                emit=emit,
+                            )
+                            fac_cache = _RHSMODE1_SPARSE_ILU_CACHE.get(block_cache_key)
+                        except Exception as exc:  # noqa: BLE001
+                            fac_cache = None
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "xblock_sparse_csr: factorization failed for block "
+                                    f"(species={int(s)} x={int(ix)} size={int(block_size)}) "
+                                    f"({type(exc).__name__}: {exc})",
+                                )
+
+                    fac = None if fac_cache is None else fac_cache.ilu
+                    if fac is not None:
+                        perm_r = np.asarray(fac.perm_r, dtype=np.int32)
+                        perm_c = np.asarray(fac.perm_c, dtype=np.int32)
+                        inv_perm_c = np.argsort(perm_c).astype(np.int32, copy=False)
+                        perm_r_full[:block_size] = perm_r
+                        inv_perm_c_full[:block_size] = inv_perm_c
+
+                        l_csr = fac.L.tocsr()
+                        u_csr = fac.U.tocsr()
+                        for i in range(int(block_size)):
+                            rs = int(l_csr.indptr[i])
+                            re = int(l_csr.indptr[i + 1])
+                            cols = l_csr.indices[rs:re]
+                            vals = l_csr.data[rs:re]
+                            mask = cols < i
+                            cols_l = cols[mask].astype(np.int32, copy=False)
+                            vals_l = vals[mask].astype(np.float64, copy=False)
+                            if block_compact_row_cap > 0 and int(cols_l.size) > int(block_compact_row_cap):
+                                sel = np.argpartition(np.abs(vals_l), -int(block_compact_row_cap))[
+                                    -int(block_compact_row_cap) :
+                                ]
+                                cols_l = cols_l[sel]
+                                vals_l = vals_l[sel]
+                            if cols_l.size:
+                                order = np.argsort(cols_l)
+                                cols_l = cols_l[order]
+                                vals_l = vals_l[order]
+                                lower_indices_parts.append(cols_l)
+                                lower_val_parts.append(vals_l)
+                                lower_nnz_total += int(cols_l.size)
+                                if lower_nnz_total > csr_index_limit:
+                                    raise MemoryError("compact x-block lower factor exceeds int32 CSR index capacity")
+                            lower_indptr_full[i + 1] = int(lower_nnz_total)
+
+                            rs_u = int(u_csr.indptr[i])
+                            re_u = int(u_csr.indptr[i + 1])
+                            cols_u_all = u_csr.indices[rs_u:re_u]
+                            vals_u_all = u_csr.data[rs_u:re_u]
+                            diag_mask = cols_u_all == i
+                            if np.any(diag_mask):
+                                upper_diag_full[i] = float(vals_u_all[diag_mask][0])
+                            cols_u = cols_u_all[cols_u_all > i].astype(np.int32, copy=False)
+                            vals_u = vals_u_all[cols_u_all > i].astype(np.float64, copy=False)
+                            if block_compact_row_cap > 0 and int(cols_u.size) > int(block_compact_row_cap):
+                                sel = np.argpartition(np.abs(vals_u), -int(block_compact_row_cap))[
+                                    -int(block_compact_row_cap) :
+                                ]
+                                cols_u = cols_u[sel]
+                                vals_u = vals_u[sel]
+                            if cols_u.size:
+                                order = np.argsort(cols_u)
+                                cols_u = cols_u[order]
+                                vals_u = vals_u[order]
+                                upper_indices_parts.append(cols_u)
+                                upper_val_parts.append(vals_u)
+                                upper_nnz_total += int(cols_u.size)
+                                if upper_nnz_total > csr_index_limit:
+                                    raise MemoryError("compact x-block upper factor exceeds int32 CSR index capacity")
+                            upper_indptr_full[i + 1] = int(upper_nnz_total)
+
+                        bad_diag = ~np.isfinite(upper_diag_full[:block_size]) | (upper_diag_full[:block_size] == 0.0)
+                        if np.any(bad_diag):
+                            upper_diag_full[np.flatnonzero(bad_diag)] = 1.0
+                    elif emit is not None and block_size > 0:
+                        emit(
+                            1,
+                            "xblock_sparse_csr: missing factor for block "
+                            f"(species={int(s)} x={int(ix)} size={int(block_size)}); using identity",
+                        )
+
+                    if fac is None:
+                        lower_indptr_full[1:] = int(lower_nnz_total)
+                        upper_indptr_full[1:] = int(upper_nnz_total)
+                    elif block_size < block_size_max:
+                        lower_indptr_full[block_size + 1 :] = int(lower_nnz_total)
+                        upper_indptr_full[block_size + 1 :] = int(upper_nnz_total)
+
+                    perm_r_blocks.append(perm_r_full)
+                    inv_perm_c_blocks.append(inv_perm_c_full)
+                    upper_diag_blocks.append(upper_diag_full)
+                    lower_indptr_parts.append(lower_indptr_full)
+                    upper_indptr_parts.append(upper_indptr_full)
+
+            lower_indices_np = (
+                np.concatenate(lower_indices_parts).astype(np.int32, copy=False)
+                if lower_indices_parts
+                else np.zeros((0,), dtype=np.int32)
+            )
+            lower_val_np = (
+                np.concatenate(lower_val_parts).astype(np.float64, copy=False)
+                if lower_val_parts
+                else np.zeros((0,), dtype=np.float64)
+            )
+            upper_indices_np = (
+                np.concatenate(upper_indices_parts).astype(np.int32, copy=False)
+                if upper_indices_parts
+                else np.zeros((0,), dtype=np.int32)
+            )
+            upper_val_np = (
+                np.concatenate(upper_val_parts).astype(np.float64, copy=False)
+                if upper_val_parts
+                else np.zeros((0,), dtype=np.float64)
+            )
+            lower_indptr_np = np.concatenate(lower_indptr_parts).astype(np.int32, copy=False)
+            upper_indptr_np = np.concatenate(upper_indptr_parts).astype(np.int32, copy=False)
+            perm_r_np = np.stack(perm_r_blocks, axis=0).reshape((n_species, n_x, block_size_max))
+            inv_perm_c_np = np.stack(inv_perm_c_blocks, axis=0).reshape((n_species, n_x, block_size_max))
+            upper_diag_np = np.stack(upper_diag_blocks, axis=0).reshape((n_species, n_x, block_size_max))
+            factor_nbytes = int(
+                lower_indptr_np.nbytes
+                + upper_indptr_np.nbytes
+                + lower_indices_np.nbytes
+                + upper_indices_np.nbytes
+                + lower_val_np.nbytes
+                + upper_val_np.nbytes
+                + perm_r_np.nbytes
+                + inv_perm_c_np.nbytes
+                + upper_diag_np.nbytes
+            )
+
+            extra_idx_jnp = jnp.asarray(extra_idx_np, dtype=jnp.int32)
+            extra_inv_jnp: jnp.ndarray | None = None
+            if extra_size > 0:
+                chunk_cols = _precond_chunk_cols(total_size, int(extra_idx_np.shape[0]))
+                y_sub = _matvec_submatrix(
+                    op,
+                    col_idx=extra_idx_np,
+                    row_idx=extra_idx_np,
+                    total_size=total_size,
+                    chunk_cols=chunk_cols,
+                )
+                ee = np.asarray(y_sub.T, dtype=np.float64)
+                ee = ee + np.float64(reg_val) * np.eye(extra_size, dtype=np.float64)
+                try:
+                    ee_inv = np.linalg.inv(ee)
+                except np.linalg.LinAlgError:
+                    ee_inv = np.linalg.pinv(ee, rcond=1e-12)
+                if not np.all(np.isfinite(ee_inv)):
+                    ee_inv = np.linalg.pinv(ee, rcond=1e-12)
+                extra_inv_jnp = jnp.asarray(ee_inv, dtype=jnp.float64)
+
+            cached = _RHSMode1SparseXBlockCSRPrecondCache(
+                perm_r_sx=jnp.asarray(perm_r_np, dtype=jnp.int32),
+                inv_perm_c_sx=jnp.asarray(inv_perm_c_np, dtype=jnp.int32),
+                lower_indptr=jnp.asarray(lower_indptr_np, dtype=jnp.int32),
+                lower_indices=jnp.asarray(lower_indices_np, dtype=jnp.int32),
+                lower_val=jnp.asarray(lower_val_np, dtype=jnp.float64),
+                upper_indptr=jnp.asarray(upper_indptr_np, dtype=jnp.int32),
+                upper_indices=jnp.asarray(upper_indices_np, dtype=jnp.int32),
+                upper_val=jnp.asarray(upper_val_np, dtype=jnp.float64),
+                upper_diag_sx=jnp.asarray(upper_diag_np, dtype=jnp.float64),
+                extra_idx_jnp=extra_idx_jnp,
+                extra_inv_jnp=extra_inv_jnp,
+                lower_nnz=int(lower_indices_np.size),
+                upper_nnz=int(upper_indices_np.size),
+                nbytes_estimate=int(factor_nbytes),
+            )
+            _RHSMODE1_SPARSE_XBLOCK_CSR_PRECOND_CACHE[cache_key] = cached
+            if emit is not None:
+                emit(
+                    1,
+                    "xblock_sparse_csr: built compact JAX factors "
+                    f"(lower_nnz={int(lower_indices_np.size)} upper_nnz={int(upper_indices_np.size)} "
+                    f"nbytes={int(factor_nbytes)})",
+                )
+        elif build_jax_factors:
             perm_r_blocks: list[np.ndarray] = []
             inv_perm_c_blocks: list[np.ndarray] = []
             lower_idx_blocks: list[np.ndarray] = []
@@ -10165,23 +11031,32 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
                             return y_full[_block_slice]
 
                         block_cache_key = (cache_key, int(s), int(ix), int(block_size))
-                        exact_lu = block_size <= int(lu_max)
+                        local_candidate = _local_factor_candidate(block_size)
+                        if local_candidate.lower_fill and emit is not None:
+                            emit(
+                                1,
+                                "xblock_sparse: lower-fill local factor "
+                                f"(species={int(s)} x={int(ix)} size={int(block_size)} "
+                                f"drop_tol={local_candidate.tuning.ilu_drop_tol:.1e} "
+                                f"fill={local_candidate.tuning.fill_factor:.1f} "
+                                f"row_cap={int(local_candidate.tuning.row_nnz_cap)})",
+                            )
                         try:
                             _build_sparse_ilu_from_matvec(
                                 matvec=_mv_block,
                                 n=int(block_size),
                                 dtype=jnp.float64,
                                 cache_key=block_cache_key,
-                                drop_tol=drop_tol,
-                                drop_rel=drop_rel,
-                                ilu_drop_tol=ilu_drop_tol,
-                                fill_factor=fill_factor,
+                                drop_tol=local_candidate.tuning.drop_tol,
+                                drop_rel=local_candidate.tuning.drop_rel,
+                                ilu_drop_tol=local_candidate.tuning.ilu_drop_tol,
+                                fill_factor=local_candidate.tuning.fill_factor,
                                 build_dense_factors=False,
                                 build_jax_factors=True,
                                 build_ilu=True,
                                 store_dense=False,
-                                factorization="lu" if exact_lu else "ilu",
-                                row_nnz_cap=int(row_cap),
+                                factorization=local_candidate.factorization,
+                                row_nnz_cap=int(local_candidate.tuning.row_nnz_cap),
                                 emit=emit,
                             )
                             fac_cache = _RHSMODE1_SPARSE_ILU_CACHE.get(block_cache_key)
@@ -10334,7 +11209,17 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
                         return y_full[_block_slice]
 
                     block_cache_key = (cache_key, int(s), int(ix), int(block_size))
-                    exact_lu = block_size <= int(lu_max)
+                    local_candidate = _local_factor_candidate(block_size)
+                    if local_candidate.lower_fill and emit is not None:
+                        emit(
+                            1,
+                            "xblock_sparse_host: lower-fill local factor "
+                            f"(species={int(s)} x={int(ix)} size={int(block_size)} "
+                            f"drop_tol={local_candidate.tuning.ilu_drop_tol:.1e} "
+                            f"fill={local_candidate.tuning.fill_factor:.1f} "
+                            f"row_cap={int(local_candidate.tuning.row_nnz_cap)} "
+                            f"reason={local_candidate.selection_reason})",
+                        )
                     try:
                         fac_cache = _RHSMODE1_SPARSE_ILU_CACHE.get(block_cache_key)
                         if fac_cache is None or fac_cache.ilu is None:
@@ -10355,11 +11240,11 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
                                 _factorize_sparse_matrix_csr_host(
                                     a_csr_full=a_block.tocsr(),
                                     cache_key=block_cache_key,
-                                    drop_tol=drop_tol,
-                                    drop_rel=drop_rel,
-                                    ilu_drop_tol=ilu_drop_tol,
-                                    fill_factor=fill_factor,
-                                    factorization="lu" if exact_lu else "ilu",
+                                    drop_tol=local_candidate.tuning.drop_tol,
+                                    drop_rel=local_candidate.tuning.drop_rel,
+                                    ilu_drop_tol=local_candidate.tuning.ilu_drop_tol,
+                                    fill_factor=local_candidate.tuning.fill_factor,
+                                    factorization=local_candidate.factorization,
                                     emit=emit,
                                 )
                             else:
@@ -10368,16 +11253,16 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
                                     n=int(block_size),
                                     dtype=jnp.float64,
                                     cache_key=block_cache_key,
-                                    drop_tol=drop_tol,
-                                    drop_rel=drop_rel,
-                                    ilu_drop_tol=ilu_drop_tol,
-                                    fill_factor=fill_factor,
+                                    drop_tol=local_candidate.tuning.drop_tol,
+                                    drop_rel=local_candidate.tuning.drop_rel,
+                                    ilu_drop_tol=local_candidate.tuning.ilu_drop_tol,
+                                    fill_factor=local_candidate.tuning.fill_factor,
                                     build_dense_factors=False,
                                     build_jax_factors=False,
                                     build_ilu=True,
                                     store_dense=False,
-                                    factorization="lu" if exact_lu else "ilu",
-                                    row_nnz_cap=int(row_cap),
+                                    factorization=local_candidate.factorization,
+                                    row_nnz_cap=int(local_candidate.tuning.row_nnz_cap),
                                     emit=emit,
                                 )
                             fac_cache = _RHSMODE1_SPARSE_ILU_CACHE.get(block_cache_key)
@@ -10430,7 +11315,97 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
             )
             _RHSMODE1_SPARSE_XBLOCK_HOST_PRECOND_CACHE[cache_key] = cached
 
-    if build_jax_factors:
+    if build_jax_factors and xblock_jax_factor_format == "csr":
+        perm_r_sx = cached.perm_r_sx
+        inv_perm_c_sx = cached.inv_perm_c_sx
+        lower_indptr = cached.lower_indptr
+        lower_indices = cached.lower_indices
+        lower_val = cached.lower_val
+        upper_indptr = cached.upper_indptr
+        upper_indices = cached.upper_indices
+        upper_val = cached.upper_val
+        upper_diag_sx = cached.upper_diag_sx
+        extra_idx_jnp = cached.extra_idx_jnp
+        extra_inv_jnp = cached.extra_inv_jnp
+
+        f_size = int(op.f_size)
+        n_blocks = int(n_species * n_x)
+        block_ids = jnp.arange(n_blocks, dtype=jnp.int32)
+        row_stride = jnp.asarray(block_size_max + 1, dtype=jnp.int32)
+        if emit is not None and xblock_jax_factor_apply != "exact":
+            emit(
+                1,
+                "xblock_sparse_csr: using approximate compact JAX factor apply "
+                f"mode={xblock_jax_factor_apply}",
+            )
+
+        def _solve_block_csr(inputs: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]) -> jnp.ndarray:
+            r, block_id, perm_r, inv_perm_c, upper_diag = inputs
+            if xblock_jax_factor_apply == "identity":
+                return r
+            r_perm = r[perm_r]
+            if xblock_jax_factor_apply == "diagonal":
+                diag_abs = jnp.abs(upper_diag)
+                sign = jnp.where(upper_diag < 0.0, -1.0, 1.0)
+                denom = jnp.where(diag_abs > 1.0e-14, upper_diag, sign * 1.0e-14)
+                return (r_perm / denom)[inv_perm_c]
+            row_base = block_id * row_stride
+            if xblock_jax_factor_apply == "lower":
+                y = _triangular_solve_lower_csr_rows(
+                    indptr=lower_indptr,
+                    indices=lower_indices,
+                    data=lower_val,
+                    b=r_perm,
+                    row_base=row_base,
+                )
+                return y[inv_perm_c]
+            if xblock_jax_factor_apply == "upper":
+                z = _triangular_solve_upper_csr_rows(
+                    indptr=upper_indptr,
+                    indices=upper_indices,
+                    data=upper_val,
+                    upper_diag=upper_diag,
+                    b=r_perm,
+                    row_base=row_base,
+                )
+                return z[inv_perm_c]
+            y = _triangular_solve_lower_csr_rows(
+                indptr=lower_indptr,
+                indices=lower_indices,
+                data=lower_val,
+                b=r_perm,
+                row_base=row_base,
+            )
+            z = _triangular_solve_upper_csr_rows(
+                indptr=upper_indptr,
+                indices=upper_indices,
+                data=upper_val,
+                upper_diag=upper_diag,
+                b=y,
+                row_base=row_base,
+            )
+            return z[inv_perm_c]
+
+        def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
+            r_full = jnp.asarray(r_full, dtype=jnp.float64)
+            r_blocks = r_full[:f_size].reshape((n_blocks, block_size_max))
+            z_blocks = jax.lax.map(
+                _solve_block_csr,
+                (
+                    r_blocks,
+                    block_ids,
+                    perm_r_sx.reshape((n_blocks, block_size_max)),
+                    inv_perm_c_sx.reshape((n_blocks, block_size_max)),
+                    upper_diag_sx.reshape((n_blocks, block_size_max)),
+                ),
+            )
+            z_full = jnp.concatenate([z_blocks.reshape((-1,)), r_full[f_size:]], axis=0)
+            if extra_inv_jnp is not None:
+                r_extra = r_full[extra_idx_jnp]
+                z_extra = extra_inv_jnp @ r_extra
+                z_full = z_full.at[extra_idx_jnp].set(z_extra, unique_indices=True)
+            return jnp.asarray(z_full, dtype=jnp.float64)
+    elif build_jax_factors:
         perm_r_sx = cached.perm_r_sx
         inv_perm_c_sx = cached.inv_perm_c_sx
         lower_idx_sx = cached.lower_idx_sx
@@ -10473,20 +11448,69 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
             in_axes=(0, 0, 0, 0, 0, 0, 0, 0),
             out_axes=0,
         )
+        if emit is not None and xblock_jax_factor_apply != "exact":
+            emit(
+                1,
+                "xblock_sparse: using approximate JAX factor apply "
+                f"mode={xblock_jax_factor_apply}",
+            )
 
         def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
             r_full = jnp.asarray(r_full, dtype=jnp.float64)
             r_f = r_full[:f_size].reshape((n_species, n_x, block_size_max))
-            z_f = _solve_over_sx(
-                r_f,
-                perm_r_sx,
-                inv_perm_c_sx,
-                lower_idx_sx,
-                lower_val_sx,
-                upper_idx_sx,
-                upper_val_sx,
-                upper_diag_sx,
-            )
+            if xblock_jax_factor_apply == "identity":
+                z_f = r_f
+            elif xblock_jax_factor_apply == "diagonal":
+                diag_abs = jnp.abs(upper_diag_sx)
+                sign = jnp.where(upper_diag_sx < 0.0, -1.0, 1.0)
+                denom = jnp.where(diag_abs > 1.0e-14, upper_diag_sx, sign * 1.0e-14)
+                r_perm = jnp.take_along_axis(r_f, perm_r_sx, axis=2)
+                z_perm = r_perm / denom
+                z_f = jnp.take_along_axis(z_perm, inv_perm_c_sx, axis=2)
+            elif xblock_jax_factor_apply == "lower":
+                r_perm = jnp.take_along_axis(r_f, perm_r_sx, axis=2)
+                y = jax.vmap(
+                    jax.vmap(
+                        lambda r, lower_idx, lower_val: _triangular_solve_lower_padded(
+                            lower_idx=lower_idx,
+                            lower_val=lower_val,
+                            b=r,
+                        ),
+                        in_axes=(0, 0, 0),
+                        out_axes=0,
+                    ),
+                    in_axes=(0, 0, 0),
+                    out_axes=0,
+                )(r_perm, lower_idx_sx, lower_val_sx)
+                z_f = jnp.take_along_axis(y, inv_perm_c_sx, axis=2)
+            elif xblock_jax_factor_apply == "upper":
+                r_perm = jnp.take_along_axis(r_f, perm_r_sx, axis=2)
+                z_perm = jax.vmap(
+                    jax.vmap(
+                        lambda r, upper_idx, upper_val, upper_diag: _triangular_solve_upper_padded(
+                            upper_idx=upper_idx,
+                            upper_val=upper_val,
+                            upper_diag=upper_diag,
+                            b=r,
+                        ),
+                        in_axes=(0, 0, 0, 0),
+                        out_axes=0,
+                    ),
+                    in_axes=(0, 0, 0, 0),
+                    out_axes=0,
+                )(r_perm, upper_idx_sx, upper_val_sx, upper_diag_sx)
+                z_f = jnp.take_along_axis(z_perm, inv_perm_c_sx, axis=2)
+            else:
+                z_f = _solve_over_sx(
+                    r_f,
+                    perm_r_sx,
+                    inv_perm_c_sx,
+                    lower_idx_sx,
+                    lower_val_sx,
+                    upper_idx_sx,
+                    upper_val_sx,
+                    upper_diag_sx,
+                )
             z_full = jnp.concatenate([z_f.reshape((-1,)), r_full[f_size:]], axis=0)
             if extra_inv_jnp is not None:
                 r_extra = r_full[extra_idx_jnp]
@@ -12599,6 +13623,10 @@ def solve_v3_full_system_linear_gmres(
             xblock_drop_rel = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_REL", 1.0e-8)
             xblock_ilu_drop_tol = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_ILU_DROP_TOL", 1.0e-4)
             xblock_fill_factor = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FILL_FACTOR", 10.0)
+            xblock_lower_fill_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL", "").strip()
+            xblock_lower_fill_mode, xblock_lower_fill_ignored_env = (
+                _rhs1_xblock_policy.rhs1_xblock_lower_fill_mode(xblock_lower_fill_env)
+            )
             xblock_preconditioner_xi = int(preconditioner_xi)
             if xblock_preconditioner_xi == 0:
                 xblock_preconditioner_xi = 1
@@ -12628,18 +13656,117 @@ def solve_v3_full_system_linear_gmres(
                     use_implicit=False,
                 )
             )
-            xblock_krylov_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "").strip().lower()
+            xblock_krylov_env_requested = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV",
+                "",
+            ).strip().lower()
+            xblock_krylov_env = xblock_krylov_env_requested
             xblock_krylov_requested, _xblock_krylov_unknown_early = _rhs1_xblock_policy.rhs1_xblock_krylov_method(
                 xblock_krylov_env
             )
             xblock_device_fgmres_requested = str(xblock_krylov_requested) == "fgmres_jax"
             xblock_device_gmres_requested = str(xblock_krylov_requested) == "gmres_jax"
-            xblock_device_krylov_requested = bool(xblock_device_fgmres_requested or xblock_device_gmres_requested)
+            xblock_device_bicgstab_requested = str(xblock_krylov_requested) == "bicgstab_jax"
+            xblock_device_tfqmr_requested = str(xblock_krylov_requested) == "tfqmr_jax"
+            xblock_device_krylov_requested = bool(
+                xblock_device_fgmres_requested
+                or xblock_device_gmres_requested
+                or xblock_device_bicgstab_requested
+                or xblock_device_tfqmr_requested
+            )
+            xblock_device_host_fallback_decision = (
+                _rhs1_xblock_policy.rhs1_xblock_device_host_fallback_decision(
+                    env_value=os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK",
+                        "",
+                    ),
+                    requested_krylov_method=str(xblock_krylov_requested),
+                    active_size=int(active_size),
+                    min_active_size_env_value=os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK_MIN_ACTIVE",
+                        "",
+                    ),
+                    rhs_mode=int(op.rhs_mode),
+                    constraint_scheme=int(op.constraint_scheme),
+                    include_phi1=bool(op.include_phi1),
+                    has_fp=op.fblock.fp is not None,
+                    has_pas=op.fblock.pas is not None,
+                    n_zeta=int(getattr(op, "n_zeta", 1)),
+                )
+            )
+            if bool(xblock_device_host_fallback_decision.used):
+                xblock_krylov_env = str(xblock_device_host_fallback_decision.effective_krylov_env_value)
+                xblock_krylov_requested, _xblock_krylov_unknown_early = (
+                    _rhs1_xblock_policy.rhs1_xblock_krylov_method(xblock_krylov_env)
+                )
+                xblock_device_fgmres_requested = str(xblock_krylov_requested) == "fgmres_jax"
+                xblock_device_gmres_requested = str(xblock_krylov_requested) == "gmres_jax"
+                xblock_device_bicgstab_requested = str(xblock_krylov_requested) == "bicgstab_jax"
+                xblock_device_tfqmr_requested = str(xblock_krylov_requested) == "tfqmr_jax"
+                xblock_device_krylov_requested = False
+                if emit is not None:
+                    emit(
+                        0,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "using non-autodiff host x-block fallback for requested device Krylov "
+                        f"method={xblock_device_host_fallback_decision.requested_method} "
+                        f"reason={xblock_device_host_fallback_decision.reason} "
+                        f"active_size={int(active_size)}",
+                    )
+            elif bool(xblock_device_host_fallback_decision.ignored_env) and emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "ignoring unknown SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK value; "
+                    f"using auto policy reason={xblock_device_host_fallback_decision.reason}",
+                )
             xblock_jax_factors_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS", "").strip().lower()
-            xblock_jax_factors = _rhs1_bool_env(
+            xblock_jax_factors_requested = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS",
                 default=False,
-            ) or bool(xblock_device_krylov_requested)
+            )
+            xblock_jax_factors = (
+                bool(xblock_jax_factors_requested) or bool(xblock_device_krylov_requested)
+            ) and not bool(xblock_device_host_fallback_decision.used)
+            if (
+                bool(xblock_device_host_fallback_decision.used)
+                and bool(xblock_jax_factors_requested)
+                and emit is not None
+            ):
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "ignoring SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS=1 because "
+                    "the non-autodiff host fallback requires host sparse factors",
+                )
+            xblock_jax_factor_format_env = (
+                os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT", "padded")
+                .strip()
+                .lower()
+                .replace("-", "_")
+            )
+            xblock_jax_factor_format = (
+                "csr"
+                if xblock_jax_factor_format_env in {"csr", "compact", "compact_csr", "ragged_csr"}
+                else "padded"
+            )
+            xblock_jax_factor_apply_env = (
+                os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_APPLY", "exact")
+                .strip()
+                .lower()
+                .replace("-", "_")
+            )
+            xblock_jax_factor_apply = (
+                "diagonal"
+                if xblock_jax_factor_apply_env in {"diag", "diagonal", "jacobi", "factor_diag", "factor_diagonal"}
+                else "identity"
+                if xblock_jax_factor_apply_env in {"identity", "none", "skip"}
+                else "upper"
+                if xblock_jax_factor_apply_env in {"upper", "upper_only", "u", "u_only"}
+                else "lower"
+                if xblock_jax_factor_apply_env in {"lower", "lower_only", "l", "l_only"}
+                else "exact"
+            )
             xblock_device_krylov_forced_jax_factors = bool(
                 xblock_device_krylov_requested
                 and xblock_jax_factors_env not in {"1", "true", "t", "yes", "on", ".true.", ".t."}
@@ -12769,11 +13896,22 @@ def solve_v3_full_system_linear_gmres(
                 z_full = precond_xblock(_xblock_expand_reduced(jnp.asarray(v, dtype=rhs.dtype)))
                 return _xblock_reduce_full(z_full)
 
+            xblock_row_equilibration_enabled = False
+            xblock_row_equilibration_built = False
+            xblock_row_equilibration_metadata: dict[str, object] = {}
+            xblock_row_scale_jnp: jnp.ndarray | None = None
+            xblock_inv_row_scale_jnp: jnp.ndarray | None = None
+            xblock_col_equilibration_enabled = False
+            xblock_col_equilibration_built = False
+            xblock_col_equilibration_metadata: dict[str, object] = {}
+            xblock_col_scale_jnp: jnp.ndarray | None = None
+            xblock_inv_col_scale_jnp: jnp.ndarray | None = None
             assembled_operator_enabled = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR",
                 default=False,
             )
             assembled_operator_built = False
+            assembled_operator_device_resident = False
             assembled_operator_metadata: dict[str, object] = {}
             if assembled_operator_enabled:
                 assembled_operator_start_s = sparse_timer.elapsed_s()
@@ -12793,6 +13931,14 @@ def solve_v3_full_system_linear_gmres(
                         "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DROP_TOL",
                         default=0.0,
                         minimum=0.0,
+                    )
+                    assembled_device_enabled = _rhs1_bool_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE",
+                        default=str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"},
+                    )
+                    assembled_device_required = _rhs1_bool_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED",
+                        default=False,
                     )
                     assembled_max_colors = _rhs1_int_env(
                         "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS",
@@ -12829,6 +13975,9 @@ def solve_v3_full_system_linear_gmres(
                             "preflight_full_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
                             "preflight_csr_max_mb": float(assembled_csr_max_mb),
                             "preflight_rejected": False,
+                            "device_enabled": bool(assembled_device_enabled),
+                            "device_required": bool(assembled_device_required),
+                            "device_resident": False,
                         }
                     )
                     if assembled_csr_cap_nbytes <= 0:
@@ -12930,18 +14079,218 @@ def solve_v3_full_system_linear_gmres(
                             "assembled x-block operator validation failed "
                             f"max_rel_error={max_validation_error:.3e} > {float(validation_tol):.3e}"
                         )
-
-                    def _mv_assembled(v: jnp.ndarray) -> jnp.ndarray:
-                        nonlocal mv_count
-                        mv_count += 1
-                        if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                f"assembled_matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
+                    xblock_col_equilibration_enabled = _rhs1_bool_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_COL_EQUILIBRATE",
+                        default=False,
+                    )
+                    xblock_row_equilibration_enabled = _rhs1_bool_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE",
+                        default=bool(xblock_col_equilibration_enabled),
+                    )
+                    if bool(xblock_row_equilibration_enabled):
+                        row_equilibration_start_s = sparse_timer.elapsed_s()
+                        row_equilibration_norm = (
+                            os.environ.get(
+                                "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE_NORM",
+                                "linf",
                             )
-                        v_np = np.asarray(jax.device_get(v), dtype=np.float64).reshape((-1,))
-                        return jnp.asarray(assembled_bundle.matvec(v_np), dtype=jnp.float64)
+                            .strip()
+                            .lower()
+                            .replace("-", "_")
+                        )
+                        if row_equilibration_norm in {"inf", "max", "maximum"}:
+                            row_equilibration_norm = "linf"
+                        elif row_equilibration_norm not in {"linf", "l1", "l2"}:
+                            row_equilibration_norm = "linf"
+                        row_equilibration_floor = _rhs1_float_env(
+                            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE_FLOOR",
+                            default=1.0e-14,
+                            minimum=0.0,
+                        )
+                        row_equilibration_max_scale = _rhs1_float_env(
+                            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE_MAX_SCALE",
+                            default=1.0e12,
+                            minimum=1.0,
+                        )
+                        assembled_csr_for_scaling = assembled_matrix.tocsr()
+                        abs_csr_for_scaling = abs(assembled_csr_for_scaling)
+                        if row_equilibration_norm == "l1":
+                            row_norm = np.asarray(abs_csr_for_scaling.sum(axis=1), dtype=np.float64).reshape((-1,))
+                        elif row_equilibration_norm == "l2":
+                            squared_csr = assembled_csr_for_scaling.copy()
+                            squared_csr.data = np.asarray(np.abs(squared_csr.data) ** 2, dtype=np.float64)
+                            row_norm = np.sqrt(
+                                np.asarray(squared_csr.sum(axis=1), dtype=np.float64).reshape((-1,))
+                            )
+                        else:
+                            row_norm = np.asarray(abs_csr_for_scaling.max(axis=1).toarray(), dtype=np.float64).reshape(
+                                (-1,)
+                            )
+                        row_norm = np.asarray(row_norm, dtype=np.float64)
+                        finite_positive = np.isfinite(row_norm) & (row_norm > float(row_equilibration_floor))
+                        raw_scale = np.ones_like(row_norm, dtype=np.float64)
+                        raw_scale[finite_positive] = 1.0 / row_norm[finite_positive]
+                        max_scale_use = max(1.0, float(row_equilibration_max_scale))
+                        row_scale_np = np.clip(raw_scale, 1.0 / max_scale_use, max_scale_use)
+                        inv_row_scale_np = 1.0 / row_scale_np
+                        if (
+                            row_scale_np.shape != (int(xblock_linear_size),)
+                            or not np.all(np.isfinite(row_scale_np))
+                            or not np.all(np.isfinite(inv_row_scale_np))
+                        ):
+                            raise RuntimeError("assembled x-block row equilibration produced invalid row scales")
+                        xblock_row_scale_jnp = jnp.asarray(row_scale_np, dtype=jnp.float64)
+                        xblock_inv_row_scale_jnp = jnp.asarray(inv_row_scale_np, dtype=jnp.float64)
+                        xblock_row_equilibration_built = True
+                        if bool(xblock_col_equilibration_enabled):
+                            col_equilibration_start_s = sparse_timer.elapsed_s()
+                            row_scaled_abs = abs_csr_for_scaling.multiply(row_scale_np[:, None])
+                            if row_equilibration_norm == "l1":
+                                col_norm = np.asarray(row_scaled_abs.sum(axis=0), dtype=np.float64).reshape((-1,))
+                            elif row_equilibration_norm == "l2":
+                                row_scaled_squared = assembled_csr_for_scaling.copy()
+                                row_scaled_squared.data = np.asarray(row_scaled_squared.data, dtype=np.float64) ** 2
+                                row_scaled_squared = row_scaled_squared.multiply((row_scale_np**2)[:, None])
+                                col_norm = np.sqrt(
+                                    np.asarray(row_scaled_squared.sum(axis=0), dtype=np.float64).reshape((-1,))
+                                )
+                            else:
+                                col_norm = np.asarray(row_scaled_abs.max(axis=0).toarray(), dtype=np.float64).reshape(
+                                    (-1,)
+                                )
+                            col_norm = np.asarray(col_norm, dtype=np.float64)
+                            col_finite_positive = np.isfinite(col_norm) & (
+                                col_norm > float(row_equilibration_floor)
+                            )
+                            raw_col_scale = np.ones_like(col_norm, dtype=np.float64)
+                            raw_col_scale[col_finite_positive] = 1.0 / col_norm[col_finite_positive]
+                            col_scale_np = np.clip(raw_col_scale, 1.0 / max_scale_use, max_scale_use)
+                            inv_col_scale_np = 1.0 / col_scale_np
+                            if (
+                                col_scale_np.shape != (int(xblock_linear_size),)
+                                or not np.all(np.isfinite(col_scale_np))
+                                or not np.all(np.isfinite(inv_col_scale_np))
+                            ):
+                                raise RuntimeError(
+                                    "assembled x-block column equilibration produced invalid column scales"
+                                )
+                            xblock_col_scale_jnp = jnp.asarray(col_scale_np, dtype=jnp.float64)
+                            xblock_inv_col_scale_jnp = jnp.asarray(inv_col_scale_np, dtype=jnp.float64)
+                            xblock_col_equilibration_built = True
+                            col_norm_positive = col_norm[col_finite_positive]
+                            xblock_col_equilibration_metadata = {
+                                "enabled": True,
+                                "built": True,
+                                "norm": row_equilibration_norm,
+                                "floor": float(row_equilibration_floor),
+                                "max_scale": float(max_scale_use),
+                                "setup_s": float(sparse_timer.elapsed_s() - col_equilibration_start_s),
+                                "zero_or_tiny_columns": int(col_norm.size - np.count_nonzero(col_finite_positive)),
+                                "col_norm_min": (
+                                    float(np.min(col_norm_positive)) if col_norm_positive.size else 0.0
+                                ),
+                                "col_norm_max": (
+                                    float(np.max(col_norm_positive)) if col_norm_positive.size else 0.0
+                                ),
+                                "col_scale_min": float(np.min(col_scale_np)) if col_scale_np.size else 0.0,
+                                "col_scale_max": float(np.max(col_scale_np)) if col_scale_np.size else 0.0,
+                            }
+                        row_norm_positive = row_norm[finite_positive]
+                        xblock_row_equilibration_metadata = {
+                            "enabled": True,
+                            "built": True,
+                            "norm": row_equilibration_norm,
+                            "floor": float(row_equilibration_floor),
+                            "max_scale": float(max_scale_use),
+                            "setup_s": float(sparse_timer.elapsed_s() - row_equilibration_start_s),
+                            "zero_or_tiny_rows": int(row_norm.size - np.count_nonzero(finite_positive)),
+                            "row_norm_min": float(np.min(row_norm_positive)) if row_norm_positive.size else 0.0,
+                            "row_norm_max": float(np.max(row_norm_positive)) if row_norm_positive.size else 0.0,
+                            "row_scale_min": float(np.min(row_scale_np)) if row_scale_np.size else 0.0,
+                            "row_scale_max": float(np.max(row_scale_np)) if row_scale_np.size else 0.0,
+                            "column_equilibration": bool(xblock_col_equilibration_built),
+                        }
+                        if emit is not None:
+                            emit(
+                                0,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                "assembled row equilibration built "
+                                f"norm={row_equilibration_norm} "
+                                f"scale_range=[{float(np.min(row_scale_np)):.3e}, "
+                                f"{float(np.max(row_scale_np)):.3e}]",
+                            )
+                            if bool(xblock_col_equilibration_built):
+                                assert xblock_col_equilibration_metadata
+                                emit(
+                                    0,
+                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                    "assembled column equilibration built "
+                                    f"norm={row_equilibration_norm} "
+                                    f"scale_range=[{xblock_col_equilibration_metadata['col_scale_min']:.3e}, "
+                                    f"{xblock_col_equilibration_metadata['col_scale_max']:.3e}]",
+                                )
+                    assembled_device_operator = None
+                    assembled_device_validation_errors: tuple[float, ...] = ()
+                    assembled_device_error = None
+                    if bool(assembled_device_enabled):
+                        try:
+                            assembled_device_operator = device_csr_from_matrix(
+                                assembled_matrix,
+                                dtype=np.float64,
+                                max_nbytes=int(assembled_csr_cap_nbytes),
+                            )
+                            assembled_device_validation_errors = validate_device_csr_matvec(
+                                assembled_device_operator,
+                                assembled_bundle.matvec,
+                                samples=int(validation_samples),
+                                rtol=float(validation_tol),
+                                seed=1730,
+                            )
+                            assembled_operator_device_resident = True
+                        except Exception as device_exc:  # noqa: BLE001
+                            assembled_device_error = f"{type(device_exc).__name__}: {device_exc}"
+                            if bool(assembled_device_required):
+                                raise RuntimeError(
+                                    "assembled x-block device CSR operator failed "
+                                    f"({assembled_device_error})"
+                                ) from device_exc
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                    "assembled device operator disabled after build failure "
+                                    f"({assembled_device_error})",
+                                )
+
+                    if assembled_device_operator is not None:
+                        assembled_device_matvec = assembled_device_operator.jitted_matvec()
+
+                        def _mv_assembled(v: jnp.ndarray) -> jnp.ndarray:
+                            nonlocal mv_count
+                            mv_count += 1
+                            if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                    f"assembled_device_matvecs={int(mv_count)} "
+                                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
+                                )
+                            return assembled_device_matvec(jnp.asarray(v, dtype=jnp.float64))
+
+                    else:
+
+                        def _mv_assembled(v: jnp.ndarray) -> jnp.ndarray:
+                            nonlocal mv_count
+                            mv_count += 1
+                            if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                    f"assembled_host_matvecs={int(mv_count)} "
+                                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
+                                )
+                            v_np = np.asarray(jax.device_get(v), dtype=np.float64).reshape((-1,))
+                            return jnp.asarray(assembled_bundle.matvec(v_np), dtype=jnp.float64)
 
                     _mv_xblock_krylov = _mv_assembled
                     assembled_operator_built = True
@@ -12961,13 +14310,31 @@ def solve_v3_full_system_linear_gmres(
                         "csr_nbytes_estimate": int(assembled_bundle.metadata.csr_nbytes_estimate),
                         "max_colors": int(assembled_max_colors),
                         "validation_rel_errors": tuple(float(v) for v in validation_errors),
+                        "device_enabled": bool(assembled_device_enabled),
+                        "device_required": bool(assembled_device_required),
+                        "device_resident": bool(assembled_operator_device_resident),
+                        "device_nnz": (
+                            int(assembled_device_operator.nnz)
+                            if assembled_device_operator is not None
+                            else None
+                        ),
+                        "device_csr_nbytes_estimate": (
+                            int(assembled_device_operator.nbytes_estimate)
+                            if assembled_device_operator is not None
+                            else None
+                        ),
+                        "device_validation_rel_errors": tuple(
+                            float(v) for v in assembled_device_validation_errors
+                        ),
+                        "device_error": assembled_device_error,
                     }
                     pc_factor_s += float(assembled_operator_metadata["setup_s"])
                     if emit is not None:
+                        operator_location = "device" if assembled_operator_device_resident else "host"
                         emit(
                             0,
                             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator "
-                            f"built nnz={assembled_operator_metadata['matrix_nnz']} "
+                            f"built location={operator_location} nnz={assembled_operator_metadata['matrix_nnz']} "
                             f"setup_s={assembled_operator_metadata['setup_s']:.3f}",
                         )
                 except Exception as exc:  # noqa: BLE001
@@ -12984,6 +14351,83 @@ def solve_v3_full_system_linear_gmres(
                         )
 
             precond_xblock_krylov = _precond_xblock_krylov_base
+            moment_schur_default_candidate = bool(
+                str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+                and int(op.rhs_mode) == 1
+                and int(op.constraint_scheme) == 1
+                and int(op.extra_size) > 0
+                and int(op.phi1_size) == 0
+            )
+            moment_schur_env_raw = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR",
+                "",
+            ).strip().lower()
+            moment_schur_default_blocked_by_compact_factors = bool(
+                moment_schur_default_candidate
+                and moment_schur_env_raw in {"", "auto", "default"}
+                and bool(xblock_jax_factors)
+                and str(xblock_jax_factor_format).strip().lower() == "csr"
+            )
+            moment_schur_default = bool(
+                moment_schur_default_candidate
+                and not moment_schur_default_blocked_by_compact_factors
+            )
+            moment_schur_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR",
+                default=moment_schur_default,
+            )
+            moment_schur_built = False
+            moment_schur_metadata: dict[str, object] = {}
+            moment_schur_stats = {"applies": 0, "base_applies": 0}
+            if (
+                emit is not None
+                and moment_schur_default_blocked_by_compact_factors
+                and not moment_schur_enabled
+            ):
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "constraint1 moment-Schur default disabled for compact JAX factors "
+                    "(set SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR=1 to force)",
+                )
+            if moment_schur_enabled and precondition_side != "none":
+                moment_schur_start_s = sparse_timer.elapsed_s()
+                moment_schur_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                if emit is not None:
+                    emit(
+                        0,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "constraint1 moment-Schur build start",
+                    )
+                try:
+                    precond_xblock_krylov, moment_schur_metadata, moment_schur_stats = (
+                        _build_rhs1_xblock_constraint1_moment_schur_preconditioner(
+                            op=op,
+                            base_preconditioner=precond_xblock_krylov,
+                            reduce_full=_xblock_reduce_full if xblock_use_active_dof else None,
+                            expand_reduced=_xblock_expand_reduced if xblock_use_active_dof else None,
+                            rcond=moment_schur_rcond,
+                            emit=emit,
+                        )
+                    )
+                    moment_schur_built = True
+                    moment_schur_metadata["setup_s"] = float(sparse_timer.elapsed_s() - moment_schur_start_s)
+                    pc_factor_s += float(moment_schur_metadata["setup_s"])
+                except Exception as exc:  # noqa: BLE001
+                    moment_schur_metadata = {
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "setup_s": float(sparse_timer.elapsed_s() - moment_schur_start_s),
+                    }
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"constraint1 moment-Schur disabled after build failure ({type(exc).__name__}: {exc})",
+                        )
             two_level_enabled = _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", default=False)
             two_level_built = False
             two_level_metadata: dict[str, object] = {}
@@ -13093,10 +14537,17 @@ def solve_v3_full_system_linear_gmres(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_INCLUDE_RHS",
                     default=True,
                 )
+                global_coupling_setup_max_s = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SETUP_MAX_S",
+                    default=180.0
+                    if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+                    else 0.0,
+                    minimum=0.0,
+                )
                 try:
                     global_builder = (
                         _build_rhs1_xblock_device_global_coupling_preconditioner
-                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
                         else _build_rhs1_xblock_smoothed_global_coupling_preconditioner
                     )
                     precond_xblock_krylov, global_coupling_metadata, global_coupling_stats = (
@@ -13114,6 +14565,7 @@ def solve_v3_full_system_linear_gmres(
                             max_directions=global_coupling_max_directions,
                             rcond=global_coupling_rcond,
                             include_rhs=global_coupling_include_rhs,
+                            max_setup_s=global_coupling_setup_max_s,
                             emit=emit,
                         )
                     )
@@ -13190,6 +14642,405 @@ def solve_v3_full_system_linear_gmres(
 
             xblock_rhs_norm = float(jnp.linalg.norm(xblock_rhs))
             target_xblock = max(float(atol), float(tol) * float(xblock_rhs_norm))
+            moment_schur_seed_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_SEED",
+                default=bool(moment_schur_built),
+            )
+            moment_schur_seed_used = False
+            moment_schur_seed_residual_norm: float | None = None
+            moment_schur_seed_residual_ratio: float | None = None
+            if moment_schur_seed_enabled and moment_schur_built:
+                try:
+                    seed_vec = jnp.asarray(precond_xblock_krylov(xblock_rhs), dtype=jnp.float64)
+                    if seed_vec.shape == xblock_rhs.shape and bool(jnp.all(jnp.isfinite(seed_vec))):
+                        seed_residual = xblock_rhs - jnp.asarray(_mv_true_no_count(seed_vec), dtype=jnp.float64)
+                        seed_residual_norm = float(jnp.linalg.norm(seed_residual))
+                        moment_schur_seed_residual_norm = float(seed_residual_norm)
+                        moment_schur_seed_residual_ratio = (
+                            float(seed_residual_norm) / float(target_xblock)
+                            if float(target_xblock) > 0.0
+                            else None
+                        )
+                        incumbent_norm = float(xblock_rhs_norm)
+                        if x0_full is not None:
+                            incumbent_residual = xblock_rhs - jnp.asarray(
+                                _mv_true_no_count(jnp.asarray(x0_full, dtype=jnp.float64)),
+                                dtype=jnp.float64,
+                            )
+                            incumbent_norm = float(jnp.linalg.norm(incumbent_residual))
+                        if np.isfinite(seed_residual_norm) and float(seed_residual_norm) < float(incumbent_norm):
+                            x0_full = seed_vec
+                            moment_schur_seed_used = True
+                            if emit is not None:
+                                emit(
+                                    0,
+                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                    f"constraint1 moment-Schur seed residual={seed_residual_norm:.6e} "
+                                    f"rhs_norm={float(xblock_rhs_norm):.6e}",
+                                )
+                        elif emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                f"constraint1 moment-Schur seed rejected residual={seed_residual_norm:.6e} "
+                                f"incumbent={float(incumbent_norm):.6e}",
+                            )
+                except Exception as exc:  # noqa: BLE001
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
+                        )
+            qi_coarse_seed_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED",
+                default=False,
+            )
+            qi_coarse_seed_used = False
+            qi_coarse_seed_residual_before: float | None = None
+            qi_coarse_seed_residual_after: float | None = None
+            qi_coarse_seed_improvement_ratio: float | None = None
+            qi_coarse_seed_rank = 0
+            qi_coarse_seed_candidate_count = 0
+            qi_coarse_seed_reason: str | None = None
+            qi_coarse_seed_labels: tuple[str, ...] = ()
+            qi_coarse_seed_s = 0.0
+            qi_seed_basis_kind: str | None = None
+            qi_seed_max_candidates = 0
+            qi_seed_max_angular_mode = 0
+            qi_seed_basis_for_galerkin: RHS1QICoarseBasis | None = None
+            qi_galerkin_preconditioner_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER",
+                default=False,
+            )
+            qi_galerkin_preconditioner_built = False
+            qi_galerkin_preconditioner_used = False
+            qi_galerkin_preconditioner_reason: str | None = None
+            qi_galerkin_preconditioner_mode: str | None = None
+            qi_galerkin_preconditioner_rank = 0
+            qi_galerkin_preconditioner_candidate_count = 0
+            qi_galerkin_preconditioner_coarse_shape: tuple[int, int] = (0, 0)
+            qi_galerkin_preconditioner_coarse_norm = 0.0
+            qi_galerkin_preconditioner_setup_s = 0.0
+            qi_galerkin_preconditioner_rcond = 0.0
+            qi_galerkin_preconditioner_damping = 1.0
+            qi_galerkin_preconditioner_basis_reused_from_seed = False
+            qi_galerkin_preconditioner_residual_before: float | None = None
+            qi_galerkin_preconditioner_residual_after: float | None = None
+            qi_galerkin_preconditioner_improvement_ratio: float | None = None
+            qi_galerkin_preconditioner_probe_reduced = False
+            qi_galerkin_preconditioner_probe_candidates: list[dict[str, object]] = []
+            qi_galerkin_preconditioner_selected_index: int | None = None
+            qi_galerkin_stats = {"applies": 0, "coarse_applies": 0, "base_applies": 0}
+            if qi_coarse_seed_enabled or qi_galerkin_preconditioner_enabled:
+                qi_seed_max_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK",
+                    default=24,
+                    minimum=1,
+                )
+                qi_seed_max_candidates = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES",
+                    default=96,
+                    minimum=1,
+                )
+                qi_seed_max_angular_mode = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_ANGULAR_MODE",
+                    default=2,
+                    minimum=0,
+                )
+                qi_seed_rank_rtol = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RANK_RTOL",
+                    default=1.0e-10,
+                    minimum=0.0,
+                )
+                qi_seed_min_improvement = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MIN_IMPROVEMENT",
+                    default=0.0,
+                    minimum=0.0,
+                )
+                qi_seed_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                qi_seed_include_angular = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_ANGULAR",
+                    default=True,
+                )
+                qi_seed_include_blocks = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_BLOCKS",
+                    default=True,
+                )
+                qi_seed_include_radial = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_RADIAL",
+                    default=True,
+                )
+                qi_seed_include_radial_angular = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_RADIAL_ANGULAR",
+                    default=True,
+                )
+                qi_seed_include_constraint_moments = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_CONSTRAINT_MOMENTS",
+                    default=True,
+                )
+                qi_seed_include_schur = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_SCHUR",
+                    default=True,
+                )
+                qi_seed_basis_kind = (
+                    os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS", "legacy")
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+            if qi_coarse_seed_enabled:
+                qi_seed_start_s = sparse_timer.elapsed_s()
+                try:
+                    qi_basis = _rhs1_xblock_qi_coarse_basis(
+                        op=op,
+                        active_dof=bool(xblock_use_active_dof),
+                        linear_size=int(xblock_linear_size),
+                        max_rank=int(qi_seed_max_rank),
+                        rank_rtol=float(qi_seed_rank_rtol),
+                        include_angular=bool(qi_seed_include_angular),
+                        include_blocks=bool(qi_seed_include_blocks),
+                        basis_kind=qi_seed_basis_kind,
+                        max_candidates=int(qi_seed_max_candidates),
+                        max_angular_mode=int(qi_seed_max_angular_mode),
+                        include_radial=bool(qi_seed_include_radial),
+                        include_radial_angular=bool(qi_seed_include_radial_angular),
+                        include_constraint_moments=bool(qi_seed_include_constraint_moments),
+                        include_schur=bool(qi_seed_include_schur),
+                    )
+                    qi_seed_basis_for_galerkin = qi_basis
+                    qi_current = (
+                        jnp.zeros_like(xblock_rhs)
+                        if x0_full is None
+                        else jnp.asarray(x0_full, dtype=jnp.float64)
+                    )
+                    qi_result = apply_rhs1_qi_coarse_correction(
+                        _mv_true_no_count,
+                        xblock_rhs,
+                        current=qi_current,
+                        basis=qi_basis,
+                        min_relative_improvement=float(qi_seed_min_improvement),
+                        rcond=float(qi_seed_rcond) if float(qi_seed_rcond) > 0.0 else None,
+                    )
+                    qi_coarse_seed_residual_before = float(qi_result.residual_before_norm)
+                    qi_coarse_seed_residual_after = float(qi_result.residual_after_norm)
+                    qi_coarse_seed_improvement_ratio = float(qi_result.improvement_ratio)
+                    qi_coarse_seed_rank = int(qi_result.basis_metadata.rank)
+                    qi_coarse_seed_candidate_count = int(qi_result.basis_metadata.candidate_count)
+                    qi_coarse_seed_reason = str(qi_result.reason)
+                    qi_coarse_seed_labels = tuple(qi_result.basis_metadata.accepted_labels)
+                    if bool(qi_result.applied):
+                        x0_full = jnp.asarray(qi_result.solution, dtype=jnp.float64)
+                        qi_coarse_seed_used = True
+                        if emit is not None:
+                            emit(
+                                0,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                f"QI coarse seed improved residual {qi_coarse_seed_residual_before:.6e} "
+                                f"-> {qi_coarse_seed_residual_after:.6e} "
+                                f"(rank={int(qi_coarse_seed_rank)} "
+                                f"ratio={float(qi_coarse_seed_improvement_ratio):.6e})",
+                            )
+                    elif emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"QI coarse seed rejected reason={qi_coarse_seed_reason} "
+                            f"residual={float(qi_coarse_seed_residual_before):.6e}",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    qi_coarse_seed_reason = f"{type(exc).__name__}: {exc}"
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"QI coarse seed failed ({type(exc).__name__}: {exc})",
+                        )
+                qi_coarse_seed_s = float(sparse_timer.elapsed_s() - qi_seed_start_s)
+            if qi_galerkin_preconditioner_enabled and bool(xblock_device_host_fallback_decision.used):
+                qi_galerkin_preconditioner_reason = "disabled_by_device_host_fallback"
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "QI Galerkin preconditioner disabled because device-host fallback is active",
+                    )
+            elif qi_galerkin_preconditioner_enabled and precondition_side == "none":
+                qi_galerkin_preconditioner_reason = "disabled_by_precondition_side_none"
+            elif qi_galerkin_preconditioner_enabled:
+                qi_galerkin_start_s = sparse_timer.elapsed_s()
+                qi_galerkin_mode_raw = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_MODE",
+                        "auto",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_galerkin_candidate_modes = parse_rhs1_qi_galerkin_modes(qi_galerkin_mode_raw, default="auto")
+                qi_galerkin_preconditioner_mode = (
+                    qi_galerkin_mode_raw if qi_galerkin_mode_raw in {"additive", "multiplicative"} else "auto"
+                )
+                qi_galerkin_preconditioner_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                qi_galerkin_preconditioner_damping = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_DAMPING",
+                    default=1.0,
+                    minimum=0.0,
+                )
+                qi_galerkin_candidate_dampings = parse_rhs1_qi_galerkin_dampings(
+                    os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_DAMPINGS", ""),
+                    default=float(qi_galerkin_preconditioner_damping),
+                )
+                qi_galerkin_probe = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_PROBE",
+                    default=True,
+                )
+                try:
+                    qi_galerkin_preconditioner_basis_reused_from_seed = qi_seed_basis_for_galerkin is not None
+                    if qi_seed_basis_for_galerkin is None:
+                        qi_seed_basis_for_galerkin = _rhs1_xblock_qi_coarse_basis(
+                            op=op,
+                            active_dof=bool(xblock_use_active_dof),
+                            linear_size=int(xblock_linear_size),
+                            max_rank=int(qi_seed_max_rank),
+                            rank_rtol=float(qi_seed_rank_rtol),
+                            include_angular=bool(qi_seed_include_angular),
+                            include_blocks=bool(qi_seed_include_blocks),
+                            basis_kind=qi_seed_basis_kind,
+                            max_candidates=int(qi_seed_max_candidates),
+                            max_angular_mode=int(qi_seed_max_angular_mode),
+                            include_radial=bool(qi_seed_include_radial),
+                            include_radial_angular=bool(qi_seed_include_radial_angular),
+                            include_constraint_moments=bool(qi_seed_include_constraint_moments),
+                            include_schur=bool(qi_seed_include_schur),
+                        )
+                    qi_galerkin = build_rhs1_qi_galerkin_preconditioner(
+                        _mv_xblock_krylov,
+                        basis=qi_seed_basis_for_galerkin,
+                        rcond=(
+                            float(qi_galerkin_preconditioner_rcond)
+                            if float(qi_galerkin_preconditioner_rcond) > 0.0
+                            else None
+                        ),
+                    )
+                    qi_galerkin_preconditioner_rank = int(qi_galerkin.metadata.rank)
+                    qi_galerkin_preconditioner_candidate_count = int(
+                        qi_galerkin.metadata.basis_metadata.candidate_count
+                    )
+                    qi_galerkin_preconditioner_coarse_shape = tuple(
+                        int(value) for value in qi_galerkin.metadata.coarse_operator_shape
+                    )
+                    qi_galerkin_preconditioner_coarse_norm = float(qi_galerkin.metadata.coarse_operator_norm)
+                    base_precond_xblock_krylov = precond_xblock_krylov
+                    qi_galerkin_apply = qi_galerkin.as_preconditioner()
+                    qi_galerkin_mode_use = str(qi_galerkin_candidate_modes[0])
+                    qi_galerkin_damping_use = float(qi_galerkin_candidate_dampings[0])
+
+                    def _precond_xblock_qi_galerkin(v: jnp.ndarray) -> jnp.ndarray:
+                        qi_galerkin_stats["applies"] += 1
+                        v_j = jnp.asarray(v, dtype=jnp.float64)
+                        base = jnp.asarray(base_precond_xblock_krylov(v_j), dtype=jnp.float64)
+                        qi_galerkin_stats["base_applies"] += 1
+                        if qi_galerkin_mode_use == "multiplicative":
+                            coarse_input = v_j - jnp.asarray(_mv_xblock_krylov(base), dtype=jnp.float64)
+                        else:
+                            coarse_input = v_j
+                        coarse = jnp.asarray(qi_galerkin_apply(coarse_input), dtype=jnp.float64)
+                        qi_galerkin_stats["coarse_applies"] += 1
+                        return base + qi_galerkin_damping_use * coarse
+
+                    qi_galerkin_preconditioner_built = True
+                    qi_galerkin_preconditioner_reason = "built"
+                    if bool(qi_galerkin_probe):
+                        probe_candidates: list[RHS1QIGalerkinProbeCandidate] = []
+                        v_probe = jnp.asarray(xblock_rhs, dtype=jnp.float64)
+                        base_probe = jnp.asarray(base_precond_xblock_krylov(v_probe), dtype=jnp.float64)
+                        for candidate_mode in qi_galerkin_candidate_modes:
+                            if str(candidate_mode) == "multiplicative":
+                                coarse_input = v_probe - jnp.asarray(_mv_xblock_krylov(base_probe), dtype=jnp.float64)
+                            else:
+                                coarse_input = v_probe
+                            coarse_probe = jnp.asarray(qi_galerkin_apply(coarse_input), dtype=jnp.float64)
+                            for candidate_damping in qi_galerkin_candidate_dampings:
+                                probe_solution = base_probe + float(candidate_damping) * coarse_probe
+                                probe_residual = xblock_rhs - jnp.asarray(
+                                    _mv_true_no_count(probe_solution),
+                                    dtype=jnp.float64,
+                                )
+                                residual_after = float(jnp.linalg.norm(probe_residual))
+                                ratio_after = (
+                                    residual_after / float(xblock_rhs_norm) if float(xblock_rhs_norm) > 0.0 else None
+                                )
+                                probe_candidates.append(
+                                    RHS1QIGalerkinProbeCandidate(
+                                        mode=str(candidate_mode),
+                                        damping=float(candidate_damping),
+                                        residual_norm=float(residual_after),
+                                        improvement_ratio=ratio_after,
+                                        reduced=bool(residual_after < float(xblock_rhs_norm)),
+                                    )
+                                )
+                        probe_selection = select_rhs1_qi_galerkin_probe_candidate(
+                            float(xblock_rhs_norm),
+                            probe_candidates,
+                        )
+                        qi_galerkin_preconditioner_probe_candidates = [
+                            candidate.to_dict() for candidate in probe_selection.candidates
+                        ]
+                        qi_galerkin_preconditioner_selected_index = probe_selection.selected_index
+                        qi_galerkin_preconditioner_residual_before = float(probe_selection.residual_before_norm)
+                        qi_galerkin_preconditioner_residual_after = probe_selection.residual_after_norm
+                        qi_galerkin_preconditioner_improvement_ratio = probe_selection.improvement_ratio
+                        qi_galerkin_preconditioner_probe_reduced = bool(probe_selection.accepted)
+                        if probe_selection.accepted:
+                            qi_galerkin_mode_use = str(probe_selection.selected_mode)
+                            qi_galerkin_damping_use = float(probe_selection.selected_damping)
+                            qi_galerkin_preconditioner_mode = qi_galerkin_mode_use
+                            qi_galerkin_preconditioner_damping = qi_galerkin_damping_use
+                            precond_xblock_krylov = _precond_xblock_qi_galerkin
+                            qi_galerkin_preconditioner_used = True
+                            qi_galerkin_preconditioner_reason = "probe_reduced"
+                        else:
+                            qi_galerkin_preconditioner_used = False
+                            qi_galerkin_preconditioner_reason = str(probe_selection.reason)
+                    else:
+                        precond_xblock_krylov = _precond_xblock_qi_galerkin
+                        qi_galerkin_preconditioner_used = True
+                        qi_galerkin_preconditioner_reason = "probe_disabled"
+                    if emit is not None:
+                        ratio = (
+                            f" probe_ratio={float(qi_galerkin_preconditioner_improvement_ratio):.6e}"
+                            if qi_galerkin_preconditioner_improvement_ratio is not None
+                            else ""
+                        )
+                        emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "QI Galerkin preconditioner built "
+                            f"mode={qi_galerkin_preconditioner_mode} "
+                            f"rank={int(qi_galerkin_preconditioner_rank)} "
+                            f"used={bool(qi_galerkin_preconditioner_used)} "
+                            f"reason={qi_galerkin_preconditioner_reason}{ratio}",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    qi_galerkin_preconditioner_reason = f"{type(exc).__name__}: {exc}"
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"QI Galerkin preconditioner disabled after build failure ({type(exc).__name__}: {exc})",
+                        )
+                qi_galerkin_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_galerkin_start_s)
+                pc_factor_s += float(qi_galerkin_preconditioner_setup_s)
             xblock_side_probe_enabled = _rhs1_xblock_policy.rhs1_xblock_side_probe_enabled(
                 env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE", ""),
                 explicit_side_env_value=side_env,
@@ -13217,7 +15068,10 @@ def solve_v3_full_system_linear_gmres(
             xblock_side_probe_matvecs = 0
             xblock_side_probe_s = 0.0
             xblock_side_probe_switch_suppressed_by_global_coupling = False
+            xblock_side_probe_switch_suppressed_by_explicit_side = False
             xblock_side_probe_physical_seed_preserved_after_switch = False
+            xblock_side_probe_seed_used = False
+            xblock_side_probe_seed_residual_norm: float | None = None
             if xblock_side_probe_enabled:
                 xblock_side_probe_used = True
                 xblock_side_probe_initial_side = str(precondition_side)
@@ -13259,8 +15113,31 @@ def solve_v3_full_system_linear_gmres(
                     xblock_side_probe_residual_ratio = (
                         float(residual_probe) / float(target_xblock) if float(target_xblock) > 0.0 else None
                     )
-                    if str(precondition_side) == "left":
+                    incumbent_seed_norm = float(xblock_rhs_norm)
+                    if x0_full is not None:
+                        try:
+                            incumbent_residual = xblock_rhs - jnp.asarray(
+                                _mv_true_no_count(jnp.asarray(x0_full, dtype=jnp.float64)),
+                                dtype=jnp.float64,
+                            )
+                            incumbent_seed_norm = float(jnp.linalg.norm(incumbent_residual))
+                        except Exception:
+                            incumbent_seed_norm = float(xblock_rhs_norm)
+                    if str(precondition_side) == "left" and np.isfinite(float(residual_probe)):
+                        # Preserve historical behavior: a left-preconditioned
+                        # side probe is already a physical-space state, so it
+                        # can seed a later side switch even if it was only used
+                        # as a switching diagnostic.
                         x0_full = jnp.asarray(x_probe, dtype=jnp.float64)
+                        xblock_side_probe_seed_used = True
+                        xblock_side_probe_seed_residual_norm = float(residual_probe)
+                    elif (
+                        np.isfinite(float(residual_probe))
+                        and float(residual_probe) < float(incumbent_seed_norm)
+                    ):
+                        x0_full = jnp.asarray(x_probe, dtype=jnp.float64)
+                        xblock_side_probe_seed_used = True
+                        xblock_side_probe_seed_residual_norm = float(residual_probe)
                     should_switch_side = _rhs1_xblock_policy.rhs1_xblock_side_probe_should_switch(
                         residual_ratio=xblock_side_probe_residual_ratio,
                         switch_ratio_env_value=os.environ.get(
@@ -13268,21 +15145,21 @@ def solve_v3_full_system_linear_gmres(
                             "",
                         ),
                     )
+                    if should_switch_side and side_env in {"left", "right", "none"}:
+                        should_switch_side = False
+                        xblock_side_probe_switch_suppressed_by_explicit_side = True
                     lgmres_rescue_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", "")
-                    lgmres_rescue_forced = lgmres_rescue_env.strip().lower() in {
-                        "1",
-                        "true",
-                        "t",
-                        "yes",
-                        "on",
-                        ".true.",
-                        ".t.",
-                    }
-                    lgmres_rescue_backend_allowed = str(jax.default_backend()).strip().lower() == "cpu"
+                    lgmres_rescue_backend_allowed = (
+                        _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_backend_allowed(
+                            backend=str(jax.default_backend()),
+                            env_value=lgmres_rescue_env,
+                        )
+                        or bool(xblock_device_host_fallback_decision.used)
+                    )
                     lgmres_rescue_enabled = _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_enabled(
-                        env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", ""),
+                        env_value=lgmres_rescue_env,
                         krylov_env_value=xblock_krylov_env,
-                    ) and (bool(lgmres_rescue_backend_allowed) or bool(lgmres_rescue_forced))
+                    ) and bool(lgmres_rescue_backend_allowed)
                     if (
                         should_switch_side
                         and bool(global_coupling_built)
@@ -13326,6 +15203,8 @@ def solve_v3_full_system_linear_gmres(
                     if emit is not None:
                         if xblock_side_probe_lgmres_rescue:
                             action = "method_rescue"
+                        elif xblock_side_probe_switch_suppressed_by_explicit_side:
+                            action = "keep_explicit_side"
                         elif xblock_side_probe_switch_suppressed_by_global_coupling:
                             action = "keep_global_coupling"
                         else:
@@ -13338,6 +15217,7 @@ def solve_v3_full_system_linear_gmres(
                             f"iters={xblock_side_probe_iterations} matvecs={xblock_side_probe_matvecs} "
                             f"residual={float(xblock_side_probe_residual_norm):.6e} "
                             f"ratio={float(xblock_side_probe_residual_ratio):.6e}"
+                            + (" seed_used=1" if xblock_side_probe_seed_used else "")
                             + (
                                 " preserved_physical_seed=1"
                                 if xblock_side_probe_physical_seed_preserved_after_switch
@@ -13374,8 +15254,10 @@ def solve_v3_full_system_linear_gmres(
                 *,
                 include_raw: bool,
                 fsavg_lmax: int,
+                angular_lmax: int,
                 max_extra_units: int,
                 max_directions: int,
+                include_angular_residual: bool,
             ) -> tuple[tuple[str, jnp.ndarray], ...]:
                 residual_for_basis = (
                     _xblock_expand_reduced(jnp.asarray(residual_vec, dtype=jnp.float64))
@@ -13390,8 +15272,10 @@ def solve_v3_full_system_linear_gmres(
                     expected_size=int(xblock_linear_size),
                     include_raw=bool(include_raw),
                     fsavg_lmax=int(fsavg_lmax),
+                    angular_lmax=int(angular_lmax),
                     max_extra_units=int(max_extra_units),
                     max_directions=int(max_directions),
+                    include_angular_residual=bool(include_angular_residual),
                 )
 
             probe_coarse_enabled = _rhs1_bool_env(
@@ -13418,6 +15302,15 @@ def solve_v3_full_system_linear_gmres(
                 default=2,
                 minimum=0,
             )
+            probe_coarse_angular_lmax = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_LMAX",
+                default=-1,
+                minimum=-1,
+            )
+            probe_coarse_include_angular_residual = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_RESIDUAL",
+                default=False,
+            )
             probe_coarse_include_raw = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_INCLUDE_RAW",
                 default=True,
@@ -13443,6 +15336,14 @@ def solve_v3_full_system_linear_gmres(
             probe_coarse_direction_names: tuple[str, ...] = ()
             probe_coarse_residual_before: float | None = None
             probe_coarse_residual_after: float | None = None
+            probe_coarse_seed_initialized = False
+            if probe_coarse_steps_requested > 0 and x0_full is None:
+                # Allow the opt-in probe-coarse path to act as a genuine
+                # pre-Krylov projected coarse solve. Previously it was inert
+                # unless an unrelated side probe or explicit initial seed had
+                # already provided an initial state.
+                x0_full = jnp.zeros_like(xblock_rhs)
+                probe_coarse_seed_initialized = True
             if probe_coarse_steps_requested > 0 and x0_full is not None:
                 probe_coarse_start_s = sparse_timer.elapsed_s()
 
@@ -13453,8 +15354,10 @@ def solve_v3_full_system_linear_gmres(
                         residual_vec,
                         include_raw=bool(probe_coarse_include_raw),
                         fsavg_lmax=int(probe_coarse_fsavg_lmax),
+                        angular_lmax=int(probe_coarse_angular_lmax),
                         max_extra_units=int(probe_coarse_max_extra_units),
                         max_directions=int(probe_coarse_max_directions),
+                        include_angular_residual=bool(probe_coarse_include_angular_residual),
                     )
 
                 try:
@@ -13517,20 +15420,196 @@ def solve_v3_full_system_linear_gmres(
                         )
                 probe_coarse_s = float(sparse_timer.elapsed_s() - probe_coarse_start_s)
 
+            preflight_min_improvement = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_MIN_IMPROVEMENT",
+                default=0.0,
+                minimum=0.0,
+            )
+            preflight_required = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_REQUIRED",
+                default=False,
+            )
+            preflight_residual_norm: float | None = None
+            preflight_improvement: float | None = None
+            preflight_passed: bool | None = None
+            if (float(preflight_min_improvement) > 0.0 or bool(preflight_required)) and x0_full is not None:
+                try:
+                    preflight_residual = xblock_rhs - jnp.asarray(
+                        _mv_true_no_count(jnp.asarray(x0_full, dtype=jnp.float64)),
+                        dtype=jnp.float64,
+                    )
+                    preflight_residual_norm = float(jnp.linalg.norm(preflight_residual))
+                    preflight_improvement = (
+                        1.0 - float(preflight_residual_norm) / float(xblock_rhs_norm)
+                        if float(xblock_rhs_norm) > 0.0
+                        else 1.0
+                    )
+                    preflight_passed = bool(
+                        float(preflight_residual_norm) <= float(target_xblock)
+                        or float(preflight_improvement) >= float(preflight_min_improvement)
+                    )
+                    if emit is not None:
+                        emit(
+                            0 if preflight_passed else 1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"preflight residual={float(preflight_residual_norm):.6e} "
+                            f"improvement={float(preflight_improvement):.6e} "
+                            f"required={float(preflight_min_improvement):.6e} passed={int(preflight_passed)}",
+                        )
+                    if bool(preflight_required) and not bool(preflight_passed):
+                        raise RuntimeError(
+                            "xblock_sparse_pc_gmres preflight gate failed "
+                            f"improvement={float(preflight_improvement):.6e} "
+                            f"< required={float(preflight_min_improvement):.6e}"
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    if bool(preflight_required):
+                        raise
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"preflight failed ({type(exc).__name__}: {exc})",
+                        )
+            elif (float(preflight_min_improvement) > 0.0 or bool(preflight_required)) and x0_full is None:
+                preflight_passed = False
+                preflight_improvement = 0.0
+                if bool(preflight_required):
+                    raise RuntimeError("xblock_sparse_pc_gmres preflight gate required an initial seed")
+
+            fgmres_block_between_cycles = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES",
+                default=False,
+            )
+            tfqmr_replacement_interval = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TFQMR_REPLACE_INTERVAL",
+                default=0,
+                minimum=0,
+            )
             if emit is not None:
+                tfqmr_note = (
+                    f" tfqmr_replacement_interval={int(tfqmr_replacement_interval)}"
+                    if str(xblock_krylov_method) == "tfqmr_jax"
+                    else ""
+                )
                 emit(
                     0,
                     "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres solve start "
                     f"method={xblock_krylov_method} restart={int(pc_restart)} maxiter={int(pc_maxiter)} "
-                    f"precondition_side={precondition_side}",
+                    f"precondition_side={precondition_side}{tfqmr_note}",
                 )
+            xblock_device_fgmres_jit = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT",
+                default=False,
+            )
+            xblock_device_fgmres_jit_mode = (
+                os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE", "cycle")
+                .strip()
+                .lower()
+                .replace("-", "_")
+            )
+            if xblock_device_fgmres_jit_mode not in {"cycle", "full"}:
+                xblock_device_fgmres_jit_mode = "cycle"
+            xblock_device_fgmres_jit_outer_k = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K",
+                default=0,
+                minimum=0,
+            )
+            if (
+                emit is not None
+                and str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                and bool(fgmres_block_between_cycles)
+            ):
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "FGMRES cycle-boundary synchronization enabled",
+                )
+            if (
+                emit is not None
+                and str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                and bool(xblock_device_fgmres_jit)
+            ):
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"JIT-compiled device FGMRES enabled mode={xblock_device_fgmres_jit_mode}",
+                )
+            solve_matvec = _mv_xblock_krylov
+            solve_rhs = xblock_rhs
+            solve_preconditioner = precond_xblock_krylov if precondition_side != "none" else None
+            solve_x0 = x0_full
+            solve_solution_to_physical = lambda v: jnp.asarray(v, dtype=jnp.float64)
+            if bool(xblock_row_equilibration_built):
+                assert xblock_row_scale_jnp is not None
+                assert xblock_inv_row_scale_jnp is not None
+                row_scale_for_solve = xblock_row_scale_jnp
+                inv_row_scale_for_solve = xblock_inv_row_scale_jnp
+                col_scale_for_solve = xblock_col_scale_jnp if bool(xblock_col_equilibration_built) else None
+                inv_col_scale_for_solve = (
+                    xblock_inv_col_scale_jnp if bool(xblock_col_equilibration_built) else None
+                )
+                base_solve_matvec = solve_matvec
+                base_solve_preconditioner = solve_preconditioner
+
+                def _mv_row_equilibrated(v: jnp.ndarray) -> jnp.ndarray:
+                    v_j = jnp.asarray(v, dtype=jnp.float64)
+                    physical_v = col_scale_for_solve * v_j if col_scale_for_solve is not None else v_j
+                    return row_scale_for_solve * jnp.asarray(base_solve_matvec(physical_v), dtype=jnp.float64)
+
+                def _precond_row_equilibrated(v: jnp.ndarray) -> jnp.ndarray:
+                    physical_residual = inv_row_scale_for_solve * jnp.asarray(v, dtype=jnp.float64)
+                    if base_solve_preconditioner is None:
+                        physical_update = physical_residual
+                    else:
+                        physical_update = jnp.asarray(base_solve_preconditioner(physical_residual), dtype=jnp.float64)
+                    if inv_col_scale_for_solve is not None:
+                        return inv_col_scale_for_solve * physical_update
+                    return physical_update
+
+                solve_matvec = _mv_row_equilibrated
+                solve_rhs = row_scale_for_solve * jnp.asarray(xblock_rhs, dtype=jnp.float64)
+                solve_preconditioner = _precond_row_equilibrated if precondition_side != "none" else None
+                if col_scale_for_solve is not None and inv_col_scale_for_solve is not None:
+                    solve_x0 = None if x0_full is None else inv_col_scale_for_solve * jnp.asarray(x0_full, dtype=jnp.float64)
+
+                    def _solution_to_physical_col_scaled(v: jnp.ndarray) -> jnp.ndarray:
+                        return col_scale_for_solve * jnp.asarray(v, dtype=jnp.float64)
+
+                    solve_solution_to_physical = _solution_to_physical_col_scaled
+                if emit is not None:
+                    transform = "row/column" if bool(xblock_col_equilibration_built) else "row"
+                    emit(
+                        0,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        f"using {transform}-equilibrated assembled operator for Krylov solve",
+                    )
             solve_start_s = sparse_timer.elapsed_s()
+
+            def _device_cycle_progress_callback(
+                *,
+                cycle: int,
+                iterations: int,
+                residual_norm: float,
+                target: float,
+            ) -> None:
+                if emit is None:
+                    return
+                ratio = float(residual_norm) / float(target) if float(target) > 0.0 else float("nan")
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"device-cycle cycle={int(cycle)} iterations={int(iterations)} "
+                    f"residual={float(residual_norm):.6e} target={float(target):.6e} "
+                    f"ratio={float(ratio):.6e} elapsed_s={sparse_timer.elapsed_s():.3f}",
+                )
+
             if xblock_krylov_method == "lgmres":
                 x_np, residual_norm_xblock_pc, history = lgmres_solve_with_history_scipy(
-                    matvec=_mv_xblock_krylov,
-                    b=xblock_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner,
+                    x0=solve_x0,
                     tol=tol,
                     atol=atol,
                     restart=pc_restart,
@@ -13539,47 +15618,114 @@ def solve_v3_full_system_linear_gmres(
                     precondition_side=precondition_side,
                 )
             elif xblock_krylov_method == "gmres_jax":
-                gmres_jax_result, _gmres_jax_residual = fgmres_solve_with_residual(
-                    matvec=_mv_xblock_krylov,
-                    b=xblock_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                    skip_inactive_work=not bool(two_level_built),
+                fgmres_solver = (
+                    (
+                        fgmres_cycle_jit_solve_with_residual
+                        if xblock_device_fgmres_jit_mode == "cycle"
+                        else fgmres_solve_with_residual_jit
+                    )
+                    if bool(xblock_device_fgmres_jit)
+                    else fgmres_solve_with_residual
                 )
+                fgmres_kwargs = {
+                    "matvec": solve_matvec,
+                    "b": solve_rhs,
+                    "preconditioner": solve_preconditioner,
+                    "x0": solve_x0,
+                    "tol": tol,
+                    "atol": atol,
+                    "restart": pc_restart,
+                    "maxiter": pc_maxiter,
+                    "precondition_side": precondition_side,
+                    "skip_inactive_work": not bool(two_level_built),
+                    "block_between_cycles": bool(fgmres_block_between_cycles),
+                }
+                if bool(xblock_device_fgmres_jit) and xblock_device_fgmres_jit_mode == "cycle":
+                    fgmres_kwargs["outer_k"] = int(xblock_device_fgmres_jit_outer_k)
+                    fgmres_kwargs["progress_callback"] = _device_cycle_progress_callback
+                gmres_jax_result, _gmres_jax_residual = fgmres_solver(**fgmres_kwargs)
                 x_np = np.asarray(jax.device_get(gmres_jax_result.x), dtype=np.float64)
                 residual_norm_xblock_pc = float(jax.device_get(gmres_jax_result.residual_norm))
                 history_arr = np.asarray(jax.device_get(gmres_jax_result.residual_history), dtype=np.float64)
                 n_iterations = int(jax.device_get(gmres_jax_result.n_iterations))
                 history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
             elif xblock_krylov_method == "fgmres_jax":
-                fgmres_result, _fgmres_residual = fgmres_solve_with_residual(
-                    matvec=_mv_xblock_krylov,
-                    b=xblock_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                    skip_inactive_work=not bool(two_level_built),
+                fgmres_solver = (
+                    (
+                        fgmres_cycle_jit_solve_with_residual
+                        if xblock_device_fgmres_jit_mode == "cycle"
+                        else fgmres_solve_with_residual_jit
+                    )
+                    if bool(xblock_device_fgmres_jit)
+                    else fgmres_solve_with_residual
                 )
+                fgmres_kwargs = {
+                    "matvec": solve_matvec,
+                    "b": solve_rhs,
+                    "preconditioner": solve_preconditioner,
+                    "x0": solve_x0,
+                    "tol": tol,
+                    "atol": atol,
+                    "restart": pc_restart,
+                    "maxiter": pc_maxiter,
+                    "precondition_side": precondition_side,
+                    "skip_inactive_work": not bool(two_level_built),
+                    "block_between_cycles": bool(fgmres_block_between_cycles),
+                }
+                if bool(xblock_device_fgmres_jit) and xblock_device_fgmres_jit_mode == "cycle":
+                    fgmres_kwargs["outer_k"] = int(xblock_device_fgmres_jit_outer_k)
+                    fgmres_kwargs["progress_callback"] = _device_cycle_progress_callback
+                fgmres_result, _fgmres_residual = fgmres_solver(**fgmres_kwargs)
                 x_np = np.asarray(jax.device_get(fgmres_result.x), dtype=np.float64)
                 residual_norm_xblock_pc = float(jax.device_get(fgmres_result.residual_norm))
                 history_arr = np.asarray(jax.device_get(fgmres_result.residual_history), dtype=np.float64)
                 n_iterations = int(jax.device_get(fgmres_result.n_iterations))
                 history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
+            elif xblock_krylov_method == "bicgstab_jax":
+                bicgstab_jax_result, _bicgstab_jax_residual = bicgstab_solve_with_residual(
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner,
+                    x0=solve_x0,
+                    tol=tol,
+                    atol=atol,
+                    maxiter=pc_maxiter,
+                    precondition_side=precondition_side,
+                )
+                x_np = np.asarray(jax.device_get(bicgstab_jax_result.x), dtype=np.float64)
+                residual_norm_xblock_pc = float(jax.device_get(bicgstab_jax_result.residual_norm))
+                history_arr = np.asarray(
+                    jax.device_get(bicgstab_jax_result.residual_history),
+                    dtype=np.float64,
+                )
+                n_iterations = int(jax.device_get(bicgstab_jax_result.n_iterations))
+                history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
+            elif xblock_krylov_method == "tfqmr_jax":
+                tfqmr_jax_result, _tfqmr_jax_residual = tfqmr_solve_with_residual(
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner,
+                    x0=solve_x0,
+                    tol=tol,
+                    atol=atol,
+                    maxiter=pc_maxiter,
+                    precondition_side=precondition_side,
+                    residual_replacement_interval=int(tfqmr_replacement_interval),
+                )
+                x_np = np.asarray(jax.device_get(tfqmr_jax_result.x), dtype=np.float64)
+                residual_norm_xblock_pc = float(jax.device_get(tfqmr_jax_result.residual_norm))
+                history_arr = np.asarray(
+                    jax.device_get(tfqmr_jax_result.residual_history),
+                    dtype=np.float64,
+                )
+                n_iterations = int(jax.device_get(tfqmr_jax_result.n_iterations))
+                history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
             elif xblock_krylov_method == "gcrotmk":
                 x_np, residual_norm_xblock_pc, history = gcrotmk_solve_with_history_scipy(
-                    matvec=_mv_xblock_krylov,
-                    b=xblock_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner,
+                    x0=solve_x0,
                     tol=tol,
                     atol=atol,
                     restart=pc_restart,
@@ -13588,10 +15734,10 @@ def solve_v3_full_system_linear_gmres(
                 )
             elif xblock_krylov_method == "bicgstab":
                 x_np, residual_norm_xblock_pc, history = bicgstab_solve_with_history_scipy(
-                    matvec=_mv_xblock_krylov,
-                    b=xblock_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner,
+                    x0=solve_x0,
                     tol=tol,
                     atol=atol,
                     maxiter=pc_maxiter,
@@ -13599,10 +15745,10 @@ def solve_v3_full_system_linear_gmres(
                 )
             else:
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
-                    matvec=_mv_xblock_krylov,
-                    b=xblock_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_full,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner,
+                    x0=solve_x0,
                     tol=tol,
                     atol=atol,
                     restart=pc_restart,
@@ -13610,9 +15756,14 @@ def solve_v3_full_system_linear_gmres(
                     precondition_side=precondition_side,
                 )
             solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s) + float(probe_coarse_s)
+            x_solution_np = np.asarray(x_np, dtype=np.float64)
+            x_physical_np = np.asarray(
+                jax.device_get(solve_solution_to_physical(jnp.asarray(x_solution_np, dtype=jnp.float64))),
+                dtype=np.float64,
+            )
             try:
                 residual_true = np.asarray(xblock_rhs, dtype=np.float64) - np.asarray(
-                    jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
+                    jax.device_get(_mv_true(jnp.asarray(x_physical_np, dtype=jnp.float64))),
                     dtype=np.float64,
                 )
                 residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
@@ -13628,7 +15779,11 @@ def solve_v3_full_system_linear_gmres(
             fallback_to_gmres = fallback_env not in {"0", "false", "f", "no", "off", ".false.", ".f."}
             if xblock_side_probe_lgmres_rescue and not fallback_env:
                 fallback_to_gmres = False
-            if xblock_krylov_method in {"fgmres_jax", "gmres_jax"} and not fallback_env:
+            if (
+                xblock_krylov_method
+                in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+                and not fallback_env
+            ):
                 fallback_to_gmres = False
             if (
                 xblock_krylov_method != "gmres"
@@ -13650,18 +15805,18 @@ def solve_v3_full_system_linear_gmres(
                     fallback_started_from_candidate,
                     fallback_candidate_improved_rhs,
                 ) = _rhs1_xblock_fallback_initial_guess(
-                    candidate=np.asarray(x_np, dtype=np.float64),
-                    original_x0=x0_full,
-                    rhs_shape=tuple(rhs.shape),
+                    candidate=x_solution_np,
+                    original_x0=solve_x0,
+                    rhs_shape=tuple(solve_rhs.shape),
                     candidate_residual_norm=float(candidate_residual_norm),
                     rhs_norm=float(xblock_rhs_norm),
                     precondition_side=str(precondition_side),
                 )
                 fallback_start_s = sparse_timer.elapsed_s()
                 x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
-                    matvec=_mv_xblock_krylov,
-                    b=xblock_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
+                    matvec=solve_matvec,
+                    b=solve_rhs,
+                    preconditioner=solve_preconditioner,
                     x0=fallback_x0,
                     tol=tol,
                     atol=atol,
@@ -13671,14 +15826,20 @@ def solve_v3_full_system_linear_gmres(
                 )
                 solve_s += sparse_timer.elapsed_s() - fallback_start_s
                 xblock_krylov_method = "gmres"
+                x_solution_np = np.asarray(x_np, dtype=np.float64)
+                x_physical_np = np.asarray(
+                    jax.device_get(solve_solution_to_physical(jnp.asarray(x_solution_np, dtype=jnp.float64))),
+                    dtype=np.float64,
+                )
                 try:
                     residual_true = np.asarray(xblock_rhs, dtype=np.float64) - np.asarray(
-                        jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
+                        jax.device_get(_mv_true(jnp.asarray(x_physical_np, dtype=jnp.float64))),
                         dtype=np.float64,
                     )
                     residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
                 except Exception:
                     residual_norm_xblock_pc = float(residual_norm_xblock_pc)
+            x_np = x_physical_np
             post_minres_env = os.environ.get(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS",
                 "",
@@ -13728,6 +15889,15 @@ def solve_v3_full_system_linear_gmres(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_FSAVG_LMAX",
                 default=2,
                 minimum=0,
+            )
+            post_coarse_angular_lmax = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_ANGULAR_LMAX",
+                default=-1,
+                minimum=-1,
+            )
+            post_coarse_include_angular_residual = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_ANGULAR_RESIDUAL",
+                default=False,
             )
             post_coarse_include_raw = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_INCLUDE_RAW",
@@ -13819,8 +15989,10 @@ def solve_v3_full_system_linear_gmres(
                         residual_vec,
                         include_raw=bool(post_coarse_include_raw),
                         fsavg_lmax=int(post_coarse_fsavg_lmax),
+                        angular_lmax=int(post_coarse_angular_lmax),
                         max_extra_units=int(post_coarse_max_extra_units),
                         max_directions=int(post_coarse_max_directions),
+                        include_angular_residual=bool(post_coarse_include_angular_residual),
                     )
 
                 try:
@@ -13891,6 +16063,25 @@ def solve_v3_full_system_linear_gmres(
                 if xblock_krylov_method == "gmres"
                 else f"xblock_sparse_pc_{xblock_krylov_method}"
             )
+            xblock_device_krylov_methods = {
+                "fgmres_jax",
+                "gmres_jax",
+                "bicgstab_jax",
+                "tfqmr_jax",
+            }
+            xblock_estimated_gmres_basis_nbytes = gmres_basis_nbytes(
+                int(xblock_linear_size),
+                int(pc_restart),
+                dtype=np.float64,
+            )
+            xblock_estimated_bicgstab_work_nbytes = bicgstab_work_nbytes(
+                int(xblock_linear_size),
+                dtype=np.float64,
+            )
+            xblock_estimated_tfqmr_work_nbytes = tfqmr_work_nbytes(
+                int(xblock_linear_size),
+                dtype=np.float64,
+            )
             return V3LinearSolveResult(
                 op=op,
                 rhs=rhs,
@@ -13929,20 +16120,78 @@ def solve_v3_full_system_linear_gmres(
                     "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
                     "sparse_pc_xblock_assembled_host": bool(xblock_assembled_host_fp),
                     "sparse_pc_xblock_jax_factors": bool(xblock_jax_factors),
+                    "sparse_pc_xblock_jax_factor_format": (
+                        str(xblock_jax_factor_format) if bool(xblock_jax_factors) else None
+                    ),
+                    "sparse_pc_xblock_jax_factor_apply": (
+                        str(xblock_jax_factor_apply) if bool(xblock_jax_factors) else None
+                    ),
+                    "xblock_lower_fill_mode": str(xblock_lower_fill_mode),
+                    "xblock_lower_fill_requested": str(xblock_lower_fill_mode) in {"probe", "force"},
+                    "xblock_lower_fill_ignored_env": bool(xblock_lower_fill_ignored_env),
                     "xblock_device_krylov_method": (
                         str(xblock_krylov_method)
-                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        if str(xblock_krylov_method) in xblock_device_krylov_methods
                         else None
+                    ),
+                    "xblock_device_host_fallback_mode": str(xblock_device_host_fallback_decision.mode),
+                    "xblock_device_host_fallback_used": bool(xblock_device_host_fallback_decision.used),
+                    "xblock_device_host_fallback_reason": str(xblock_device_host_fallback_decision.reason),
+                    "xblock_device_host_fallback_requested_method": str(
+                        xblock_device_host_fallback_decision.requested_method
+                    ),
+                    "xblock_device_host_fallback_requested_env": str(xblock_krylov_env_requested),
+                    "xblock_device_host_fallback_effective_krylov_env_value": str(
+                        xblock_device_host_fallback_decision.effective_krylov_env_value
+                    ),
+                    "xblock_device_host_fallback_min_active_size": int(
+                        xblock_device_host_fallback_decision.min_active_size
+                    ),
+                    "xblock_device_host_fallback_qi_like_full_fp_3d": bool(
+                        xblock_device_host_fallback_decision.qi_like_full_fp_3d
+                    ),
+                    "xblock_device_host_fallback_ignored_env": bool(
+                        xblock_device_host_fallback_decision.ignored_env
+                    ),
+                    "xblock_device_host_fallback_non_autodiff": bool(
+                        xblock_device_host_fallback_decision.non_autodiff
                     ),
                     "xblock_device_gmres_enabled": bool(str(xblock_krylov_method) == "gmres_jax"),
                     "xblock_device_fgmres_enabled": bool(str(xblock_krylov_method) == "fgmres_jax"),
+                    "xblock_device_fgmres_jit_enabled": bool(
+                        str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        and bool(xblock_device_fgmres_jit)
+                    ),
+                    "xblock_device_fgmres_jit_mode": (
+                        xblock_device_fgmres_jit_mode
+                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        and bool(xblock_device_fgmres_jit)
+                        else None
+                    ),
+                    "xblock_device_fgmres_jit_outer_k": (
+                        int(xblock_device_fgmres_jit_outer_k)
+                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        and bool(xblock_device_fgmres_jit)
+                        and xblock_device_fgmres_jit_mode == "cycle"
+                        else 0
+                    ),
+                    "xblock_device_bicgstab_enabled": bool(str(xblock_krylov_method) == "bicgstab_jax"),
+                    "xblock_device_tfqmr_enabled": bool(str(xblock_krylov_method) == "tfqmr_jax"),
+                    "xblock_device_tfqmr_replacement_interval": int(tfqmr_replacement_interval),
                     "xblock_device_krylov_forced_jax_factors": bool(xblock_device_krylov_forced_jax_factors),
                     "xblock_device_fgmres_forced_jax_factors": bool(xblock_device_krylov_forced_jax_factors),
                     "xblock_device_fgmres_forced_right_pc": bool(xblock_device_fgmres_forced_right_pc),
+                    "xblock_device_fgmres_block_between_cycles": bool(fgmres_block_between_cycles),
+                    "xblock_estimated_gmres_basis_nbytes": int(xblock_estimated_gmres_basis_nbytes),
+                    "xblock_estimated_bicgstab_work_nbytes": int(xblock_estimated_bicgstab_work_nbytes),
+                    "xblock_estimated_tfqmr_work_nbytes": int(xblock_estimated_tfqmr_work_nbytes),
                     "xblock_device_krylov_host_transfer_free": bool(
-                        str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        str(xblock_krylov_method) in xblock_device_krylov_methods
                         and bool(xblock_jax_factors)
-                        and not bool(assembled_operator_built)
+                        and (
+                            not bool(assembled_operator_built)
+                            or bool(assembled_operator_device_resident)
+                        )
                         and not bool(two_level_built)
                         and (
                             not bool(global_coupling_built)
@@ -13950,9 +16199,38 @@ def solve_v3_full_system_linear_gmres(
                         )
                     ),
                     "xblock_device_fgmres_host_transfer_free": bool(
-                        str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
+                        str(xblock_krylov_method) == "fgmres_jax"
                         and bool(xblock_jax_factors)
-                        and not bool(assembled_operator_built)
+                        and (
+                            not bool(assembled_operator_built)
+                            or bool(assembled_operator_device_resident)
+                        )
+                        and not bool(two_level_built)
+                        and (
+                            not bool(global_coupling_built)
+                            or bool(global_coupling_metadata.get("device_resident", False))
+                        )
+                    ),
+                    "xblock_device_bicgstab_host_transfer_free": bool(
+                        str(xblock_krylov_method) == "bicgstab_jax"
+                        and bool(xblock_jax_factors)
+                        and (
+                            not bool(assembled_operator_built)
+                            or bool(assembled_operator_device_resident)
+                        )
+                        and not bool(two_level_built)
+                        and (
+                            not bool(global_coupling_built)
+                            or bool(global_coupling_metadata.get("device_resident", False))
+                        )
+                    ),
+                    "xblock_device_tfqmr_host_transfer_free": bool(
+                        str(xblock_krylov_method) == "tfqmr_jax"
+                        and bool(xblock_jax_factors)
+                        and (
+                            not bool(assembled_operator_built)
+                            or bool(assembled_operator_device_resident)
+                        )
                         and not bool(two_level_built)
                         and (
                             not bool(global_coupling_built)
@@ -13987,12 +16265,105 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_assembled_operator_csr_nbytes_estimate": assembled_operator_metadata.get(
                         "csr_nbytes_estimate"
                     ),
+                    "xblock_assembled_operator_device_enabled": bool(
+                        assembled_operator_metadata.get("device_enabled", False)
+                    ),
+                    "xblock_assembled_operator_device_required": bool(
+                        assembled_operator_metadata.get("device_required", False)
+                    ),
+                    "xblock_assembled_operator_device_resident": bool(
+                        assembled_operator_metadata.get("device_resident", False)
+                    ),
+                    "xblock_assembled_operator_device_nnz": assembled_operator_metadata.get("device_nnz"),
+                    "xblock_assembled_operator_device_csr_nbytes_estimate": assembled_operator_metadata.get(
+                        "device_csr_nbytes_estimate"
+                    ),
+                    "xblock_assembled_operator_device_validation_rel_errors": assembled_operator_metadata.get(
+                        "device_validation_rel_errors",
+                        (),
+                    ),
+                    "xblock_assembled_operator_device_error": assembled_operator_metadata.get("device_error"),
+                    "xblock_assembled_operator_row_equilibration_enabled": bool(
+                        xblock_row_equilibration_enabled
+                    ),
+                    "xblock_assembled_operator_row_equilibration_built": bool(
+                        xblock_row_equilibration_built
+                    ),
+                    "xblock_assembled_operator_row_equilibration_norm": xblock_row_equilibration_metadata.get(
+                        "norm"
+                    ),
+                    "xblock_assembled_operator_row_equilibration_setup_s": xblock_row_equilibration_metadata.get(
+                        "setup_s"
+                    ),
+                    "xblock_assembled_operator_row_equilibration_zero_or_tiny_rows": (
+                        xblock_row_equilibration_metadata.get("zero_or_tiny_rows")
+                    ),
+                    "xblock_assembled_operator_row_equilibration_row_norm_min": (
+                        xblock_row_equilibration_metadata.get("row_norm_min")
+                    ),
+                    "xblock_assembled_operator_row_equilibration_row_norm_max": (
+                        xblock_row_equilibration_metadata.get("row_norm_max")
+                    ),
+                    "xblock_assembled_operator_row_equilibration_scale_min": (
+                        xblock_row_equilibration_metadata.get("row_scale_min")
+                    ),
+                    "xblock_assembled_operator_row_equilibration_scale_max": (
+                        xblock_row_equilibration_metadata.get("row_scale_max")
+                    ),
+                    "xblock_assembled_operator_col_equilibration_enabled": bool(
+                        xblock_col_equilibration_enabled
+                    ),
+                    "xblock_assembled_operator_col_equilibration_built": bool(
+                        xblock_col_equilibration_built
+                    ),
+                    "xblock_assembled_operator_col_equilibration_norm": xblock_col_equilibration_metadata.get(
+                        "norm"
+                    ),
+                    "xblock_assembled_operator_col_equilibration_setup_s": xblock_col_equilibration_metadata.get(
+                        "setup_s"
+                    ),
+                    "xblock_assembled_operator_col_equilibration_zero_or_tiny_columns": (
+                        xblock_col_equilibration_metadata.get("zero_or_tiny_columns")
+                    ),
+                    "xblock_assembled_operator_col_equilibration_col_norm_min": (
+                        xblock_col_equilibration_metadata.get("col_norm_min")
+                    ),
+                    "xblock_assembled_operator_col_equilibration_col_norm_max": (
+                        xblock_col_equilibration_metadata.get("col_norm_max")
+                    ),
+                    "xblock_assembled_operator_col_equilibration_scale_min": (
+                        xblock_col_equilibration_metadata.get("col_scale_min")
+                    ),
+                    "xblock_assembled_operator_col_equilibration_scale_max": (
+                        xblock_col_equilibration_metadata.get("col_scale_max")
+                    ),
                     "xblock_assembled_operator_max_colors": assembled_operator_metadata.get("max_colors"),
                     "xblock_assembled_operator_validation_rel_errors": assembled_operator_metadata.get(
                         "validation_rel_errors",
                         (),
                     ),
                     "xblock_assembled_operator_error": assembled_operator_metadata.get("error"),
+                    "xblock_moment_schur_enabled": bool(moment_schur_enabled),
+                    "xblock_moment_schur_built": bool(moment_schur_built),
+                    "xblock_moment_schur_default_blocked_by_compact_factors": bool(
+                        moment_schur_default_blocked_by_compact_factors
+                    ),
+                    "xblock_moment_schur_mode": moment_schur_metadata.get("mode"),
+                    "xblock_moment_schur_rank": moment_schur_metadata.get("rank"),
+                    "xblock_moment_schur_extra_size": moment_schur_metadata.get("extra_size"),
+                    "xblock_moment_schur_setup_s": moment_schur_metadata.get("setup_s"),
+                    "xblock_moment_schur_expected_size": moment_schur_metadata.get("expected_size"),
+                    "xblock_moment_schur_rcond": moment_schur_metadata.get("rcond"),
+                    "xblock_moment_schur_singular_value_proxy": moment_schur_metadata.get(
+                        "singular_value_proxy",
+                        (),
+                    ),
+                    "xblock_moment_schur_device_resident": bool(
+                        moment_schur_metadata.get("device_resident", False)
+                    ),
+                    "xblock_moment_schur_error": moment_schur_metadata.get("error"),
+                    "xblock_moment_schur_applies": int(moment_schur_stats.get("applies", 0)),
+                    "xblock_moment_schur_base_applies": int(moment_schur_stats.get("base_applies", 0)),
                     "xblock_two_level_enabled": bool(two_level_enabled),
                     "xblock_two_level_built": bool(two_level_built),
                     "xblock_two_level_mode": two_level_metadata.get("mode"),
@@ -14013,7 +16384,15 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_global_coupling_basis_size": global_coupling_metadata.get("basis_size"),
                     "xblock_global_coupling_rank": global_coupling_metadata.get("rank"),
                     "xblock_global_coupling_setup_s": global_coupling_metadata.get("setup_s"),
+                    "xblock_global_coupling_setup_budget_s": global_coupling_metadata.get("setup_budget_s"),
+                    "xblock_global_coupling_setup_budget_reached": bool(
+                        global_coupling_metadata.get("setup_budget_reached", False)
+                    ),
                     "xblock_global_coupling_rcond": global_coupling_metadata.get("rcond"),
+                    "xblock_global_coupling_coarse_solver": global_coupling_metadata.get("coarse_solver"),
+                    "xblock_global_coupling_smoother": global_coupling_metadata.get("smoother"),
+                    "xblock_global_coupling_ridge": global_coupling_metadata.get("ridge"),
+                    "xblock_global_coupling_singular_values": global_coupling_metadata.get("singular_values", ()),
                     "xblock_global_coupling_device_resident": bool(
                         global_coupling_metadata.get("device_resident", False)
                     ),
@@ -14026,15 +16405,81 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_initial_seed_used": bool(xblock_initial_seed_used),
                     "xblock_initial_seed_residual_norm": xblock_initial_seed_residual_norm,
                     "xblock_initial_seed_residual_ratio": xblock_initial_seed_residual_ratio,
+                    "xblock_moment_schur_seed_enabled": bool(moment_schur_seed_enabled),
+                    "xblock_moment_schur_seed_used": bool(moment_schur_seed_used),
+                    "xblock_moment_schur_seed_residual_norm": moment_schur_seed_residual_norm,
+                    "xblock_moment_schur_seed_residual_ratio": moment_schur_seed_residual_ratio,
+                    "xblock_qi_coarse_seed_enabled": bool(qi_coarse_seed_enabled),
+                    "xblock_qi_coarse_seed_used": bool(qi_coarse_seed_used),
+                    "xblock_qi_coarse_seed_residual_before": qi_coarse_seed_residual_before,
+                    "xblock_qi_coarse_seed_residual_after": qi_coarse_seed_residual_after,
+                    "xblock_qi_coarse_seed_improvement_ratio": qi_coarse_seed_improvement_ratio,
+                    "xblock_qi_coarse_seed_rank": int(qi_coarse_seed_rank),
+                    "xblock_qi_coarse_seed_candidate_count": int(qi_coarse_seed_candidate_count),
+                    "xblock_qi_coarse_seed_reason": qi_coarse_seed_reason,
+                    "xblock_qi_coarse_seed_labels": qi_coarse_seed_labels,
+                    "xblock_qi_coarse_seed_s": float(qi_coarse_seed_s),
+                    "xblock_qi_coarse_seed_basis": qi_seed_basis_kind,
+                    "xblock_qi_coarse_seed_max_candidates": int(qi_seed_max_candidates),
+                    "xblock_qi_coarse_seed_max_angular_mode": int(qi_seed_max_angular_mode),
+                    "xblock_qi_galerkin_preconditioner_enabled": bool(qi_galerkin_preconditioner_enabled),
+                    "xblock_qi_galerkin_preconditioner_built": bool(qi_galerkin_preconditioner_built),
+                    "xblock_qi_galerkin_preconditioner_used": bool(qi_galerkin_preconditioner_used),
+                    "xblock_qi_galerkin_preconditioner_reason": qi_galerkin_preconditioner_reason,
+                    "xblock_qi_galerkin_preconditioner_mode": qi_galerkin_preconditioner_mode,
+                    "xblock_qi_galerkin_preconditioner_rank": int(qi_galerkin_preconditioner_rank),
+                    "xblock_qi_galerkin_preconditioner_candidate_count": int(
+                        qi_galerkin_preconditioner_candidate_count
+                    ),
+                    "xblock_qi_galerkin_preconditioner_coarse_operator_shape": (
+                        qi_galerkin_preconditioner_coarse_shape
+                    ),
+                    "xblock_qi_galerkin_preconditioner_coarse_operator_norm": float(
+                        qi_galerkin_preconditioner_coarse_norm
+                    ),
+                    "xblock_qi_galerkin_preconditioner_rcond": float(qi_galerkin_preconditioner_rcond),
+                    "xblock_qi_galerkin_preconditioner_damping": float(qi_galerkin_preconditioner_damping),
+                    "xblock_qi_galerkin_preconditioner_basis_reused_from_seed": bool(
+                        qi_galerkin_preconditioner_basis_reused_from_seed
+                    ),
+                    "xblock_qi_galerkin_preconditioner_residual_before": (
+                        qi_galerkin_preconditioner_residual_before
+                    ),
+                    "xblock_qi_galerkin_preconditioner_residual_after": qi_galerkin_preconditioner_residual_after,
+                    "xblock_qi_galerkin_preconditioner_improvement_ratio": (
+                        qi_galerkin_preconditioner_improvement_ratio
+                    ),
+                    "xblock_qi_galerkin_preconditioner_probe_reduced": bool(
+                        qi_galerkin_preconditioner_probe_reduced
+                    ),
+                    "xblock_qi_galerkin_preconditioner_probe_candidates": (
+                        qi_galerkin_preconditioner_probe_candidates
+                    ),
+                    "xblock_qi_galerkin_preconditioner_selected_index": (
+                        qi_galerkin_preconditioner_selected_index
+                    ),
+                    "xblock_qi_galerkin_preconditioner_setup_s": float(qi_galerkin_preconditioner_setup_s),
+                    "xblock_qi_galerkin_preconditioner_applies": int(qi_galerkin_stats.get("applies", 0)),
+                    "xblock_qi_galerkin_preconditioner_coarse_applies": int(
+                        qi_galerkin_stats.get("coarse_applies", 0)
+                    ),
+                    "xblock_qi_galerkin_preconditioner_base_applies": int(
+                        qi_galerkin_stats.get("base_applies", 0)
+                    ),
                     "xblock_side_probe_enabled": bool(xblock_side_probe_enabled),
                     "xblock_side_probe_used": bool(xblock_side_probe_used),
                     "xblock_side_probe_switched": bool(xblock_side_probe_switched),
                     "xblock_side_probe_switch_suppressed_by_global_coupling": bool(
                         xblock_side_probe_switch_suppressed_by_global_coupling
                     ),
+                    "xblock_side_probe_switch_suppressed_by_explicit_side": bool(
+                        xblock_side_probe_switch_suppressed_by_explicit_side
+                    ),
                     "xblock_side_probe_physical_seed_preserved_after_switch": bool(
                         xblock_side_probe_physical_seed_preserved_after_switch
                     ),
+                    "xblock_side_probe_seed_used": bool(xblock_side_probe_seed_used),
+                    "xblock_side_probe_seed_residual_norm": xblock_side_probe_seed_residual_norm,
                     "xblock_side_probe_initial_side": xblock_side_probe_initial_side,
                     "xblock_side_probe_selected_side": xblock_side_probe_selected_side,
                     "xblock_side_probe_initial_method": xblock_side_probe_initial_method,
@@ -14052,10 +16497,19 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_probe_coarse_direction_count": int(sum(probe_coarse_direction_counts)),
                     "xblock_probe_coarse_residual_before": probe_coarse_residual_before,
                     "xblock_probe_coarse_residual_after": probe_coarse_residual_after,
+                    "xblock_probe_coarse_seed_initialized": bool(probe_coarse_seed_initialized),
                     "xblock_probe_coarse_s": float(probe_coarse_s),
                     "xblock_probe_coarse_history": probe_coarse_history,
                     "xblock_probe_coarse_direction_counts": probe_coarse_direction_counts,
                     "xblock_probe_coarse_direction_names": probe_coarse_direction_names,
+                    "xblock_probe_coarse_fsavg_lmax": int(probe_coarse_fsavg_lmax),
+                    "xblock_probe_coarse_angular_lmax": int(probe_coarse_angular_lmax),
+                    "xblock_probe_coarse_angular_residual": bool(probe_coarse_include_angular_residual),
+                    "xblock_preflight_min_improvement": float(preflight_min_improvement),
+                    "xblock_preflight_required": bool(preflight_required),
+                    "xblock_preflight_residual_norm": preflight_residual_norm,
+                    "xblock_preflight_improvement": preflight_improvement,
+                    "xblock_preflight_passed": preflight_passed,
                     "xblock_post_minres_steps_requested": int(post_minres_steps_requested),
                     "xblock_post_minres_steps_accepted": int(len(post_minres_alphas)),
                     "xblock_post_minres_residual_before": post_minres_residual_before,
@@ -14070,6 +16524,9 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_post_coarse_history": post_coarse_history,
                     "xblock_post_coarse_direction_counts": post_coarse_direction_counts,
                     "xblock_post_coarse_direction_names": post_coarse_direction_names,
+                    "xblock_post_coarse_fsavg_lmax": int(post_coarse_fsavg_lmax),
+                    "xblock_post_coarse_angular_lmax": int(post_coarse_angular_lmax),
+                    "xblock_post_coarse_angular_residual": bool(post_coarse_include_angular_residual),
                 },
             )
 
@@ -22726,6 +25183,31 @@ def _constraint_scheme2_inject_source(op: V3FullSystemOperator, src: jnp.ndarray
     f = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
     ix0 = _ix_min(bool(op.point_at_x0))
     f = f.at[:, ix0:, 0, :, :].set(src[:, ix0:, None, None])
+    return f.reshape((-1,))
+
+
+def _constraint_scheme1_moments_from_f(op: V3FullSystemOperator, f: jnp.ndarray) -> jnp.ndarray:
+    """Return constraintScheme=1 density/pressure moments from the L=0 block."""
+    factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)  # (T,Z)
+    x2 = op.x * op.x
+    x4 = x2 * x2
+    w2 = x2 * op.x_weights
+    w4 = x4 * op.x_weights
+    y_dens = jnp.einsum("x,tz,sxtz->s", w2, factor, f[:, :, 0, :, :])
+    y_pres = jnp.einsum("x,tz,sxtz->s", w4, factor, f[:, :, 0, :, :])
+    return jnp.stack([y_dens, y_pres], axis=1)
+
+
+def _constraint_scheme1_inject_source(op: V3FullSystemOperator, src: jnp.ndarray) -> jnp.ndarray:
+    """Inject constraintScheme=1 particle/energy source amplitudes into L=0 rows."""
+    src = jnp.asarray(src, dtype=jnp.float64).reshape((int(op.n_species), 2))
+    xpart1, xpart2 = _source_basis_constraint_scheme_1(op.x)
+    ix0 = _ix_min(bool(op.point_at_x0))
+    f = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+    f = f.at[:, ix0:, 0, :, :].set(
+        xpart1[ix0:][None, :, None, None] * src[:, 0, None, None, None]
+        + xpart2[ix0:][None, :, None, None] * src[:, 1, None, None, None]
+    )
     return f.reshape((-1,))
 
 

@@ -395,7 +395,18 @@ performance without changing the input file:
   before the full Krylov solve. Related diagnostic controls include
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS`` and
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX``. This remains off by
-  default until both CPU and GPU QI hard-seed gates pass.
+  default for the differentiable/device-QI lane until the GPU hard-seed gate
+  passes.
+
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK``: non-autodiff production
+  fallback for large RHSMode=1 QI-like systems when an explicit JAX-native
+  x-block Krylov method is requested. The default ``auto`` mode rewrites
+  qualifying large ConstraintScheme=1 full-FP/QI requests to the host x-block
+  auto policy before JAX factor arrays are built, preserving the measured
+  side-probe seed plus host ``lgmres`` rescue. Set to ``0`` to force the
+  experimental device-Krylov lane, or ``force``/``host`` to use the host policy
+  below the automatic active-size floor. Solver metadata records that this is a
+  non-autodiff fallback; it is not an end-to-end differentiable device-QI path.
 
 - ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` (GMRES only): optional RHSMode=1 preconditioning.
 

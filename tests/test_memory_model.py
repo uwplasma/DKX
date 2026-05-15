@@ -3,12 +3,14 @@ from __future__ import annotations
 import numpy as np
 
 from sfincs_jax.memory_model import (
+    bicgstab_work_nbytes,
     csr_matrix_nbytes,
     dense_matrix_nbytes,
     estimate_linear_solve_memory,
     estimate_sparse_pc_memory,
     gmres_basis_nbytes,
     gmres_restart_for_budget,
+    tfqmr_work_nbytes,
 )
 
 
@@ -24,6 +26,18 @@ def test_gmres_restart_budget_counts_work_vectors() -> None:
     assert gmres_basis_nbytes(n, 50, dtype=np.float64) == 55 * 1_000 * 8
     max_bytes = 15 * n * 8
     assert gmres_restart_for_budget(n, 50, dtype=np.float64, max_bytes=max_bytes) == 10
+
+
+def test_bicgstab_work_estimate_is_short_recurrence() -> None:
+    n = 10_000
+    assert bicgstab_work_nbytes(n, dtype=np.float64) == 8 * n * 8
+    assert bicgstab_work_nbytes(n, dtype=np.float64) < gmres_basis_nbytes(n, 50, dtype=np.float64)
+
+
+def test_tfqmr_work_estimate_is_short_recurrence() -> None:
+    n = 10_000
+    assert tfqmr_work_nbytes(n, dtype=np.float64) == 10 * n * 8
+    assert tfqmr_work_nbytes(n, dtype=np.float64) < gmres_basis_nbytes(n, 50, dtype=np.float64)
 
 
 def test_linear_solve_memory_estimate_reports_per_device_totals() -> None:

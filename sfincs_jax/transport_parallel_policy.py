@@ -73,6 +73,27 @@ class MultiGpuCaseThroughputAudit:
     min_throughput_speedup: float = 1.0
 
 
+@dataclass(frozen=True)
+class ParallelScalingClaimScopeAudit:
+    """Pure audit separating throughput evidence from single-case strong scaling."""
+
+    benchmark_kind: str
+    claim_scope: str
+    independent_task_count: int
+    parallel_count: int
+    backend: str
+    artifact_kind: str | None
+    launches_solves: bool | None
+    plan_only_scope_evidence: bool
+    measured_results_present: bool
+    release_gate_required: str | None
+    claim_scope_release_eligible: bool
+    release_scaling_supported: bool
+    unsupported_single_case_strong_scaling: bool
+    failures: tuple[str, ...]
+    notes: tuple[str, ...]
+
+
 def validate_transport_parallel_worker_count(
     parallel_workers: int,
     *,
@@ -557,6 +578,283 @@ def _wall_time_from_mapping(summary: dict[str, object], *, key: str) -> float:
     if not isinstance(raw, dict):
         raise ValueError(f"{key} must be a dictionary containing wall_s")
     return _finite_positive_float(raw.get("wall_s"), name=f"{key}.wall_s")
+
+
+def _positive_int_sequence(summary: dict[str, object], *, keys: tuple[str, ...]) -> tuple[int, ...]:
+    for key in keys:
+        raw = summary.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, (str, bytes)):
+            values = [raw]
+        else:
+            try:
+                values = list(raw)  # type: ignore[arg-type]
+            except TypeError as exc:
+                raise ValueError(f"{key} must be an iterable of positive integers") from exc
+        parsed = tuple(_optional_positive_int(value, name=key) for value in values)
+        if any(value is None for value in parsed):
+            raise ValueError(f"{key} must contain positive integers")
+        return tuple(int(value) for value in parsed if value is not None)
+    return ()
+
+
+def _parallel_count_from_results(
+    summary: dict[str, object],
+    *,
+    result_key: str,
+) -> tuple[int, ...]:
+    raw_results = summary.get("results")
+    if not isinstance(raw_results, list):
+        return ()
+    values: list[int] = []
+    for i, result in enumerate(raw_results):
+        if not isinstance(result, dict) or result_key not in result:
+            continue
+        values.append(
+            validate_transport_parallel_worker_count(
+                result[result_key],
+                context=f"results[{i}]",
+            )
+        )
+    return tuple(values)
+
+
+def _parallel_scope_metadata(
+    summary: dict[str, object],
+) -> tuple[str, str | None, bool | None, bool, bool]:
+    backend = str(summary.get("backend", "unspecified")).strip().lower().replace("-", "_") or "unspecified"
+    artifact_kind_raw = summary.get("artifact_kind")
+    artifact_kind = (
+        str(artifact_kind_raw).strip().lower().replace("-", "_")
+        if artifact_kind_raw is not None
+        else None
+    )
+    launches_solves = (
+        _optional_bool(summary.get("launches_solves"), name="launches_solves")
+        if "launches_solves" in summary
+        else None
+    )
+    measured_results_present = isinstance(summary.get("results"), list) and bool(summary.get("results"))
+    plan_only = artifact_kind == "benchmark_plan" or launches_solves is False
+    return backend, artifact_kind, launches_solves, plan_only, measured_results_present
+
+
+def _declared_parallel_claim_scope(summary: dict[str, object]) -> str | None:
+    raw_scope = summary.get("claim_scope")
+    if raw_scope is None:
+        raw_nested = summary.get("parallel_claim_scope")
+        if isinstance(raw_nested, dict):
+            raw_scope = raw_nested.get("claim_scope")
+    if raw_scope is None:
+        return None
+    return str(raw_scope).strip().lower().replace("-", "_")
+
+
+def _append_common_parallel_scope_failures(
+    *,
+    failures: list[str],
+    notes: list[str],
+    expected_claim_scope: str,
+    declared_claim_scope: str | None,
+    explicit_benchmark_kind: bool,
+    requested_release: bool,
+    artifact_kind: str | None,
+    launches_solves: bool | None,
+    plan_only: bool,
+    measured_results_present: bool,
+) -> None:
+    if not explicit_benchmark_kind:
+        failures.append("parallel scaling scope audit requires explicit benchmark_kind metadata")
+    if declared_claim_scope is not None and declared_claim_scope != expected_claim_scope:
+        failures.append(
+            f"declared claim_scope={declared_claim_scope!r} conflicts with "
+            f"benchmark_kind claim_scope={expected_claim_scope!r}"
+        )
+    if plan_only and requested_release:
+        failures.append("plan-only parallel benchmark artifacts cannot set release_scaling_claim=true")
+    if plan_only and measured_results_present:
+        failures.append("plan-only parallel benchmark artifacts must not include measured timing results")
+    if artifact_kind is not None:
+        notes.append(f"artifact_kind={artifact_kind}")
+    if launches_solves is not None:
+        notes.append(f"launches_solves={launches_solves}")
+    if plan_only:
+        notes.append("plan-only artifact checks launch scope; measured speedup and memory gates still require a run")
+
+
+def audit_parallel_scaling_claim_scope(summary: dict[str, object]) -> ParallelScalingClaimScopeAudit:
+    """Audit the semantic scope of a parallel benchmark without running solves.
+
+    The release-facing scaling claim in ``sfincs_jax`` is independent-work
+    throughput: transport ``whichRHS`` columns, scan points, or separate cases
+    can run concurrently. A single RHSMode=1 linear system split across devices
+    is a different claim. This helper fails closed when a saved artifact or
+    benchmark plan tries to promote that single-case path as release-grade
+    strong scaling.
+    """
+    if not isinstance(summary, dict):
+        raise ValueError("parallel scaling claim scope summary must be a dictionary")
+
+    explicit_benchmark_kind = "benchmark_kind" in summary
+    benchmark_kind = _normalized_benchmark_kind(summary, default="transport_worker_scaling")
+    requested_release = bool(_optional_bool(summary.get("release_scaling_claim"), name="release_scaling_claim") or False)
+    failures: list[str] = []
+    notes: list[str] = []
+    backend, artifact_kind, launches_solves, plan_only, measured_results_present = _parallel_scope_metadata(summary)
+    declared_claim_scope = _declared_parallel_claim_scope(summary)
+
+    if benchmark_kind in {"transport_worker_scaling", "transport_parallel_scaling", "whichrhs_worker_scaling"}:
+        expected_claim_scope = "independent_transport_worker_throughput"
+        _append_common_parallel_scope_failures(
+            failures=failures,
+            notes=notes,
+            expected_claim_scope=expected_claim_scope,
+            declared_claim_scope=declared_claim_scope,
+            explicit_benchmark_kind=explicit_benchmark_kind,
+            requested_release=requested_release,
+            artifact_kind=artifact_kind,
+            launches_solves=launches_solves,
+            plan_only=plan_only,
+            measured_results_present=measured_results_present,
+        )
+        task_count = _scaling_task_count(summary)
+        worker_counts = _positive_int_sequence(summary, keys=("workers", "requested_workers"))
+        if not worker_counts:
+            worker_counts = _parallel_count_from_results(summary, result_key="workers")
+        parallel_count = max(worker_counts) if worker_counts else 1
+        if backend not in {"cpu", "gpu"}:
+            failures.append("transport-worker scope must record backend='cpu' or backend='gpu'")
+        if parallel_count > task_count:
+            failures.append(
+                f"{parallel_count} transport workers cannot support a release claim with only "
+                f"{task_count} independent whichRHS tasks"
+            )
+        if parallel_count < 2:
+            failures.append("transport-worker release scaling needs at least two workers")
+        if requested_release and not measured_results_present:
+            failures.append("transport-worker release_scaling_claim=true requires measured timing results")
+        scope_release_eligible = not failures
+        release_supported = scope_release_eligible and measured_results_present and not plan_only
+        notes.append("transport-worker scaling is independent whichRHS throughput")
+        return ParallelScalingClaimScopeAudit(
+            benchmark_kind=benchmark_kind,
+            claim_scope=expected_claim_scope,
+            independent_task_count=int(task_count),
+            parallel_count=int(parallel_count),
+            backend=backend,
+            artifact_kind=artifact_kind,
+            launches_solves=launches_solves,
+            plan_only_scope_evidence=plan_only,
+            measured_results_present=measured_results_present,
+            release_gate_required="audit_transport_parallel_scaling_summary",
+            claim_scope_release_eligible=scope_release_eligible,
+            release_scaling_supported=release_supported,
+            unsupported_single_case_strong_scaling=False,
+            failures=tuple(failures),
+            notes=tuple(notes),
+        )
+
+    if benchmark_kind in {"single_case_sharded_solve", "sharded_solve_scaling", "sharded_solve"}:
+        expected_claim_scope = "single_case_sharded_solve_experimental"
+        _append_common_parallel_scope_failures(
+            failures=failures,
+            notes=notes,
+            expected_claim_scope=expected_claim_scope,
+            declared_claim_scope=declared_claim_scope,
+            explicit_benchmark_kind=explicit_benchmark_kind,
+            requested_release=requested_release,
+            artifact_kind=artifact_kind,
+            launches_solves=launches_solves,
+            plan_only=plan_only,
+            measured_results_present=measured_results_present,
+        )
+        device_counts = _positive_int_sequence(summary, keys=("devices", "device_counts", "requested_devices"))
+        if not device_counts:
+            device_counts = _parallel_count_from_results(summary, result_key="devices")
+        parallel_count = max(device_counts) if device_counts else 1
+        experimental_marker = _optional_bool(
+            summary.get("experimental_single_case_scaling"),
+            name="experimental_single_case_scaling",
+        )
+        scaling_status = str(summary.get("scaling_status", "")).strip().lower().replace("-", "_")
+        marked_experimental = bool(experimental_marker) or scaling_status in {
+            "experimental",
+            "experimental_single_case_sharding",
+            "regression_snapshot",
+            "non_release_snapshot",
+        }
+        if requested_release:
+            failures.append("single-case sharded solve cannot set release_scaling_claim=true")
+        if not marked_experimental:
+            failures.append("single-case sharded solve must be marked experimental/non-release")
+        if parallel_count < 2:
+            failures.append("single-case sharded solve needs at least two devices to demonstrate sharding")
+        notes.append("single-case sharded solve is not independent throughput")
+        notes.append("this helper never promotes single-case sharding to release strong-scaling evidence")
+        return ParallelScalingClaimScopeAudit(
+            benchmark_kind=benchmark_kind,
+            claim_scope=expected_claim_scope,
+            independent_task_count=1,
+            parallel_count=int(parallel_count),
+            backend=backend,
+            artifact_kind=artifact_kind,
+            launches_solves=launches_solves,
+            plan_only_scope_evidence=plan_only,
+            measured_results_present=measured_results_present,
+            release_gate_required=None,
+            claim_scope_release_eligible=not failures,
+            release_scaling_supported=False,
+            unsupported_single_case_strong_scaling=parallel_count > 1,
+            failures=tuple(failures),
+            notes=tuple(notes),
+        )
+
+    if benchmark_kind in {"multi_gpu_case_throughput", "gpu_case_throughput"}:
+        expected_claim_scope = "independent_case_throughput_non_release"
+        _append_common_parallel_scope_failures(
+            failures=failures,
+            notes=notes,
+            expected_claim_scope=expected_claim_scope,
+            declared_claim_scope=declared_claim_scope,
+            explicit_benchmark_kind=explicit_benchmark_kind,
+            requested_release=requested_release,
+            artifact_kind=artifact_kind,
+            launches_solves=launches_solves,
+            plan_only=plan_only,
+            measured_results_present=measured_results_present,
+        )
+        required_gpu_count = _optional_positive_int(
+            summary.get("required_gpu_count", 2),
+            name="required_gpu_count",
+        )
+        parallel_count = int(required_gpu_count or 2)
+        if requested_release:
+            failures.append("multi-GPU case-throughput artifacts must not set release_scaling_claim=true")
+        if backend != "gpu":
+            failures.append("multi-GPU case-throughput scope must record backend='gpu'")
+        if parallel_count < 2:
+            failures.append("multi-GPU case throughput needs at least two GPU workers/cases")
+        notes.append("multi-GPU case throughput covers independent cases, not a single sharded solve")
+        return ParallelScalingClaimScopeAudit(
+            benchmark_kind=benchmark_kind,
+            claim_scope=expected_claim_scope,
+            independent_task_count=parallel_count,
+            parallel_count=parallel_count,
+            backend=backend,
+            artifact_kind=artifact_kind,
+            launches_solves=launches_solves,
+            plan_only_scope_evidence=plan_only,
+            measured_results_present=measured_results_present,
+            release_gate_required="audit_multi_gpu_case_throughput_summary",
+            claim_scope_release_eligible=not failures,
+            release_scaling_supported=False,
+            unsupported_single_case_strong_scaling=False,
+            failures=tuple(failures),
+            notes=tuple(notes),
+        )
+
+    raise ValueError(f"unsupported parallel benchmark_kind={benchmark_kind!r}")
 
 
 def audit_multi_gpu_case_throughput_summary(

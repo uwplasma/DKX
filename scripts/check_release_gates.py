@@ -15,6 +15,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = REPO_ROOT / "examples" / "publication_figures" / "validation_manifest.json"
 DEFAULT_DOCS = (REPO_ROOT / "docs" / "validation_matrix.rst",)
 
+DEFERRED_STATUS = "deferred_post_release"
+VALID_RECORD_STATUSES = {"implemented", DEFERRED_STATUS}
+VALID_RECORD_KINDS = {
+    "literature_reproduction",
+    "literature_validation",
+    "profile_validation",
+    "cross_code_validation",
+    "autodiff_validation",
+}
 VALID_CLAIM_STATUSES = {
     "release_ready",
     "regression_scaffold",
@@ -26,7 +35,6 @@ IMPLEMENTED_CLAIM_STATUSES = {
     "regression_scaffold",
     "bounded_proxy",
 }
-DEFERRED_STATUS = "deferred_post_release"
 
 REQUIRED_DOC_PHRASES = (
     "Release claim gate metadata",
@@ -34,6 +42,13 @@ REQUIRED_DOC_PHRASES = (
     "regression_scaffold",
     "bounded_proxy",
     "closed_deferred",
+)
+REQUIRED_RECORD_LIST_FIELDS = (
+    "literature",
+    "claims",
+    "source_code",
+    "tests",
+    "acceptance_gates",
 )
 
 
@@ -48,10 +63,22 @@ def _nonempty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _string_list(value: object) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    rows = [str(item).strip() for item in value if isinstance(item, str) and item.strip()]
+    return rows if len(rows) == len(value) else None
+
+
+def _first_command_path(command: str) -> str:
+    return command.split()[0]
+
+
 def release_gate_errors(
     manifest_path: Path = DEFAULT_MANIFEST,
     *,
     docs_paths: Iterable[Path] = DEFAULT_DOCS,
+    repo_root: Path = REPO_ROOT,
 ) -> list[str]:
     """Return release-gate metadata errors for CI-fast checks."""
 
@@ -59,7 +86,42 @@ def release_gate_errors(
     records = _load_manifest(manifest_path)
     for index, record in enumerate(records):
         record_id = str(record.get("id", f"<record {index}>"))
+        if not _nonempty_string(record.get("id")):
+            errors.append(f"<record {index}>: id must be a non-empty string")
+
         status = str(record.get("status", ""))
+        if status not in VALID_RECORD_STATUSES:
+            errors.append(
+                f"{record_id}: status must be one of {sorted(VALID_RECORD_STATUSES)}, got {status!r}"
+            )
+        kind = str(record.get("kind", ""))
+        if kind not in VALID_RECORD_KINDS:
+            errors.append(
+                f"{record_id}: kind must be one of {sorted(VALID_RECORD_KINDS)}, got {kind!r}"
+            )
+
+        for key in REQUIRED_RECORD_LIST_FIELDS:
+            values = _string_list(record.get(key))
+            if values is None or not values:
+                errors.append(f"{record_id}: field {key} must be a non-empty list of strings")
+
+        for key in ("source_code", "tests", "artifacts"):
+            values = _string_list(record.get(key))
+            if values is None:
+                continue
+            for value in values:
+                if not (repo_root / value).exists():
+                    errors.append(f"{record_id}: {key} path does not exist: {value}")
+
+        scripts = _string_list(record.get("scripts"))
+        if scripts is None and "scripts" in record:
+            errors.append(f"{record_id}: field scripts must be a list of strings")
+        elif scripts is not None:
+            for command in scripts:
+                path = _first_command_path(command)
+                if path and not (repo_root / path).exists():
+                    errors.append(f"{record_id}: script path does not exist: {path}")
+
         gate = record.get("release_gate")
         if not isinstance(gate, dict):
             errors.append(f"{record_id}: missing release_gate object")
