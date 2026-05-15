@@ -117,6 +117,11 @@ conversion consistency. These gates are cheap enough for CI and catch a common
 class of manuscript-facing mistakes: a plot can look reasonable while using an
 inconsistent radial normalization.
 
+The VMEC/JAX geometry adapter tests also avoid a solve when checking that the
+normalized Boozer proxy transport objective is invariant under global
+:math:`|B|` spectrum scaling and has zero value and gradient for constant
+:math:`B`.
+
 Full suite and release checks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -218,6 +223,25 @@ package-percentage jump but a tighter, more meaningful test net around the
 green and the package coverage at roughly ``54%``. The latest bounded
 solve-policy pass then moved the full tree to ``568/568`` and pushed package
 coverage to about ``55%`` by exercising more of the driver’s actual control
+flow. The current QI coarse-basis pass adds focused tests for deterministic
+rank gating, guarded least-squares residual reduction, callable matrix-free
+operators, empty-basis guards, low-Fourier angular coarse directions, and
+metadata from the opt-in pre-Krylov QI coarse seed path. These are still bounded
+unit/regression gates. The documented large-QI non-autodiff host fallback now
+covers production runs that need a robust solution today, while true
+differentiable/device-QI closure still requires the documented scale-0.60 GPU
+hard-seed artifact to pass within budget.
+The follow-up Galerkin-policy tests make the opt-in device-QI path fail closed:
+mode parsing, damping selection, nonfinite rejection, required-drop gates, and
+production metadata are tested without launching a large solve. A Galerkin
+preconditioner candidate is now used only when its probe reduces the true
+residual; otherwise the base preconditioner remains active and the trace records
+``probe_not_reduced``.
+The runner also has a liveness gate for long GPU attempts: pass
+``--heartbeat-s`` to write per-case ``runner_heartbeat.jsonl`` events outside
+the solver trace. Tests cover both normal heartbeat completion and process-group
+termination on timeout, so a hung GPU attempt leaves explicit evidence instead
+of a silent SSH session.
 logic: constraint-scheme routing, sparse-exact-LU selection, x-block/sxblock
 rescue eligibility, transport sparse-direct and host-GMRES guard rails, host-only
 SciPy Krylov dispatch, and distributed-incompatible GMRES rejection. These tests
@@ -501,7 +525,11 @@ unit/regression suite:
   CI-fast release gate over the manifest's ``release_gate`` metadata. Each lane must be
   ``release_ready``, ``regression_scaffold``, ``bounded_proxy``, or
   ``closed_deferred``; none may block the current release without being explicitly
-  closed or removed from the release manifest.
+  closed or removed from the release manifest. The release checker now also validates
+  the record status/kind, the non-empty literature/claim/source/test/gate lists, and
+  all listed source, test, script, and artifact paths, including paths on
+  ``closed_deferred`` lanes. A deferred lane is therefore allowed to stay out of the
+  tagged release claim, but it is not allowed to rot silently.
 - ``docs/_static/research_lane_completion_2026_05_12.json`` records the active
   research/performance lanes, evidence artifacts, completion estimates, gates,
   and next actions for the current large-push cycle. ``scripts/check_research_lanes.py``
@@ -742,11 +770,102 @@ zero process failures, output and solver trace written, residual ratios below
 is used only to advance the next-size readiness estimate; production promotion
 still requires multi-seed CPU/GPU evidence at the larger target.
 
+The scale-0.60 seed-3 follow-up
+``docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json``
+keeps the GPU hard-seed blocker actionable without promoting another solver
+toggle. It records rejected two-level x-block, GCROT(m,k), BiCGStab fallback,
+post-correction-only BiCGStab, and experimental JAX-factor/device-Krylov probes.
+The only retained code policy from that pass is the safe GMRES fallback guard:
+a non-GMRES candidate may seed fallback GMRES only when it strictly improves the
+finite RHS norm and is not a right-preconditioned coordinate state.
+
+The subsequent global-coupling/operator-reuse probe summary
+``docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json``
+adds another negative gate. It verifies that the newly implemented opt-in
+smoothed global-coupling preconditioner, assembled-operator matvec reuse
+preflight, side-probe keep-left guard, and JAX-factor switch are wired and
+metadata-covered, but it rejects all of them for default promotion on the
+scale-0.60 seed-3 hard case. The important behavioral result is that the GPU
+left side probe reached a finite near residual, while both the old right-switch
+continuation and the new keep-left continuation timed out at ``620 s``. This
+keeps the lane honest: the next closing step must be a genuinely device-resident
+or differently structured preconditioner/Krylov formulation, not another
+threshold-only side-selection tweak.
+
+The device-operator rejection artifact has since been extended with the
+cycle-JIT evidence. It records that full-solver JIT is not viable for this hard
+seed because it reaches ``56.6 GB`` RSS, while cycle-JIT and recycled cycle-JIT
+keep the one-GPU memory footprint near ``13.9 GB`` and write diagnostics within
+the bounded window. They still fail the strict true-residual gate, so tests treat
+them as infrastructure coverage and negative physics evidence rather than a
+closed QI validation.
+
+The current development branch adds that next formulation as an opt-in test
+surface, not a promoted claim: ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres``
+selects a JAX-native flexible GMRES primitive, while ``gmres-jax`` selects the
+same fixed-shape Arnoldi/least-squares primitive with a fixed left
+preconditioner so left-preconditioned device probes can be tested without SciPy
+Krylov. Both routes force JAX x-block factors and use a device-resident
+global-coupling coarse correction when global coupling is enabled. The checked
+device-Krylov rejection artifact shows a useful robustness improvement on the
+scale-0.60 GPU hard seed: the route finishes before the timeout and avoids the
+earlier CUDA illegal-address failure, but it still fails strict true-residual
+acceptance. Unit tests cover the solver primitive, JIT tracing, policy parsing,
+small full-system metadata, and host-transfer-free metadata boundaries, while
+the production QI gate above remains unchanged until the scale-0.60 seed-3 and
+production-resolution CPU/GPU ladders pass.
+
+The 2026-05-15 compact-factor apply diagnostics add another negative gate. The
+runner now includes diagonal, exact-LU diagonal, row-cap-16 exact triangular,
+forced-left FGMRES, and left ``gmres_jax`` artifacts in the QI evidence manifest.
+These probes demonstrate that a GPU-cheap diagonal apply can return restart
+cycles without the old timeout, but it does not reduce the physical residual.
+Tests therefore classify these artifacts as non-passing blocker evidence and
+keep the completion estimate tied to the largest passing measured artifact.
+
+The follow-up device-operator artifact exercises the next operator-reuse step on
+the same ``office`` GPU hard seed. Full-restart device FGMRES builds the active
+device CSR operator but times out after ``400`` device matvecs. The
+short-recurrence ``bicgstab-jax`` variant reduces peak RSS to ``13.6 GB`` and
+finishes before timeout, but diverges and therefore remains rejected. This is
+valuable blocker evidence because it separates memory pressure from
+preconditioner/Krylov stability.
+
+The same blocker artifact now includes the final conditioning probes for this
+push. Row equilibration, two-sided row/column equilibration, and a larger
+x-block JAX factor row cap all complete the bounded GPU hard seed but leave the
+physical residual at the same ``3.02e-5`` floor. A closer device analogue of the
+CPU-closing route, exact per-x sparse LU with left device GMRES, reaches the
+intended factors but times out inside the bounded GPU window. Tests therefore
+keep these routes as negative infrastructure evidence. The compact-CSR
+exact-factor replacement is now tested too: it stores actual SuperLU factor
+nonzeros rather than padded rows and builds the full exact factors, but the
+bounded GPU hard seed still times out before a solver trace. The remaining QI
+closure therefore requires a cheaper exact/block-Schur application or a
+different residual-reducing coarse operator, not another scaling or restart-only
+knob.
+
+The latest QI coarse-seed follow-up adds bounded liveness evidence for that
+same one-GPU hard seed. The CPU artifact
+``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_cpu_2026_05_14.json``
+passes at ``15 x 31 x 60 x 5`` with an accepted residual ratio below
+``1.4e-3``. The matching GPU heartbeat artifact
+``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_heartbeat_timeout_2026_05_14.json``
+records ``31`` heartbeat events over ``420 s`` and preserves the active/total
+matrix sizes even though no solver trace was written. It is negative evidence:
+that diagnostic launch forced the host-oriented LGMRES rescue on GPU and timed
+out, so it does not promote the GPU policy. The follow-up no-LGMRES artifact
+``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_no_lgmres_timeout_2026_05_14.json``
+confirms the GPU-compatible branch: the side probe switches left-to-right with
+plain GMRES, probe-coarse improves the seed to ``2.83e-6``, and the solve reaches
+``900`` matvecs by ``412.7 s`` before timeout. It is still blocker evidence
+because it writes no output or solver trace.
+
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
 passing bounded grid ``139502``, the largest attempted bounded grid ``139502``,
-sixteen passing artifacts and three non-passing blocker artifacts, a ``60%``
+21 passing artifacts and 27 non-passing blocker artifacts, a ``60%``
 per-axis lane-completion estimate based only on passing artifacts, and
 ``86.32%`` of production total size still uncovered. The production acceptance
 gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
@@ -757,6 +876,26 @@ evidence, not as a production-resolution QI robustness claim. Promote QI
 robustness only after the next bounded scale and production-resolution CPU/GPU
 seed ladders are checked with solver traces and the evidence manifest is
 regenerated.
+
+The latest residual-weighted angular probe-coarse artifact
+``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``
+is the accepted CPU hard-seed reference for this bounded scale: it passes in
+``170.7 s`` with residual ratio ``2.14e-3``. The enriched QI basis,
+lower-fill local ILU, no-LGMRES GPU, and compact-factor device-Krylov follow-up
+artifacts are deliberately kept as rejected evidence because they either regress
+CPU time/memory or fail to write GPU HDF5/trace output.
+
+Large device-Krylov QI solves now have a tested non-autodiff host fallback
+policy. ``tests/test_rhs1_xblock_policy.py`` covers the auto/force/disable
+decision gates, and
+``tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_device_host_fallback_records_non_autodiff_host_policy``
+checks that an explicit device-Krylov request can be rewritten to the host
+x-block auto policy before JAX factor arrays are built. Large QI runs then
+retain the measured side-probe seed plus host SciPy ``lgmres`` rescue rather
+than launching direct LGMRES from a weak zero seed. This is a production-safe
+route for large RHSMode=1 QI runs that need a solution today; it is deliberately
+metadata-visible and does not count as an end-to-end differentiable device
+Krylov closure.
 
 The high-collisionality Simakov-Helander lane now has a bounded normalization audit:
 

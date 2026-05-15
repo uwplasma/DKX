@@ -24,6 +24,33 @@ no-overclaim gate, a no-optional-dependency Boozer-spectrum autodiff readiness
 gate, and the exact command for the optional proxy-gradient gate.  It does not
 import either optional backend.
 
+The status JSON also contains ``no_solve_provenance_gate``.  This gate is a
+machine-readable assertion that the workflow is still a proxy-gradient lane:
+``kinetic_solve_executed`` is false, the differentiated object is the
+Boozer-spectrum transport-like scalar, and full VMEC-boundary-to-SFINCS kinetic
+gradients remain deferred.
+
+The same payload now also carries ``kinetic_transport_scalar_contract`` and a
+copy of its gate in
+``no_solve_provenance_gate.kinetic_transport_scalar_contract_gate``. This is the
+forward contract for a future VMEC/Boozer-to-kinetic-transport scalar.  It lists
+``required_kinetic_transport_scalar_stages`` in machine-readable form:
+
+- ``vmec_source``,
+- ``vmec_equilibrium_or_wout``,
+- ``boozer_transform``,
+- ``sfincs_geometry_adapter``,
+- ``kinetic_operator_assembly``,
+- ``linear_kinetic_solve``,
+- ``transport_scalar_reduction``,
+- ``gradient_validation``.
+
+Each stage records its current public role, differentiability boundary, current
+status, and evidence required before the stage can support a full kinetic
+transport scalar.  The current public scalar is explicitly
+``boozer_spectrum_proxy_not_kinetic``; ``kinetic_transport_scalar_claimed`` and
+``kinetic_solve_executed`` must both remain false in this lane.
+
 The existing end-to-end example has the same skip-safe backend contract:
 
 .. code-block:: bash
@@ -116,6 +143,18 @@ Explicit non-claims:
 - no gradient through the SFINCS kinetic transport solve in this lane,
 - no production solver dependency on ``vmec_jax`` or ``booz_xform_jax``.
 
+Future kinetic scalar contract:
+
+- ``kinetic_transport_scalar_contract.required_stages`` is the authoritative
+  list of stages that must be present before a VMEC/Boozer-to-SFINCS kinetic
+  scalar can be claimed.
+- ``kinetic_transport_scalar_contract.current_public_scalar`` separates
+  differentiated proxy stages from setup-only and not-covered stages.
+- ``kinetic_transport_scalar_contract.no_overclaim_gate.status`` must be
+  ``"pass"`` in default CI.  It fails if the proxy lane claims a kinetic solve,
+  requires optional geometry packages in default CI, drops a required stage, or
+  promotes the full kinetic scalar while deferred stages remain.
+
 Gates
 -----
 
@@ -124,6 +163,10 @@ Run the VMEC/Boozer workflow and adapter gates:
 .. code-block:: bash
 
    python -m pytest tests/test_vmec_jax_workflow.py tests/test_jax_geometry_adapters.py -q
+
+These gates also include a no-solve invariant check that the normalized Boozer
+proxy transport objective is unchanged by global :math:`|B|` spectrum scaling
+and is exactly zero, with zero gradient, for a constant-:math:`B` spectrum.
 
 Run the optional JAX ecosystem gates that protect future Lineax, Equinox, and
 JAXopt adoption:
@@ -158,6 +201,17 @@ The optional VMEC/Boozer integration tests use ``pytest.importorskip`` or a
 skip-status payload. Missing optional packages therefore record a skipped lane,
 not a failed default installation.
 
+In a file-backed optional run, the written ``workflow-summary.json`` must also
+show ``no_solve_provenance_gate.status == "pass"``.  For that path the gate
+requires explicit provenance fields for the source ``wout`` or in-memory VMEC
+object, selected surface, Boozer resolution, objective grid shape, and spectral
+scale.  This lets downstream users audit what was differentiated without
+mistaking the proxy scalar for a SFINCS kinetic transport solve.
+The same JSON must show
+``no_solve_provenance_gate.required_kinetic_transport_scalar_stages`` and
+``kinetic_transport_scalar_contract.no_overclaim_gate.status == "pass"`` so the
+future kinetic-scalar lane cannot silently lose required stages or boundaries.
+
 Promotion rule
 --------------
 
@@ -166,6 +220,9 @@ This lane is complete enough for documented research use when:
 - ``--check-backends --json`` returns a valid workflow contract,
 - ``backend_readiness_gate.status == "pass"`` in the no-optional-dependency
   preflight/backend-contract payload,
+- ``no_solve_provenance_gate.status == "pass"`` and
+  ``no_solve_provenance_gate.kinetic_solve_executed == false`` in both preflight
+  and file-backed summary payloads,
 - the proxy-gradient gate writes a summary JSON with
   ``numerical_gradient_gate.status == "pass"`` on at least one explicit ``wout``
   fixture when optional packages are installed,

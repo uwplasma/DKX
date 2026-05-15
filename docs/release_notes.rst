@@ -4,6 +4,23 @@ Release notes
 Unreleased
 ----------
 
+No unreleased changes yet.
+
+v1.1.3
+------
+
+This patch release candidate packages the 2026-05-15 release-narrative cleanup,
+bounded large-QI fallback work, PAS probe gating, and release-claim hardening.
+
+Highlights
+~~~~~~~~~~
+
+- Added an explicit release scope: current claims cover the audited example-suite
+  parity, bounded large-QI non-autodiff host fallback, PAS/runtime probe gates,
+  and transport-worker parallelism. Production-resolution QI CPU/GPU ladders,
+  true differentiable device-QI, and single-case multi-GPU strong scaling remain
+  deferred or experimental research lanes.
+
 - Added an explicit ``pas_tzfft`` / ``pas_fft`` RHSMode=1 PAS preconditioner
   candidate and a guarded ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft``
   route for memory-unsafe PAS-TZ experiments.
@@ -21,6 +38,34 @@ Unreleased
   cheap-base plus matrix-free streaming-correction probe. It is bounded and
   modestly improves the cheap collision fallback, but the checked geometry4
   smoke does not meet the promotion gate.
+- Large-QI explicit device-Krylov requests now have a metadata-visible
+  non-autodiff host fallback that enters the measured host x-block auto policy
+  before JAX factors are built. This is the current production escape hatch, not
+  an end-to-end differentiable device-QI claim.
+- PAS matrix-free production probes now require explicit candidate byte budgets
+  by default, and the checked geometry4/HSX real-solve probes are documented as
+  negative promotion evidence because they are residual-clean but do not improve
+  runtime or memory.
+- Release-gate and research-lane manifests now keep deferred validation lanes,
+  device-QI work, and single-case scaling from silently blocking a tag while
+  still preserving concrete promotion gates.
+
+Validation
+~~~~~~~~~~
+
+- Release-gate and research-lane checks pass against the updated manifests.
+- Sphinx documentation builds with warnings as errors after this release-note and
+  scope refresh.
+- Focused version metadata validation requires ``pyproject.toml`` and
+  ``sfincs_jax.__version__`` to agree on ``1.1.3``.
+
+Remaining research lanes
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+No documented release-facing lane is blocked by true device-QI or single-case
+strong-scaling work. Production-resolution QI CPU/GPU seed ladders, the
+scale-0.60 one-GPU hard seed, and geometry-rich PAS runtime/memory wins remain
+post-release promotion candidates until checked artifacts pass their gates.
 
 v1.1.2
 ------

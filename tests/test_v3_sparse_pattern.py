@@ -15,10 +15,18 @@ from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_mat_aij
 from sfincs_jax.rhs1_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
-from sfincs_jax.v3_sparse_pattern import summarize_v3_sparse_pattern, v3_full_system_conservative_sparsity_pattern
+from sfincs_jax.v3_sparse_pattern import (
+    estimate_v3_full_system_conservative_sparsity_summary,
+    summarize_v3_sparse_pattern,
+    v3_full_system_conservative_sparsity_pattern,
+    v3_full_system_conservative_sparsity_pattern_for_indices,
+)
 from sfincs_jax.v3_driver import (
     _rhs1_xblock_gmres_restart,
     _rhs1_xblock_precondition_side,
+    _rhs1_xblock_post_coarse_directions,
+    _triangular_solve_lower_csr_rows,
+    _triangular_solve_upper_csr_rows,
     solve_v3_full_system_linear_gmres,
 )
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
@@ -143,6 +151,38 @@ def test_xblock_gmres_restart_caps_only_auto_right_preconditioned_path() -> None
     assert (restart, capped) == (80, False)
 
 
+def test_compact_csr_triangular_solves_match_dense_reference() -> None:
+    lower_indptr = jnp.asarray([0, 0, 1, 3], dtype=jnp.int32)
+    lower_indices = jnp.asarray([0, 0, 1], dtype=jnp.int32)
+    lower_data = jnp.asarray([2.0, -1.0, 0.5], dtype=jnp.float64)
+    upper_indptr = jnp.asarray([0, 2, 3, 3], dtype=jnp.int32)
+    upper_indices = jnp.asarray([1, 2, 2], dtype=jnp.int32)
+    upper_data = jnp.asarray([-0.25, 0.5, 1.5], dtype=jnp.float64)
+    upper_diag = jnp.asarray([4.0, -3.0, 2.0], dtype=jnp.float64)
+    rhs = jnp.asarray([1.0, -2.0, 0.25], dtype=jnp.float64)
+
+    y = _triangular_solve_lower_csr_rows(
+        indptr=lower_indptr,
+        indices=lower_indices,
+        data=lower_data,
+        b=rhs,
+        row_base=jnp.asarray(0, dtype=jnp.int32),
+    )
+    z = _triangular_solve_upper_csr_rows(
+        indptr=upper_indptr,
+        indices=upper_indices,
+        data=upper_data,
+        upper_diag=upper_diag,
+        b=y,
+        row_base=jnp.asarray(0, dtype=jnp.int32),
+    )
+
+    lower = np.array([[1.0, 0.0, 0.0], [2.0, 1.0, 0.0], [-1.0, 0.5, 1.0]])
+    upper = np.array([[4.0, -0.25, 0.5], [0.0, -3.0, 1.5], [0.0, 0.0, 2.0]])
+    expected = np.linalg.solve(upper, np.linalg.solve(lower, np.asarray(rhs)))
+    np.testing.assert_allclose(np.asarray(z), expected, rtol=1.0e-12, atol=1.0e-12)
+
+
 def test_conservative_sparse_pattern_covers_pas_fortran_matrix() -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist")
@@ -170,6 +210,20 @@ def test_conservative_sparse_pattern_covers_fp_fortran_matrix() -> None:
     summary = summarize_v3_sparse_pattern(op, pattern)
     assert summary.has_fp
     assert summary.avg_row_nnz > 0.0
+
+
+def test_conservative_sparse_pattern_preflight_estimate_bounds_materialized_pattern() -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    pattern = v3_full_system_conservative_sparsity_pattern(op)
+    summary = summarize_v3_sparse_pattern(op, pattern)
+    estimate = estimate_v3_full_system_conservative_sparsity_summary(op)
+
+    assert estimate.shape == summary.shape
+    assert estimate.nnz >= summary.nnz
+    assert estimate.max_row_nnz >= summary.max_row_nnz
+    assert estimate.has_fp is True
 
 
 def test_fp_sparse_pc_can_use_local_velocity_pattern() -> None:
@@ -380,6 +434,598 @@ def test_xblock_sparse_pc_two_level_preconditioner_records_metadata(monkeypatch)
     assert any("two-level coarse built" in msg for msg in messages)
 
 
+def test_xblock_sparse_pc_global_coupling_preconditioner_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "12")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_FSAVG_LMAX", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_ANGULAR_LMAX", "1")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_gmres"
+    assert result.metadata["xblock_global_coupling_enabled"] is True
+    assert result.metadata["xblock_global_coupling_built"] is True
+    assert result.metadata["xblock_global_coupling_mode"] == "additive"
+    assert 1 <= result.metadata["xblock_global_coupling_rank"] <= result.metadata["xblock_global_coupling_basis_size"] <= 12
+    assert result.metadata["xblock_global_coupling_smoother"] == "base"
+    assert result.metadata["xblock_global_coupling_setup_budget_s"] == 0.0
+    assert result.metadata["xblock_global_coupling_setup_budget_reached"] is False
+    assert result.metadata["xblock_global_coupling_applies"] > 0
+    assert result.metadata["xblock_global_coupling_coarse_applies"] == result.metadata["xblock_global_coupling_applies"]
+    assert any("global-coupling built" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_global_coupling_setup_budget_uses_partial_basis(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "12")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_FSAVG_LMAX", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_ANGULAR_LMAX", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SETUP_MAX_S", "1e-12")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_global_coupling_built"] is True
+    assert result.metadata["xblock_global_coupling_smoother"] == "base"
+    assert result.metadata["xblock_global_coupling_setup_budget_s"] == pytest.approx(1.0e-12)
+    assert result.metadata["xblock_global_coupling_setup_budget_reached"] is True
+    assert result.metadata["xblock_global_coupling_basis_size"] < result.metadata["xblock_global_coupling_load_basis_size"]
+    assert any("global-coupling setup budget reached" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_constraint1_moment_schur_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_SEED", "1")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_moment_schur_enabled"] is True
+    assert result.metadata["xblock_moment_schur_built"] is True
+    assert result.metadata["xblock_moment_schur_mode"] == "constraint1_moment_schur"
+    assert result.metadata["xblock_moment_schur_extra_size"] == 4
+    assert result.metadata["xblock_moment_schur_rank"] == 4
+    assert result.metadata["xblock_moment_schur_device_resident"] is True
+    assert result.metadata["xblock_moment_schur_base_applies"] == 2 * result.metadata["xblock_moment_schur_applies"]
+    assert result.metadata["xblock_moment_schur_seed_residual_norm"] is not None
+    assert any("constraint1 moment-Schur built" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_preflight_required_rejects_weak_seed(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_MIN_IMPROVEMENT", "0.9")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_REQUIRED", "1")
+
+    with pytest.raises(RuntimeError, match="preflight gate failed"):
+        solve_v3_full_system_linear_gmres(
+            nml=nml,
+            solve_method="xblock_sparse_pc_gmres",
+            tol=1.0e-8,
+            maxiter=80,
+        )
+
+
+def test_xblock_sparse_pc_assembled_operator_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_gmres"
+    assert result.metadata["xblock_assembled_operator_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is True
+    assert result.metadata["xblock_assembled_operator_matrix_nnz"] > 0
+    assert result.metadata["xblock_assembled_operator_error"] is None
+    assert any("assembled operator built" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_assembled_operator_can_use_device_csr(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_assembled_operator_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is True
+    assert result.metadata["xblock_assembled_operator_device_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_device_required"] is True
+    assert result.metadata["xblock_assembled_operator_device_resident"] is True
+    assert result.metadata["xblock_assembled_operator_device_nnz"] == result.metadata["xblock_assembled_operator_matrix_nnz"]
+    assert result.metadata["xblock_assembled_operator_device_csr_nbytes_estimate"] > 0
+    assert result.metadata["xblock_assembled_operator_device_error"] is None
+    assert any("assembled operator built location=device" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_assembled_operator_row_equilibration_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE_NORM", "linf")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_assembled_operator_built"] is True
+    assert result.metadata["xblock_assembled_operator_device_resident"] is True
+    assert result.metadata["xblock_assembled_operator_row_equilibration_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_row_equilibration_built"] is True
+    assert result.metadata["xblock_assembled_operator_row_equilibration_norm"] == "linf"
+    assert result.metadata["xblock_assembled_operator_row_equilibration_setup_s"] >= 0.0
+    assert result.metadata["xblock_assembled_operator_row_equilibration_scale_min"] > 0.0
+    assert result.metadata["xblock_assembled_operator_row_equilibration_scale_max"] > 0.0
+    assert any("assembled row equilibration built" in msg for msg in messages)
+    assert any("using row-equilibrated assembled operator" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_assembled_operator_row_col_equilibration_maps_solution(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_COL_EQUILIBRATE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_assembled_operator_row_equilibration_built"] is True
+    assert result.metadata["xblock_assembled_operator_col_equilibration_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_col_equilibration_built"] is True
+    assert result.metadata["xblock_assembled_operator_col_equilibration_scale_min"] > 0.0
+    assert result.metadata["xblock_assembled_operator_col_equilibration_scale_max"] > 0.0
+    assert any("assembled column equilibration built" in msg for msg in messages)
+    assert any("using row/column-equilibrated assembled operator" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_assembled_operator_records_budget_rejection(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "0")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_assembled_operator_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is False
+    assert "MemoryError" in str(result.metadata["xblock_assembled_operator_error"])
+    assert result.metadata["xblock_assembled_operator_preflight_rejected"] is True
+    assert result.metadata["xblock_assembled_operator_preflight_pattern_nnz_estimate"] > 0
+    assert any("assembled operator disabled after build failure" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_active_dof"] is True
+    assert result.metadata["xblock_linear_size"] < result.metadata["xblock_full_size"]
+    assert result.gmres.x.shape == result.rhs.shape
+
+
+def test_xblock_sparse_pc_probe_coarse_uses_active_projected_directions(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX", "2")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_active_dof"] is True
+    assert result.metadata["xblock_probe_coarse_steps_requested"] == 1
+    assert result.metadata["xblock_probe_coarse_steps_accepted"] == 1
+    assert result.metadata["xblock_probe_coarse_direction_count"] == 8
+    assert result.metadata["xblock_probe_coarse_angular_lmax"] == -1
+    assert result.metadata["xblock_probe_coarse_seed_initialized"] is True
+    assert result.metadata["xblock_probe_coarse_residual_after"] < result.metadata["xblock_probe_coarse_residual_before"]
+    assert any("probe-coarse improved seed residual" in msg for msg in messages)
+
+
+def test_xblock_post_coarse_directions_can_include_angular_modes() -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    residual = jnp.ones((op.total_size,), dtype=jnp.float64)
+
+    directions = _rhs1_xblock_post_coarse_directions(
+        op=op,
+        residual=residual,
+        preconditioner=lambda v: jnp.asarray(v, dtype=jnp.float64),
+        include_raw=False,
+        fsavg_lmax=0,
+        angular_lmax=1,
+        max_extra_units=0,
+        max_directions=16,
+    )
+
+    names = tuple(name for name, _direction in directions)
+    assert any(name.startswith("fsavg_l") for name in names)
+    assert any(name.startswith("angular_") for name in names)
+    assert len(directions) <= 16
+
+
+def test_xblock_post_coarse_directions_can_include_residual_weighted_angular_modes() -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    theta = jnp.arange(int(op.n_theta), dtype=jnp.float64)
+    zeta = jnp.arange(int(op.n_zeta), dtype=jnp.float64)
+    pattern = jnp.cos(2.0 * jnp.pi * theta[:, None] / float(op.n_theta)) + 0.25 * jnp.sin(
+        2.0 * jnp.pi * zeta[None, :] / float(op.n_zeta)
+    )
+    f_res = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+    f_res = f_res.at[0, :, 0, :, :].set(pattern[None, :, :])
+    residual = jnp.concatenate(
+        [f_res.reshape((-1,)), jnp.zeros((int(op.total_size) - int(op.f_size),), dtype=jnp.float64)]
+    )
+
+    directions = _rhs1_xblock_post_coarse_directions(
+        op=op,
+        residual=residual,
+        preconditioner=lambda v: jnp.asarray(v, dtype=jnp.float64),
+        include_raw=False,
+        fsavg_lmax=0,
+        angular_lmax=0,
+        include_angular_residual=True,
+        max_extra_units=0,
+        max_directions=16,
+    )
+
+    names = tuple(name for name, _direction in directions)
+    assert any(name.startswith("angular_residual_") for name in names)
+    assert len(directions) <= 16
+
+
+def test_xblock_sparse_pc_probe_coarse_records_angular_mode_usage(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS", "12")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_LMAX", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_RESIDUAL", "1")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_probe_coarse_angular_lmax"] == 1
+    assert result.metadata["xblock_probe_coarse_angular_residual"] is True
+    assert any(
+        str(name).startswith("angular_")
+        for name in result.metadata["xblock_probe_coarse_direction_names"]
+    )
+
+
+def test_xblock_sparse_pc_qi_coarse_seed_records_residual_reduction(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS", "enriched")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK", "10")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES", "24")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_qi_coarse_seed_enabled"] is True
+    assert result.metadata["xblock_qi_coarse_seed_used"] is True
+    assert result.metadata["xblock_qi_coarse_seed_rank"] > 0
+    assert result.metadata["xblock_qi_coarse_seed_residual_after"] < result.metadata[
+        "xblock_qi_coarse_seed_residual_before"
+    ]
+    assert result.metadata["xblock_qi_coarse_seed_basis"] == "enriched"
+    assert result.metadata["xblock_qi_coarse_seed_candidate_count"] <= 24
+    assert result.metadata["xblock_qi_coarse_seed_max_candidates"] == 24
+    assert result.metadata["xblock_qi_coarse_seed_max_angular_mode"] == 2
+    assert "global" in result.metadata["xblock_qi_coarse_seed_labels"]
+    assert result.metadata["xblock_qi_galerkin_preconditioner_enabled"] is False
+    assert result.metadata["xblock_qi_galerkin_preconditioner_built"] is False
+    assert any("QI coarse seed improved residual" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_qi_galerkin_preconditioner_fails_closed_when_probe_worsens(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS", "enriched")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES", "24")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_MODE", "multiplicative")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_DAMPINGS", "1.0")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_qi_galerkin_preconditioner_enabled"] is True
+    assert result.metadata["xblock_qi_galerkin_preconditioner_built"] is True
+    assert result.metadata["xblock_qi_galerkin_preconditioner_used"] is False
+    assert result.metadata["xblock_qi_galerkin_preconditioner_reason"] == "probe_not_reduced"
+    assert result.metadata["xblock_qi_galerkin_preconditioner_mode"] == "multiplicative"
+    assert result.metadata["xblock_qi_galerkin_preconditioner_basis_reused_from_seed"] is True
+    assert result.metadata["xblock_qi_galerkin_preconditioner_rank"] > 0
+    assert result.metadata["xblock_qi_galerkin_preconditioner_candidate_count"] <= 24
+    assert result.metadata["xblock_qi_galerkin_preconditioner_coarse_operator_shape"][0] == result.metadata[
+        "xblock_qi_galerkin_preconditioner_rank"
+    ]
+    assert result.metadata["xblock_qi_galerkin_preconditioner_coarse_applies"] == 0
+    assert result.metadata["xblock_qi_galerkin_preconditioner_base_applies"] == 0
+    assert np.isfinite(float(result.metadata["xblock_qi_galerkin_preconditioner_residual_before"]))
+    assert np.isfinite(float(result.metadata["xblock_qi_galerkin_preconditioner_residual_after"]))
+    assert result.metadata["xblock_qi_galerkin_preconditioner_probe_reduced"] is False
+    assert result.metadata["xblock_qi_galerkin_preconditioner_selected_index"] is None
+    assert result.metadata["xblock_qi_galerkin_preconditioner_probe_candidates"]
+    assert all(
+        candidate["residual_norm"] >= result.metadata["xblock_qi_galerkin_preconditioner_residual_before"]
+        for candidate in result.metadata["xblock_qi_galerkin_preconditioner_probe_candidates"]
+    )
+    assert any("QI Galerkin preconditioner built" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_lower_fill_local_policy_is_wired(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL", "force")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_FACTOR", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_ILU_DROP_TOL", "1e-3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_ROW_NNZ_MAX", "16")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-4,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-4
+    assert result.metadata["xblock_lower_fill_mode"] == "force"
+    assert result.metadata["xblock_lower_fill_requested"] is True
+    assert result.metadata["xblock_lower_fill_ignored_env"] is False
+    assert any("lower-fill local factor" in msg for msg in messages)
+
+
+def test_xblock_side_probe_switch_preserves_physical_seed_for_right_pc(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("physicsParameters")["includeXDotTerm"] = False
+    nml.group("physicsParameters")["includeElectricFieldTermInXiDot"] = False
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_RESTART", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", "0")
+    monkeypatch.setattr(
+        v3_driver_module._rhs1_xblock_policy,
+        "rhs1_xblock_side_probe_should_switch",
+        lambda *, residual_ratio, switch_ratio_env_value: True,
+    )
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_side_probe_used"] is True
+    assert result.metadata["xblock_side_probe_switched"] is True
+    assert result.metadata["xblock_side_probe_initial_side"] == "left"
+    assert result.metadata["xblock_side_probe_selected_side"] == "right"
+    assert result.metadata["xblock_side_probe_physical_seed_preserved_after_switch"] is True
+    assert result.metadata["xblock_side_probe_seed_used"] is True
+    assert any("preserved_physical_seed=1" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_two_level_active_dof_projects_coarse_basis(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_FSAVG_LMAX", "2")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_active_dof"] is True
+    assert result.metadata["xblock_two_level_enabled"] is True
+    assert result.metadata["xblock_two_level_built"] is True
+    assert result.metadata["xblock_two_level_active_projected"] is True
+    assert result.metadata["xblock_two_level_expected_size"] == result.metadata["xblock_linear_size"]
+    assert result.metadata["xblock_two_level_applies"] > 0
+    assert any("two-level coarse built" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_assembled_operator_active_dof_uses_sliced_budget(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    active_idx = v3_driver_module._transport_active_dof_indices(op)
+    full_summary = estimate_v3_full_system_conservative_sparsity_summary(op)
+    full_csr_nbytes = int(full_summary.nnz * 12 + (full_summary.shape[0] + 1) * 4)
+    full_sliced_pattern = v3_full_system_conservative_sparsity_pattern(op)[active_idx, :][:, active_idx].tocsr()
+    active_pattern = v3_full_system_conservative_sparsity_pattern_for_indices(op, active_idx)
+    assert (active_pattern != full_sliced_pattern).nnz == 0
+    active_csr_nbytes = int(active_pattern.nnz * 12 + (active_pattern.shape[0] + 1) * 4)
+    assert active_csr_nbytes < full_csr_nbytes
+
+    cap_mb = 1.2 * active_csr_nbytes / 1.0e6
+    assert full_csr_nbytes > cap_mb * 1.0e6
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", f"{cap_mb:.6f}")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_active_dof"] is True
+    assert result.metadata["xblock_assembled_operator_enabled"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is True
+    assert result.metadata["xblock_assembled_operator_active_dof"] is True
+    assert result.metadata["xblock_assembled_operator_preflight_scope"] == "active_dof"
+    assert result.metadata["xblock_assembled_operator_preflight_active_csr_nbytes_estimate"] <= cap_mb * 1.0e6
+    assert result.metadata["xblock_assembled_operator_preflight_full_csr_nbytes_estimate"] > cap_mb * 1.0e6
+    assert result.metadata["xblock_assembled_operator_error"] is None
+
+
 @pytest.mark.parametrize(
     ("method", "expected_solver_kind"),
     [
@@ -410,6 +1056,291 @@ def test_xblock_sparse_pc_gmres_opt_in_krylov_method_records_realized_solver(
     assert result.metadata["candidate_krylov_method"] == method
     assert result.metadata["fallback_from_krylov_method"] is None
     assert result.metadata["matvecs"] >= result.metadata["candidate_matvecs"]
+
+
+@pytest.mark.parametrize(
+    ("method", "expected_kind", "expected_metadata_key"),
+    [
+        ("fgmres", "xblock_sparse_pc_fgmres_jax", "xblock_device_fgmres_enabled"),
+        ("gmres-jax", "xblock_sparse_pc_gmres_jax", "xblock_device_gmres_enabled"),
+    ],
+)
+def test_xblock_sparse_pc_device_krylov_records_experimental_metadata(
+    monkeypatch,
+    method: str,
+    expected_kind: str,
+    expected_metadata_key: str,
+) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", method)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "4")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-3,
+        maxiter=20,
+    )
+
+    assert float(result.residual_norm) < 1.0e-3
+    expected_method = {
+        "fgmres": "fgmres_jax",
+        "gmres-jax": "gmres_jax",
+    }[method]
+    assert result.metadata["solver_kind"] == expected_kind
+    assert result.metadata["krylov_method"] == expected_method
+    assert result.metadata["candidate_krylov_method"] == expected_method
+    assert result.metadata["sparse_pc_xblock_jax_factors"] is True
+    assert result.metadata["xblock_device_krylov_method"] == expected_method
+    assert result.metadata[expected_metadata_key] is True
+    assert result.metadata["xblock_device_fgmres_forced_jax_factors"] is True
+    if method == "fgmres":
+        assert result.metadata["precondition_side"] == "right"
+    assert result.metadata["xblock_global_coupling_built"] is True
+    assert result.metadata["xblock_global_coupling_device_resident"] is True
+    assert result.metadata["xblock_global_coupling_coarse_solver"] == "qr"
+    assert result.metadata["xblock_global_coupling_smoother"] == "identity"
+    assert result.metadata["xblock_global_coupling_ridge"] == 0.0
+    assert result.metadata["xblock_global_coupling_setup_budget_s"] == 180.0
+    assert result.metadata["xblock_global_coupling_setup_budget_reached"] is False
+    assert len(result.metadata["xblock_global_coupling_singular_values"]) >= 1
+
+
+def test_xblock_sparse_pc_device_host_fallback_records_non_autodiff_host_policy(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "gmres-jax")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK", "force")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER", "1")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=40,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_gmres"
+    assert result.metadata["krylov_method"] == "gmres"
+    assert result.metadata["sparse_pc_xblock_jax_factors"] is False
+    assert result.metadata["xblock_device_krylov_method"] is None
+    assert result.metadata["xblock_device_host_fallback_used"] is True
+    assert result.metadata["xblock_device_host_fallback_reason"] == "forced"
+    assert result.metadata["xblock_device_host_fallback_requested_method"] == "gmres_jax"
+    assert result.metadata["xblock_device_host_fallback_effective_krylov_env_value"] == "auto"
+    assert result.metadata["xblock_device_host_fallback_non_autodiff"] is True
+    assert result.metadata["xblock_qi_galerkin_preconditioner_enabled"] is True
+    assert result.metadata["xblock_qi_galerkin_preconditioner_built"] is False
+    assert result.metadata["xblock_qi_galerkin_preconditioner_reason"] == "disabled_by_device_host_fallback"
+    assert any("using non-autodiff host x-block fallback" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_device_krylov_can_use_compact_csr_factors(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "gmres-jax")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT", "csr")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX", "100000")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-3,
+        maxiter=20,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-3
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_gmres_jax"
+    assert result.metadata["sparse_pc_xblock_jax_factors"] is True
+    assert result.metadata["sparse_pc_xblock_jax_factor_format"] == "csr"
+    assert result.metadata["xblock_moment_schur_default_blocked_by_compact_factors"] is True
+    assert result.metadata["xblock_moment_schur_built"] is False
+    assert result.metadata["xblock_device_krylov_host_transfer_free"] is True
+    assert any("xblock_sparse_csr: built compact JAX factors" in msg for msg in messages)
+    assert any("moment-Schur default disabled for compact JAX factors" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_device_krylov_can_use_compact_diagonal_factor_apply(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "gmres-jax")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT", "csr")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_APPLY", "diagonal")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX", "100000")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-3,
+        maxiter=20,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert np.isfinite(float(result.residual_norm))
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_gmres_jax"
+    assert result.metadata["sparse_pc_xblock_jax_factors"] is True
+    assert result.metadata["sparse_pc_xblock_jax_factor_format"] == "csr"
+    assert result.metadata["sparse_pc_xblock_jax_factor_apply"] == "diagonal"
+    assert any("xblock_sparse_csr: using approximate compact JAX factor apply mode=diagonal" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_device_global_coupling_can_use_normal_equations(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "gmres-jax")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_DEVICE_SOLVER", "normal-equations")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-3,
+        maxiter=20,
+    )
+
+    assert float(result.residual_norm) < 1.0e-3
+    assert result.metadata["xblock_global_coupling_built"] is True
+    assert result.metadata["xblock_global_coupling_device_resident"] is True
+    assert result.metadata["xblock_global_coupling_coarse_solver"] == "normal_equations"
+    assert result.metadata["xblock_global_coupling_smoother"] == "identity"
+    assert result.metadata["xblock_global_coupling_ridge"] > 0.0
+    assert result.metadata["xblock_global_coupling_setup_budget_s"] == 180.0
+    assert result.metadata["xblock_global_coupling_setup_budget_reached"] is False
+
+
+def test_xblock_sparse_pc_device_krylov_with_device_assembled_operator_is_transfer_free(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES", "1")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+    )
+
+    assert np.isfinite(float(result.residual_norm))
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_fgmres_jax"
+    assert result.metadata["sparse_pc_xblock_jax_factors"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is True
+    assert result.metadata["xblock_assembled_operator_device_resident"] is True
+    assert result.metadata["xblock_device_krylov_host_transfer_free"] is True
+    assert result.metadata["xblock_device_fgmres_host_transfer_free"] is True
+    assert result.metadata["xblock_device_fgmres_block_between_cycles"] is True
+
+
+def test_xblock_sparse_pc_device_bicgstab_uses_device_assembled_operator(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "bicgstab-jax")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+    )
+
+    assert np.isfinite(float(result.residual_norm))
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_bicgstab_jax"
+    assert result.metadata["xblock_device_krylov_method"] == "bicgstab_jax"
+    assert result.metadata["xblock_device_bicgstab_enabled"] is True
+    assert result.metadata["sparse_pc_xblock_jax_factors"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is True
+    assert result.metadata["xblock_assembled_operator_device_resident"] is True
+    assert result.metadata["xblock_device_krylov_host_transfer_free"] is True
+    assert result.metadata["xblock_device_bicgstab_host_transfer_free"] is True
+    assert result.metadata["xblock_device_fgmres_host_transfer_free"] is False
+    assert result.metadata["candidate_iterations"] >= 1
+    assert result.metadata["xblock_estimated_bicgstab_work_nbytes"] < result.metadata["xblock_estimated_gmres_basis_nbytes"]
+
+
+def test_xblock_sparse_pc_device_tfqmr_uses_device_assembled_operator(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "tfqmr-jax")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TFQMR_REPLACE_INTERVAL", "2")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+    )
+
+    assert np.isfinite(float(result.residual_norm))
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_tfqmr_jax"
+    assert result.metadata["xblock_device_krylov_method"] == "tfqmr_jax"
+    assert result.metadata["xblock_device_tfqmr_enabled"] is True
+    assert result.metadata["xblock_device_tfqmr_replacement_interval"] == 2
+    assert result.metadata["sparse_pc_xblock_jax_factors"] is True
+    assert result.metadata["xblock_assembled_operator_built"] is True
+    assert result.metadata["xblock_assembled_operator_device_resident"] is True
+    assert result.metadata["xblock_device_krylov_host_transfer_free"] is True
+    assert result.metadata["xblock_device_tfqmr_host_transfer_free"] is True
+    assert result.metadata["xblock_device_fgmres_host_transfer_free"] is False
+    assert result.metadata["candidate_iterations"] >= 1
+    assert result.metadata["xblock_estimated_tfqmr_work_nbytes"] < result.metadata["xblock_estimated_gmres_basis_nbytes"]
+
+
+def test_xblock_sparse_pc_device_krylov_marks_host_two_level_transfer(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS", "2")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-3,
+        maxiter=20,
+    )
+
+    assert float(result.residual_norm) < 1.0e-3
+    assert result.metadata["xblock_device_krylov_method"] == "fgmres_jax"
+    assert result.metadata["xblock_two_level_built"] is True
+    assert result.metadata["xblock_device_krylov_host_transfer_free"] is False
+    assert result.metadata["xblock_device_fgmres_host_transfer_free"] is False
 
 
 def test_xblock_sparse_pc_candidate_falls_back_to_gmres_when_residual_is_bad(monkeypatch) -> None:

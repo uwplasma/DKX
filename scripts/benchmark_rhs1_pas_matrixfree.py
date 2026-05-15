@@ -61,6 +61,9 @@ DEFAULT_PRODUCTION_SOLVE_MAX_RSS_MB = 4096.0
 DEFAULT_PRODUCTION_SOLVE_MAX_RESIDUAL_NORM = 1.0e-3
 DEFAULT_PRODUCTION_SOLVE_MIN_PROMOTION_SPEEDUP = 1.05
 DEFAULT_PRODUCTION_SOLVE_MIN_PROMOTION_MEMORY_REDUCTION = 1.05
+DEFAULT_BOUNDED_CANDIDATE_ITEMSIZE_BYTES = 4
+DEFAULT_PRODUCTION_CANDIDATE_ITEMSIZE_BYTES = 8
+DEFAULT_CANDIDATE_LIVE_ARRAYS = 5
 
 
 def _positive_float(value: str) -> float:
@@ -114,9 +117,23 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-update-norm-ratio", type=_nonnegative_float, default=1.0e-12)
     parser.add_argument("--max-candidate-elements", type=_positive_int, help="Reject candidates above this size.")
     parser.add_argument(
+        "--max-candidate-bytes",
+        type=_positive_int,
+        help="Reject matrix-free candidates whose estimated live vector bytes exceed this limit.",
+    )
+    parser.add_argument(
         "--run-production-solve-probe",
         action="store_true",
         help="Opt in to bounded production-floor real-solve probes after preflight passes.",
+    )
+    parser.add_argument(
+        "--production-solve-allow-unbudgeted-candidate",
+        action="store_true",
+        help=(
+            "Allow opt-in production real-solve probes without --max-candidate-bytes. "
+            "By default real probes fail closed unless the candidate live-vector "
+            "memory budget is explicit."
+        ),
     )
     parser.add_argument(
         "--production-solve-timeout-s",
@@ -331,6 +348,56 @@ def _config_record(args: argparse.Namespace) -> dict[str, Any]:
         "max_candidate_elements": None
         if getattr(args, "max_candidate_elements", None) is None
         else int(args.max_candidate_elements),
+        "max_candidate_bytes": None
+        if getattr(args, "max_candidate_bytes", None) is None
+        else int(args.max_candidate_bytes),
+    }
+
+
+def _candidate_byte_preflight_record(
+    *,
+    element_count: int,
+    config: dict[str, Any],
+    live_arrays: int = DEFAULT_CANDIDATE_LIVE_ARRAYS,
+    itemsize_bytes: int = DEFAULT_BOUNDED_CANDIDATE_ITEMSIZE_BYTES,
+    dtype_assumption: str = "float32_bounded_probe",
+) -> dict[str, Any]:
+    element_count_i = max(0, int(element_count))
+    itemsize_i = max(1, int(itemsize_bytes))
+    live_arrays_i = max(1, int(live_arrays))
+    array_bytes = int(element_count_i * itemsize_i)
+    live_bytes = int(array_bytes * live_arrays_i)
+    max_elements = config.get("max_candidate_elements")
+    max_bytes = config.get("max_candidate_bytes")
+    element_budget_configured = max_elements is not None
+    byte_budget_configured = max_bytes is not None
+    element_safe = (not element_budget_configured) or element_count_i <= int(max_elements)
+    byte_safe = (not byte_budget_configured) or live_bytes <= int(max_bytes)
+    if not element_safe:
+        reason = "candidate-size-limit-exceeded"
+    elif not byte_safe:
+        reason = "candidate-memory-limit-exceeded"
+    elif byte_budget_configured:
+        reason = "within-candidate-memory-limit"
+    else:
+        reason = "candidate-byte-budget-not-configured"
+    safe = bool(element_safe and byte_safe)
+    return {
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "dtype_assumption": dtype_assumption,
+        "element_count": element_count_i,
+        "itemsize_bytes": itemsize_i,
+        "array_bytes": array_bytes,
+        "estimated_live_array_count": live_arrays_i,
+        "estimated_live_array_bytes": live_bytes,
+        "max_candidate_elements": None if max_elements is None else int(max_elements),
+        "max_candidate_bytes": None if max_bytes is None else int(max_bytes),
+        "candidate_element_budget_configured": bool(element_budget_configured),
+        "candidate_byte_budget_configured": bool(byte_budget_configured),
+        "candidate_byte_budget_margin": None if max_bytes is None else int(max_bytes) - live_bytes,
+        "safe": safe,
+        "reason": reason,
+        "promotion_gate_passed": bool(safe and byte_budget_configured),
     }
 
 
@@ -347,58 +414,69 @@ def _bounded_metadata_size(metadata: dict[str, Any], max_size: int) -> int:
 
 def _deterministic_case(system: str, args: argparse.Namespace) -> dict[str, Any]:
     size = min(int(args.max_size), 32)
+    config = _config_record(args)
     if system == "diagonal_keep":
+        case_size = max(4, min(size, 16))
         return {
             "case_id": "diagonal_keep",
             "source_type": "synthetic",
             "system_kind": "diagonal",
-            "size": max(4, min(size, 16)),
+            "size": case_size,
             "expected_gate": "keep",
             "expected_reason": "accepted",
-            "config": _config_record(args),
+            "config": config,
+            "byte_preflight": _candidate_byte_preflight_record(element_count=case_size, config=config),
         }
     if system == "coupled_jacobi_keep":
+        case_size = max(4, size)
         return {
             "case_id": "coupled_jacobi_keep",
             "source_type": "synthetic",
             "system_kind": "coupled_jacobi",
-            "size": max(4, size),
+            "size": case_size,
             "coupling": 0.03,
             "phase": 0.0,
             "expected_gate": "keep",
             "expected_reason": "accepted",
-            "config": _config_record(args),
+            "config": config,
+            "byte_preflight": _candidate_byte_preflight_record(element_count=case_size, config=config),
         }
     if system == "zero_update_reject":
+        case_size = max(4, min(size, 16))
         return {
             "case_id": "zero_update_reject",
             "source_type": "synthetic",
             "system_kind": "zero_update",
-            "size": max(4, min(size, 16)),
+            "size": case_size,
             "expected_gate": "reject",
             "expected_reason": "insufficient-residual-improvement",
-            "config": _config_record(args),
+            "config": config,
+            "byte_preflight": _candidate_byte_preflight_record(element_count=case_size, config=config),
         }
     if system == "tiny_update_reject":
+        case_size = max(4, min(size, 16))
         return {
             "case_id": "tiny_update_reject",
             "source_type": "synthetic",
             "system_kind": "tiny_update",
-            "size": max(4, min(size, 16)),
+            "size": case_size,
             "update_scale": 1.0e-14,
             "expected_gate": "reject",
             "expected_reason": "update-norm-too-small",
-            "config": _config_record(args),
+            "config": config,
+            "byte_preflight": _candidate_byte_preflight_record(element_count=case_size, config=config),
         }
     if system == "nonfinite_candidate_reject":
+        case_size = max(4, min(size, 16))
         return {
             "case_id": "nonfinite_candidate_reject",
             "source_type": "synthetic",
             "system_kind": "nonfinite_candidate",
-            "size": max(4, min(size, 16)),
+            "size": case_size,
             "expected_gate": "reject",
             "expected_reason": "nonfinite-candidate-residual",
-            "config": _config_record(args),
+            "config": config,
+            "byte_preflight": _candidate_byte_preflight_record(element_count=case_size, config=config),
         }
     if system == "timeout_sleep":
         return {
@@ -409,7 +487,8 @@ def _deterministic_case(system: str, args: argparse.Namespace) -> dict[str, Any]
             "sleep_s": max(1.0, float(args.timeout_s) * 2.0),
             "expected_gate": "reject",
             "expected_reason": "timeout",
-            "config": _config_record(args),
+            "config": config,
+            "byte_preflight": _candidate_byte_preflight_record(element_count=1, config=config),
         }
     raise ValueError(f"Unknown deterministic system: {system}")
 
@@ -425,6 +504,8 @@ def build_probe_cases(args: argparse.Namespace) -> list[dict[str, Any]]:
         metadata = _read_input_metadata(Path(input_path))
         label = _sanitize_id(str(metadata["case"]))
         resolution = metadata["resolution"]
+        config = _config_record(args)
+        bounded_size = _bounded_metadata_size(metadata, int(args.max_size))
         phase_seed = (
             int(metadata["geometry_scheme"])
             + int(resolution["Ntheta"])
@@ -437,12 +518,19 @@ def build_probe_cases(args: argparse.Namespace) -> list[dict[str, Any]]:
                 "source_type": "production_floor_geometry_metadata",
                 "production_floor_target": metadata["production_floor_target"],
                 "system_kind": "metadata_coupled_jacobi",
-                "size": _bounded_metadata_size(metadata, int(args.max_size)),
+                "size": bounded_size,
                 "coupling": 0.01 + 0.002 * (abs(int(metadata["geometry_scheme"])) % 5),
                 "phase": float((phase_seed % 17) / 17.0),
                 "expected_gate": "keep",
                 "expected_reason": "accepted",
-                "config": _config_record(args),
+                "config": config,
+                "byte_preflight": _candidate_byte_preflight_record(element_count=bounded_size, config=config),
+                "production_floor_byte_preflight": _candidate_byte_preflight_record(
+                    element_count=int(metadata["estimated_full_unknowns"]),
+                    config=config,
+                    itemsize_bytes=DEFAULT_PRODUCTION_CANDIDATE_ITEMSIZE_BYTES,
+                    dtype_assumption="float64_conservative_production_floor",
+                ),
                 "source_metadata": metadata,
             }
         )
@@ -511,6 +599,15 @@ def _requested_production_solve_targets(args: argparse.Namespace) -> list[str]:
 
 def _validate_production_solve_bounds(args: argparse.Namespace) -> None:
     _requested_production_solve_targets(args)
+    if (
+        bool(getattr(args, "run_production_solve_probe", False))
+        and not bool(getattr(args, "production_solve_allow_unbudgeted_candidate", False))
+        and getattr(args, "max_candidate_bytes", None) is None
+    ):
+        raise ValueError(
+            "--max-candidate-bytes is required with --run-production-solve-probe "
+            "unless --production-solve-allow-unbudgeted-candidate is set"
+        )
     if bool(getattr(args, "production_solve_require_default_promotion_gate", False)):
         if getattr(args, "production_solve_baseline_elapsed_s", None) is None:
             raise ValueError(
@@ -520,6 +617,11 @@ def _validate_production_solve_bounds(args: argparse.Namespace) -> None:
         if getattr(args, "production_solve_baseline_rss_mb", None) is None:
             raise ValueError(
                 "--production-solve-baseline-rss-mb is required with "
+                "--production-solve-require-default-promotion-gate"
+            )
+        if getattr(args, "max_candidate_bytes", None) is None:
+            raise ValueError(
+                "--max-candidate-bytes is required with "
                 "--production-solve-require-default-promotion-gate"
             )
     if bool(args.allow_long_production_solve):
@@ -557,6 +659,27 @@ def build_bounded_real_solve_probe(
     selected_targets: list[str] = []
     for target in PRODUCTION_FLOOR_TARGETS:
         preflight_target = dict(preflight.get("targets", {}).get(target, {}))
+        preflight_gates = preflight_target.get("gates", {})
+        if not isinstance(preflight_gates, dict):
+            preflight_gates = {}
+        byte_preflight_gate = preflight_gates.get("candidate_byte_preflight", {})
+        if not isinstance(byte_preflight_gate, dict):
+            byte_preflight_gate = {}
+        default_promotion_required = bool(args.production_solve_require_default_promotion_gate)
+        byte_preflight_required = bool(
+            default_promotion_required
+            or (
+                bool(args.run_production_solve_probe)
+                and not bool(args.production_solve_allow_unbudgeted_candidate)
+            )
+        )
+        byte_preflight_promotion_ready = (
+            not byte_preflight_required
+            or (
+                byte_preflight_gate.get("status") == "pass"
+                and byte_preflight_gate.get("promotion_gate_passed") is True
+            )
+        )
         metadata_cases = target_cases[target]
         metadata = metadata_cases[0].get("source_metadata") if metadata_cases else None
         ready = bool(preflight_target.get("ready") is True and metadata)
@@ -616,7 +739,7 @@ def build_bounded_real_solve_probe(
                 command.append("--allow-long-run")
         requested = target in requested_targets
         budget_fit = planned_wall_timeout_s + per_target_timeout_s <= total_timeout_s
-        selected_by_budget = bool(ready and requested and budget_fit)
+        selected_by_budget = bool(ready and requested and budget_fit and byte_preflight_promotion_ready)
         if selected_by_budget:
             planned_wall_timeout_s += per_target_timeout_s
             selected_targets.append(target)
@@ -624,6 +747,8 @@ def build_bounded_real_solve_probe(
             skip_reason = preflight_target.get("next_solve_recommendation", "preflight-not-ready")
         elif not requested:
             skip_reason = "not-requested"
+        elif not byte_preflight_promotion_ready:
+            skip_reason = "candidate-byte-preflight-not-promotion-safe"
         elif not budget_fit:
             skip_reason = "production-solve-total-timeout-budget-exhausted"
         else:
@@ -632,6 +757,9 @@ def build_bounded_real_solve_probe(
             "ready": ready,
             "requested": requested,
             "budget_fit": budget_fit,
+            "byte_preflight_required": byte_preflight_required,
+            "byte_preflight_promotion_ready": byte_preflight_promotion_ready,
+            "candidate_byte_preflight": byte_preflight_gate,
             "planned_parent_timeout_s": per_target_timeout_s,
             "total_wall_timeout_budget_s": total_timeout_s,
             "selected_by_budget": selected_by_budget,
@@ -659,6 +787,8 @@ def build_bounded_real_solve_probe(
             "dry_run_launches_subprocesses": False,
             "default_batch_cap_s": MAX_DEFAULT_PRODUCTION_SOLVE_TIMEOUT_S,
             "invalid_targets_fail_closed": True,
+            "requires_candidate_byte_budget_by_default": True,
+            "allow_unbudgeted_candidate": bool(args.production_solve_allow_unbudgeted_candidate),
         },
         "allow_long_run": bool(args.allow_long_production_solve),
         "variants": list(args.production_solve_variants),
@@ -670,6 +800,13 @@ def build_bounded_real_solve_probe(
             "expected_backend": str(args.production_solve_expected_backend),
             "solver_path_churn_allowed": False,
             "default_promotion_required": bool(args.production_solve_require_default_promotion_gate),
+            "candidate_byte_preflight_required": bool(
+                args.production_solve_require_default_promotion_gate
+                or (
+                    bool(args.run_production_solve_probe)
+                    and not bool(args.production_solve_allow_unbudgeted_candidate)
+                )
+            ),
             "baseline_elapsed_s": _json_float(args.production_solve_baseline_elapsed_s),
             "baseline_rss_mb": _json_float(args.production_solve_baseline_rss_mb),
             "min_runtime_speedup": float(args.production_solve_min_runtime_speedup),
@@ -712,6 +849,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
                     "child timeout/error",
                     "non-finite residual/update",
                     "shape mismatch",
+                    "candidate element or byte preflight budget exceeded",
                     "insufficient residual improvement",
                 ],
                 "safe_default": True,
@@ -813,6 +951,15 @@ def _read_artifact_probe(path: Path) -> dict[str, Any]:
     summary = payload.get("summary", {})
     if not isinstance(summary, dict):
         summary = {}
+    failed_variants = summary.get("failed_variants")
+    if not isinstance(failed_variants, list):
+        failed_variants = []
+    promotion_eligible_variants = summary.get("promotion_eligible_variants")
+    if not isinstance(promotion_eligible_variants, list):
+        promotion_eligible_variants = []
+    failure_reasons = summary.get("failure_reasons")
+    if not isinstance(failure_reasons, dict):
+        failure_reasons = {}
     artifact_gates = {
         "guarded_pas_tz": _gate(
             "pass" if guarded_pas_tz_seen else "fail",
@@ -855,15 +1002,16 @@ def _read_artifact_probe(path: Path) -> dict[str, Any]:
             limit_mb=DEFAULT_PRODUCTION_SOLVE_MAX_RSS_MB,
         ),
         "row_gates": _gate(
-            "pass"
-            if summary.get("all_gates_passed") is True or "all_gates_passed" not in summary
-            else "fail",
+            "pass" if summary.get("all_gates_passed") is True else "fail",
             "artifact row gates passed"
             if summary.get("all_gates_passed") is True
-            else "legacy artifact without row-gate summary"
+            else "missing-artifact-row-gate-summary"
             if "all_gates_passed" not in summary
             else "artifact row gates failed",
             all_gates_passed=summary.get("all_gates_passed"),
+            failed_variants=failed_variants,
+            promotion_eligible_variants=promotion_eligible_variants,
+            failure_reasons=failure_reasons,
         ),
     }
     artifact_gates_passed = all(gate["status"] == "pass" for gate in artifact_gates.values())
@@ -934,6 +1082,14 @@ def build_production_floor_preflight(
         target_artifacts = _artifact_matches(artifacts, target)
         metadata = [case["source_metadata"] for case in target_cases if "source_metadata" in case]
         artifact_ready = [artifact for artifact in target_artifacts if artifact.get("ready_evidence") is True]
+        byte_records = [
+            case.get("production_floor_byte_preflight", case.get("byte_preflight", {}))
+            for case in target_cases
+            if isinstance(case.get("production_floor_byte_preflight", case.get("byte_preflight", {})), dict)
+        ]
+        unsafe_byte_records = [record for record in byte_records if record.get("safe") is False]
+        byte_budget_configured = any(record.get("candidate_byte_budget_configured") is True for record in byte_records)
+        byte_promotion_ready = bool(byte_records and byte_budget_configured and not unsafe_byte_records)
         gates = {
             "metadata_present": _gate(
                 "pass" if metadata else "fail",
@@ -955,6 +1111,20 @@ def build_production_floor_preflight(
                 planned_case_ids=[case.get("case_id") for case in target_cases],
                 planned_sizes=[case.get("size") for case in target_cases],
             ),
+            "candidate_byte_preflight": _gate(
+                "pass" if byte_records and not unsafe_byte_records else "fail",
+                "candidate byte preflight is within configured budget"
+                if byte_promotion_ready
+                else "candidate byte preflight recorded without byte budget; diagnostic only"
+                if byte_records and not byte_budget_configured
+                else "candidate byte preflight exceeds configured budget"
+                if unsafe_byte_records
+                else "missing candidate byte preflight",
+                byte_budget_configured=byte_budget_configured,
+                promotion_gate_passed=byte_promotion_ready,
+                unsafe_count=len(unsafe_byte_records),
+                records=byte_records,
+            ),
             "checked_artifact_evidence": _gate(
                 "pass" if artifact_ready else "fail",
                 "checked-in PAS benchmark artifact has guarded residual/runtime/memory evidence"
@@ -969,10 +1139,17 @@ def build_production_floor_preflight(
             ),
         }
         ready = all(gate["status"] == "pass" for gate in gates.values())
+        next_solve_recommendation = (
+            "proceed_to_short_real_solve_probe"
+            if ready
+            else "candidate-byte-preflight-not-promotion-safe"
+            if unsafe_byte_records
+            else "hold_for_missing_evidence"
+        )
         targets[target] = {
             "ready": ready,
             "gates": gates,
-            "next_solve_recommendation": "proceed_to_short_real_solve_probe" if ready else "hold_for_missing_evidence",
+            "next_solve_recommendation": next_solve_recommendation,
         }
     ready_targets = [target for target, record in targets.items() if record["ready"]]
     return {
@@ -1170,6 +1347,9 @@ def _child_payload(case: dict[str, Any]) -> dict[str, Any]:
             max_candidate_elements=None
             if config.get("max_candidate_elements") is None
             else int(config["max_candidate_elements"]),
+            max_candidate_bytes=None
+            if config.get("max_candidate_bytes") is None
+            else int(config["max_candidate_bytes"]),
         ),
     )
     elapsed_s = time.perf_counter() - t0
@@ -1182,6 +1362,10 @@ def _child_payload(case: dict[str, Any]) -> dict[str, Any]:
         "source_type": str(case.get("source_type", "synthetic")),
         "production_floor_target": str(case.get("production_floor_target", "")),
         "system_kind": str(case["system_kind"]),
+        "byte_preflight": _json_safe_metadata(case.get("byte_preflight", {})),
+        "production_floor_byte_preflight": _json_safe_metadata(
+            case.get("production_floor_byte_preflight", {})
+        ),
         "status": "ok",
         "gate": gate,
         "gate_reason": gate_reason,
@@ -1228,6 +1412,10 @@ def _run_child(args: argparse.Namespace, case: dict[str, Any]) -> dict[str, Any]
             "source_type": str(case.get("source_type", "synthetic")),
             "production_floor_target": str(case.get("production_floor_target", "")),
             "system_kind": str(case["system_kind"]),
+            "byte_preflight": _json_safe_metadata(case.get("byte_preflight", {})),
+            "production_floor_byte_preflight": _json_safe_metadata(
+                case.get("production_floor_byte_preflight", {})
+            ),
             "status": "timeout",
             "gate": "reject",
             "gate_reason": "timeout",
@@ -1257,6 +1445,10 @@ def _run_child(args: argparse.Namespace, case: dict[str, Any]) -> dict[str, Any]
             "source_type": str(case.get("source_type", "synthetic")),
             "production_floor_target": str(case.get("production_floor_target", "")),
             "system_kind": str(case["system_kind"]),
+            "byte_preflight": _json_safe_metadata(case.get("byte_preflight", {})),
+            "production_floor_byte_preflight": _json_safe_metadata(
+                case.get("production_floor_byte_preflight", {})
+            ),
             "status": "error",
             "gate": "reject",
             "gate_reason": "missing-result-marker",
@@ -1391,12 +1583,38 @@ def summarize_results(
         for row in solve_results
         if row.get("status") != "ok" or row.get("all_gates_passed") is False
     ]
+    byte_preflight_targets: dict[str, Any] = {}
+    if preflight and isinstance(preflight.get("targets"), dict):
+        for target, record in preflight["targets"].items():
+            if not isinstance(record, dict):
+                continue
+            gates = record.get("gates", {})
+            if not isinstance(gates, dict):
+                continue
+            byte_gate = gates.get("candidate_byte_preflight", {})
+            if not isinstance(byte_gate, dict):
+                continue
+            byte_preflight_targets[str(target)] = {
+                "status": byte_gate.get("status"),
+                "byte_budget_configured": byte_gate.get("byte_budget_configured"),
+                "promotion_gate_passed": byte_gate.get("promotion_gate_passed"),
+                "unsafe_count": byte_gate.get("unsafe_count"),
+            }
     return {
         "by_gate": by_gate,
         "by_status": by_status,
         "unexpected_cases": unexpected,
         "all_expected_gates_met": not unexpected,
         "lane_state": "harness_only_no_solver_default_change",
+        "candidate_byte_preflight": {
+            "targets": byte_preflight_targets,
+            "promotion_safe_target_count": sum(
+                1 for record in byte_preflight_targets.values() if record.get("promotion_gate_passed") is True
+            ),
+            "unsafe_target_count": sum(
+                1 for record in byte_preflight_targets.values() if int(record.get("unsafe_count") or 0) > 0
+            ),
+        },
         "production_floor_probe_ready": preflight_ready and (not results or not unexpected),
         "production_real_solve_result_count": len(solve_results),
         "production_real_solve_failures": solve_failures,

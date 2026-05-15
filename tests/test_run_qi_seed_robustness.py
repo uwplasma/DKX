@@ -161,6 +161,199 @@ def test_qi_seed_runner_records_mocked_execution_results(tmp_path: Path, monkeyp
     result = manifest["execution"]["results"][0]
     assert (out_root / result["stdout"]).read_text(encoding="utf-8") == "ok\n"
     assert (out_root / result["stderr"]).read_text(encoding="utf-8") == ""
+    assert result["heartbeat"] is None
+    assert result["heartbeat_count"] == 0
+
+
+def test_qi_seed_runner_heartbeat_records_liveness_and_timeout(tmp_path: Path) -> None:
+    stdout_path = tmp_path / "stdout.log"
+    stderr_path = tmp_path / "stderr.log"
+    heartbeat_path = tmp_path / "runner_heartbeat.jsonl"
+    with stdout_path.open("w", encoding="utf-8") as stdout, stderr_path.open("w", encoding="utf-8") as stderr:
+        returncode, timed_out, heartbeat_count = qi_seed._run_command_with_heartbeat(
+            [
+                sys.executable,
+                "-c",
+                "import time; print('start', flush=True); time.sleep(0.05); print('end', flush=True)",
+            ],
+            cwd=tmp_path,
+            stdout=stdout,
+            stderr=stderr,
+            timeout_s=2.0,
+            heartbeat_s=0.01,
+            heartbeat_path=heartbeat_path,
+        )
+
+    events = [json.loads(line)["event"] for line in heartbeat_path.read_text(encoding="utf-8").splitlines()]
+    assert returncode == 0
+    assert timed_out is False
+    assert heartbeat_count >= 2
+    assert events[0] == "started"
+    assert "completed" in events
+    assert stdout_path.read_text(encoding="utf-8").splitlines() == ["start", "end"]
+
+    timeout_stdout = tmp_path / "timeout_stdout.log"
+    timeout_stderr = tmp_path / "timeout_stderr.log"
+    timeout_heartbeat = tmp_path / "timeout_heartbeat.jsonl"
+    with timeout_stdout.open("w", encoding="utf-8") as stdout, timeout_stderr.open(
+        "w", encoding="utf-8"
+    ) as stderr:
+        returncode, timed_out, heartbeat_count = qi_seed._run_command_with_heartbeat(
+            [sys.executable, "-c", "import time; time.sleep(5)"],
+            cwd=tmp_path,
+            stdout=stdout,
+            stderr=stderr,
+            timeout_s=0.05,
+            heartbeat_s=0.01,
+            heartbeat_path=timeout_heartbeat,
+        )
+
+    timeout_events = [
+        json.loads(line)["event"] for line in timeout_heartbeat.read_text(encoding="utf-8").splitlines()
+    ]
+    assert returncode == 124
+    assert timed_out is True
+    assert heartbeat_count >= 3
+    assert "timeout" in timeout_events
+    assert timeout_events[-1] == "terminated"
+    assert "timed out" in timeout_stderr.read_text(encoding="utf-8")
+
+
+def test_qi_seed_runner_infers_matrix_sizes_from_timeout_progress() -> None:
+    events = [
+        "The matrix is 81377 x 81377 elements.",
+        "solve_v3_full_system_linear_gmres: active-DOF mode enabled (size=81377/139502)",
+        "QI seed execution timed out after 420.000 s.",
+    ]
+
+    assert qi_seed._infer_sizes_from_progress_events(events) == (81377, 139502)
+
+
+def test_qi_seed_runner_infers_latest_matvec_progress() -> None:
+    events = [
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres matvecs=875 elapsed_s=403.885",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres matvecs=900 elapsed_s=412.719",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=gmres "
+        "elapsed_s=417.536 iters=48 matvecs=925 residual=4.0e-13 target=3.0e-13",
+    ]
+
+    assert qi_seed._infer_last_matvec_progress(events) == (925, 417.536)
+
+
+def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
+    events = [
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe method_rescue "
+        "side=left->left method=gmres->lgmres iters=20 matvecs=23 residual=4.565805e-06 "
+        "ratio=1.511112e+07 seed_used=1",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=lgmres "
+        "elapsed_s=247.000 iters=48 matvecs=2978 residual=4.122852e-14 "
+        "target=3.021487e-13 ksp_residual=4.122852e-14",
+    ]
+
+    side_probe = qi_seed._infer_side_probe_progress(events)
+    assert side_probe["precondition_side"] == "left"
+    assert side_probe["xblock_side_probe_initial_method"] == "gmres"
+    assert side_probe["xblock_side_probe_selected_method"] == "lgmres"
+    assert side_probe["xblock_side_probe_lgmres_rescue"] is True
+    assert side_probe["xblock_side_probe_iterations"] == 20
+    assert side_probe["xblock_side_probe_matvecs"] == 23
+    assert side_probe["xblock_side_probe_residual_norm"] == 4.565805e-06
+    assert side_probe["xblock_side_probe_residual_ratio"] == 1.511112e7
+    assert qi_seed._infer_lgmres_rescue_status(events, side_probe) == "used"
+
+    residual = qi_seed._infer_last_residual_progress(events)
+    assert residual is not None
+    assert residual["event"] == events[-1]
+    assert residual["residual_norm"] == 4.122852e-14
+    assert residual["residual_target"] == 3.021487e-13
+    assert 0.0 < residual["residual_ratio"] < 1.0
+
+
+def test_qi_seed_runner_records_timeout_attempt_from_synthetic_tails(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&resolutionParameters\n  Ntheta = 15\n/\n", encoding="utf-8")
+    progress_events = [
+        "solve_v3_full_system_linear_gmres: active-DOF mode enabled (size=81377/139502)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres LGMRES rescue disabled by explicit gmres method",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe switch "
+        "side=left->right method=gmres->gmres iters=20 matvecs=23 residual=4.565805e-06 "
+        "ratio=1.511112e+07 seed_used=1 preserved_physical_seed=1",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        "probe-coarse improved seed residual 4.565805e-06 -> 2.830374e-06 (steps=1 directions=40)",
+        "QI seed execution timed out after 420.000 s.",
+    ]
+    stdout_tail = [
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres matvecs=875 elapsed_s=403.885",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres matvecs=900 elapsed_s=412.719",
+    ]
+    manifest = {
+        "source_input": str(input_path),
+        "resolution_scale": 0.6,
+        "case_count": 1,
+        "solve_method": "xblock_sparse_pc_gmres",
+        "nu_jitter": 0.05,
+        "er_jitter": 0.02,
+        "cases": [
+            {
+                "case": "qi_seed_0003",
+                "resolution": {"NTHETA": 15, "NZETA": 31, "NX": 5, "NXI": 60},
+            }
+        ],
+        "execution": {
+            "summary": {"attempted": 1, "timed_out": 1},
+            "gates": {"passed": False},
+            "timeout_s": 420.0,
+            "heartbeat_s": 15.0,
+            "fail_fast": False,
+            "results": [
+                {
+                    "case": "qi_seed_0003",
+                    "seed": 3,
+                    "returncode": 124,
+                    "timed_out": True,
+                    "output_exists": False,
+                    "solver_trace_exists": False,
+                    "solver_trace_summary": None,
+                    "elapsed_s": 420.1,
+                    "progress_events": progress_events,
+                    "stdout_tail": stdout_tail,
+                    "stderr_tail": ["QI seed execution timed out after 420.000 s."],
+                    "heartbeat": "qi_seed_0003/runner_heartbeat.jsonl",
+                    "heartbeat_count": 31,
+                }
+            ],
+        },
+    }
+
+    seed = qi_seed._compact_execution_artifact(manifest)["seeds"][0]
+    assert seed["active_size"] == 81377
+    assert seed["total_size"] == 139502
+    assert seed["precondition_side"] == "right"
+    assert seed["xblock_side_probe_used"] is True
+    assert seed["xblock_side_probe_decision"] == "switch"
+    assert seed["xblock_side_probe_switched"] is True
+    assert seed["xblock_side_probe_selected_method"] == "gmres"
+    assert seed["xblock_side_probe_lgmres_rescue"] is False
+    assert seed["xblock_lgmres_rescue_status"] == "disabled"
+    assert seed["xblock_side_probe_residual_norm"] == 4.565805e-06
+    assert seed["xblock_side_probe_residual_ratio"] == 1.511112e7
+    assert seed["last_progress_residual_event"] == progress_events[3]
+    assert seed["last_progress_residual_before"] == 4.565805e-06
+    assert seed["last_progress_residual_norm"] == 2.830374e-06
+    assert seed["last_matvecs"] == 900
+    assert seed["last_matvec_elapsed_s"] == 412.719
+
+
+def test_qi_seed_runner_preserves_forced_lgmres_visibility() -> None:
+    events = [
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres LGMRES rescue forced by env",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe method_rescue "
+        "side=left->left method=gmres->lgmres iters=20 matvecs=23 residual=4.565805e-06 "
+        "ratio=1.511112e+07 seed_used=1",
+    ]
+    side_probe = qi_seed._infer_side_probe_progress(events)
+
+    assert qi_seed._infer_lgmres_rescue_status(events, side_probe) == "forced"
 
 
 def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
@@ -188,6 +381,11 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
                             "accepted_converged": False,
                             "iterations": 12,
                             "solver_kind": "dense",
+                            "xblock_device_host_fallback_used": True,
+                            "xblock_device_host_fallback_reason": "large-qi-full-fp-3d",
+                            "xblock_device_host_fallback_requested_method": "gmres_jax",
+                            "xblock_device_host_fallback_effective_krylov_env_value": "auto",
+                            "xblock_device_host_fallback_non_autodiff": True,
                         }
                     },
                 }
@@ -227,6 +425,11 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
     assert summary["residual_target"] == 1.0e-11
     assert summary["residual_ratio"] == 2.0e5
     assert summary["iterations"] == 12
+    assert summary["xblock_device_host_fallback_used"] is True
+    assert summary["xblock_device_host_fallback_reason"] == "large-qi-full-fp-3d"
+    assert summary["xblock_device_host_fallback_requested_method"] == "gmres_jax"
+    assert summary["xblock_device_host_fallback_effective_krylov_env_value"] == "auto"
+    assert summary["xblock_device_host_fallback_non_autodiff"] is True
     assert manifest["execution"]["summary"]["max_residual_ratio"] == 2.0e5
     assert manifest["execution"]["summary"]["converged"] == 0
     assert manifest["execution"]["summary"]["solve_methods"] == ["dense"]

@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-05-12T00:00:00+01:00",
+  "generated_at": "2026-05-15T00:00:00+01:00",
   "lanes": [
     {
       "before_percent": 23,
-      "current_percent": 96,
+      "current_percent": 98,
       "evidence": [
         {
           "claim": "Production-readiness manifest rolls up all checked QI CPU/GPU seed artifacts and explicitly keeps the gate bounded until production CPU/GPU ladders exist.",
@@ -100,29 +100,71 @@
         {
           "claim": "Scale-0.60 GPU seed3 right-preconditioned GMRES side-switch probe also times out at 620 s, keeping the hard-seed GPU lane open.",
           "path": "docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json"
+        },
+        {
+          "claim": "Scale-0.60 GPU hard-seed rejected-probe summary records failed two-level x-block, GCROT(m,k), BiCGStab, post-correction-only, and JAX-factor attempts as blocker evidence.",
+          "path": "docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json"
+        },
+        {
+          "claim": "Scale-0.60 global-coupling/operator-reuse rejected-probe summary records opt-in smoothed global coupling, assembled-operator reuse, keep-left side probing, and JAX-factor exposure as implemented but not default-promoted.",
+          "path": "docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json"
+        },
+        {
+          "claim": "Large-QI explicit device-Krylov requests now have a metadata-visible non-autodiff host fallback artifact that preserves the measured side-probe seed plus LGMRES rescue.",
+          "path": "docs/_static/qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json"
+        },
+        {
+          "claim": "Reusable JAX-compatible Galerkin QI coarse preconditioner infrastructure eliminates synthetic residuals to roundoff with DeviceCSR/JIT coverage, but remains to be wired into the production GPU hard-seed loop.",
+          "path": "sfincs_jax/rhs1_qi_coarse.py"
+        },
+        {
+          "claim": "Focused QI coarse tests cover regularized JAX normal-equation solves, Galerkin correction reuse, and JIT/device CSR application without requiring a large solve.",
+          "path": "tests/test_rhs1_qi_coarse.py"
+        },
+        {
+          "claim": "The opt-in production Galerkin QI preconditioner is now fail-closed: additive/multiplicative/damping probe candidates are selected only when they reduce the true residual, otherwise the base preconditioner remains active.",
+          "path": "sfincs_jax/rhs1_qi_galerkin_policy.py"
+        },
+        {
+          "claim": "Focused policy tests cover Galerkin mode parsing, damping parsing, residual-reduction selection, nonfinite rejection, and required-drop gates.",
+          "path": "tests/test_rhs1_qi_galerkin_policy.py"
+        },
+        {
+          "claim": "Scale-0.60 public-auto one-GPU QI hard seed timed out at 600 s on office after the xmg/strong-fallback route reached residual 2.262e-6 against target 3.021e-13, with no output or solver trace.",
+          "path": "docs/_static/qi_seed_robustness_scale060_galerkin_failclosed_seed3_gpu0_2026_05_15.json"
+        },
+        {
+          "claim": "Scale-0.60 forced x-block one-GPU QI hard seed exercised the fail-closed Galerkin production hook; rank-32 Galerkin was rejected because the probe worsened the residual, then right-preconditioned GMRES timed out after 1300 matvecs.",
+          "path": "docs/_static/qi_seed_robustness_scale060_galerkin_forced_xblock_seed3_gpu1_2026_05_15.json"
+        },
+        {
+          "claim": "Scale-0.60 forced x-block one-GPU LGMRES rescue selected the intended method-rescue path but timed out after 950 matvecs, so GPU promotion requires a stronger residual-reducing algorithm rather than another solver-label toggle.",
+          "path": "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu0_2026_05_15_retry.json"
         }
       ],
       "gates": [
         "Residual ratio must remain below the requested gate on CPU and GPU.",
-        "Production-resolution promotion still requires wider seeds and wall-time/memory budgets.",
+        "Production-resolution public-auto promotion still requires wider seeds and wall-time/memory budgets.",
         "No QI-specific default branch may bypass the public auto solver policy.",
-        "The exact-xblock-LU cap must remain scoped to non-differentiable full-FP host x-block factors."
+        "The exact-xblock-LU cap and device-host fallback must remain scoped to non-differentiable full-FP host x-block factors.",
+        "True device-QI remains closed deferred and cannot block release until a new residual-reducing GPU hard-seed artifact passes."
       ],
       "id": "production_qi_cpu_gpu",
       "next_actions": [
-        "Design and test a GPU-native scale-0.60 QI hard-seed solver path or an explicit CPU-offload policy for host-Krylov hard seeds before widening the default QI auto-policy window.",
-        "Only after the scale-0.60 GPU five-seed ladder passes, raise the full-FP 3D x-block sparse-PC default max window beyond the current bounded opt-in gate.",
-        "Profile host-assembled x-block sparse LU memory and factorization ordering at scale 0.60 and the next bounded scale before any production-resolution promotion."
+        "Keep the production non-autodiff host fallback release-ready by preserving metadata that records fallback use, non-autodiff scope, output/trace writes, and residual convergence.",
+        "Do not widen the public full-FP 3D x-block sparse-PC default window from the new GPU artifacts; public-auto, forced x-block GMRES, and forced x-block LGMRES scale-0.60 hard-seed reruns timed out under strict gates.",
+        "Revisit true device-QI only post-release with a stronger residual-reducing algorithm; the current fail-closed Galerkin selector correctly rejects the rank-32 hard-seed probe."
       ],
-      "second_push_delta_percent": 65,
-      "second_push_result": "scale-0.50 and scale-0.55 public auto CPU and one-GPU five-seed QI ladders pass; scale-0.60 CPU now also passes seeds 0..4 with the bounded side-probe/LGMRES rescue. Scale-0.60 GPU seed3 remains the honest blocker: both CPU-style LGMRES rescue and right-GMRES side switch timed out at 620 s on office, so GPU promotion needs a GPU-native or explicit CPU-offload hard-seed path.",
-      "status": "active",
+      "second_push_delta_percent": 75,
+      "second_push_result": "scale-0.50 and scale-0.55 public auto CPU and one-GPU five-seed QI ladders pass; scale-0.60 CPU now also passes seeds 0..4 with the bounded side-probe/LGMRES rescue. The large-QI production escape hatch is closed by a release-ready non-autodiff host fallback for explicit device-Krylov requests. True differentiable/device-QI is closed deferred post-release: the JAX Galerkin coarse preconditioner is implemented and fail-closed, but the scale-0.60 GPU hard seed timed out and the rank-32 Galerkin probe worsened the residual.",
+      "status": "evidence_ready",
       "target_percent": 100,
+      "deferred_reason": "The current release can ship the documented non-autodiff large-QI host fallback, but true differentiable/device-QI and production-resolution CPU/GPU QI ladders remain post-release research until GPU hard-seed and production ladder artifacts pass.",
       "title": "Production-resolution QI CPU/GPU robustness"
     },
     {
       "before_percent": 53,
-      "current_percent": 93,
+      "current_percent": 96,
       "evidence": [
         {
           "claim": "Production-floor PAS-TZ tzfft CPU artifact converges at the collaborator floor without dense allocation.",
@@ -163,6 +205,30 @@
         {
           "claim": "Release checker rejects malformed or policy-invalid PAS benchmark artifacts before they can support runtime/memory claims.",
           "path": "scripts/check_benchmark_artifacts.py"
+        },
+        {
+          "claim": "Matrix-free PAS correction now has a fail-fast live-byte preflight that rejects oversized candidates before update allocation or candidate residual matvecs.",
+          "path": "sfincs_jax/rhs1_pas_matrixfree.py"
+        },
+        {
+          "claim": "PAS matrix-free benchmark dry-runs can record a maximum candidate byte budget so unsafe production-floor probes fail before allocating the candidate path.",
+          "path": "scripts/benchmark_rhs1_pas_matrixfree.py"
+        },
+        {
+          "claim": "Opt-in PAS production real-solve probes now require --max-candidate-bytes by default, with explicit opt-out provenance for unbudgeted diagnostics.",
+          "path": "scripts/benchmark_rhs1_pas_matrixfree.py"
+        },
+        {
+          "claim": "Checked byte-budget dry-run records geometry4 and HSX as byte-safe launchable short probes while holding geometry11 for missing promotion-facing artifact evidence.",
+          "path": "docs/_static/rhs1_pas_matrixfree_byte_budget_gate_2026_05_15.json"
+        },
+        {
+          "claim": "Geometry4 production real-solve probe is residual-clean and solver-path stable, but both tzfft candidates regress runtime/RSS against the checked baseline and therefore fail the default-promotion gate.",
+          "path": "docs/_static/rhs1_pas_production_solve_geometry4.json"
+        },
+        {
+          "claim": "HSX production real-solve probe is residual-clean and solver-path stable, but tzfft has a runtime regression and tzfft_lgmres has a memory regression, so neither is promoted.",
+          "path": "docs/_static/rhs1_pas_production_solve_hsx.json"
         }
       ],
       "gates": [
@@ -172,18 +238,19 @@
       ],
       "id": "pas_geometry_runtime_memory",
       "next_actions": [
-        "Use the production-floor CPU/GPU PAS-TZ tzfft artifacts as bounded solver evidence, but do not promote geometry-rich PAS defaults until a candidate improves residual, runtime, and peak RSS on geometry4/HSX/geometry11.",
-        "Run the next real production-floor geometry-rich PAS probe only with timeout and memory gates enabled."
+        "Keep the current guarded PAS-TZ defaults; the new geometry4 and HSX real-solve probes are residual-clean but do not improve runtime/RSS.",
+        "Next PAS work must change algorithmic cost, for example chunked/streamed PAS updates or a geometry-aware correction that reduces residual without materializing dense update blocks.",
+        "Promote a PAS route only after a residual-clean CPU/GPU artifact improves runtime or peak memory on geometry4/HSX/geometry11 floors."
       ],
       "second_push_delta_percent": 40,
-      "second_push_result": "CPU and GPU production-floor PAS-TZ tzfft artifacts now converge at 25 x 51 x 100 x 4 with bounded memory; benchmark gates reject non-improving candidates and keep default promotion evidence-gated",
+      "second_push_result": "CPU and GPU production-floor PAS-TZ tzfft artifacts now converge at 25 x 51 x 100 x 4 with bounded memory; matrix-free PAS candidates now have element and byte preflights, real-solve probes require explicit byte budgets by default, and default promotion remains evidence-gated until a residual-clean runtime/RSS win exists",
       "status": "active",
       "target_percent": 97,
       "title": "PAS and geometry-rich runtime/memory offenders"
     },
     {
       "before_percent": 66,
-      "current_percent": 92,
+      "current_percent": 94,
       "evidence": [
         {
           "claim": "Transport-worker benchmark now has a plan-only mode that records deterministic RHS partitioning, skipped worker counts, timing semantics, and release-gate semantics without launching solves.",
@@ -248,6 +315,14 @@
         {
           "claim": "Office two-GPU case-throughput artifact is checked as blocker evidence and explicitly fails the speedup gate instead of becoming a release claim.",
           "path": "docs/_static/gpu_case_throughput_large_push_2026_05_12.json"
+        },
+        {
+          "claim": "Pure parallel claim-scope audit now separates independent whichRHS throughput, independent case throughput, and experimental single-case sharded solves before speedup claims are inspected.",
+          "path": "sfincs_jax/transport_parallel_policy.py"
+        },
+        {
+          "claim": "Transport and sharded benchmark plans now write parallel_claim_scope metadata so single-case sharding cannot be mistaken for release-grade strong scaling.",
+          "path": "examples/performance/benchmark_transport_parallel_scaling.py"
         }
       ],
       "gates": [
@@ -257,18 +332,18 @@
       ],
       "id": "parallel_scaling",
       "next_actions": [
-        "Keep single-case multi-GPU sharding experimental until a warm measured artifact beats one device.",
-        "Improve compiled-executable reuse across case-parallel GPU workers before claiming broader strong scaling."
+        "Keep single-case multi-GPU sharding experimental until a warm measured artifact beats one device and passes the claim-scope audit.",
+        "Improve compiled-executable reuse across case-parallel GPU workers before broadening release scaling claims beyond independent-work throughput."
       ],
       "second_push_delta_percent": 26,
-      "second_push_result": "release-facing transport-worker parallelism is now evidence-ready with audited GPU throughput artifacts and strict non-release classification for setup-dominated two-GPU/single-case experiments",
+      "second_push_result": "release-facing transport-worker parallelism is now evidence-ready with audited GPU throughput artifacts, claim-scope metadata, and strict non-release classification for setup-dominated two-GPU/single-case experiments",
       "status": "evidence_ready",
-      "target_percent": 92,
+      "target_percent": 94,
       "title": "Executable parallelism and strong-scaling evidence"
     },
     {
       "before_percent": 63,
-      "current_percent": 90,
+      "current_percent": 94,
       "evidence": [
         {
           "claim": "Dynamic docstring tests now cover public APIs in split policy modules so refactors stay discoverable.",
@@ -317,6 +392,22 @@
         {
           "claim": "Artifact tests ensure CPU/GPU QI public-auto evidence stays checked and solver traces remain present.",
           "path": "tests/test_qi_seed_smoke_artifact.py"
+        },
+        {
+          "claim": "Release-gate checker validates status, kind, non-empty literature/claim/source/test/gate lists, and source/test/script/artifact path existence for release-ready and closed-deferred lanes.",
+          "path": "scripts/check_release_gates.py"
+        },
+        {
+          "claim": "Deferred-lane gate tests prove closed-deferred validation lanes can remain nonblocking while still requiring valid source, test, script, and artifact paths.",
+          "path": "tests/test_validation_deferred_lane_gates.py"
+        },
+        {
+          "claim": "Fast CLI, plotting, validation-figure, and benchmark-artifact tests cover I/O/error branches without launching expensive solves.",
+          "path": "tests/test_cli_validation_io_fast_coverage.py"
+        },
+        {
+          "claim": "QI Galerkin residual-selection policy is split out of the driver with direct fast tests, reducing the remaining untested hard-seed branch surface without adding slow solves.",
+          "path": "sfincs_jax/rhs1_qi_galerkin_policy.py"
         }
       ],
       "gates": [
@@ -330,14 +421,14 @@
         "Move package coverage to a JAX-safe CI coverage environment before claiming the remaining 95% coverage target."
       ],
       "second_push_delta_percent": 27,
-      "second_push_result": "additional policy extraction, source-map documentation, public-auto QI dispatch tests, and CI-fast release gates make the refactor/CI lane release-ready except for the explicit 95% package-coverage target",
+      "second_push_result": "additional policy extraction, source-map documentation, public-auto QI dispatch tests, CI-fast release gates, deferred-lane path hygiene, and fast CLI/validation I/O coverage make the refactor/CI lane release-ready except for the explicit 95% package-coverage target",
       "status": "evidence_ready",
       "target_percent": 95,
       "title": "Refactor, source map, coverage, and CI readiness"
     },
     {
       "before_percent": 73,
-      "current_percent": 93,
+      "current_percent": 95,
       "evidence": [
         {
           "claim": "New docs page states the skip-safe workflow, commands, differentiability contract, and non-claims.",
@@ -370,6 +461,22 @@
         {
           "claim": "Optional workflow tests exercise the shared proxy transport gradient gate in default CI.",
           "path": "tests/test_optional_ecosystem_gates.py"
+        },
+        {
+          "claim": "VMEC/Boozer workflow status and pipeline summaries now include a no-solve provenance gate that records proxy-vs-kinetic scope and confirms no kinetic solve was executed.",
+          "path": "examples/optimization/vmec_jax_workflow_status.py"
+        },
+        {
+          "claim": "Workflow tests require the no-solve provenance gate in backend status and file-backed summary payloads.",
+          "path": "tests/test_vmec_jax_workflow.py"
+        },
+        {
+          "claim": "VMEC/Boozer adapters now expose a machine-readable kinetic transport scalar contract that separates geometry preparation, kinetic operator assembly, solve, reduction, and gradient validation stages.",
+          "path": "sfincs_jax/jax_geometry_adapters.py"
+        },
+        {
+          "claim": "Autodiff pipeline and status examples emit the kinetic scalar contract so public examples cannot overclaim full VMEC-boundary-to-kinetic gradients before the solve stage is wired.",
+          "path": "examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py"
         }
       ],
       "gates": [
@@ -379,13 +486,13 @@
       ],
       "id": "vmec_booz_sfincs_workflow",
       "next_actions": [
-        "Add a pure-JAX scheme-5 transport-objective gradient gate before claiming full kinetic transport gradients.",
-        "Keep VMEC/Boozer optional dependencies skip-safe in default CI."
+        "Wire a validated VMEC/Boozer geometry-to-kinetic-transport scalar before claiming full VMEC-boundary-to-SFINCS gradients.",
+        "Keep VMEC/Boozer optional dependencies skip-safe in default CI and keep no-solve provenance explicit in public examples."
       ],
       "second_push_delta_percent": 8,
-      "second_push_result": "target saturated for scoped geometry-proxy workflow; shared proxy transport-gradient gate added, while full kinetic transport gradients remain out of scope",
+      "second_push_result": "scoped geometry-proxy workflow now has shared proxy transport-gradient gates, machine-readable no-solve provenance, and an explicit VMEC/Boozer-to-kinetic scalar contract; full kinetic transport gradients remain out of scope until the kinetic solve stage is validated",
       "status": "evidence_ready",
-      "target_percent": 93,
+      "target_percent": 95,
       "title": "vmec_jax to booz_xform_jax to sfincs_jax differentiable workflow"
     },
     {
@@ -484,7 +591,7 @@
     }
   ],
   "minimum_substantial_delta_percent": 10,
-  "overall_average_percent": 92.9,
+  "overall_average_percent": 94.7,
   "owner_threads": [
     "019e1b62-a2b6-7d82-924c-d3f27b58cc34",
     "019e1b62-ee67-78f3-a63f-06f5623b4217",
@@ -501,10 +608,20 @@
     "019e1c7b-3f37-7fd0-9ee4-c68e565ac137",
     "019e1c7b-7d69-7783-8493-4d410ebde31b",
     "019e1c7b-be00-7a33-92b9-0870894e145e",
-    "019e1c7b-f59d-7f23-a71d-5b015e962e46"
+    "019e1c7b-f59d-7f23-a71d-5b015e962e46",
+    "019e2bd7-5bc9-7a52-9850-2531f5bce9cb",
+    "019e2bd7-6616-7d20-8a73-47ddb9e2d9ea",
+    "019e2bd7-71fa-7d23-ad22-62ada4aa009f",
+    "019e2bd7-7c48-7ab2-b5fc-99675590eb3e",
+    "019e2bd7-86dc-7681-8f66-a656d730a9d9",
+    "019e2bee-b5db-7e60-93e2-2a5b0ed13f15",
+    "019e2bee-bf53-7e50-973d-877065bd1b3b",
+    "019e2bee-c947-7712-a8bc-c065c0e7f644",
+    "019e2bee-d344-7740-bb01-3f198fe6e405",
+    "019e2bee-dd71-77d3-87be-ca076c4ac8ea"
   ],
   "purpose": "Machine-readable completion tracker for the coordinated large-push research/performance lanes. Percentages are engineering readiness estimates backed by checked-in evidence, not physics claims by themselves.",
   "requested_second_push_delta_percent": 15,
   "schema_version": 1,
-  "second_push_assessment": "large push is now at 92.7% overall: PAS CPU/GPU production-floor artifacts, release-grade parallel audit gates, refactor/CI policy extraction, optional JAX-ecosystem gates, the scale-0.55 CPU QI exact-LU successor, adaptive-side scale-0.55 CPU/GPU five-seed successors, and scale-0.60 seed-0 CPU/GPU probes are reflected in the manifest. QI remains active at 95% because scale-0.60 multiseed and production-resolution CPU/GPU seed ladders are still required before promotion."
+  "second_push_assessment": "large push is now at 94.7% overall: production large-QI has a release-ready non-autodiff host fallback, true device-QI is explicitly closed deferred post-release after scale-0.60 GPU hard-seed timeouts and Galerkin rejection, PAS has candidate-byte preflight gating plus byte-budget-required real-solve planning, scaling claims have CI-safe scope classification, refactor/CI has broader fast CLI/validation and Galerkin-policy coverage, and VMEC/Boozer examples expose both no-solve provenance and a kinetic scalar contract. Remaining open work is now narrow and evidence-defined: prove a residual-clean PAS runtime/memory win from the byte-budgeted real-solve probe, continue splitting v3_driver control flow before claiming package-wide 95% coverage, and revisit true device-QI only post-release with a new residual-reducing algorithm rather than another solver-label toggle."
 }

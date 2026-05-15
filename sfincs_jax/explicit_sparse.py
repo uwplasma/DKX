@@ -454,7 +454,7 @@ def _normalize_pattern(pattern, *, shape: tuple[int, int] | None = None) -> sp.c
     return pattern_csr
 
 
-def color_pattern_columns(pattern) -> list[list[int]]:
+def color_pattern_columns(pattern, *, max_colors: int | None = None) -> list[list[int]]:
     """Greedily group columns whose declared row supports do not overlap.
 
     A single matvec with ones in all columns of a color recovers every value in
@@ -464,6 +464,7 @@ def color_pattern_columns(pattern) -> list[list[int]]:
     """
 
     pattern_csc = _normalize_pattern(pattern).tocsc()
+    max_colors_use = None if max_colors is None else max(1, int(max_colors))
     color_rows: list[set[int]] = []
     color_cols: list[list[int]] = []
     for col in range(pattern_csc.shape[1]):
@@ -479,6 +480,10 @@ def color_pattern_columns(pattern) -> list[list[int]]:
         else:
             color_rows.append(set(rows))
             color_cols.append([col])
+            if max_colors_use is not None and len(color_cols) > max_colors_use:
+                raise ValueError(
+                    f"pattern probing would require more than max_colors={max_colors_use} colors"
+                )
     return color_cols
 
 
@@ -509,6 +514,11 @@ def build_operator_from_pattern(
     dense_nbytes = estimate_dense_nbytes((n_rows, n_cols), dtype_np)
     csr_nbytes_estimate = estimate_csr_nbytes((n_rows, n_cols), int(pattern_csr.nnz), data_dtype=dtype_np)
     csr_cap = int(max(0.0, float(csr_max_mb)) * 1e6)
+    if (not allow_operator_only) and (csr_cap <= 0 or csr_nbytes_estimate > csr_cap):
+        raise MemoryError(
+            "pattern CSR estimate would exceed budget "
+            f"({csr_nbytes_estimate / 1.0e6:.3g} MB > {float(csr_max_mb):.3g} MB)"
+        )
     if allow_operator_only and (csr_cap <= 0 or csr_nbytes_estimate > csr_cap):
         decision = SparseDecision(
             storage_kind="linear_operator",
@@ -527,9 +537,7 @@ def build_operator_from_pattern(
         operator = LinearOperator((n_rows, n_cols), matvec=_op_matvec, dtype=dtype_np)
         return SparseOperatorBundle(matrix=None, operator=operator, metadata=decision)
 
-    colors = color_pattern_columns(pattern_csr)
-    if max_colors is not None and len(colors) > int(max_colors):
-        raise ValueError(f"pattern probing would require {len(colors)} colors, exceeding max_colors={max_colors}")
+    colors = color_pattern_columns(pattern_csr, max_colors=max_colors)
 
     pattern_csc = pattern_csr.tocsc()
     data_parts: list[np.ndarray] = []

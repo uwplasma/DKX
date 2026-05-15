@@ -73,6 +73,14 @@ def bicgstab_work_nbytes(n: int, *, dtype: Any = np.float64, work_vectors: int =
     return int(n * work_vectors * dtype_nbytes(dtype))
 
 
+def tfqmr_work_nbytes(n: int, *, dtype: Any = np.float64, work_vectors: int = 10) -> int:
+    """Estimate short-recurrence TFQMR vector storage."""
+
+    n = max(0, int(n))
+    work_vectors = max(0, int(work_vectors))
+    return int(n * work_vectors * dtype_nbytes(dtype))
+
+
 def gmres_restart_for_budget(
     n: int,
     requested_restart: int,

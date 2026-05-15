@@ -101,12 +101,33 @@ def rhs1_pas_tz_max_bytes() -> int:
 def estimate_rhs1_pas_tz_build_bytes(op) -> int:
     """Estimate the dense PAS-TZ builder memory footprint in bytes.
 
-    This is intentionally conservative. It counts the dominant dense arrays built
-    by the block-tridiagonal PAS-TZ approximation, which is enough for the
-    routing layer to avoid obviously unsafe builder choices.
+    This is intentionally conservative. It counts persistent block-Thomas
+    factors, the host/device overlap while cached arrays are materialized, and
+    the largest dense work arrays used by local inversions. The extra headroom
+    keeps routing away from builder choices that are nominally under the hard
+    cache footprint but unsafe once transient live arrays are included.
+    """
+    return int(estimate_rhs1_pas_tz_build_memory(op)["total_nbytes"])
+
+
+def estimate_rhs1_pas_tz_build_memory(op) -> dict[str, object]:
+    """Return structured dense PAS-TZ builder memory preflight metadata.
+
+    The scalar byte estimate is still exposed through
+    ``estimate_rhs1_pas_tz_build_bytes`` for existing route gates. This richer
+    form lets tests, benchmark manifests, and fail-fast diagnostics explain why
+    geometry-rich PAS-TZ builds are accepted or rejected without entering a heavy
+    preconditioner construction.
     """
     if not pas_tz_preconditioner_applicable(op):
-        return 0
+        max_bytes = max(0, rhs1_pas_tz_max_bytes())
+        return {
+            "applicable": False,
+            "safe": True,
+            "reason": "pas-tz-inapplicable",
+            "total_nbytes": 0,
+            "max_nbytes": int(max_bytes),
+        }
     n_species = int(op.n_species)
     n_x = int(op.n_x)
     n_l_full = int(op.n_xi)
@@ -121,6 +142,7 @@ def estimate_rhs1_pas_tz_build_bytes(op) -> int:
         pas_tz_lmax = int(pas_tz_lmax_env) if pas_tz_lmax_env else 0
     except ValueError:
         pas_tz_lmax = 0
+    lmax_source = "env" if pas_tz_lmax > 0 else "default"
     if pas_tz_lmax <= 0:
         if n_tz <= 192:
             pas_tz_lmax = n_l_full
@@ -131,16 +153,17 @@ def estimate_rhs1_pas_tz_build_bytes(op) -> int:
         else:
             pas_tz_lmax = 12
         if (
-            op.fblock.exb_theta is None
-            and op.fblock.exb_zeta is None
-            and op.fblock.magdrift_theta is None
-            and op.fblock.magdrift_zeta is None
-            and op.fblock.magdrift_xidot is None
-            and op.fblock.er_xdot is None
-            and op.fblock.er_xidot is None
+            getattr(op.fblock, "exb_theta", None) is None
+            and getattr(op.fblock, "exb_zeta", None) is None
+            and getattr(op.fblock, "magdrift_theta", None) is None
+            and getattr(op.fblock, "magdrift_zeta", None) is None
+            and getattr(op.fblock, "magdrift_xidot", None) is None
+            and getattr(op.fblock, "er_xdot", None) is None
+            and getattr(op.fblock, "er_xidot", None) is None
             and n_tz <= 256
         ):
             pas_tz_lmax = n_l_full
+            lmax_source = "drift-free-small-tz"
     n_l_use = min(n_l_full, max(2, int(pas_tz_lmax)))
     tz = int(n_tz)
     twotz = int(2 * tz)
@@ -149,7 +172,47 @@ def estimate_rhs1_pas_tz_build_bytes(op) -> int:
     g01 = n_species * n_x * twotz * tz
     inv_a = n_species * n_x * max(n_l_use - 2, 0) * tz * tz
     g = n_species * n_x * max(n_l_use - 3, 0) * tz * tz
-    return int((inv_a01 + g01 + inv_a + g) * 8)
+    stored_factor_entries = int(inv_a01 + g01 + inv_a + g)
+
+    # Geometry/operator arrays live alongside the factor arrays while the build
+    # runs: dtheta_tz, dzeta_tz, m_tz per species, exb_op_tz, and eye_tz.
+    geometry_entries = int((4 + n_species) * tz * tz)
+
+    # Local inversion work keeps the input block, inverse/pseudoinverse result,
+    # coupling blocks, and effective diagonal blocks live around linalg calls.
+    inversion_workspace_entries = int(max(2 * twotz * twotz + 2 * twotz * tz, 6 * tz * tz))
+
+    # Host factor arrays remain live while jnp.asarray materializes device
+    # copies. Apply headroom to account for allocator alignment and linalg
+    # temporaries that are not visible from Python-level array shapes.
+    live_entries = 2 * stored_factor_entries + geometry_entries + inversion_workspace_entries
+    headroom = 1.25
+    total_nbytes = int(math.ceil(live_entries * 8 * headroom))
+    max_nbytes = int(max(0, rhs1_pas_tz_max_bytes()))
+    safe = bool(total_nbytes <= max_nbytes)
+    return {
+        "applicable": True,
+        "safe": safe,
+        "reason": "within-pas-tz-build-memory-limit" if safe else "pas-tz-build-memory-limit-exceeded",
+        "n_species": int(n_species),
+        "n_x": int(n_x),
+        "n_xi_full": int(n_l_full),
+        "n_theta": int(n_theta),
+        "n_zeta": int(n_zeta),
+        "n_tz": int(n_tz),
+        "active_unknowns": int(n_species * n_x * n_l_full * n_tz),
+        "lmax": int(n_l_use),
+        "lmax_requested": int(pas_tz_lmax),
+        "lmax_source": str(lmax_source),
+        "stored_factor_entries": int(stored_factor_entries),
+        "geometry_entries": int(geometry_entries),
+        "inversion_workspace_entries": int(inversion_workspace_entries),
+        "live_entries": int(live_entries),
+        "headroom": float(headroom),
+        "scalar_nbytes": 8,
+        "total_nbytes": int(total_nbytes),
+        "max_nbytes": int(max_nbytes),
+    }
 
 
 def pas_tz_preconditioner_memory_safe(op) -> bool:
@@ -204,18 +267,16 @@ def build_pas_tz_memory_fallback(
     """Build the fallback preconditioner for memory-unsafe PAS-TZ requests.
 
     On multi-device sharded runs we use the shard-axis-specific Schwarz builder.
-    Otherwise we default to the cheap collision fallback when available. The
-    older PAS-hybrid fallback remains available with
+    Otherwise we prefer the matrix-free ``tzfft`` fallback when available, unless
+    ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK`` explicitly requests
+    ``collision``. The older PAS-hybrid fallback remains available with
     ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=hybrid`` for A/B profiling.
-    ``tzfft`` is an opt-in matrix-free angular-streaming candidate that avoids
-    dense patch inverses; it is not selected by default until benchmarked.
-    This keeps memory-unsafe PAS-TZ attempts fail-fast instead of spending the
-    wall-time budget in a second dense-ish fallback. Structured Schwarz builders
-    still allocate dense patch inverses, so they are guarded by an explicit
-    patch-work estimate; unsafe structured requests also fall back to the cheap
-    collision preconditioner when it is available.
+    Structured Schwarz builders still allocate dense patch inverses, so they are
+    guarded by an explicit patch-work estimate; unsafe structured requests also
+    use ``tzfft`` first when available unless collision was requested.
     """
     requested = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "")
+    explicit_collision_request = _pas_tz_explicit_collision_fallback_requested(requested)
     shard_axis = matvec_shard_axis(op)
     axis = resolve_pas_tz_memory_fallback_axis(
         op=op,
@@ -241,11 +302,18 @@ def build_pas_tz_memory_fallback(
             overlap=dd_overlap,
         )
         if not bool(guard["safe"]):
-            if collision_builder is not None:
+            if tzfft_builder is not None and not explicit_collision_request:
+                metadata = dict(guard)
+                metadata["reason"] = f"{guard.get('reason', 'schwarz-unsafe')}; using tzfft"
+                metadata["requested_axis"] = axis
+                precond = tzfft_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+                _mark_pas_tz_guarded_fallback(precond, axis="tzfft", metadata=metadata)
+            elif collision_builder is not None:
                 precond = collision_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+                _mark_pas_tz_guarded_fallback(precond, axis=axis, metadata=guard)
             else:
                 precond = hybrid_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
-            _mark_pas_tz_guarded_fallback(precond, axis=axis, metadata=guard)
+                _mark_pas_tz_guarded_fallback(precond, axis=axis, metadata=guard)
             return precond
         schwarz_builder = theta_schwarz_builder if axis == "theta" else zeta_schwarz_builder
         return schwarz_builder(
@@ -256,7 +324,9 @@ def build_pas_tz_memory_fallback(
             expand_reduced=expand_reduced,
         )
     cheap_kind = resolve_pas_tz_cheap_fallback_kind(requested=requested)
-    if cheap_kind == "tzfft" and tzfft_builder is not None:
+    if (cheap_kind == "tzfft" and tzfft_builder is not None) or (
+        cheap_kind == "collision" and tzfft_builder is not None and not explicit_collision_request
+    ):
         precond = tzfft_builder(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
         _mark_pas_tz_guarded_fallback(precond, axis="tzfft", metadata={"safe": True, "reason": "cheap-tzfft"})
         return precond
@@ -277,6 +347,20 @@ def _mark_pas_tz_guarded_fallback(precond: Callable, *, axis: str, metadata: dic
         setattr(precond, "_sfincs_jax_pas_tz_guarded_metadata", dict(metadata or {}))
     except Exception:
         pass
+
+
+def _pas_tz_explicit_collision_fallback_requested(requested: str) -> bool:
+    """Return whether the PAS-TZ fallback env explicitly asks for collision."""
+    req = str(requested or "").strip().lower().replace("-", "_")
+    return req in {
+        "collision",
+        "collisions",
+        "collision_diag",
+        "pas_collision",
+        "cheap_collision",
+        "collision_tzfft",
+        "collision_tzfft_correction",
+    }
 
 
 def estimate_pas_tz_schwarz_fallback_work(
@@ -486,6 +570,7 @@ def resolve_pas_tz_memory_fallback_axis(
 __all__ = [
     "build_pas_tz_memory_fallback",
     "estimate_rhs1_pas_tz_build_bytes",
+    "estimate_rhs1_pas_tz_build_memory",
     "estimate_pas_tz_schwarz_fallback_work",
     "pas_tokamak_theta_preconditioner_applicable",
     "pas_tz_preconditioner_applicable",

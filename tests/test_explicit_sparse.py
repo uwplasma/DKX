@@ -173,6 +173,15 @@ def test_color_pattern_columns_groups_disjoint_row_supports() -> None:
             rows_seen.update(rows)
 
 
+def test_color_pattern_columns_honors_max_colors_preflight() -> None:
+    pattern = sp.eye(4, format="csr")
+    assert color_pattern_columns(pattern, max_colors=1) == [[0, 1, 2, 3, 4][:4]]
+
+    dense_pattern = sp.csr_matrix(np.ones((4, 4), dtype=bool))
+    with pytest.raises(ValueError, match="max_colors=1"):
+        color_pattern_columns(dense_pattern, max_colors=1)
+
+
 def test_build_operator_from_pattern_uses_one_probe_for_diagonal_pattern() -> None:
     a = np.diag([2.0, 3.0, 5.0, 7.0])
     calls: list[np.ndarray] = []
@@ -245,6 +254,22 @@ def test_build_operator_from_pattern_can_fall_back_to_operator_only_when_budgete
     assert bundle.matrix is None
     assert bundle.metadata.storage_kind == "linear_operator"
     np.testing.assert_allclose(bundle.matvec(np.array([1.0, 2.0, 3.0])), np.array([1.0, 2.0, 3.0]))
+
+
+def test_build_operator_from_pattern_enforces_csr_budget_when_materializing() -> None:
+    pattern = sp.eye(3, format="csr")
+
+    def mv(x):
+        return np.asarray(x)
+
+    with pytest.raises(MemoryError, match="pattern CSR estimate would exceed budget"):
+        build_operator_from_pattern(
+            mv,
+            pattern=pattern,
+            backend="cpu",
+            csr_max_mb=0.0,
+            allow_operator_only=False,
+        )
 
 
 def test_factorize_host_sparse_operator_solves_exactly() -> None:
