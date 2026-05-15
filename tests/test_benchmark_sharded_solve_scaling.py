@@ -191,6 +191,16 @@ def test_sharded_solve_plan_records_hot_timing_timeout_and_non_release_gate(tmp_
     assert plan["release_scaling_claim"] is False
     assert plan["speedup_gate_semantics"]["gate_scope"] == "schema_and_honesty_only"
     assert plan["memory_gate_semantics"]["child_process_timeout_enabled"] is True
+    assert plan["parallel_claim_scope"]["claim_scope"] == "single_case_sharded_solve_experimental"
+    assert plan["parallel_claim_scope"]["claim_scope_release_eligible"] is True
+    assert plan["parallel_claim_scope"]["release_scaling_supported"] is False
+    assert plan["parallel_claim_scope"]["unsupported_single_case_strong_scaling"] is True
+    assert plan["parallel_claim_scope"]["backend"] == "gpu"
+    assert plan["parallel_claim_scope"]["artifact_kind"] == "benchmark_plan"
+    assert plan["parallel_claim_scope"]["launches_solves"] is False
+    assert plan["parallel_claim_scope"]["plan_only_scope_evidence"] is True
+    assert plan["parallel_claim_scope"]["measured_results_present"] is False
+    assert plan["parallel_claim_scope"]["release_gate_required"] is None
     assert plan["device_plan"][1]["env"]["CUDA_VISIBLE_DEVICES"] == "0,1"
     assert "--audit" in plan["benchmark_command"]
 

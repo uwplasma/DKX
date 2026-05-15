@@ -28,6 +28,7 @@ class Rhs1PasMatrixFreeConfig:
     max_update_norm_ratio: float | None = None
     min_update_norm_ratio: float | None = None
     max_candidate_elements: int | None = None
+    max_candidate_bytes: int | None = None
 
     def __post_init__(self) -> None:
         if int(self.max_steps) < 1:
@@ -50,6 +51,8 @@ class Rhs1PasMatrixFreeConfig:
                 raise ValueError("min_update_norm_ratio must be finite and >= 0 when provided")
         if self.max_candidate_elements is not None and int(self.max_candidate_elements) < 1:
             raise ValueError("max_candidate_elements must be >= 1 when provided")
+        if self.max_candidate_bytes is not None and int(self.max_candidate_bytes) < 1:
+            raise ValueError("max_candidate_bytes must be >= 1 when provided")
 
 
 @dataclass(frozen=True)
@@ -112,6 +115,56 @@ def _array_metadata(value: jnp.ndarray, *, block_size: int | None) -> dict[str, 
     }
 
 
+def rhs1_pas_matrixfree_preflight_gate(
+    x_template: ArrayLike,
+    *,
+    config: Rhs1PasMatrixFreeConfig = Rhs1PasMatrixFreeConfig(),
+    live_arrays: int = 5,
+) -> tuple[bool, str, dict[str, object]]:
+    """Return a fail-fast memory gate for a matrix-free PAS candidate step.
+
+    The guarded PAS correction needs several vectors live at once around the
+    candidate update and residual check. Rejecting at this preflight avoids
+    calling expensive correction builders, materializing candidate updates, or
+    running another matvec when the configured element/byte budget cannot hold.
+    """
+
+    metadata = _array_metadata(jnp.asarray(x_template), block_size=config.block_size)
+    live_array_count = max(1, int(live_arrays))
+    estimated_live_bytes = int(metadata["array_bytes"]) * live_array_count
+    enriched = dict(metadata)
+    enriched["estimated_live_array_count"] = int(live_array_count)
+    enriched["estimated_live_array_bytes"] = int(estimated_live_bytes)
+    enriched["preflight_kind"] = "rhs1_pas_matrixfree_candidate"
+    enriched["max_candidate_elements"] = (
+        None if config.max_candidate_elements is None else int(config.max_candidate_elements)
+    )
+    enriched["max_candidate_bytes"] = (
+        None if config.max_candidate_bytes is None else int(config.max_candidate_bytes)
+    )
+    enriched["candidate_element_budget_configured"] = config.max_candidate_elements is not None
+    enriched["candidate_byte_budget_configured"] = config.max_candidate_bytes is not None
+    enriched["candidate_byte_budget_margin"] = (
+        None if config.max_candidate_bytes is None else int(config.max_candidate_bytes) - estimated_live_bytes
+    )
+    enriched["min_update_norm_ratio"] = (
+        None if config.min_update_norm_ratio is None else float(config.min_update_norm_ratio)
+    )
+    if config.max_candidate_elements is not None and int(metadata["element_count"]) > int(
+        config.max_candidate_elements
+    ):
+        enriched["safe"] = False
+        enriched["reason"] = "candidate-size-limit-exceeded"
+        return False, "candidate-size-limit-exceeded", enriched
+    if config.max_candidate_bytes is not None and estimated_live_bytes > int(config.max_candidate_bytes):
+        enriched["safe"] = False
+        enriched["reason"] = "candidate-memory-limit-exceeded"
+        return False, "candidate-memory-limit-exceeded", enriched
+    enriched["safe"] = True
+    enriched["reason"] = "within-candidate-memory-limit"
+    return True, "within-candidate-memory-limit", enriched
+
+
 def _with_matrixfree_metadata(
     diagnostics: dict[str, object],
     *,
@@ -121,16 +174,12 @@ def _with_matrixfree_metadata(
     candidate_matvecs: int,
 ) -> dict[str, object]:
     enriched = dict(diagnostics)
-    metadata = _array_metadata(x_template, block_size=config.block_size)
-    metadata["estimated_live_array_count"] = int(live_arrays)
-    metadata["estimated_live_array_bytes"] = int(metadata["array_bytes"]) * int(live_arrays)
+    _safe, _reason, metadata = rhs1_pas_matrixfree_preflight_gate(
+        x_template,
+        config=config,
+        live_arrays=live_arrays,
+    )
     metadata["candidate_matvecs"] = int(candidate_matvecs)
-    metadata["max_candidate_elements"] = (
-        None if config.max_candidate_elements is None else int(config.max_candidate_elements)
-    )
-    metadata["min_update_norm_ratio"] = (
-        None if config.min_update_norm_ratio is None else float(config.min_update_norm_ratio)
-    )
     enriched["matrix_free_metadata"] = metadata
     return enriched
 
@@ -235,6 +284,33 @@ def rhs1_pas_matrixfree_correction(
     omega_use = float(config.omega)
     max_steps = max(1, int(config.max_steps))
     candidate_matvecs = 0
+    preflight_safe, preflight_reason, preflight_metadata = rhs1_pas_matrixfree_preflight_gate(
+        x_initial,
+        config=config,
+        live_arrays=5,
+    )
+    if not preflight_safe:
+        metadata = dict(preflight_metadata)
+        metadata["candidate_matvecs"] = 0
+        return Rhs1PasMatrixFreeResult(
+            x=x_best,
+            residual_norm=best_norm,
+            initial_residual_norm=initial_norm,
+            residual_history=tuple(history),
+            accepted_steps=0,
+            accepted=False,
+            reason=preflight_reason,
+            diagnostics={
+                "reason": preflight_reason,
+                "accepted_steps": 0,
+                "initial_residual_norm": _finite_or_none(initial_norm),
+                "candidate_residual_norm": None,
+                "min_residual_reduction": float(config.min_residual_reduction),
+                "initial_residual_finite": True,
+                "candidate_residual_finite": None,
+                "matrix_free_metadata": metadata,
+            },
+        )
     for step_index in range(max_steps):
         update = jnp.asarray(correction(current_residual))
         if update.shape != x_initial.shape:
@@ -366,29 +442,6 @@ def rhs1_pas_matrixfree_correction(
                         candidate_matvecs=candidate_matvecs,
                     ),
                 )
-        if config.max_candidate_elements is not None and int(x_initial.size) > int(config.max_candidate_elements):
-            return Rhs1PasMatrixFreeResult(
-                x=x_best,
-                residual_norm=best_norm,
-                initial_residual_norm=initial_norm,
-                residual_history=tuple(history),
-                accepted_steps=accepted_steps,
-                accepted=accepted_steps > 0,
-                reason="candidate-size-limit-exceeded",
-                diagnostics=_with_matrixfree_metadata(
-                    {
-                        "reason": "candidate-size-limit-exceeded",
-                        "accepted_steps": int(accepted_steps),
-                        "element_count": int(x_initial.size),
-                        "max_candidate_elements": int(config.max_candidate_elements),
-                    },
-                    x_template=x_initial,
-                    config=config,
-                    live_arrays=3,
-                    candidate_matvecs=candidate_matvecs,
-                ),
-            )
-
         candidate = x_best + jnp.asarray(omega_use * update, dtype=x_initial.dtype)
         candidate = jnp.asarray(candidate, dtype=x_initial.dtype)
         del update
@@ -483,5 +536,6 @@ __all__ = [
     "Rhs1PasMatrixFreeResult",
     "rhs1_pas_matrixfree_acceptance_gate",
     "rhs1_pas_matrixfree_correction",
+    "rhs1_pas_matrixfree_preflight_gate",
     "streaming_l2_norm",
 ]

@@ -1,0 +1,1037 @@
+{
+  "active_size": 81377,
+  "artifact_kind": "qi_seed_device_operator_rejected_probe",
+  "backend": "gpu",
+  "bicgstab_device_probe": {
+    "active_size": 81377,
+    "assembled_operator_nnz": 2884321,
+    "assembled_operator_setup_s": 84.767,
+    "backend": "gpu",
+    "conclusion": "The short-recurrence bicgstab-jax route reduced peak host RSS relative to full-restart device FGMRES, but it diverged on the scale-0.60 QI hard seed and output was correctly refused. Keep it opt-in until the preconditioner or Krylov formulation is stabilized.",
+    "device": "RTX A4000 gpu0",
+    "host": "office",
+    "krylov_method": "bicgstab_jax",
+    "max_rss_mb": 13593.23046875,
+    "memory_reduction_vs_device_fgmres_percent": 66.30941665526662,
+    "operator_device_resident": true,
+    "outer_elapsed_s": 483.50744315003976,
+    "output_written": false,
+    "promotion_decision": "rejected_divergent_short_recurrence",
+    "reported_iterations": 1,
+    "reported_matvecs": 5,
+    "reported_residual_norm": 2.351749e+102,
+    "reported_target": 3.021487e-13,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 2,
+    "solver_trace_written": false,
+    "stderr_tail": [
+      "sfincs_jax write-output failed: Refusing to write nonconverged RHSMode=1 diagnostics for a production-sized solve: active_size=81377 residual_norm=2.351749e+102 target=3.021487e-11 solve_method=xblock_sparse_pc_gmres. accepted_converged=False criterion=true_residual. Use a converged solver path such as --solve-method sparse_pc_gmres, lower the resolution, or set SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1 only for debugging partial states."
+    ],
+    "total_size": 139502
+  },
+  "case_count": 1,
+  "device_compact_csr_exact_xblock_probe": {
+    "active_size": 81377,
+    "assembled_operator_reuse": "requested_but_rejected_max_colors_512",
+    "backend": "gpu",
+    "conclusion": "Compact CSR exact x-block factors remove the padded max-row storage blow-up and build a full exact-factor representation, but the first device-side apply/transfer remains too expensive and the hard seed times out before a solver trace. This is a memory improvement, not QI closure.",
+    "device": "RTX A4000 GPU0",
+    "factor_format": "compact_csr",
+    "factor_nbytes_estimate": 2755472392,
+    "host": "office",
+    "krylov_method": "gmres_jax",
+    "lower_factor_nnz": 110063331,
+    "max_rss_mb": 17201.85546875,
+    "outer_elapsed_s": 540.9526982633397,
+    "output_written": false,
+    "precondition_side": "left",
+    "progress_events_tail": [
+      "sparse_lu: nnz=447664 (1.791e-03 density)",
+      "sparse_lu: assembling sparse operator in column blocks (n=25110 block=128)",
+      "sparse_lu: nnz=717282 (1.138e-03 density)",
+      "sparse_lu: assembling sparse operator in column blocks (n=27900 block=128)",
+      "sparse_lu: nnz=798168 (1.025e-03 density)",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator disabled after build failure (ValueError: pattern probing would require more than max_colors=512 colors)",
+      "QI seed execution timed out after 540.000 s."
+    ],
+    "promotion_decision": "rejected",
+    "reported_residual_norm": null,
+    "reported_residual_ratio": null,
+    "reported_target": null,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 124,
+    "solver_trace_written": false,
+    "timed_out": true,
+    "total_size": 139502,
+    "upper_factor_nnz": 119280365,
+    "xblock_factor_row_cap": 0,
+    "xblock_lu_max": 30000
+  },
+  "device_cycle_jit_fgmres_probe": {
+    "accepted_converged": false,
+    "active_size": 81377,
+    "backend": "gpu",
+    "conclusion": "Cycle-JIT FGMRES avoided the full-solver JIT memory blow-up and finished within the bounded GPU window, writing output/trace when nonconverged diagnostics were explicitly allowed. It reduced peak RSS back to the short-recurrence range but did not lower the QI hard-seed residual beyond the probe-coarse seed.",
+    "device": "RTX A4000 gpu0",
+    "host": "office",
+    "jit_mode": "cycle",
+    "krylov_method": "fgmres_jax",
+    "max_rss_mb": 13566.21875,
+    "outer_elapsed_s": 281.6822349028662,
+    "outer_k": 0,
+    "output_written": true,
+    "progress_events_tail": [
+      "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+      "sparse_ilu: assembling sparse operator in column blocks (n=27900 block=128)",
+      "sparse_ilu: dropping entries |a| < 1.553e-08",
+      "sparse_ilu: nnz=709868 (9.119e-04 density)",
+      "sparse_ilu: factorization failed (attempt=1/3 thresh=1.553e-08 drop_tol=1.0e-04 fill=10.0) (RuntimeError: Factor is exactly singular)",
+      "sparse_ilu: dropping entries |a| < 1.553e-09",
+      "sparse_ilu: nnz=781328 (1.004e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=82.872",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=25 elapsed_s=204.833",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=fgmres_jax elapsed_s=277.047 iters=6 matvecs=47 residual=3.019236e-05 target=3.021487e-13 ksp_residual=3.019236e-05"
+    ],
+    "promotion_decision": "promote_infrastructure_reject_convergence",
+    "reported_residual_norm": 3.019236349021897e-05,
+    "reported_residual_ratio": 999255.1995817899,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 0,
+    "solver_trace_written": true,
+    "timed_out": false,
+    "total_size": 139502
+  },
+  "device_cycle_jit_left_probe_rejected": {
+    "accepted_converged": false,
+    "active_size": 81377,
+    "backend": "gpu",
+    "conclusion": "Forced left side-probe seeding with device global coupling made the residual order unity and is not usable for the GPU hard seed. The production policy must not switch to this side in explicit-right diagnostic runs.",
+    "device": "RTX A4000 gpu0",
+    "host": "office",
+    "jit_mode": "cycle",
+    "krylov_method": "gmres_jax",
+    "max_rss_mb": 13592.8203125,
+    "outer_elapsed_s": 340.51715627964586,
+    "outer_k": 0,
+    "output_written": true,
+    "progress_events_tail": [
+      "sparse_ilu: nnz=709868 (9.119e-04 density)",
+      "sparse_ilu: factorization failed (attempt=1/3 thresh=1.553e-08 drop_tol=1.0e-04 fill=10.0) (RuntimeError: Factor is exactly singular)",
+      "sparse_ilu: dropping entries |a| < 1.553e-09",
+      "sparse_ilu: nnz=781328 (1.004e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=83.392",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=25 elapsed_s=201.582",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=50 elapsed_s=212.094",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=75 elapsed_s=226.982",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe switch side=left->right method=gmres_jax->gmres_jax iters=60 matvecs=62 residual=2.576212e+00 ratio=8.526307e+12 seed_used=1 preserved_physical_seed=1",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=gmres_jax elapsed_s=337.344 iters=6 matvecs=113 residual=1.183143e+00 target=3.021487e-13 ksp_residual=1.183143e+00"
+    ],
+    "promotion_decision": "reject_left_side_probe_with_device_global_coupling",
+    "reported_residual_norm": 1.1831427222419815,
+    "reported_residual_ratio": 39157633930.53529,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 0,
+    "solver_trace_written": true,
+    "timed_out": false,
+    "total_size": 139502
+  },
+  "device_cycle_jit_recycled_probe": {
+    "accepted_converged": false,
+    "active_size": 81377,
+    "backend": "gpu",
+    "conclusion": "Recycled cycle-JIT kept the bounded memory behavior and preserved the explicit right-preconditioned side, but outer_k=6 did not improve the hard-seed residual. This rejects restart recycling alone as the missing QI fix.",
+    "device": "RTX A4000 gpu0",
+    "host": "office",
+    "jit_mode": "cycle",
+    "krylov_method": "fgmres_jax",
+    "max_rss_mb": 13588.8828125,
+    "outer_elapsed_s": 386.37678109202534,
+    "outer_k": 6,
+    "output_written": true,
+    "progress_events_tail": [
+      "sparse_ilu: nnz=709868 (9.119e-04 density)",
+      "sparse_ilu: factorization failed (attempt=1/3 thresh=1.553e-08 drop_tol=1.0e-04 fill=10.0) (RuntimeError: Factor is exactly singular)",
+      "sparse_ilu: dropping entries |a| < 1.553e-09",
+      "sparse_ilu: nnz=781328 (1.004e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=82.713",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=25 elapsed_s=202.663",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=50 elapsed_s=213.019",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=75 elapsed_s=227.895",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe keep_explicit_side side=right->right method=fgmres_jax->fgmres_jax iters=60 matvecs=62 residual=2.351749e+102 ratio=7.783417e+114",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=fgmres_jax elapsed_s=383.461 iters=13 matvecs=109 residual=3.019236e-05 target=3.021487e-13 ksp_residual=3.019236e-05"
+    ],
+    "promotion_decision": "promote_recycling_infrastructure_reject_hard_seed_fix",
+    "reported_residual_norm": 3.019236279656307e-05,
+    "reported_residual_ratio": 999255.1766243535,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 0,
+    "solver_trace_written": true,
+    "timed_out": false,
+    "total_size": 139502
+  },
+  "device_exact_xblock_lu_left_probe": {
+    "accepted_converged": false,
+    "active_size": 81377,
+    "backend": "gpu",
+    "conclusion": "The closest device analogue of the CPU-closing path, exact per-x sparse LU with left device GMRES, reached the intended factors but timed out before producing output and used a much larger host/GPU footprint. This rules out naive padded exact-LU transfer as a production GPU closure strategy.",
+    "converged": false,
+    "device": "RTX A4000 gpu0",
+    "equilibration": "none",
+    "host": "office",
+    "krylov_method": "gmres_jax",
+    "outer_elapsed_s": 541.4980548098683,
+    "output_written": false,
+    "progress_events_tail": [
+      "sparse_ilu: built JAX factors (max_lower=1024 max_upper=1024 cap=1024)",
+      "sparse_lu: assembling sparse operator in column blocks (n=15810 block=128)",
+      "sparse_lu: nnz=447664 (1.791e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=1024 max_upper=1024 cap=1024)",
+      "sparse_lu: assembling sparse operator in column blocks (n=25110 block=128)",
+      "sparse_lu: nnz=717282 (1.138e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=1024 max_upper=1024 cap=1024)",
+      "sparse_lu: assembling sparse operator in column blocks (n=27900 block=128)",
+      "sparse_lu: nnz=798168 (1.025e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=1024 max_upper=1024 cap=1024)",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=83.424",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres constraint1 moment-Schur seed rejected residual=2.240479e+03 incumbent=3.021487e-05",
+      "QI seed execution timed out after 540.000 s."
+    ],
+    "promotion_decision": "rejected_timeout_memory",
+    "reported_iterations": null,
+    "reported_matvecs": null,
+    "reported_residual_norm": null,
+    "reported_residual_ratio": null,
+    "reported_target": null,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 124,
+    "solver_trace_written": false,
+    "timed_out": true,
+    "total_size": 139502,
+    "xblock_factor_row_cap": 1024,
+    "xblock_lu_max": 30000
+  },
+  "device_global_qr_fgmres_probe": {
+    "active_size": 81377,
+    "assembled_operator_nnz": 2884321,
+    "assembled_operator_setup_s": 83.104,
+    "backend": "gpu",
+    "coarse_solver": "qr",
+    "conclusion": "The device global-coupling correction now uses a rank-revealed QR coarse solve and remains compatible with the device-resident assembled operator. On the scale-0.60 QI hard seed it built successfully, but FGMRES still timed out at the 540 s gate and peak host RSS remained high, so this is better coarse-solve infrastructure but not a promoted hard-seed fix.",
+    "device": "RTX A4000 gpu0",
+    "global_coupling_basis_size": 20,
+    "global_coupling_loads": 32,
+    "global_coupling_mode": "additive",
+    "global_coupling_rank": 20,
+    "host": "office",
+    "krylov_method": "fgmres_jax",
+    "matvec_progress": [
+      {
+        "elapsed_s": 215.256,
+        "matvecs": 25
+      },
+      {
+        "elapsed_s": 269.719,
+        "matvecs": 100
+      },
+      {
+        "elapsed_s": 342.876,
+        "matvecs": 200
+      },
+      {
+        "elapsed_s": 411.765,
+        "matvecs": 300
+      },
+      {
+        "elapsed_s": 480.976,
+        "matvecs": 400
+      },
+      {
+        "elapsed_s": 532.478,
+        "matvecs": 475
+      }
+    ],
+    "max_rss_mb": 46113.0546875,
+    "maxiter": 260,
+    "operator_device_resident": true,
+    "outer_elapsed_s": 541.9680245183408,
+    "output_written": false,
+    "precondition_side": "right",
+    "promotion_decision": "rejected_timeout_device_global_qr_fgmres",
+    "reported_matvecs": 475,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "restart": 60,
+    "returncode": 124,
+    "solver_trace_written": false,
+    "timed_out": true,
+    "total_size": 139502
+  },
+  "device_global_qr_identity_probe_coarse_probe": {
+    "active_size": 81377,
+    "assembled_operator_nnz": 2884321,
+    "assembled_operator_setup_s": 98.169,
+    "backend": "gpu",
+    "coarse_solver": "qr",
+    "conclusion": "Changing the device global-coupling setup to an identity/raw physics-load smoother bounded the coarse setup and reached the Krylov solve start, but the scale-0.60 QI hard seed still timed out before convergence. Probe-coarse only reduced the seed residual from 3.021487e-05 to 3.019236e-05, so this is a setup/runtime improvement and negative evidence for promotion.",
+    "device": "RTX A4000 gpu0",
+    "global_coupling_basis_size": 30,
+    "global_coupling_loads": 32,
+    "global_coupling_mode": "additive",
+    "global_coupling_rank": 30,
+    "global_coupling_smoother": "identity",
+    "host": "office",
+    "krylov_method": "fgmres_jax",
+    "matvec_progress": [
+      {
+        "elapsed_s": 269.088,
+        "matvecs": 25
+      },
+      {
+        "elapsed_s": 322.212,
+        "matvecs": 100
+      },
+      {
+        "elapsed_s": 396.01,
+        "matvecs": 200
+      },
+      {
+        "elapsed_s": 464.748,
+        "matvecs": 300
+      },
+      {
+        "elapsed_s": 533.417,
+        "matvecs": 400
+      }
+    ],
+    "max_rss_mb": 37823.54296875,
+    "maxiter": 260,
+    "operator_device_resident": true,
+    "outer_elapsed_s": 541.6717840349302,
+    "output_written": false,
+    "precondition_side": "right",
+    "probe_coarse_direction_count": 8,
+    "probe_coarse_residual_after": 3.019236e-05,
+    "probe_coarse_residual_before": 3.021487e-05,
+    "probe_coarse_seed_initialized": true,
+    "promotion_decision": "rejected_timeout_identity_global_qr_probe_coarse_fgmres",
+    "reported_matvecs": 400,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "restart": 60,
+    "returncode": 124,
+    "setup_budget_s": 120.0,
+    "solver_trace_written": false,
+    "timed_out": true,
+    "total_size": 139502
+  },
+  "device_operator_probe": {
+    "active_size": 81377,
+    "assembled_operator_nnz": 2884321,
+    "assembled_operator_setup_s": 83.587,
+    "backend": "gpu",
+    "conclusion": "The device-resident assembled operator path works and removes the host SciPy matvec loop, but the current full-restart device FGMRES run timed out after 540 s and peaked near 40 GB RSS. Next QI work should reuse this operator with lower-memory restarted/short-recurrence Krylov or a stronger residual-reducing preconditioner.",
+    "device": "RTX A4000 gpu0",
+    "host": "office",
+    "matvec_progress": [
+      {
+        "elapsed_s": 290.419,
+        "matvecs": 100
+      },
+      {
+        "elapsed_s": 372.628,
+        "matvecs": 200
+      },
+      {
+        "elapsed_s": 439.914,
+        "matvecs": 300
+      },
+      {
+        "elapsed_s": 505.695,
+        "matvecs": 400
+      }
+    ],
+    "max_rss_mb": 40347.26953125,
+    "operator_device_resident": true,
+    "outer_elapsed_s": 541.9,
+    "output_written": false,
+    "promotion_decision": "rejected_timeout_after_device_operator_build",
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "solver_trace_written": false,
+    "total_size": 139502
+  },
+  "device_row_col_cap256_cycle_jit_probe": {
+    "accepted_converged": false,
+    "active_size": 81377,
+    "backend": "gpu",
+    "conclusion": "Increasing the JAX x-block sparse factor row cap from 64 to 256 did not improve the hard-seed residual. The bottleneck is not merely the 64-entry triangular-factor padding cap when the path still uses ILU blocks.",
+    "converged": false,
+    "device": "RTX A4000 gpu0",
+    "equilibration": "row_column",
+    "host": "office",
+    "krylov_method": "fgmres_jax",
+    "outer_elapsed_s": 317.3314420040697,
+    "output_written": true,
+    "progress_events_tail": [
+      "sparse_ilu: dropping entries |a| < 2.480e-09",
+      "sparse_ilu: nnz=697986 (1.107e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=256 max_upper=256 cap=256)",
+      "sparse_ilu: assembling sparse operator in column blocks (n=27900 block=128)",
+      "sparse_ilu: dropping entries |a| < 1.553e-08",
+      "sparse_ilu: nnz=709868 (9.119e-04 density)",
+      "sparse_ilu: factorization failed (attempt=1/3 thresh=1.553e-08 drop_tol=1.0e-04 fill=10.0) (RuntimeError: Factor is exactly singular)",
+      "sparse_ilu: dropping entries |a| < 1.553e-09",
+      "sparse_ilu: nnz=781328 (1.004e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=256 max_upper=256 cap=256)",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=83.232",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres using row/column-equilibrated assembled operator for Krylov solve",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=fgmres_jax elapsed_s=314.552 iters=9 matvecs=5 residual=3.021649e-05 target=3.021487e-13 ksp_residual=1.720919e-04"
+    ],
+    "promotion_decision": "rejected_no_residual_improvement",
+    "reported_iterations": 9,
+    "reported_matvecs": 5,
+    "reported_residual_norm": 3.0216494085297368e-05,
+    "reported_residual_ratio": 1000053.8327397704,
+    "reported_target": 3.021486753619609e-11,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 0,
+    "solver_trace_written": true,
+    "timed_out": false,
+    "total_size": 139502,
+    "xblock_factor_row_cap": 256,
+    "xblock_lu_max": 2000
+  },
+  "device_row_col_equilibrated_cycle_jit_probe": {
+    "accepted_converged": false,
+    "active_size": 81377,
+    "backend": "gpu",
+    "conclusion": "Two-sided row/column equilibration solved the scaled system and mapped back to the physical state, but the physical residual remained at the same hard-seed floor. Scaling improves conditioning infrastructure but is not sufficient for QI closure.",
+    "converged": false,
+    "device": "RTX A4000 gpu0",
+    "equilibration": "row_column",
+    "host": "office",
+    "krylov_method": "fgmres_jax",
+    "outer_elapsed_s": 276.9887349018827,
+    "output_written": true,
+    "progress_events_tail": [
+      "sparse_ilu: nnz=697986 (1.107e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+      "sparse_ilu: assembling sparse operator in column blocks (n=27900 block=128)",
+      "sparse_ilu: dropping entries |a| < 1.553e-08",
+      "sparse_ilu: nnz=709868 (9.119e-04 density)",
+      "sparse_ilu: factorization failed (attempt=1/3 thresh=1.553e-08 drop_tol=1.0e-04 fill=10.0) (RuntimeError: Factor is exactly singular)",
+      "sparse_ilu: dropping entries |a| < 1.553e-09",
+      "sparse_ilu: nnz=781328 (1.004e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=84.076",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=25 elapsed_s=203.437",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres using row/column-equilibrated assembled operator for Krylov solve",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=fgmres_jax elapsed_s=274.422 iters=9 matvecs=37 residual=3.021550e-05 target=3.021487e-13 ksp_residual=1.720920e-04"
+    ],
+    "promotion_decision": "rejected_no_residual_improvement",
+    "reported_iterations": 9,
+    "reported_matvecs": 37,
+    "reported_residual_norm": 3.021550089669077e-05,
+    "reported_residual_ratio": 1000020.961882223,
+    "reported_target": 3.021486753619609e-11,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 0,
+    "solver_trace_written": true,
+    "timed_out": false,
+    "total_size": 139502,
+    "xblock_factor_row_cap": 64,
+    "xblock_lu_max": 2000
+  },
+  "device_row_equilibrated_cycle_jit_probe": {
+    "accepted_converged": false,
+    "active_size": 81377,
+    "backend": "gpu",
+    "conclusion": "Left row equilibration of the active assembled device operator completed inside the bounded GPU window and preserved output/trace emission, but it did not reduce the physical QI hard-seed residual. This rejects row scaling alone as the missing preconditioner.",
+    "converged": false,
+    "device": "RTX A4000 gpu0",
+    "equilibration": "row",
+    "host": "office",
+    "krylov_method": "fgmres_jax",
+    "outer_elapsed_s": 274.25177652807906,
+    "output_written": true,
+    "progress_events_tail": [
+      "sparse_ilu: nnz=697986 (1.107e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+      "sparse_ilu: assembling sparse operator in column blocks (n=27900 block=128)",
+      "sparse_ilu: dropping entries |a| < 1.553e-08",
+      "sparse_ilu: nnz=709868 (9.119e-04 density)",
+      "sparse_ilu: factorization failed (attempt=1/3 thresh=1.553e-08 drop_tol=1.0e-04 fill=10.0) (RuntimeError: Factor is exactly singular)",
+      "sparse_ilu: dropping entries |a| < 1.553e-09",
+      "sparse_ilu: nnz=781328 (1.004e-03 density)",
+      "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=83.134",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=25 elapsed_s=200.671",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres using row-equilibrated assembled operator for Krylov solve",
+      "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=fgmres_jax elapsed_s=271.514 iters=9 matvecs=37 residual=3.021555e-05 target=3.021487e-13 ksp_residual=1.720920e-04"
+    ],
+    "promotion_decision": "rejected_no_residual_improvement",
+    "reported_iterations": 9,
+    "reported_matvecs": 37,
+    "reported_residual_norm": 3.0215547129901553e-05,
+    "reported_residual_ratio": 1000022.4920299468,
+    "reported_target": 3.021486753619609e-11,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 0,
+    "solver_trace_written": true,
+    "timed_out": false,
+    "total_size": 139502,
+    "xblock_factor_row_cap": 64,
+    "xblock_lu_max": 2000
+  },
+  "er_jitter": 0.02,
+  "evidence_note": "Bounded QI seed-robustness execution summary generated from the reusable runner manifest gate. Passing artifacts provide measured evidence at their recorded resolution; failed or timed-out artifacts are blocker evidence and must not be used for production promotion. Added 2026-05-14 cycle-JIT, recycled cycle-JIT, rank-gated moment-Schur, and explicit-side probe evidence. The 2026-05-14 row/column equilibration and exact-x-block-LU probes show that the device operator path is stable and bounded for ILU-scaled solves, but QI hard-seed closure requires a compact exact/block-Schur representation or a genuinely stronger coarse operator; row scaling, two-sided scaling, larger ILU padding, and naive padded exact LU are rejected as production fixes. A compact-CSR exact-xblock GPU probe was also implemented and measured: it built the exact per-x LU factors without padded row truncation (2.76 GB estimated factor arrays, 17.2 GB peak RSS) but timed out before a solver trace, so compact storage alone is rejected as the QI GPU closure algorithm.",
+  "execution_summary": {
+    "accepted_converged": 0,
+    "attempted": 1,
+    "backends": [],
+    "converged": 0,
+    "max_elapsed_s": 542.3093052939512,
+    "max_residual_ratio": null,
+    "outputs_written": 0,
+    "process_failed": 1,
+    "process_passed": 0,
+    "selected_paths": [],
+    "solve_methods": [],
+    "solver_traces_written": 0,
+    "timed_out": 1
+  },
+  "fail_fast": true,
+  "fgmres_restart20_cycle_sync_device_probe": {
+    "active_size": 81377,
+    "assembled_operator_nnz": 2884321,
+    "assembled_operator_setup_s": 82.525,
+    "backend": "gpu",
+    "block_between_cycles": true,
+    "conclusion": "Cycle-boundary synchronization verified the FGMRES memory knob and preserved the device-operator path, but it did not lower peak hard-seed RSS or converge before the 540 s gate. The memory ceiling is dominated by the algorithmic FGMRES/basis/preconditioner footprint, not merely queued cross-cycle work.",
+    "device": "RTX A4000 gpu0",
+    "host": "office",
+    "krylov_method": "fgmres_jax",
+    "matvec_progress": [
+      {
+        "elapsed_s": 215.772,
+        "matvecs": 25
+      },
+      {
+        "elapsed_s": 233.123,
+        "matvecs": 50
+      },
+      {
+        "elapsed_s": 249.387,
+        "matvecs": 75
+      },
+      {
+        "elapsed_s": 266.221,
+        "matvecs": 100
+      },
+      {
+        "elapsed_s": 282.774,
+        "matvecs": 125
+      },
+      {
+        "elapsed_s": 299.766,
+        "matvecs": 150
+      },
+      {
+        "elapsed_s": 315.941,
+        "matvecs": 175
+      },
+      {
+        "elapsed_s": 332.958,
+        "matvecs": 200
+      },
+      {
+        "elapsed_s": 349.098,
+        "matvecs": 225
+      },
+      {
+        "elapsed_s": 365.47,
+        "matvecs": 250
+      },
+      {
+        "elapsed_s": 381.825,
+        "matvecs": 275
+      },
+      {
+        "elapsed_s": 398.078,
+        "matvecs": 300
+      },
+      {
+        "elapsed_s": 414.138,
+        "matvecs": 325
+      },
+      {
+        "elapsed_s": 430.946,
+        "matvecs": 350
+      },
+      {
+        "elapsed_s": 446.994,
+        "matvecs": 375
+      },
+      {
+        "elapsed_s": 463.601,
+        "matvecs": 400
+      },
+      {
+        "elapsed_s": 479.465,
+        "matvecs": 425
+      },
+      {
+        "elapsed_s": 496.424,
+        "matvecs": 450
+      },
+      {
+        "elapsed_s": 512.347,
+        "matvecs": 475
+      },
+      {
+        "elapsed_s": 528.81,
+        "matvecs": 500
+      }
+    ],
+    "max_rss_mb": 50980.8671875,
+    "maxiter": 400,
+    "memory_change_vs_device_fgmres_percent": 26.355185319328747,
+    "memory_change_vs_restart20_percent": 1.115625678163201,
+    "operator_device_resident": true,
+    "outer_elapsed_s": 542.3093052939512,
+    "output_written": false,
+    "precondition_side": "right",
+    "promotion_decision": "rejected_timeout_cycle_sync_no_memory_gain",
+    "reported_matvecs": 500,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "restart": 20,
+    "returncode": 124,
+    "solver_trace_written": false,
+    "timed_out": true,
+    "total_size": 139502
+  },
+  "fgmres_restart20_device_probe": {
+    "active_size": 81377,
+    "assembled_operator_nnz": 2884321,
+    "assembled_operator_setup_s": 83.809,
+    "backend": "gpu",
+    "conclusion": "Restart-20 device FGMRES kept Krylov matvecs on the assembled device operator, but timed out at the 540 s gate and increased host RSS relative to the full-restart probe. It is not a promotable QI hard-seed path; the next algorithmic step must reduce host-side Krylov basis retention or use a stronger/short-recurrence method that actually reduces residuals.",
+    "device": "RTX A4000 gpu0",
+    "host": "office",
+    "krylov_method": "fgmres_jax",
+    "matvec_progress": [
+      {
+        "elapsed_s": 218.529,
+        "matvecs": 25
+      },
+      {
+        "elapsed_s": 235.975,
+        "matvecs": 50
+      },
+      {
+        "elapsed_s": 252.35,
+        "matvecs": 75
+      },
+      {
+        "elapsed_s": 268.583,
+        "matvecs": 100
+      },
+      {
+        "elapsed_s": 285.054,
+        "matvecs": 125
+      },
+      {
+        "elapsed_s": 301.739,
+        "matvecs": 150
+      },
+      {
+        "elapsed_s": 317.865,
+        "matvecs": 175
+      },
+      {
+        "elapsed_s": 334.539,
+        "matvecs": 200
+      },
+      {
+        "elapsed_s": 350.307,
+        "matvecs": 225
+      },
+      {
+        "elapsed_s": 366.616,
+        "matvecs": 250
+      },
+      {
+        "elapsed_s": 382.92,
+        "matvecs": 275
+      },
+      {
+        "elapsed_s": 399.398,
+        "matvecs": 300
+      },
+      {
+        "elapsed_s": 415.392,
+        "matvecs": 325
+      },
+      {
+        "elapsed_s": 432.456,
+        "matvecs": 350
+      },
+      {
+        "elapsed_s": 448.791,
+        "matvecs": 375
+      },
+      {
+        "elapsed_s": 465.575,
+        "matvecs": 400
+      },
+      {
+        "elapsed_s": 481.741,
+        "matvecs": 425
+      },
+      {
+        "elapsed_s": 499.016,
+        "matvecs": 450
+      },
+      {
+        "elapsed_s": 515.458,
+        "matvecs": 475
+      },
+      {
+        "elapsed_s": 533.214,
+        "matvecs": 500
+      }
+    ],
+    "max_rss_mb": 50418.38671875,
+    "maxiter": 400,
+    "memory_change_vs_device_fgmres_percent": 24.96108734123795,
+    "operator_device_resident": true,
+    "outer_elapsed_s": 542.3277920628898,
+    "output_written": false,
+    "precondition_side": "right",
+    "promotion_decision": "rejected_timeout_restart20_host_memory_regression",
+    "reported_matvecs": 500,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "restart": 20,
+    "returncode": 124,
+    "solver_trace_written": false,
+    "timed_out": true,
+    "total_size": 139502
+  },
+  "gates": {
+    "failures": [
+      {
+        "case": "qi_seed_0003",
+        "reason": "process_failed",
+        "returncode": 124
+      }
+    ],
+    "max_residual_ratio": 1.0,
+    "passed": false,
+    "require_accepted_converged": true,
+    "require_converged": true
+  },
+  "lane": "qi_seed_robustness",
+  "nu_jitter": 0.05,
+  "observed_progress": [
+    " Runtime hint: RHSMode=1 active_size=81377. This size range is often minutes.",
+    " Solver note: large system detected; preconditioner setup and Krylov solve can take several minutes.",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres active-DOF reduction enabled (size=81377/139502)",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=83.587",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres solve start method=fgmres_jax restart=80 maxiter=400 precondition_side=right",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=100 elapsed_s=290.419",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=200 elapsed_s=372.628",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=300 elapsed_s=439.914",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=400 elapsed_s=505.695",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=84.767",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres solve start method=bicgstab_jax restart=80 maxiter=400 precondition_side=right",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=bicgstab_jax elapsed_s=480.776 iters=1 matvecs=5 residual=2.351749e+102 target=3.021487e-13 ksp_residual=2.351749e+102",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=82.072",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres solve start method=tfqmr_jax restart=80 maxiter=400 precondition_side=right",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=tfqmr_jax elapsed_s=482.665 iters=401 matvecs=6 residual=2.351749e+102 target=3.021487e-13 ksp_residual=2.351749e+102",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=101.566",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres solve start method=tfqmr_jax restart=80 maxiter=400 precondition_side=right",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=tfqmr_jax elapsed_s=261.444 iters=21 matvecs=8 residual=2.351670e+102 target=3.021487e-13 ksp_residual=2.351670e+102",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=83.104",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres device global-coupling built mode=additive coarse_solver=qr loads=32 basis=20 rank=20",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres solve start method=fgmres_jax restart=60 maxiter=260 precondition_side=right",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=475 elapsed_s=532.478",
+    "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=83.809",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=25 elapsed_s=218.529",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=50 elapsed_s=235.975",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=75 elapsed_s=252.350",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=100 elapsed_s=268.583",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=125 elapsed_s=285.054",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=150 elapsed_s=301.739",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=175 elapsed_s=317.865",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=200 elapsed_s=334.539",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=225 elapsed_s=350.307",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=250 elapsed_s=366.616",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=275 elapsed_s=382.920",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=300 elapsed_s=399.398",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=325 elapsed_s=415.392",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=350 elapsed_s=432.456",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=375 elapsed_s=448.791",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=400 elapsed_s=465.575",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=425 elapsed_s=481.741",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=450 elapsed_s=499.016",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=475 elapsed_s=515.458",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=500 elapsed_s=533.214",
+    "QI seed execution timed out after 540.000 s.",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres FGMRES cycle-boundary synchronization enabled",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=82.525",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=25 elapsed_s=215.772",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=50 elapsed_s=233.123",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=75 elapsed_s=249.387",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=100 elapsed_s=266.221",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=125 elapsed_s=282.774",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=150 elapsed_s=299.766",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=175 elapsed_s=315.941",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=200 elapsed_s=332.958",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=225 elapsed_s=349.098",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=250 elapsed_s=365.470",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=275 elapsed_s=381.825",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=300 elapsed_s=398.078",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=325 elapsed_s=414.138",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=350 elapsed_s=430.946",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=375 elapsed_s=446.994",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=400 elapsed_s=463.601",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=425 elapsed_s=479.465",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=450 elapsed_s=496.424",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=475 elapsed_s=512.347",
+    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=500 elapsed_s=528.810"
+  ],
+  "public_cli_default_path": false,
+  "resolution": {
+    "NTHETA": 15,
+    "NX": 5,
+    "NXI": 60,
+    "NZETA": 31
+  },
+  "resolution_scale": 0.6,
+  "schema_version": 2,
+  "seeds": [
+    {
+      "accepted_converged": null,
+      "active_size": null,
+      "backend": null,
+      "case": "qi_seed_0003",
+      "converged": null,
+      "default_right_preconditioned": null,
+      "elapsed_s": 542.3093052939512,
+      "gmres_restart": null,
+      "iterations": null,
+      "matvecs": null,
+      "output_exists": false,
+      "precondition_side": null,
+      "progress_events": [
+        "sparse_ilu: built JAX factors (max_lower=64 max_upper=64 cap=64)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building assembled operator for Krylov matvec reuse",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator built location=device nnz=2884321 setup_s=82.525",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=25 elapsed_s=215.772",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=50 elapsed_s=233.123",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=75 elapsed_s=249.387",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=100 elapsed_s=266.221",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=125 elapsed_s=282.774",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=150 elapsed_s=299.766",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=175 elapsed_s=315.941",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=200 elapsed_s=332.958",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=225 elapsed_s=349.098",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=250 elapsed_s=365.470",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=275 elapsed_s=381.825",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=300 elapsed_s=398.078",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=325 elapsed_s=414.138",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=350 elapsed_s=430.946",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=375 elapsed_s=446.994",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=400 elapsed_s=463.601",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=425 elapsed_s=479.465",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=450 elapsed_s=496.424",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=475 elapsed_s=512.347",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled_device_matvecs=500 elapsed_s=528.810",
+        "QI seed execution timed out after 540.000 s."
+      ],
+      "residual_norm": null,
+      "residual_ratio": null,
+      "residual_target": null,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "returncode": 124,
+      "seed": 3,
+      "selected_path": null,
+      "solve_method": null,
+      "solver_elapsed_s": null,
+      "solver_trace_exists": false,
+      "stderr_tail": [
+        "",
+        "QI seed execution timed out after 540.000 s."
+      ],
+      "timed_out": true,
+      "total_size": null,
+      "xblock_lgmres_rescue_outer_k": null,
+      "xblock_side_probe_initial_method": null,
+      "xblock_side_probe_initial_side": null,
+      "xblock_side_probe_iterations": null,
+      "xblock_side_probe_lgmres_rescue": null,
+      "xblock_side_probe_matvecs": null,
+      "xblock_side_probe_residual_ratio": null,
+      "xblock_side_probe_selected_method": null,
+      "xblock_side_probe_selected_side": null,
+      "xblock_side_probe_switched": null,
+      "xblock_side_probe_used": null
+    }
+  ],
+  "solve_method_request": "xblock_sparse_pc_gmres",
+  "source_input": "examples/additional_examples/input.namelist",
+  "stderr_tail": [
+    "",
+    "QI seed execution timed out after 540.000 s."
+  ],
+  "tfqmr_device_probe": {
+    "active_size": 81377,
+    "assembled_operator_nnz": 2884321,
+    "assembled_operator_setup_s": 82.072,
+    "backend": "gpu",
+    "conclusion": "The transpose-free QMR route preserved the device-resident assembled-operator path and kept the short-recurrence memory footprint near the BiCGStab probe, but it diverged on the scale-0.60 QI hard seed and output was correctly refused. TFQMR is therefore an opt-in diagnostic path, not a production replacement.",
+    "device": "RTX A4000 gpu0",
+    "host": "office",
+    "krylov_method": "tfqmr_jax",
+    "max_rss_mb": 13585.98046875,
+    "operator_device_resident": true,
+    "outer_elapsed_s": 485.6057825111784,
+    "output_written": false,
+    "precondition_side": "right",
+    "promotion_decision": "rejected_divergent_tfqmr",
+    "reported_iterations": 401,
+    "reported_matvecs": 6,
+    "reported_residual_norm": 2.351749e+102,
+    "reported_target": 3.021487e-13,
+    "residual_replacement_interval": 0,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 2,
+    "solver_trace_written": false,
+    "timed_out": false,
+    "total_size": 139502
+  },
+  "tfqmr_replacement20_device_probe": {
+    "active_size": 81377,
+    "assembled_operator_nnz": 2884321,
+    "assembled_operator_setup_s": 101.566,
+    "backend": "gpu",
+    "conclusion": "True-residual replacement every 20 TFQMR iterations made the divergent short-recurrence path fail safely in about half the wall time, but the residual still exploded to the same scale as BiCGStab/TFQMR without replacement. This closes TFQMR residual replacement as a guardrail, not as the QI hard-seed replacement solver.",
+    "device": "RTX A4000 gpu1",
+    "host": "office",
+    "krylov_method": "tfqmr_jax",
+    "max_rss_mb": 13584.59765625,
+    "operator_device_resident": true,
+    "outer_elapsed_s": 263.86378032015637,
+    "output_written": false,
+    "precondition_side": "right",
+    "promotion_decision": "rejected_divergent_tfqmr_residual_replacement",
+    "reported_iterations": 21,
+    "reported_matvecs": 8,
+    "reported_residual_norm": 2.35167e+102,
+    "reported_target": 3.021487e-13,
+    "residual_replacement_interval": 20,
+    "resolution": {
+      "NTHETA": 15,
+      "NX": 5,
+      "NXI": 60,
+      "NZETA": 31
+    },
+    "returncode": 2,
+    "solver_trace_written": false,
+    "timed_out": false,
+    "total_size": 139502
+  },
+  "timeout_s": 540.0,
+  "total_size": 139502,
+  "total_size_estimate": 139502
+}

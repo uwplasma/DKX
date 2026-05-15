@@ -131,6 +131,25 @@ def test_pas_tz_build_bytes_zero_for_inapplicable_and_positive_for_valid(monkeyp
     assert vd._estimate_rhs1_pas_tz_build_bytes(_pas_tz_op()) > 0
 
 
+def test_pas_tz_build_bytes_include_live_copies_and_headroom(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX", raising=False)
+    op = _pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)
+
+    estimate = vd._estimate_rhs1_pas_tz_build_bytes(op)
+
+    tz = int(op.n_theta * op.n_zeta)
+    twotz = int(2 * tz)
+    n_l_use = 6
+    stored_factor_entries = (
+        int(op.n_species) * int(op.n_x) * twotz * twotz
+        + int(op.n_species) * int(op.n_x) * twotz * tz
+        + int(op.n_species) * int(op.n_x) * max(n_l_use - 2, 0) * tz * tz
+        + int(op.n_species) * int(op.n_x) * max(n_l_use - 3, 0) * tz * tz
+    )
+    stored_factor_bytes = stored_factor_entries * 8
+    assert estimate > 2 * stored_factor_bytes
+
+
 def test_pas_tz_memory_safe_respects_env_override(monkeypatch) -> None:
     op = _pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 1)
@@ -146,9 +165,26 @@ def test_pas_tz_builder_falls_back_to_hybrid_when_inapplicable(monkeypatch) -> N
     assert vd._build_rhsmode1_pas_tz_preconditioner(op=op) is sentinel
 
 
-def test_pas_tz_builder_falls_back_to_collision_when_memory_unsafe_without_sharding(monkeypatch) -> None:
+def test_pas_tz_builder_prefers_tzfft_when_memory_unsafe_without_sharding(monkeypatch) -> None:
     sentinel = object()
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", raising=False)
+    monkeypatch.setattr(vd, "_build_rhsmode23_tzfft_preconditioner", lambda **kwargs: sentinel)
+    monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
+    monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
+    monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: None)
+    monkeypatch.setattr(vd.jax, "device_count", lambda: 1)
+    assert vd._build_rhsmode1_pas_tz_preconditioner(op=_pas_tz_op(n_theta=17, n_zeta=17, n_xi=6)) is sentinel
+
+
+def test_pas_tz_builder_collision_memory_fallback_is_explicit(monkeypatch) -> None:
+    sentinel = object()
+
+    def _fail_tzfft(**_kwargs):
+        raise AssertionError("explicit collision must not build tzfft")
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", "collision")
     monkeypatch.setattr(vd, "_build_rhsmode1_collision_preconditioner", lambda **kwargs: sentinel)
+    monkeypatch.setattr(vd, "_build_rhsmode23_tzfft_preconditioner", _fail_tzfft)
     monkeypatch.setattr(pas_policy, "estimate_rhs1_pas_tz_build_bytes", lambda _op: 10 * 2**30)
     monkeypatch.setattr(pas_policy, "rhs1_pas_tz_max_bytes", lambda: 2 * 2**30)
     monkeypatch.setattr(vd, "_matvec_shard_axis", lambda _op: None)

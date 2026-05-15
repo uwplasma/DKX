@@ -1,0 +1,373 @@
+{
+  "kind": "pas_tz_memory_fallback_benchmark",
+  "plan": {
+    "block": 3,
+    "gates": {
+      "allow_solver_churn": false,
+      "baseline_elapsed_s": 3.6626276669558138,
+      "baseline_rss_mb": 908.953125,
+      "default_promotion_required": true,
+      "expected_backend": "cpu",
+      "guarded_pas_tz_markers": [
+        "PAS-TZ structured fallback guarded out",
+        "PAS-TZ guarded",
+        "guarded PAS-TZ fallback"
+      ],
+      "guarded_pas_tz_required": true,
+      "long_run_opt_in": false,
+      "max_default_runtime_s": 600.0,
+      "max_residual_norm": 0.001,
+      "max_rss_mb": 4096.0,
+      "min_memory_reduction": 1.05,
+      "min_runtime_speedup": 1.05,
+      "promotion_policy": "residual-clean candidates must not regress elapsed_s or max_rss_mb against baseline and must still show a material runtime or memory win",
+      "stall_s": 240.0,
+      "timeout_s": 240.0
+    },
+    "input": "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+    "input_overrides": {
+      "Ntheta": 25,
+      "Nx": 4,
+      "Nxi": 100,
+      "Nzeta": 51
+    },
+    "maxiter": 20,
+    "overlap": 1,
+    "restart": 20,
+    "solve_method": "incremental",
+    "timeout_s": 240.0,
+    "tol": 1e-06,
+    "variant_methods": [
+      {
+        "base_variant": "tzfft",
+        "lgmres_opt_in": false,
+        "realized_solve_method": "incremental",
+        "requested_solve_method": "incremental",
+        "solve_method_source": "plan_default",
+        "variant": "tzfft"
+      },
+      {
+        "base_variant": "tzfft",
+        "lgmres_opt_in": true,
+        "realized_solve_method": "lgmres",
+        "requested_solve_method": "incremental",
+        "solve_method_source": "variant_suffix",
+        "variant": "tzfft_lgmres"
+      }
+    ],
+    "variants": [
+      "tzfft",
+      "tzfft_lgmres"
+    ]
+  },
+  "results": [
+    {
+      "elapsed_s": 38.250824749993626,
+      "gate": "fail",
+      "gate_failures": [
+        "default_promotion:runtime-and-memory-regression"
+      ],
+      "gates": {
+        "backend": {
+          "expected_backend": "cpu",
+          "observed_backend": "cpu",
+          "reason": "backend-matches",
+          "status": "pass"
+        },
+        "default_promotion": {
+          "baseline_elapsed_s": 3.6626276669558138,
+          "baseline_rss_mb": 908.953125,
+          "elapsed_s": 38.250824749993626,
+          "max_rss_mb": 2712.328125,
+          "memory_reduction": 0.3351191607763165,
+          "reason": "runtime-and-memory-regression",
+          "runtime_speedup": 0.09575290705219171,
+          "status": "fail"
+        },
+        "guarded_pas_tz": {
+          "evidence_tail": [
+            "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
+            "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=6.348e-08->5.868e-08",
+            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+            "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
+          ],
+          "reason": "guarded-pas-tz-evidence-recorded",
+          "status": "pass"
+        },
+        "memory": {
+          "limit_mb": 4096.0,
+          "max_rss_mb": 2712.328125,
+          "reason": "rss-within-bound",
+          "status": "pass"
+        },
+        "residual": {
+          "max_residual_norm": 0.001,
+          "reason": "residual-clean",
+          "residual_norm": 5.8681915568091774e-08,
+          "status": "pass"
+        },
+        "solver_path": {
+          "expected_solver": "gmres",
+          "observed_solver": "gmres",
+          "reason": "solver-path-stable",
+          "status": "pass"
+        },
+        "stall": {
+          "elapsed_s": 38.250824749993626,
+          "reason": "within-stall-bound",
+          "stall_s": 240.0,
+          "status": "pass"
+        },
+        "variant": {
+          "reason": "variant-recorded",
+          "status": "pass",
+          "variant": "tzfft"
+        }
+      },
+      "guarded_pas_tz_evidence_count": 4,
+      "guarded_pas_tz_evidence_tail": [
+        "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
+        "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=6.348e-08->5.868e-08",
+        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
+      ],
+      "guarded_pas_tz_seen": true,
+      "max_rss_mb": 2712.328125,
+      "messages_tail": [
+        "solve_v3_full_system_linear_gmres: building operator",
+        "solve_v3_full_system_linear_gmres: total_size=1020008",
+        "solve_v3_full_system_linear_gmres: assembling RHS",
+        "solve_v3_full_system_linear_gmres: rhs_norm=5.849955e-04",
+        "solve_v3_full_system_linear_gmres: PAS constraint projection enabled (size=571200/1020008)",
+        "solve_v3_full_system_linear_gmres: GMRES tol=1e-06 atol=0.0 restart=20 maxiter=20 solve_method=incremental",
+        "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)",
+        "solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner=collision",
+        "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)",
+        " solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.",
+        "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
+        " solve_v3_full_system_linear_gmres: starting Krylov iterations.",
+        "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=6.348e-08->5.868e-08",
+        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+        "sparse_ilu: disabled (size=571200 > max=6000)",
+        "ksp_iterations=300 solver=gmres",
+        "solve_v3_full_system_linear_gmres: residual_norm=5.868192e-08",
+        "solve_v3_full_system_linear_gmres: elapsed_s=38.245"
+      ],
+      "metadata": {},
+      "phase_metadata": [
+        {
+          "elapsed_s": 0.00037049996899440885,
+          "name": "read_input",
+          "status": "ok"
+        },
+        {
+          "elapsed_s": 38.25045091699576,
+          "name": "solve",
+          "status": "ok"
+        }
+      ],
+      "residual_norm": 5.8681915568091774e-08,
+      "returncode": 0,
+      "rhs_norm": 0.000584995451590903,
+      "runtime_metadata": {
+        "expected_backend": "cpu",
+        "jax_default_backend": "cpu",
+        "jax_device_count": 1,
+        "jax_device_platforms": [
+          "cpu"
+        ]
+      },
+      "solver_provenance": {
+        "fallback_from_krylov_method": null,
+        "metadata_krylov_method": null,
+        "metadata_solver_kind": null,
+        "normalized_expected_krylov_method": "gmres",
+        "normalized_observed_krylov_method": "gmres",
+        "observed_krylov_method": "gmres",
+        "realized_solve_method": "incremental",
+        "requested_solve_method": "incremental",
+        "safe_sparse_host_fallback_used": null
+      },
+      "status": "ok",
+      "tail_metadata": {
+        "messages_tail_count": 19,
+        "messages_tail_limit": 40
+      },
+      "target_residual_norm": 5.84995451590903e-10,
+      "variant": "tzfft",
+      "variant_provenance": {
+        "base_variant": "tzfft",
+        "lgmres_opt_in": false,
+        "realized_solve_method": "incremental",
+        "requested_solve_method": "incremental",
+        "solve_method_source": "plan_default",
+        "variant": "tzfft"
+      }
+    },
+    {
+      "elapsed_s": 37.70538191701053,
+      "gate": "fail",
+      "gate_failures": [
+        "default_promotion:runtime-and-memory-regression"
+      ],
+      "gates": {
+        "backend": {
+          "expected_backend": "cpu",
+          "observed_backend": "cpu",
+          "reason": "backend-matches",
+          "status": "pass"
+        },
+        "default_promotion": {
+          "baseline_elapsed_s": 3.6626276669558138,
+          "baseline_rss_mb": 908.953125,
+          "elapsed_s": 37.70538191701053,
+          "max_rss_mb": 3044.109375,
+          "memory_reduction": 0.2985941084984832,
+          "reason": "runtime-and-memory-regression",
+          "runtime_speedup": 0.0971380604237679,
+          "status": "fail"
+        },
+        "guarded_pas_tz": {
+          "evidence_tail": [
+            "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
+            "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=6.348e-08->5.868e-08",
+            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+            "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
+          ],
+          "reason": "guarded-pas-tz-evidence-recorded",
+          "status": "pass"
+        },
+        "memory": {
+          "limit_mb": 4096.0,
+          "max_rss_mb": 3044.109375,
+          "reason": "rss-within-bound",
+          "status": "pass"
+        },
+        "residual": {
+          "max_residual_norm": 0.001,
+          "reason": "residual-clean",
+          "residual_norm": 5.8681915568091774e-08,
+          "status": "pass"
+        },
+        "solver_path": {
+          "expected_solver": "lgmres",
+          "observed_solver": "lgmres",
+          "reason": "solver-path-stable",
+          "status": "pass"
+        },
+        "stall": {
+          "elapsed_s": 37.70538191701053,
+          "reason": "within-stall-bound",
+          "stall_s": 240.0,
+          "status": "pass"
+        },
+        "variant": {
+          "reason": "variant-recorded",
+          "status": "pass",
+          "variant": "tzfft_lgmres"
+        }
+      },
+      "guarded_pas_tz_evidence_count": 4,
+      "guarded_pas_tz_evidence_tail": [
+        "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
+        "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=6.348e-08->5.868e-08",
+        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
+      ],
+      "guarded_pas_tz_seen": true,
+      "max_rss_mb": 3044.109375,
+      "messages_tail": [
+        "solve_v3_full_system_linear_gmres: building operator",
+        "solve_v3_full_system_linear_gmres: total_size=1020008",
+        "solve_v3_full_system_linear_gmres: assembling RHS",
+        "solve_v3_full_system_linear_gmres: rhs_norm=5.849955e-04",
+        "solve_v3_full_system_linear_gmres: PAS constraint projection enabled (size=571200/1020008)",
+        "solve_v3_full_system_linear_gmres: GMRES tol=1e-06 atol=0.0 restart=20 maxiter=20 solve_method=lgmres",
+        "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)",
+        "solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner=collision",
+        "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)",
+        " solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner (pas_tz); this stage can take a while for large systems.",
+        "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
+        " solve_v3_full_system_linear_gmres: starting Krylov iterations.",
+        "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=6.348e-08->5.868e-08",
+        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+        "sparse_ilu: disabled (size=571200 > max=6000)",
+        "ksp_iterations=17 solver=lgmres",
+        "solve_v3_full_system_linear_gmres: residual_norm=5.868192e-08",
+        "solve_v3_full_system_linear_gmres: elapsed_s=37.701"
+      ],
+      "metadata": {},
+      "phase_metadata": [
+        {
+          "elapsed_s": 0.00043183297384530306,
+          "name": "read_input",
+          "status": "ok"
+        },
+        {
+          "elapsed_s": 37.70494654204231,
+          "name": "solve",
+          "status": "ok"
+        }
+      ],
+      "residual_norm": 5.8681915568091774e-08,
+      "returncode": 0,
+      "rhs_norm": 0.000584995451590903,
+      "runtime_metadata": {
+        "expected_backend": "cpu",
+        "jax_default_backend": "cpu",
+        "jax_device_count": 1,
+        "jax_device_platforms": [
+          "cpu"
+        ]
+      },
+      "solver_provenance": {
+        "fallback_from_krylov_method": null,
+        "metadata_krylov_method": null,
+        "metadata_solver_kind": null,
+        "normalized_expected_krylov_method": "lgmres",
+        "normalized_observed_krylov_method": "lgmres",
+        "observed_krylov_method": "lgmres",
+        "realized_solve_method": "lgmres",
+        "requested_solve_method": "lgmres",
+        "safe_sparse_host_fallback_used": null
+      },
+      "status": "ok",
+      "tail_metadata": {
+        "messages_tail_count": 19,
+        "messages_tail_limit": 40
+      },
+      "target_residual_norm": 5.84995451590903e-10,
+      "variant": "tzfft_lgmres",
+      "variant_provenance": {
+        "base_variant": "tzfft",
+        "lgmres_opt_in": true,
+        "realized_solve_method": "lgmres",
+        "requested_solve_method": "incremental",
+        "solve_method_source": "variant_suffix",
+        "variant": "tzfft_lgmres"
+      }
+    }
+  ],
+  "schema_version": 2,
+  "summary": {
+    "all_gates_passed": false,
+    "by_gate": {
+      "fail": 2,
+      "pass": 0
+    },
+    "by_status": {
+      "ok": 2
+    },
+    "failed_variants": [
+      "tzfft",
+      "tzfft_lgmres"
+    ],
+    "failure_reasons": {
+      "default_promotion:runtime-and-memory-regression": 2
+    },
+    "promotion_eligible_variants": [],
+    "result_count": 2
+  }
+}

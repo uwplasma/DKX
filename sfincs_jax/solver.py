@@ -17,7 +17,7 @@ import jax.numpy as jnp
 from jax import core as jax_core
 from jax import tree_util as jtu
 from jax import vmap
-from jax.scipy.sparse.linalg import bicgstab, gmres
+from jax.scipy.sparse.linalg import gmres
 
 try:  # pragma: no cover - optional for distributed GMRES
     from jax.experimental import pjit as _pjit  # noqa: PLC0415
@@ -97,6 +97,76 @@ class FlexibleGMRESSolveResult:
         )
 
 
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class BiCGSTABSolveResult:
+    """Result from the JAX-native BiCGStab short-recurrence solver."""
+
+    x: jnp.ndarray
+    residual_norm: jnp.ndarray
+    residual_history: jnp.ndarray
+    n_iterations: jnp.ndarray
+    converged: jnp.ndarray
+
+    def tree_flatten(self):
+        children = (
+            self.x,
+            self.residual_norm,
+            self.residual_history,
+            self.n_iterations,
+            self.converged,
+        )
+        aux = None
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        del aux
+        x, residual_norm, residual_history, n_iterations, converged = children
+        return cls(
+            x=x,
+            residual_norm=residual_norm,
+            residual_history=residual_history,
+            n_iterations=n_iterations,
+            converged=converged,
+        )
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class TFQMRSolveResult:
+    """Result from the JAX-native TFQMR short-recurrence solver."""
+
+    x: jnp.ndarray
+    residual_norm: jnp.ndarray
+    residual_history: jnp.ndarray
+    n_iterations: jnp.ndarray
+    converged: jnp.ndarray
+
+    def tree_flatten(self):
+        children = (
+            self.x,
+            self.residual_norm,
+            self.residual_history,
+            self.n_iterations,
+            self.converged,
+        )
+        aux = None
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        del aux
+        x, residual_norm, residual_history, n_iterations, converged = children
+        return cls(
+            x=x,
+            residual_norm=residual_norm,
+            residual_history=residual_history,
+            n_iterations=n_iterations,
+            converged=converged,
+        )
+
+
 _HOST_SCIPY_KRYLOV_METHODS = frozenset({"lgmres", "lgmres_scipy"})
 
 
@@ -111,7 +181,7 @@ def _contains_tracer(*values) -> bool:
 
 
 def _normalize_krylov_method(solve_method: str) -> str:
-    method = str(solve_method).strip().lower()
+    method = str(solve_method).strip().lower().replace("-", "_")
     if method in {"auto", "default"}:
         return "bicgstab"
     return method
@@ -601,40 +671,161 @@ def _bicgstab_solve_core(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     b = jnp.asarray(b)
     if x0 is not None:
-        x0 = jnp.asarray(x0)
+        x0 = jnp.asarray(x0, dtype=b.dtype)
 
     side = str(precondition_side).strip().lower()
     if side not in {"left", "right", "none"}:
         side = "left"
 
     if side == "right" and preconditioner is not None:
-        def matvec_right(y):
+        def work_matvec(y):
             return matvec(preconditioner(y))
 
-        y, _info = bicgstab(
-            matvec_right,
-            b,
-            x0=None,
-            tol=float(tol),
-            atol=float(atol),
-            maxiter=maxiter,
-            M=None,
-        )
-        x = preconditioner(y)
+        b_solve = b
+        if x0 is not None:
+            b_solve = b - matvec(x0)
+        y0 = jnp.zeros_like(b)
+
+        def recover_solution(y):
+            x = preconditioner(y)
+            return x if x0 is None else x0 + x
+
     else:
-        M = preconditioner if side == "left" else None
-        x, _info = bicgstab(
-            matvec,
-            b,
-            x0=x0,
-            tol=float(tol),
-            atol=float(atol),
-            maxiter=maxiter,
-            M=M,
+        if side == "left" and preconditioner is not None:
+            b_solve = preconditioner(b)
+
+            def work_matvec(y):
+                return preconditioner(matvec(y))
+
+        else:
+            b_solve = b
+
+            def work_matvec(y):
+                return matvec(y)
+
+        y0 = jnp.zeros_like(b) if x0 is None else x0
+
+        def recover_solution(y):
+            return y
+
+    maxiter_use = int(maxiter) if maxiter is not None else max(1, 10 * int(b.size))
+    maxiter_use = max(1, int(maxiter_use))
+    dtype = b.dtype
+    target = jnp.maximum(
+        jnp.asarray(atol, dtype=dtype),
+        jnp.asarray(tol, dtype=dtype) * jnp.linalg.norm(b_solve),
+    )
+    eps = jnp.asarray(np.finfo(np.dtype(dtype)).eps, dtype=dtype)
+    growth_limit = jnp.asarray(1.0e12, dtype=dtype)
+
+    y = jnp.asarray(y0, dtype=dtype)
+    r = b_solve - jnp.asarray(work_matvec(y), dtype=dtype)
+    r_hat = r
+    rho_old = jnp.asarray(1.0, dtype=dtype)
+    alpha = jnp.asarray(1.0, dtype=dtype)
+    omega = jnp.asarray(1.0, dtype=dtype)
+    p = jnp.zeros_like(b_solve)
+    v = jnp.zeros_like(b_solve)
+    residual_norm = jnp.linalg.norm(r)
+    residual_history = jnp.full((maxiter_use + 1,), jnp.nan, dtype=dtype)
+    residual_history = residual_history.at[0].set(residual_norm)
+    converged = jnp.logical_and(jnp.isfinite(residual_norm), residual_norm <= target)
+    running = jnp.logical_not(converged)
+
+    def _safe_den(value: jnp.ndarray) -> jnp.ndarray:
+        return jnp.where(jnp.abs(value) > eps, value, jnp.asarray(1.0, dtype=dtype))
+
+    def _cond(state):
+        k, *_rest, running = state
+        return (k < maxiter_use) & running
+
+    def _body(state):
+        (
+            k,
+            y,
+            r,
+            rho_old,
+            alpha,
+            omega,
+            p,
+            v,
+            residual_norm,
+            residual_history,
+            converged,
+            running,
+        ) = state
+        rho = jnp.vdot(r_hat, r)
+        beta = (rho / _safe_den(rho_old)) * (alpha / _safe_den(omega))
+        p_new = r + beta * (p - omega * v)
+        v_new = jnp.asarray(work_matvec(p_new), dtype=dtype)
+        alpha_new = rho / _safe_den(jnp.vdot(r_hat, v_new))
+        s = r - alpha_new * v_new
+        s_norm = jnp.linalg.norm(s)
+        t = jnp.asarray(work_matvec(s), dtype=dtype)
+        omega_num = jnp.vdot(t, s)
+        omega_den = jnp.vdot(t, t)
+        omega_new = omega_num / _safe_den(omega_den)
+        y_new = y + alpha_new * p_new + omega_new * s
+        r_new = s - omega_new * t
+        residual_norm_new = jnp.linalg.norm(r_new)
+        bounded_step = residual_norm_new <= jnp.maximum(target, growth_limit * jnp.maximum(residual_norm, eps))
+        finite_step = (
+            jnp.isfinite(residual_norm_new)
+            & jnp.isfinite(jnp.real(rho))
+            & jnp.isfinite(jnp.real(alpha_new))
+            & jnp.isfinite(jnp.real(omega_new))
+            & bounded_step
+        )
+        update = running & finite_step
+        y = jnp.where(update, y_new, y)
+        r = jnp.where(update, r_new, r)
+        p = jnp.where(update, p_new, p)
+        v = jnp.where(update, v_new, v)
+        rho_old = jnp.where(update, rho, rho_old)
+        alpha = jnp.where(update, alpha_new, alpha)
+        omega = jnp.where(update, omega_new, omega)
+        residual_norm = jnp.where(update, residual_norm_new, residual_norm)
+        residual_history = residual_history.at[k + 1].set(residual_norm)
+        converged = converged | (update & ((residual_norm <= target) | (s_norm <= target)))
+        running = update & jnp.logical_not(converged)
+        return (
+            k + 1,
+            y,
+            r,
+            rho_old,
+            alpha,
+            omega,
+            p,
+            v,
+            residual_norm,
+            residual_history,
+            converged,
+            running,
         )
 
+    k, y, r, rho_old, alpha, omega, p, v, residual_norm, residual_history, converged, running = jax.lax.while_loop(
+        _cond,
+        _body,
+        (
+            jnp.asarray(0, dtype=jnp.int32),
+            y,
+            r,
+            rho_old,
+            alpha,
+            omega,
+            p,
+            v,
+            residual_norm,
+            residual_history,
+            converged,
+            running,
+        ),
+    )
+    del rho_old, alpha, omega, p, v, residual_norm, running
+
+    x = recover_solution(y)
     r = b - matvec(x)
-    return x, r
+    return x, r, residual_history, k, converged
 
 
 def bicgstab_solve(
@@ -647,9 +838,9 @@ def bicgstab_solve(
     atol: float = 0.0,
     maxiter: int | None = None,
     precondition_side: str = "left",
-) -> GMRESSolveResult:
+) -> BiCGSTABSolveResult:
     """Solve `A x = b` using JAX's BiCGStab (short-recurrence Krylov, O(n) memory)."""
-    x, r = _bicgstab_solve_core(
+    x, r, residual_history, n_iterations, converged = _bicgstab_solve_core(
         matvec=matvec,
         b=b,
         preconditioner=preconditioner,
@@ -659,7 +850,21 @@ def bicgstab_solve(
         maxiter=maxiter,
         precondition_side=precondition_side,
     )
-    return GMRESSolveResult(x=x, residual_norm=jnp.linalg.norm(r))
+    residual_norm = jnp.linalg.norm(r)
+    residual_history = residual_history.at[jnp.minimum(n_iterations, residual_history.shape[0] - 1)].set(
+        residual_norm
+    )
+    true_target = jnp.maximum(
+        jnp.asarray(atol, dtype=b.dtype),
+        jnp.asarray(tol, dtype=b.dtype) * jnp.linalg.norm(b),
+    )
+    return BiCGSTABSolveResult(
+        x=x,
+        residual_norm=residual_norm,
+        residual_history=residual_history,
+        n_iterations=jnp.asarray(n_iterations, dtype=jnp.int32),
+        converged=jnp.asarray(converged & (residual_norm <= true_target), dtype=jnp.bool_),
+    )
 
 
 def bicgstab_solve_with_residual(
@@ -672,9 +877,9 @@ def bicgstab_solve_with_residual(
     atol: float = 0.0,
     maxiter: int | None = None,
     precondition_side: str = "left",
-) -> tuple[GMRESSolveResult, jnp.ndarray]:
+) -> tuple[BiCGSTABSolveResult, jnp.ndarray]:
     """Solve `A x = b` and return both the GMRES-style result and residual vector."""
-    x, r = _bicgstab_solve_core(
+    x, r, residual_history, n_iterations, converged = _bicgstab_solve_core(
         matvec=matvec,
         b=b,
         preconditioner=preconditioner,
@@ -684,7 +889,22 @@ def bicgstab_solve_with_residual(
         maxiter=maxiter,
         precondition_side=precondition_side,
     )
-    return GMRESSolveResult(x=x, residual_norm=jnp.linalg.norm(r)), r
+    residual_norm = jnp.linalg.norm(r)
+    residual_history = residual_history.at[jnp.minimum(n_iterations, residual_history.shape[0] - 1)].set(
+        residual_norm
+    )
+    true_target = jnp.maximum(
+        jnp.asarray(atol, dtype=b.dtype),
+        jnp.asarray(tol, dtype=b.dtype) * jnp.linalg.norm(b),
+    )
+    result = BiCGSTABSolveResult(
+        x=x,
+        residual_norm=residual_norm,
+        residual_history=residual_history,
+        n_iterations=jnp.asarray(n_iterations, dtype=jnp.int32),
+        converged=jnp.asarray(converged & (residual_norm <= true_target), dtype=jnp.bool_),
+    )
+    return result, r
 
 
 bicgstab_solve_jit = jax.jit(
@@ -695,6 +915,419 @@ bicgstab_solve_jit = jax.jit(
 bicgstab_solve_with_residual_jit = jax.jit(
     bicgstab_solve_with_residual,
     static_argnames=("matvec", "preconditioner", "tol", "atol", "maxiter", "precondition_side"),
+)
+
+
+def _tfqmr_solve_core(
+    *,
+    matvec,
+    b: jnp.ndarray,
+    preconditioner=None,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1e-10,
+    atol: float = 0.0,
+    maxiter: int | None = None,
+    precondition_side: str = "left",
+    residual_replacement_interval: int = 0,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Solve a transformed system using transpose-free QMR.
+
+    TFQMR is a short-recurrence Krylov method derived from CGS that smooths the
+    residual curve without storing an Arnoldi basis. We apply left/right
+    preconditioning by solving the corresponding transformed system, then
+    always report the true physical residual ``b - A x`` at the end.
+    """
+    b = jnp.asarray(b)
+    if x0 is not None:
+        x0 = jnp.asarray(x0, dtype=b.dtype)
+
+    side = str(precondition_side).strip().lower()
+    if side not in {"left", "right", "none"}:
+        side = "left"
+
+    if side == "right" and preconditioner is not None:
+        def work_matvec(y):
+            return matvec(preconditioner(y))
+
+        b_solve = b if x0 is None else b - matvec(x0)
+        y0 = jnp.zeros_like(b)
+
+        def recover_solution(y):
+            x = preconditioner(y)
+            return x if x0 is None else x0 + x
+
+    else:
+        if side == "left" and preconditioner is not None:
+            b_solve = preconditioner(b)
+
+            def work_matvec(y):
+                return preconditioner(matvec(y))
+
+        else:
+            b_solve = b
+
+            def work_matvec(y):
+                return matvec(y)
+
+        y0 = jnp.zeros_like(b) if x0 is None else x0
+
+        def recover_solution(y):
+            return y
+
+    maxiter_use = int(maxiter) if maxiter is not None else max(1, 10 * int(b.size))
+    maxiter_use = max(1, int(maxiter_use))
+    replacement_interval = max(0, int(residual_replacement_interval))
+    dtype = b.dtype
+    target = jnp.maximum(
+        jnp.asarray(atol, dtype=dtype),
+        jnp.asarray(tol, dtype=dtype) * jnp.linalg.norm(b_solve),
+    )
+    eps = jnp.asarray(np.finfo(np.dtype(dtype)).eps, dtype=dtype)
+    growth_limit = jnp.asarray(1.0e12, dtype=dtype)
+
+    y = jnp.asarray(y0, dtype=dtype)
+    r = b_solve - jnp.asarray(work_matvec(y), dtype=dtype)
+    r_star = r
+    u = r
+    w = r
+    v = jnp.asarray(work_matvec(r), dtype=dtype)
+    uhat = v
+    d = jnp.zeros_like(b_solve)
+    rho = jnp.real(jnp.vdot(r_star, r))
+    rho_last = rho
+    alpha = jnp.asarray(1.0, dtype=dtype)
+    theta = jnp.asarray(0.0, dtype=dtype)
+    eta = jnp.asarray(0.0, dtype=dtype)
+    tau = jnp.linalg.norm(r)
+    residual_estimate = tau
+    residual_history = jnp.full((maxiter_use + 1,), jnp.nan, dtype=dtype)
+    residual_history = residual_history.at[0].set(residual_estimate)
+    converged = jnp.logical_and(jnp.isfinite(residual_estimate), residual_estimate <= target)
+    running = jnp.logical_not(converged)
+
+    def _safe_den(value: jnp.ndarray) -> jnp.ndarray:
+        return jnp.where(jnp.abs(value) > eps, value, jnp.asarray(1.0, dtype=dtype))
+
+    def _cond(state):
+        k, *_rest, running = state
+        return (k < maxiter_use) & running
+
+    def _body(state):
+        (
+            k,
+            y,
+            r_star,
+            u,
+            w,
+            v,
+            uhat,
+            d,
+            rho,
+            rho_last,
+            alpha,
+            theta,
+            eta,
+            tau,
+            residual_estimate,
+            residual_history,
+            converged,
+            running,
+        ) = state
+        even = (k % jnp.asarray(2, dtype=jnp.int32)) == 0
+
+        sigma = jnp.vdot(r_star, v)
+        alpha_even = rho / _safe_den(sigma)
+        alpha_use = jnp.where(even, alpha_even, alpha)
+        u_next_even = u - alpha_use * v
+
+        w_new = w - alpha_use * uhat
+        d_new = u + ((theta * theta) / _safe_den(alpha_use)) * eta * d
+        tau_safe = jnp.where(tau > eps, tau, jnp.asarray(1.0, dtype=dtype))
+        theta_new = jnp.linalg.norm(w_new) / tau_safe
+        c_new = jnp.sqrt(1.0 / (1.0 + theta_new * theta_new))
+        tau_new = tau * theta_new * c_new
+        eta_new = c_new * c_new * alpha_use
+        y_new = y + eta_new * d_new
+        residual_estimate_new = tau_new * jnp.sqrt(jnp.asarray(k + 1, dtype=dtype))
+
+        rho_odd = jnp.real(jnp.vdot(r_star, w_new))
+        beta_odd = rho_odd / _safe_den(rho_last)
+        u_odd = w_new + beta_odd * u
+        uhat_odd = jnp.asarray(work_matvec(u_odd), dtype=dtype)
+        v_odd = beta_odd * uhat + beta_odd * beta_odd * v + uhat_odd
+
+        uhat_even = jnp.asarray(work_matvec(u_next_even), dtype=dtype)
+        u_new = jnp.where(even, u_next_even, u_odd)
+        uhat_new = jnp.where(even, uhat_even, uhat_odd)
+        v_new = jnp.where(even, v, v_odd)
+        rho_new = jnp.where(even, rho, rho_odd)
+        rho_last_new = jnp.where(even, rho, rho_last)
+
+        bounded_step = residual_estimate_new <= jnp.maximum(
+            target,
+            growth_limit * jnp.maximum(residual_estimate, eps),
+        )
+        finite_step = (
+            jnp.isfinite(residual_estimate_new)
+            & jnp.isfinite(jnp.real(sigma))
+            & jnp.isfinite(jnp.real(alpha_use))
+            & jnp.isfinite(rho_new)
+            & jnp.isfinite(jnp.linalg.norm(y_new))
+            & bounded_step
+        )
+        update = running & finite_step
+        y = jnp.where(update, y_new, y)
+        u = jnp.where(update, u_new, u)
+        w = jnp.where(update, w_new, w)
+        v = jnp.where(update, v_new, v)
+        uhat = jnp.where(update, uhat_new, uhat)
+        d = jnp.where(update, d_new, d)
+        rho = jnp.where(update, rho_new, rho)
+        rho_last = jnp.where(update, rho_last_new, rho_last)
+        alpha = jnp.where(update, alpha_use, alpha)
+        theta = jnp.where(update, theta_new, theta)
+        eta = jnp.where(update, eta_new, eta)
+        tau = jnp.where(update, tau_new, tau)
+        residual_estimate = jnp.where(update, residual_estimate_new, residual_estimate)
+        residual_history = residual_history.at[k + 1].set(residual_estimate)
+        converged = converged | (update & (residual_estimate <= target))
+        running = update & jnp.logical_not(converged)
+        if replacement_interval > 0:
+            replacement_due = running & (((k + 1) % jnp.asarray(replacement_interval, dtype=jnp.int32)) == 0)
+
+            def _replace(_operand):
+                exact_r = b_solve - jnp.asarray(work_matvec(y), dtype=dtype)
+                exact_norm = jnp.linalg.norm(exact_r)
+                v_restart = jnp.asarray(work_matvec(exact_r), dtype=dtype)
+                rho_restart = jnp.real(jnp.vdot(exact_r, exact_r))
+                bounded_exact = exact_norm <= jnp.maximum(
+                    target,
+                    growth_limit * jnp.maximum(residual_estimate, eps),
+                )
+                replacement_ok = jnp.isfinite(exact_norm) & jnp.isfinite(rho_restart) & bounded_exact
+                accept_restart = replacement_due & replacement_ok
+                reject_restart = replacement_due & jnp.logical_not(replacement_ok)
+                converged_restart = converged | (replacement_due & replacement_ok & (exact_norm <= target))
+                running_restart = jnp.where(reject_restart, False, running & jnp.logical_not(converged_restart))
+                return (
+                    jnp.where(accept_restart, exact_r, r_star),
+                    jnp.where(accept_restart, exact_r, u),
+                    jnp.where(accept_restart, exact_r, w),
+                    jnp.where(accept_restart, v_restart, v),
+                    jnp.where(accept_restart, v_restart, uhat),
+                    jnp.where(accept_restart, jnp.zeros_like(d), d),
+                    jnp.where(accept_restart, rho_restart, rho),
+                    jnp.where(accept_restart, rho_restart, rho_last),
+                    jnp.where(accept_restart, jnp.asarray(1.0, dtype=dtype), alpha),
+                    jnp.where(accept_restart, jnp.asarray(0.0, dtype=dtype), theta),
+                    jnp.where(accept_restart, jnp.asarray(0.0, dtype=dtype), eta),
+                    jnp.where(accept_restart, exact_norm, tau),
+                    jnp.where(replacement_due, exact_norm, residual_estimate),
+                    converged_restart,
+                    running_restart,
+                )
+
+            (
+                r_star,
+                u,
+                w,
+                v,
+                uhat,
+                d,
+                rho,
+                rho_last,
+                alpha,
+                theta,
+                eta,
+                tau,
+                residual_estimate,
+                converged,
+                running,
+            ) = jax.lax.cond(
+                replacement_due,
+                _replace,
+                lambda _operand: (
+                    r_star,
+                    u,
+                    w,
+                    v,
+                    uhat,
+                    d,
+                    rho,
+                    rho_last,
+                    alpha,
+                    theta,
+                    eta,
+                    tau,
+                    residual_estimate,
+                    converged,
+                    running,
+                ),
+                operand=None,
+            )
+            residual_history = residual_history.at[k + 1].set(residual_estimate)
+        return (
+            k + 1,
+            y,
+            r_star,
+            u,
+            w,
+            v,
+            uhat,
+            d,
+            rho,
+            rho_last,
+            alpha,
+            theta,
+            eta,
+            tau,
+            residual_estimate,
+            residual_history,
+            converged,
+            running,
+        )
+
+    state = jax.lax.while_loop(
+        _cond,
+        _body,
+        (
+            jnp.asarray(0, dtype=jnp.int32),
+            y,
+            r_star,
+            u,
+            w,
+            v,
+            uhat,
+            d,
+            rho,
+            rho_last,
+            alpha,
+            theta,
+            eta,
+            tau,
+            residual_estimate,
+            residual_history,
+            converged,
+            running,
+        ),
+    )
+    k = state[0]
+    y = state[1]
+    residual_history = state[15]
+    converged = state[16]
+
+    x = recover_solution(y)
+    r_true = b - jnp.asarray(matvec(x), dtype=dtype)
+    return x, r_true, residual_history, k, converged
+
+
+def tfqmr_solve(
+    *,
+    matvec,
+    b: jnp.ndarray,
+    preconditioner=None,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1e-10,
+    atol: float = 0.0,
+    maxiter: int | None = None,
+    precondition_side: str = "left",
+    residual_replacement_interval: int = 0,
+) -> TFQMRSolveResult:
+    """Solve ``A x = b`` with JAX-native TFQMR."""
+    x, r, residual_history, n_iterations, converged = _tfqmr_solve_core(
+        matvec=matvec,
+        b=b,
+        preconditioner=preconditioner,
+        x0=x0,
+        tol=tol,
+        atol=atol,
+        maxiter=maxiter,
+        precondition_side=precondition_side,
+        residual_replacement_interval=residual_replacement_interval,
+    )
+    residual_norm = jnp.linalg.norm(r)
+    residual_history = residual_history.at[jnp.minimum(n_iterations, residual_history.shape[0] - 1)].set(
+        residual_norm
+    )
+    true_target = jnp.maximum(
+        jnp.asarray(atol, dtype=b.dtype),
+        jnp.asarray(tol, dtype=b.dtype) * jnp.linalg.norm(b),
+    )
+    return TFQMRSolveResult(
+        x=x,
+        residual_norm=residual_norm,
+        residual_history=residual_history,
+        n_iterations=jnp.asarray(n_iterations, dtype=jnp.int32),
+        converged=jnp.asarray(converged & (residual_norm <= true_target), dtype=jnp.bool_),
+    )
+
+
+def tfqmr_solve_with_residual(
+    *,
+    matvec,
+    b: jnp.ndarray,
+    preconditioner=None,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1e-10,
+    atol: float = 0.0,
+    maxiter: int | None = None,
+    precondition_side: str = "left",
+    residual_replacement_interval: int = 0,
+) -> tuple[TFQMRSolveResult, jnp.ndarray]:
+    """Solve ``A x = b`` with TFQMR and return the true residual vector."""
+    x, r, residual_history, n_iterations, converged = _tfqmr_solve_core(
+        matvec=matvec,
+        b=b,
+        preconditioner=preconditioner,
+        x0=x0,
+        tol=tol,
+        atol=atol,
+        maxiter=maxiter,
+        precondition_side=precondition_side,
+        residual_replacement_interval=residual_replacement_interval,
+    )
+    residual_norm = jnp.linalg.norm(r)
+    residual_history = residual_history.at[jnp.minimum(n_iterations, residual_history.shape[0] - 1)].set(
+        residual_norm
+    )
+    true_target = jnp.maximum(
+        jnp.asarray(atol, dtype=b.dtype),
+        jnp.asarray(tol, dtype=b.dtype) * jnp.linalg.norm(b),
+    )
+    result = TFQMRSolveResult(
+        x=x,
+        residual_norm=residual_norm,
+        residual_history=residual_history,
+        n_iterations=jnp.asarray(n_iterations, dtype=jnp.int32),
+        converged=jnp.asarray(converged & (residual_norm <= true_target), dtype=jnp.bool_),
+    )
+    return result, r
+
+
+tfqmr_solve_jit = jax.jit(
+    tfqmr_solve,
+    static_argnames=(
+        "matvec",
+        "preconditioner",
+        "tol",
+        "atol",
+        "maxiter",
+        "precondition_side",
+        "residual_replacement_interval",
+    ),
+)
+
+tfqmr_solve_with_residual_jit = jax.jit(
+    tfqmr_solve_with_residual,
+    static_argnames=(
+        "matvec",
+        "preconditioner",
+        "tol",
+        "atol",
+        "maxiter",
+        "precondition_side",
+        "residual_replacement_interval",
+    ),
 )
 
 
@@ -923,6 +1556,7 @@ def fgmres_solve_with_residual(
     breakdown_tol: float = 1e-14,
     precondition_side: str = "right",
     skip_inactive_work: bool = True,
+    block_between_cycles: bool = False,
 ) -> tuple[FlexibleGMRESSolveResult, jnp.ndarray]:
     """Solve ``A x = b`` with a fixed-shape GMRES/FGMRES implementation in JAX.
 
@@ -940,8 +1574,12 @@ def fgmres_solve_with_residual(
     The implementation deliberately uses fixed-shape JAX arrays for the Arnoldi
     and least-squares state. It does not convert residuals to Python scalars
     inside the iteration loop, so accelerator calls avoid per-iteration
-    host/device synchronization. A separate ``jax.jit`` wrapper can trace this
-    function when ``matvec`` and ``preconditioner`` are trace-safe callables.
+    host/device synchronization. ``block_between_cycles`` is an opt-in memory
+    diagnostic for eager accelerator runs: it synchronizes at GMRES restart
+    boundaries so queued device work and basis buffers can be released before
+    the next cycle. It is ignored while tracing under ``jax.jit``. A separate
+    ``jax.jit`` wrapper can trace this function when ``matvec`` and
+    ``preconditioner`` are trace-safe callables.
     """
     b = jnp.asarray(b)
     if b.ndim != 1:
@@ -1086,6 +1724,8 @@ def fgmres_solve_with_residual(
             converged = jnp.logical_or(converged, jnp.logical_and(update_ok, residual_norm <= target))
             cycle_active = jnp.logical_and(cycle_active, arnoldi_ok)
             iteration_index += 1
+        if bool(block_between_cycles) and not _contains_tracer(x, residual, residual_norm):
+            x, residual, residual_norm = jax.block_until_ready((x, residual, residual_norm))
 
     residual_final = b - jnp.asarray(matvec(x), dtype=dtype)
     residual_norm_final = jnp.linalg.norm(residual_final)
@@ -1110,6 +1750,248 @@ def fgmres_solve_with_residual(
     return result, residual_final
 
 
+def _fgmres_restart_cycle_fixed(
+    *,
+    matvec,
+    preconditioner,
+    work_b: jnp.ndarray,
+    x: jnp.ndarray,
+    residual: jnp.ndarray,
+    restart: int,
+    breakdown_tol: float,
+    precondition_side: str,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Run one fixed-shape restarted FGMRES cycle.
+
+    This helper is intentionally one cycle only. JIT-compiling the whole
+    multi-cycle Python FGMRES loop creates very large HLO graphs for production
+    QI cases. A single-cycle kernel retains accelerator-side Arnoldi work while
+    letting the caller synchronize and reuse the same compiled cycle.
+    """
+
+    dtype = work_b.dtype
+    n = int(work_b.size)
+    restart_use = max(1, int(restart))
+    side = str(precondition_side).strip().lower()
+    if side not in {"left", "right", "none"}:
+        side = "right"
+
+    def _prec(v: jnp.ndarray) -> jnp.ndarray:
+        if preconditioner is None:
+            return v
+        return jnp.asarray(preconditioner(v), dtype=dtype)
+
+    def _search_direction(v: jnp.ndarray) -> jnp.ndarray:
+        if side == "right":
+            return _prec(v)
+        return v
+
+    def _work_matvec(v: jnp.ndarray) -> jnp.ndarray:
+        av = jnp.asarray(matvec(v), dtype=dtype)
+        if side == "left":
+            return _prec(av)
+        return av
+
+    beta = jnp.linalg.norm(residual)
+    breakdown_threshold = jnp.asarray(max(0.0, float(breakdown_tol)), dtype=dtype)
+    active_cycle = jnp.logical_and(jnp.isfinite(beta), beta > breakdown_threshold)
+    v_basis = jnp.zeros((restart_use + 1, n), dtype=dtype)
+    z_basis = jnp.zeros((restart_use, n), dtype=dtype)
+    hessenberg = jnp.zeros((restart_use + 1, restart_use), dtype=dtype)
+    v0 = jnp.where(active_cycle, residual / jnp.where(beta > 0.0, beta, jnp.asarray(1.0, dtype=dtype)), 0.0)
+    v_basis = v_basis.at[0].set(v0)
+
+    def _arnoldi_step(j: jnp.ndarray, state):
+        v_basis, z_basis, hessenberg, running = state
+        active_step = running
+        vj = v_basis[j]
+        z = jax.lax.cond(active_step, _search_direction, lambda _v: jnp.zeros_like(_v), vj)
+        z = jnp.asarray(z, dtype=dtype)
+        z_basis = z_basis.at[j].set(z)
+        w0 = jax.lax.cond(active_step, _work_matvec, lambda _z: jnp.zeros_like(_z), z)
+
+        def _orthogonalize(i: jnp.ndarray, inner_state):
+            w, hessenberg = inner_state
+            hij = jnp.vdot(v_basis[i], w)
+            hessenberg = hessenberg.at[i, j].set(hij)
+            return w - hij * v_basis[i], hessenberg
+
+        w, hessenberg = jax.lax.fori_loop(0, j + 1, _orthogonalize, (w0, hessenberg))
+        h_next = jnp.linalg.norm(w)
+        hessenberg = hessenberg.at[j + 1, j].set(h_next)
+        arnoldi_ok = jnp.logical_and(jnp.isfinite(h_next), h_next > breakdown_threshold)
+        v_next = jnp.where(
+            jnp.logical_and(active_step, arnoldi_ok),
+            w / jnp.where(h_next > 0.0, h_next, jnp.asarray(1.0, dtype=dtype)),
+            jnp.zeros_like(w),
+        )
+        v_basis = v_basis.at[j + 1].set(v_next)
+        return v_basis, z_basis, hessenberg, jnp.logical_and(running, arnoldi_ok)
+
+    v_basis, z_basis, hessenberg, _running = jax.lax.fori_loop(
+        0,
+        restart_use,
+        _arnoldi_step,
+        (v_basis, z_basis, hessenberg, active_cycle),
+    )
+    small_rhs = jnp.zeros((restart_use + 1,), dtype=dtype).at[0].set(beta)
+    coeff = jnp.linalg.lstsq(hessenberg, small_rhs, rcond=None)[0]
+    update = coeff @ z_basis
+    candidate_x = x + update
+    candidate_residual = work_b - _work_matvec(candidate_x)
+    candidate_norm = jnp.linalg.norm(candidate_residual)
+    accept = jnp.logical_and(active_cycle, jnp.isfinite(candidate_norm))
+    x_out = jnp.where(accept, candidate_x, x)
+    residual_out = jnp.where(accept, candidate_residual, residual)
+    residual_norm_out = jnp.where(accept, candidate_norm, beta)
+    accepted_update = jnp.where(accept, update, jnp.zeros_like(update))
+    accepted_work_update = jnp.where(accept, residual - candidate_residual, jnp.zeros_like(residual))
+    return x_out, residual_out, residual_norm_out, accepted_update, accepted_work_update
+
+
+_fgmres_restart_cycle_fixed_jit = jax.jit(
+    _fgmres_restart_cycle_fixed,
+    static_argnames=("matvec", "preconditioner", "restart", "breakdown_tol", "precondition_side"),
+)
+
+
+def fgmres_cycle_jit_solve_with_residual(
+    *,
+    matvec,
+    b: jnp.ndarray,
+    preconditioner=None,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1e-10,
+    atol: float = 0.0,
+    restart: int = 50,
+    maxiter: int | None = None,
+    breakdown_tol: float = 1e-14,
+    precondition_side: str = "right",
+    skip_inactive_work: bool = True,
+    block_between_cycles: bool = False,
+    outer_k: int = 0,
+    augmentation_rcond: float = 1.0e-12,
+    progress_callback=None,
+) -> tuple[FlexibleGMRESSolveResult, jnp.ndarray]:
+    """Solve with restarted FGMRES using a JIT-compiled single-cycle kernel.
+
+    The method is designed for large accelerator runs where eager Python-loop
+    FGMRES is too slow, but full-solver JIT is too memory hungry. It synchronizes
+    once per restart cycle, which gives bounded memory and useful progress
+    points while keeping the Arnoldi/preconditioned matvec work on device. If
+    ``progress_callback`` is provided, it is called after each synchronized
+    restart cycle with JSON-ready cycle, iteration, residual, and target values.
+    """
+
+    del skip_inactive_work, block_between_cycles
+    b = jnp.asarray(b)
+    if b.ndim != 1:
+        raise ValueError(f"fgmres_cycle_jit_solve_with_residual expects 1D b, got shape {b.shape}")
+    dtype = b.dtype
+    n = int(b.size)
+    restart_use = max(1, min(int(restart), max(1, n)))
+    maxiter_use = max(restart_use, n) if maxiter is None else max(1, int(maxiter))
+    max_cycles = max(1, int(np.ceil(maxiter_use / restart_use)))
+    side = str(precondition_side).strip().lower()
+    if side not in {"left", "right", "none"}:
+        side = "right"
+
+    def _prec(v: jnp.ndarray) -> jnp.ndarray:
+        if preconditioner is None:
+            return v
+        return jnp.asarray(preconditioner(v), dtype=dtype)
+
+    def _work_matvec_physical(v: jnp.ndarray) -> jnp.ndarray:
+        av = jnp.asarray(matvec(v), dtype=dtype)
+        if side == "left":
+            return _prec(av)
+        return av
+
+    x = jnp.zeros_like(b) if x0 is None else jnp.asarray(x0, dtype=dtype)
+    if x.shape != b.shape:
+        raise ValueError(f"fgmres_cycle_jit_solve_with_residual x0 shape mismatch: expected {b.shape}, got {x.shape}")
+    work_b = _prec(b) if side == "left" else b
+    residual = work_b - _work_matvec_physical(x)
+    residual_norm = jnp.linalg.norm(residual)
+    rhs_norm = jnp.linalg.norm(work_b)
+    target = jnp.maximum(jnp.asarray(atol, dtype=dtype), jnp.asarray(tol, dtype=dtype) * rhs_norm)
+    true_target = jnp.maximum(jnp.asarray(atol, dtype=dtype), jnp.asarray(tol, dtype=dtype) * jnp.linalg.norm(b))
+    history: list[jnp.ndarray] = [residual_norm]
+    cycles_done = 0
+    outer_k_use = max(0, int(outer_k))
+    augmentation_rcond_use = max(0.0, float(augmentation_rcond))
+    recycle_u: list[jnp.ndarray] = []
+    recycle_au: list[jnp.ndarray] = []
+    converged = bool(jax.device_get(jnp.logical_and(jnp.isfinite(residual_norm), residual_norm <= target)))
+    for _cycle in range(max_cycles):
+        if converged:
+            break
+        if recycle_u and recycle_au:
+            u_basis = jnp.stack(recycle_u, axis=1)
+            au_basis = jnp.stack(recycle_au, axis=1)
+            coeff = jnp.linalg.lstsq(au_basis, residual, rcond=augmentation_rcond_use)[0]
+            aug_update = u_basis @ coeff
+            aug_residual = residual - au_basis @ coeff
+            aug_norm = jnp.linalg.norm(aug_residual)
+            aug_accept = jnp.logical_and(jnp.isfinite(aug_norm), aug_norm < residual_norm)
+            x = jnp.where(aug_accept, x + aug_update, x)
+            residual = jnp.where(aug_accept, aug_residual, residual)
+            residual_norm = jnp.where(aug_accept, aug_norm, residual_norm)
+            residual_norm = jax.block_until_ready(residual_norm)
+            history.append(residual_norm)
+            converged = bool(jax.device_get(jnp.logical_and(jnp.isfinite(residual_norm), residual_norm <= target)))
+            if converged:
+                break
+
+        x, residual, residual_norm, cycle_update, cycle_work_update = _fgmres_restart_cycle_fixed_jit(
+            matvec=matvec,
+            preconditioner=preconditioner,
+            work_b=work_b,
+            x=x,
+            residual=residual,
+            restart=restart_use,
+            breakdown_tol=breakdown_tol,
+            precondition_side=side,
+        )
+        residual_norm = jax.block_until_ready(residual_norm)
+        history.append(residual_norm)
+        cycles_done += 1
+        if progress_callback is not None:
+            progress_callback(
+                cycle=int(cycles_done),
+                iterations=int(cycles_done) * int(restart_use),
+                residual_norm=float(jax.device_get(residual_norm)),
+                target=float(jax.device_get(target)),
+            )
+        if outer_k_use > 0:
+            work_norm = jnp.linalg.norm(cycle_work_update)
+            work_norm_f = float(jax.device_get(work_norm))
+            if np.isfinite(work_norm_f) and work_norm_f > 0.0:
+                scale = jnp.asarray(work_norm_f, dtype=dtype)
+                recycle_u.append(jax.lax.stop_gradient(cycle_update / scale))
+                recycle_au.append(jax.lax.stop_gradient(cycle_work_update / scale))
+                if len(recycle_u) > outer_k_use:
+                    recycle_u = recycle_u[-outer_k_use:]
+                    recycle_au = recycle_au[-outer_k_use:]
+        converged = bool(jax.device_get(jnp.logical_and(jnp.isfinite(residual_norm), residual_norm <= target)))
+
+    true_residual = b - jnp.asarray(matvec(x), dtype=dtype)
+    true_residual_norm = jnp.linalg.norm(true_residual)
+    true_residual_norm = jax.block_until_ready(true_residual_norm)
+    true_converged = jnp.logical_and(jnp.isfinite(true_residual_norm), true_residual_norm <= true_target)
+    n_iterations = min(int(cycles_done) * int(restart_use), int(maxiter_use))
+    history_arr = jnp.asarray(history + [true_residual_norm], dtype=dtype)
+    result = FlexibleGMRESSolveResult(
+        x=x,
+        residual_norm=true_residual_norm,
+        residual_history=history_arr,
+        n_iterations=jnp.asarray(n_iterations, dtype=jnp.int32),
+        n_restarts=jnp.asarray(max(0, int(cycles_done) - 1), dtype=jnp.int32),
+        converged=jnp.asarray(true_converged, dtype=jnp.bool_),
+    )
+    return result, true_residual
+
+
 fgmres_solve_with_residual_jit = jax.jit(
     fgmres_solve_with_residual,
     static_argnames=(
@@ -1122,6 +2004,7 @@ fgmres_solve_with_residual_jit = jax.jit(
         "breakdown_tol",
         "precondition_side",
         "skip_inactive_work",
+        "block_between_cycles",
     ),
 )
 
@@ -1151,6 +2034,18 @@ def _gmres_solve_core(
         x0 = jnp.asarray(x0)
 
     method = _normalize_krylov_method(solve_method)
+    if method in {"tfqmr", "tfqmr_jax"}:
+        res, r = tfqmr_solve_with_residual(
+            matvec=matvec,
+            b=b,
+            preconditioner=preconditioner,
+            x0=x0,
+            tol=tol,
+            atol=atol,
+            maxiter=maxiter,
+            precondition_side=precondition_side,
+        )
+        return res.x, r
     if method in {"bicgstab", "bicgstab_jax"}:
         res, r = bicgstab_solve_with_residual(
             matvec=matvec,
@@ -1263,14 +2158,18 @@ def _gmres_solve_core(
         side = "left"
 
     if side == "right" and preconditioner is not None:
-        # PETSc's GMRES defaults to right preconditioning: solve A P^{-1} y = b, x = P^{-1} y.
-        # Here, `preconditioner` is expected to apply P^{-1}.
+        # PETSc's GMRES defaults to right preconditioning. Preserve a physical
+        # initial guess by solving the correction equation
+        # A P^{-1} y = b - A x0, x = x0 + P^{-1} y.
         def matvec_right(y):
             return matvec(preconditioner(y))
 
+        b_solve = b
+        if x0 is not None:
+            b_solve = b - matvec(x0)
         y, _info = gmres(
             matvec_right,
-            b,
+            b_solve,
             x0=None,
             tol=float(tol),
             atol=float(atol),
@@ -1280,6 +2179,8 @@ def _gmres_solve_core(
             solve_method=solve_method,
         )
         x = preconditioner(y)
+        if x0 is not None:
+            x = x0 + x
     else:
         # Left preconditioning (SciPy-style): solve P^{-1} A x = P^{-1} b.
         M = preconditioner if side == "left" else None

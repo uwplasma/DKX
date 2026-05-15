@@ -4,7 +4,10 @@ from types import SimpleNamespace
 
 from sfincs_jax.rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
+    estimate_rhs1_pas_tz_build_bytes,
+    estimate_rhs1_pas_tz_build_memory,
     estimate_pas_tz_schwarz_fallback_work,
+    pas_tz_preconditioner_memory_safe,
     pas_tz_schwarz_fallback_guard,
     pas_tz_schwarz_fallback_memory_safe,
     preferred_pas_tz_schwarz_axis,
@@ -39,6 +42,41 @@ def _op(
     )
 
 
+def _pas_tz_op(
+    *,
+    rhs_mode: int = 1,
+    has_pas: bool = True,
+    has_fp: bool = False,
+    n_species: int = 2,
+    n_theta: int = 25,
+    n_zeta: int = 51,
+    n_x: int = 4,
+    n_xi: int = 100,
+):
+    return SimpleNamespace(
+        rhs_mode=rhs_mode,
+        include_phi1=False,
+        n_species=n_species,
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        n_x=n_x,
+        n_xi=n_xi,
+        fblock=SimpleNamespace(
+            collisionless=SimpleNamespace(n_xi_for_x=tuple([int(n_xi)] * int(n_x))),
+            pas=object() if has_pas else None,
+            fp=object() if has_fp else None,
+            fp_phi1=None,
+            exb_theta=None,
+            exb_zeta=None,
+            magdrift_theta=None,
+            magdrift_zeta=None,
+            magdrift_xidot=None,
+            er_xdot=None,
+            er_xidot=None,
+        ),
+    )
+
+
 def test_pas_adaptive_smoother_allowed_for_large_explicit_pas(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER", raising=False)
     monkeypatch.delenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_MIN", raising=False)
@@ -49,6 +87,50 @@ def test_pas_adaptive_smoother_allowed_for_large_explicit_pas(monkeypatch) -> No
         target=1.0e-8,
         use_implicit=False,
     )
+
+
+def test_pas_tz_build_memory_preflight_rejects_productionish_grid(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MAX_BYTES", raising=False)
+
+    op = _pas_tz_op(n_species=2, n_theta=25, n_zeta=51, n_x=4, n_xi=100)
+    metadata = estimate_rhs1_pas_tz_build_memory(op)
+
+    assert metadata["applicable"] is True
+    assert metadata["safe"] is False
+    assert metadata["reason"] == "pas-tz-build-memory-limit-exceeded"
+    assert metadata["active_unknowns"] == 2 * 25 * 51 * 4 * 100
+    assert metadata["lmax"] == 6
+    assert metadata["lmax_source"] == "default"
+    assert metadata["total_nbytes"] == estimate_rhs1_pas_tz_build_bytes(op)
+    assert metadata["max_nbytes"] == 2 * 1024 * 1024 * 1024
+    assert not pas_tz_preconditioner_memory_safe(op)
+
+
+def test_pas_tz_build_memory_preflight_tracks_env_limit(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_LMAX", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MAX_BYTES", str(4 * 1024 * 1024 * 1024))
+
+    metadata = estimate_rhs1_pas_tz_build_memory(
+        _pas_tz_op(n_species=2, n_theta=25, n_zeta=51, n_x=4, n_xi=100)
+    )
+
+    assert metadata["safe"] is True
+    assert metadata["reason"] == "within-pas-tz-build-memory-limit"
+    assert metadata["max_nbytes"] == 4 * 1024 * 1024 * 1024
+
+
+def test_pas_tz_build_memory_preflight_explains_inapplicable_ops(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MAX_BYTES", raising=False)
+    metadata = estimate_rhs1_pas_tz_build_memory(_pas_tz_op(rhs_mode=2))
+
+    assert metadata == {
+        "applicable": False,
+        "safe": True,
+        "reason": "pas-tz-inapplicable",
+        "total_nbytes": 0,
+        "max_nbytes": 2 * 1024 * 1024 * 1024,
+    }
 
 
 def test_pas_adaptive_smoother_respects_problem_and_residual_guards(monkeypatch) -> None:
@@ -291,7 +373,7 @@ def test_build_pas_tz_memory_fallback_prefers_tzfft_when_schwarz_guard_fails(mon
     assert "using tzfft" in metadata["reason"]
 
 
-def test_build_pas_tz_memory_fallback_keeps_implicit_sharded_default_bounded(monkeypatch) -> None:
+def test_build_pas_tz_memory_fallback_prefers_tzfft_when_available(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK", raising=False)
     calls: list[str] = []
 
@@ -328,8 +410,8 @@ def test_build_pas_tz_memory_fallback_keeps_implicit_sharded_default_bounded(mon
         tzfft_builder=tzfft_builder,
     )
 
-    assert result == "collision-preconditioner"
-    assert calls == ["collision"]
+    assert callable(result)
+    assert calls == ["tzfft"]
 
 
 def test_build_pas_tz_memory_fallback_defaults_to_collision_on_single_device(monkeypatch) -> None:

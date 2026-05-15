@@ -13,6 +13,10 @@ On the current ``main`` branch, `sfincs_jax` can claim:
 - no ``jax_error`` or ``max_attempts`` in the current release-facing suite artifacts,
 - matching ``sfincsOutput.h5`` common numeric datasets, zero missing Fortran top-level
   output keys in JAX, and the required terminal-output signals for the supported examples.
+- a bounded, metadata-visible non-autodiff host fallback for explicit large-QI
+  device-Krylov requests, backed by the checked scale-0.60 CPU hard-seed artifact.
+- transport-worker GPU parallelism for independent RHS/case throughput on the
+  checked two-GPU benchmark lane.
 
 The authoritative release-facing artifacts for this state are:
 
@@ -23,7 +27,12 @@ What should still be stated carefully:
 
 - the CLI defaults are explicit and performance-oriented, not differentiable by default,
 - differentiable solve paths are available from Python when requested,
-- and remaining work is concentrated on runtime and memory optimization of the heaviest PAS and geometry-rich cases.
+- production-resolution QI CPU/GPU seed ladders remain bounded-proxy evidence,
+- true differentiable device-QI closure is deferred research, not a release blocker,
+- single-case multi-GPU strong scaling remains experimental and must not be
+  presented as the release scaling story,
+- and remaining work is concentrated on runtime and memory optimization of the
+  heaviest PAS and geometry-rich cases.
 
 Before shipping a release, make sure `README.md`, `docs/fortran_comparison.rst`, and
 the performance/parallelism pages accurately reflect the current state of the code.

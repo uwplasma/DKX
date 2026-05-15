@@ -20,6 +20,7 @@ from .vmec_wout import VmecWout
 
 GEOMETRY_PROXY_WORKFLOW = "vmec_jax_to_boozer_sfincs_geometry_proxy"
 GEOMETRY_PROXY_CONTRACT_VERSION = 1
+KINETIC_TRANSPORT_SCALAR_CONTRACT_VERSION = 1
 
 _DIFFERENTIABILITY_LABELS = {
     "differentiated": "covered by JAX autodiff in this geometry-proxy graph",
@@ -50,6 +51,253 @@ _OUTSIDE_DIFFERENTIATED_GRAPH = [
 
 _FORBIDDEN_GRADIENT_CLAIM = "full VMEC-boundary-to-SFINCS kinetic transport gradients"
 
+_KINETIC_TRANSPORT_SCALAR_REQUIRED_STAGES = (
+    "vmec_source",
+    "vmec_equilibrium_or_wout",
+    "boozer_transform",
+    "sfincs_geometry_adapter",
+    "kinetic_operator_assembly",
+    "linear_kinetic_solve",
+    "transport_scalar_reduction",
+    "gradient_validation",
+)
+
+
+def _kinetic_transport_scalar_required_stages() -> list[dict[str, Any]]:
+    """Return the staged contract for a future kinetic transport scalar.
+
+    The stages are intentionally more detailed than the current proxy workflow.
+    They make the missing pieces explicit so examples and docs can describe
+    current differentiability without implying a full kinetic-transport gradient.
+    """
+    return [
+        {
+            "name": "vmec_source",
+            "component": "VMEC boundary, VMEC input, or VMEC wout provenance",
+            "current_public_role": "setup_or_file_provenance",
+            "differentiability_boundary": "setup_only_not_differentiated",
+            "current_status": "available_for_provenance",
+            "required_for_future_kinetic_scalar": True,
+            "required_evidence": ["source identifier", "radial coordinate convention"],
+        },
+        {
+            "name": "vmec_equilibrium_or_wout",
+            "component": "vmec_jax equilibrium solve or file-backed VMEC wout",
+            "current_public_role": "setup_or_optional_in_memory_provenance",
+            "differentiability_boundary": "setup_only_not_differentiated",
+            "current_status": "optional_setup_not_default_ci",
+            "required_for_future_kinetic_scalar": True,
+            "required_evidence": ["wout-like field arrays", "surface selection provenance"],
+        },
+        {
+            "name": "boozer_transform",
+            "component": "booz_xform_jax Boozer-spectrum transform",
+            "current_public_role": "differentiated_geometry_proxy_stage",
+            "differentiability_boundary": "differentiated_for_geometry_proxy_gate",
+            "current_status": "optional_proxy_gate",
+            "required_for_future_kinetic_scalar": True,
+            "required_evidence": ["mboz/nboz", "selected surface", "Boozer spectrum"],
+        },
+        {
+            "name": "sfincs_geometry_adapter",
+            "component": "sfincs_jax geometry objects used by kinetic operators",
+            "current_public_role": "setup_only_adapter",
+            "differentiability_boundary": "setup_only_not_differentiated",
+            "current_status": "file_backed_adapter_available",
+            "required_for_future_kinetic_scalar": True,
+            "required_evidence": ["geometry scheme", "theta/zeta grid", "normalization audit"],
+        },
+        {
+            "name": "kinetic_operator_assembly",
+            "component": "drift-kinetic matrix/operator assembly",
+            "current_public_role": "not_run_by_vmec_boozer_proxy_lane",
+            "differentiability_boundary": "not_claimed_not_covered_by_this_lane",
+            "current_status": "deferred_for_full_kinetic_scalar",
+            "required_for_future_kinetic_scalar": True,
+            "required_evidence": ["operator residual gate", "memory/runtime budget", "CPU/GPU parity"],
+        },
+        {
+            "name": "linear_kinetic_solve",
+            "component": "SFINCS kinetic linear solve and constraints",
+            "current_public_role": "not_run_by_vmec_boozer_proxy_lane",
+            "differentiability_boundary": "not_claimed_not_covered_by_this_lane",
+            "current_status": "deferred_for_full_kinetic_scalar",
+            "required_for_future_kinetic_scalar": True,
+            "required_evidence": ["solver residual history", "fallback/provenance log", "parity gate"],
+        },
+        {
+            "name": "transport_scalar_reduction",
+            "component": "transport coefficient, current, flux, or ambipolar scalar",
+            "current_public_role": "proxy_scalar_only",
+            "differentiability_boundary": "not_claimed_not_covered_by_this_lane",
+            "current_status": "proxy_available_kinetic_scalar_deferred",
+            "required_for_future_kinetic_scalar": True,
+            "required_evidence": ["observable normalization", "units", "comparison target"],
+        },
+        {
+            "name": "gradient_validation",
+            "component": "JVP/VJP, finite-difference, and physics-gate validation",
+            "current_public_role": "proxy_gradient_validation_only",
+            "differentiability_boundary": "not_claimed_not_covered_by_this_lane",
+            "current_status": "proxy_gate_available_kinetic_gate_deferred",
+            "required_for_future_kinetic_scalar": True,
+            "required_evidence": ["finite-difference check", "shape derivative provenance", "physics gate"],
+        },
+    ]
+
+
+def kinetic_transport_scalar_no_overclaim_gate(contract: dict[str, Any]) -> dict[str, Any]:
+    """Validate that the VMEC/Boozer contract does not overclaim kinetic gradients.
+
+    This pure-Python gate is deliberately cheap enough for default CI. It checks
+    schema completeness and verifies that the current public scalar remains a
+    Boozer-spectrum proxy unless all future kinetic stages have explicit
+    promotion evidence.
+    """
+    stages = list(contract.get("required_stages") or [])
+    stage_names = [str(stage.get("name")) for stage in stages]
+    missing_stages = [
+        name for name in _KINETIC_TRANSPORT_SCALAR_REQUIRED_STAGES if name not in stage_names
+    ]
+    duplicate_stages = sorted(
+        {name for name in stage_names if stage_names.count(name) > 1}
+    )
+    schema_errors: list[str] = []
+    for stage in stages:
+        for key in (
+            "name",
+            "component",
+            "current_public_role",
+            "differentiability_boundary",
+            "current_status",
+            "required_for_future_kinetic_scalar",
+            "required_evidence",
+        ):
+            if key not in stage:
+                schema_errors.append(f"{stage.get('name', '<unnamed>')} missing {key}")
+        if not stage.get("required_evidence"):
+            schema_errors.append(f"{stage.get('name', '<unnamed>')} has no required_evidence")
+
+    current = dict(contract.get("current_public_scalar") or {})
+    differentiated = set(current.get("differentiated_stage_names") or [])
+    setup_only = set(current.get("setup_only_stage_names") or [])
+    not_covered = set(current.get("not_covered_stage_names") or [])
+    boundary_overlap = sorted(differentiated & (setup_only | not_covered))
+    forbidden_claims = []
+    if bool(current.get("kinetic_transport_scalar_claimed", True)):
+        forbidden_claims.append("kinetic_transport_scalar_claimed")
+    if bool(current.get("kinetic_solve_executed", True)):
+        forbidden_claims.append("kinetic_solve_executed")
+    if str(current.get("scalar_kind")) != "boozer_spectrum_proxy_not_kinetic":
+        forbidden_claims.append("scalar_kind")
+
+    ci_policy = dict(contract.get("ci_dependency_policy") or {})
+    ci_violations = [
+        key
+        for key in (
+            "default_ci_requires_vmec_jax",
+            "default_ci_requires_booz_xform_jax",
+        )
+        if bool(ci_policy.get(key, True))
+    ]
+
+    promotion = dict(contract.get("promotion_requirements") or {})
+    promoted = bool(promotion.get("full_kinetic_scalar_promoted", False))
+    unvalidated_future_stages = [
+        str(stage.get("name"))
+        for stage in stages
+        if str(stage.get("current_status", "")).startswith("deferred")
+        or str(stage.get("current_status", "")).endswith("_deferred")
+    ]
+    promotion_violations = unvalidated_future_stages if promoted else []
+    passed = not (
+        missing_stages
+        or duplicate_stages
+        or schema_errors
+        or boundary_overlap
+        or forbidden_claims
+        or ci_violations
+        or promotion_violations
+    )
+    return {
+        "status": "pass" if passed else "fail",
+        "claim_scope": "proxy_scalar_only_until_full_kinetic_contract_is_promoted",
+        "required_stage_count": len(_KINETIC_TRANSPORT_SCALAR_REQUIRED_STAGES),
+        "present_stage_count": len(stages),
+        "missing_required_stages": missing_stages,
+        "duplicate_stages": duplicate_stages,
+        "schema_errors": schema_errors,
+        "boundary_overlap": boundary_overlap,
+        "forbidden_claims": forbidden_claims,
+        "ci_dependency_violations": ci_violations,
+        "promotion_violations": promotion_violations,
+        "kinetic_solve_executed": bool(current.get("kinetic_solve_executed", True)),
+        "kinetic_transport_scalar_claimed": bool(
+            current.get("kinetic_transport_scalar_claimed", True)
+        ),
+    }
+
+
+def vmec_boozer_kinetic_transport_scalar_contract(
+    *,
+    backend_status: dict[str, bool] | None = None,
+) -> dict[str, Any]:
+    """Return the contract for a future VMEC/Boozer-to-kinetic scalar.
+
+    The current public implementation only differentiates a Boozer-spectrum
+    proxy scalar. This contract records the required stages for promoting a true
+    kinetic transport scalar later, without importing optional geometry packages
+    or changing default CI dependencies.
+    """
+    status = optional_jax_geometry_backend_status() if backend_status is None else dict(backend_status)
+    contract: dict[str, Any] = {
+        "workflow": GEOMETRY_PROXY_WORKFLOW,
+        "contract_version": KINETIC_TRANSPORT_SCALAR_CONTRACT_VERSION,
+        "scalar_target": "future_vmec_boozer_to_sfincs_kinetic_transport_scalar",
+        "ci_dependency_policy": {
+            "default_ci_requires_vmec_jax": False,
+            "default_ci_requires_booz_xform_jax": False,
+            "backend_check_imports_optional_packages": False,
+        },
+        "optional_backends": {
+            "vmec_jax": bool(status.get("vmec_jax", False)),
+            "booz_xform_jax": bool(status.get("booz_xform_jax", False)),
+        },
+        "required_stages": _kinetic_transport_scalar_required_stages(),
+        "current_public_scalar": {
+            "name": "boozer_spectrum_proxy_transport_objective",
+            "scalar_kind": "boozer_spectrum_proxy_not_kinetic",
+            "kinetic_transport_scalar_claimed": False,
+            "kinetic_solve_executed": False,
+            "differentiated_stage_names": [
+                "boozer_transform",
+                "transport_scalar_reduction",
+            ],
+            "setup_only_stage_names": [
+                "vmec_source",
+                "vmec_equilibrium_or_wout",
+                "sfincs_geometry_adapter",
+            ],
+            "not_covered_stage_names": [
+                "kinetic_operator_assembly",
+                "linear_kinetic_solve",
+                "gradient_validation",
+            ],
+        },
+        "promotion_requirements": {
+            "full_kinetic_scalar_promoted": False,
+            "required_before_promotion": [
+                "pure-JAX or explicitly non-differentiable geometry path selected by user",
+                "kinetic operator assembly residual and normalization audit",
+                "linear solve residual history and CPU/GPU parity gate",
+                "finite-difference/JVP/VJP validation for the promoted scalar",
+                "physics-gate comparison against documented SFINCS or literature targets",
+            ],
+        },
+    }
+    contract["no_overclaim_gate"] = kinetic_transport_scalar_no_overclaim_gate(contract)
+    return contract
+
 
 def optional_jax_geometry_backend_status() -> dict[str, bool]:
     """Return whether optional JAX geometry backends are importable.
@@ -77,6 +325,9 @@ def geometry_proxy_workflow_contract(
     supported gradient claim is the Boozer-spectrum proxy gate.
     """
     status = optional_jax_geometry_backend_status() if backend_status is None else dict(backend_status)
+    kinetic_scalar_contract = vmec_boozer_kinetic_transport_scalar_contract(
+        backend_status=status
+    )
     return {
         "workflow": GEOMETRY_PROXY_WORKFLOW,
         "contract_version": GEOMETRY_PROXY_CONTRACT_VERSION,
@@ -93,6 +344,7 @@ def geometry_proxy_workflow_contract(
         "differentiability_labels": dict(_DIFFERENTIABILITY_LABELS),
         "differentiated_graph": list(_DIFFERENTIATED_GRAPH),
         "outside_differentiated_graph": list(_OUTSIDE_DIFFERENTIATED_GRAPH),
+        "kinetic_transport_scalar_contract": kinetic_scalar_contract,
         "deferred_work": [
             "VMEC boundary-shape gradients through a production equilibrium solve",
             "pure-JAX scheme-5 VMEC geometry evaluation for kinetic operators",
@@ -104,6 +356,9 @@ def geometry_proxy_workflow_contract(
             "full_transport_gradients_claimed": False,
             "forbidden_gradient_claim": _FORBIDDEN_GRADIENT_CLAIM,
             "kinetic_gradient_status": "deferred_not_covered_by_this_lane",
+            "kinetic_transport_scalar_contract_gate": kinetic_scalar_contract[
+                "no_overclaim_gate"
+            ],
         },
     }
 
@@ -120,6 +375,7 @@ def optional_jax_geometry_backend_report() -> dict[str, Any]:
     return {
         "backends": status,
         "workflow_contract": contract,
+        "kinetic_transport_scalar_contract": contract["kinetic_transport_scalar_contract"],
         "runnable_paths": {
             "no_optional_dependencies": "--check-backends",
             "file_backed_setup": "--wout /path/to/wout.nc",
@@ -195,6 +451,7 @@ def geometry_proxy_workflow_summary(
     return {
         "workflow": GEOMETRY_PROXY_WORKFLOW,
         "workflow_contract": contract,
+        "kinetic_transport_scalar_contract": contract["kinetic_transport_scalar_contract"],
         "provenance": {
             "source": provenance,
             "requested_surface": requested_surface,
@@ -600,7 +857,9 @@ __all__ = [
     "boozer_spectrum_proxy_transport_objective",
     "geometry_proxy_workflow_contract",
     "geometry_proxy_workflow_summary",
+    "kinetic_transport_scalar_no_overclaim_gate",
     "optional_jax_geometry_backend_report",
     "optional_jax_geometry_backend_status",
+    "vmec_boozer_kinetic_transport_scalar_contract",
     "vmec_wout_from_wout_like",
 ]

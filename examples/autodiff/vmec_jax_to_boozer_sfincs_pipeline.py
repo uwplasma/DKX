@@ -109,6 +109,10 @@ def _print_backend_status() -> None:
     print("  default CI requires booz_xform_jax: false")
     print(f"  no-overclaim gate: {contract['no_overclaim_gate']['status']}")
     print(f"  kinetic gradient status: {contract['no_overclaim_gate']['kinetic_gradient_status']}")
+    print(
+        "  kinetic scalar contract gate: "
+        f"{contract['kinetic_transport_scalar_contract']['no_overclaim_gate']['status']}"
+    )
     print("Workflow summary:")
     print(
         "  backend-readiness gate: "
@@ -126,6 +130,62 @@ def _print_backend_status() -> None:
 def _write_summary_json(path: Path, summary: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _no_solve_provenance_gate(
+    summary: dict[str, object],
+    *,
+    require_file_provenance: bool,
+) -> dict[str, object]:
+    """Return a machine-readable gate that separates proxy gradients from solves."""
+    provenance = dict(summary.get("provenance") or {})
+    no_overclaim = dict(summary.get("no_overclaim_gate") or {})
+    gradient_gate = dict(summary.get("numerical_gradient_gate") or {})
+    kinetic_contract = dict(summary.get("kinetic_transport_scalar_contract") or {})
+    kinetic_contract_gate = dict(kinetic_contract.get("no_overclaim_gate") or {})
+    required_kinetic_stages = [
+        str(stage.get("name"))
+        for stage in list(kinetic_contract.get("required_stages") or [])
+    ]
+    current_scalar = dict(kinetic_contract.get("current_public_scalar") or {})
+    required_fields = ("source", "selected_surface", "boozer_resolution", "grid_shape", "scale")
+    present_fields = [
+        field
+        for field in required_fields
+        if provenance.get(field) not in (None, {}, [])
+    ]
+    missing_fields = [
+        field
+        for field in required_fields
+        if require_file_provenance and provenance.get(field) in (None, {}, [])
+    ]
+    proxy_status = str(gradient_gate.get("status", "not_run"))
+    proxy_ok = proxy_status == "pass" if require_file_provenance else proxy_status in {"pass", "not_run"}
+    kinetic_claimed = bool(no_overclaim.get("full_transport_gradients_claimed", True))
+    kinetic_contract_ok = kinetic_contract_gate.get("status") == "pass"
+    passed = (not kinetic_claimed) and proxy_ok and not missing_fields and kinetic_contract_ok
+    return {
+        "status": "pass" if passed else "fail",
+        "claim_scope": "no_solve_boozer_spectrum_proxy_gradient",
+        "kinetic_solve_executed": False,
+        "full_vmec_boundary_to_sfincs_kinetic_gradients": "deferred_not_covered_by_this_lane",
+        "kinetic_transport_scalar_contract_gate": kinetic_contract_gate,
+        "required_kinetic_transport_scalar_stages": required_kinetic_stages,
+        "differentiability_boundary": {
+            "differentiated_stage_names": list(current_scalar.get("differentiated_stage_names") or []),
+            "setup_only_stage_names": list(current_scalar.get("setup_only_stage_names") or []),
+            "not_covered_stage_names": list(current_scalar.get("not_covered_stage_names") or []),
+        },
+        "requires_file_provenance": bool(require_file_provenance),
+        "required_file_provenance_fields": list(required_fields),
+        "present_file_provenance_fields": present_fields,
+        "missing_file_provenance_fields": missing_fields,
+        "proxy_gradient_gate_status": proxy_status,
+        "proxy_vs_kinetic": {
+            "proxy": "differentiated Boozer-spectrum transport-like scalar",
+            "kinetic": "not run and not differentiated by this example",
+        },
+    }
 
 
 def _synthetic_backend_readiness_gate() -> dict[str, object]:
@@ -243,14 +303,20 @@ def main() -> int:
     if args.check_backends:
         summary = geometry_proxy_workflow_summary()
         summary["backend_readiness_gate"] = _synthetic_backend_readiness_gate()
+        summary["no_solve_provenance_gate"] = _no_solve_provenance_gate(
+            summary,
+            require_file_provenance=False,
+        )
         if args.summary_json is not None:
             _write_summary_json(args.summary_json, summary)
         if args.json:
             report = optional_jax_geometry_backend_report()
             report["backend_readiness_gate"] = summary["backend_readiness_gate"]
+            report["no_solve_provenance_gate"] = summary["no_solve_provenance_gate"]
             print(json.dumps(report, indent=2, sort_keys=True))
         else:
             _print_backend_status()
+            print(f"  no-solve provenance gate: {summary['no_solve_provenance_gate']['status']}")
         return 0
 
     if args.vmec_case:
@@ -317,6 +383,10 @@ def main() -> int:
         finite_difference_gradient=float(finite_difference),
         finite_difference_step=step,
     )
+    summary["no_solve_provenance_gate"] = _no_solve_provenance_gate(
+        summary,
+        require_file_provenance=True,
+    )
 
     print("Differentiable geometry workflow:")
     print(f"  VMEC provenance: {provenance}")
@@ -327,6 +397,7 @@ def main() -> int:
     print(f"  d objective / d scale (centered FD) = {float(finite_difference):.12e}")
     print(f"  abs gradient error = {gradient_error:.3e}")
     print(f"  numerical gradient gate: {summary['numerical_gradient_gate']['status']}")
+    print(f"  no-solve provenance gate: {summary['no_solve_provenance_gate']['status']}")
     print("  differentiated graph: scaled spectral arrays -> booz_xform_jax -> sfincs_jax proxy transport objective")
     print(
         "  outside graph: file I/O, VMEC setup, sfincs_jax VMEC file adapters, "

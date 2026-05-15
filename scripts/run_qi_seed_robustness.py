@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -46,12 +48,96 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_auto_side_seed0_gpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_lgmres_rescue_multiseed5_cpu.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_probe_coarse_seed3_cpu.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_qi_coarse_seed3_cpu_2026_05_14.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_lower_fill_seed3_cpu_rejected_2026_05_14.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_lower_fill8_seed3_cpu_rejected_2026_05_14.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_heartbeat_timeout_2026_05_14.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_no_lgmres_timeout_2026_05_14.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_enriched_angular_seed3_gpu0_no_lgmres_timeout_2026_05_14.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_krylov_enriched_seed3_gpu1_timeout_2026_05_14.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_krylov_skip_side_probe_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_krylov_compact_no_moment_seed3_gpu1_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_krylov_compact_right_restart20_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_cycle_jit_restart20_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_cycle_jit_restart4_diag_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_cycle_jit_diag_factor_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_cycle_jit_diag_exact_lu_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_cycle_jit_exact_cap16_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_cycle_jit_diag_left_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_cycle_jit_diag_left_gmres_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_galerkin_failclosed_seed3_gpu0_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_galerkin_forced_xblock_seed3_gpu1_2026_05_15.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu0_2026_05_15_retry.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_device_operator_rejected_2026_05_13.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
@@ -65,12 +151,24 @@ PROGRESS_MARKERS = (
     "targeted sparse",
     "xblock factorization",
     "explicit FP x-block seed",
+    "fallback",
+    "QI coarse seed",
+    "probe-coarse",
+    "side probe",
+    "lgmres",
+    "LGMRES",
+    "rescue",
+    "solve method forced",
     "sparse_host pattern",
     "sparse_lsmr complete",
     "sparse_ilu:",
     "sparse_lu:",
     "post-minres",
     "post-coarse",
+    "solve start",
+    "device-cycle",
+    "assembled operator",
+    "assembled_device_matvecs",
     "gmres complete",
     "GMRES complete",
     "residual=",
@@ -79,6 +177,24 @@ PROGRESS_MARKERS = (
     "Host sparse factorization failed",
     "timed out",
     "CUDA_ERROR",
+)
+_FLOAT_PATTERN = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eEdD][-+]?\d+)?"
+_ACTIVE_DOF_SIZE_RE = re.compile(r"active-DOF mode enabled\s+\(size=(?P<active>\d+)/(?P<total>\d+)\)")
+_MATRIX_SIZE_RE = re.compile(r"The matrix is (?P<size>\d+) x (?P=size) elements\.")
+_KEY_VALUE_RE = re.compile(
+    r"\b(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[^,\s)]+)"
+)
+_RESIDUAL_ARROW_RE = re.compile(
+    rf"\bresidual(?:[_\s-]*(?:norm|after|before|seed))?\s+(?P<before>{_FLOAT_PATTERN})\s*->\s*(?P<after>{_FLOAT_PATTERN})",
+    re.IGNORECASE,
+)
+_SIDE_PROBE_RE = re.compile(
+    r"\bside probe\s+(?P<decision>[A-Za-z0-9_]+)"
+    r"(?:\s+side=(?P<side_from>[A-Za-z0-9_.-]+)->(?P<side_to>[A-Za-z0-9_.-]+)"
+    r"|\s+(?P<side_from_short>left|right)->(?P<side_to_short>left|right))"
+    r"(?:\s+method=(?P<method_from>[A-Za-z0-9_.-]+)->(?P<method_to>[A-Za-z0-9_.-]+)"
+    r"|\s+(?P<method_from_short>[A-Za-z0-9_.-]+)->(?P<method_to_short>[A-Za-z0-9_.-]+))",
+    re.IGNORECASE,
 )
 
 
@@ -395,6 +511,18 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
         "xblock_side_probe_residual_ratio": solver_metadata.get("xblock_side_probe_residual_ratio"),
         "xblock_side_probe_iterations": solver_metadata.get("xblock_side_probe_iterations"),
         "xblock_side_probe_matvecs": solver_metadata.get("xblock_side_probe_matvecs"),
+        "xblock_device_host_fallback_used": solver_metadata.get("xblock_device_host_fallback_used"),
+        "xblock_device_host_fallback_mode": solver_metadata.get("xblock_device_host_fallback_mode"),
+        "xblock_device_host_fallback_reason": solver_metadata.get("xblock_device_host_fallback_reason"),
+        "xblock_device_host_fallback_requested_method": solver_metadata.get(
+            "xblock_device_host_fallback_requested_method"
+        ),
+        "xblock_device_host_fallback_effective_krylov_env_value": solver_metadata.get(
+            "xblock_device_host_fallback_effective_krylov_env_value"
+        ),
+        "xblock_device_host_fallback_non_autodiff": solver_metadata.get(
+            "xblock_device_host_fallback_non_autodiff"
+        ),
         "solver_kind": solver_metadata.get("solver_kind"),
     }
 
@@ -427,31 +555,320 @@ def _extract_progress_events(*paths: Path, max_events: int = PROGRESS_EVENT_LIMI
     return events
 
 
-def _execute_cases(out_root: Path, cases: Iterable[dict[str, object]], *, timeout_s: float, fail_fast: bool) -> list[dict[str, object]]:
+def _log_key_values(text: object) -> dict[str, str]:
+    """Return simple key=value pairs from one progress line."""
+    return {match.group("key").lower(): match.group("value").rstrip(".,;") for match in _KEY_VALUE_RE.finditer(str(text))}
+
+
+def _float_from_log_value(value: object) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip().rstrip(".,;")
+    if "->" in text:
+        text = text.split("->")[-1]
+    return _finite_float_or_none(text.replace("D", "E").replace("d", "e"))
+
+
+def _int_from_log_value(value: object) -> int | None:
+    parsed = _float_from_log_value(value)
+    if parsed is None:
+        return None
+    return int(parsed)
+
+
+def _arrow_before_after(value: object) -> tuple[float | None, float | None]:
+    text = str(value).strip().rstrip(".,;")
+    if "->" not in text:
+        parsed = _float_from_log_value(text)
+        return None, parsed
+    before, after = text.split("->", 1)
+    return _float_from_log_value(before), _float_from_log_value(after)
+
+
+def _infer_side_probe_progress(events: Iterable[object]) -> dict[str, object]:
+    """Infer selected x-block side/method from compact side-probe progress lines."""
+    summary: dict[str, object] = {}
+    for event in events:
+        text = str(event)
+        match = _SIDE_PROBE_RE.search(text)
+        if match is None:
+            continue
+        key_values = _log_key_values(text)
+        initial_side = match.group("side_from") or match.group("side_from_short")
+        selected_side = match.group("side_to") or match.group("side_to_short")
+        initial_method = match.group("method_from") or match.group("method_from_short")
+        selected_method = match.group("method_to") or match.group("method_to_short")
+        initial_side = initial_side.lower() if initial_side else None
+        selected_side = selected_side.lower() if selected_side else None
+        initial_method = initial_method.lower() if initial_method else None
+        selected_method = selected_method.lower() if selected_method else None
+        summary = {
+            "precondition_side": selected_side,
+            "xblock_side_probe_used": True,
+            "xblock_side_probe_decision": match.group("decision").lower(),
+            "xblock_side_probe_switched": (
+                selected_side != initial_side if selected_side is not None and initial_side is not None else None
+            ),
+            "xblock_side_probe_initial_side": initial_side,
+            "xblock_side_probe_selected_side": selected_side,
+            "xblock_side_probe_initial_method": initial_method,
+            "xblock_side_probe_selected_method": selected_method,
+            "xblock_side_probe_lgmres_rescue": (
+                selected_method == "lgmres" if selected_method is not None else None
+            ),
+            "xblock_side_probe_iterations": _int_from_log_value(
+                key_values.get("iters") or key_values.get("iterations")
+            ),
+            "xblock_side_probe_matvecs": _int_from_log_value(key_values.get("matvecs")),
+            "xblock_side_probe_residual_norm": _float_from_log_value(
+                key_values.get("residual") or key_values.get("residual_norm")
+            ),
+            "xblock_side_probe_residual_ratio": _float_from_log_value(
+                key_values.get("ratio") or key_values.get("residual_ratio")
+            ),
+        }
+    return summary
+
+
+def _infer_lgmres_rescue_status(events: Iterable[object], side_probe: dict[str, object]) -> str | None:
+    """Infer whether LGMRES rescue was visibly forced, disabled, used, or skipped."""
+    status: str | None = None
+    for event in events:
+        text = str(event).lower()
+        text_for_tokens = text.replace("-", "_")
+        if "lgmres" not in text_for_tokens:
+            continue
+        if any(
+            token in text_for_tokens
+            for token in (
+                "disabled",
+                "disable",
+                "no_lgmres",
+                "without_lgmres",
+                "without lgmres",
+                "lgmres_rescue=0",
+                "rescue disabled",
+            )
+        ):
+            status = "disabled"
+        if any(token in text_for_tokens for token in ("forced", "force", "opt_in", "optin")):
+            status = "forced"
+
+    selected_method = side_probe.get("xblock_side_probe_selected_method")
+    if isinstance(selected_method, str):
+        if selected_method.lower() == "lgmres":
+            return status or "used"
+        return status or "not_selected"
+    return status
+
+
+def _infer_last_residual_progress(events: Iterable[object]) -> dict[str, object] | None:
+    """Infer the last residual-like progress record without treating it as convergence."""
+    latest: dict[str, object] | None = None
+    for event in events:
+        text = str(event)
+        if "residual" not in text.lower():
+            continue
+        key_values = _log_key_values(text)
+        residual_before: float | None = None
+        residual_norm: float | None = None
+        residual_kind: str | None = None
+
+        arrow_match = _RESIDUAL_ARROW_RE.search(text)
+        if arrow_match is not None:
+            residual_before = _float_from_log_value(arrow_match.group("before"))
+            residual_norm = _float_from_log_value(arrow_match.group("after"))
+            residual_kind = "residual"
+
+        for key in ("residual", "residual_norm", "relative_residual", "ksp_residual"):
+            if key not in key_values:
+                continue
+            value_before, value_after = _arrow_before_after(key_values[key])
+            residual_before = value_before if value_before is not None else residual_before
+            residual_norm = value_after
+            residual_kind = key
+            break
+
+        target = _float_from_log_value(key_values.get("target") or key_values.get("residual_target"))
+        ratio = _float_from_log_value(key_values.get("ratio") or key_values.get("residual_ratio"))
+        if ratio is None and residual_norm is not None and target is not None and target > 0.0:
+            ratio = residual_norm / target
+
+        latest = {
+            "event": text,
+            "kind": residual_kind,
+            "residual_before": residual_before,
+            "residual_norm": residual_norm,
+            "residual_target": target,
+            "residual_ratio": ratio,
+        }
+    return latest
+
+
+def _infer_sizes_from_progress_events(events: Iterable[object]) -> tuple[int | None, int | None]:
+    """Infer matrix sizes from preserved progress breadcrumbs when traces are absent."""
+    active_size: int | None = None
+    total_size: int | None = None
+    for event in events:
+        text = str(event)
+        active_match = _ACTIVE_DOF_SIZE_RE.search(text)
+        if active_match is not None:
+            active_size = int(active_match.group("active"))
+            total_size = int(active_match.group("total"))
+            continue
+        matrix_match = _MATRIX_SIZE_RE.search(text)
+        if matrix_match is not None and active_size is None:
+            active_size = int(matrix_match.group("size"))
+    return active_size, total_size
+
+
+def _infer_last_matvec_progress(events: Iterable[object]) -> tuple[int | None, float | None]:
+    """Infer the latest reported Krylov matvec progress from compact logs."""
+    last_matvecs: int | None = None
+    last_elapsed_s: float | None = None
+    for event in events:
+        key_values = _log_key_values(event)
+        matvecs = key_values.get("matvecs") or key_values.get("assembled_device_matvecs")
+        elapsed_s = key_values.get("elapsed_s")
+        if matvecs is None or elapsed_s is None:
+            continue
+        parsed_matvecs = _int_from_log_value(matvecs)
+        parsed_elapsed_s = _float_from_log_value(elapsed_s)
+        if parsed_matvecs is None or parsed_elapsed_s is None:
+            continue
+        last_matvecs = parsed_matvecs
+        last_elapsed_s = parsed_elapsed_s
+    return last_matvecs, last_elapsed_s
+
+
+def _append_heartbeat(path: Path, payload: dict[str, object]) -> None:
+    """Append one runner heartbeat event as JSONL."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def _run_command_with_heartbeat(
+    command: list[str],
+    *,
+    cwd: Path,
+    stdout,
+    stderr,
+    timeout_s: float,
+    heartbeat_s: float,
+    heartbeat_path: Path,
+) -> tuple[int, bool, int]:
+    """Run a command with JSONL liveness events and hard process-group timeout."""
+    timeout_use = max(0.0, float(timeout_s))
+    heartbeat_use = max(0.0, float(heartbeat_s))
+    start = time.perf_counter()
+    deadline = start + timeout_use
+    heartbeat_count = 0
+    proc = subprocess.Popen(
+        command,
+        cwd=cwd,
+        stdout=stdout,
+        stderr=stderr,
+        start_new_session=True,
+    )
+
+    def _heartbeat(event: str, **extra: object) -> None:
+        nonlocal heartbeat_count
+        now = time.perf_counter()
+        payload: dict[str, object] = {
+            "event": event,
+            "elapsed_s": now - start,
+            "pid": int(proc.pid),
+            "returncode": proc.returncode,
+        }
+        payload.update(extra)
+        _append_heartbeat(heartbeat_path, payload)
+        heartbeat_count += 1
+
+    _heartbeat("started")
+    next_heartbeat = start + heartbeat_use if heartbeat_use > 0.0 else float("inf")
+    while True:
+        now = time.perf_counter()
+        if timeout_use > 0.0 and now >= deadline:
+            _heartbeat("timeout", timeout_s=timeout_use)
+            stderr.write(f"\nQI seed execution timed out after {timeout_use:.3f} s.\n")
+            stderr.flush()
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                proc.wait(timeout=10.0)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.wait(timeout=10.0)
+            _heartbeat("terminated", timeout_s=timeout_use)
+            return 124, True, heartbeat_count
+
+        wait_until = min(deadline if timeout_use > 0.0 else float("inf"), next_heartbeat)
+        wait_s = max(0.05, min(1.0, wait_until - now if wait_until != float("inf") else 1.0))
+        try:
+            returncode = proc.wait(timeout=wait_s)
+        except subprocess.TimeoutExpired:
+            if heartbeat_use > 0.0 and time.perf_counter() >= next_heartbeat:
+                stdout.flush()
+                stderr.flush()
+                _heartbeat("running", timeout_s=timeout_use)
+                next_heartbeat += heartbeat_use
+            continue
+        _heartbeat("completed", timeout_s=timeout_use)
+        return int(returncode), False, heartbeat_count
+
+
+def _execute_cases(
+    out_root: Path,
+    cases: Iterable[dict[str, object]],
+    *,
+    timeout_s: float,
+    fail_fast: bool,
+    heartbeat_s: float = 0.0,
+) -> list[dict[str, object]]:
     results: list[dict[str, object]] = []
+    heartbeat_use = max(0.0, float(heartbeat_s))
     for case in cases:
         command = [str(part) for part in case["command"]]  # type: ignore[index]
         case_dir = out_root / str(case["case"])
         stdout_path = case_dir / "sfincs_jax.stdout.log"
         stderr_path = case_dir / "sfincs_jax.stderr.log"
+        heartbeat_path = case_dir / "runner_heartbeat.jsonl"
         trace_path = case_dir / "sfincsOutput_jax.solver_trace.json"
         start = time.perf_counter()
+        heartbeat_count = 0
         with stdout_path.open("w", encoding="utf-8") as stdout, stderr_path.open("w", encoding="utf-8") as stderr:
-            try:
-                completed = subprocess.run(
+            if heartbeat_use > 0.0:
+                returncode, timed_out, heartbeat_count = _run_command_with_heartbeat(
                     command,
                     cwd=REPO_ROOT,
                     stdout=stdout,
                     stderr=stderr,
-                    timeout=float(timeout_s),
-                    check=False,
+                    timeout_s=float(timeout_s),
+                    heartbeat_s=heartbeat_use,
+                    heartbeat_path=heartbeat_path,
                 )
-                returncode = int(completed.returncode)
-                timed_out = False
-            except subprocess.TimeoutExpired:
-                stderr.write(f"\nQI seed execution timed out after {float(timeout_s):.3f} s.\n")
-                returncode = 124
-                timed_out = True
+            else:
+                try:
+                    completed = subprocess.run(
+                        command,
+                        cwd=REPO_ROOT,
+                        stdout=stdout,
+                        stderr=stderr,
+                        timeout=float(timeout_s),
+                        check=False,
+                    )
+                    returncode = int(completed.returncode)
+                    timed_out = False
+                except subprocess.TimeoutExpired:
+                    stderr.write(f"\nQI seed execution timed out after {float(timeout_s):.3f} s.\n")
+                    returncode = 124
+                    timed_out = True
         elapsed_s = time.perf_counter() - start
         result = {
             "case": case["case"],
@@ -461,6 +878,8 @@ def _execute_cases(out_root: Path, cases: Iterable[dict[str, object]], *, timeou
             "elapsed_s": elapsed_s,
             "stdout": str(stdout_path.relative_to(out_root)),
             "stderr": str(stderr_path.relative_to(out_root)),
+            "heartbeat": str(heartbeat_path.relative_to(out_root)) if heartbeat_path.exists() else None,
+            "heartbeat_count": int(heartbeat_count),
             "output_exists": (case_dir / "sfincsOutput_jax.h5").exists(),
             "solver_trace_exists": trace_path.exists(),
             "solver_trace_summary": _solver_trace_summary(trace_path),
@@ -590,6 +1009,32 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         trace = result.get("solver_trace_summary")
         trace_summary = trace if isinstance(trace, dict) else {}
         case = case_by_name.get(str(result.get("case")), {})
+        progress_events = result.get("progress_events")
+        stdout_tail = result.get("stdout_tail")
+        stderr_tail = result.get("stderr_tail")
+        log_context = [
+            *(progress_events if isinstance(progress_events, list) else []),
+            *(stdout_tail if isinstance(stdout_tail, list) else []),
+            *(stderr_tail if isinstance(stderr_tail, list) else []),
+        ]
+        side_probe_progress = _infer_side_probe_progress(log_context)
+        lgmres_rescue_status = _infer_lgmres_rescue_status(log_context, side_probe_progress)
+        last_residual_progress = _infer_last_residual_progress(log_context) or {}
+        last_matvecs, last_matvec_elapsed_s = _infer_last_matvec_progress(log_context)
+        inferred_active_size, inferred_total_size = _infer_sizes_from_progress_events(log_context)
+        active_size = trace_summary.get("active_size")
+        total_size = trace_summary.get("total_size")
+
+        def trace_or_progress(key: str) -> object:
+            trace_value = trace_summary.get(key)
+            if trace_value is not None:
+                return trace_value
+            return side_probe_progress.get(key)
+
+        trace_lgmres_rescue = trace_summary.get("xblock_side_probe_lgmres_rescue")
+        if lgmres_rescue_status is None and isinstance(trace_lgmres_rescue, bool):
+            lgmres_rescue_status = "used" if trace_lgmres_rescue else "not_selected"
+
         seed_summaries.append(
             {
                 "case": result.get("case"),
@@ -601,8 +1046,8 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                 "elapsed_s": result.get("elapsed_s"),
                 "solver_elapsed_s": trace_summary.get("elapsed_s"),
                 "backend": trace_summary.get("backend"),
-                "active_size": trace_summary.get("active_size"),
-                "total_size": trace_summary.get("total_size"),
+                "active_size": active_size if active_size is not None else inferred_active_size,
+                "total_size": total_size if total_size is not None else inferred_total_size,
                 "solve_method": trace_summary.get("solve_method"),
                 "selected_path": trace_summary.get("selected_path"),
                 "converged": trace_summary.get("converged"),
@@ -610,25 +1055,50 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                 "residual_norm": trace_summary.get("residual_norm"),
                 "residual_target": trace_summary.get("residual_target"),
                 "residual_ratio": trace_summary.get("residual_ratio"),
-                "precondition_side": trace_summary.get("precondition_side"),
+                "precondition_side": trace_or_progress("precondition_side"),
                 "default_right_preconditioned": trace_summary.get("default_right_preconditioned"),
                 "gmres_restart": trace_summary.get("gmres_restart"),
                 "iterations": trace_summary.get("iterations"),
                 "matvecs": trace_summary.get("matvecs"),
-                "xblock_side_probe_used": trace_summary.get("xblock_side_probe_used"),
-                "xblock_side_probe_switched": trace_summary.get("xblock_side_probe_switched"),
-                "xblock_side_probe_initial_side": trace_summary.get("xblock_side_probe_initial_side"),
-                "xblock_side_probe_selected_side": trace_summary.get("xblock_side_probe_selected_side"),
-                "xblock_side_probe_initial_method": trace_summary.get("xblock_side_probe_initial_method"),
-                "xblock_side_probe_selected_method": trace_summary.get("xblock_side_probe_selected_method"),
-                "xblock_side_probe_lgmres_rescue": trace_summary.get("xblock_side_probe_lgmres_rescue"),
+                "xblock_side_probe_used": trace_or_progress("xblock_side_probe_used"),
+                "xblock_side_probe_decision": trace_or_progress("xblock_side_probe_decision"),
+                "xblock_side_probe_switched": trace_or_progress("xblock_side_probe_switched"),
+                "xblock_side_probe_initial_side": trace_or_progress("xblock_side_probe_initial_side"),
+                "xblock_side_probe_selected_side": trace_or_progress("xblock_side_probe_selected_side"),
+                "xblock_side_probe_initial_method": trace_or_progress("xblock_side_probe_initial_method"),
+                "xblock_side_probe_selected_method": trace_or_progress("xblock_side_probe_selected_method"),
+                "xblock_side_probe_lgmres_rescue": trace_or_progress("xblock_side_probe_lgmres_rescue"),
+                "xblock_lgmres_rescue_status": lgmres_rescue_status,
                 "xblock_lgmres_rescue_outer_k": trace_summary.get("xblock_lgmres_rescue_outer_k"),
-                "xblock_side_probe_residual_ratio": trace_summary.get("xblock_side_probe_residual_ratio"),
-                "xblock_side_probe_iterations": trace_summary.get("xblock_side_probe_iterations"),
-                "xblock_side_probe_matvecs": trace_summary.get("xblock_side_probe_matvecs"),
+                "xblock_side_probe_residual_ratio": trace_or_progress("xblock_side_probe_residual_ratio"),
+                "xblock_side_probe_residual_norm": trace_or_progress("xblock_side_probe_residual_norm"),
+                "xblock_side_probe_iterations": trace_or_progress("xblock_side_probe_iterations"),
+                "xblock_side_probe_matvecs": trace_or_progress("xblock_side_probe_matvecs"),
+                "xblock_device_host_fallback_used": trace_summary.get("xblock_device_host_fallback_used"),
+                "xblock_device_host_fallback_mode": trace_summary.get("xblock_device_host_fallback_mode"),
+                "xblock_device_host_fallback_reason": trace_summary.get("xblock_device_host_fallback_reason"),
+                "xblock_device_host_fallback_requested_method": trace_summary.get(
+                    "xblock_device_host_fallback_requested_method"
+                ),
+                "xblock_device_host_fallback_effective_krylov_env_value": trace_summary.get(
+                    "xblock_device_host_fallback_effective_krylov_env_value"
+                ),
+                "xblock_device_host_fallback_non_autodiff": trace_summary.get(
+                    "xblock_device_host_fallback_non_autodiff"
+                ),
                 "resolution": case.get("resolution") if isinstance(case, dict) else None,
-                "progress_events": result.get("progress_events"),
-                "stderr_tail": result.get("stderr_tail"),
+                "progress_events": progress_events,
+                "stdout_tail": stdout_tail,
+                "stderr_tail": stderr_tail,
+                "last_progress_residual_event": last_residual_progress.get("event"),
+                "last_progress_residual_norm": last_residual_progress.get("residual_norm"),
+                "last_progress_residual_target": last_residual_progress.get("residual_target"),
+                "last_progress_residual_ratio": last_residual_progress.get("residual_ratio"),
+                "last_progress_residual_before": last_residual_progress.get("residual_before"),
+                "last_matvecs": last_matvecs,
+                "last_matvec_elapsed_s": last_matvec_elapsed_s,
+                "heartbeat": result.get("heartbeat"),
+                "heartbeat_count": result.get("heartbeat_count"),
             }
         )
 
@@ -665,6 +1135,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         "gates": execution.get("gates"),
         "seeds": seed_summaries,
         "timeout_s": execution.get("timeout_s"),
+        "heartbeat_s": execution.get("heartbeat_s"),
         "fail_fast": execution.get("fail_fast"),
     }
 
@@ -691,7 +1162,12 @@ def _artifact_passed(payload: dict[str, object]) -> bool:
 def _artifact_backends(payload: dict[str, object]) -> list[str]:
     summary = payload.get("execution_summary")
     if isinstance(summary, dict) and isinstance(summary.get("backends"), list):
-        return sorted({str(backend) for backend in summary["backends"] if backend})
+        backends = sorted({str(backend) for backend in summary["backends"] if backend})
+        if backends:
+            return backends
+
+    if payload.get("backend"):
+        return [str(payload["backend"])]
 
     trace = payload.get("solver_trace_summary")
     if isinstance(trace, dict) and trace.get("backend"):
@@ -721,7 +1197,12 @@ def _artifact_backends(payload: dict[str, object]) -> list[str]:
             for probe in rejected
             if isinstance(probe, dict) and probe.get("backend")
         }
-        return sorted(backends)
+        if backends:
+            return sorted(backends)
+
+    device_operator_probe = payload.get("device_operator_probe")
+    if isinstance(device_operator_probe, dict) and device_operator_probe.get("backend"):
+        return [str(device_operator_probe["backend"])]
     return []
 
 
@@ -897,6 +1378,24 @@ def build_evidence_manifest(
             if backend
         }
     )
+    non_autodiff_fallback_artifacts = [
+        artifact
+        for artifact in passed_artifacts
+        if "device_host_fallback" in str(artifact.get("path", ""))
+    ]
+    non_autodiff_fallback_ready = bool(non_autodiff_fallback_artifacts)
+    true_device_qi_blockers = [
+        artifact
+        for artifact in nonpassing_artifacts
+        if (
+            "scale060" in str(artifact.get("path", ""))
+            and (
+                "gpu" in str(artifact.get("path", ""))
+                or "device" in str(artifact.get("path", ""))
+                or "galerkin" in str(artifact.get("path", ""))
+            )
+        )
+    ]
 
     cpu_command = [
         "JAX_PLATFORM_NAME=cpu",
@@ -963,9 +1462,60 @@ def build_evidence_manifest(
         "source_input": _repo_relative(source_input),
         "release_gate": "bounded_proxy",
         "release_gate_reason": (
-            "Bounded CPU/GPU QI artifacts pass, but no production-resolution CPU/GPU "
-            "multi-seed ladder has been checked in yet."
+            "Scoped production non-autodiff host fallback evidence is release-ready; "
+            "the broad public auto QI gate remains a bounded proxy until production-resolution "
+            "CPU/GPU ladders pass, and true device-QI is closed deferred post-release."
         ),
+        "release_claims": {
+            "production_non_autodiff_host_fallback": {
+                "claim_status": "release_ready" if non_autodiff_fallback_ready else "bounded_proxy",
+                "blocks_current_release": False,
+                "scope": (
+                    "Explicit large-QI device-Krylov requests may use the non-autodiff host "
+                    "x-block sparse-PC fallback. This is production fallback coverage, not "
+                    "a differentiable or true device-resident QI solve claim."
+                ),
+                "evidence": (
+                    str(non_autodiff_fallback_artifacts[0].get("path"))
+                    if non_autodiff_fallback_artifacts
+                    else "missing passing device_host_fallback artifact"
+                ),
+                "promotion_gate": (
+                    "Keep release-ready only while a passing artifact records the host fallback "
+                    "metadata, writes output/trace, and preserves residual convergence under "
+                    "the QI gate."
+                ),
+            },
+            "true_device_qi": {
+                "claim_status": "closed_deferred",
+                "blocks_current_release": False,
+                "closed_or_deferred_reason": (
+                    "Closed post-release: scale-0.60 GPU hard-seed device/Galerkin/x-block "
+                    "routes time out or fail residual probes; production fallback is covered "
+                    "by the non-autodiff host path."
+                ),
+                "evidence": [str(artifact.get("path")) for artifact in true_device_qi_blockers],
+                "promotion_gate": (
+                    "Promote only after a scale-0.60 GPU hard-seed artifact writes HDF5, "
+                    "solver trace, accepted-converged residual metadata, and shows the "
+                    "device-resident QI path reduces the true residual before timeout."
+                ),
+            },
+            "public_auto_production_ladder": {
+                "claim_status": "bounded_proxy",
+                "blocks_current_release": False,
+                "scope": (
+                    "Checked artifacts are bounded-resolution QI evidence. Production-resolution "
+                    "CPU/GPU multi-seed public-auto ladders remain the promotion gate for a "
+                    "broad default-policy claim."
+                ),
+                "evidence": "source_artifacts",
+                "promotion_gate": (
+                    "Promote only after production CPU and GPU public-auto ladder artifacts "
+                    "pass residual, convergence, output, and solver-trace gates."
+                ),
+            },
+        },
         "source_artifacts": artifacts,
         "current_evidence": {
             "artifact_count": len(artifacts),
@@ -1015,9 +1565,10 @@ def build_evidence_manifest(
             "production_gpu0_seed_ladder": " ".join(gpu_command),
         },
         "open_blockers": [
-            "Run and check in production-resolution CPU multi-seed summary artifact.",
-            "Run and check in production-resolution GPU0 multi-seed summary artifact.",
-            "Promote release_gate only after both production artifacts pass the residual and convergence gates.",
+            "Run and check in production-resolution CPU multi-seed summary artifact before promoting broad public-auto QI.",
+            "Run and check in production-resolution GPU0 multi-seed summary artifact before promoting broad public-auto QI.",
+            "Keep true device-QI closed deferred until a scale-0.60 GPU hard-seed artifact writes output, trace, and accepted-converged residual metadata.",
+            "Do not use the non-autodiff host fallback as evidence for differentiable or true device-resident QI.",
         ],
     }
 
@@ -1064,6 +1615,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--execute", action="store_true", help="Run each generated seed through sfincs_jax write-output.")
     parser.add_argument("--timeout-s", type=float, default=300.0, help="Per-seed execution timeout.")
+    parser.add_argument(
+        "--heartbeat-s",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional per-seed heartbeat interval. When positive, the runner writes "
+            "case-local runner_heartbeat.jsonl events and enforces timeout by killing "
+            "the whole subprocess process group."
+        ),
+    )
     parser.add_argument("--fail-fast", action="store_true", help="Stop executing after the first failed seed.")
     parser.add_argument(
         "--max-residual-ratio",
@@ -1184,7 +1745,13 @@ def main(argv: list[str] | None = None) -> int:
         "cases": cases,
     }
     if bool(args.execute):
-        results = _execute_cases(out_root, cases, timeout_s=float(args.timeout_s), fail_fast=bool(args.fail_fast))
+        results = _execute_cases(
+            out_root,
+            cases,
+            timeout_s=float(args.timeout_s),
+            fail_fast=bool(args.fail_fast),
+            heartbeat_s=float(args.heartbeat_s),
+        )
         gates = _evaluate_execution_gates(
             results,
             max_residual_ratio=args.max_residual_ratio,
@@ -1193,6 +1760,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         manifest["execution"] = {
             "timeout_s": float(args.timeout_s),
+            "heartbeat_s": float(args.heartbeat_s),
             "fail_fast": bool(args.fail_fast),
             "results": results,
             "passed": sum(1 for result in results if int(result["returncode"]) == 0),

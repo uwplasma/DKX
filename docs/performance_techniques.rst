@@ -1584,10 +1584,20 @@ Controls:
   setup time, basis names, and side-probe switch suppression metadata. The
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres`` and ``gmres-jax``
   experimental routes now use a JAX-array global-coupling variant for this
-  wrapper: ``Z``, ``A Z``, and the small ridge-regularized coarse inverse stay
-  in JAX arrays during the Krylov apply path, so the coarse correction no longer
-  requires host QR/SciPy calls on every iteration. This is still opt-in and does
-  not change default solver selection.
+  wrapper: ``Z`` and a small coarse least-squares solve stay in JAX arrays
+  during the Krylov apply path, so the coarse correction no longer requires
+  host QR/SciPy calls on every iteration. The default device coarse solver is a
+  rank-revealed QR factorization built once at setup; the older
+  ridge-regularized normal-equation solver remains available through
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_DEVICE_SOLVER=normal-equations``
+  for diagnostics. Device global coupling now defaults to an identity/raw-load
+  smoother, while the older preconditioned-load smoothing remains available
+  through ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SMOOTHER=base``.
+  This avoids spending hundreds of accelerator matvecs before the Krylov solve
+  starts on memory-sensitive QI probes. The setup can also be bounded with
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SETUP_MAX_S``; metadata records
+  ``xblock_global_coupling_smoother`` and whether the setup budget was reached.
+  This is still opt-in and does not change default solver selection.
   The
   scale-0.60 hard-seed probe
   ``docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json``
@@ -1623,6 +1633,21 @@ Controls:
   infeasible materialization attempts bounded, but it also means the active
   assembled path remains diagnostic-only until a large case shows strict
   residual parity and lower wall time/memory.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE`` (default: on for
+  experimental JAX device Krylov, off otherwise): copies a successfully
+  materialized assembled x-block operator into budgeted JAX CSR arrays and uses a
+  JIT-compatible CSR matvec instead of calling SciPy from every Krylov
+  iteration. ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED=1``
+  makes this a hard gate for GPU experiments, so a failed device transfer or
+  validation does not silently fall back to host round trips. Solver metadata
+  records ``xblock_assembled_operator_device_resident``,
+  ``xblock_assembled_operator_device_csr_nbytes_estimate``, validation errors,
+  and whether device-Krylov matvec/preconditioner application is
+  host-transfer-free. The device CSR stores precomputed row indices in addition
+  to ``data``, ``indices``, and ``indptr`` so accelerator matvecs avoid
+  per-trace ``repeat``/constant-folding work. This is the current QI
+  operator-reuse candidate; it is still opt-in until the bounded ``office``
+  hard-seed gate writes a converged HDF5 output and solver trace.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF`` (default: off): opt-in active-DOF
   reduction for explicit ``xblock_sparse_pc_gmres``. When ``Nxi_for_x`` truncates
   the pitch basis, this route solves the x-block Krylov system on the active
@@ -1638,26 +1663,184 @@ Controls:
   convergence. The 2026-05-13 bounded probe did not promote it: even a small
   local full-FP RHSMode=1 opt-in run was manually killed after about ``76 s`` of
   setup/test time, so this path is evidence-gathering only.
-- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres`` or ``gmres-jax`` (default:
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres``, ``gmres-jax``,
+  ``bicgstab-jax``, or ``tfqmr-jax`` (default:
   off): opt-in JAX-native device Krylov routes for the explicit x-block path.
   ``fgmres`` uses fixed-shape JAX Arnoldi/Hessenberg work arrays, supports
   iteration-dependent right preconditioners, and avoids per-iteration residual
   conversion to Python scalars. ``gmres-jax`` uses the same fixed-shape
   Arnoldi/least-squares primitive with a fixed left preconditioner so measured
-  left-preconditioned QI side choices can be tested without SciPy Krylov. Both
-  routes force the JAX-factor x-block apply path and can use the device-resident
+  left-preconditioned QI side choices can be tested without SciPy Krylov.
+  ``bicgstab-jax`` and ``tfqmr-jax`` are lower-memory short-recurrence paths
+  for device assembled-operator experiments; they avoid the :math:`O(n\,m)`
+  GMRES restart basis and record ``xblock_estimated_gmres_basis_nbytes``,
+  ``xblock_estimated_bicgstab_work_nbytes``, and
+  ``xblock_estimated_tfqmr_work_nbytes`` in solver metadata. These routes
+  force the JAX-factor x-block apply path and can use the device-resident
   global-coupling correction above. Current tests cover the solver primitive,
   JIT tracing, policy parsing, and small full-system metadata. The checked
   ``docs/_static/qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json``
   artifact shows why these routes remain experimental: the one-GPU hard seed no
   longer times out or triggers the earlier illegal-address failure, but it still
-  fails strict true-residual acceptance.
+  fails strict true-residual acceptance. The follow-up
+  ``docs/_static/qi_seed_robustness_scale060_device_operator_rejected_2026_05_13.json``
+  artifact verifies the next operator-reuse step: the active device CSR
+  assembled with ``2.88e6`` nonzeros in ``83.6 s`` and executed ``400`` device
+  matvecs by ``505.7 s``, but full-restart FGMRES still timed out at ``540 s``
+  without HDF5 output or a solver trace. The same artifact also records a
+  follow-up ``bicgstab-jax`` trial: peak RSS dropped to ``13.6 GB`` and the run
+  finished before timeout, but the short-recurrence solve diverged to
+  ``2.35e102`` and output was correctly refused. The same artifact records
+  ``tfqmr-jax`` and ``tfqmr-jax`` with true-residual replacement every 20
+  iterations. Plain TFQMR preserved the low-memory device path but diverged in
+  ``8:05``; residual replacement made the failure bounded and faster
+  (``4:23``) but still diverged to ``2.35e102``. TFQMR is therefore a useful
+  guardrail/diagnostic path, not a production QI replacement solver. The same
+  artifact also records the device QR global-coupling FGMRES probe: the
+  correction built successfully with ``32`` loads, ``20`` retained directions,
+  and rank ``20``, but the run still timed out at ``540 s`` after ``475``
+  device matvecs and peaked at ``46.1 GB`` RSS. This rejects QR global coupling
+  as a standalone hard-seed fix while keeping the better-conditioned coarse
+  implementation for future preconditioner work. A later identity-smoother
+  device QR probe reached global-coupling build and Krylov start with ``30``
+  retained directions and reduced the probe-coarse seed residual only from
+  ``3.021487e-05`` to ``3.019236e-05``; it still timed out after ``400`` device
+  matvecs, but peak RSS was lower than the preconditioned-load setup probe.
+  This promotes identity smoothing as a bounded setup default, not as a QI
+  hard-seed convergence fix. A
+  restart-20 device-FGMRES follow-up reached ``500`` device matvecs by
+  ``533.2 s`` but still timed out and increased peak host RSS to ``50.4 GB``.
+  The cycle-synchronized
+  restart-20 follow-up verified the new memory knob and reached ``500`` device
+  matvecs by ``528.8 s``, but still timed out and peaked at ``51.0 GB`` RSS.
+  That artifact is explicit blocker evidence, not a performance claim. The
+  next cycle-JIT implementation changes the device-Krylov execution model: it
+  JIT-compiles one restart cycle instead of tracing the entire Python-unrolled
+  solver. On the same scale-0.60 seed-3 GPU hard seed, cycle-JIT FGMRES with the
+  active device CSR operator finished in ``281.7 s`` and kept peak RSS near
+  ``13.9 GB`` instead of the full-solver JIT ``56.6 GB`` failure. Recycled
+  cycle-JIT with ``outer_k=6`` also stayed bounded (``386.4 s``, ``13.9 GB``)
+  and preserved the explicit right-preconditioned side after a rejected
+  right-side probe. Neither reduced the hard-seed residual below
+  ``3.019e-5`` versus the ``3.021e-13`` target, so these routes are promoted as
+  device/operator infrastructure only, not as QI closure.
+- The same blocker artifact records the final conditioning probes for this
+  push. Row equilibration solves ``D_r A x = D_r b`` and two-sided
+  equilibration solves ``D_r A D_c z = D_r b`` with the physical mapping
+  ``x = D_c z``. Both completed the scale-0.60 seed-3 GPU hard seed in about
+  ``275 s`` with output/trace enabled, but the physical residual remained near
+  ``3.02e-5``. Increasing the x-block JAX factor row cap to ``256`` also left
+  the residual unchanged. A closer GPU analogue of the CPU-closing path, exact
+  per-x sparse LU with left device GMRES and row cap ``1024``, reached the
+  intended factors but timed out at ``540 s`` with no output. These probes
+  reject scaling, ILU padding, and naive padded exact-LU transfer as production
+  GPU closure strategies. The replacement compact-CSR exact-factor path stores
+  only actual SuperLU factor nonzeros instead of padding every row to the widest
+  factor row. On the same hard seed it built the full exact per-x factors
+  (``1.10e8`` lower nonzeros, ``1.19e8`` upper nonzeros, ``2.76 GB`` estimated
+  factor arrays) and reduced the padded-factor memory problem, but the run still
+  timed out before writing a solver trace because the first device
+  transfer/apply remained too expensive. This keeps compact CSR as useful
+  infrastructure, not QI closure. The next QI algorithm must either reduce the
+  factor application cost by changing the block factorization itself, or replace
+  the x-block preconditioner with a residual-reducing block-Schur/coarse
+  operator.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT`` (default: off): opt-in JIT
+  execution for JAX-native x-block FGMRES/GMRES probes. With
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle`` (default), SFINCS_JAX
+  compiles a single restarted FGMRES cycle and calls it repeatedly. This avoids
+  the large HLO and host-RSS spike observed when the full multi-cycle solver is
+  JIT-compiled. ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K`` adds a
+  small LGMRES-style recycled augmentation space for diagnostics. Cycle-JIT now
+  exposes per-cycle progress callbacks, so timeout artifacts can distinguish
+  setup stalls from a Krylov cycle that is actively reducing the residual. The
+  2026-05-15 scale-0.60 QI seed-3 GPU probes showed that compact CSR exact
+  factors reach ``solve start`` with about ``5.9--6.4 GB`` of GPU memory when
+  ``XLA_PYTHON_CLIENT_PREALLOCATE=false`` is used, but even restart-4 and
+  restart-20 cycle-JIT probes did not return one full cycle within the bounded
+  window. This rejects compact exact triangular solves inside device Krylov as
+  the closure path for this hard seed.
+- ConstraintScheme=1 moment-Schur preconditioning is rank-gated. The
+  one-species QI hard seed produces a rank-``1`` moment Schur matrix for
+  ``extra=2``; SFINCS_JAX now refuses that unstable pseudo-inverse by default
+  instead of generating ``1e102`` residual seeds. For compact CSR JAX factors,
+  the moment-Schur default is also disabled because bounded GPU evidence showed
+  this setup can consume the budget before useful Krylov work. Users can still
+  force it with ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR=1`` for controlled
+  diagnostics.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE`` and
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_COL_EQUILIBRATE`` (defaults:
+  off): opt-in active assembled-operator scaling probes. Row equilibration is a
+  left diagonal scaling; column equilibration additionally solves in scaled
+  unknowns and maps back before physical diagnostics/output. Both paths are
+  metadata-covered and acceptance-gated by the unscaled physical residual.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT=csr`` (default:
+  ``padded``): opt-in compact CSR storage for JAX x-block SuperLU factors. This
+  avoids the padded max-row storage cliff and is the preferred diagnostic format
+  for exact-factor GPU probes, but it is still too expensive to promote on the
+  scale-0.60 QI hard seed without a stronger residual-reducing algorithm. The
+  current conclusion is explicit: the remaining GPU hard-seed blocker is not
+  side selection, LGMRES rescue, QI seed construction, moment-Schur setup, or
+  memory preallocation. It is the cost of applying exact compact triangular
+  factors inside device Krylov. The next GPU production path should replace that
+  per-iteration apply with a GPU-cheap residual-effective smoother/coarse
+  preconditioner or use a documented non-autodiff host fallback for this large
+  RHSMode=1 lane.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK`` (default: ``auto``):
+  documented non-autodiff fallback for large RHSMode=1, ConstraintScheme=1,
+  three-dimensional full-FP/QI solves when the user explicitly requests a
+  JAX-native x-block Krylov method (``fgmres``, ``gmres-jax``,
+  ``bicgstab-jax``, or ``tfqmr-jax``). In ``auto`` mode this fallback is scoped
+  to active systems above
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK_MIN_ACTIVE`` (default:
+  ``80000``) and rewrites the requested device solver to the host x-block auto
+  policy before x-block factors are built. This avoids constructing JAX factor
+  arrays that the accepted path will not use, while preserving the measured
+  host side-probe seed and LGMRES rescue that close the CPU hard seed. The
+  solver metadata records ``xblock_device_host_fallback_used``,
+  ``xblock_device_host_fallback_reason``, the requested method, the effective
+  method, and ``xblock_device_host_fallback_non_autodiff=True``. Set the
+  fallback to ``0`` to force the experimental device-Krylov path, or to
+  ``force``/``host`` to use the host x-block policy even below the automatic
+  active-size floor. This is the production-safe escape hatch for the current
+  large-QI hard-seed blocker; it is not an end-to-end differentiable solver
+  path.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_APPLY`` (default:
+  ``exact``): diagnostic compact-factor apply mode for device Krylov. ``exact``
+  applies both SuperLU triangular factors, ``diagonal`` applies only the pivoted
+  upper-factor diagonal, ``upper`` and ``lower`` apply one triangular factor,
+  and ``identity`` bypasses local factor application. These modes are
+  acceptance-gated by the unscaled true residual and are not default
+  performance claims. The 2026-05-15 ``office`` GPU hard-seed diagnostics showed
+  that ``diagonal`` returns synchronized restart cycles in about
+  ``124--153 s`` instead of timing out before the first cycle, but it leaves the
+  true residual near ``3.02e-5`` against a ``3.02e-13`` target. A row-cap-16
+  exact triangular apply reduced compact factor storage to about ``33 MB`` but
+  still needed about ``266 s`` and showed the same residual. This rejects
+  diagonal, one-sided, and storage-only triangular approximations as QI closure
+  strategies while keeping them as bounded profiling tools.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES`` (default:
+  off): opt-in memory diagnostic for the JAX-native FGMRES routes. When enabled,
+  SFINCS_JAX synchronizes at GMRES restart boundaries in eager accelerator runs
+  so queued work and basis buffers can be released before the next cycle. It is
+  ignored while tracing under ``jax.jit`` and is not a convergence fix by itself;
+  it exists to test whether hard-seed memory growth comes from cross-cycle
+  buffer retention or from the algorithmic basis/preconditioner footprint. The
+  scale-0.60 QI hard-seed evidence above shows no peak-memory gain, so this knob
+  remains diagnostic-only.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS`` (default: ``0``): opt-in
   matrix-free post-Krylov correction for explicit ``xblock_sparse_pc_gmres``.
   Each accepted step applies the x-block preconditioner to the current residual
   and chooses a scalar minimum-residual step using one extra operator
   application. It did not materially reduce the scale-0.50 QI residual floor
   and remains diagnostic-only.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE`` (default: off): opt-in
+  pre-Krylov projected coarse correction for explicit ``xblock_sparse_pc_gmres``.
+  It now initializes a zero x-block seed when no side probe or explicit
+  ``x0`` is present, records ``xblock_probe_coarse_seed_initialized``, and only
+  promotes the projected update if the measured true residual decreases. This
+  makes the hook useful as a bounded residual preflight before expensive GPU
+  Krylov launches; it is still experimental and does not alter public defaults.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE`` (default: off): opt-in
   multidirectional post-Krylov coarse correction for explicit
   ``xblock_sparse_pc_gmres``. When enabled, SFINCS_JAX forms a bounded
@@ -1687,6 +1870,70 @@ Controls:
   to about ``700`` matvecs before the timeout. The remaining GPU blocker is
   therefore a device-resident/preconditioner-application issue, not an illegal
   address crash or CPU convergence issue.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_LMAX`` (default:
+  ``-1``): optional low-Fourier angular directions for the probe-coarse seed
+  basis. These modes target global angular coupling that is invisible to a pure
+  per-``x`` block inverse. The basis remains bounded by
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS`` and is accepted
+  only when the measured true residual decreases.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_RESIDUAL`` (default:
+  off): adds residual-weighted angular directions to the same bounded
+  probe-coarse seed. This is the current best bounded CPU hard-seed variant:
+  ``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``
+  passes the scale-0.60 seed-3 QI case in ``170.7 s`` with residual ratio
+  ``2.14e-3``, ``2024`` matvecs, active size ``81377``, and measured peak RSS
+  about ``4.77 GB``. It improves the probe seed from about ``4.57e-6`` to
+  ``2.85e-6`` before Krylov. This knob remains opt-in because the matching
+  one-GPU run still times out without HDF5 output.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED`` (default: off): opt-in
+  pre-Krylov QI coarse seed. This path builds a deterministic rank-gated basis
+  from block constants, species groups, radial ramps, and first angular
+  harmonics, pads it into the active ``Nxi_for_x`` Krylov space, and solves a
+  small least-squares problem for the seed correction. Metadata records the
+  residual before/after, improvement ratio, rank, candidate count, accepted
+  labels, rejection reason, and setup time. It is a genuine replacement
+  candidate for QI hard seeds. The checked scale-0.60 seed-3 CPU rerun
+  ``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_cpu_2026_05_14.json``
+  passes in ``248.4 s`` with residual ratio ``1.36e-3``. The QI seed correction
+  itself is small, while the new angular probe-coarse directions supply the
+  material pre-Krylov drop. A matching one-GPU heartbeat probe
+  ``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_heartbeat_timeout_2026_05_14.json``
+  kept the process live and bounded for ``420 s`` on the same active
+  ``81377``/total ``139502`` system, but it still wrote no HDF5 or solver trace.
+  That probe also forced the host-oriented LGMRES rescue on GPU, so it is
+  retained only as negative liveness evidence. The follow-up GPU-compatible
+  policy probe
+  ``docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_gpu0_no_lgmres_timeout_2026_05_14.json``
+  explicitly disabled LGMRES rescue. It switched the side probe from left to
+  right GMRES, preserved the physical seed, improved that seed with the
+  probe-coarse basis from ``4.57e-6`` to ``2.83e-6``, and reached ``900`` matvecs
+  by ``412.7 s`` before the same bounded timeout. This is useful progress
+  evidence, but still rejected because no HDF5 output or solver trace was
+  written. Keep the route off by default until the GPU-compatible policy writes
+  HDF5/trace within budget and is competitive.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS=enriched``: A/B-test
+  basis that adds radial curvature, higher angular/mixed harmonics,
+  residual-independent constraint moments, and block-Schur-like species/``x``
+  contrasts before rank truncation. It is intentionally not the default. The
+  scale-0.60 CPU A/B run converged, but it took ``265.2 s`` and about ``5.34 GB``
+  RSS, slower and larger than the accepted residual-weighted angular
+  probe-coarse run, so
+  ``docs/_static/qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json``
+  marks it as a performance rejection. The matching GPU-compatible no-LGMRES
+  run reached ``925`` matvecs by ``409.9 s`` and timed out; the compact
+  JAX-factor device-Krylov run built ``57 MB`` compact CSR factors but timed out
+  before useful Krylov progress. These artifacts are negative evidence, not QI
+  promotion.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL`` (default: off): local x-block
+  factorization A/B hook. ``force`` replaces exact per-x SuperLU factors by
+  lower-fill ILU factors even inside the exact-LU size window; companion knobs
+  tune ``*_LOWER_FILL_FACTOR``, ``*_LOWER_FILL_ILU_DROP_TOL``,
+  ``*_LOWER_FILL_ROW_NNZ_MAX``, and ``*_LOWER_FILL_COMPACT_ROW_NNZ_MAX``. The
+  QI hard-seed tests show the tradeoff clearly: lower fill reduced peak RSS to
+  about ``3.0 GB`` but stalled at residual ``~6.6e-6`` against a ``3e-11`` target
+  after ``14835`` matvecs. The moderate-fill variant also failed. Keep this as
+  a memory diagnostic until an adaptive acceptance/probing layer can prove both
+  residual convergence and wall-time competitiveness.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL`` (default: off): opt-in two-level
   global-coupling preconditioner for explicit ``xblock_sparse_pc_gmres``. It
   builds a fixed low-dimensional coarse basis from RHS-like directions,
@@ -1708,8 +1955,29 @@ Controls:
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=lgmres`` or ``gcrotmk`` remains a
   diagnostic-only Krylov-method toggle. On the scale-0.50 QI blocker, LGMRES
   stalled at a slightly worse residual than GMRES, fell back to GMRES, doubled
-  the matrix-vector count, and ended at the same residual floor. GCROT(m,k) also
-  underperformed right-preconditioned GMRES on the checked QI probe.
+  the matrix-vector count, and ended at the same residual floor. The automatic
+  LGMRES rescue is now backend-gated through the tested x-block policy helper:
+  it is allowed by default on CPU, disabled by default on GPU, and only runs on
+  GPU when the user explicitly forces ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE=1``.
+  GCROT(m,k) also underperformed right-preconditioned GMRES on the checked QI
+  probe.
+
+Current QI promotion gate:
+
+- Further QI promotion must not be justified by another Krylov-name toggle,
+  restart-only change, or side-threshold adjustment. Those routes are useful only
+  as negative diagnostics unless a new preconditioner/operator path first changes
+  the measured true-residual trend.
+- The next admissible path must be device-resident or operator-reuse based. Before
+  launching the full expensive Krylov loop, it must apply the candidate
+  preconditioner, active assembled/reused operator, or physical seed correction to
+  the hard-seed state or physics load bases and show a lower true residual than
+  the incumbent preflight.
+- CPU/GPU parity remains part of the gate. A bounded CPU rescue is not enough to
+  widen public QI defaults; the matching one-GPU ``office`` gate must write HDF5
+  output and a solver trace, satisfy strict true-residual acceptance, and preserve
+  the bounded CPU result before any CPU/GPU multi-seed or production-resolution
+  ladder is attempted.
 
 Large geometry-rich PAS closeout:
 
@@ -1924,6 +2192,48 @@ The helper rejects exactly zero updates and zero-relaxation attempts before
 running a candidate residual matvec, so no-op PAS correction probes now spend one
 matrix-free operator application instead of two while preserving the same reject
 reason and residual history.
+It also preflights candidate vector element and byte budgets before calling the
+correction builder. ``scripts/benchmark_rhs1_pas_matrixfree.py`` exposes this as
+``--max-candidate-elements`` and ``--max-candidate-bytes`` so production-floor
+PAS probes can fail closed before materializing large update or residual arrays.
+The byte budget is now also a promotion gate: every planned bounded probe writes
+``byte_preflight`` provenance, metadata-backed production-floor probes write a
+conservative ``production_floor_byte_preflight`` record using the estimated full
+unknown count and float64 item size, and
+``--production-solve-require-default-promotion-gate`` refuses to run unless
+``--max-candidate-bytes`` is supplied and the selected target is byte-safe. This
+keeps diagnostic dry-runs useful without allowing a memory-unsafe PAS candidate
+to be promoted from an unrelated runtime/residual artifact.
+
+The real-solve launcher now applies the same rule before *any* opt-in
+production-floor PAS probe: ``--run-production-solve-probe`` requires an
+explicit ``--max-candidate-bytes`` budget by default.  A developer can still
+force an unbudgeted diagnostic with
+``--production-solve-allow-unbudgeted-candidate``, but that opt-out is recorded
+in the plan JSON and is not suitable for promotion evidence.  The checked
+``docs/_static/rhs1_pas_matrixfree_byte_budget_gate_2026_05_15.json`` dry-run
+shows the intended state for the current production-floor candidates: geometry4
+and HSX have byte-safe, launchable short-probe plans under the configured
+budget; geometry11 remains held because the checked artifact evidence is not yet
+complete enough for a promotion-facing real solve.
+
+The corresponding byte-budgeted real-solve probes are checked in as negative
+promotion evidence, not as defaults.  The geometry4 probe
+(``docs/_static/rhs1_pas_production_solve_geometry4.json``) reaches a clean
+true residual of about ``5.9e-8`` with stable GMRES solver metadata, but its
+``tzfft`` and ``tzfft_lgmres`` candidates both regress runtime and peak RSS
+relative to the checked baseline.  The HSX probe
+(``docs/_static/rhs1_pas_production_solve_hsx.json``) reaches a clean residual
+near ``1.6e-4``; ``tzfft`` is a runtime regression and ``tzfft_lgmres`` is a
+memory regression.  These artifacts are useful because they prevent a
+memory-safe but slower route from being accidentally promoted.  The matrix-free
+PAS artifact preflight treats ``summary.all_gates_passed=false`` as blocking
+even when the residual/runtime/RSS absolute gates pass, requires that row-gate
+summary for ready evidence, and preserves the row-level promotion failure
+reasons so residual-clean regressions remain negative evidence.  The next PAS
+optimization must reduce algorithmic cost, for example by chunking/streaming
+the correction or by adding a geometry-aware residual-reducing update that does
+not materialize dense blocks.
 
 The same fail-fast rule is now applied to forced weak PAS baselines at
 astronomical residual ratios, with a cheap accept-only minres correction before
