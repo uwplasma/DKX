@@ -89,6 +89,7 @@ This manual is organized around the actual user and developer workflows:
    physics_reference
    system_equations
    parallelism
+   research_lanes
    performance
    performance_techniques
    adaptive_speed_grid

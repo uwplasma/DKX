@@ -509,6 +509,130 @@ Current active lane (2026-05-12, coordinated large-push research/performance clo
   differentiable device-QI, and single-case multi-GPU strong scaling are
   deferred/nonblocking research lanes until their checked artifacts pass.
 
+Current active lane (2026-05-15, post-v1.1.3 research-lane closure pass):
+- [x] Full pass over the open-lane state confirms the release is not blocked by
+  correctness or public-scope parity. The still-open lanes are algorithmic
+  research/performance gates: true device-QI, production-resolution QI ladders,
+  geometry-rich PAS runtime/RSS promotion, and single-case multi-GPU strong
+  scaling. The current evidence is summarized by
+  `docs/_static/research_lane_completion_2026_05_12.json` and documented in
+  `docs/research_lanes.rst`.
+- [x] Code audit result for true device-QI:
+  `sfincs_jax/rhs1_qi_coarse.py`,
+  `sfincs_jax/rhs1_qi_galerkin_policy.py`,
+  `sfincs_jax/rhs1_device_operator.py`, and the x-block paths in
+  `sfincs_jax/v3_driver.py` already provide device CSR matvecs, rank-gated QI
+  bases, fail-closed Galerkin probes, compact factor experiments, and a
+  documented non-autodiff host fallback. The failed scale-0.60 GPU hard-seed
+  artifacts show the blocker is residual quality, not storage format or a
+  Krylov-name choice. Next implementation: build a PETSc-style two-level
+  field-split/Schur preconditioner for the active RHSMode=1 system:
+  local x/species/angular block smoother on device, small replicated
+  moment/constraint Schur solve, and multiplicative residual update. Gate it by
+  applying the preconditioner to physics load bases before launching long GMRES.
+- [x] Implement `rhs1_qi_two_level` as an opt-in device-compatible candidate.
+  Proposed write scope:
+  `sfincs_jax/rhs1_qi_coarse.py` for basis/restriction/prolongation reuse,
+  a new pure policy/helper module for field-split metadata and acceptance
+  gates, and the existing x-block sparse-PC hook in `sfincs_jax/v3_driver.py`.
+  The implementation is off by default and opt-in only. Promotion gates remain:
+  a material true-residual probe reduction on the scale-0.60 hard seed, CPU and
+  GPU HDF5 plus solver-trace writes within the bounded wall-time budget, and
+  CPU/GPU observables within the existing parity gates.
+- [x] First implementation step for `rhs1_qi_two_level`: added
+  `sfincs_jax/rhs1_qi_two_level.py`, a JAX-compatible local-smoother plus
+  coarse-correction primitive,
+  `M^{-1} r = S^{-1}r + Q A_c^{-1} Q^T (r - A S^{-1}r)`, with a fail-closed
+  true-residual probe. Added `tests/test_rhs1_qi_two_level.py` covering
+  residual reduction on a low-rank-coupled system, `jax.jit` compatibility, and
+  impossible-improvement rejection. This closes the pure primitive, not the
+  production wiring or scale-0.60 GPU hard-seed gate.
+- [x] Wired the two-level primitive into the x-block sparse-PC path behind
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER=1`. The hook
+  reuses the existing QI coarse-basis controls, builds a local-smoother plus
+  coarse correction around the current x-block preconditioner, probes the true
+  physical residual, seeds `x0`, and replaces the Krylov preconditioner only
+  when the probe improves. Focused integration evidence on the quick x-block
+  fixture correctly builds and rejects the candidate when it worsens the true
+  residual, preserving baseline convergence and recording metadata. This closes
+  production wiring and fail-closed safety; it does not close the scale-0.60
+  hard-seed GPU gate until a larger artifact accepts and converges.
+- [x] Scale-0.60 seed-3 CPU hard-seed preflight for the two-level candidate:
+  the public auto path timed out before reaching the x-block hook, confirming
+  that the hard seed still needs explicit x-block/device algorithm work. The
+  explicit `xblock_sparse_pc_gmres` path converged in 158.4 s with residual
+  ratio `5.96e-3` after the two-level candidate rejected itself
+  fail-closed (`3.02e-5 -> 2.05e-4`). A damped one-step scan found only a
+  tiny 0.7% residual decrease at damping `1e-2`; that was rejected as
+  non-material after it drove the subsequent Krylov path to 288.5 s and
+  3569 matvecs. The default acceptance gate now requires at least 5% residual
+  reduction, and damping scans are explicit-only via
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_DAMPINGS`, before
+  the candidate can replace the baseline preconditioner. A fresh no-two-level
+  baseline pass on the same seed completed in 225.3 s and 2723 matvecs, while
+  the final single-damping opt-in rejected path completed in 276.9 s and
+  3424 matvecs; both passed residual gates, but neither justifies promotion.
+- [ ] Redesign the next QI candidate around a stronger coarse space or a true
+  Schur/moment field split before spending GPU time. The current two-level
+  helper is useful infrastructure and metadata, but it is not a production
+  residual reducer for the scale-0.60 hard seed.
+- [ ] Production-resolution QI ladder after `rhs1_qi_two_level` passes the hard
+  seed. Required sequence: scale-0.60 five seeds on CPU and one GPU, then the
+  production-resolution proxy ladder at `25 x 51 x 100 x 8` or the documented
+  production manifest equivalent. Do not count timed-out, host-idle, or
+  nonconverged artifacts as progress. The public claim remains the
+  non-autodiff host fallback until this ladder is closed.
+- [x] Code audit result for geometry-rich PAS runtime/RSS:
+  `sfincs_jax/rhs1_pas_matrixfree.py`,
+  `sfincs_jax/rhs1_pas_policy.py`, `sfincs_jax/pas_smoother.py`, and
+  `scripts/benchmark_pas_tz_memory_fallback.py` now contain preflight byte
+  budgets and residual gates, but the checked geometry4/HSX real-solve probes
+  did not improve runtime/RSS. Next implementation must change algorithmic
+  cost: stream pitch-angle/angular correction actions with `lax.scan`/chunked
+  vector updates or use a lower-memory block-tridiagonal PAS smoother. Another
+  dense update candidate or looser fallback threshold is explicitly rejected.
+- [ ] Implement a streamed PAS correction prototype behind an opt-in flag.
+  Proposed write scope: extend `rhs1_pas_matrixfree.py` with a chunked
+  correction interface that never materializes a full dense update block, add
+  a benchmark mode in `scripts/benchmark_pas_tz_memory_fallback.py`, and add
+  CI-fast unit tests for chunk invariance/residual gates. Promotion gates:
+  geometry4, HSX, and geometry11 artifacts must be residual-clean and improve
+  either warm runtime by at least 20% or active/RSS memory by at least 25% on
+  both CPU and GPU where available.
+- [x] Code audit result for single-case multi-GPU strong scaling:
+  `examples/performance/benchmark_sharded_solve_scaling.py`,
+  `examples/performance/benchmark_sharded_matvec_scaling.py`,
+  `sfincs_jax/transport_parallel_policy.py`, and
+  `sfincs_jax/transport_parallel_execution.py` already protect release claims
+  from cold compile/setup artifacts. The failing evidence shows current
+  single-case sharding is synchronization/setup dominated; transport-worker and
+  scan/case-level throughput remain the release-facing scaling story.
+- [ ] Implement the next single-case multi-GPU attempt as compiled sharded
+  operator reuse, not process-per-sample benchmarking. Use JAX `NamedSharding`
+  or `shard_map` for the matvec over theta/zeta slabs, keep the small
+  coarse/Schur problem replicated, and persist compilation cache on a shared
+  filesystem. Acceptance gates: warm 2-GPU solve must beat warm 1-GPU solve
+  by at least 1.15x, per-device memory must not increase, and deterministic
+  residual/output checks must pass.
+- [x] Literature and external-code audit result:
+  PETSc `PCFIELDSPLIT` supports the exact block/Schur direction needed here;
+  the SFINCS v3 manual/paper justify dropping speed/species coupling for a
+  cheaper LU-factorized preconditioner; JAX `jax.Array`, `NamedSharding`,
+  multi-controller execution, persistent compilation cache, and `shard_map`
+  are the right infrastructure for sharded array execution; JAX sparse is
+  useful for compatibility but the official docs warn it is experimental and
+  not a performance-critical backend; Lineax remains an optional benchmark
+  lane, not a production dependency, until real SFINCS operator errors are
+  resolved.
+- [ ] Validation order for this pass:
+  1. add pure unit tests for the new two-level QI and streamed PAS helpers;
+  2. run focused solver/policy tests under CPU;
+  3. run bounded scale-0.60 seed-3 CPU and one-GPU probes;
+  4. if and only if the hard seed passes, run five-seed QI ladders and
+     geometry-rich PAS CPU/GPU artifacts;
+  5. update README/docs/figures only after checked artifacts change public
+     claims.
+
 Current active lane (2026-05-11, validation/docs/release integration):
 - [x] Keep this pass write-scoped to validation, documentation, planning, and
   release gates. Do not edit `v3_driver.py`, QI/mapped-grid implementation code,

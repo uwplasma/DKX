@@ -900,6 +900,43 @@ def test_xblock_sparse_pc_qi_galerkin_preconditioner_fails_closed_when_probe_wor
     assert any("QI Galerkin preconditioner built" in msg for msg in messages)
 
 
+def test_xblock_sparse_pc_qi_two_level_preconditioner_fails_closed_when_probe_worsens(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS", "enriched")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES", "24")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_qi_two_level_preconditioner_enabled"] is True
+    assert result.metadata["xblock_qi_two_level_preconditioner_built"] is True
+    assert result.metadata["xblock_qi_two_level_preconditioner_used"] is False
+    assert result.metadata["xblock_qi_two_level_preconditioner_reason"] == "residual_not_reduced"
+    assert result.metadata["xblock_qi_two_level_preconditioner_rank"] > 0
+    assert result.metadata["xblock_qi_two_level_preconditioner_candidate_count"] <= 24
+    assert result.metadata["xblock_qi_two_level_preconditioner_coarse_operator_shape"][0] == result.metadata[
+        "xblock_qi_two_level_preconditioner_rank"
+    ]
+    assert result.metadata["xblock_qi_two_level_preconditioner_probe_candidates"]
+    assert result.metadata["xblock_qi_two_level_preconditioner_selected_index"] is not None
+    assert result.metadata["xblock_qi_two_level_preconditioner_improvement_ratio"] >= 0.95
+    assert result.metadata["xblock_qi_two_level_preconditioner_applies"] == 0
+    assert result.metadata["xblock_qi_two_level_preconditioner_local_applies"] >= 1
+    assert any("QI two-level preconditioner rejected" in msg for msg in messages)
+
+
 def test_xblock_sparse_pc_lower_fill_local_policy_is_wired(monkeypatch) -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
