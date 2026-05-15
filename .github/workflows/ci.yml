@@ -2,11 +2,18 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   tests:
     runs-on: ubuntu-22.04
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +41,7 @@ jobs:
 
   coverage:
     runs-on: ubuntu-22.04
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
@@ -65,6 +73,7 @@ jobs:
 
   examples-smoke:
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -103,6 +112,7 @@ jobs:
 
   optional-ecosystem-gates:
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
