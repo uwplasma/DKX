@@ -18,10 +18,13 @@ import sfincs_jax.jax_geometry_adapters as jga
 from sfincs_jax.jax_geometry_adapters import (
     boozer_bhat_from_spectrum,
     boozer_spectrum_geometry_proxy_objective,
+    boozer_spectrum_proxy_transport_objective,
     geometry_proxy_workflow_contract,
     geometry_proxy_workflow_summary,
+    kinetic_transport_scalar_no_overclaim_gate,
     optional_jax_geometry_backend_report,
     optional_jax_geometry_backend_status,
+    vmec_boozer_kinetic_transport_scalar_contract,
     vmec_wout_from_wout_like,
 )
 from sfincs_jax.vmec_geometry import vmec_geometry_from_wout
@@ -104,6 +107,7 @@ def test_optional_jax_geometry_backend_report_marks_gradient_boundary() -> None:
     assert "booz_xform_jax" in report["differentiated_graph"]
     assert "SFINCS kinetic transport solve" in report["outside_differentiated_graph"]
     assert report["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
+    assert report["kinetic_transport_scalar_contract"]["no_overclaim_gate"]["status"] == "pass"
     assert report["claim"] == "geometry_proxy_gradient_gate_not_full_transport_gradient"
 
 
@@ -119,13 +123,65 @@ def test_geometry_proxy_workflow_contract_records_ci_and_differentiability_polic
     assert contract["ci_dependency_policy"]["backend_check_imports_optional_packages"] is False
     assert contract["differentiability_labels"]["differentiated"].startswith("covered by JAX")
     assert "SFINCS kinetic transport solve" in contract["outside_differentiated_graph"]
-    assert contract["no_overclaim_gate"] == {
-        "status": "pass",
-        "claim_scope": "geometry_proxy_gradient_only",
-        "full_transport_gradients_claimed": False,
-        "forbidden_gradient_claim": "full VMEC-boundary-to-SFINCS kinetic transport gradients",
-        "kinetic_gradient_status": "deferred_not_covered_by_this_lane",
+    gate = contract["no_overclaim_gate"]
+    assert gate["status"] == "pass"
+    assert gate["claim_scope"] == "geometry_proxy_gradient_only"
+    assert gate["full_transport_gradients_claimed"] is False
+    assert gate["forbidden_gradient_claim"] == "full VMEC-boundary-to-SFINCS kinetic transport gradients"
+    assert gate["kinetic_gradient_status"] == "deferred_not_covered_by_this_lane"
+    assert gate["kinetic_transport_scalar_contract_gate"]["status"] == "pass"
+
+
+def test_vmec_boozer_kinetic_transport_scalar_contract_is_machine_readable() -> None:
+    contract = vmec_boozer_kinetic_transport_scalar_contract(
+        backend_status={"vmec_jax": False, "booz_xform_jax": False}
+    )
+
+    assert contract["scalar_target"] == "future_vmec_boozer_to_sfincs_kinetic_transport_scalar"
+    assert contract["ci_dependency_policy"]["default_ci_requires_vmec_jax"] is False
+    assert contract["ci_dependency_policy"]["default_ci_requires_booz_xform_jax"] is False
+    assert contract["current_public_scalar"]["kinetic_transport_scalar_claimed"] is False
+    assert contract["current_public_scalar"]["kinetic_solve_executed"] is False
+    assert contract["current_public_scalar"]["scalar_kind"] == "boozer_spectrum_proxy_not_kinetic"
+    assert contract["no_overclaim_gate"]["status"] == "pass"
+
+    stage_names = [stage["name"] for stage in contract["required_stages"]]
+    allowed_boundaries = {
+        "differentiated",
+        "differentiated_for_geometry_proxy_gate",
+        "setup_only_not_differentiated",
+        "not_claimed_not_covered_by_this_lane",
     }
+    assert stage_names == [
+        "vmec_source",
+        "vmec_equilibrium_or_wout",
+        "boozer_transform",
+        "sfincs_geometry_adapter",
+        "kinetic_operator_assembly",
+        "linear_kinetic_solve",
+        "transport_scalar_reduction",
+        "gradient_validation",
+    ]
+    for stage in contract["required_stages"]:
+        assert stage["required_for_future_kinetic_scalar"] is True
+        assert stage["required_evidence"]
+        assert stage["differentiability_boundary"] in allowed_boundaries
+
+
+def test_kinetic_transport_scalar_no_overclaim_gate_rejects_false_promotion() -> None:
+    contract = vmec_boozer_kinetic_transport_scalar_contract(
+        backend_status={"vmec_jax": True, "booz_xform_jax": True}
+    )
+    contract["current_public_scalar"]["kinetic_transport_scalar_claimed"] = True
+    contract["current_public_scalar"]["kinetic_solve_executed"] = True
+    contract["promotion_requirements"]["full_kinetic_scalar_promoted"] = True
+
+    gate = kinetic_transport_scalar_no_overclaim_gate(contract)
+
+    assert gate["status"] == "fail"
+    assert "kinetic_transport_scalar_claimed" in gate["forbidden_claims"]
+    assert "kinetic_solve_executed" in gate["forbidden_claims"]
+    assert "kinetic_operator_assembly" in gate["promotion_violations"]
 
 
 def test_geometry_proxy_workflow_summary_records_stage_claims_and_gate() -> None:
@@ -145,6 +201,7 @@ def test_geometry_proxy_workflow_summary_records_stage_claims_and_gate() -> None
 
     assert summary["workflow"] == "vmec_jax_to_boozer_sfincs_geometry_proxy"
     assert summary["workflow_contract"]["ci_dependency_policy"]["default_ci_requires_vmec_jax"] is False
+    assert summary["kinetic_transport_scalar_contract"]["no_overclaim_gate"]["status"] == "pass"
     assert summary["provenance"]["source"] == "unit-test wout"
     assert summary["required_optional_dependencies"]["vmec_jax"]["importable"] is True
     assert summary["required_optional_dependencies"]["booz_xform_jax"]["importable"] is False
@@ -158,6 +215,7 @@ def test_geometry_proxy_workflow_summary_records_stage_claims_and_gate() -> None
         "full VMEC-boundary-to-SFINCS kinetic transport gradients"
     )
     assert summary["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
+    assert summary["no_overclaim_gate"]["kinetic_transport_scalar_contract_gate"]["status"] == "pass"
 
 
 def test_geometry_proxy_workflow_summary_marks_failed_gradient_gate() -> None:
@@ -294,6 +352,36 @@ def test_boozer_spectrum_proxy_gradient_matches_centered_difference() -> None:
     assert autodiff == pytest.approx(finite_difference, rel=5.0e-6, abs=1.0e-9)
 
 
+def test_boozer_proxy_transport_normalized_invariants_are_no_solve_gates() -> None:
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, 11, endpoint=False)
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / 5.0, 9, endpoint=False)
+    ixm_b = jnp.asarray([0, 1, 1, 2])
+    ixn_b = jnp.asarray([0, 0, 5, -5])
+    bmnc_b = jnp.asarray([2.0, 0.25, -0.12, 0.07])
+
+    def objective(coeff: jnp.ndarray) -> jnp.ndarray:
+        return boozer_spectrum_proxy_transport_objective(
+            coeff,
+            ixm_b,
+            ixn_b,
+            theta=theta,
+            zeta=zeta,
+        )
+
+    base = objective(bmnc_b)
+    scaled = objective(3.5 * bmnc_b)
+    scale_gradient = jax.grad(lambda scale: objective(scale * bmnc_b))(3.5)
+
+    np.testing.assert_allclose(np.asarray(scaled), np.asarray(base), rtol=1.0e-6, atol=1.0e-9)
+    assert float(scale_gradient) == pytest.approx(0.0, abs=1.0e-8)
+
+    constant_spectrum = jnp.asarray([2.0, 0.0, 0.0, 0.0])
+    constant_value, constant_gradient = jax.value_and_grad(objective)(constant_spectrum)
+
+    assert float(constant_value) == pytest.approx(0.0, abs=1.0e-12)
+    np.testing.assert_allclose(np.asarray(constant_gradient), np.zeros(4), rtol=0.0, atol=1.0e-10)
+
+
 def test_public_vmec_jax_boozer_example_backend_check_is_runnable() -> None:
     script = (
         Path(__file__).parents[1]
@@ -317,6 +405,8 @@ def test_public_vmec_jax_boozer_example_backend_check_is_runnable() -> None:
     assert "default CI requires vmec_jax: false" in result.stdout
     assert "default CI requires booz_xform_jax: false" in result.stdout
     assert "no-overclaim gate: pass" in result.stdout
+    assert "kinetic scalar contract gate: pass" in result.stdout
+    assert "no-solve provenance gate: pass" in result.stdout
     assert "numerical gradient gate: not_run" in result.stdout
     assert "pass --json with --check-backends" in result.stdout
     assert "pass --summary-json PATH" in result.stdout
@@ -342,6 +432,14 @@ def test_public_vmec_jax_boozer_example_backend_check_json_is_runnable() -> None
     assert report["gradient_availability"]["vmec_file_io"] == "setup_only_not_differentiated"
     assert report["gradient_availability"]["sfincs_kinetic_transport_solve"] == "not_covered_by_this_lane"
     assert report["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
+    assert report["no_solve_provenance_gate"]["status"] == "pass"
+    assert report["no_solve_provenance_gate"]["kinetic_solve_executed"] is False
+    assert report["no_solve_provenance_gate"]["requires_file_provenance"] is False
+    assert report["kinetic_transport_scalar_contract"]["no_overclaim_gate"]["status"] == "pass"
+    assert report["no_solve_provenance_gate"]["kinetic_transport_scalar_contract_gate"]["status"] == "pass"
+    assert "linear_kinetic_solve" in report["no_solve_provenance_gate"][
+        "required_kinetic_transport_scalar_stages"
+    ]
 
 
 def test_public_vmec_jax_boozer_example_backend_check_writes_summary_json(tmp_path: Path) -> None:
@@ -364,6 +462,11 @@ def test_public_vmec_jax_boozer_example_backend_check_writes_summary_json(tmp_pa
     assert summary["workflow"] == "vmec_jax_to_boozer_sfincs_geometry_proxy"
     assert summary["workflow_contract"]["contract_version"] >= 1
     assert summary["numerical_gradient_gate"]["status"] == "not_run"
+    assert summary["no_solve_provenance_gate"]["status"] == "pass"
+    assert summary["no_solve_provenance_gate"]["kinetic_solve_executed"] is False
+    assert summary["no_solve_provenance_gate"]["requires_file_provenance"] is False
+    assert summary["kinetic_transport_scalar_contract"]["no_overclaim_gate"]["status"] == "pass"
+    assert summary["no_solve_provenance_gate"]["kinetic_transport_scalar_contract_gate"]["status"] == "pass"
     assert summary["claims"]["not_claimed"] == (
         "full VMEC-boundary-to-SFINCS kinetic transport gradients"
     )

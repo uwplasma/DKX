@@ -21,6 +21,11 @@ parity checks. The default CLI path is tuned for robust explicit solves and
 practical throughput, while the Python API can opt into differentiable solve
 paths when gradients matter.
 
+Current release claims intentionally exclude production-resolution QI CPU/GPU
+seed ladders, true differentiable device-QI closure, and single-case multi-GPU
+strong scaling; those remain bounded or deferred research lanes until their
+promotion artifacts pass.
+
 It is designed for:
 
 - high-performance runs on CPU/GPU,
@@ -85,6 +90,12 @@ that dominated earlier production-floor runs. On the non-differentiable
 full-FP x-block path, per-x/TZ blocks up to size `30000` use exact sparse LU
 before falling back to ILU; this measured policy removes the medium-QI and
 production-floor full-trajectory cliffs without changing PAS or autodiff paths.
+For explicit large-QI requests that opt into JAX-native x-block Krylov, the
+documented non-autodiff host fallback can rewrite the solve to the accepted host
+x-block auto policy before JAX factors are built, keeping the measured side-probe
+seed plus LGMRES rescue. That is the production escape hatch for robust large
+RHSMode=1 QI solves today; it is distinct from the still-deferred true
+differentiable device-QI lane.
 For tokamak full-FP Er and 3D full-FP full-trajectory x-block solves, the same
 right-preconditioned path is now the default on CPU and GPU. For one-species
 decks, the Fortran-style `preconditioner_species = 0` setting is treated as
