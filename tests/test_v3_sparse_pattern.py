@@ -964,6 +964,9 @@ def test_xblock_sparse_pc_qi_two_level_residual_augmentation_records_metadata(mo
     assert result.metadata["xblock_qi_two_level_preconditioner_built"] is True
     assert result.metadata["xblock_qi_two_level_preconditioner_residual_augmented"] is True
     assert result.metadata["xblock_qi_two_level_preconditioner_rank_before_augmentation"] > 0
+    assert result.metadata["xblock_qi_two_level_preconditioner_residual_augment_max_extra"] == 2
+    assert result.metadata["xblock_qi_two_level_preconditioner_residual_augment_steps"] == 1
+    assert result.metadata["xblock_qi_two_level_preconditioner_residual_augment_include_residuals"] is True
     assert result.metadata["xblock_qi_two_level_preconditioner_augmentation_labels"]
     assert result.metadata["xblock_qi_two_level_preconditioner_rank"] >= result.metadata[
         "xblock_qi_two_level_preconditioner_rank_before_augmentation"

@@ -592,6 +592,17 @@ Current active lane (2026-05-15, post-v1.1.3 research-lane closure pass):
   A deliberately loosened 2% acceptance test immediately worsened the side
   probe (`8.5e4 -> 2.4e7` residual ratio), so the 5% default gate remains
   correct and no GPU promotion is justified yet.
+- [x] Added bounded preconditioned-residual Krylov augmentation for the same
+  fail-closed two-level path. The first deep-Krylov probe exposed a useful bug:
+  raw high-norm adaptive residual directions dominated the rank threshold and
+  collapsed the retained basis from rank 32 to rank 2. Adaptive vectors are now
+  normalized before rank gating, and metadata records the augmentation depth and
+  labels. The corrected scale-0.60 seed-3 CPU probe retained rank 39 and stayed
+  residual-clean, but the one-step improvement remained `0.9783`, below the 5%
+  gate, with 242.6 s / 2942 matvecs. Damping line-search exploration also
+  rejected before promotion. Conclusion: residual-vector enrichment is safe and
+  diagnostic, but closing true device-QI needs a physically different Schur /
+  moment coarse operator, not just deeper residual Krylov vectors.
 - [ ] Production-resolution QI ladder after `rhs1_qi_two_level` passes the hard
   seed. Required sequence: scale-0.60 five seeds on CPU and one GPU, then the
   production-resolution proxy ladder at `25 x 51 x 100 x 8` or the documented

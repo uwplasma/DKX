@@ -14751,6 +14751,9 @@ def solve_v3_full_system_linear_gmres(
             qi_two_level_preconditioner_residual_augmented = False
             qi_two_level_preconditioner_rank_before_augmentation = 0
             qi_two_level_preconditioner_augmentation_labels: tuple[str, ...] = ()
+            qi_two_level_preconditioner_residual_augment_max_extra = 0
+            qi_two_level_preconditioner_residual_augment_steps = 0
+            qi_two_level_preconditioner_residual_augment_include_residuals = False
             qi_two_level_preconditioner_setup_s = 0.0
             qi_two_level_preconditioner_rcond = 0.0
             qi_two_level_preconditioner_damping = 1.0
@@ -15120,6 +15123,22 @@ def solve_v3_full_system_linear_gmres(
                     default=3,
                     minimum=0,
                 )
+                qi_two_level_preconditioner_residual_augment_max_extra = int(
+                    qi_two_level_residual_augment_max_extra
+                )
+                qi_two_level_residual_augment_steps = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_STEPS",
+                    default=1,
+                    minimum=1,
+                )
+                qi_two_level_preconditioner_residual_augment_steps = int(qi_two_level_residual_augment_steps)
+                qi_two_level_residual_augment_include_residuals = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_INCLUDE_RESIDUALS",
+                    default=True,
+                )
+                qi_two_level_preconditioner_residual_augment_include_residuals = bool(
+                    qi_two_level_residual_augment_include_residuals
+                )
                 try:
                     qi_two_level_preconditioner_basis_reused_from_seed = qi_seed_basis_for_galerkin is not None
                     if qi_seed_basis_for_galerkin is None:
@@ -15170,15 +15189,33 @@ def solve_v3_full_system_linear_gmres(
                             norm = float(jnp.linalg.norm(vec))
                             if not np.isfinite(norm) or norm <= 0.0:
                                 return
-                            extra_vectors.append(vec)
+                            extra_vectors.append(vec / jnp.asarray(norm, dtype=vec.dtype))
                             extra_labels.append(label)
 
-                        local_seed = _qi_two_level_local_smoother(residual_two_level_before)
-                        _add_adaptive_vector("adaptive:local_smoother_residual", local_seed)
-                        remaining_seed = residual_two_level_before - jnp.asarray(_mv_xblock_krylov(local_seed), dtype=jnp.float64)
-                        _add_adaptive_vector("adaptive:remaining_residual", remaining_seed)
-                        local_remaining_seed = _qi_two_level_local_smoother(remaining_seed)
-                        _add_adaptive_vector("adaptive:local_smoother_remaining", local_remaining_seed)
+                        adaptive_residual = residual_two_level_before
+                        for adaptive_step in range(int(qi_two_level_residual_augment_steps)):
+                            if len(extra_vectors) >= int(qi_two_level_residual_augment_max_extra):
+                                break
+                            adaptive_correction = _qi_two_level_local_smoother(adaptive_residual)
+                            _add_adaptive_vector(
+                                f"adaptive:krylov_local_step_{adaptive_step}",
+                                adaptive_correction,
+                            )
+                            adaptive_residual = adaptive_residual - jnp.asarray(
+                                _mv_xblock_krylov(adaptive_correction),
+                                dtype=jnp.float64,
+                            )
+                            if bool(qi_two_level_residual_augment_include_residuals):
+                                _add_adaptive_vector(
+                                    f"adaptive:krylov_remaining_step_{adaptive_step}",
+                                    adaptive_residual,
+                                )
+                        if len(extra_vectors) < int(qi_two_level_residual_augment_max_extra):
+                            final_local = _qi_two_level_local_smoother(adaptive_residual)
+                            _add_adaptive_vector(
+                                f"adaptive:krylov_local_step_{int(qi_two_level_residual_augment_steps)}",
+                                final_local,
+                            )
                         if extra_vectors:
                             qi_two_level_preconditioner_residual_augmented = True
                             qi_two_level_preconditioner_augmentation_labels = tuple(extra_labels)
@@ -16769,6 +16806,15 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     "xblock_qi_two_level_preconditioner_augmentation_labels": (
                         qi_two_level_preconditioner_augmentation_labels
+                    ),
+                    "xblock_qi_two_level_preconditioner_residual_augment_max_extra": int(
+                        qi_two_level_preconditioner_residual_augment_max_extra
+                    ),
+                    "xblock_qi_two_level_preconditioner_residual_augment_steps": int(
+                        qi_two_level_preconditioner_residual_augment_steps
+                    ),
+                    "xblock_qi_two_level_preconditioner_residual_augment_include_residuals": bool(
+                        qi_two_level_preconditioner_residual_augment_include_residuals
                     ),
                     "xblock_qi_two_level_preconditioner_rcond": float(qi_two_level_preconditioner_rcond),
                     "xblock_qi_two_level_preconditioner_damping": float(qi_two_level_preconditioner_damping),
