@@ -6,6 +6,57 @@ Unreleased
 
 No unreleased changes yet.
 
+v1.1.4
+------
+
+This patch release packages the 2026-05-16 research-lane safety and planning
+push. It adds reusable QI/PAS/parallelism infrastructure while keeping public
+claims scoped to checked release evidence.
+
+Highlights
+~~~~~~~~~~
+
+- Added a standalone JAX-compatible RHSMode=1 QI block-Schur/angular/radial
+  coarse-preconditioner primitive in ``sfincs_jax/rhs1_qi_block_schur.py``.
+  The primitive builds deterministic block, radial, angular, and Schur-like
+  basis directions; applies a local-plus-coarse action; and exposes a
+  fail-closed true-residual probe with rank and conditioning metadata. It is
+  not promoted as a production device-QI solve until wired into the driver and
+  validated on the scale-0.60 CPU/GPU hard-seed gates.
+- Strengthened PAS matrix-free memory guards with ``PasRuntimeChunkPlan`` and
+  ``plan_pas_runtime_chunks``. PAS candidate and norm reductions can now derive
+  bounded chunks from configured byte budgets, and tight budgets fail before
+  launching a matvec or correction.
+- Added release-safe single-case sharded-solve planning metadata in
+  ``sfincs_jax/transport_parallel_sharding.py``. The helper caps requested
+  devices to available work, records per-device balance diagnostics, and
+  fail-closes release scaling claims for experimental single-case sharding.
+- Refreshed QI evidence metadata to include the scale-0.60 smoothed-load and
+  probed moment-Schur CPU artifacts. The moment-Schur probe rejected itself
+  after worsening the hard-seed residual, preserving the baseline x-block path.
+
+Validation
+~~~~~~~~~~
+
+- Focused local validation for the new lanes passed:
+  ``135 passed`` across QI block-Schur, PAS matrix-free/policy, PAS benchmark,
+  sharding planner, sharded benchmark, and transport-parallel tests.
+- Full local validation passed: ``1651 passed in 712.28 s``.
+- Release-gate and research-lane checks remain green, and the Sphinx docs build
+  passes with warnings treated as errors.
+- Package build and distribution metadata checks passed with ``python -m build``
+  and ``twine check dist/*``.
+- The package version is ``1.1.4`` in both ``pyproject.toml`` and
+  ``sfincs_jax.__version__`` so the PyPI workflow can validate the matching
+  ``v1.1.4`` tag.
+
+Remaining research lanes
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+No new release-facing claim depends on true device-QI, production-resolution QI
+ladders, or single-case multi-GPU strong scaling. Those lanes remain explicitly
+deferred until checked CPU/GPU artifacts pass their promotion gates.
+
 v1.1.3
 ------
 
