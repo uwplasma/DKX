@@ -576,6 +576,22 @@ Current active lane (2026-05-15, post-v1.1.3 research-lane closure pass):
   Schur/moment field split before spending GPU time. The current two-level
   helper is useful infrastructure and metadata, but it is not a production
   residual reducer for the scale-0.60 hard seed.
+- [x] Implemented the first stronger coarse-space A/B: the two-level helper now
+  supports `action_lstsq`, which solves the small coarse problem against the
+  stored action `A Q` instead of only `Q^T A Q`, and an explicit residual
+  augmentation mode that prepends local-smoother and remaining-residual
+  directions before rank gating. Pure tests cover a non-normal operator where
+  projected Galerkin fails but action least-squares reduces the residual;
+  driver tests cover metadata and fail-closed residual augmentation.
+- [x] Scale-0.60 seed-3 CPU A/B for the stronger coarse-space candidates:
+  action least-squares without residual augmentation still rejected itself
+  (`3.02e-5 -> 2.00e-4`) and completed residual-clean in 313.7 s / 3869
+  matvecs. Residual augmentation improved the one-step probe
+  (`3.02e-5 -> 2.96e-5`, ratio `0.9783`) and completed residual-clean in
+  195.0 s / 2295 matvecs, but it did not meet the 5% material-improvement gate.
+  A deliberately loosened 2% acceptance test immediately worsened the side
+  probe (`8.5e4 -> 2.4e7` residual ratio), so the 5% default gate remains
+  correct and no GPU promotion is justified yet.
 - [ ] Production-resolution QI ladder after `rhs1_qi_two_level` passes the hard
   seed. Required sequence: scale-0.60 five seeds on CPU and one GPU, then the
   production-resolution proxy ladder at `25 x 51 x 100 x 8` or the documented

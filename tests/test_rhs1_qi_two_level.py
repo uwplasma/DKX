@@ -94,6 +94,57 @@ def test_two_level_qi_preconditioner_action_is_jittable() -> None:
     assert jnp.allclose(compiled, eager)
 
 
+def test_two_level_qi_action_lstsq_handles_nonnormal_coarse_vectors() -> None:
+    a = jnp.asarray(
+        [
+            [1.0, 100.0],
+            [0.0, 1.0],
+        ],
+        dtype=jnp.float64,
+    )
+    q = jnp.asarray([[0.0], [1.0]], dtype=jnp.float64)
+    rhs = jnp.asarray([1.0, 0.0], dtype=jnp.float64)
+
+    def operator(x):
+        return a @ x
+
+    def zero_local_smoother(r):
+        return jnp.zeros_like(r)
+
+    projected = build_rhs1_qi_two_level_preconditioner(
+        operator=operator,
+        local_smoother=zero_local_smoother,
+        basis=_basis(q),
+        coarse_solver="projected",
+    )
+    action_lstsq = build_rhs1_qi_two_level_preconditioner(
+        operator=operator,
+        local_smoother=zero_local_smoother,
+        basis=_basis(q),
+        coarse_solver="action_lstsq",
+    )
+
+    projected_x, projected_probe = probe_rhs1_qi_two_level_correction(
+        operator=operator,
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        preconditioner=projected,
+    )
+    action_x, action_probe = probe_rhs1_qi_two_level_correction(
+        operator=operator,
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        preconditioner=action_lstsq,
+    )
+
+    assert projected_probe.accepted is False
+    assert jnp.allclose(projected_x, jnp.zeros_like(rhs))
+    assert action_probe.accepted is True
+    assert action_probe.metadata.coarse_solver == "action_lstsq"
+    assert action_probe.residual_after_norm < 0.02
+    assert float(jnp.linalg.norm(rhs - operator(action_x))) == action_probe.residual_after_norm
+
+
 def test_two_level_qi_probe_fails_closed_without_required_improvement() -> None:
     a = jnp.eye(4, dtype=jnp.float64)
     q = jnp.ones((4, 1), dtype=jnp.float64)

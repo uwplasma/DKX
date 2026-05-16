@@ -63,6 +63,7 @@ from .rhs1_qi_coarse import (
     build_rhs1_qi_galerkin_preconditioner,
     build_rhs1_qi_coarse_basis,
     build_rhs1_qi_xblock_hard_seed_basis,
+    orthonormalize_rhs1_qi_coarse_basis,
 )
 from .rhs1_qi_galerkin_policy import (
     RHS1QIGalerkinProbeCandidate,
@@ -14744,6 +14745,12 @@ def solve_v3_full_system_linear_gmres(
             qi_two_level_preconditioner_candidate_count = 0
             qi_two_level_preconditioner_coarse_shape: tuple[int, int] = (0, 0)
             qi_two_level_preconditioner_coarse_norm = 0.0
+            qi_two_level_preconditioner_operator_on_basis_shape: tuple[int, int] = (0, 0)
+            qi_two_level_preconditioner_operator_on_basis_norm = 0.0
+            qi_two_level_preconditioner_coarse_solver: str | None = None
+            qi_two_level_preconditioner_residual_augmented = False
+            qi_two_level_preconditioner_rank_before_augmentation = 0
+            qi_two_level_preconditioner_augmentation_labels: tuple[str, ...] = ()
             qi_two_level_preconditioner_setup_s = 0.0
             qi_two_level_preconditioner_rcond = 0.0
             qi_two_level_preconditioner_damping = 1.0
@@ -15095,6 +15102,24 @@ def solve_v3_full_system_linear_gmres(
                     default=0.05,
                     minimum=0.0,
                 )
+                qi_two_level_preconditioner_coarse_solver = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_COARSE_SOLVER",
+                        "action_lstsq",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_two_level_residual_augment = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT",
+                    default=False,
+                )
+                qi_two_level_residual_augment_max_extra = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_MAX_EXTRA",
+                    default=3,
+                    minimum=0,
+                )
                 try:
                     qi_two_level_preconditioner_basis_reused_from_seed = qi_seed_basis_for_galerkin is not None
                     if qi_seed_basis_for_galerkin is None:
@@ -15120,26 +15145,6 @@ def solve_v3_full_system_linear_gmres(
                         qi_two_level_stats["local_applies"] += 1
                         return jnp.asarray(base_precond_xblock_krylov(jnp.asarray(v, dtype=jnp.float64)), dtype=jnp.float64)
 
-                    qi_two_level = build_rhs1_qi_two_level_preconditioner(
-                        operator=_mv_xblock_krylov,
-                        local_smoother=_qi_two_level_local_smoother,
-                        basis=qi_seed_basis_for_galerkin,
-                        regularization_rcond=(
-                            float(qi_two_level_preconditioner_rcond)
-                            if float(qi_two_level_preconditioner_rcond) > 0.0
-                            else 0.0
-                        ),
-                        damping=1.0,
-                    )
-                    qi_two_level_preconditioner_built = True
-                    qi_two_level_preconditioner_rank = int(qi_two_level.metadata.rank)
-                    qi_two_level_preconditioner_candidate_count = int(
-                        qi_seed_basis_for_galerkin.metadata.candidate_count
-                    )
-                    qi_two_level_preconditioner_coarse_shape = tuple(
-                        int(value) for value in qi_two_level.metadata.coarse_operator_shape
-                    )
-                    qi_two_level_preconditioner_coarse_norm = float(qi_two_level.metadata.coarse_operator_norm)
                     qi_current = (
                         jnp.zeros_like(xblock_rhs)
                         if x0_full is None
@@ -15150,6 +15155,73 @@ def solve_v3_full_system_linear_gmres(
                         dtype=jnp.float64,
                     )
                     qi_two_level_preconditioner_residual_before = float(jnp.linalg.norm(residual_two_level_before))
+                    qi_two_level_basis = qi_seed_basis_for_galerkin
+                    if bool(qi_two_level_residual_augment) and int(qi_two_level_residual_augment_max_extra) > 0:
+                        qi_two_level_preconditioner_rank_before_augmentation = int(qi_two_level_basis.metadata.rank)
+                        extra_vectors: list[jnp.ndarray] = []
+                        extra_labels: list[str] = []
+
+                        def _add_adaptive_vector(label: str, values: jnp.ndarray) -> None:
+                            if len(extra_vectors) >= int(qi_two_level_residual_augment_max_extra):
+                                return
+                            vec = jnp.asarray(values, dtype=jnp.float64).reshape((-1,))
+                            if int(vec.shape[0]) != int(qi_two_level_basis.vectors.shape[0]):
+                                return
+                            norm = float(jnp.linalg.norm(vec))
+                            if not np.isfinite(norm) or norm <= 0.0:
+                                return
+                            extra_vectors.append(vec)
+                            extra_labels.append(label)
+
+                        local_seed = _qi_two_level_local_smoother(residual_two_level_before)
+                        _add_adaptive_vector("adaptive:local_smoother_residual", local_seed)
+                        remaining_seed = residual_two_level_before - jnp.asarray(_mv_xblock_krylov(local_seed), dtype=jnp.float64)
+                        _add_adaptive_vector("adaptive:remaining_residual", remaining_seed)
+                        local_remaining_seed = _qi_two_level_local_smoother(remaining_seed)
+                        _add_adaptive_vector("adaptive:local_smoother_remaining", local_remaining_seed)
+                        if extra_vectors:
+                            qi_two_level_preconditioner_residual_augmented = True
+                            qi_two_level_preconditioner_augmentation_labels = tuple(extra_labels)
+                            augmented_candidates = jnp.concatenate(
+                                [jnp.stack(tuple(extra_vectors), axis=1), jnp.asarray(qi_two_level_basis.vectors)],
+                                axis=1,
+                            )
+                            augmented_labels = tuple(extra_labels) + tuple(qi_two_level_basis.metadata.accepted_labels)
+                            qi_two_level_basis = orthonormalize_rhs1_qi_coarse_basis(
+                                augmented_candidates,
+                                labels=augmented_labels,
+                                rtol=float(qi_seed_rank_rtol),
+                                max_rank=int(qi_seed_max_rank) + int(qi_two_level_residual_augment_max_extra),
+                            )
+
+                    qi_two_level = build_rhs1_qi_two_level_preconditioner(
+                        operator=_mv_xblock_krylov,
+                        local_smoother=_qi_two_level_local_smoother,
+                        basis=qi_two_level_basis,
+                        regularization_rcond=(
+                            float(qi_two_level_preconditioner_rcond)
+                            if float(qi_two_level_preconditioner_rcond) > 0.0
+                            else 0.0
+                        ),
+                        damping=1.0,
+                        coarse_solver=qi_two_level_preconditioner_coarse_solver,
+                    )
+                    qi_two_level_preconditioner_built = True
+                    qi_two_level_preconditioner_rank = int(qi_two_level.metadata.rank)
+                    qi_two_level_preconditioner_candidate_count = int(
+                        qi_two_level_basis.metadata.candidate_count
+                    )
+                    qi_two_level_preconditioner_coarse_shape = tuple(
+                        int(value) for value in qi_two_level.metadata.coarse_operator_shape
+                    )
+                    qi_two_level_preconditioner_coarse_norm = float(qi_two_level.metadata.coarse_operator_norm)
+                    qi_two_level_preconditioner_coarse_solver = str(qi_two_level.metadata.coarse_solver)
+                    qi_two_level_preconditioner_operator_on_basis_shape = tuple(
+                        int(value) for value in qi_two_level.metadata.operator_on_basis_shape
+                    )
+                    qi_two_level_preconditioner_operator_on_basis_norm = float(
+                        qi_two_level.metadata.operator_on_basis_norm
+                    )
                     correction_two_level = jnp.asarray(
                         qi_two_level.apply(residual_two_level_before),
                         dtype=jnp.float64,
@@ -16681,6 +16753,22 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     "xblock_qi_two_level_preconditioner_coarse_operator_norm": float(
                         qi_two_level_preconditioner_coarse_norm
+                    ),
+                    "xblock_qi_two_level_preconditioner_operator_on_basis_shape": (
+                        qi_two_level_preconditioner_operator_on_basis_shape
+                    ),
+                    "xblock_qi_two_level_preconditioner_operator_on_basis_norm": float(
+                        qi_two_level_preconditioner_operator_on_basis_norm
+                    ),
+                    "xblock_qi_two_level_preconditioner_coarse_solver": qi_two_level_preconditioner_coarse_solver,
+                    "xblock_qi_two_level_preconditioner_residual_augmented": bool(
+                        qi_two_level_preconditioner_residual_augmented
+                    ),
+                    "xblock_qi_two_level_preconditioner_rank_before_augmentation": int(
+                        qi_two_level_preconditioner_rank_before_augmentation
+                    ),
+                    "xblock_qi_two_level_preconditioner_augmentation_labels": (
+                        qi_two_level_preconditioner_augmentation_labels
                     ),
                     "xblock_qi_two_level_preconditioner_rcond": float(qi_two_level_preconditioner_rcond),
                     "xblock_qi_two_level_preconditioner_damping": float(qi_two_level_preconditioner_damping),

@@ -926,7 +926,11 @@ def test_xblock_sparse_pc_qi_two_level_preconditioner_fails_closed_when_probe_wo
     assert result.metadata["xblock_qi_two_level_preconditioner_reason"] == "residual_not_reduced"
     assert result.metadata["xblock_qi_two_level_preconditioner_rank"] > 0
     assert result.metadata["xblock_qi_two_level_preconditioner_candidate_count"] <= 24
+    assert result.metadata["xblock_qi_two_level_preconditioner_coarse_solver"] == "action_lstsq"
     assert result.metadata["xblock_qi_two_level_preconditioner_coarse_operator_shape"][0] == result.metadata[
+        "xblock_qi_two_level_preconditioner_rank"
+    ]
+    assert result.metadata["xblock_qi_two_level_preconditioner_operator_on_basis_shape"][1] == result.metadata[
         "xblock_qi_two_level_preconditioner_rank"
     ]
     assert result.metadata["xblock_qi_two_level_preconditioner_probe_candidates"]
@@ -935,6 +939,35 @@ def test_xblock_sparse_pc_qi_two_level_preconditioner_fails_closed_when_probe_wo
     assert result.metadata["xblock_qi_two_level_preconditioner_applies"] == 0
     assert result.metadata["xblock_qi_two_level_preconditioner_local_applies"] >= 1
     assert any("QI two-level preconditioner rejected" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_qi_two_level_residual_augmentation_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_MAX_EXTRA", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS", "enriched")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES", "24")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_qi_two_level_preconditioner_built"] is True
+    assert result.metadata["xblock_qi_two_level_preconditioner_residual_augmented"] is True
+    assert result.metadata["xblock_qi_two_level_preconditioner_rank_before_augmentation"] > 0
+    assert result.metadata["xblock_qi_two_level_preconditioner_augmentation_labels"]
+    assert result.metadata["xblock_qi_two_level_preconditioner_rank"] >= result.metadata[
+        "xblock_qi_two_level_preconditioner_rank_before_augmentation"
+    ]
 
 
 def test_xblock_sparse_pc_lower_fill_local_policy_is_wired(monkeypatch) -> None:

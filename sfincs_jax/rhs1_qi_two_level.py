@@ -29,6 +29,25 @@ ArrayLike = Any
 LinearOperator = Callable[[ArrayLike], ArrayLike]
 
 
+def _normalize_coarse_solver(value: str) -> str:
+    normalized = str(value).strip().lower().replace("-", "_")
+    aliases = {
+        "projected": "projected",
+        "galerkin": "projected",
+        "qtaq": "projected",
+        "action_lstsq": "action_lstsq",
+        "action_ls": "action_lstsq",
+        "least_squares": "action_lstsq",
+        "lstsq": "action_lstsq",
+    }
+    if normalized not in aliases:
+        raise ValueError(
+            "coarse_solver must be one of 'projected' or 'action_lstsq' "
+            f"(got {value!r})"
+        )
+    return aliases[normalized]
+
+
 @dataclass(frozen=True)
 class RHS1QITwoLevelMetadata:
     """Diagnostics for a two-level QI preconditioner candidate."""
@@ -36,8 +55,11 @@ class RHS1QITwoLevelMetadata:
     rank: int
     coarse_operator_shape: tuple[int, int]
     coarse_operator_norm: float
+    operator_on_basis_shape: tuple[int, int]
+    operator_on_basis_norm: float
     regularization_rcond: float
     damping: float
+    coarse_solver: str = "projected"
     composition: str = "multiplicative"
 
     def to_dict(self) -> dict[str, object]:
@@ -45,8 +67,11 @@ class RHS1QITwoLevelMetadata:
             "rank": int(self.rank),
             "coarse_operator_shape": tuple(int(v) for v in self.coarse_operator_shape),
             "coarse_operator_norm": float(self.coarse_operator_norm),
+            "operator_on_basis_shape": tuple(int(v) for v in self.operator_on_basis_shape),
+            "operator_on_basis_norm": float(self.operator_on_basis_norm),
             "regularization_rcond": float(self.regularization_rcond),
             "damping": float(self.damping),
+            "coarse_solver": self.coarse_solver,
             "composition": self.composition,
         }
 
@@ -59,6 +84,7 @@ class RHS1QITwoLevelPreconditioner:
     local_smoother: LinearOperator
     basis: RHS1QICoarseBasis
     coarse_operator: ArrayLike
+    operator_on_basis: ArrayLike
     metadata: RHS1QITwoLevelMetadata
 
     def solve_coarse(self, residual: ArrayLike) -> ArrayLike:
@@ -68,6 +94,12 @@ class RHS1QITwoLevelPreconditioner:
         rank = int(self.metadata.rank)
         if rank <= 0:
             return jnp.zeros((0,), dtype=residual_vec.dtype)
+        if self.metadata.coarse_solver == "action_lstsq":
+            return _regularized_coarse_solve(
+                self.operator_on_basis,
+                residual_vec,
+                rcond=float(self.metadata.regularization_rcond),
+            )
         projected = jnp.conjugate(self.basis.vectors).T @ residual_vec
         return _regularized_coarse_solve(
             self.coarse_operator,
@@ -143,28 +175,35 @@ def build_rhs1_qi_two_level_preconditioner(
     basis: RHS1QICoarseBasis,
     regularization_rcond: float = 1.0e-12,
     damping: float = 1.0,
+    coarse_solver: str = "projected",
 ) -> RHS1QITwoLevelPreconditioner:
     """Build a reusable two-level QI preconditioner from a coarse basis."""
 
     q = jnp.asarray(basis.vectors)
     rank = int(q.shape[1]) if q.ndim == 2 else 0
+    coarse_solver_norm = _normalize_coarse_solver(coarse_solver)
     if rank <= 0:
         coarse_operator = jnp.zeros((0, 0), dtype=q.dtype)
+        operator_on_basis = jnp.zeros_like(q)
     else:
-        aq = _apply_operator_to_basis(operator, q)
-        coarse_operator = jnp.conjugate(q).T @ aq
+        operator_on_basis = _apply_operator_to_basis(operator, q)
+        coarse_operator = jnp.conjugate(q).T @ operator_on_basis
     metadata = RHS1QITwoLevelMetadata(
         rank=rank,
         coarse_operator_shape=tuple(int(v) for v in coarse_operator.shape),
         coarse_operator_norm=float(jnp.linalg.norm(coarse_operator)) if rank > 0 else 0.0,
+        operator_on_basis_shape=tuple(int(v) for v in operator_on_basis.shape),
+        operator_on_basis_norm=float(jnp.linalg.norm(operator_on_basis)) if rank > 0 else 0.0,
         regularization_rcond=float(regularization_rcond),
         damping=float(damping),
+        coarse_solver=coarse_solver_norm,
     )
     return RHS1QITwoLevelPreconditioner(
         operator=operator,
         local_smoother=local_smoother,
         basis=basis,
         coarse_operator=coarse_operator,
+        operator_on_basis=operator_on_basis,
         metadata=metadata,
     )
 
