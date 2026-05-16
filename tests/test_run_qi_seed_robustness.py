@@ -386,6 +386,10 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
                             "xblock_device_host_fallback_requested_method": "gmres_jax",
                             "xblock_device_host_fallback_effective_krylov_env_value": "auto",
                             "xblock_device_host_fallback_non_autodiff": True,
+                            "xblock_qi_two_level_preconditioner_built": True,
+                            "xblock_qi_two_level_preconditioner_smoothed_load_basis": True,
+                            "xblock_qi_two_level_preconditioner_improvement_ratio": 0.99,
+                            "xblock_qi_two_level_preconditioner_smoothed_load_metadata": {"rank": 4},
                         }
                     },
                 }
@@ -430,6 +434,10 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
     assert summary["xblock_device_host_fallback_requested_method"] == "gmres_jax"
     assert summary["xblock_device_host_fallback_effective_krylov_env_value"] == "auto"
     assert summary["xblock_device_host_fallback_non_autodiff"] is True
+    assert summary["xblock_qi_two_level_preconditioner_built"] is True
+    assert summary["xblock_qi_two_level_preconditioner_smoothed_load_basis"] is True
+    assert summary["xblock_qi_two_level_preconditioner_improvement_ratio"] == 0.99
+    assert summary["xblock_qi_two_level_preconditioner_smoothed_load_metadata"] == {"rank": 4}
     assert manifest["execution"]["summary"]["max_residual_ratio"] == 2.0e5
     assert manifest["execution"]["summary"]["converged"] == 0
     assert manifest["execution"]["summary"]["solve_methods"] == ["dense"]

@@ -141,6 +141,23 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
+QI_TWO_LEVEL_TRACE_KEYS = (
+    "xblock_qi_two_level_preconditioner_enabled",
+    "xblock_qi_two_level_preconditioner_built",
+    "xblock_qi_two_level_preconditioner_used",
+    "xblock_qi_two_level_preconditioner_reason",
+    "xblock_qi_two_level_preconditioner_rank",
+    "xblock_qi_two_level_preconditioner_candidate_count",
+    "xblock_qi_two_level_preconditioner_coarse_solver",
+    "xblock_qi_two_level_preconditioner_residual_before",
+    "xblock_qi_two_level_preconditioner_residual_after",
+    "xblock_qi_two_level_preconditioner_improvement_ratio",
+    "xblock_qi_two_level_preconditioner_probe_candidates",
+    "xblock_qi_two_level_preconditioner_residual_augmented",
+    "xblock_qi_two_level_preconditioner_smoothed_load_basis",
+    "xblock_qi_two_level_preconditioner_smoothed_load_metadata",
+    "xblock_qi_two_level_preconditioner_setup_s",
+)
 PROGRESS_EVENT_LIMIT = 24
 PROGRESS_MARKERS = (
     "active matrix size=",
@@ -480,7 +497,7 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
         residual_ratio = residual_norm / residual_target
     metadata = payload.get("metadata")
     solver_metadata = metadata.get("solver_metadata", {}) if isinstance(metadata, dict) else {}
-    return {
+    summary = {
         "path": str(trace_path),
         "readable": True,
         "solve_method": payload.get("solve_method"),
@@ -525,6 +542,8 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
         ),
         "solver_kind": solver_metadata.get("solver_kind"),
     }
+    summary.update({key: solver_metadata.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
+    return summary
 
 
 def _tail_lines(path: Path, *, max_lines: int = LOG_TAIL_LINES) -> list[str]:
@@ -1035,72 +1054,72 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         if lgmres_rescue_status is None and isinstance(trace_lgmres_rescue, bool):
             lgmres_rescue_status = "used" if trace_lgmres_rescue else "not_selected"
 
-        seed_summaries.append(
-            {
-                "case": result.get("case"),
-                "seed": result.get("seed"),
-                "returncode": result.get("returncode"),
-                "timed_out": result.get("timed_out"),
-                "output_exists": result.get("output_exists"),
-                "solver_trace_exists": result.get("solver_trace_exists"),
-                "elapsed_s": result.get("elapsed_s"),
-                "solver_elapsed_s": trace_summary.get("elapsed_s"),
-                "backend": trace_summary.get("backend"),
-                "active_size": active_size if active_size is not None else inferred_active_size,
-                "total_size": total_size if total_size is not None else inferred_total_size,
-                "solve_method": trace_summary.get("solve_method"),
-                "selected_path": trace_summary.get("selected_path"),
-                "converged": trace_summary.get("converged"),
-                "accepted_converged": trace_summary.get("accepted_converged"),
-                "residual_norm": trace_summary.get("residual_norm"),
-                "residual_target": trace_summary.get("residual_target"),
-                "residual_ratio": trace_summary.get("residual_ratio"),
-                "precondition_side": trace_or_progress("precondition_side"),
-                "default_right_preconditioned": trace_summary.get("default_right_preconditioned"),
-                "gmres_restart": trace_summary.get("gmres_restart"),
-                "iterations": trace_summary.get("iterations"),
-                "matvecs": trace_summary.get("matvecs"),
-                "xblock_side_probe_used": trace_or_progress("xblock_side_probe_used"),
-                "xblock_side_probe_decision": trace_or_progress("xblock_side_probe_decision"),
-                "xblock_side_probe_switched": trace_or_progress("xblock_side_probe_switched"),
-                "xblock_side_probe_initial_side": trace_or_progress("xblock_side_probe_initial_side"),
-                "xblock_side_probe_selected_side": trace_or_progress("xblock_side_probe_selected_side"),
-                "xblock_side_probe_initial_method": trace_or_progress("xblock_side_probe_initial_method"),
-                "xblock_side_probe_selected_method": trace_or_progress("xblock_side_probe_selected_method"),
-                "xblock_side_probe_lgmres_rescue": trace_or_progress("xblock_side_probe_lgmres_rescue"),
-                "xblock_lgmres_rescue_status": lgmres_rescue_status,
-                "xblock_lgmres_rescue_outer_k": trace_summary.get("xblock_lgmres_rescue_outer_k"),
-                "xblock_side_probe_residual_ratio": trace_or_progress("xblock_side_probe_residual_ratio"),
-                "xblock_side_probe_residual_norm": trace_or_progress("xblock_side_probe_residual_norm"),
-                "xblock_side_probe_iterations": trace_or_progress("xblock_side_probe_iterations"),
-                "xblock_side_probe_matvecs": trace_or_progress("xblock_side_probe_matvecs"),
-                "xblock_device_host_fallback_used": trace_summary.get("xblock_device_host_fallback_used"),
-                "xblock_device_host_fallback_mode": trace_summary.get("xblock_device_host_fallback_mode"),
-                "xblock_device_host_fallback_reason": trace_summary.get("xblock_device_host_fallback_reason"),
-                "xblock_device_host_fallback_requested_method": trace_summary.get(
-                    "xblock_device_host_fallback_requested_method"
-                ),
-                "xblock_device_host_fallback_effective_krylov_env_value": trace_summary.get(
-                    "xblock_device_host_fallback_effective_krylov_env_value"
-                ),
-                "xblock_device_host_fallback_non_autodiff": trace_summary.get(
-                    "xblock_device_host_fallback_non_autodiff"
-                ),
-                "resolution": case.get("resolution") if isinstance(case, dict) else None,
-                "progress_events": progress_events,
-                "stdout_tail": stdout_tail,
-                "stderr_tail": stderr_tail,
-                "last_progress_residual_event": last_residual_progress.get("event"),
-                "last_progress_residual_norm": last_residual_progress.get("residual_norm"),
-                "last_progress_residual_target": last_residual_progress.get("residual_target"),
-                "last_progress_residual_ratio": last_residual_progress.get("residual_ratio"),
-                "last_progress_residual_before": last_residual_progress.get("residual_before"),
-                "last_matvecs": last_matvecs,
-                "last_matvec_elapsed_s": last_matvec_elapsed_s,
-                "heartbeat": result.get("heartbeat"),
-                "heartbeat_count": result.get("heartbeat_count"),
-            }
-        )
+        seed_summary = {
+            "case": result.get("case"),
+            "seed": result.get("seed"),
+            "returncode": result.get("returncode"),
+            "timed_out": result.get("timed_out"),
+            "output_exists": result.get("output_exists"),
+            "solver_trace_exists": result.get("solver_trace_exists"),
+            "elapsed_s": result.get("elapsed_s"),
+            "solver_elapsed_s": trace_summary.get("elapsed_s"),
+            "backend": trace_summary.get("backend"),
+            "active_size": active_size if active_size is not None else inferred_active_size,
+            "total_size": total_size if total_size is not None else inferred_total_size,
+            "solve_method": trace_summary.get("solve_method"),
+            "selected_path": trace_summary.get("selected_path"),
+            "converged": trace_summary.get("converged"),
+            "accepted_converged": trace_summary.get("accepted_converged"),
+            "residual_norm": trace_summary.get("residual_norm"),
+            "residual_target": trace_summary.get("residual_target"),
+            "residual_ratio": trace_summary.get("residual_ratio"),
+            "precondition_side": trace_or_progress("precondition_side"),
+            "default_right_preconditioned": trace_summary.get("default_right_preconditioned"),
+            "gmres_restart": trace_summary.get("gmres_restart"),
+            "iterations": trace_summary.get("iterations"),
+            "matvecs": trace_summary.get("matvecs"),
+            "xblock_side_probe_used": trace_or_progress("xblock_side_probe_used"),
+            "xblock_side_probe_decision": trace_or_progress("xblock_side_probe_decision"),
+            "xblock_side_probe_switched": trace_or_progress("xblock_side_probe_switched"),
+            "xblock_side_probe_initial_side": trace_or_progress("xblock_side_probe_initial_side"),
+            "xblock_side_probe_selected_side": trace_or_progress("xblock_side_probe_selected_side"),
+            "xblock_side_probe_initial_method": trace_or_progress("xblock_side_probe_initial_method"),
+            "xblock_side_probe_selected_method": trace_or_progress("xblock_side_probe_selected_method"),
+            "xblock_side_probe_lgmres_rescue": trace_or_progress("xblock_side_probe_lgmres_rescue"),
+            "xblock_lgmres_rescue_status": lgmres_rescue_status,
+            "xblock_lgmres_rescue_outer_k": trace_summary.get("xblock_lgmres_rescue_outer_k"),
+            "xblock_side_probe_residual_ratio": trace_or_progress("xblock_side_probe_residual_ratio"),
+            "xblock_side_probe_residual_norm": trace_or_progress("xblock_side_probe_residual_norm"),
+            "xblock_side_probe_iterations": trace_or_progress("xblock_side_probe_iterations"),
+            "xblock_side_probe_matvecs": trace_or_progress("xblock_side_probe_matvecs"),
+            "xblock_device_host_fallback_used": trace_summary.get("xblock_device_host_fallback_used"),
+            "xblock_device_host_fallback_mode": trace_summary.get("xblock_device_host_fallback_mode"),
+            "xblock_device_host_fallback_reason": trace_summary.get("xblock_device_host_fallback_reason"),
+            "xblock_device_host_fallback_requested_method": trace_summary.get(
+                "xblock_device_host_fallback_requested_method"
+            ),
+            "xblock_device_host_fallback_effective_krylov_env_value": trace_summary.get(
+                "xblock_device_host_fallback_effective_krylov_env_value"
+            ),
+            "xblock_device_host_fallback_non_autodiff": trace_summary.get(
+                "xblock_device_host_fallback_non_autodiff"
+            ),
+            "resolution": case.get("resolution") if isinstance(case, dict) else None,
+            "progress_events": progress_events,
+            "stdout_tail": stdout_tail,
+            "stderr_tail": stderr_tail,
+            "last_progress_residual_event": last_residual_progress.get("event"),
+            "last_progress_residual_norm": last_residual_progress.get("residual_norm"),
+            "last_progress_residual_target": last_residual_progress.get("residual_target"),
+            "last_progress_residual_ratio": last_residual_progress.get("residual_ratio"),
+            "last_progress_residual_before": last_residual_progress.get("residual_before"),
+            "last_matvecs": last_matvecs,
+            "last_matvec_elapsed_s": last_matvec_elapsed_s,
+            "heartbeat": result.get("heartbeat"),
+            "heartbeat_count": result.get("heartbeat_count"),
+        }
+        seed_summary.update({key: trace_summary.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
+        seed_summaries.append(seed_summary)
 
     first_case = cases[0]
     resolution = first_case.get("resolution") if isinstance(first_case, dict) else None

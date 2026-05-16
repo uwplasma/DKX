@@ -9086,6 +9086,97 @@ def _rhs1_xblock_global_coupling_load_basis(
     return tuple(directions)
 
 
+def _rhs1_xblock_smoothed_load_qi_basis(
+    *,
+    op: V3FullSystemOperator,
+    rhs: jnp.ndarray,
+    base_preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    direction_projector: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expected_size: int | None = None,
+    include_rhs: bool,
+    fsavg_lmax: int,
+    angular_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+    rank_rtol: float,
+    max_rank: int,
+) -> tuple[RHS1QICoarseBasis, dict[str, object]]:
+    """Build a QI coarse basis from smoothed physics load vectors.
+
+    This is the low-rank field-split/Schur candidate for the hard QI lane:
+    load vectors represent source, flux-surface averaged, and low angular
+    coupling channels, while the local x-block smoother maps those loads into
+    prolongation directions. The resulting basis is still rank-gated and
+    fail-closed by the caller before it can replace the baseline preconditioner.
+    """
+
+    expected_size_use = int(op.total_size) if expected_size is None else int(expected_size)
+    max_dirs_use = max(1, int(max_directions))
+    raw_loads = _rhs1_xblock_global_coupling_load_basis(
+        op=op,
+        rhs=rhs,
+        include_rhs=bool(include_rhs),
+        fsavg_lmax=int(fsavg_lmax),
+        angular_lmax=int(angular_lmax),
+        max_extra_units=int(max_extra_units),
+        max_directions=max_dirs_use,
+    )
+    columns: list[jnp.ndarray] = []
+    labels: list[str] = []
+    for name, load in raw_loads[:max_dirs_use]:
+        load_vec = jnp.asarray(load, dtype=jnp.float64).reshape((-1,))
+        if direction_projector is not None:
+            load_vec = jnp.asarray(direction_projector(load_vec), dtype=jnp.float64).reshape((-1,))
+        if int(load_vec.shape[0]) != expected_size_use:
+            continue
+        try:
+            load_norm = float(jnp.linalg.norm(load_vec))
+        except Exception:
+            continue
+        if not np.isfinite(load_norm) or load_norm <= 0.0:
+            continue
+        try:
+            smoothed = jnp.asarray(
+                base_preconditioner(load_vec / jnp.asarray(load_norm, dtype=load_vec.dtype)),
+                dtype=jnp.float64,
+            ).reshape((-1,))
+        except Exception:
+            continue
+        if int(smoothed.shape[0]) != expected_size_use:
+            continue
+        try:
+            smooth_norm = float(jnp.linalg.norm(smoothed))
+        except Exception:
+            continue
+        if not np.isfinite(smooth_norm) or smooth_norm <= 0.0:
+            continue
+        columns.append(smoothed / jnp.asarray(smooth_norm, dtype=smoothed.dtype))
+        labels.append(f"smoothed_load:{name}")
+
+    if not columns:
+        raise RuntimeError("smoothed-load QI basis found no valid preconditioned load directions")
+
+    candidates = jnp.stack(tuple(columns), axis=1)
+    basis = orthonormalize_rhs1_qi_coarse_basis(
+        candidates,
+        labels=tuple(labels),
+        rtol=float(rank_rtol),
+        max_rank=max(1, int(max_rank)),
+    )
+    metadata = {
+        "load_basis_size": int(len(raw_loads)),
+        "smoothed_candidate_count": int(len(columns)),
+        "rank": int(basis.metadata.rank),
+        "max_directions": int(max_dirs_use),
+        "max_rank": int(max_rank),
+        "fsavg_lmax": int(fsavg_lmax),
+        "angular_lmax": int(angular_lmax),
+        "include_rhs": bool(include_rhs),
+        "accepted_labels": tuple(basis.metadata.accepted_labels),
+    }
+    return basis, metadata
+
+
 def _build_rhs1_xblock_two_level_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -14754,6 +14845,8 @@ def solve_v3_full_system_linear_gmres(
             qi_two_level_preconditioner_residual_augment_max_extra = 0
             qi_two_level_preconditioner_residual_augment_steps = 0
             qi_two_level_preconditioner_residual_augment_include_residuals = False
+            qi_two_level_preconditioner_smoothed_load_basis = False
+            qi_two_level_preconditioner_smoothed_load_metadata: dict[str, object] = {}
             qi_two_level_preconditioner_setup_s = 0.0
             qi_two_level_preconditioner_rcond = 0.0
             qi_two_level_preconditioner_damping = 1.0
@@ -15139,6 +15232,43 @@ def solve_v3_full_system_linear_gmres(
                 qi_two_level_preconditioner_residual_augment_include_residuals = bool(
                     qi_two_level_residual_augment_include_residuals
                 )
+                qi_two_level_smoothed_load_basis = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS",
+                    default=False,
+                )
+                qi_two_level_smoothed_load_basis_combine = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS_COMBINE",
+                    default=True,
+                )
+                qi_two_level_smoothed_load_max_directions = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_DIRECTIONS",
+                    default=48,
+                    minimum=1,
+                )
+                qi_two_level_smoothed_load_max_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_RANK",
+                    default=int(qi_seed_max_rank),
+                    minimum=1,
+                )
+                qi_two_level_smoothed_load_fsavg_lmax = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_FSAVG_LMAX",
+                    default=8,
+                    minimum=0,
+                )
+                qi_two_level_smoothed_load_angular_lmax = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_ANGULAR_LMAX",
+                    default=1,
+                    minimum=0,
+                )
+                qi_two_level_smoothed_load_max_extra_units = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_EXTRA_UNITS",
+                    default=8,
+                    minimum=0,
+                )
+                qi_two_level_smoothed_load_include_rhs = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_INCLUDE_RHS",
+                    default=True,
+                )
                 try:
                     qi_two_level_preconditioner_basis_reused_from_seed = qi_seed_basis_for_galerkin is not None
                     if qi_seed_basis_for_galerkin is None:
@@ -15175,6 +15305,42 @@ def solve_v3_full_system_linear_gmres(
                     )
                     qi_two_level_preconditioner_residual_before = float(jnp.linalg.norm(residual_two_level_before))
                     qi_two_level_basis = qi_seed_basis_for_galerkin
+                    if bool(qi_two_level_smoothed_load_basis):
+                        smoothed_load_basis, smoothed_load_metadata = _rhs1_xblock_smoothed_load_qi_basis(
+                            op=op,
+                            rhs=rhs,
+                            base_preconditioner=_qi_two_level_local_smoother,
+                            direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
+                            expected_size=int(xblock_linear_size),
+                            include_rhs=bool(qi_two_level_smoothed_load_include_rhs),
+                            fsavg_lmax=int(qi_two_level_smoothed_load_fsavg_lmax),
+                            angular_lmax=int(qi_two_level_smoothed_load_angular_lmax),
+                            max_extra_units=int(qi_two_level_smoothed_load_max_extra_units),
+                            max_directions=int(qi_two_level_smoothed_load_max_directions),
+                            rank_rtol=float(qi_seed_rank_rtol),
+                            max_rank=int(qi_two_level_smoothed_load_max_rank),
+                        )
+                        qi_two_level_preconditioner_smoothed_load_basis = True
+                        qi_two_level_preconditioner_smoothed_load_metadata = smoothed_load_metadata
+                        if bool(qi_two_level_smoothed_load_basis_combine):
+                            combined_candidates = jnp.concatenate(
+                                [
+                                    jnp.asarray(smoothed_load_basis.vectors, dtype=jnp.float64),
+                                    jnp.asarray(qi_two_level_basis.vectors, dtype=jnp.float64),
+                                ],
+                                axis=1,
+                            )
+                            combined_labels = tuple(smoothed_load_basis.metadata.accepted_labels) + tuple(
+                                qi_two_level_basis.metadata.accepted_labels
+                            )
+                            qi_two_level_basis = orthonormalize_rhs1_qi_coarse_basis(
+                                combined_candidates,
+                                labels=combined_labels,
+                                rtol=float(qi_seed_rank_rtol),
+                                max_rank=int(qi_two_level_smoothed_load_max_rank) + int(qi_seed_max_rank),
+                            )
+                        else:
+                            qi_two_level_basis = smoothed_load_basis
                     if bool(qi_two_level_residual_augment) and int(qi_two_level_residual_augment_max_extra) > 0:
                         qi_two_level_preconditioner_rank_before_augmentation = int(qi_two_level_basis.metadata.rank)
                         extra_vectors: list[jnp.ndarray] = []
@@ -16815,6 +16981,12 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     "xblock_qi_two_level_preconditioner_residual_augment_include_residuals": bool(
                         qi_two_level_preconditioner_residual_augment_include_residuals
+                    ),
+                    "xblock_qi_two_level_preconditioner_smoothed_load_basis": bool(
+                        qi_two_level_preconditioner_smoothed_load_basis
+                    ),
+                    "xblock_qi_two_level_preconditioner_smoothed_load_metadata": (
+                        qi_two_level_preconditioner_smoothed_load_metadata
                     ),
                     "xblock_qi_two_level_preconditioner_rcond": float(qi_two_level_preconditioner_rcond),
                     "xblock_qi_two_level_preconditioner_damping": float(qi_two_level_preconditioner_damping),

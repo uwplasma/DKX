@@ -973,6 +973,42 @@ def test_xblock_sparse_pc_qi_two_level_residual_augmentation_records_metadata(mo
     ]
 
 
+def test_xblock_sparse_pc_qi_two_level_smoothed_load_basis_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("otherNumericalParameters")["NXI_FOR_X_OPTION"] = 1
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER", "1")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS", "1"
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS_COMBINE", "0"
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_RANK", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_DIRECTIONS", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_FSAVG_LMAX", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_ANGULAR_LMAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS", "enriched")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES", "12")
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_qi_two_level_preconditioner_built"] is True
+    assert result.metadata["xblock_qi_two_level_preconditioner_smoothed_load_basis"] is True
+    smoothed = result.metadata["xblock_qi_two_level_preconditioner_smoothed_load_metadata"]
+    assert smoothed["smoothed_candidate_count"] > 0
+    assert smoothed["rank"] == result.metadata["xblock_qi_two_level_preconditioner_rank"]
+    assert result.metadata["xblock_qi_two_level_preconditioner_rank"] <= 4
+
+
 def test_xblock_sparse_pc_lower_fill_local_policy_is_wired(monkeypatch) -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")

@@ -603,6 +603,20 @@ Current active lane (2026-05-15, post-v1.1.3 research-lane closure pass):
   rejected before promotion. Conclusion: residual-vector enrichment is safe and
   diagnostic, but closing true device-QI needs a physically different Schur /
   moment coarse operator, not just deeper residual Krylov vectors.
+- [x] Implemented the first smoothed-load field-split A/B inside the same
+  fail-closed QI two-level hook. The opt-in
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS=1`
+  path builds source/constraint, flux-surface-average, and low-angular load
+  vectors, applies the local x-block smoother to obtain Schur-like
+  prolongation directions, rank-gates them, and records the load metadata in
+  solver traces and QI seed summaries. The scale-0.60 seed-3 CPU artifact
+  `docs/_static/qi_seed_robustness_scale060_qi_two_level_smoothed_load_seed3_cpu_2026_05_16.json`
+  passed the residual gate after fail-closed rejection, but the one-application
+  probe only improved `3.0215e-5 -> 2.9902e-5` (`0.9896` ratio), below the 5%
+  material gate, and the full solve took 285.7 s / 3523 matvecs. This confirms
+  that smoothed physical load directions alone are not enough to close the QI
+  hard seed; the next candidate needs a true block-Schur/moment operator, not
+  just a better coarse subspace.
 - [ ] Production-resolution QI ladder after `rhs1_qi_two_level` passes the hard
   seed. Required sequence: scale-0.60 five seeds on CPU and one GPU, then the
   production-resolution proxy ladder at `25 x 51 x 100 x 8` or the documented
