@@ -84,6 +84,10 @@ one-step decrease can make the subsequent Krylov phase substantially worse.
 The default path tests only the requested damping; damping scans are
 explicit-only with
 ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_DAMPINGS``.
+The opt-in coarse solve can use either the projected Galerkin operator
+``Q^T A Q`` or an action least-squares solve against ``A Q``. Residual-adaptive
+augmentation can also prepend the current local-smoother correction and
+remaining-residual directions before rank gating.
 
 Current evidence
 ~~~~~~~~~~~~~~~~
@@ -103,6 +107,16 @@ Current evidence
   That result is not a promotion candidate; it is the reason the default gate
   now requires at least 5% true-residual reduction and no longer runs damping
   scans unless explicitly requested.
+- Action least-squares without residual augmentation still worsened the
+  scale-0.60 seed-3 CPU true residual from ``3.02e-5`` to ``2.00e-4`` and
+  completed residual-clean in 313.7 s / 3869 matvecs after fail-closed
+  rejection.
+- Residual-adaptive augmentation improved the same one-step probe to
+  ``2.96e-5`` (ratio ``0.9783``) and completed residual-clean in 195.0 s /
+  2295 matvecs, but the reduction is below the 5% material gate. A loosened
+  2% acceptance test immediately worsened the side-probe residual ratio from
+  ``8.5e4`` to ``2.4e7``, so this remains diagnostic infrastructure rather than
+  a GPU-promotion candidate.
 
 Promotion gate
 ~~~~~~~~~~~~~~
