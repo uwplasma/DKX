@@ -126,6 +126,17 @@ Current evidence
   ``0.9783`` and the run took 242.6 s / 2942 matvecs. This confirms that
   residual-vector enrichment is safe diagnostic infrastructure, not the
   production device-QI closure.
+- A smoothed-load field-split A/B is now wired into the same fail-closed
+  two-level hook with
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS=1``.
+  The basis uses source/constraint, flux-surface-average, and low-angular
+  loads, then applies the local x-block smoother before rank gating. The
+  scale-0.60 seed-3 CPU artifact improved the one-application residual only
+  from ``3.0215e-5`` to ``2.9902e-5`` (ratio ``0.9896``), below the 5%
+  material gate, and the residual-clean full solve took 285.7 s / 3523
+  matvecs. This is useful negative evidence: smoothed physical load directions
+  alone are not enough; the remaining algorithmic step is a true
+  block-Schur/moment coarse operator.
 
 Promotion gate
 ~~~~~~~~~~~~~~
