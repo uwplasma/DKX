@@ -117,6 +117,15 @@ Current evidence
   2% acceptance test immediately worsened the side-probe residual ratio from
   ``8.5e4`` to ``2.4e7``, so this remains diagnostic infrastructure rather than
   a GPU-promotion candidate.
+- Deeper preconditioned-residual Krylov augmentation is now available and
+  records its depth and labels. The first deep probe exposed a rank-gating bug:
+  raw high-norm adaptive residual vectors collapsed the retained basis from
+  rank 32 to rank 2. Adaptive vectors are now normalized before
+  orthonormalization. The corrected scale-0.60 seed-3 CPU probe retained
+  rank 39 and stayed residual-clean, but the one-step ratio was still
+  ``0.9783`` and the run took 242.6 s / 2942 matvecs. This confirms that
+  residual-vector enrichment is safe diagnostic infrastructure, not the
+  production device-QI closure.
 
 Promotion gate
 ~~~~~~~~~~~~~~
