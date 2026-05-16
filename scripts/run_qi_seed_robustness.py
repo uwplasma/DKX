@@ -60,6 +60,14 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT
     / "docs"
     / "_static"
+    / "qi_seed_robustness_scale060_qi_two_level_smoothed_load_seed3_cpu_2026_05_16.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_moment_schur_probe_seed3_cpu_2026_05_16.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
     / "qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json",
     REPO_ROOT
     / "docs"
@@ -157,6 +165,19 @@ QI_TWO_LEVEL_TRACE_KEYS = (
     "xblock_qi_two_level_preconditioner_smoothed_load_basis",
     "xblock_qi_two_level_preconditioner_smoothed_load_metadata",
     "xblock_qi_two_level_preconditioner_setup_s",
+)
+MOMENT_SCHUR_TRACE_KEYS = (
+    "xblock_moment_schur_enabled",
+    "xblock_moment_schur_built",
+    "xblock_moment_schur_used",
+    "xblock_moment_schur_reason",
+    "xblock_moment_schur_rank",
+    "xblock_moment_schur_extra_size",
+    "xblock_moment_schur_probe_residual_before",
+    "xblock_moment_schur_probe_residual_after",
+    "xblock_moment_schur_probe_improvement_ratio",
+    "xblock_moment_schur_seed_used",
+    "xblock_moment_schur_seed_residual_ratio",
 )
 PROGRESS_EVENT_LIMIT = 24
 PROGRESS_MARKERS = (
@@ -543,6 +564,7 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
         "solver_kind": solver_metadata.get("solver_kind"),
     }
     summary.update({key: solver_metadata.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
+    summary.update({key: solver_metadata.get(key) for key in MOMENT_SCHUR_TRACE_KEYS})
     return summary
 
 
@@ -1119,6 +1141,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
             "heartbeat_count": result.get("heartbeat_count"),
         }
         seed_summary.update({key: trace_summary.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
+        seed_summary.update({key: trace_summary.get(key) for key in MOMENT_SCHUR_TRACE_KEYS})
         seed_summaries.append(seed_summary)
 
     first_case = cases[0]

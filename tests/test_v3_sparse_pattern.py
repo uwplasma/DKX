@@ -517,9 +517,40 @@ def test_xblock_sparse_pc_constraint1_moment_schur_records_metadata(monkeypatch)
     assert result.metadata["xblock_moment_schur_extra_size"] == 4
     assert result.metadata["xblock_moment_schur_rank"] == 4
     assert result.metadata["xblock_moment_schur_device_resident"] is True
+    assert result.metadata["xblock_moment_schur_used"] is True
+    assert result.metadata["xblock_moment_schur_reason"] == "built"
     assert result.metadata["xblock_moment_schur_base_applies"] == 2 * result.metadata["xblock_moment_schur_applies"]
     assert result.metadata["xblock_moment_schur_seed_residual_norm"] is not None
     assert any("constraint1 moment-Schur built" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_constraint1_moment_schur_probe_fails_closed(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_PROBE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_MIN_IMPROVEMENT", "1.0")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["xblock_moment_schur_enabled"] is True
+    assert result.metadata["xblock_moment_schur_built"] is True
+    assert result.metadata["xblock_moment_schur_used"] is False
+    assert result.metadata["xblock_moment_schur_reason"] == "probe_not_reduced"
+    assert result.metadata["xblock_moment_schur_probe_residual_before"] is not None
+    assert result.metadata["xblock_moment_schur_probe_residual_after"] is not None
+    assert result.metadata["xblock_moment_schur_probe_improvement_ratio"] is not None
+    assert result.metadata["xblock_moment_schur_seed_used"] is False
+    assert any("constraint1 moment-Schur rejected" in msg for msg in messages)
 
 
 def test_xblock_sparse_pc_preflight_required_rejects_weak_seed(monkeypatch) -> None:

@@ -390,6 +390,10 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
                             "xblock_qi_two_level_preconditioner_smoothed_load_basis": True,
                             "xblock_qi_two_level_preconditioner_improvement_ratio": 0.99,
                             "xblock_qi_two_level_preconditioner_smoothed_load_metadata": {"rank": 4},
+                            "xblock_moment_schur_built": True,
+                            "xblock_moment_schur_used": False,
+                            "xblock_moment_schur_reason": "probe_not_reduced",
+                            "xblock_moment_schur_probe_improvement_ratio": 1.2,
                         }
                     },
                 }
@@ -438,6 +442,10 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
     assert summary["xblock_qi_two_level_preconditioner_smoothed_load_basis"] is True
     assert summary["xblock_qi_two_level_preconditioner_improvement_ratio"] == 0.99
     assert summary["xblock_qi_two_level_preconditioner_smoothed_load_metadata"] == {"rank": 4}
+    assert summary["xblock_moment_schur_built"] is True
+    assert summary["xblock_moment_schur_used"] is False
+    assert summary["xblock_moment_schur_reason"] == "probe_not_reduced"
+    assert summary["xblock_moment_schur_probe_improvement_ratio"] == 1.2
     assert manifest["execution"]["summary"]["max_residual_ratio"] == 2.0e5
     assert manifest["execution"]["summary"]["converged"] == 0
     assert manifest["execution"]["summary"]["solve_methods"] == ["dense"]

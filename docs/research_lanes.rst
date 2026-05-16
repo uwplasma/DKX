@@ -137,6 +137,14 @@ Current evidence
   matvecs. This is useful negative evidence: smoothed physical load directions
   alone are not enough; the remaining algorithmic step is a true
   block-Schur/moment coarse operator.
+- The existing ``constraintScheme = 1`` moment-Schur wrapper is now guarded by
+  an optional true-residual probe,
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_PROBE=1``. On the scale-0.60
+  seed-3 CPU hard case the probe rejected the candidate after worsening the
+  seed residual from ``3.0215e-5`` to ``2.0325e-4`` (ratio ``6.73``). The
+  fail-closed fallback remained residual-clean in 288.2 s / 3502 matvecs. This
+  closes the safety/observability gap for the current moment-Schur wrapper, but
+  also rules it out as the missing QI residual reducer.
 
 Promotion gate
 ~~~~~~~~~~~~~~

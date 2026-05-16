@@ -848,8 +848,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 51
-    assert current["passing_artifact_count"] == 21
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 53
+    assert current["passing_artifact_count"] == 23
     assert current["nonpassing_artifact_count"] == 30
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
@@ -888,6 +888,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale060_qi_coarse_seed3_cpu_2026_05_14.json",
         "docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json",
         "docs/_static/qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_two_level_smoothed_load_seed3_cpu_2026_05_16.json",
+        "docs/_static/qi_seed_robustness_scale060_moment_schur_probe_seed3_cpu_2026_05_16.json",
         "docs/_static/qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json",
         "docs/_static/qi_seed_robustness_scale060_lower_fill_seed3_cpu_rejected_2026_05_14.json",
         "docs/_static/qi_seed_robustness_scale060_lower_fill8_seed3_cpu_rejected_2026_05_14.json",
@@ -986,6 +988,26 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert host_fallback_cpu["total_size"] == 139502
     assert host_fallback_cpu["max_elapsed_s"] < 180.0
     assert host_fallback_cpu["max_residual_ratio"] < 0.01
+    smoothed_load_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_qi_two_level_smoothed_load_seed3_cpu_2026_05_16.json"
+    )
+    assert smoothed_load_cpu["passed"] is True
+    assert smoothed_load_cpu["active_size"] == 81377
+    assert smoothed_load_cpu["total_size"] == 139502
+    assert smoothed_load_cpu["max_elapsed_s"] > host_fallback_cpu["max_elapsed_s"]
+    moment_schur_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_moment_schur_probe_seed3_cpu_2026_05_16.json"
+    )
+    assert moment_schur_cpu["passed"] is True
+    assert moment_schur_cpu["active_size"] == 81377
+    assert moment_schur_cpu["total_size"] == 139502
+    assert moment_schur_cpu["max_elapsed_s"] > host_fallback_cpu["max_elapsed_s"]
     lower_fill = next(
         artifact
         for artifact in payload["source_artifacts"]

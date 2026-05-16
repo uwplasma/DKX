@@ -14470,6 +14470,11 @@ def solve_v3_full_system_linear_gmres(
                 default=moment_schur_default,
             )
             moment_schur_built = False
+            moment_schur_used = False
+            moment_schur_reason: str | None = None
+            moment_schur_probe_residual_before: float | None = None
+            moment_schur_probe_residual_after: float | None = None
+            moment_schur_probe_improvement_ratio: float | None = None
             moment_schur_metadata: dict[str, object] = {}
             moment_schur_stats = {"applies": 0, "base_applies": 0}
             if (
@@ -14490,6 +14495,15 @@ def solve_v3_full_system_linear_gmres(
                     default=1.0e-12,
                     minimum=0.0,
                 )
+                moment_schur_probe_enabled = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_PROBE",
+                    default=False,
+                )
+                moment_schur_probe_min_improvement = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_MIN_IMPROVEMENT",
+                    default=0.0,
+                    minimum=0.0,
+                )
                 if emit is not None:
                     emit(
                         0,
@@ -14497,10 +14511,11 @@ def solve_v3_full_system_linear_gmres(
                         "constraint1 moment-Schur build start",
                     )
                 try:
-                    precond_xblock_krylov, moment_schur_metadata, moment_schur_stats = (
+                    base_precond_before_moment_schur = precond_xblock_krylov
+                    moment_schur_candidate, moment_schur_metadata, moment_schur_stats = (
                         _build_rhs1_xblock_constraint1_moment_schur_preconditioner(
                             op=op,
-                            base_preconditioner=precond_xblock_krylov,
+                            base_preconditioner=base_precond_before_moment_schur,
                             reduce_full=_xblock_reduce_full if xblock_use_active_dof else None,
                             expand_reduced=_xblock_expand_reduced if xblock_use_active_dof else None,
                             rcond=moment_schur_rcond,
@@ -14508,9 +14523,58 @@ def solve_v3_full_system_linear_gmres(
                         )
                     )
                     moment_schur_built = True
+                    moment_schur_used = True
+                    moment_schur_reason = "built"
+                    if bool(moment_schur_probe_enabled):
+                        seed_candidate = jnp.asarray(moment_schur_candidate(xblock_rhs), dtype=jnp.float64)
+                        seed_residual = xblock_rhs - jnp.asarray(
+                            _mv_true_no_count(seed_candidate),
+                            dtype=jnp.float64,
+                        )
+                        moment_schur_probe_residual_after = float(jnp.linalg.norm(seed_residual))
+                        moment_schur_probe_residual_before = float(jnp.linalg.norm(xblock_rhs))
+                        if moment_schur_probe_residual_before > 0.0:
+                            moment_schur_probe_improvement_ratio = (
+                                moment_schur_probe_residual_after / moment_schur_probe_residual_before
+                            )
+                            required = float(moment_schur_probe_residual_before) * max(
+                                0.0,
+                                1.0 - float(moment_schur_probe_min_improvement),
+                            )
+                            moment_schur_used = bool(
+                                np.isfinite(float(moment_schur_probe_residual_after))
+                                and float(moment_schur_probe_residual_after) < float(required)
+                            )
+                        else:
+                            moment_schur_probe_improvement_ratio = (
+                                0.0 if moment_schur_probe_residual_after == 0.0 else float("inf")
+                            )
+                            moment_schur_used = bool(
+                                np.isfinite(float(moment_schur_probe_residual_after))
+                                and float(moment_schur_probe_residual_after) <= 0.0
+                            )
+                        moment_schur_reason = (
+                            "probe_reduced" if bool(moment_schur_used) else "probe_not_reduced"
+                        )
+                        if emit is not None:
+                            level = 0 if bool(moment_schur_used) else 1
+                            emit(
+                                level,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                "constraint1 moment-Schur "
+                                f"{'accepted' if bool(moment_schur_used) else 'rejected'} "
+                                f"seed residual {moment_schur_probe_residual_before:.6e} "
+                                f"-> {moment_schur_probe_residual_after:.6e} "
+                                f"(ratio={float(moment_schur_probe_improvement_ratio):.6e})",
+                            )
+                    precond_xblock_krylov = (
+                        moment_schur_candidate if bool(moment_schur_used) else base_precond_before_moment_schur
+                    )
                     moment_schur_metadata["setup_s"] = float(sparse_timer.elapsed_s() - moment_schur_start_s)
                     pc_factor_s += float(moment_schur_metadata["setup_s"])
                 except Exception as exc:  # noqa: BLE001
+                    moment_schur_used = False
+                    moment_schur_reason = f"{type(exc).__name__}: {exc}"
                     moment_schur_metadata = {
                         "error": f"{type(exc).__name__}: {exc}",
                         "setup_s": float(sparse_timer.elapsed_s() - moment_schur_start_s),
@@ -14737,7 +14801,7 @@ def solve_v3_full_system_linear_gmres(
             target_xblock = max(float(atol), float(tol) * float(xblock_rhs_norm))
             moment_schur_seed_enabled = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_SEED",
-                default=bool(moment_schur_built),
+                default=bool(moment_schur_used),
             )
             moment_schur_seed_used = False
             moment_schur_seed_residual_norm: float | None = None
@@ -16822,6 +16886,8 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_assembled_operator_error": assembled_operator_metadata.get("error"),
                     "xblock_moment_schur_enabled": bool(moment_schur_enabled),
                     "xblock_moment_schur_built": bool(moment_schur_built),
+                    "xblock_moment_schur_used": bool(moment_schur_used),
+                    "xblock_moment_schur_reason": moment_schur_reason,
                     "xblock_moment_schur_default_blocked_by_compact_factors": bool(
                         moment_schur_default_blocked_by_compact_factors
                     ),
@@ -16837,6 +16903,11 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     "xblock_moment_schur_device_resident": bool(
                         moment_schur_metadata.get("device_resident", False)
+                    ),
+                    "xblock_moment_schur_probe_residual_before": moment_schur_probe_residual_before,
+                    "xblock_moment_schur_probe_residual_after": moment_schur_probe_residual_after,
+                    "xblock_moment_schur_probe_improvement_ratio": (
+                        moment_schur_probe_improvement_ratio
                     ),
                     "xblock_moment_schur_error": moment_schur_metadata.get("error"),
                     "xblock_moment_schur_applies": int(moment_schur_stats.get("applies", 0)),

@@ -617,6 +617,22 @@ Current active lane (2026-05-15, post-v1.1.3 research-lane closure pass):
   that smoothed physical load directions alone are not enough to close the QI
   hard seed; the next candidate needs a true block-Schur/moment operator, not
   just a better coarse subspace.
+- [x] Closed the safety gap in the existing `constraintScheme = 1`
+  moment-Schur wrapper by adding an opt-in true-residual probe:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_PROBE=1` with a configurable
+  material-improvement gate. Rejected candidates now restore the baseline
+  x-block preconditioner, suppress moment-Schur seeding, and write
+  `xblock_moment_schur_used`, `xblock_moment_schur_reason`, and probe residuals
+  into solver traces and QI seed summaries.
+- [x] Scale-0.60 seed-3 CPU A/B for the probed moment-Schur wrapper:
+  `docs/_static/qi_seed_robustness_scale060_moment_schur_probe_seed3_cpu_2026_05_16.json`
+  passed only because the fail-closed gate rejected the wrapper. The
+  one-application residual worsened from `3.0215e-5` to `2.0325e-4`
+  (`6.73` ratio), then the fallback path completed residual-clean in
+  288.2 s / 3502 matvecs. This confirms the current dense moment-Schur wrapper
+  is not the missing residual reducer; the next QI algorithm must use a
+  physically stronger block-Schur/angular/radial coupling or documented
+  non-autodiff host fallback for production use.
 - [ ] Production-resolution QI ladder after `rhs1_qi_two_level` passes the hard
   seed. Required sequence: scale-0.60 five seeds on CPU and one GPU, then the
   production-resolution proxy ladder at `25 x 51 x 100 x 8` or the documented

@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 51,
+    "artifact_count": 53,
     "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
@@ -33,7 +33,7 @@
     "max_checked_total_size": 139502,
     "max_checked_total_size_fraction": 0.13676639849725786,
     "nonpassing_artifact_count": 30,
-    "passing_artifact_count": 21,
+    "passing_artifact_count": 23,
     "production_total_size_uncovered_percent": 86.32
   },
   "lane": "qi_seed_robustness",
@@ -740,6 +740,60 @@
       "max_residual_ratio": 0.003432393591615328,
       "passed": true,
       "path": "docs/_static/qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 285.7342047499842,
+      "max_residual_ratio": 0.007270896967165838,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_two_level_smoothed_load_seed3_cpu_2026_05_16.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 289.6280926250038,
+      "max_residual_ratio": 0.007912546888986167,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale060_moment_schur_probe_seed3_cpu_2026_05_16.json",
       "public_cli_default_path": false,
       "resolution": {
         "NTHETA": 15,
