@@ -8,6 +8,7 @@ import pytest
 
 from sfincs_jax.rhs1_pas_matrixfree import (
     Rhs1PasMatrixFreeConfig,
+    plan_pas_runtime_chunks,
     rhs1_pas_matrixfree_acceptance_gate,
     rhs1_pas_matrixfree_correction,
     rhs1_pas_matrixfree_preflight_gate,
@@ -167,7 +168,7 @@ def test_matrixfree_correction_candidate_size_limit_rejects_before_candidate_mat
     assert result.diagnostics["matrix_free_metadata"]["element_count"] == 5
     assert result.diagnostics["matrix_free_metadata"]["candidate_matvecs"] == 0
     assert result.diagnostics["matrix_free_metadata"]["safe"] is False
-    assert calls == {"matvec": 1, "correction": 0}
+    assert calls == {"matvec": 0, "correction": 0}
 
 
 def test_matrixfree_correction_candidate_byte_limit_rejects_before_correction() -> None:
@@ -202,7 +203,7 @@ def test_matrixfree_correction_candidate_byte_limit_rejects_before_correction() 
     assert metadata["candidate_byte_budget_margin"] == -1
     assert metadata["preflight_kind"] == "rhs1_pas_matrixfree_candidate"
     assert metadata["candidate_matvecs"] == 0
-    assert calls == {"matvec": 1, "correction": 0}
+    assert calls == {"matvec": 0, "correction": 0}
 
 
 def test_matrixfree_correction_rejects_zero_update_without_candidate_matvec() -> None:
@@ -314,11 +315,116 @@ def test_streaming_l2_norm_matches_dense_norm() -> None:
     assert streaming_l2_norm(value, block_size=2) == pytest.approx(
         streaming_l2_norm(value, block_size=None)
     )
+    assert streaming_l2_norm(value, max_chunk_bytes=8) == pytest.approx(
+        streaming_l2_norm(value, block_size=None)
+    )
 
 
 def test_streaming_l2_norm_preserves_nonfinite_with_blocks() -> None:
     assert math.isnan(streaming_l2_norm(jnp.asarray([1.0, jnp.nan]), block_size=1))
     assert math.isinf(streaming_l2_norm(jnp.asarray([1.0, jnp.inf]), block_size=1))
+
+
+def test_streaming_l2_norm_fails_closed_when_chunk_budget_cannot_hold_one_element() -> None:
+    with pytest.raises(MemoryError):
+        streaming_l2_norm(jnp.asarray([1.0], dtype=jnp.float32), max_chunk_bytes=7)
+
+
+def test_pas_runtime_chunk_plan_is_monotone_and_bounded_by_byte_budget() -> None:
+    value = jnp.zeros((10,), dtype=jnp.float32)
+
+    tight = plan_pas_runtime_chunks(value, max_reduction_bytes=8)
+    medium = plan_pas_runtime_chunks(value, max_reduction_bytes=16)
+    loose = plan_pas_runtime_chunks(value, max_reduction_bytes=80)
+
+    assert tight.safe and medium.safe and loose.safe
+    assert tight.block_size == 1
+    assert medium.block_size == 2
+    assert loose.block_size == 10
+    assert tight.block_size <= medium.block_size <= loose.block_size
+    for plan in (tight, medium, loose):
+        assert plan.estimated_reduction_bytes <= plan.max_reduction_bytes
+
+
+def test_pas_runtime_chunk_plan_respects_requested_block_cap() -> None:
+    value = jnp.zeros((10,), dtype=jnp.float32)
+
+    plan = plan_pas_runtime_chunks(
+        value,
+        requested_block_size=3,
+        max_reduction_bytes=80,
+        max_live_bytes=200,
+        live_arrays=5,
+    )
+
+    assert plan.safe
+    assert plan.block_size == 3
+    assert plan.estimated_live_array_bytes == 200
+    assert plan.live_byte_margin == 0
+
+
+def test_matrixfree_reduction_budget_rejects_before_matvec_or_correction() -> None:
+    rhs = jnp.ones((2,), dtype=jnp.float32)
+    calls = {"matvec": 0, "correction": 0}
+
+    def matvec(x):
+        calls["matvec"] += 1
+        return x
+
+    def correction(residual):
+        calls["correction"] += 1
+        return residual
+
+    result = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        correction=correction,
+        config=Rhs1PasMatrixFreeConfig(max_reduction_bytes=7),
+    )
+
+    metadata = result.diagnostics["matrix_free_metadata"]
+    assert not result.accepted
+    assert result.reason == "reduction-memory-limit-exceeded"
+    assert metadata["candidate_matvecs"] == 0
+    assert metadata["reduction_chunk_plan"]["safe"] is False
+    assert calls == {"matvec": 0, "correction": 0}
+
+
+def test_matrixfree_auto_chunk_plan_preserves_function_level_result() -> None:
+    diag = jnp.asarray([2.0, 4.0, 8.0], dtype=jnp.float32)
+    rhs = jnp.asarray([2.0, 8.0, 24.0], dtype=jnp.float32)
+    x0 = jnp.zeros_like(rhs)
+
+    def matvec(x):
+        return diag * x
+
+    def exact_diagonal_correction(residual):
+        return residual / diag
+
+    dense = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        correction=exact_diagonal_correction,
+        config=Rhs1PasMatrixFreeConfig(max_steps=1, min_residual_reduction=0.5),
+    )
+    chunked = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        correction=exact_diagonal_correction,
+        config=Rhs1PasMatrixFreeConfig(
+            max_steps=1,
+            min_residual_reduction=0.5,
+            max_candidate_bytes=128,
+        ),
+    )
+
+    assert dense.accepted and chunked.accepted
+    assert chunked.diagnostics["matrix_free_metadata"]["planned_norm_block_size"] == 3
+    np.testing.assert_allclose(np.asarray(chunked.x), np.asarray(dense.x))
+    assert chunked.residual_norm == pytest.approx(dense.residual_norm)
 
 
 def test_matrixfree_preflight_gate_reports_safe_and_reject_metadata() -> None:
@@ -337,6 +443,8 @@ def test_matrixfree_preflight_gate_reports_safe_and_reject_metadata() -> None:
     assert metadata["candidate_byte_budget_configured"] is True
     assert metadata["candidate_byte_budget_margin"] == 0
     assert metadata["preflight_kind"] == "rhs1_pas_matrixfree_candidate"
+    assert metadata["planned_norm_block_size"] == 2
+    assert metadata["reduction_chunk_plan"]["estimated_reduction_bytes"] == 16
 
     safe, reason, metadata = rhs1_pas_matrixfree_preflight_gate(
         x,
@@ -364,3 +472,5 @@ def test_matrixfree_config_validation() -> None:
         Rhs1PasMatrixFreeConfig(max_candidate_elements=0)
     with pytest.raises(ValueError):
         Rhs1PasMatrixFreeConfig(max_candidate_bytes=0)
+    with pytest.raises(ValueError):
+        Rhs1PasMatrixFreeConfig(max_reduction_bytes=0)

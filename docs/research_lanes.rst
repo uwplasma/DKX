@@ -27,6 +27,10 @@ Relevant implementation:
 
 - ``sfincs_jax/rhs1_qi_coarse.py`` builds deterministic QI coarse bases and
   fail-closed Galerkin corrections.
+- ``sfincs_jax/rhs1_qi_block_schur.py`` provides the next standalone
+  block-Schur/angular/radial coarse-preconditioner primitive. It is
+  JAX-compatible, emits rank/conditioning metadata, and has a fail-closed
+  true-residual probe, but it is not yet wired into the production driver.
 - ``sfincs_jax/rhs1_qi_two_level.py`` provides the first device-compatible
   local-smoother plus coarse-correction primitive for the next hard-seed probe.
 - ``sfincs_jax/rhs1_device_operator.py`` provides bounded device CSR matvec
@@ -145,6 +149,12 @@ Current evidence
   fail-closed fallback remained residual-clean in 288.2 s / 3502 matvecs. This
   closes the safety/observability gap for the current moment-Schur wrapper, but
   also rules it out as the missing QI residual reducer.
+- A standalone block-Schur/angular/radial primitive now exists for the next
+  device-QI attempt. Unit tests show residual reduction on synthetic coupled
+  angular/radial systems, fail-closed rejection when no reduction is possible,
+  stable rank/conditioning metadata, and JAX transform compatibility. This moves
+  the implementation surface forward, but it is not a promotion artifact until
+  the driver hook and scale-0.60 CPU/GPU hard-seed runs accept and converge.
 
 Promotion gate
 ~~~~~~~~~~~~~~
@@ -196,7 +206,8 @@ improve runtime or peak memory, so no default promotion is justified.
 Relevant implementation:
 
 - ``sfincs_jax/rhs1_pas_matrixfree.py`` contains guarded matrix-free correction
-  helpers and candidate-size preflights.
+  helpers, candidate-size preflights, and ``PasRuntimeChunkPlan`` for deriving
+  bounded reduction chunks from configured byte budgets.
 - ``sfincs_jax/rhs1_pas_policy.py`` contains PAS applicability and memory gates.
 - ``scripts/benchmark_pas_tz_memory_fallback.py`` records promotion/rejection
   evidence.
@@ -204,10 +215,11 @@ Relevant implementation:
 Next implementation
 ~~~~~~~~~~~~~~~~~~~
 
-Replace dense candidate update materialization with streamed/chunked correction
-actions over pitch-angle/angular blocks. The candidate should use
-``jax.lax.scan`` or equivalent fixed-shape chunks so the live set is bounded and
-the same operation can run on CPU or GPU.
+Promote the new reduction chunk planner from helper-level memory safety into a
+measured solve path: use it to bound PAS-heavy diagnostic/reduction live sets,
+then benchmark geometry4, HSX, and geometry11 on CPU and GPU. A later algorithm
+should still replace dense candidate update materialization with fixed-shape
+streamed/chunked correction actions over pitch-angle/angular blocks.
 
 Promotion gate
 ~~~~~~~~~~~~~~
@@ -234,6 +246,10 @@ Relevant implementation:
   bounded single-case scaling evidence.
 - ``sfincs_jax/transport_parallel_policy.py`` prevents cold or malformed
   scaling payloads from becoming release claims.
+- ``sfincs_jax/transport_parallel_sharding.py`` records pure single-case
+  sharded-solve plans, caps requested devices to available work, reports
+  workload balance, and fail-closes release scaling claims for experimental
+  single-case sharding.
 - ``sfincs_jax/v3_system.py`` contains the sharded matrix-free operator path.
 
 Next implementation

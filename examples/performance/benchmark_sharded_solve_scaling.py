@@ -17,6 +17,7 @@ from sfincs_jax.transport_parallel_policy import (
     audit_parallel_scaling_claim_scope,
     audit_sharded_solve_scaling_summary,
 )
+from sfincs_jax.transport_parallel_sharding import plan_single_case_sharded_solve
 from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
 
 
@@ -356,6 +357,19 @@ def _build_sharded_solve_benchmark_plan(
     )
     device_plan = []
     for d in normalized_devices:
+        sharding_plan = plan_single_case_sharded_solve(
+            requested_devices=int(d),
+            backend=str(backend),
+            available_device_count=int(d),
+            available_device_ids=[str(i) for i in range(int(d))],
+            rhs_mode=1,
+            shard_axis=str(shard_axis),
+            benchmark_kind="single_case_sharded_solve",
+            task_count=1,
+            release_scaling_claim=False,
+            experimental_single_case_scaling=True,
+            scaling_status="experimental_single_case_sharding",
+        )
         env = _device_env_preview(
             devices=d,
             cache_dir=cache_dir,
@@ -378,6 +392,7 @@ def _build_sharded_solve_benchmark_plan(
                 "nsolve_per_sample": max(int(nsolve), 1),
                 "inner_warmup_solves": max(int(inner_warmup_solves), 0),
                 "sample_timeout_s": float(sample_timeout_s),
+                "sharding_plan": sharding_plan.to_dict(),
                 "env": env,
                 "run_once_command": [
                     "python",

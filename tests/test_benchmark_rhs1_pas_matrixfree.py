@@ -222,7 +222,7 @@ def test_child_payload_candidate_budget_rejects_before_correction() -> None:
     assert row["byte_preflight"]["candidate_byte_budget_configured"] is True
     assert row["byte_preflight"]["safe"] is False
     assert row["byte_preflight"]["candidate_byte_budget_margin"] == -1
-    assert row["metrics"]["matvec_calls"] == 1
+    assert row["metrics"]["matvec_calls"] == 0
     assert row["metrics"]["correction_calls"] == 0
     metadata = row["gate_diagnostics"]["matrix_free_metadata"]
     assert metadata["estimated_live_array_bytes"] == 320

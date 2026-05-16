@@ -202,6 +202,11 @@ def test_sharded_solve_plan_records_hot_timing_timeout_and_non_release_gate(tmp_
     assert plan["parallel_claim_scope"]["measured_results_present"] is False
     assert plan["parallel_claim_scope"]["release_gate_required"] is None
     assert plan["device_plan"][1]["env"]["CUDA_VISIBLE_DEVICES"] == "0,1"
+    assert plan["device_plan"][1]["sharding_plan"]["requested_devices"] == 2
+    assert plan["device_plan"][1]["sharding_plan"]["active_devices"] == 2
+    assert plan["device_plan"][1]["sharding_plan"]["eligible_for_single_case_sharding"] is True
+    assert plan["device_plan"][1]["sharding_plan"]["release_scaling_supported"] is False
+    assert plan["device_plan"][1]["sharding_plan"]["balance_diagnostics"]["imbalance_units"] == 0
     assert "--audit" in plan["benchmark_command"]
 
 

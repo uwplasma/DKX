@@ -152,6 +152,16 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/rhs1_pas_policy.py``:
   PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
   adaptive-smoother eligibility.
+- ``sfincs_jax/rhs1_pas_matrixfree.py``:
+  bounded matrix-free PAS correction probes, streaming L2 norms, candidate
+  byte-budget preflights, and ``PasRuntimeChunkPlan`` metadata for keeping
+  PAS-heavy residual/correction reductions inside configured memory budgets
+  before a matvec is launched.
+- ``sfincs_jax/rhs1_qi_block_schur.py``:
+  standalone JAX-compatible QI block-Schur/angular/radial coarse-preconditioner
+  primitive. It builds deterministic global, radial, angular, and block-Schur
+  basis directions, applies a local-plus-coarse action, and exposes a
+  fail-closed true-residual probe for future device-QI driver integration.
 - ``sfincs_jax/rhs1_preconditioner_dispatch.py``:
   shared RHSMode=1 preconditioner-kind dispatch.
 - ``sfincs_jax/rhs1_preconditioner_auto_policy.py``:
@@ -237,6 +247,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   top-level transport process-parallel execution control, including run/no-run gating,
   per-worker payload construction, backend-specific execution, retry, and sequential
   fallback.
+- ``sfincs_jax/transport_parallel_sharding.py``:
+  pure single-case sharded-solve planning metadata. It caps requested device
+  counts, records per-device workload balance, marks single-case sharding as
+  experimental/non-release by default, and prevents malformed sharded payloads
+  from becoming release scaling claims.
 - ``sfincs_jax/validation_artifacts.py``:
   lightweight loaders and physics metrics for checked-in publication artifacts. This
   module is independent of the heavy solver path, so documentation and CI can verify

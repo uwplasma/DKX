@@ -8,6 +8,7 @@ free residual check shows a finite improvement.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 from dataclasses import dataclass
 from dataclasses import field
 import math
@@ -29,6 +30,7 @@ class Rhs1PasMatrixFreeConfig:
     min_update_norm_ratio: float | None = None
     max_candidate_elements: int | None = None
     max_candidate_bytes: int | None = None
+    max_reduction_bytes: int | None = None
 
     def __post_init__(self) -> None:
         if int(self.max_steps) < 1:
@@ -53,6 +55,33 @@ class Rhs1PasMatrixFreeConfig:
             raise ValueError("max_candidate_elements must be >= 1 when provided")
         if self.max_candidate_bytes is not None and int(self.max_candidate_bytes) < 1:
             raise ValueError("max_candidate_bytes must be >= 1 when provided")
+        if self.max_reduction_bytes is not None and int(self.max_reduction_bytes) < 1:
+            raise ValueError("max_reduction_bytes must be >= 1 when provided")
+
+
+@dataclass(frozen=True)
+class PasRuntimeChunkPlan:
+    """Bounded chunk plan for PAS vector reductions and live-array guards."""
+
+    element_count: int
+    itemsize: int
+    array_bytes: int
+    requested_block_size: int | None
+    block_size: int | None
+    live_array_count: int
+    estimated_live_array_bytes: int
+    max_live_bytes: int | None
+    live_byte_margin: int | None
+    reduction_work_arrays: int
+    max_reduction_bytes: int | None
+    estimated_reduction_bytes: int | None
+    safe: bool
+    reason: str
+
+    def as_metadata(self) -> dict[str, object]:
+        """Return a plain metadata mapping suitable for diagnostics."""
+
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -115,6 +144,131 @@ def _array_metadata(value: jnp.ndarray, *, block_size: int | None) -> dict[str, 
     }
 
 
+def _reduction_chunk_bytes_for_config(
+    config: Rhs1PasMatrixFreeConfig,
+    *,
+    live_arrays: int,
+) -> int | None:
+    if config.max_reduction_bytes is not None:
+        return int(config.max_reduction_bytes)
+    if config.max_candidate_bytes is None:
+        return None
+    return max(1, int(config.max_candidate_bytes) // max(1, int(live_arrays)))
+
+
+def plan_pas_runtime_chunks(
+    value: ArrayLike,
+    *,
+    requested_block_size: int | None = None,
+    max_live_bytes: int | None = None,
+    live_arrays: int = 1,
+    max_reduction_bytes: int | None = None,
+    reduction_work_arrays: int = 2,
+) -> PasRuntimeChunkPlan:
+    """Plan bounded PAS vector chunks without changing numerical operations.
+
+    ``max_live_bytes`` guards how many full vectors may be live at once.
+    ``max_reduction_bytes`` bounds each streaming reduction chunk. If a
+    non-empty vector cannot fit even one element of reduction work, the plan is
+    unsafe so callers can fail closed before launching larger PAS work.
+    """
+
+    arr = jnp.asarray(value)
+    element_count = int(arr.size)
+    itemsize = max(1, int(getattr(arr.dtype, "itemsize", 0)))
+    array_bytes = int(element_count * itemsize)
+    live_array_count = max(1, int(live_arrays))
+    estimated_live_bytes = int(array_bytes * live_array_count)
+    max_live = None if max_live_bytes is None else int(max_live_bytes)
+    live_margin = None if max_live is None else int(max_live - estimated_live_bytes)
+    requested_block = None if requested_block_size is None else max(1, int(requested_block_size))
+    work_arrays = max(1, int(reduction_work_arrays))
+    max_reduction = None if max_reduction_bytes is None else int(max_reduction_bytes)
+
+    if max_live is not None and estimated_live_bytes > max_live:
+        return PasRuntimeChunkPlan(
+            element_count=element_count,
+            itemsize=itemsize,
+            array_bytes=array_bytes,
+            requested_block_size=requested_block,
+            block_size=requested_block,
+            live_array_count=live_array_count,
+            estimated_live_array_bytes=estimated_live_bytes,
+            max_live_bytes=max_live,
+            live_byte_margin=live_margin,
+            reduction_work_arrays=work_arrays,
+            max_reduction_bytes=max_reduction,
+            estimated_reduction_bytes=None,
+            safe=False,
+            reason="live-memory-limit-exceeded",
+        )
+
+    if element_count == 0:
+        return PasRuntimeChunkPlan(
+            element_count=0,
+            itemsize=itemsize,
+            array_bytes=0,
+            requested_block_size=requested_block,
+            block_size=0 if requested_block is not None or max_reduction is not None else None,
+            live_array_count=live_array_count,
+            estimated_live_array_bytes=0,
+            max_live_bytes=max_live,
+            live_byte_margin=live_margin,
+            reduction_work_arrays=work_arrays,
+            max_reduction_bytes=max_reduction,
+            estimated_reduction_bytes=0,
+            safe=True,
+            reason="within-pas-runtime-memory-limit",
+        )
+
+    bytes_per_reduction_element = int(itemsize * work_arrays)
+    if max_reduction is None:
+        block_size = requested_block
+        estimated_reduction = (
+            int(min(element_count, block_size) * bytes_per_reduction_element)
+            if block_size is not None
+            else int(element_count * bytes_per_reduction_element)
+        )
+    else:
+        if max_reduction < bytes_per_reduction_element:
+            return PasRuntimeChunkPlan(
+                element_count=element_count,
+                itemsize=itemsize,
+                array_bytes=array_bytes,
+                requested_block_size=requested_block,
+                block_size=0,
+                live_array_count=live_array_count,
+                estimated_live_array_bytes=estimated_live_bytes,
+                max_live_bytes=max_live,
+                live_byte_margin=live_margin,
+                reduction_work_arrays=work_arrays,
+                max_reduction_bytes=max_reduction,
+                estimated_reduction_bytes=bytes_per_reduction_element,
+                safe=False,
+                reason="reduction-memory-limit-exceeded",
+            )
+        budget_block = max(1, int(max_reduction // bytes_per_reduction_element))
+        block_size = min(element_count, budget_block if requested_block is None else min(requested_block, budget_block))
+        estimated_reduction = int(block_size * bytes_per_reduction_element)
+
+    return PasRuntimeChunkPlan(
+        element_count=element_count,
+        itemsize=itemsize,
+        array_bytes=array_bytes,
+        requested_block_size=requested_block,
+        block_size=block_size,
+        live_array_count=live_array_count,
+        estimated_live_array_bytes=estimated_live_bytes,
+        max_live_bytes=max_live,
+        live_byte_margin=live_margin,
+        reduction_work_arrays=work_arrays,
+        max_reduction_bytes=max_reduction,
+        estimated_reduction_bytes=estimated_reduction,
+        safe=True,
+        reason="within-pas-runtime-memory-limit",
+    )
+
+
 def rhs1_pas_matrixfree_preflight_gate(
     x_template: ArrayLike,
     *,
@@ -129,7 +283,15 @@ def rhs1_pas_matrixfree_preflight_gate(
     running another matvec when the configured element/byte budget cannot hold.
     """
 
-    metadata = _array_metadata(jnp.asarray(x_template), block_size=config.block_size)
+    reduction_budget = _reduction_chunk_bytes_for_config(config, live_arrays=live_arrays)
+    chunk_plan = plan_pas_runtime_chunks(
+        x_template,
+        requested_block_size=config.block_size,
+        max_live_bytes=config.max_candidate_bytes,
+        live_arrays=live_arrays,
+        max_reduction_bytes=reduction_budget,
+    )
+    metadata = _array_metadata(jnp.asarray(x_template), block_size=chunk_plan.block_size)
     live_array_count = max(1, int(live_arrays))
     estimated_live_bytes = int(metadata["array_bytes"]) * live_array_count
     enriched = dict(metadata)
@@ -147,6 +309,9 @@ def rhs1_pas_matrixfree_preflight_gate(
     enriched["candidate_byte_budget_margin"] = (
         None if config.max_candidate_bytes is None else int(config.max_candidate_bytes) - estimated_live_bytes
     )
+    enriched["max_reduction_bytes"] = reduction_budget
+    enriched["planned_norm_block_size"] = chunk_plan.block_size
+    enriched["reduction_chunk_plan"] = chunk_plan.as_metadata()
     enriched["min_update_norm_ratio"] = (
         None if config.min_update_norm_ratio is None else float(config.min_update_norm_ratio)
     )
@@ -160,6 +325,10 @@ def rhs1_pas_matrixfree_preflight_gate(
         enriched["safe"] = False
         enriched["reason"] = "candidate-memory-limit-exceeded"
         return False, "candidate-memory-limit-exceeded", enriched
+    if not chunk_plan.safe:
+        enriched["safe"] = False
+        enriched["reason"] = str(chunk_plan.reason)
+        return False, str(chunk_plan.reason), enriched
     enriched["safe"] = True
     enriched["reason"] = "within-candidate-memory-limit"
     return True, "within-candidate-memory-limit", enriched
@@ -184,16 +353,29 @@ def _with_matrixfree_metadata(
     return enriched
 
 
-def streaming_l2_norm(value: ArrayLike, *, block_size: int | None = None) -> float:
+def streaming_l2_norm(
+    value: ArrayLike,
+    *,
+    block_size: int | None = None,
+    max_chunk_bytes: int | None = None,
+) -> float:
     """Return an L2 norm using optional flat chunks for bounded accumulation."""
 
     arr = jnp.ravel(jnp.asarray(value))
     if arr.size == 0:
         return 0.0
-    if block_size is None:
+    plan = plan_pas_runtime_chunks(
+        arr,
+        requested_block_size=block_size,
+        max_reduction_bytes=max_chunk_bytes,
+    )
+    if not plan.safe:
+        raise MemoryError(f"PAS streaming norm rejected: {plan.reason}")
+    planned_block_size = plan.block_size
+    if planned_block_size is None:
         norm = jnp.linalg.norm(arr)
         return float(norm)
-    block = max(1, int(block_size))
+    block = max(1, int(planned_block_size))
     total = 0.0
     for start in range(0, int(arr.size), block):
         chunk = arr[start : start + block]
@@ -204,6 +386,19 @@ def streaming_l2_norm(value: ArrayLike, *, block_size: int | None = None) -> flo
         if not math.isfinite(total):
             return total
     return math.sqrt(max(0.0, total))
+
+
+def _configured_streaming_l2_norm(
+    value: ArrayLike,
+    *,
+    config: Rhs1PasMatrixFreeConfig,
+    live_arrays: int,
+) -> float:
+    return streaming_l2_norm(
+        value,
+        block_size=config.block_size,
+        max_chunk_bytes=_reduction_chunk_bytes_for_config(config, live_arrays=live_arrays),
+    )
 
 
 def rhs1_pas_matrixfree_acceptance_gate(
@@ -249,11 +444,40 @@ def rhs1_pas_matrixfree_correction(
     if rhs_arr.shape != x_initial.shape:
         raise ValueError("rhs and x0 must have the same shape")
 
+    preflight_safe, preflight_reason, preflight_metadata = rhs1_pas_matrixfree_preflight_gate(
+        x_initial,
+        config=config,
+        live_arrays=5,
+    )
+    if not preflight_safe:
+        metadata = dict(preflight_metadata)
+        metadata["candidate_matvecs"] = 0
+        initial_norm = float("nan")
+        return Rhs1PasMatrixFreeResult(
+            x=x_initial,
+            residual_norm=initial_norm,
+            initial_residual_norm=initial_norm,
+            residual_history=(),
+            accepted_steps=0,
+            accepted=False,
+            reason=preflight_reason,
+            diagnostics={
+                "reason": preflight_reason,
+                "accepted_steps": 0,
+                "initial_residual_norm": None,
+                "candidate_residual_norm": None,
+                "min_residual_reduction": float(config.min_residual_reduction),
+                "initial_residual_finite": None,
+                "candidate_residual_finite": None,
+                "matrix_free_metadata": metadata,
+            },
+        )
+
     x_best = x_initial
     residual = rhs_arr - matvec(x_best)
     if jnp.asarray(residual).shape != x_initial.shape:
         raise ValueError("matvec(x0) must have the same shape as x0")
-    initial_norm = streaming_l2_norm(residual, block_size=config.block_size)
+    initial_norm = _configured_streaming_l2_norm(residual, config=config, live_arrays=2)
     history: list[float] = [initial_norm]
     if not math.isfinite(initial_norm):
         return Rhs1PasMatrixFreeResult(
@@ -284,33 +508,6 @@ def rhs1_pas_matrixfree_correction(
     omega_use = float(config.omega)
     max_steps = max(1, int(config.max_steps))
     candidate_matvecs = 0
-    preflight_safe, preflight_reason, preflight_metadata = rhs1_pas_matrixfree_preflight_gate(
-        x_initial,
-        config=config,
-        live_arrays=5,
-    )
-    if not preflight_safe:
-        metadata = dict(preflight_metadata)
-        metadata["candidate_matvecs"] = 0
-        return Rhs1PasMatrixFreeResult(
-            x=x_best,
-            residual_norm=best_norm,
-            initial_residual_norm=initial_norm,
-            residual_history=tuple(history),
-            accepted_steps=0,
-            accepted=False,
-            reason=preflight_reason,
-            diagnostics={
-                "reason": preflight_reason,
-                "accepted_steps": 0,
-                "initial_residual_norm": _finite_or_none(initial_norm),
-                "candidate_residual_norm": None,
-                "min_residual_reduction": float(config.min_residual_reduction),
-                "initial_residual_finite": True,
-                "candidate_residual_finite": None,
-                "matrix_free_metadata": metadata,
-            },
-        )
     for step_index in range(max_steps):
         update = jnp.asarray(correction(current_residual))
         if update.shape != x_initial.shape:
@@ -335,7 +532,7 @@ def rhs1_pas_matrixfree_correction(
                     candidate_matvecs=candidate_matvecs,
                 ),
             )
-        update_norm = streaming_l2_norm(update, block_size=config.block_size)
+        update_norm = _configured_streaming_l2_norm(update, config=config, live_arrays=3)
         if not math.isfinite(update_norm):
             return Rhs1PasMatrixFreeResult(
                 x=x_best,
@@ -414,7 +611,7 @@ def rhs1_pas_matrixfree_correction(
         if config.max_update_norm_ratio is not None:
             max_update_ratio = float(config.max_update_norm_ratio)
             if update_norm > max_update_ratio:
-                x_scale = max(streaming_l2_norm(x_best, block_size=config.block_size), 1.0)
+                x_scale = max(_configured_streaming_l2_norm(x_best, config=config, live_arrays=3), 1.0)
             else:
                 x_scale = 1.0
             if update_norm > x_scale * max_update_ratio:
@@ -469,7 +666,7 @@ def rhs1_pas_matrixfree_correction(
                     candidate_matvecs=candidate_matvecs,
                 ),
             )
-        candidate_norm = streaming_l2_norm(candidate_residual, block_size=config.block_size)
+        candidate_norm = _configured_streaming_l2_norm(candidate_residual, config=config, live_arrays=5)
         history.append(candidate_norm)
         accepted, reason = rhs1_pas_matrixfree_acceptance_gate(
             initial_residual_norm=best_norm,
@@ -534,6 +731,8 @@ def rhs1_pas_matrixfree_correction(
 __all__ = [
     "Rhs1PasMatrixFreeConfig",
     "Rhs1PasMatrixFreeResult",
+    "PasRuntimeChunkPlan",
+    "plan_pas_runtime_chunks",
     "rhs1_pas_matrixfree_acceptance_gate",
     "rhs1_pas_matrixfree_correction",
     "rhs1_pas_matrixfree_preflight_gate",

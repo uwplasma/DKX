@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-15 (Europe/Lisbon)
+Last updated: 2026-05-16 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -42,6 +42,43 @@ Immediate priorities:
 - Eliminate remaining solver branch fragility while preserving differentiability,
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
+
+Current active lane (2026-05-16, v1.1.4 completion push):
+- [x] Coordinated a four-lane completion push on clean `main` after
+  `f35c0c6`. Three implementation lanes landed with disjoint scopes: a
+  standalone QI block-Schur/angular/radial coarse primitive, PAS matrix-free
+  runtime chunk planning, and single-case sharded-solve planning metadata. The
+  release/docs lane was stopped after no patch returned; release metadata was
+  handled in the main thread instead.
+- [x] Added `sfincs_jax/rhs1_qi_block_schur.py` with deterministic global,
+  radial, angular, and block-Schur basis directions, a local-plus-coarse JAX
+  action, fail-closed true-residual probing, and rank/conditioning diagnostics.
+  Focused tests prove synthetic residual reduction, impossible-improvement
+  rejection, stable metadata, and JAX transform compatibility. This is ready as
+  standalone infrastructure, but not yet a release-facing true device-QI solve
+  until wired through the driver and validated on the scale-0.60 CPU/GPU hard
+  seed.
+- [x] Strengthened PAS matrix-free memory safety with `PasRuntimeChunkPlan`,
+  `plan_pas_runtime_chunks`, a `max_reduction_bytes` configuration knob, and
+  earlier byte-budget preflight. Tight PAS budgets now reject before matvec or
+  correction work, and configured candidate-byte budgets also bound streaming
+  reduction chunks. This reduces memory-risk surface without changing physics.
+- [x] Added `sfincs_jax/transport_parallel_sharding.py` and benchmark-plan
+  metadata so experimental single-case sharded solves record active devices,
+  capped device requests, per-device balance diagnostics, and fail-closed
+  release-scaling eligibility. This improves practical scaling setup and claim
+  hygiene, but does not convert single-case multi-GPU sharding into a release
+  scaling claim.
+- [x] Focused validation for the new lanes passed: `python -m py_compile` on
+  touched files, `ruff check` on touched files, and `pytest -q` across QI
+  block-Schur, PAS policy/matrix-free/benchmark, sharding planner, sharded
+  benchmark, and transport parallel tests (`135 passed in 5.76 s`).
+- [x] Local final release validation passed: release-gate checks, research-lane
+  checks, `git diff --check`, Sphinx `-W` docs build, full local suite
+  (`1651 passed in 712.28 s`), `python -m build`, and `twine check dist/*`.
+- [ ] Final v1.1.4 remote gate: push to `main`, require CI/docs success, then
+  tag `v1.1.4` only if the tree stays clean and the tag matches
+  `pyproject.toml` / `sfincs_jax.__version__`.
 
 Current active lane (2026-05-12, coordinated large-push research/performance closure):
 - [ ] Second larger push requested on 2026-05-12: increase each open lane by at
