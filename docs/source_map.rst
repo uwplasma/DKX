@@ -55,7 +55,9 @@ Boozer file.
 Optional structural adapters for JAX-native geometry producers such as ``vmec_jax``
 and ``booz_xform_jax``. These helpers do not make either package a required
 dependency; they normalize in-memory VMEC-like ``wout`` objects to the internal
-``VmecWout`` layout used by ``geometryScheme=5``.
+``VmecWout`` layout used by ``geometryScheme=5``. The module also owns the
+machine-readable VMEC/Boozer proxy workflow contract and the shared no-solve
+provenance gate used by the workflow status and autodiff examples.
 
 ``sfincs_jax/grids.py`` and ``sfincs_jax/xgrid.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -294,6 +296,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   lightweight so CLI progress can stay informative without importing heavy solver
   dependencies. It is solver-neutral: it improves observability without affecting
   numerical decisions.
+- ``sfincs_jax/profiling.py``:
+  opt-in coarse solver/output profiling behind ``SFINCS_JAX_PROFILE``. It owns
+  phase-level timing, RSS high-water sampling, optional JAX device-memory polling,
+  and the ``profile_entries`` payload written into solver traces and output metadata.
 - ``sfincs_jax/solver_progress_policy.py``:
   the pure formatting and RHSMode=1 progress-threshold policy re-exported by
   ``solver_progress.py`` so CLI observability decisions remain unit-testable.
