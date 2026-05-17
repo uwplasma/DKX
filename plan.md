@@ -12356,6 +12356,12 @@ Validation:
   utility scripts. The active lint gate for this coherent change set is
   touched-file ruff plus focused py_compile; do not add broad ignores just to
   hide this debt.
+- Remote CI follow-up: the push for commit `d613bac` cleared Docs,
+  examples-smoke, optional ecosystem gates, and all three pytest shards, but the
+  serial coverage job was still running past the CI budget. The coverage gate
+  is now split into three parallel coverage shards plus a combine/report job
+  that preserves the same `43%` fail-under threshold and Codecov upload without
+  duplicating the entire suite in one runner.
 - Keep true device-QI and production-resolution QI ladders as deferred research
   lanes unless new residual-clean GPU artifacts replace the current negative
   evidence.
