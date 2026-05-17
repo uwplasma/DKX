@@ -41,10 +41,11 @@ jobs:
 
   coverage:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      id-token: write
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -53,6 +54,7 @@ jobs:
       SFINCS_JAX_PROFILE: "0"
       SFINCS_JAX_CI: "1"
       SFINCS_JAX_FAST_EXAMPLES: "1"
+      COVERAGE_FILE: ".coverage.${{ matrix.group }}"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -62,9 +64,42 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-      - name: Coverage
+      - name: Coverage shard
         run: |
-          python -m pytest -q -n auto --dist=loadscope --cov=sfincs_jax --cov-report=term --cov-report=xml --cov-fail-under=43
+          python -m pytest -q -n auto --dist=loadscope --splits 3 --group ${{ matrix.group }} --cov=sfincs_jax --cov-report=
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.group }}
+          path: .coverage.${{ matrix.group }}
+          if-no-files-found: error
+
+  coverage-report:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    needs: coverage
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Download coverage data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-parts
+      - name: Combine coverage
+        run: |
+          python -m coverage combine $(find coverage-parts -type f -name '.coverage.*' | sort)
+          python -m coverage report --fail-under=43
+          python -m coverage xml
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:
