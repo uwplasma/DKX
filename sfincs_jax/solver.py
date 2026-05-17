@@ -2326,6 +2326,129 @@ def distributed_gmres_enabled() -> bool:
     return _get_gmres_mesh(axis_name) is not None
 
 
+_DISTRIBUTED_SOLVE_STATIC_ARGS = (
+    "matvec",
+    "preconditioner",
+    "solver_kind",
+    "tol",
+    "atol",
+    "restart",
+    "maxiter",
+    "solve_method",
+    "precondition_side",
+)
+
+
+def _distributed_solve_kernel(
+    b_in: jnp.ndarray,
+    x0_in: jnp.ndarray,
+    *,
+    matvec,
+    preconditioner,
+    solver_kind: str,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    solve_method: str,
+    precondition_side: str,
+):
+    if solver_kind == "bicgstab":
+        res = bicgstab_solve(
+            matvec=matvec,
+            b=b_in,
+            preconditioner=preconditioner,
+            x0=x0_in,
+            tol=tol,
+            atol=atol,
+            maxiter=maxiter,
+            precondition_side=precondition_side,
+        )
+    else:
+        res = gmres_solve(
+            matvec=matvec,
+            b=b_in,
+            preconditioner=preconditioner,
+            x0=x0_in,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=solve_method,
+            precondition_side=precondition_side,
+        )
+    return res.x, res.residual_norm
+
+
+def _distributed_solve_with_residual_kernel(
+    b_in: jnp.ndarray,
+    x0_in: jnp.ndarray,
+    *,
+    matvec,
+    preconditioner,
+    solver_kind: str,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    solve_method: str,
+    precondition_side: str,
+):
+    if solver_kind == "bicgstab":
+        res, r = bicgstab_solve_with_residual(
+            matvec=matvec,
+            b=b_in,
+            preconditioner=preconditioner,
+            x0=x0_in,
+            tol=tol,
+            atol=atol,
+            maxiter=maxiter,
+            precondition_side=precondition_side,
+        )
+    else:
+        res, r = gmres_solve_with_residual(
+            matvec=matvec,
+            b=b_in,
+            preconditioner=preconditioner,
+            x0=x0_in,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=solve_method,
+            precondition_side=precondition_side,
+        )
+    return res.x, res.residual_norm, r
+
+
+@lru_cache(maxsize=8)
+def _get_distributed_solve_pjit(axis_name: str):
+    """Return the cached sharded Krylov executable wrapper for an axis."""
+
+    if _pjit is None or PartitionSpec is None:
+        return None
+    return _pjit.pjit(
+        _distributed_solve_kernel,
+        in_shardings=(PartitionSpec(axis_name), PartitionSpec(axis_name)),
+        out_shardings=(PartitionSpec(axis_name), None),
+        static_argnames=_DISTRIBUTED_SOLVE_STATIC_ARGS,
+    )
+
+
+@lru_cache(maxsize=8)
+def _get_distributed_solve_with_residual_pjit(axis_name: str):
+    """Return the cached sharded Krylov executable wrapper that also returns r."""
+
+    if _pjit is None or PartitionSpec is None:
+        return None
+    return _pjit.pjit(
+        _distributed_solve_with_residual_kernel,
+        in_shardings=(PartitionSpec(axis_name), PartitionSpec(axis_name)),
+        out_shardings=(PartitionSpec(axis_name), None, PartitionSpec(axis_name)),
+        static_argnames=_DISTRIBUTED_SOLVE_STATIC_ARGS,
+    )
+
+
 def gmres_solve_distributed(
     *,
     matvec,
@@ -2392,40 +2515,34 @@ def gmres_solve_distributed(
     else:
         matvec_use = matvec
 
-    def _solve(b_in: jnp.ndarray, x0_in: jnp.ndarray):
-        if solver_kind == "bicgstab":
-            res = bicgstab_solve(
-                matvec=matvec_use,
-                b=b_in,
-                preconditioner=preconditioner_use,
-                x0=x0_in,
-                tol=tol,
-                atol=atol,
-                maxiter=maxiter,
-                precondition_side=precondition_side,
-            )
-        else:
-            res = gmres_solve(
-                matvec=matvec_use,
-                b=b_in,
-                preconditioner=preconditioner_use,
-                x0=x0_in,
-                tol=tol,
-                atol=atol,
-                restart=restart,
-                maxiter=maxiter,
-                solve_method=solve_method_use,
-                precondition_side=precondition_side,
-            )
-        return res.x, res.residual_norm
-
-    solve_pjit = _pjit.pjit(
-        _solve,
-        in_shardings=(PartitionSpec(axis_name), PartitionSpec(axis_name)),
-        out_shardings=(PartitionSpec(axis_name), None),
-    )
+    solve_pjit = _get_distributed_solve_pjit(axis_name)
+    if solve_pjit is None:
+        return gmres_solve(
+            matvec=matvec,
+            b=b,
+            preconditioner=preconditioner,
+            x0=x0,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=solve_method,
+            precondition_side=precondition_side,
+        )
     with mesh:
-        x, rn = solve_pjit(b_use, x0_use)
+        x, rn = solve_pjit(
+            b_use,
+            x0_use,
+            matvec=matvec_use,
+            preconditioner=preconditioner_use,
+            solver_kind=solver_kind,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=solve_method_use,
+            precondition_side=precondition_side,
+        )
         if pad:
             r_pad = b_use - matvec_use(x)
             r = r_pad[:n]
@@ -2501,40 +2618,34 @@ def gmres_solve_with_residual_distributed(
     else:
         matvec_use = matvec
 
-    def _solve(b_in: jnp.ndarray, x0_in: jnp.ndarray):
-        if solver_kind == "bicgstab":
-            res, r = bicgstab_solve_with_residual(
-                matvec=matvec_use,
-                b=b_in,
-                preconditioner=preconditioner_use,
-                x0=x0_in,
-                tol=tol,
-                atol=atol,
-                maxiter=maxiter,
-                precondition_side=precondition_side,
-            )
-        else:
-            res, r = gmres_solve_with_residual(
-                matvec=matvec_use,
-                b=b_in,
-                preconditioner=preconditioner_use,
-                x0=x0_in,
-                tol=tol,
-                atol=atol,
-                restart=restart,
-                maxiter=maxiter,
-                solve_method=solve_method_use,
-                precondition_side=precondition_side,
-            )
-        return res.x, res.residual_norm, r
-
-    solve_pjit = _pjit.pjit(
-        _solve,
-        in_shardings=(PartitionSpec(axis_name), PartitionSpec(axis_name)),
-        out_shardings=(PartitionSpec(axis_name), None, PartitionSpec(axis_name)),
-    )
+    solve_pjit = _get_distributed_solve_with_residual_pjit(axis_name)
+    if solve_pjit is None:
+        return gmres_solve_with_residual(
+            matvec=matvec,
+            b=b,
+            preconditioner=preconditioner,
+            x0=x0,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=solve_method,
+            precondition_side=precondition_side,
+        )
     with mesh:
-        x, rn, r = solve_pjit(b_use, x0_use)
+        x, rn, r = solve_pjit(
+            b_use,
+            x0_use,
+            matvec=matvec_use,
+            preconditioner=preconditioner_use,
+            solver_kind=solver_kind,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=solve_method_use,
+            precondition_side=precondition_side,
+        )
         if pad:
             r_pad = b_use - matvec_use(x)
             r = r_pad[:n]

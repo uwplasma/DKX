@@ -3,11 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 import re
 from types import SimpleNamespace
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.solver import GMRESSolveResult
 import sfincs_jax.v3_driver as v3_driver
 from sfincs_jax.v3_system import full_system_operator_from_namelist, rhs_v3_full_system
 
@@ -395,15 +397,9 @@ def test_forced_rhs1_preconditioner_does_not_crash_before_er_is_computed(
     monkeypatch,
     forced_precond: str,
 ) -> None:
-    input_path = (
-        Path(__file__).parent
-        / "reduced_inputs"
-        / "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories.input.namelist"
-    )
-    out_path = tmp_path / f"forced_{forced_precond}.h5"
-
+    input_path = Path(__file__).parent / "reduced_inputs" / "tokamak_1species_PASCollisions_noEr_Nx1.input.namelist"
     txt = input_path.read_text()
-    txt = _patch_resolution_block(txt, ntheta=5, nzeta=9, nxi=4, nx=2, solver_tol=1e-6)
+    txt = _patch_resolution_block(txt, ntheta=5, nzeta=1, nxi=3, nx=1, solver_tol=1e-6)
     txt = _patch_export_block(txt)
     patched = tmp_path / f"input_forced_{forced_precond}.namelist"
     patched.write_text(txt)
@@ -412,15 +408,35 @@ def test_forced_rhs1_preconditioner_does_not_crash_before_er_is_computed(
     monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SOLVE_METHOD", "incremental")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECONDITIONER", forced_precond)
+    monkeypatch.setenv("SFINCS_JAX_GMRES_MAXITER", "1")
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2", "0")
+    if forced_precond == "xblock_tz":
+        monkeypatch.setattr(
+            v3_driver,
+            "_build_rhsmode1_xblock_tz_preconditioner",
+            lambda **_kwargs: (lambda v: v),
+        )
+    else:
+        monkeypatch.setattr(
+            v3_driver,
+            "_build_rhsmode1_schur_preconditioner",
+            lambda **_kwargs: (lambda v: v),
+        )
 
-    write_sfincs_jax_output_h5(
-        input_namelist=patched,
-        output_path=out_path,
-        compute_solution=True,
-        verbose=True,
+    def _fake_linear_with_residual(**kwargs):
+        b = jnp.asarray(kwargs["b"])
+        x = jnp.zeros_like(b)
+        return GMRESSolveResult(x=x, residual_norm=jnp.asarray(0.0, dtype=b.dtype)), jnp.zeros_like(b)
+
+    monkeypatch.setattr(v3_driver, "_gmres_solve_with_residual_dispatch", _fake_linear_with_residual)
+
+    result = v3_driver.solve_v3_full_system_linear_gmres(
+        nml=read_sfincs_input(patched),
+        tol=1.0e-6,
+        emit=lambda _level, _msg: None,
     )
 
-    assert out_path.exists()
+    assert int(result.x.size) > 0
 
 
 def test_pas_dkes_xblock_allowed_only_for_moderate_blocks() -> None:

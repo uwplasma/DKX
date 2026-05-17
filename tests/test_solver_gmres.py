@@ -4,6 +4,7 @@ import numpy as np
 import jax.numpy as jnp
 import pytest
 
+import sfincs_jax.solver as solver_module
 from sfincs_jax.v3_driver import _rhs_krylov_method_for_context
 from sfincs_jax.solver import (
     _materialize_distributed_input,
@@ -988,3 +989,15 @@ def test_materialize_distributed_input_preserves_values_and_dtype() -> None:
     assert out is not None
     np.testing.assert_allclose(np.asarray(out), np.asarray(arr), rtol=0.0, atol=0.0)
     assert out.dtype == jnp.float64
+
+
+def test_distributed_solver_pjit_factories_reuse_wrappers() -> None:
+    if solver_module._pjit is None:  # pragma: no cover - depends on optional JAX internals
+        pytest.skip("pjit unavailable")
+    solver_module._get_distributed_solve_pjit.cache_clear()
+    solver_module._get_distributed_solve_with_residual_pjit.cache_clear()
+
+    assert solver_module._get_distributed_solve_pjit("p") is solver_module._get_distributed_solve_pjit("p")
+    assert solver_module._get_distributed_solve_with_residual_pjit(
+        "p"
+    ) is solver_module._get_distributed_solve_with_residual_pjit("p")

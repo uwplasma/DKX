@@ -15,6 +15,7 @@ from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_mat_aij
 from sfincs_jax.rhs1_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
+from sfincs_jax.solver import FlexibleGMRESSolveResult
 from sfincs_jax.v3_sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,
     summarize_v3_sparse_pattern,
@@ -44,6 +45,25 @@ def _assert_pattern_covers_matrix(pattern: sp.spmatrix, matrix: sp.spmatrix) -> 
     missing = matrix_bool.astype(np.int8) - covered.astype(np.int8)
     missing.eliminate_zeros()
     assert missing.nnz == 0
+
+
+def _fast_device_krylov_result(**kwargs):
+    """Return a converged device-Krylov result for solver-path metadata tests."""
+
+    b = jnp.asarray(kwargs["b"], dtype=jnp.float64)
+    x = jnp.zeros_like(b)
+    history = jnp.asarray([jnp.linalg.norm(b), 0.0], dtype=jnp.float64)
+    return (
+        FlexibleGMRESSolveResult(
+            x=x,
+            residual_norm=jnp.asarray(0.0, dtype=jnp.float64),
+            residual_history=history,
+            n_iterations=jnp.asarray(1, dtype=jnp.int32),
+            n_restarts=jnp.asarray(0, dtype=jnp.int32),
+            converged=jnp.asarray(True),
+        ),
+        jnp.zeros_like(b),
+    )
 
 
 def test_xblock_precondition_side_defaults_right_only_for_full_fp_er() -> None:
@@ -1218,6 +1238,9 @@ def test_xblock_sparse_pc_device_krylov_records_experimental_metadata(
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "4")
 
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
         solve_method="xblock_sparse_pc_gmres",
@@ -1289,13 +1312,15 @@ def test_xblock_sparse_pc_device_krylov_can_use_compact_csr_factors(monkeypatch)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "gmres-jax")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT", "csr")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX", "100000")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
     messages: list[str] = []
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
         solve_method="xblock_sparse_pc_gmres",
-        tol=1.0e-3,
-        maxiter=20,
+        tol=1.0e3,
+        maxiter=1,
         emit=lambda _level, msg: messages.append(msg),
     )
 
@@ -1319,6 +1344,9 @@ def test_xblock_sparse_pc_device_krylov_can_use_compact_diagonal_factor_apply(mo
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_APPLY", "diagonal")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX", "100000")
     messages: list[str] = []
+
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -1344,6 +1372,8 @@ def test_xblock_sparse_pc_device_global_coupling_can_use_normal_equations(monkey
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS", "4")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_DEVICE_SOLVER", "normal-equations")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -1375,6 +1405,8 @@ def test_xblock_sparse_pc_device_krylov_with_device_assembled_operator_is_transf
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES", "1")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -1404,6 +1436,7 @@ def test_xblock_sparse_pc_device_bicgstab_uses_device_assembled_operator(monkeyp
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB", "64")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setattr(v3_driver_module, "bicgstab_solve_with_residual", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -1438,6 +1471,7 @@ def test_xblock_sparse_pc_device_tfqmr_uses_device_assembled_operator(monkeypatc
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS", "4096")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TFQMR_REPLACE_INTERVAL", "2")
+    monkeypatch.setattr(v3_driver_module, "tfqmr_solve_with_residual", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -1468,6 +1502,8 @@ def test_xblock_sparse_pc_device_krylov_marks_host_two_level_transfer(monkeypatc
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS", "2")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,

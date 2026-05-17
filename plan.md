@@ -12457,3 +12457,59 @@ Next steps:
 - Do not mark true device-QI, production-resolution QI ladders, or single-case
   multi-GPU strong scaling as public/release claims until the required CPU/GPU
   artifacts pass the new gates.
+
+## 2026-05-17 compiled sharded solve reuse and CI contraction
+
+Goal:
+
+- Replace the single-case sharded RHSMode=1 benchmark path that rebuilt solver
+  wrappers and operators inside each sample with a real reuse lane suitable for
+  multi-GPU evidence collection.
+- Reduce GitHub Actions wall time and runner minutes without dropping tests,
+  coverage, example smoke checks, optional ecosystem gates, or Codecov upload.
+
+Implementation:
+
+- The distributed Krylov solver now uses cached `pjit` factories for the
+  no-residual and with-residual sharded solve kernels. The factory is keyed by
+  sharding axis, while matvec/preconditioner/tolerance choices remain explicit
+  static compile inputs. This avoids rebuilding the `pjit` wrapper on every
+  distributed RHSMode=1 solve call.
+- The sharded solve benchmark now supports `--operator-reuse=auto|on|off`.
+  `auto` keeps true cold-start samples cold, but for hot or repeated child
+  samples it builds the full RHSMode=1 operator once and passes that same
+  operator into all warmup/timed solves so operator signatures, compiled device
+  kernels, Schwarz blocks, and coarse preconditioner caches can be reused.
+- Benchmark plan and result payloads now record `operator_reuse` plus
+  `assembled_operator_reuse`, including whether the operator build is excluded
+  from the timed region and what reuse scope was active.
+- CI now removes the duplicated non-coverage pytest matrix. The coverage shards
+  are the canonical test execution, split four ways, followed by a lightweight
+  aggregate `tests` status. Example smoke tests and optional ecosystem gates
+  remain separate. Pip caching is enabled, and the coverage-combine job installs
+  only `coverage[toml]` instead of the full editable dev environment.
+
+Validation plan:
+
+- Focused local tests for the sharded solve benchmark and solver factories.
+- `python -m pytest -q tests/test_benchmark_sharded_solve_scaling.py tests/test_solver_gmres.py`.
+- `python -m py_compile examples/performance/benchmark_sharded_solve_scaling.py sfincs_jax/solver.py`.
+- Run a plan-only sharded solve benchmark to confirm the new payload schema.
+- Push after local gates pass, then verify the contracted CI workflow remains
+  green and has lower total runner time than the previous duplicated suite.
+
+Validation results:
+
+- CI-style local shards now complete as one canonical pytest execution split
+  four ways: group 1 with coverage passed in 29 s, group 2 passed in 33 s,
+  group 3 passed in 27 s, and group 4 passed in 64 s after metadata-only
+  device-Krylov tests stopped paying full Krylov solves.
+- The example-smoke sequence passes. The geometry-only parity CLI example now
+  uses `--geometry-only`, reducing that duplicate geometry comparison from a
+  minutes-scale RHSMode=1 solve path to a 0.4 s geometry/grid parity check.
+- The bounded 1-vs-2 CPU sharded benchmark with `--operator-reuse=auto`
+  passes the deterministic output gate with identical SHA256 solution digests.
+- On the `office` two-A4000 GPU host, the same 1-vs-2 GPU smoke passes the
+  deterministic output gate with identical SHA256 solution digests. The tiny
+  case remains overhead dominated: 1 GPU took 1.45 s and 2 GPUs took 31.8 s, so
+  this validates correctness/reuse plumbing but is not a strong-scaling claim.

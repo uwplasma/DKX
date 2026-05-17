@@ -589,7 +589,9 @@ def test_run_logged_subprocess_timeout_kills_process_group(tmp_path: Path) -> No
             cwd=tmp_path,
             env=os.environ.copy(),
             log_path=log_path,
-            timeout_s=0.2,
+            # Keep this above process-start jitter on loaded CI so the child PID
+            # exists before the process group is killed.
+            timeout_s=1.5,
         )
 
     deadline = time.time() + 3.0

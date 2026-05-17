@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -11,6 +12,8 @@ from examples.performance.benchmark_sharded_solve_scaling import (
     _configure_benchmark_subprocess_env,
     _configure_solver_env,
     _measure_deterministic_output_gate,
+    _operator_reuse_enabled,
+    _run_once,
     _run_once_command,
     _run_once_output_digest_command,
     _run_once_output_digest_subprocess,
@@ -92,6 +95,14 @@ def test_timing_semantics_labels_sharded_hot_and_cold_modes() -> None:
     assert _timing_semantics(global_warmup=0, per_device_warmup=0, inner_warmup_solves=0) == "cold_start"
 
 
+def test_operator_reuse_auto_preserves_cold_start_and_enables_hot_reuse() -> None:
+    assert _operator_reuse_enabled(mode="auto", nsolve=1, inner_warmup_solves=0) is False
+    assert _operator_reuse_enabled(mode="auto", nsolve=2, inner_warmup_solves=0) is True
+    assert _operator_reuse_enabled(mode="auto", nsolve=1, inner_warmup_solves=1) is True
+    assert _operator_reuse_enabled(mode="on", nsolve=1, inner_warmup_solves=0) is True
+    assert _operator_reuse_enabled(mode="off", nsolve=8, inner_warmup_solves=8) is False
+
+
 def test_run_once_subprocess_passes_recorded_solver_options(monkeypatch, tmp_path) -> None:
     calls: list[tuple[list[str], dict[str, str], float | None]] = []
 
@@ -130,6 +141,7 @@ def test_run_once_subprocess_passes_recorded_solver_options(monkeypatch, tmp_pat
     assert cmd[cmd.index("--periodic-stencil-on-sharded") + 1] == "off"
     assert "--rhs1-precond" in cmd and cmd[cmd.index("--rhs1-precond") + 1] == "theta_schwarz"
     assert "--backend" in cmd and cmd[cmd.index("--backend") + 1] == "gpu"
+    assert "--operator-reuse" in cmd and cmd[cmd.index("--operator-reuse") + 1] == "auto"
     assert "--schwarz-coarse-levels" in cmd and cmd[cmd.index("--schwarz-coarse-levels") + 1] == "2"
     assert "--schwarz-coarse-steps" in cmd and cmd[cmd.index("--schwarz-coarse-steps") + 1] == "1"
     assert "--schwarz-coarse-damp" in cmd and cmd[cmd.index("--schwarz-coarse-damp") + 1] == "0.75"
@@ -162,6 +174,7 @@ def test_run_once_command_records_all_sharded_solver_options() -> None:
     assert cmd[cmd.index("--periodic-stencil-on-sharded") + 1] == "off"
     assert cmd[cmd.index("--rhs1-precond") + 1] == "theta_schwarz"
     assert cmd[cmd.index("--backend") + 1] == "gpu"
+    assert cmd[cmd.index("--operator-reuse") + 1] == "auto"
     assert cmd[cmd.index("--schwarz-coarse-levels") + 1] == "2"
 
 
@@ -186,6 +199,61 @@ def test_run_once_output_digest_command_records_vector_artifact_path() -> None:
     assert cmd[cmd.index("--output-vector-path") + 1] == "out/vector.npy"
     assert cmd[cmd.index("--inner-warmup-solves") + 1] == "1"
     assert cmd[cmd.index("--backend") + 1] == "gpu"
+    assert cmd[cmd.index("--operator-reuse") + 1] == "auto"
+
+
+def test_run_once_reuses_full_system_operator_for_hot_child_process(monkeypatch) -> None:
+    nml = object()
+    op = object()
+    operator_builds: list[object] = []
+    solves: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        "examples.performance.benchmark_sharded_solve_scaling.read_sfincs_input",
+        lambda _path: nml,
+    )
+
+    def fake_build_operator(*, nml):  # noqa: ANN001
+        operator_builds.append(nml)
+        return op
+
+    def fake_solve(**kwargs):  # noqa: ANN003
+        solves.append(dict(kwargs))
+        return SimpleNamespace(x=np.asarray([1.0]))
+
+    monkeypatch.setattr(
+        "examples.performance.benchmark_sharded_solve_scaling.full_system_operator_from_namelist",
+        fake_build_operator,
+    )
+    monkeypatch.setattr(
+        "examples.performance.benchmark_sharded_solve_scaling.solve_v3_full_system_linear_gmres",
+        fake_solve,
+    )
+    monkeypatch.setattr(
+        "examples.performance.benchmark_sharded_solve_scaling.jax.block_until_ready",
+        lambda x: x,
+    )
+
+    _run_once(
+        Path("case.input.namelist"),
+        shard_axis="theta",
+        gmres_distributed="1",
+        distributed_krylov="auto",
+        periodic_stencil_on_sharded="auto",
+        nsolve=2,
+        inner_warmup_solves=1,
+        rhs1_precond="theta_schwarz",
+        backend="cpu",
+        schwarz_coarse_levels=2,
+        schwarz_coarse_steps=None,
+        schwarz_coarse_damp=None,
+        operator_reuse="auto",
+    )
+
+    assert operator_builds == [nml]
+    assert len(solves) == 3
+    assert all(call["nml"] is nml for call in solves)
+    assert all(call["op"] is op for call in solves)
 
 
 def test_run_once_output_digest_subprocess_records_backend_env(monkeypatch, tmp_path: Path) -> None:
@@ -305,6 +373,9 @@ def test_sharded_solve_plan_records_hot_timing_timeout_and_non_release_gate(tmp_
     assert plan["operator_reuse_gate"]["strategy"] == "inner_warmup"
     assert plan["operator_reuse_gate"]["persistent_compile_cache"] is True
     assert plan["operator_reuse_gate"]["compile_in_timed_region"] is False
+    assert plan["operator_reuse"] == "auto"
+    assert plan["assembled_operator_reuse"]["enabled"] is True
+    assert plan["assembled_operator_reuse"]["scope"] == "child_process_full_system_operator"
     assert plan["deterministic_output_gate"]["passes"] is False
     assert plan["deterministic_output_gate"]["status"] == "not_measured"
     assert plan["deterministic_output_gate"]["evidence_source"] == "not_measured"

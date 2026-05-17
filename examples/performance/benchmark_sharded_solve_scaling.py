@@ -24,6 +24,7 @@ from sfincs_jax.transport_parallel_sharding import (
     plan_single_case_sharded_solve,
 )
 from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
+from sfincs_jax.v3_system import full_system_operator_from_namelist
 
 
 def _normalized_backend(backend: str) -> str:
@@ -131,6 +132,60 @@ def _timing_semantics(
     return "cold_start"
 
 
+def _normalized_operator_reuse(mode: str) -> str:
+    value = str(mode).strip().lower()
+    if value in {"", "auto", "default"}:
+        return "auto"
+    if value in {"1", "true", "yes", "on", "reuse"}:
+        return "on"
+    if value in {"0", "false", "no", "off", "none"}:
+        return "off"
+    raise ValueError(f"Unsupported operator reuse mode {mode!r}")
+
+
+def _operator_reuse_enabled(
+    *,
+    mode: str,
+    nsolve: int,
+    inner_warmup_solves: int,
+) -> bool:
+    normalized = _normalized_operator_reuse(mode)
+    if normalized == "on":
+        return True
+    if normalized == "off":
+        return False
+    return int(inner_warmup_solves) > 0 or int(nsolve) > 1
+
+
+def _operator_reuse_metadata(
+    *,
+    mode: str,
+    nsolve: int,
+    inner_warmup_solves: int,
+) -> dict[str, object]:
+    enabled = _operator_reuse_enabled(
+        mode=mode,
+        nsolve=int(nsolve),
+        inner_warmup_solves=int(inner_warmup_solves),
+    )
+    if enabled:
+        scope = "child_process_full_system_operator"
+    else:
+        scope = "driver_default_per_solve_operator"
+    return {
+        "mode": _normalized_operator_reuse(mode),
+        "enabled": enabled,
+        "scope": scope,
+        "reuses_preconditioner_cache_key": enabled,
+        "excludes_operator_build_from_timed_region": bool(enabled),
+        "notes": [
+            "When enabled, the child process builds the full RHSMode=1 operator once "
+            "and passes it into all warmup/timed solves so Schwarz/coarse builders can "
+            "reuse the same operator signature.",
+        ],
+    }
+
+
 def _operator_reuse_gate(
     *,
     timing_semantics: str,
@@ -220,6 +275,7 @@ def _run_once_args(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
 ) -> list[str]:
     args = [
         "--run-once",
@@ -239,6 +295,8 @@ def _run_once_args(
         str(periodic_stencil_on_sharded),
         "--backend",
         str(backend),
+        "--operator-reuse",
+        _normalized_operator_reuse(operator_reuse),
     ]
     if rhs1_precond:
         args.extend(["--rhs1-precond", str(rhs1_precond)])
@@ -265,6 +323,7 @@ def _run_once_command(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
 ) -> list[str]:
     return [
         sys.executable,
@@ -282,6 +341,7 @@ def _run_once_command(
             schwarz_coarse_levels=schwarz_coarse_levels,
             schwarz_coarse_steps=schwarz_coarse_steps,
             schwarz_coarse_damp=schwarz_coarse_damp,
+            operator_reuse=operator_reuse,
         ),
     ]
 
@@ -300,6 +360,7 @@ def _run_once_output_digest_args(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
 ) -> list[str]:
     args = [
         "--run-once-output-digest",
@@ -319,6 +380,8 @@ def _run_once_output_digest_args(
         str(periodic_stencil_on_sharded),
         "--backend",
         str(backend),
+        "--operator-reuse",
+        _normalized_operator_reuse(operator_reuse),
     ]
     if rhs1_precond:
         args.extend(["--rhs1-precond", str(rhs1_precond)])
@@ -345,6 +408,7 @@ def _run_once_output_digest_command(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
 ) -> list[str]:
     return [
         sys.executable,
@@ -362,6 +426,7 @@ def _run_once_output_digest_command(
             schwarz_coarse_levels=schwarz_coarse_levels,
             schwarz_coarse_steps=schwarz_coarse_steps,
             schwarz_coarse_damp=schwarz_coarse_damp,
+            operator_reuse=operator_reuse,
         ),
     ]
 
@@ -387,6 +452,7 @@ def _benchmark_command(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
     audit: bool,
     deterministic_output_probe: bool,
     deterministic_output_tolerance: float,
@@ -425,6 +491,8 @@ def _benchmark_command(
         str(periodic_stencil_on_sharded),
         "--backend",
         str(backend),
+        "--operator-reuse",
+        _normalized_operator_reuse(operator_reuse),
     ]
     if rhs1_precond:
         cmd.extend(["--rhs1-precond", str(rhs1_precond)])
@@ -502,6 +570,7 @@ def _build_sharded_solve_benchmark_plan(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
     audit: bool = False,
     deterministic_output_probe: bool = False,
     deterministic_output_tolerance: float = 1.0e-10,
@@ -524,6 +593,11 @@ def _build_sharded_solve_benchmark_plan(
         nsolve=int(nsolve),
         cache_dir=cache_dir,
         repo_root=repo_root,
+    )
+    assembled_operator_reuse = _operator_reuse_metadata(
+        mode=operator_reuse,
+        nsolve=int(nsolve),
+        inner_warmup_solves=int(inner_warmup_solves),
     )
     deterministic_gate = _deterministic_output_gate(
         devices=normalized_devices,
@@ -587,6 +661,7 @@ def _build_sharded_solve_benchmark_plan(
                         schwarz_coarse_levels=schwarz_coarse_levels,
                         schwarz_coarse_steps=schwarz_coarse_steps,
                         schwarz_coarse_damp=schwarz_coarse_damp,
+                        operator_reuse=operator_reuse,
                     ),
                 ],
             }
@@ -613,11 +688,13 @@ def _build_sharded_solve_benchmark_plan(
         "sample_timeout_s": float(sample_timeout_s),
         "rhs1_precond": str(rhs1_precond),
         "backend": str(backend),
+        "operator_reuse": _normalized_operator_reuse(operator_reuse),
         "schwarz_coarse_levels": schwarz_coarse_levels,
         "schwarz_coarse_steps": schwarz_coarse_steps,
         "schwarz_coarse_damp": schwarz_coarse_damp,
         "timing_semantics": timing_semantics,
         "operator_reuse_gate": operator_reuse_gate,
+        "assembled_operator_reuse": assembled_operator_reuse,
         "global_warmup": int(global_warmup),
         "per_device_warmup": int(warmup),
         "repeats": int(repeats),
@@ -669,6 +746,7 @@ def _build_sharded_solve_benchmark_plan(
             schwarz_coarse_levels=schwarz_coarse_levels,
             schwarz_coarse_steps=schwarz_coarse_steps,
             schwarz_coarse_damp=schwarz_coarse_damp,
+            operator_reuse=operator_reuse,
             audit=bool(audit),
             deterministic_output_probe=bool(deterministic_output_probe),
             deterministic_output_tolerance=float(deterministic_output_tolerance),
@@ -698,6 +776,7 @@ def _run_once(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
 ) -> float:
     _normalized_backend(backend)
     _configure_solver_env(
@@ -712,18 +791,21 @@ def _run_once(
         schwarz_coarse_damp=schwarz_coarse_damp,
     )
     nml = read_sfincs_input(input_path)
+    reuse_operator = _operator_reuse_enabled(
+        mode=operator_reuse,
+        nsolve=int(nsolve),
+        inner_warmup_solves=int(inner_warmup_solves),
+    )
+    op = full_system_operator_from_namelist(nml=nml) if reuse_operator else None
+    solve_kwargs = {"nml": nml, "tol": 1e-10}
+    if op is not None:
+        solve_kwargs["op"] = op
     for _ in range(max(0, int(inner_warmup_solves))):
-        warm = solve_v3_full_system_linear_gmres(
-            nml=nml,
-            tol=1e-10,
-        )
+        warm = solve_v3_full_system_linear_gmres(**solve_kwargs)
         jax.block_until_ready(warm.x)
     t0 = time.perf_counter()
     for _ in range(max(1, int(nsolve))):
-        res = solve_v3_full_system_linear_gmres(
-            nml=nml,
-            tol=1e-10,
-        )
+        res = solve_v3_full_system_linear_gmres(**solve_kwargs)
         jax.block_until_ready(res.x)
     return time.perf_counter() - t0
 
@@ -742,6 +824,7 @@ def _run_once_output_digest(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
 ) -> dict[str, object]:
     _normalized_backend(backend)
     _configure_solver_env(
@@ -756,17 +839,20 @@ def _run_once_output_digest(
         schwarz_coarse_damp=schwarz_coarse_damp,
     )
     nml = read_sfincs_input(input_path)
+    reuse_operator = _operator_reuse_enabled(
+        mode=operator_reuse,
+        nsolve=1,
+        inner_warmup_solves=int(inner_warmup_solves),
+    )
+    op = full_system_operator_from_namelist(nml=nml) if reuse_operator else None
+    solve_kwargs = {"nml": nml, "tol": 1e-10}
+    if op is not None:
+        solve_kwargs["op"] = op
     for _ in range(max(0, int(inner_warmup_solves))):
-        warm = solve_v3_full_system_linear_gmres(
-            nml=nml,
-            tol=1e-10,
-        )
+        warm = solve_v3_full_system_linear_gmres(**solve_kwargs)
         jax.block_until_ready(warm.x)
     t0 = time.perf_counter()
-    res = solve_v3_full_system_linear_gmres(
-        nml=nml,
-        tol=1e-10,
-    )
+    res = solve_v3_full_system_linear_gmres(**solve_kwargs)
     jax.block_until_ready(res.x)
     solve_s = time.perf_counter() - t0
     values = np.ascontiguousarray(np.asarray(jax.device_get(res.x), dtype=np.float64))
@@ -800,6 +886,7 @@ def _run_once_subprocess(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
 ) -> float:
     env = os.environ.copy()
     _configure_benchmark_subprocess_env(env)
@@ -831,6 +918,7 @@ def _run_once_subprocess(
         schwarz_coarse_levels=schwarz_coarse_levels,
         schwarz_coarse_steps=schwarz_coarse_steps,
         schwarz_coarse_damp=schwarz_coarse_damp,
+        operator_reuse=operator_reuse,
     )
     timeout = None if sample_timeout_s is None or sample_timeout_s <= 0 else float(sample_timeout_s)
     try:
@@ -860,6 +948,7 @@ def _run_once_output_digest_subprocess(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
 ) -> dict[str, object]:
     env = os.environ.copy()
     _configure_benchmark_subprocess_env(env)
@@ -891,6 +980,7 @@ def _run_once_output_digest_subprocess(
         schwarz_coarse_levels=schwarz_coarse_levels,
         schwarz_coarse_steps=schwarz_coarse_steps,
         schwarz_coarse_damp=schwarz_coarse_damp,
+        operator_reuse=operator_reuse,
     )
     timeout = None if sample_timeout_s is None or sample_timeout_s <= 0 else float(sample_timeout_s)
     try:
@@ -937,6 +1027,7 @@ def _measure_deterministic_output_gate(
     schwarz_coarse_levels: int | None,
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
+    operator_reuse: str = "auto",
     residual_tolerance: float,
     repo_root: Path,
 ) -> dict[str, object]:
@@ -967,6 +1058,7 @@ def _measure_deterministic_output_gate(
         schwarz_coarse_levels=schwarz_coarse_levels,
         schwarz_coarse_steps=schwarz_coarse_steps,
         schwarz_coarse_damp=schwarz_coarse_damp,
+        operator_reuse=operator_reuse,
     )
     comparison_probe = _run_once_output_digest_subprocess(
         input_path=input_path,
@@ -984,6 +1076,7 @@ def _measure_deterministic_output_gate(
         schwarz_coarse_levels=schwarz_coarse_levels,
         schwarz_coarse_steps=schwarz_coarse_steps,
         schwarz_coarse_damp=schwarz_coarse_damp,
+        operator_reuse=operator_reuse,
     )
 
     baseline_values = np.load(baseline_vector)
@@ -1133,6 +1226,16 @@ def main() -> None:
         help="Benchmark backend. 'cpu' uses SFINCS_JAX_CPU_DEVICES; 'gpu' uses CUDA_VISIBLE_DEVICES.",
     )
     parser.add_argument(
+        "--operator-reuse",
+        type=str,
+        default="auto",
+        choices=("auto", "on", "off"),
+        help=(
+            "Reuse the assembled RHSMode=1 full-system operator inside each child process. "
+            "'auto' enables this for hot/repeated samples and keeps true cold-start samples cold."
+        ),
+    )
+    parser.add_argument(
         "--schwarz-coarse-levels",
         type=int,
         default=None,
@@ -1203,6 +1306,7 @@ def main() -> None:
             schwarz_coarse_levels=args.schwarz_coarse_levels,
             schwarz_coarse_steps=args.schwarz_coarse_steps,
             schwarz_coarse_damp=args.schwarz_coarse_damp,
+            operator_reuse=str(args.operator_reuse),
         )
         print(f"{dt:.6f}")
         return
@@ -1223,6 +1327,7 @@ def main() -> None:
             schwarz_coarse_levels=args.schwarz_coarse_levels,
             schwarz_coarse_steps=args.schwarz_coarse_steps,
             schwarz_coarse_damp=args.schwarz_coarse_damp,
+            operator_reuse=str(args.operator_reuse),
         )
         print(json.dumps(payload, sort_keys=True))
         return
@@ -1259,6 +1364,7 @@ def main() -> None:
             schwarz_coarse_levels=args.schwarz_coarse_levels,
             schwarz_coarse_steps=args.schwarz_coarse_steps,
             schwarz_coarse_damp=args.schwarz_coarse_damp,
+            operator_reuse=str(args.operator_reuse),
             audit=bool(args.audit),
             deterministic_output_probe=bool(args.deterministic_output_probe),
             deterministic_output_tolerance=float(args.deterministic_output_tolerance),
@@ -1289,6 +1395,7 @@ def main() -> None:
                 schwarz_coarse_levels=args.schwarz_coarse_levels,
                 schwarz_coarse_steps=args.schwarz_coarse_steps,
                 schwarz_coarse_damp=args.schwarz_coarse_damp,
+                operator_reuse=str(args.operator_reuse),
             )
 
     results = []
@@ -1300,6 +1407,7 @@ def main() -> None:
             f"stencil_on_sharded={args.periodic_stencil_on_sharded} "
             f"nsolve={int(args.nsolve)} inner_warmup_solves={int(args.inner_warmup_solves)} "
             f"rhs1_precond={args.rhs1_precond or 'auto'} "
+            f"operator_reuse={args.operator_reuse} "
             f"backend={args.backend} coarse_levels={args.schwarz_coarse_levels if args.schwarz_coarse_levels is not None else 'auto'} "
             f"coarse_steps={args.schwarz_coarse_steps if args.schwarz_coarse_steps is not None else 'auto'} "
             f"coarse_damp={args.schwarz_coarse_damp if args.schwarz_coarse_damp is not None else 'auto'}",
@@ -1323,6 +1431,7 @@ def main() -> None:
                 schwarz_coarse_levels=args.schwarz_coarse_levels,
                 schwarz_coarse_steps=args.schwarz_coarse_steps,
                 schwarz_coarse_damp=args.schwarz_coarse_damp,
+                operator_reuse=str(args.operator_reuse),
             )
             print(f"[device {d}] warmup {i + 1}/{max(args.warmup, 0)} done", flush=True)
         times = []
@@ -1347,6 +1456,7 @@ def main() -> None:
                     schwarz_coarse_levels=args.schwarz_coarse_levels,
                     schwarz_coarse_steps=args.schwarz_coarse_steps,
                     schwarz_coarse_damp=args.schwarz_coarse_damp,
+                    operator_reuse=str(args.operator_reuse),
                 )
             except Exception as exc:  # noqa: BLE001
                 failure = f"repeat {i + 1}/{max(args.repeats, 1)} failed: {type(exc).__name__}: {exc}"
@@ -1436,6 +1546,7 @@ def main() -> None:
                     schwarz_coarse_levels=args.schwarz_coarse_levels,
                     schwarz_coarse_steps=args.schwarz_coarse_steps,
                     schwarz_coarse_damp=args.schwarz_coarse_damp,
+                    operator_reuse=str(args.operator_reuse),
                     residual_tolerance=float(args.deterministic_output_tolerance),
                     repo_root=repo_root,
                 )
@@ -1466,6 +1577,7 @@ def main() -> None:
         "sample_timeout_s": float(args.sample_timeout_s),
         "rhs1_precond": str(args.rhs1_precond),
         "backend": str(args.backend),
+        "operator_reuse": _normalized_operator_reuse(str(args.operator_reuse)),
         "schwarz_coarse_levels": args.schwarz_coarse_levels,
         "schwarz_coarse_steps": args.schwarz_coarse_steps,
         "schwarz_coarse_damp": args.schwarz_coarse_damp,
@@ -1487,6 +1599,11 @@ def main() -> None:
             nsolve=int(args.nsolve),
             cache_dir=cache_dir,
             repo_root=repo_root,
+        ),
+        "assembled_operator_reuse": _operator_reuse_metadata(
+            mode=str(args.operator_reuse),
+            nsolve=int(args.nsolve),
+            inner_warmup_solves=int(args.inner_warmup_solves),
         ),
         "global_warmup": int(args.global_warmup),
         "per_device_warmup": int(args.warmup),
