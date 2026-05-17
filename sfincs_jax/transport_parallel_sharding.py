@@ -18,6 +18,19 @@ _EXPERIMENTAL_STATUSES = {
     "non_release_snapshot",
 }
 _SUPPORTED_SINGLE_CASE_AXES = {"theta", "zeta"}
+_COMPILED_SHARDED_OPERATOR_KINDS = _SHARDED_SOLVE_KINDS | {
+    "sharded_matvec_scaling",
+    "sharded_matvec",
+}
+_WARM_OPERATOR_TIMING_SEMANTICS = {
+    "cache_warm",
+    "compiled_matvec_hot_loop",
+    "hot",
+    "hot_run",
+    "hot_solve",
+    "warm",
+    "warm_cache",
+}
 
 
 @dataclass(frozen=True)
@@ -102,6 +115,56 @@ class ShardedSolveAmortizationDiagnostics:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class CompiledShardedOperatorReuseGate:
+    """Deterministic metadata for compiled sharded operator reuse."""
+
+    benchmark_kind: str
+    timing_semantics: str
+    strategy: str
+    persistent_compile_cache: bool
+    compile_cache_dir: str | None
+    cache_required: bool
+    global_warmup_runs: int
+    per_device_warmup_runs: int
+    inner_warmup_runs: int
+    timed_repeats: int
+    min_timed_repeats: int
+    work_units_per_sample: int
+    compile_in_timed_region: bool
+    passes: bool
+    warm_run_amortization_pass: bool
+    failures: tuple[str, ...]
+    notes: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-serializable gate dictionary."""
+
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ShardedSolveDeterministicOutputGate:
+    """Portable schema for residual/output parity before promoting sharded runs."""
+
+    schema_version: int
+    status: str
+    passes: bool
+    baseline_devices: int
+    comparison_devices: int
+    residual_tolerance: float
+    max_relative_residual_norm: float | None
+    output_digest_algorithm: str
+    output_digest: str | None
+    failures: tuple[str, ...]
+    notes: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-serializable gate dictionary."""
+
+        return asdict(self)
+
+
 def _positive_int(value: object, *, name: str) -> int:
     try:
         parsed = int(value)
@@ -124,6 +187,20 @@ def _nonnegative_int(value: object, *, name: str) -> int:
 
 def _normalized_token(value: object) -> str:
     return str(value).strip().lower().replace("-", "_")
+
+
+def _optional_bool_value(value: object, *, default: bool) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = _normalized_token(value)
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
 
 
 def _normalize_backend(value: object) -> str:
@@ -429,11 +506,179 @@ def estimate_sharded_solve_amortization(
     )
 
 
+def plan_compiled_sharded_operator_reuse(
+    *,
+    benchmark_kind: str,
+    timing_semantics: str,
+    global_warmup_runs: int = 0,
+    per_device_warmup_runs: int = 0,
+    inner_warmup_runs: int = 0,
+    timed_repeats: int = 1,
+    work_units_per_sample: int = 1,
+    compile_cache_dir: str | None = None,
+    persistent_compile_cache: bool | None = None,
+    compile_in_timed_region: bool = False,
+    min_timed_repeats: int = 1,
+    require_cache_for_global_warmup: bool = True,
+) -> CompiledShardedOperatorReuseGate:
+    """Plan a fail-closed compiled-operator reuse gate for sharded benchmarks.
+
+    The gate is pure metadata. It records whether timed samples are intended to
+    reuse an already-compiled sharded operator via an inner/per-device warmup or
+    via a persistent compilation cache populated by a global warmup.
+    """
+
+    kind = _normalized_token(benchmark_kind)
+    timing = _normalized_token(timing_semantics)
+    global_warmup = _nonnegative_int(global_warmup_runs, name="global_warmup_runs")
+    per_device_warmup = _nonnegative_int(
+        per_device_warmup_runs,
+        name="per_device_warmup_runs",
+    )
+    inner_warmup = _nonnegative_int(inner_warmup_runs, name="inner_warmup_runs")
+    repeats = _positive_int(timed_repeats, name="timed_repeats")
+    min_repeats = _positive_int(min_timed_repeats, name="min_timed_repeats")
+    work_units = _positive_int(work_units_per_sample, name="work_units_per_sample")
+    cache_dir = None if compile_cache_dir is None else str(compile_cache_dir).strip() or None
+    persistent_cache = _optional_bool_value(
+        persistent_compile_cache,
+        default=cache_dir is not None,
+    )
+    compile_inside = _optional_bool_value(compile_in_timed_region, default=False)
+
+    if inner_warmup > 0:
+        strategy = "inner_warmup"
+    elif per_device_warmup > 0:
+        strategy = "per_device_warmup"
+    elif global_warmup > 0:
+        strategy = "global_persistent_compile_cache"
+    else:
+        strategy = "none"
+
+    cache_required = bool(
+        require_cache_for_global_warmup
+        and strategy == "global_persistent_compile_cache"
+    )
+    warm_run_amortized = bool(
+        strategy in {"inner_warmup", "per_device_warmup"}
+        or (strategy == "global_persistent_compile_cache" and persistent_cache and cache_dir)
+    )
+
+    failures: list[str] = []
+    notes: list[str] = []
+    if kind not in _COMPILED_SHARDED_OPERATOR_KINDS:
+        failures.append(f"unsupported compiled sharded operator benchmark_kind={kind!r}")
+    if timing not in _WARM_OPERATOR_TIMING_SEMANTICS:
+        failures.append(f"timing semantics {timing!r} do not describe a warm compiled operator")
+    if repeats < min_repeats:
+        failures.append(f"only {repeats} timed repeats recorded; need at least {min_repeats}")
+    if compile_inside:
+        failures.append("compiled sharded operator gate records compilation inside timed samples")
+    if not warm_run_amortized:
+        failures.append(
+            "compiled sharded operator gate requires an inner/per-device warmup "
+            "or a persistent-cache-backed global warmup"
+        )
+    if cache_required and not persistent_cache:
+        failures.append("global warmup strategy requires persistent_compile_cache=true")
+    if cache_required and cache_dir is None:
+        failures.append("global warmup strategy requires compile_cache_dir metadata")
+    if persistent_cache and cache_dir is None:
+        failures.append("persistent_compile_cache=true requires compile_cache_dir metadata")
+    if work_units == 1:
+        notes.append("one work unit per timed sample; speedup evidence is sensitive to launch overhead")
+    if strategy == "global_persistent_compile_cache":
+        notes.append("global warmup depends on cross-process persistent compilation cache reuse")
+    elif strategy != "none":
+        notes.append(f"timed samples reuse operators via {strategy}")
+
+    return CompiledShardedOperatorReuseGate(
+        benchmark_kind=kind,
+        timing_semantics=timing,
+        strategy=strategy,
+        persistent_compile_cache=bool(persistent_cache),
+        compile_cache_dir=cache_dir,
+        cache_required=cache_required,
+        global_warmup_runs=global_warmup,
+        per_device_warmup_runs=per_device_warmup,
+        inner_warmup_runs=inner_warmup,
+        timed_repeats=repeats,
+        min_timed_repeats=min_repeats,
+        work_units_per_sample=work_units,
+        compile_in_timed_region=bool(compile_inside),
+        passes=not failures,
+        warm_run_amortization_pass=warm_run_amortized and not failures,
+        failures=tuple(failures),
+        notes=tuple(notes),
+    )
+
+
+def plan_sharded_solve_deterministic_output_gate(
+    *,
+    baseline_devices: int = 1,
+    comparison_devices: int,
+    residual_tolerance: float = 1.0e-10,
+    max_relative_residual_norm: float | None = None,
+    output_digest: str | None = None,
+    output_digest_algorithm: str = "sha256",
+) -> ShardedSolveDeterministicOutputGate:
+    """Build a deterministic residual/output parity gate for sharded solve artifacts."""
+
+    baseline = _positive_int(baseline_devices, name="baseline_devices")
+    comparison = _positive_int(comparison_devices, name="comparison_devices")
+    tolerance = float(residual_tolerance)
+    if not math.isfinite(tolerance) or tolerance <= 0.0:
+        raise ValueError("residual_tolerance must be positive and finite")
+
+    observed = None
+    if max_relative_residual_norm is not None:
+        observed = float(max_relative_residual_norm)
+
+    digest = None if output_digest is None else str(output_digest).strip() or None
+    digest_algorithm = str(output_digest_algorithm).strip().lower() or "sha256"
+    failures: list[str] = []
+    notes: list[str] = []
+    if comparison < 2:
+        failures.append("deterministic output gate needs at least two comparison devices")
+    if observed is None:
+        failures.append("max_relative_residual_norm was not measured")
+    elif not math.isfinite(observed) or observed > tolerance:
+        failures.append(
+            f"max_relative_residual_norm {observed!r} exceeds tolerance {tolerance:g}"
+        )
+    if digest is None:
+        failures.append("output digest was not recorded")
+    if baseline == comparison:
+        notes.append("baseline and comparison device counts are identical")
+
+    status = "pass" if not failures else "not_measured" if observed is None and digest is None else "fail"
+    if status == "not_measured":
+        notes.append("deterministic output parity must be measured before a scaling claim")
+
+    return ShardedSolveDeterministicOutputGate(
+        schema_version=1,
+        status=status,
+        passes=not failures,
+        baseline_devices=baseline,
+        comparison_devices=comparison,
+        residual_tolerance=tolerance,
+        max_relative_residual_norm=observed,
+        output_digest_algorithm=digest_algorithm,
+        output_digest=digest,
+        failures=tuple(failures),
+        notes=tuple(notes),
+    )
+
+
 __all__ = [
+    "CompiledShardedOperatorReuseGate",
+    "ShardedSolveDeterministicOutputGate",
     "ShardedSolveAmortizationDiagnostics",
     "ShardedSolveBalanceDiagnostics",
     "ShardedSolveDeviceAssignment",
     "ShardedSolveExecutionPlan",
     "estimate_sharded_solve_amortization",
+    "plan_compiled_sharded_operator_reuse",
+    "plan_sharded_solve_deterministic_output_gate",
     "plan_single_case_sharded_solve",
 ]

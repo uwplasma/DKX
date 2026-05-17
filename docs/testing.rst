@@ -433,6 +433,14 @@ The measured solver-candidate gates are covered separately in
 ``tests/test_solver_selection_policy.py``. Those tests exercise residual/parity
 rejection, baseline-clean promotion requirements, failed-baseline rescue
 allowances, paired memory metrics, tie-breaking, and missing-measurement guards.
+The adjacent RHSMode=1 handoff seam is covered in ``tests/test_rhs1_handoff.py``:
+the strict finite residual-improvement predicate is tested directly, nonfinite
+candidates are rejected even before measured gates run, finite rescues after a
+nonfinite incumbent are accepted, and measured runtime/memory regressions still
+block an otherwise lower residual when the incumbent is already clean. The
+docstring audit in ``tests/test_policy_module_docstrings.py`` now also covers
+this source-mapped non-policy control module so the handoff contract remains
+discoverable while ``v3_driver.py`` is split further.
 Transport worker residual abort formatting is covered in
 ``tests/test_transport_residual_quality.py``, including custom environment names,
 negative/invalid threshold normalization, nonfinite residual diagnostics, and

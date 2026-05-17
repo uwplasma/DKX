@@ -522,11 +522,23 @@ def test_sharded_scaling_audit_stays_non_release_but_ci_gateable() -> None:
             "backend": "gpu",
             "devices": [1, 2],
             "global_warmup": 0,
+            "gpu_device_count": 2,
             "results": [
                 {"devices": 1, "mean_s": 4.0},
                 {"devices": 2, "mean_s": 3.0},
             ],
             "scaling_status": "regression-snapshot",
+            "timing_semantics": "hot_solve",
+            "operator_reuse_gate": {
+                "passes": True,
+                "timing_semantics": "hot_solve",
+                "timed_repeats": 1,
+                "min_timed_repeats": 1,
+                "compile_in_timed_region": False,
+                "warm_run_amortization_pass": True,
+                "persistent_compile_cache": True,
+                "compile_cache_dir": "examples/performance/output/cache",
+            },
             "deterministic_output_check": False,
         }
     )
@@ -534,8 +546,8 @@ def test_sharded_scaling_audit_stays_non_release_but_ci_gateable() -> None:
     assert audit.release_scaling_claim is False
     assert audit.experimental_single_case_scaling
     assert audit.ci_gate_pass
-    assert audit.timing_semantics == "cold_start"
-    assert any("cold setup" in note for note in audit.notes)
+    assert audit.timing_semantics == "hot_solve"
+    assert audit.operator_reuse_gate
     assert any("not a release scaling claim" in note for note in audit.notes)
 
 

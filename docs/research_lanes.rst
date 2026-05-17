@@ -42,6 +42,9 @@ Relevant implementation:
   gate: every requested seed/backend pair must converge, write output and
   solver trace artifacts, satisfy residual/observable gates, and avoid host
   fallback for a true device-QI claim.
+- ``sfincs_jax/rhs1_qi_device_smoother.py`` provides the first standalone
+  device-local ``S_local`` candidate: a bounded CSR-backed damped
+  Jacobi/stationary smoother with fail-closed diagonal validation.
 - ``sfincs_jax/rhs1_device_operator.py`` provides bounded device CSR matvec
   utilities.
 - ``sfincs_jax/rhs1_qi_galerkin_policy.py`` rejects Galerkin candidates unless
@@ -85,6 +88,12 @@ This follows the same structural idea as field-split/Schur preconditioning:
 apply cheap local solves, then correct global low-dimensional coupling. It
 should be tested first as a preconditioner action on physics load bases before
 launching long Krylov solves.
+
+The standalone device-Jacobi smoother is now available as the minimal
+operator-reuse ``S_local`` prototype. It deliberately validates diagonal
+coverage before construction and performs only JAX CSR matvecs during
+application, so it can probe whether a weaker but genuinely device-resident
+smoother is preferable to host x-block LU/ILU for the hard GPU seed.
 
 The next candidate is residual-deflated rather than threshold-driven:
 
@@ -232,6 +241,12 @@ Current evidence
   x-block factorization path, with low GPU utilization, so the remaining GPU
   blocker is architectural: a device-local local smoother/operator-reuse path
   is required before production-resolution GPU QI can be promoted.
+- A standalone device CSR Jacobi/stationary smoother now exists for that
+  architectural blocker. Focused tests show CSR diagonal extraction, JIT-safe
+  stationary sweeps, fail-closed rejection of missing/invalid diagonals, and
+  compatibility with the existing two-level true-residual probe on a synthetic
+  coupled global mode. This is implementation infrastructure only: no
+  scale-0.60 CPU/GPU hard-seed artifact has been promoted from it.
 
 Promotion gate
 ~~~~~~~~~~~~~~

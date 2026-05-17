@@ -2,12 +2,40 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.rhs1_handoff import rhs1_accept_candidate
+import pytest
+
+from sfincs_jax.rhs1_handoff import rhs1_accept_candidate, rhs1_residual_improves
 from sfincs_jax.solver_selection_policy import SolverCandidateMetrics
 
 
 def _result(residual_norm: float, x: object = None):
     return SimpleNamespace(residual_norm=residual_norm, x=x)
+
+
+@pytest.mark.parametrize(
+    ("current_residual", "candidate_residual", "expected"),
+    [
+        (1.0, 0.5, True),
+        (1.0, 1.0, False),
+        (1.0, 2.0, False),
+        (float("nan"), 1.0e-9, True),
+        (float("inf"), 1.0e-9, True),
+        (1.0, float("nan"), False),
+        (1.0, float("inf"), False),
+    ],
+)
+def test_rhs1_residual_improves_is_strict_and_finite(
+    current_residual: float,
+    candidate_residual: float,
+    expected: bool,
+) -> None:
+    assert (
+        rhs1_residual_improves(
+            current_residual=current_residual,
+            candidate_residual=candidate_residual,
+        )
+        is expected
+    )
 
 
 def test_rhs1_accept_candidate_accepts_improvement_and_emits_handoff_state() -> None:
@@ -87,6 +115,31 @@ def test_rhs1_accept_candidate_accepts_finite_rescue_after_nonfinite_current() -
     assert result is candidate
     assert residual_vec == "r1"
     assert handoff is not None
+
+
+def test_rhs1_accept_candidate_rejects_nonfinite_candidate_residual() -> None:
+    current = _result(1.0e-6, x="x0")
+    candidate = _result(float("nan"), x="x1")
+
+    result, residual_vec, handoff, accepted = rhs1_accept_candidate(
+        current_result=current,
+        candidate_result=candidate,
+        current_residual_vec="r0",
+        candidate_residual_vec="r1",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        x0_vec="seed",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="gmres",
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec == "r0"
+    assert handoff is None
 
 
 def test_rhs1_accept_candidate_keeps_current_residual_vector_when_candidate_residual_is_missing() -> None:

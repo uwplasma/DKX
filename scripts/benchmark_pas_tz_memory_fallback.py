@@ -38,6 +38,13 @@ GUARDED_PAS_TZ_MARKERS = (
     "PAS-TZ guarded",
     "guarded PAS-TZ fallback",
 )
+DENSE_GUARDED_CORRECTION_VARIANTS = frozenset(
+    {
+        "collision_tzfft",
+        "collision_tzfft_correction",
+        "tzfft_correction",
+    }
+)
 BACKEND_ALIASES = {
     "cuda": "gpu",
     "gpu": "gpu",
@@ -313,6 +320,11 @@ def _variant_base(variant: str) -> str:
     return str(variant).strip().lower().replace("-", "_").removesuffix("_lgmres")
 
 
+def _variant_requests_guarded_correction(variant: str) -> bool:
+    """Return whether a variant requests a post-Krylov guarded correction."""
+    return _variant_base(variant) in DENSE_GUARDED_CORRECTION_VARIANTS
+
+
 def _variant_solve_method(variant: str, default: str) -> str:
     """Return the child solve method for a variant name."""
     variant_l = str(variant).strip().lower().replace("-", "_")
@@ -364,6 +376,38 @@ def _guarded_pas_tz_evidence(row: dict[str, Any]) -> tuple[bool, list[str]]:
 
     evidence = _guarded_pas_tz_evidence_from_messages(messages)
     return bool(evidence), evidence[-5:]
+
+
+def _iter_nested_dicts(value: Any):
+    if not isinstance(value, dict):
+        return
+    yield value
+    for item in value.values():
+        if isinstance(item, dict):
+            yield from _iter_nested_dicts(item)
+
+
+def _streamed_guarded_correction_evidence(row: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Return whether a row proves the guarded correction avoided dense updates."""
+    evidence: list[str] = []
+    full_update_materialized = False
+    for root_key in ("metadata", "diagnostics", "matrix_free_metadata"):
+        for metadata in _iter_nested_dicts(row.get(root_key, {})):
+            if metadata.get("full_update_materialized") is True:
+                full_update_materialized = True
+            if metadata.get("pas_tz_guarded_correction_full_update_materialized") is True:
+                full_update_materialized = True
+            if metadata.get("stream_update_chunks") is True:
+                evidence.append(f"{root_key}.stream_update_chunks")
+            if metadata.get("pas_tz_guarded_correction_streamed") is True:
+                evidence.append(f"{root_key}.pas_tz_guarded_correction_streamed")
+    messages = row.get("messages_tail", [])
+    if isinstance(messages, list):
+        for message in messages:
+            message_s = str(message).lower()
+            if "pas-tz" in message_s and "stream" in message_s and "correction" in message_s:
+                evidence.append("messages_tail.streamed_pas_tz_correction")
+    return bool(evidence) and not full_update_materialized, evidence[-5:]
 
 
 def _phase_record(name: str, start_s: float, end_s: float, *, status: str = "ok") -> dict[str, Any]:
@@ -633,6 +677,30 @@ def result_gates(args: argparse.Namespace, row: dict[str, Any], variant: str) ->
             required_markers=list(GUARDED_PAS_TZ_MARKERS),
         )
 
+    correction_streamed, correction_evidence = _streamed_guarded_correction_evidence(row)
+    if status != "ok":
+        guarded_correction_memory_gate = _gate("fail", "non-ok-status", status=status)
+    elif not _variant_requests_guarded_correction(variant):
+        guarded_correction_memory_gate = _gate("pass", "guarded-correction-not-requested")
+    elif correction_streamed:
+        guarded_correction_memory_gate = _gate(
+            "pass",
+            "streamed-guarded-correction-evidence-recorded",
+            evidence=correction_evidence,
+        )
+    else:
+        guarded_correction_memory_gate = _gate(
+            "fail",
+            "dense-guarded-correction-disallowed",
+            variant=str(variant),
+            required_metadata=[
+                "stream_update_chunks=true",
+                "pas_tz_guarded_correction_streamed=true",
+                "full_update_materialized=false",
+            ],
+            evidence=correction_evidence,
+        )
+
     if not bool(getattr(args, "require_default_promotion_gate", False)):
         default_promotion_gate = _gate("pass", "default-promotion-gate-not-requested")
     elif status != "ok":
@@ -727,6 +795,7 @@ def result_gates(args: argparse.Namespace, row: dict[str, Any], variant: str) ->
         "backend": backend_gate,
         "solver_path": solver_gate,
         "guarded_pas_tz": guarded_pas_tz_gate,
+        "guarded_correction_memory": guarded_correction_memory_gate,
         "default_promotion": default_promotion_gate,
         "variant": _gate("pass", "variant-recorded", variant=str(variant)),
     }
@@ -863,6 +932,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "allow_solver_churn": bool(getattr(args, "allow_solver_churn", False)),
             "guarded_pas_tz_required": True,
             "guarded_pas_tz_markers": list(GUARDED_PAS_TZ_MARKERS),
+            "streamed_guarded_correction_required": True,
+            "dense_guarded_correction_variants": sorted(DENSE_GUARDED_CORRECTION_VARIANTS),
             "default_promotion_required": bool(getattr(args, "require_default_promotion_gate", False)),
             "baseline_elapsed_s": _optional_float(getattr(args, "baseline_elapsed_s", None)),
             "baseline_rss_mb": _optional_float(getattr(args, "baseline_rss_mb", None)),

@@ -98,6 +98,17 @@ def test_readme_quick_solve_command_uses_public_auto_path(tmp_path: Path) -> Non
     output_pdf = tmp_path / "sfincsOutput_summary.pdf"
     env = os.environ.copy()
     env["MPLBACKEND"] = "Agg"
+    env.update(
+        {
+            "SFINCS_JAX_AUTO_SHARD": "0",
+            "SFINCS_JAX_CPU_DEVICES": "1",
+            "SFINCS_JAX_MATVEC_SHARD_AXIS": "off",
+            "SFINCS_JAX_SHARD": "0",
+            "SFINCS_JAX_SHARD_PAD": "0",
+            "SFINCS_JAX_TRANSPORT_PARALLEL": "off",
+            "SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS": "1",
+        }
+    )
     subprocess.run(
         [
             sys.executable,

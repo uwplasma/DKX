@@ -757,14 +757,15 @@ Current active lane (2026-05-15, post-v1.1.3 research-lane closure pass):
   cost: stream pitch-angle/angular correction actions with `lax.scan`/chunked
   vector updates or use a lower-memory block-tridiagonal PAS smoother. Another
   dense update candidate or looser fallback threshold is explicitly rejected.
-- [ ] Implement a streamed PAS correction prototype behind an opt-in flag.
-  Proposed write scope: extend `rhs1_pas_matrixfree.py` with a chunked
-  correction interface that never materializes a full dense update block, add
-  a benchmark mode in `scripts/benchmark_pas_tz_memory_fallback.py`, and add
-  CI-fast unit tests for chunk invariance/residual gates. Promotion gates:
-  geometry4, HSX, and geometry11 artifacts must be residual-clean and improve
-  either warm runtime by at least 20% or active/RSS memory by at least 25% on
-  both CPU and GPU where available.
+- [x] Implemented the first streamed PAS correction prototype behind an opt-in
+  flag. `rhs1_pas_matrixfree.py` now supports `stream_update_chunks=True` with
+  chunked correction callbacks and a per-update-chunk byte budget, so the helper
+  can build a candidate without materializing a full dense update vector. The
+  PAS-TZ memory fallback benchmark gate now rejects guarded-correction variants
+  unless row metadata proves streamed/no-full-update behavior. Promotion gates
+  remain unchanged: geometry4, HSX, and geometry11 artifacts must be
+  residual-clean and improve either warm runtime by at least 20% or active/RSS
+  memory by at least 25% on both CPU and GPU where available.
 - [x] Code audit result for single-case multi-GPU strong scaling:
   `examples/performance/benchmark_sharded_solve_scaling.py`,
   `examples/performance/benchmark_sharded_matvec_scaling.py`,
@@ -12369,3 +12370,60 @@ Validation:
 - Keep true device-QI and production-resolution QI ladders as deferred research
   lanes unless new residual-clean GPU artifacts replace the current negative
   evidence.
+
+## 2026-05-17 multi-lane closure push
+
+Goal:
+
+- Use parallel lane work to close every open item that can be closed with
+  code/tests/docs on the local machine, while keeping hardware-dependent and
+  artifact-dependent claims explicitly deferred.
+
+Implementation:
+
+- QI/device lane: added `sfincs_jax/rhs1_qi_device_smoother.py`, a pure-JAX
+  DeviceCSR-backed damped Jacobi/stationary smoother. It is the first
+  device-local `S_local` prototype for the true device-QI architecture, with
+  fail-closed diagonal validation and JIT-safe application. This does not
+  promote true device-QI until scale-0.60 CPU/GPU hard-seed artifacts pass.
+- PAS/runtime-memory lane: added opt-in streamed update chunks to
+  `rhs1_pas_matrixfree.py`, including update-chunk byte budgets and metadata
+  proving that dense guarded-correction updates were not materialized. The PAS
+  fallback benchmark now rejects guarded-correction variants without streamed
+  no-full-update evidence.
+- Parallel/scaling lane: added compiled sharded operator-reuse gates,
+  persistent compile-cache metadata, warm-run amortization checks, and
+  deterministic residual/output gate schemas to the single-case sharded solve
+  and matvec benchmark planners. Single-case multi-GPU remains experimental
+  until a measured 1-vs-2 GPU artifact passes these gates.
+- Refactor/coverage lane: split the strict finite RHSMode=1 residual-improvement
+  predicate into `rhs1_handoff.py`, documented the source-map seam, and added
+  fast finite/nonfinite boundary tests plus public-API docstring coverage.
+- Research-lane manifest now records PAS at its scoped `97%` target,
+  refactor/CI at its scoped `95%` target, and overall lane average at `95.0%`.
+  The manifest still records true device-QI and production-resolution QI ladders
+  as deferred until new residual-clean GPU artifacts exist.
+
+Validation:
+
+- Focused combined lane tests:
+  `python -m pytest -q tests/test_rhs1_qi*.py tests/test_run_qi_seed_robustness.py tests/test_rhs1_pas_policy.py tests/test_rhs1_pas_matrixfree.py tests/test_benchmark_pas_tz_memory_fallback.py tests/test_transport_parallel*.py tests/test_benchmark_transport_parallel*.py tests/test_benchmark_sharded_solve_scaling.py tests/test_rhs1_handoff.py tests/test_policy_module_docstrings.py`
+  passed (`211 passed in 30.80 s`).
+- Touched-file lint passed:
+  `python -m ruff check` on the touched QI, PAS, parallel, benchmark, handoff,
+  and docstring-test files.
+- `git diff --check`: passed.
+- Full local suite passed after fixing two integration regressions uncovered by
+  the first full run: the README subprocess test now disables inherited
+  sharding/parallel environment state, and the sharded-solve policy coverage
+  test records the required operator-reuse gate. Final result:
+  `python -m pytest -q` passed (`1684 passed in 727.48 s`).
+
+Next steps:
+
+- Run release/research gates, Sphinx, and a broader pytest slice after this
+  integration lands.
+- If those pass, commit and push this multi-lane closure state.
+- Do not mark true device-QI, production-resolution QI ladders, or single-case
+  multi-GPU strong scaling as public/release claims until the required CPU/GPU
+  artifacts pass the new gates.

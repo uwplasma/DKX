@@ -53,6 +53,8 @@ class ShardedSolveScalingAudit:
     benchmark_kind: str = "single_case_sharded_solve"
     timing_semantics: str | None = None
     deterministic_output_check: bool = False
+    operator_reuse_gate: bool = False
+    deterministic_output_gate: bool = False
 
 
 @dataclass(frozen=True)
@@ -375,6 +377,30 @@ def _compile_amortization_gate(
     if compile_in_timed_region:
         failures.append("compile-amortization gate records compilation inside the timed region")
 
+    warm_run_amortization = _optional_bool(
+        raw.get("warm_run_amortization_pass", raw.get("warm_run_amortization")),
+        name="compile_amortization_gate.warm_run_amortization_pass",
+    )
+    if warm_run_amortization is False:
+        failures.append("compile-amortization gate did not prove warm-run amortization")
+
+    cache_required = _optional_bool(
+        raw.get("cache_required"),
+        name="compile_amortization_gate.cache_required",
+    )
+    persistent_compile_cache = _optional_bool(
+        raw.get("persistent_compile_cache"),
+        name="compile_amortization_gate.persistent_compile_cache",
+    )
+    compile_cache_dir = raw.get("compile_cache_dir")
+    has_compile_cache_dir = compile_cache_dir is not None and bool(str(compile_cache_dir).strip())
+    if cache_required is True and persistent_compile_cache is not True:
+        failures.append("compile-amortization gate requires persistent_compile_cache=true")
+    if cache_required is True and not has_compile_cache_dir:
+        failures.append("compile-amortization gate requires compile_cache_dir metadata")
+    if persistent_compile_cache is True and not has_compile_cache_dir:
+        failures.append("persistent_compile_cache=true requires compile_cache_dir metadata")
+
     timed_repeats = _optional_positive_int(
         raw.get("timed_repeats", raw.get("repeats")),
         name="compile_amortization_gate.timed_repeats",
@@ -403,6 +429,84 @@ def _compile_amortization_gate(
             raise ValueError("compile_amortization_gate.notes must be an iterable of strings") from exc
 
     return True, not failures, tuple(failures), tuple(notes)
+
+
+def _operator_reuse_gate(
+    summary: dict[str, object],
+    *,
+    timing_semantics: str | None,
+) -> tuple[bool, bool, tuple[str, ...], tuple[str, ...]]:
+    raw = summary.get("operator_reuse_gate", summary.get("compile_amortization_gate"))
+    if raw is None:
+        return False, False, (), ("compiled sharded operator-reuse gate was not recorded",)
+    return _compile_amortization_gate(
+        {"compile_amortization_gate": raw},
+        timing_semantics=timing_semantics,
+    )
+
+
+def _sharded_deterministic_output_gate(
+    summary: dict[str, object],
+) -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
+    raw = summary.get("deterministic_output_gate")
+    explicit = _optional_bool(
+        summary.get("deterministic_output_check"),
+        name="deterministic_output_check",
+    )
+    if raw is None:
+        if explicit:
+            return True, (), ("legacy deterministic_output_check=true without gate schema",)
+        return False, (), ("deterministic residual/output gate was not recorded",)
+    if not isinstance(raw, dict):
+        raise ValueError("deterministic_output_gate must be a dictionary")
+
+    passes = _optional_bool(raw.get("passes"), name="deterministic_output_gate.passes")
+    if passes is None:
+        raise ValueError("deterministic_output_gate must record passes=true/false")
+
+    failures: list[str] = []
+    notes: list[str] = []
+    threshold_raw = raw.get("residual_tolerance", raw.get("max_relative_residual_norm_gate"))
+    observed_raw = raw.get("max_relative_residual_norm")
+    if passes:
+        if threshold_raw is None:
+            failures.append("deterministic_output_gate.passes=true requires residual_tolerance")
+        else:
+            threshold = _finite_positive_float(
+                threshold_raw,
+                name="deterministic_output_gate.residual_tolerance",
+            )
+            if observed_raw is None:
+                failures.append(
+                    "deterministic_output_gate.passes=true requires max_relative_residual_norm"
+                )
+            else:
+                observed = float(observed_raw)
+                if not math.isfinite(observed) or observed > threshold:
+                    failures.append(
+                        "deterministic output residual exceeds tolerance "
+                        f"({observed!r} > {threshold:g})"
+                    )
+        output_digest = raw.get("output_digest")
+        if output_digest is None or not str(output_digest).strip():
+            failures.append("deterministic_output_gate.passes=true requires output_digest")
+    else:
+        raw_failures = raw.get("failures")
+        if raw_failures is not None:
+            try:
+                notes.extend(str(failure) for failure in raw_failures)  # type: ignore[arg-type]
+            except TypeError as exc:
+                raise ValueError("deterministic_output_gate.failures must be an iterable") from exc
+        notes.append("deterministic residual/output parity is not proven")
+
+    raw_notes = raw.get("notes")
+    if raw_notes is not None:
+        try:
+            notes.extend(str(note) for note in raw_notes)  # type: ignore[arg-type]
+        except TypeError as exc:
+            raise ValueError("deterministic_output_gate.notes must be an iterable") from exc
+
+    return passes and not failures, tuple(failures), tuple(notes)
 
 
 def audit_transport_parallel_scaling_summary(
@@ -958,7 +1062,7 @@ def audit_sharded_solve_scaling_summary(
 
     backend = str(summary.get("backend", "cpu")).strip().lower() or "cpu"
     timing_semantics, timing_note = _timing_semantics(summary)
-    deterministic_output_check = bool(
+    legacy_deterministic_output_check = bool(
         _optional_bool(summary.get("deterministic_output_check"), name="deterministic_output_check") or False
     )
     requested_release = bool(_optional_bool(summary.get("release_scaling_claim"), name="release_scaling_claim") or False)
@@ -1000,6 +1104,14 @@ def audit_sharded_solve_scaling_summary(
         "regression_snapshot",
         "non_release_snapshot",
     }
+    operator_gate_recorded, operator_gate_ok, operator_failures, operator_notes = _operator_reuse_gate(
+        summary,
+        timing_semantics=timing_semantics,
+    )
+    deterministic_gate_ok, deterministic_failures, deterministic_notes = (
+        _sharded_deterministic_output_gate(summary)
+    )
+    deterministic_output_check = bool(legacy_deterministic_output_check or deterministic_gate_ok)
 
     failures: list[str] = []
     notes: list[str] = []
@@ -1013,6 +1125,10 @@ def audit_sharded_solve_scaling_summary(
         failures.append("timing semantics were not recorded")
     elif timing_semantics in {"cold", "cold_start", "cold_cache"}:
         notes.append(f"timing semantics {timing_semantics!r} include cold setup")
+    if operator_gate_recorded:
+        failures.extend(operator_failures)
+    else:
+        failures.append("compiled sharded operator-reuse gate metadata was not recorded")
     if backend == "gpu":
         device_count, device_note = _scaling_device_count(summary, backend=backend)
         if device_note is not None:
@@ -1021,6 +1137,9 @@ def audit_sharded_solve_scaling_summary(
             failures.append(f"only {device_count} GPU devices recorded for {claim_devices} sharded devices")
     if not deterministic_output_check:
         notes.append("deterministic output parity was not recorded for this timing-only sharded benchmark")
+    failures.extend(deterministic_failures)
+    notes.extend(operator_notes)
+    notes.extend(deterministic_notes)
     if timing_note is not None:
         notes.append(timing_note)
     notes.append("single-case sharded solve remains experimental and is not a release scaling claim")
@@ -1040,6 +1159,8 @@ def audit_sharded_solve_scaling_summary(
         benchmark_kind=benchmark_kind,
         timing_semantics=timing_semantics,
         deterministic_output_check=deterministic_output_check,
+        operator_reuse_gate=operator_gate_ok,
+        deterministic_output_gate=deterministic_gate_ok,
     )
 
 

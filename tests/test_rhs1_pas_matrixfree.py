@@ -427,6 +427,138 @@ def test_matrixfree_auto_chunk_plan_preserves_function_level_result() -> None:
     assert chunked.residual_norm == pytest.approx(dense.residual_norm)
 
 
+def test_matrixfree_streamed_update_chunks_match_dense_correction() -> None:
+    diag = jnp.asarray([2.0, 4.0, 8.0, 16.0], dtype=jnp.float32)
+    rhs = jnp.asarray([2.0, 8.0, 24.0, 64.0], dtype=jnp.float32)
+    x0 = jnp.zeros_like(rhs)
+    calls = {"chunked": 0, "dense": 0, "max_chunk": 0}
+
+    def matvec(x):
+        return diag * x
+
+    def dense_correction(residual):
+        calls["dense"] += 1
+        return residual / diag
+
+    def chunked_correction(residual_chunk, start, stop):
+        calls["chunked"] += 1
+        calls["max_chunk"] = max(calls["max_chunk"], int(residual_chunk.size))
+        return residual_chunk / diag[start:stop]
+
+    dense = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        correction=dense_correction,
+        config=Rhs1PasMatrixFreeConfig(max_steps=1, min_residual_reduction=0.5),
+    )
+    streamed = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        correction=dense_correction,
+        chunked_correction=chunked_correction,
+        config=Rhs1PasMatrixFreeConfig(
+            max_steps=1,
+            min_residual_reduction=0.5,
+            block_size=2,
+            stream_update_chunks=True,
+            max_update_chunk_bytes=8,
+        ),
+    )
+
+    assert dense.accepted and streamed.accepted
+    assert calls == {"chunked": 2, "dense": 1, "max_chunk": 2}
+    np.testing.assert_allclose(np.asarray(streamed.x), np.asarray(dense.x))
+    assert streamed.residual_norm == pytest.approx(dense.residual_norm)
+    metadata = streamed.diagnostics["matrix_free_metadata"]
+    assert metadata["stream_update_chunks"] is True
+    assert metadata["full_update_materialized"] is False
+    assert metadata["planned_update_block_size"] == 2
+    streamed_metadata = streamed.diagnostics["streamed_update_metadata"]
+    assert streamed_metadata["full_update_materialized"] is False
+    assert streamed_metadata["update_chunk_count"] == 2
+    assert streamed_metadata["max_update_chunk_elements"] == 2
+
+
+def test_matrixfree_streamed_update_byte_budget_rejects_before_work() -> None:
+    rhs = jnp.ones((3,), dtype=jnp.float32)
+    x0 = jnp.zeros_like(rhs)
+    calls = {"matvec": 0, "dense": 0, "chunked": 0}
+
+    def matvec(x):
+        calls["matvec"] += 1
+        return x
+
+    def dense_correction(residual):
+        calls["dense"] += 1
+        return residual
+
+    def chunked_correction(residual_chunk, start, stop):
+        del start, stop
+        calls["chunked"] += 1
+        return residual_chunk
+
+    result = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        correction=dense_correction,
+        chunked_correction=chunked_correction,
+        config=Rhs1PasMatrixFreeConfig(
+            stream_update_chunks=True,
+            max_update_chunk_bytes=3,
+        ),
+    )
+
+    metadata = result.diagnostics["matrix_free_metadata"]
+    assert not result.accepted
+    assert result.reason == "update-chunk-memory-limit-exceeded"
+    assert metadata["candidate_matvecs"] == 0
+    assert metadata["stream_update_chunks"] is True
+    assert metadata["stream_update_chunk_plan"]["safe"] is False
+    assert metadata["full_update_materialized"] is False
+    assert calls == {"matvec": 0, "dense": 0, "chunked": 0}
+
+
+def test_matrixfree_streamed_update_uses_same_residual_gate_semantics() -> None:
+    rhs = jnp.ones((4,), dtype=jnp.float32)
+    x0 = jnp.zeros_like(rhs)
+    calls = {"chunked": 0}
+
+    def matvec(x):
+        return x
+
+    def dense_correction(_residual):
+        raise AssertionError("dense correction should not run in streamed mode")
+
+    def weak_chunked_correction(residual_chunk, start, stop):
+        del start, stop
+        calls["chunked"] += 1
+        return 0.1 * residual_chunk
+
+    result = rhs1_pas_matrixfree_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=x0,
+        correction=dense_correction,
+        chunked_correction=weak_chunked_correction,
+        config=Rhs1PasMatrixFreeConfig(
+            min_residual_reduction=0.5,
+            block_size=2,
+            stream_update_chunks=True,
+        ),
+    )
+
+    assert not result.accepted
+    assert result.reason == "insufficient-residual-improvement"
+    assert result.residual_history[-1] == pytest.approx(0.9 * result.initial_residual_norm)
+    assert result.diagnostics["matrix_free_metadata"]["candidate_matvecs"] == 1
+    assert result.diagnostics["streamed_update_metadata"]["update_chunk_count"] == 2
+    assert calls == {"chunked": 2}
+    np.testing.assert_array_equal(np.asarray(result.x), np.asarray(x0))
+
+
 def test_matrixfree_preflight_gate_reports_safe_and_reject_metadata() -> None:
     x = jnp.zeros((4,), dtype=jnp.float32)
 
@@ -474,3 +606,5 @@ def test_matrixfree_config_validation() -> None:
         Rhs1PasMatrixFreeConfig(max_candidate_bytes=0)
     with pytest.raises(ValueError):
         Rhs1PasMatrixFreeConfig(max_reduction_bytes=0)
+    with pytest.raises(ValueError):
+        Rhs1PasMatrixFreeConfig(max_update_chunk_bytes=0)

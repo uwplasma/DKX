@@ -17,7 +17,11 @@ from sfincs_jax.transport_parallel_policy import (
     audit_parallel_scaling_claim_scope,
     audit_sharded_solve_scaling_summary,
 )
-from sfincs_jax.transport_parallel_sharding import plan_single_case_sharded_solve
+from sfincs_jax.transport_parallel_sharding import (
+    plan_compiled_sharded_operator_reuse,
+    plan_sharded_solve_deterministic_output_gate,
+    plan_single_case_sharded_solve,
+)
 from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
 
 
@@ -124,6 +128,38 @@ def _timing_semantics(
     if int(per_device_warmup) > 0 or int(global_warmup) > 0:
         return "cache_warm"
     return "cold_start"
+
+
+def _operator_reuse_gate(
+    *,
+    timing_semantics: str,
+    global_warmup: int,
+    per_device_warmup: int,
+    inner_warmup_solves: int,
+    repeats: int,
+    nsolve: int,
+    cache_dir: Path | None,
+    repo_root: Path,
+) -> dict[str, object]:
+    return plan_compiled_sharded_operator_reuse(
+        benchmark_kind="single_case_sharded_solve",
+        timing_semantics=str(timing_semantics),
+        global_warmup_runs=int(global_warmup),
+        per_device_warmup_runs=int(per_device_warmup),
+        inner_warmup_runs=int(inner_warmup_solves),
+        timed_repeats=max(int(repeats), 1),
+        work_units_per_sample=max(int(nsolve), 1),
+        compile_cache_dir=None if cache_dir is None else _display_path(cache_dir, repo_root=repo_root),
+        persistent_compile_cache=cache_dir is not None,
+        compile_in_timed_region=False,
+    ).to_dict()
+
+
+def _deterministic_output_gate(*, devices: list[int]) -> dict[str, object]:
+    return plan_sharded_solve_deterministic_output_gate(
+        baseline_devices=1,
+        comparison_devices=max(int(d) for d in devices),
+    ).to_dict()
 
 
 def _run_scaling_audit(payload: dict[str, object]) -> None:
@@ -355,6 +391,16 @@ def _build_sharded_solve_benchmark_plan(
         per_device_warmup=int(warmup),
         inner_warmup_solves=int(inner_warmup_solves),
     )
+    operator_reuse_gate = _operator_reuse_gate(
+        timing_semantics=timing_semantics,
+        global_warmup=int(global_warmup),
+        per_device_warmup=int(warmup),
+        inner_warmup_solves=int(inner_warmup_solves),
+        repeats=int(repeats),
+        nsolve=int(nsolve),
+        cache_dir=cache_dir,
+        repo_root=repo_root,
+    )
     device_plan = []
     for d in normalized_devices:
         sharding_plan = plan_single_case_sharded_solve(
@@ -440,10 +486,12 @@ def _build_sharded_solve_benchmark_plan(
         "schwarz_coarse_steps": schwarz_coarse_steps,
         "schwarz_coarse_damp": schwarz_coarse_damp,
         "timing_semantics": timing_semantics,
+        "operator_reuse_gate": operator_reuse_gate,
         "global_warmup": int(global_warmup),
         "per_device_warmup": int(warmup),
         "repeats": int(repeats),
         "deterministic_output_check": False,
+        "deterministic_output_gate": _deterministic_output_gate(devices=normalized_devices),
         "estimated_child_process_samples": int(max(global_warmup, 0))
         + len(normalized_devices) * (max(int(warmup), 0) + max(int(repeats), 1)),
         "speedup_gate_semantics": {
@@ -451,6 +499,8 @@ def _build_sharded_solve_benchmark_plan(
             "evaluated_by": "audit_sharded_solve_scaling_summary",
             "gate_scope": "schema_and_honesty_only",
             "single_case_strong_scaling_is_experimental": True,
+            "requires_operator_reuse_gate": True,
+            "requires_deterministic_output_gate_for_claim": True,
         },
         "memory_gate_semantics": {
             "status": "bounded_by_child_timeout_and_allocator_settings",
@@ -918,10 +968,25 @@ def main() -> None:
             per_device_warmup=int(args.warmup),
             inner_warmup_solves=int(args.inner_warmup_solves),
         ),
+        "operator_reuse_gate": _operator_reuse_gate(
+            timing_semantics=_timing_semantics(
+                global_warmup=int(args.global_warmup),
+                per_device_warmup=int(args.warmup),
+                inner_warmup_solves=int(args.inner_warmup_solves),
+            ),
+            global_warmup=int(args.global_warmup),
+            per_device_warmup=int(args.warmup),
+            inner_warmup_solves=int(args.inner_warmup_solves),
+            repeats=int(args.repeats),
+            nsolve=int(args.nsolve),
+            cache_dir=cache_dir,
+            repo_root=repo_root,
+        ),
         "global_warmup": int(args.global_warmup),
         "per_device_warmup": int(args.warmup),
         "repeats": int(args.repeats),
         "deterministic_output_check": False,
+        "deterministic_output_gate": _deterministic_output_gate(devices=devices),
     }
     if _normalized_backend(args.backend) == "gpu":
         payload["gpu_device_count"] = int(max(devices))

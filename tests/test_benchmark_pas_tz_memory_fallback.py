@@ -445,6 +445,55 @@ def test_run_child_gates_stalls_churn_backend_memory_and_residual(
     assert summarize_results([row])["all_gates_passed"] is False
 
 
+def test_result_gates_reject_dense_guarded_correction_without_streaming_evidence() -> None:
+    args = type(
+        "Args",
+        (),
+        {
+            "timeout_s": 9.0,
+            "stall_s": 9.0,
+            "max_rss_mb": 0.0,
+            "max_residual_norm": 1.0e-3,
+            "expected_backend": "auto",
+            "allow_solver_churn": False,
+            "solve_method": "incremental",
+            "require_default_promotion_gate": False,
+        },
+    )()
+    row = {
+        "status": "ok",
+        "elapsed_s": 1.0,
+        "max_rss_mb": 800.0,
+        "residual_norm": 1.0e-5,
+        "phase_metadata": [{"name": "solve", "status": "ok", "elapsed_s": 1.0}],
+        "guarded_pas_tz_seen": True,
+        "solver_provenance": {
+            "requested_solve_method": "incremental",
+            "realized_solve_method": "incremental",
+        },
+        "metadata": {"accepted_converged": True},
+    }
+
+    gates = result_gates(args, row, "collision-tzfft-correction")
+
+    assert gates["guarded_correction_memory"]["status"] == "fail"
+    assert gates["guarded_correction_memory"]["reason"] == "dense-guarded-correction-disallowed"
+
+    streamed_row = {
+        **row,
+        "metadata": {
+            "accepted_converged": True,
+            "pas_tz_guarded_correction_streamed": True,
+            "pas_tz_guarded_correction_full_update_materialized": False,
+        },
+    }
+
+    gates = result_gates(args, streamed_row, "collision-tzfft-correction")
+
+    assert gates["guarded_correction_memory"]["status"] == "pass"
+    assert gates["guarded_correction_memory"]["reason"] == "streamed-guarded-correction-evidence-recorded"
+
+
 def test_default_promotion_gate_requires_baseline_and_runtime_or_memory_win() -> None:
     args = type(
         "Args",

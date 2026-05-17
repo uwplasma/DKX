@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.transport_parallel_sharding import plan_compiled_sharded_operator_reuse
 from sfincs_jax.v3_driver import full_system_operator_from_namelist
 from sfincs_jax.v3_system import apply_v3_full_system_operator_cached
 
@@ -25,6 +26,27 @@ def _display_path(path: Path, *, repo_root: Path) -> str:
 def _normalize_device_counts(requested_devices: list[int]) -> list[int]:
     devices = sorted({int(d) for d in requested_devices if int(d) >= 1})
     return devices or [1]
+
+
+def _operator_reuse_gate(
+    *,
+    nrep: int,
+    repeats: int,
+    global_warmup: int,
+    cache_dir: Path | None,
+    repo_root: Path,
+) -> dict[str, object]:
+    return plan_compiled_sharded_operator_reuse(
+        benchmark_kind="sharded_matvec_scaling",
+        timing_semantics="compiled_matvec_hot_loop",
+        global_warmup_runs=int(global_warmup),
+        inner_warmup_runs=1,
+        timed_repeats=max(int(repeats), 1),
+        work_units_per_sample=max(int(nrep), 1),
+        compile_cache_dir=None if cache_dir is None else _display_path(cache_dir, repo_root=repo_root),
+        persistent_compile_cache=cache_dir is not None,
+        compile_in_timed_region=False,
+    ).to_dict()
 
 
 def _run_once(input_path: Path, *, nrep: int) -> float:
@@ -114,6 +136,13 @@ def _build_sharded_matvec_benchmark_plan(
     repo_root = Path(__file__).resolve().parents[2]
     normalized_devices = _normalize_device_counts(devices)
     input_display = _display_path(input_path, repo_root=repo_root)
+    operator_reuse_gate = _operator_reuse_gate(
+        nrep=int(nrep),
+        repeats=int(repeats),
+        global_warmup=int(global_warmup),
+        cache_dir=cache_dir,
+        repo_root=repo_root,
+    )
     device_plan = []
     for d in normalized_devices:
         device_plan.append(
@@ -149,6 +178,7 @@ def _build_sharded_matvec_benchmark_plan(
         "repeats": int(repeats),
         "global_warmup": int(global_warmup),
         "timing_semantics": "compiled_matvec_hot_loop",
+        "operator_reuse_gate": operator_reuse_gate,
         "device_plan": device_plan,
         "estimated_child_process_samples": int(max(global_warmup, 0))
         + len(normalized_devices) * max(int(repeats), 1),
@@ -156,6 +186,7 @@ def _build_sharded_matvec_benchmark_plan(
             "release_gate": False,
             "metric": "one_device_mean_s / device_mean_s",
             "matvec_microbenchmark_only": True,
+            "requires_operator_reuse_gate": True,
         },
         "memory_gate_semantics": {
             "status": "not_measured_in_plan",
@@ -357,6 +388,8 @@ def main() -> None:
             r["speedup"] = None
 
     payload = {
+        "artifact_kind": "benchmark_result",
+        "benchmark_kind": "sharded_matvec_scaling",
         "input": input_path.name,
         "axis": args.axis,
         "pad": bool(args.pad),
@@ -364,6 +397,16 @@ def main() -> None:
         "devices": devices,
         "results": results,
         "nrep": int(args.nrep),
+        "repeats": int(args.repeats),
+        "global_warmup": int(args.global_warmup),
+        "timing_semantics": "compiled_matvec_hot_loop",
+        "operator_reuse_gate": _operator_reuse_gate(
+            nrep=int(args.nrep),
+            repeats=int(args.repeats),
+            global_warmup=int(args.global_warmup),
+            cache_dir=cache_dir,
+            repo_root=repo_root,
+        ),
     }
 
     json_path = out_dir / "sharded_matvec_scaling.json"

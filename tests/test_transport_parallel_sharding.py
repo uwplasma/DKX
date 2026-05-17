@@ -4,6 +4,8 @@ import pytest
 
 from sfincs_jax.transport_parallel_sharding import (
     estimate_sharded_solve_amortization,
+    plan_compiled_sharded_operator_reuse,
+    plan_sharded_solve_deterministic_output_gate,
     plan_single_case_sharded_solve,
 )
 
@@ -86,6 +88,56 @@ def test_single_case_sharding_plan_claim_gating_fails_closed() -> None:
 def test_single_case_sharding_plan_rejects_invalid_counts() -> None:
     with pytest.raises(ValueError, match="requested_devices must be a positive integer"):
         plan_single_case_sharded_solve(requested_devices=0)
+
+
+def test_compiled_sharded_operator_reuse_gate_accepts_hot_inner_warmup() -> None:
+    gate = plan_compiled_sharded_operator_reuse(
+        benchmark_kind="single_case_sharded_solve",
+        timing_semantics="hot_solve",
+        inner_warmup_runs=1,
+        timed_repeats=2,
+        work_units_per_sample=4,
+        compile_cache_dir="examples/performance/output/cache",
+        persistent_compile_cache=True,
+    )
+
+    assert gate.passes is True
+    assert gate.warm_run_amortization_pass is True
+    assert gate.strategy == "inner_warmup"
+    assert gate.compile_in_timed_region is False
+    assert gate.failures == ()
+
+
+def test_compiled_sharded_operator_reuse_gate_fails_closed_without_cache() -> None:
+    gate = plan_compiled_sharded_operator_reuse(
+        benchmark_kind="single_case_sharded_solve",
+        timing_semantics="cache_warm",
+        global_warmup_runs=1,
+        timed_repeats=1,
+        compile_cache_dir=None,
+        persistent_compile_cache=False,
+    )
+
+    assert gate.passes is False
+    assert gate.strategy == "global_persistent_compile_cache"
+    assert any("persistent_compile_cache=true" in failure for failure in gate.failures)
+    assert any("compile_cache_dir" in failure for failure in gate.failures)
+
+
+def test_sharded_solve_deterministic_output_gate_schema_is_fail_closed() -> None:
+    missing = plan_sharded_solve_deterministic_output_gate(comparison_devices=2)
+    assert missing.passes is False
+    assert missing.status == "not_measured"
+    assert any("max_relative_residual_norm" in failure for failure in missing.failures)
+    assert any("output digest" in failure for failure in missing.failures)
+
+    measured = plan_sharded_solve_deterministic_output_gate(
+        comparison_devices=2,
+        max_relative_residual_norm=2.0e-12,
+        output_digest="abc123",
+    )
+    assert measured.passes is True
+    assert measured.status == "pass"
 
 
 def test_sharded_solve_amortization_rejects_communication_dominated_claim() -> None:

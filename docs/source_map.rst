@@ -200,7 +200,12 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   sparse exact-LU request policy, sparse-over-dense preference, and stage-2
   skip decisions for moderate RHSMode=1 full-FP systems.
 - ``sfincs_jax/rhs1_handoff.py``:
-  accepted-candidate handoff and Krylov replay-state updates.
+  accepted-candidate handoff and Krylov replay-state updates. This is the
+  source-mapped seam for the repeated RHSMode=1 driver pattern: compare a
+  rescue/refinement candidate against the incumbent residual, apply optional
+  measured solver-candidate gates, preserve the accepted residual vector, and
+  update the KSP replay metadata only after a strict finite residual
+  improvement.
 - ``sfincs_jax/rhs1_acceptance_policy.py``:
   large-PAS fast-accept gates and host x-block factor-probe safety checks.
 - ``sfincs_jax/rhs1_constraint0_policy.py``:

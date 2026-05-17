@@ -264,6 +264,16 @@ def test_audit_sharded_solve_scaling_summary_accepts_honest_experimental_payload
             "backend": "gpu",
             "gpu_device_count": 2,
             "timing_semantics": "hot_solve",
+            "operator_reuse_gate": {
+                "passes": True,
+                "timing_semantics": "hot_solve",
+                "timed_repeats": 1,
+                "min_timed_repeats": 1,
+                "compile_in_timed_region": False,
+                "warm_run_amortization_pass": True,
+                "persistent_compile_cache": True,
+                "compile_cache_dir": "examples/performance/output/cache",
+            },
             "deterministic_output_check": False,
             "devices": [1, 2],
             "results": [
@@ -276,8 +286,33 @@ def test_audit_sharded_solve_scaling_summary_accepts_honest_experimental_payload
     assert audit.ci_gate_pass
     assert not audit.release_scaling_claim
     assert audit.experimental_single_case_scaling
+    assert audit.operator_reuse_gate
+    assert not audit.deterministic_output_gate
     assert audit.claim_speedup == pytest.approx(1.25)
     assert any("not a release scaling claim" in note for note in audit.notes)
+
+
+def test_audit_sharded_solve_scaling_summary_requires_operator_reuse_gate() -> None:
+    audit = audit_sharded_solve_scaling_summary(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "scaling_status": "experimental_single_case_sharding",
+            "experimental_single_case_scaling": True,
+            "release_scaling_claim": False,
+            "backend": "gpu",
+            "gpu_device_count": 2,
+            "timing_semantics": "hot_solve",
+            "devices": [1, 2],
+            "results": [
+                {"devices": 1, "mean_s": 10.0, "speedup": 1.0},
+                {"devices": 2, "mean_s": 8.0, "speedup": 1.25},
+            ],
+        }
+    )
+
+    assert not audit.ci_gate_pass
+    assert not audit.operator_reuse_gate
+    assert any("operator-reuse gate metadata" in failure for failure in audit.failures)
 
 
 def test_audit_sharded_solve_scaling_summary_rejects_release_overclaim() -> None:

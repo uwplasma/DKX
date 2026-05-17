@@ -188,8 +188,16 @@ def test_sharded_solve_plan_records_hot_timing_timeout_and_non_release_gate(tmp_
     assert plan["launches_solves"] is False
     assert plan["devices"] == [1, 2]
     assert plan["timing_semantics"] == "hot_solve"
+    assert plan["operator_reuse_gate"]["passes"] is True
+    assert plan["operator_reuse_gate"]["strategy"] == "inner_warmup"
+    assert plan["operator_reuse_gate"]["persistent_compile_cache"] is True
+    assert plan["operator_reuse_gate"]["compile_in_timed_region"] is False
+    assert plan["deterministic_output_gate"]["passes"] is False
+    assert plan["deterministic_output_gate"]["status"] == "not_measured"
     assert plan["release_scaling_claim"] is False
     assert plan["speedup_gate_semantics"]["gate_scope"] == "schema_and_honesty_only"
+    assert plan["speedup_gate_semantics"]["requires_operator_reuse_gate"] is True
+    assert plan["speedup_gate_semantics"]["requires_deterministic_output_gate_for_claim"] is True
     assert plan["memory_gate_semantics"]["child_process_timeout_enabled"] is True
     assert plan["parallel_claim_scope"]["claim_scope"] == "single_case_sharded_solve_experimental"
     assert plan["parallel_claim_scope"]["claim_scope_release_eligible"] is True
@@ -249,5 +257,8 @@ def test_sharded_matvec_plan_records_compiled_hot_loop_and_padding(tmp_path: Pat
     assert plan["benchmark_kind"] == "sharded_matvec_scaling"
     assert plan["devices"] == [1, 2]
     assert plan["timing_semantics"] == "compiled_matvec_hot_loop"
+    assert plan["operator_reuse_gate"]["passes"] is True
+    assert plan["operator_reuse_gate"]["strategy"] == "inner_warmup"
+    assert plan["operator_reuse_gate"]["work_units_per_sample"] == 20
     assert plan["memory_gate_semantics"]["padding_enabled"] is True
     assert plan["estimated_child_process_samples"] == 5
