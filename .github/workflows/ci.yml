@@ -73,6 +73,7 @@ jobs:
           name: coverage-${{ matrix.group }}
           path: .coverage.${{ matrix.group }}
           if-no-files-found: error
+          include-hidden-files: true
 
   coverage-report:
     runs-on: ubuntu-22.04

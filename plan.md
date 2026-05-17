@@ -12362,6 +12362,10 @@ Validation:
   is now split into three parallel coverage shards plus a combine/report job
   that preserves the same `43%` fail-under threshold and Codecov upload without
   duplicating the entire suite in one runner.
+- Sharded-coverage CI repair: the first sharded coverage trial proved shard 2
+  itself passed (`537 passed, 18 skipped in 95 s`) but failed at artifact upload
+  because Actions excludes hidden files by default. The workflow now explicitly
+  allows uploading `.coverage.<group>` files.
 - Keep true device-QI and production-resolution QI ladders as deferred research
   lanes unless new residual-clean GPU artifacts replace the current negative
   evidence.
