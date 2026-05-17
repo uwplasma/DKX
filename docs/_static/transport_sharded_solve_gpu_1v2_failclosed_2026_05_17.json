@@ -1,0 +1,157 @@
+{
+  "benchmark_kind": "single_case_sharded_solve",
+  "scaling_status": "experimental_single_case_sharding",
+  "experimental_single_case_scaling": true,
+  "release_scaling_claim": false,
+  "input": "rhsmode1_sharded_scaling.input.namelist",
+  "case": "rhsmode1_sharded_scaling",
+  "task_count": 1,
+  "devices": [
+    1,
+    2
+  ],
+  "results": [
+    {
+      "devices": 1,
+      "mean_s": 4.046628,
+      "std_s": 0.0,
+      "samples": [
+        4.046628
+      ],
+      "speedup": 1.0
+    },
+    {
+      "devices": 2,
+      "mean_s": 300.0,
+      "std_s": 0.0,
+      "samples": [],
+      "timed_out": true,
+      "sample_failures": [
+        "repeat 1/1 failed: RuntimeError: Timed out after 300.0s while benchmarking devices=2; increase --sample-timeout-s or use a smaller case."
+      ],
+      "failed_samples": [
+        {
+          "repeat": 1,
+          "failure": "repeat 1/1 failed: RuntimeError: Timed out after 300.0s while benchmarking devices=2; increase --sample-timeout-s or use a smaller case.",
+          "timeout_s": 300.0
+        }
+      ],
+      "speedup": 0.01348876
+    }
+  ],
+  "shard_axis": "theta",
+  "gmres_distributed": "1",
+  "distributed_krylov": "auto",
+  "periodic_stencil_on_sharded": "auto",
+  "nsolve": 1,
+  "inner_warmup_solves": 1,
+  "sample_timeout_s": 300.0,
+  "rhs1_precond": "theta_schwarz",
+  "backend": "gpu",
+  "schwarz_coarse_levels": 2,
+  "schwarz_coarse_steps": null,
+  "schwarz_coarse_damp": null,
+  "timing_semantics": "hot_solve",
+  "operator_reuse_gate": {
+    "benchmark_kind": "single_case_sharded_solve",
+    "timing_semantics": "hot_solve",
+    "strategy": "inner_warmup",
+    "persistent_compile_cache": true,
+    "compile_cache_dir": "examples/performance/output/sharded_solve_scaling/jax_cache",
+    "cache_required": false,
+    "global_warmup_runs": 0,
+    "per_device_warmup_runs": 0,
+    "inner_warmup_runs": 1,
+    "timed_repeats": 1,
+    "min_timed_repeats": 1,
+    "work_units_per_sample": 1,
+    "compile_in_timed_region": false,
+    "passes": true,
+    "warm_run_amortization_pass": true,
+    "failures": [],
+    "notes": [
+      "one work unit per timed sample; speedup evidence is sensitive to launch overhead",
+      "timed samples reuse operators via inner_warmup"
+    ]
+  },
+  "global_warmup": 0,
+  "per_device_warmup": 0,
+  "repeats": 1,
+  "deterministic_output_check": false,
+  "deterministic_output_probe_requested": true,
+  "deterministic_output_tolerance": 1e-10,
+  "deterministic_output_dir": "/tmp/sfincs_jax_sharded_gpu_1v2_20260517_failclosed/deterministic_output_probe",
+  "deterministic_output_gate": {
+    "schema_version": 1,
+    "status": "probe_failed",
+    "passes": false,
+    "baseline_devices": 1,
+    "comparison_devices": 2,
+    "residual_tolerance": 1e-10,
+    "max_relative_residual_norm": null,
+    "output_digest_algorithm": "sha256",
+    "output_digest": null,
+    "failures": [
+      "max_relative_residual_norm was not measured",
+      "output digest was not recorded",
+      "deterministic output probe skipped because timed samples failed: devices=2: repeat 1/1 failed: RuntimeError: Timed out after 300.0s while benchmarking devices=2; increase --sample-timeout-s or use a smaller case."
+    ],
+    "notes": [
+      "deterministic output parity must be measured before a scaling claim"
+    ],
+    "baseline_output_digest": null,
+    "comparison_output_digest": null,
+    "output_digest_match": null,
+    "evidence_source": "skipped_after_timing_failure"
+  },
+  "gpu_device_count": 2,
+  "visible_gpu_ids": [
+    "0",
+    "1"
+  ],
+  "sharded_solve_audit": {
+    "backend": "gpu",
+    "device_counts": [
+      1,
+      2
+    ],
+    "baseline_s": 4.046628,
+    "claim_devices": 2,
+    "claim_speedup": 0.01348876,
+    "claim_efficiency": 0.00674438,
+    "release_scaling_claim": false,
+    "experimental_single_case_scaling": true,
+    "ci_gate_pass": false,
+    "failures": [
+      "devices=2 recorded failed/timed-out sharded-solve samples",
+      "requested deterministic output probe did not pass"
+    ],
+    "notes": [
+      "deterministic output parity was not recorded for this timing-only sharded benchmark",
+      "one work unit per timed sample; speedup evidence is sensitive to launch overhead",
+      "timed samples reuse operators via inner_warmup",
+      "max_relative_residual_norm was not measured",
+      "output digest was not recorded",
+      "deterministic output probe skipped because timed samples failed: devices=2: repeat 1/1 failed: RuntimeError: Timed out after 300.0s while benchmarking devices=2; increase --sample-timeout-s or use a smaller case.",
+      "deterministic residual/output parity is not proven",
+      "deterministic output parity must be measured before a scaling claim",
+      "deterministic output evidence_source=skipped_after_timing_failure",
+      "single-case sharded solve remains experimental and is not a release scaling claim",
+      "release promotion blocked: single-case sharded solve is experimental and not independent transport throughput; artifact records release_scaling_claim=false; devices=2 recorded failed/timed-out sharded-solve samples; deterministic residual/output parity was not proven; requested deterministic output probe did not pass; deterministic residual/output gate did not pass"
+    ],
+    "benchmark_kind": "single_case_sharded_solve",
+    "timing_semantics": "hot_solve",
+    "deterministic_output_check": false,
+    "operator_reuse_gate": true,
+    "deterministic_output_gate": false,
+    "release_promotion_supported": false,
+    "release_promotion_blockers": [
+      "single-case sharded solve is experimental and not independent transport throughput",
+      "artifact records release_scaling_claim=false",
+      "devices=2 recorded failed/timed-out sharded-solve samples",
+      "deterministic residual/output parity was not proven",
+      "requested deterministic output probe did not pass",
+      "deterministic residual/output gate did not pass"
+    ]
+  }
+}
