@@ -161,7 +161,22 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   standalone JAX-compatible QI block-Schur/angular/radial coarse-preconditioner
   primitive. It builds deterministic global, radial, angular, and block-Schur
   basis directions, applies a local-plus-coarse action, and exposes a
-  fail-closed true-residual probe for future device-QI driver integration.
+  fail-closed true-residual probe for future device-QI expansion.
+- ``sfincs_jax/rhs1_qi_deflation.py``:
+  residual-deflated, device-compatible QI preconditioner primitive. It builds a
+  bounded preconditioned-residual Krylov basis, optionally merges
+  physics-informed block-Schur directions, applies a local-plus-deflated
+  least-squares action, and fail-closes on true-residual probes. It also
+  provides the seed-only cycle-minres helper used by QI hard-seed evidence:
+  repeated fixed-basis residual corrections are combined by a small
+  ``min ||A Z c - r||`` solve before Krylov starts. The production driver
+  exposes it through the opt-in
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER`` hook.
+- ``sfincs_jax/rhs1_qi_promotion.py``:
+  pure promotion gates for QI hard-seed and production-ladder evidence. It
+  requires complete seed/backend coverage, convergence, output and trace
+  provenance, residual/observable bounds, and no host fallback before a true
+  device-QI claim can be promoted.
 - ``sfincs_jax/rhs1_preconditioner_dispatch.py``:
   shared RHSMode=1 preconditioner-kind dispatch.
 - ``sfincs_jax/rhs1_preconditioner_auto_policy.py``:
@@ -249,7 +264,8 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   fallback.
 - ``sfincs_jax/transport_parallel_sharding.py``:
   pure single-case sharded-solve planning metadata. It caps requested device
-  counts, records per-device workload balance, marks single-case sharding as
+  counts, records per-device workload balance, estimates whether setup and
+  Krylov communication can be amortized, marks single-case sharding as
   experimental/non-release by default, and prevents malformed sharded payloads
   from becoming release scaling claims.
 - ``sfincs_jax/validation_artifacts.py``:
