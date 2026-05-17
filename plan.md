@@ -766,6 +766,15 @@ Current active lane (2026-05-15, post-v1.1.3 research-lane closure pass):
   remain unchanged: geometry4, HSX, and geometry11 artifacts must be
   residual-clean and improve either warm runtime by at least 20% or active/RSS
   memory by at least 25% on both CPU and GPU where available.
+- [x] 2026-05-17 PAS streamed-update gate follow-up: added an opt-in streamed
+  update mode to the bounded RHSMode=1 PAS matrix-free probe and recorded
+  `docs/_static/rhs1_pas_streamed_update_gate_2026_05_17.json`. The bounded
+  geometry4/HSX/geometry11-style metadata probes all passed with
+  `stream_update_chunks=true` and `full_update_materialized=false`, but no
+  production real-solve promotion was attempted: checked production artifacts
+  still lack promotion-ready evidence, and the production PAS-TZ guarded
+  correction path is explicitly blocked because its minres correction requires
+  full residual/direction work arrays rather than a chunked PAS-TZ callback.
 - [x] Code audit result for single-case multi-GPU strong scaling:
   `examples/performance/benchmark_sharded_solve_scaling.py`,
   `examples/performance/benchmark_sharded_matvec_scaling.py`,
@@ -12386,6 +12395,12 @@ Implementation:
   device-local `S_local` prototype for the true device-QI architecture, with
   fail-closed diagonal validation and JIT-safe application. This does not
   promote true device-QI until scale-0.60 CPU/GPU hard-seed artifacts pass.
+- QI/device smoother follow-up: the standalone smoother now has an opt-in
+  residual-minimizing step policy and a true-residual seed probe. On the focused
+  synthetic device-CSR gate, fixed Jacobi worsens the residual norm `1.0 -> 2.0`;
+  the residual-minimizing seed reduces it to `0.8944` and fails closed when a
+  stricter 20% material-improvement gate is requested. This remains
+  infrastructure only until the scale-0.60 CPU/GPU hard-seed lane accepts it.
 - PAS/runtime-memory lane: added opt-in streamed update chunks to
   `rhs1_pas_matrixfree.py`, including update-chunk byte budgets and metadata
   proving that dense guarded-correction updates were not materialized. The PAS

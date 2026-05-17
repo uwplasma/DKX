@@ -158,6 +158,10 @@ class ShardedSolveDeterministicOutputGate:
     output_digest: str | None
     failures: tuple[str, ...]
     notes: tuple[str, ...]
+    baseline_output_digest: str | None = None
+    comparison_output_digest: str | None = None
+    output_digest_match: bool | None = None
+    evidence_source: str = "not_measured"
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable gate dictionary."""
@@ -620,7 +624,10 @@ def plan_sharded_solve_deterministic_output_gate(
     residual_tolerance: float = 1.0e-10,
     max_relative_residual_norm: float | None = None,
     output_digest: str | None = None,
+    baseline_output_digest: str | None = None,
+    comparison_output_digest: str | None = None,
     output_digest_algorithm: str = "sha256",
+    evidence_source: str = "not_measured",
 ) -> ShardedSolveDeterministicOutputGate:
     """Build a deterministic residual/output parity gate for sharded solve artifacts."""
 
@@ -635,7 +642,27 @@ def plan_sharded_solve_deterministic_output_gate(
         observed = float(max_relative_residual_norm)
 
     digest = None if output_digest is None else str(output_digest).strip() or None
+    baseline_digest = (
+        None
+        if baseline_output_digest is None
+        else str(baseline_output_digest).strip() or None
+    )
+    comparison_digest = (
+        None
+        if comparison_output_digest is None
+        else str(comparison_output_digest).strip() or None
+    )
+    if digest is None and comparison_digest is not None:
+        digest = comparison_digest
+    elif digest is None and baseline_digest is not None:
+        digest = baseline_digest
     digest_algorithm = str(output_digest_algorithm).strip().lower() or "sha256"
+    source = _normalized_token(evidence_source or "not_measured")
+    digest_match = (
+        baseline_digest == comparison_digest
+        if baseline_digest is not None and comparison_digest is not None
+        else None
+    )
     failures: list[str] = []
     notes: list[str] = []
     if comparison < 2:
@@ -646,14 +673,23 @@ def plan_sharded_solve_deterministic_output_gate(
         failures.append(
             f"max_relative_residual_norm {observed!r} exceeds tolerance {tolerance:g}"
         )
-    if digest is None:
+    if baseline_digest is None and comparison_digest is None and digest is None:
         failures.append("output digest was not recorded")
+    if baseline_digest is not None or comparison_digest is not None:
+        if baseline_digest is None:
+            failures.append("baseline output digest was not recorded")
+        if comparison_digest is None:
+            failures.append("comparison output digest was not recorded")
+        if digest_match is False:
+            notes.append("baseline/comparison output digests differ; residual gate decides parity")
     if baseline == comparison:
         notes.append("baseline and comparison device counts are identical")
 
     status = "pass" if not failures else "not_measured" if observed is None and digest is None else "fail"
     if status == "not_measured":
         notes.append("deterministic output parity must be measured before a scaling claim")
+    if source == "not_measured" and status == "pass":
+        source = "measured"
 
     return ShardedSolveDeterministicOutputGate(
         schema_version=1,
@@ -667,6 +703,10 @@ def plan_sharded_solve_deterministic_output_gate(
         output_digest=digest,
         failures=tuple(failures),
         notes=tuple(notes),
+        baseline_output_digest=baseline_digest,
+        comparison_output_digest=comparison_digest,
+        output_digest_match=digest_match,
+        evidence_source=source,
     )
 
 

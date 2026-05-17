@@ -37,6 +37,7 @@ def test_variant_env_supports_collision_tzfft_correction() -> None:
 
     assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK"] == "collision"
     assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION"] == "tzfft"
+    assert env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STREAM_UPDATE"] == "1"
 
 
 def test_variant_env_supports_structured_tzfft_correction() -> None:
@@ -478,6 +479,29 @@ def test_result_gates_reject_dense_guarded_correction_without_streaming_evidence
 
     assert gates["guarded_correction_memory"]["status"] == "fail"
     assert gates["guarded_correction_memory"]["reason"] == "dense-guarded-correction-disallowed"
+    assert gates["guarded_correction_memory"]["diagnostics"]["full_update_materialized"] is False
+
+    blocked_row = {
+        **row,
+        "metadata": {
+            "accepted_converged": True,
+            "pas_tz_guarded_correction_stream_requested": True,
+            "pas_tz_guarded_correction_streamed": False,
+            "pas_tz_guarded_correction_full_update_materialized": True,
+            "pas_tz_guarded_correction_stream_blocker": (
+                "production-pas-tz-minres-correction-requires-full-residual-direction"
+            ),
+        },
+    }
+
+    gates = result_gates(args, blocked_row, "collision-tzfft-correction")
+
+    assert gates["guarded_correction_memory"]["status"] == "fail"
+    assert gates["guarded_correction_memory"]["diagnostics"]["stream_requested"] is True
+    assert gates["guarded_correction_memory"]["diagnostics"]["full_update_materialized"] is True
+    assert gates["guarded_correction_memory"]["diagnostics"]["blockers"] == [
+        "metadata:production-pas-tz-minres-correction-requires-full-residual-direction"
+    ]
 
     streamed_row = {
         **row,

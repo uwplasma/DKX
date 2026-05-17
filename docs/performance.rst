@@ -287,7 +287,10 @@ The executable gate for this decision is:
 
 This benchmark is intentionally optional. It always runs the current in-tree
 ``jax.lax.custom_linear_solve`` path, and it records ``lineax`` as skipped when the
-library is not installed. A future Lineax-backed implementation should only be promoted
+library is not installed. Its summary JSON now also counts
+``residual_clean_status_mismatch_rows`` so a Lineax solve that has a tiny residual but
+a non-success solver result remains a blocker instead of being promoted by residuals
+alone. A future Lineax-backed implementation should only be promoted
 after all three gates below stay healthy:
 
 - a synthetic deterministic nonsymmetric stress system,

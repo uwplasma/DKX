@@ -133,6 +133,54 @@ def test_lineax_summary_logic_records_missing_dependency_decision() -> None:
     assert summary["adoption_decision"]["hard_dependency"] is False
 
 
+def test_lineax_summary_fail_closed_on_residual_clean_real_status_mismatch() -> None:
+    mod = _load_module()
+    results = [
+        mod.GateResult(
+            case="sfincs_tiny_implicit",
+            backend="current_custom_linear_solve",
+            status="ok",
+            size=303,
+            n_rhs=1,
+            residual_norm=1.4e-14,
+            relative_residual=1.4e-14,
+            max_solution_error=None,
+            objective=8.0e-6,
+            grad=0.0,
+            finite_difference_grad=0.0,
+            grad_abs_error=0.0,
+            elapsed_s=4.0,
+            error=None,
+        ),
+        mod.GateResult(
+            case="sfincs_tiny_implicit",
+            backend="lineax_gmres",
+            status="error",
+            size=303,
+            n_rhs=1,
+            residual_norm=3.2e-16,
+            relative_residual=3.2e-16,
+            max_solution_error=None,
+            objective=8.0e-6,
+            grad=0.0,
+            finite_difference_grad=0.0,
+            grad_abs_error=0.0,
+            elapsed_s=0.8,
+            error="Lineax solve result: maximum number of solver steps was reached",
+        ),
+    ]
+    summary = mod.summarize_gate_results(results)
+    assert summary["lineax_evidence"]["error_rows"] == 1
+    assert summary["lineax_evidence"]["residual_clean_status_mismatch_rows"] == 1
+    assert summary["lineax_evidence"]["sfincs_residual_clean_status_mismatch_cases"] == [
+        "sfincs_tiny_implicit"
+    ]
+    assert summary["lineax_evidence"]["sfincs_rows_ready"] is False
+    assert summary["adoption_decision"]["lineax"] == "do_not_promote_lineax_status_mismatch"
+    assert summary["adoption_decision"]["production_default"] == "keep_current_custom_linear_solve"
+    assert summary["adoption_decision"]["hard_dependency"] is False
+
+
 def test_load_tiny_sfincs_fixture_returns_scheme5_operator_and_reference_state() -> None:
     mod = _load_module()
     op0, x_ref, nu0 = mod.load_tiny_sfincs_fixture(str(mod._default_sfincs_input()))

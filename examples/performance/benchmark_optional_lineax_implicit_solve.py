@@ -29,6 +29,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
 import json
+import math
 from pathlib import Path
 import sys
 import time
@@ -81,6 +82,30 @@ def _safe_ratio(candidate: float | None, baseline: float | None) -> float | None
     return float(candidate) / float(baseline)
 
 
+def _finite_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        candidate = float(value)
+    except (TypeError, ValueError):
+        return None
+    return candidate if math.isfinite(candidate) else None
+
+
+def _lineax_numeric_gate_passed(row: dict[str, Any]) -> bool:
+    """Return True for rows that are numerically clean despite solver status."""
+    relative_residual = _finite_float(row.get("relative_residual"))
+    if relative_residual is None or relative_residual >= 1.0e-8:
+        return False
+    grad_abs_error = _finite_float(row.get("grad_abs_error"))
+    if grad_abs_error is not None and grad_abs_error >= 1.0e-4:
+        return False
+    max_solution_error = _finite_float(row.get("max_solution_error"))
+    if max_solution_error is not None and max_solution_error >= 1.0e-6:
+        return False
+    return True
+
+
 def summarize_gate_results(results: list[GateResult]) -> dict[str, Any]:
     """Summarize measured Lineax evidence into a bounded adoption decision."""
     rows = [result.to_json_dict() for result in results]
@@ -115,6 +140,12 @@ def summarize_gate_results(results: list[GateResult]) -> dict[str, Any]:
     lineax_ok = [row for row in lineax_rows if row["status"] == "ok"]
     lineax_errors = [row for row in lineax_rows if row["status"] == "error"]
     lineax_skipped = [row for row in lineax_rows if row["status"] == "skipped"]
+    lineax_status_mismatches = [
+        row for row in lineax_errors if _lineax_numeric_gate_passed(row)
+    ]
+    sfincs_lineax_status_mismatches = [
+        row for row in lineax_status_mismatches if str(row["case"]).startswith("sfincs_")
+    ]
     sfincs_lineax_rows = [row for row in lineax_rows if str(row["case"]).startswith("sfincs_")]
     sfincs_lineax_ready = bool(sfincs_lineax_rows) and all(
         row["status"] == "ok"
@@ -130,7 +161,13 @@ def summarize_gate_results(results: list[GateResult]) -> dict[str, Any]:
         and float(row["elapsed_ratio_lineax_over_current"]) < 0.9
     ]
 
-    if lineax_errors:
+    if sfincs_lineax_status_mismatches:
+        decision = "do_not_promote_lineax_status_mismatch"
+        reason = (
+            "Lineax residuals were numerically clean on real SFINCS rows, "
+            "but solver result statuses were not successful."
+        )
+    elif lineax_errors:
         decision = "do_not_promote_error_status"
         reason = "At least one Lineax row returned an error status."
     elif lineax_skipped and not lineax_ok:
@@ -158,6 +195,10 @@ def summarize_gate_results(results: list[GateResult]) -> dict[str, Any]:
             "ok_rows": len(lineax_ok),
             "skipped_rows": len(lineax_skipped),
             "error_rows": len(lineax_errors),
+            "residual_clean_status_mismatch_rows": len(lineax_status_mismatches),
+            "sfincs_residual_clean_status_mismatch_cases": [
+                str(row["case"]) for row in sfincs_lineax_status_mismatches
+            ],
             "sfincs_rows_ready": sfincs_lineax_ready,
             "speedup_cases": [row["case"] for row in speedup_cases],
         },

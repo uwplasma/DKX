@@ -30,6 +30,21 @@ def _ratio_token(payload: dict[str, object], backend: str, key: str, digits: int
     return f"{float(ratio_summary['median']):.{digits}f}x"
 
 
+def _readme_benchmark_table_rows() -> list[str]:
+    readme = (REPO_ROOT / "README.md").read_text().splitlines()
+    try:
+        start = readme.index("Full per-case runtime / memory table:")
+    except ValueError as exc:  # pragma: no cover - assertion gives clearer failure
+        raise AssertionError("README is missing the benchmark table heading") from exc
+    rows: list[str] = []
+    for line in readme[start + 1 :]:
+        if rows and not line:
+            break
+        if line.startswith("| `"):
+            rows.append(line)
+    return rows
+
+
 def test_benchmark_doc_ratio_claims_match_checked_summary() -> None:
     payload = _summary()
     cpu_cold = _ratio_token(payload, "cpu", "cold_runtime_ratio_summary", 3)
@@ -83,3 +98,33 @@ def test_benchmark_artifacts_and_references_are_release_scoped() -> None:
         assert "plotted production-scale case" not in text
         assert "audited reduced example suite" not in text
         assert "production-resolution benchmark tier is now being used for public runtime/memory claims" not in text
+
+
+def test_readme_suite_counts_and_filtered_table_scope_match_summary() -> None:
+    payload = _summary()
+    metadata = payload["metadata"]
+    assert isinstance(metadata, dict)
+    source_counts = metadata["source_case_counts"]
+    reported_counts = metadata["reported_case_counts"]
+    assert isinstance(source_counts, dict)
+    assert isinstance(reported_counts, dict)
+
+    readme = (REPO_ROOT / "README.md").read_text()
+    for label, backend in (
+        ("Practical status counts", "cpu"),
+        ("Strict status counts", "cpu"),
+        ("GPU practical status counts", "gpu"),
+        ("GPU strict status counts", "gpu"),
+    ):
+        expected_source_count = int(source_counts[backend])
+        assert f"- {label}: `parity_ok={expected_source_count}`" in readme
+
+    rows = _readme_benchmark_table_rows()
+    assert len(rows) == int(reported_counts["cpu"]) == int(reported_counts["gpu"])
+
+    excluded_cases = metadata["excluded_low_fortran_runtime_cases"]
+    assert isinstance(excluded_cases, list)
+    excluded_case_names = {str(row["case"]) for row in excluded_cases if isinstance(row, dict)}
+    table_case_names = {line.split("`", maxsplit=2)[1] for line in rows}
+    assert table_case_names.isdisjoint(excluded_case_names)
+    assert "README-facing runtime/memory rows are restricted" in readme

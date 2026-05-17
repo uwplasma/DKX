@@ -28,7 +28,9 @@ The status JSON also contains ``no_solve_provenance_gate``.  This gate is a
 machine-readable assertion that the workflow is still a proxy-gradient lane:
 ``kinetic_solve_executed`` is false, the differentiated object is the
 Boozer-spectrum transport-like scalar, and full VMEC-boundary-to-SFINCS kinetic
-gradients remain deferred.
+gradients remain deferred.  Both workflow examples use the same shared
+``sfincs_jax.jax_geometry_adapters`` gate, so the skip-safe status path and the
+file-backed proxy-gradient summary enforce the same scalar-contract boundary.
 
 The same payload now also carries ``kinetic_transport_scalar_contract`` and a
 copy of its gate in
@@ -184,7 +186,7 @@ without changing their row-list JSON outputs:
 
    python examples/performance/benchmark_optional_lineax_implicit_solve.py \
      --backend all \
-     --suite synthetic \
+     --suite all \
      --out-json lineax-rows.json \
      --summary-json lineax-summary.json
 

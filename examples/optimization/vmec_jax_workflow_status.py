@@ -23,6 +23,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
     boozer_spectrum_proxy_transport_gradient_gate,
+    geometry_proxy_no_solve_provenance_gate,
     geometry_proxy_workflow_summary,
     optional_jax_geometry_backend_report,
 )
@@ -62,44 +63,6 @@ def _synthetic_backend_readiness_gate() -> dict[str, Any]:
     return boozer_spectrum_proxy_transport_gradient_gate()
 
 
-def _no_solve_provenance_gate(summary: dict[str, Any]) -> dict[str, Any]:
-    """Record that the status scaffold is a no-solve proxy/provenance gate."""
-    no_overclaim = dict(summary.get("no_overclaim_gate") or {})
-    gradient_gate = dict(summary.get("numerical_gradient_gate") or {})
-    kinetic_contract = dict(summary.get("kinetic_transport_scalar_contract") or {})
-    kinetic_contract_gate = dict(kinetic_contract.get("no_overclaim_gate") or {})
-    current_scalar = dict(kinetic_contract.get("current_public_scalar") or {})
-    required_kinetic_stages = [
-        str(stage.get("name"))
-        for stage in list(kinetic_contract.get("required_stages") or [])
-    ]
-    proxy_status = str(gradient_gate.get("status", "not_run"))
-    passed = (
-        no_overclaim.get("full_transport_gradients_claimed") is False
-        and proxy_status in {"pass", "not_run"}
-        and kinetic_contract_gate.get("status") == "pass"
-    )
-    return {
-        "status": "pass" if passed else "fail",
-        "claim_scope": "no_solve_boozer_spectrum_proxy_gradient",
-        "kinetic_solve_executed": False,
-        "requires_file_provenance": False,
-        "proxy_gradient_gate_status": proxy_status,
-        "full_vmec_boundary_to_sfincs_kinetic_gradients": "deferred_not_covered_by_this_lane",
-        "kinetic_transport_scalar_contract_gate": kinetic_contract_gate,
-        "required_kinetic_transport_scalar_stages": required_kinetic_stages,
-        "differentiability_boundary": {
-            "differentiated_stage_names": list(current_scalar.get("differentiated_stage_names") or []),
-            "setup_only_stage_names": list(current_scalar.get("setup_only_stage_names") or []),
-            "not_covered_stage_names": list(current_scalar.get("not_covered_stage_names") or []),
-        },
-        "proxy_vs_kinetic": {
-            "proxy": "differentiated Boozer-spectrum transport-like scalar",
-            "kinetic": "not run and not differentiated by this status scaffold",
-        },
-    }
-
-
 def build_status(
     *,
     wout: Path | None = None,
@@ -117,7 +80,7 @@ def build_status(
         "optional_backends": dict(report["backends"]),
         "default_ci_requires_optional_backends": False,
         "backend_readiness_gate": _synthetic_backend_readiness_gate(),
-        "no_solve_provenance_gate": _no_solve_provenance_gate(summary),
+        "no_solve_provenance_gate": geometry_proxy_no_solve_provenance_gate(summary),
         "differentiability_contract": {
             "differentiated_graph": list(summary["workflow_contract"]["differentiated_graph"]),
             "outside_differentiated_graph": list(summary["workflow_contract"]["outside_differentiated_graph"]),

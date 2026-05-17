@@ -2,7 +2,7 @@
 
 Examples that focus on JIT/vectorization performance:
 - `benchmark_jit_matvec.py` — benchmark a JIT-compiled matvec.
-- `benchmark_sharded_solve_scaling.py` — benchmark single-case CPU/GPU sharded RHSMode=1 solves. For current hot-solve scaling checks, use `--inner-warmup-solves 1 --sample-timeout-s 300 --rhs1-precond theta_schwarz --schwarz-coarse-levels 2`.
+- `benchmark_sharded_solve_scaling.py` — benchmark single-case CPU/GPU sharded RHSMode=1 solves. For current hot-solve scaling checks, use `--inner-warmup-solves 1 --sample-timeout-s 300 --rhs1-precond theta_schwarz --schwarz-coarse-levels 2`; add `--deterministic-output-probe` to record a bounded 1-vs-N residual/digest gate.
 - `benchmark_multi_gpu_case_throughput.py` — benchmark the production GPU-throughput lane: one GPU per case, comparing sequential 1-GPU execution against two concurrent 1-GPU runs on a 2-GPU node.
 - `benchmark_transport_parallel_scaling.py` — benchmark transport-worker scaling on CPU or GPU (`--backend cpu|gpu`). The current publication-grade multi-GPU result uses `--backend gpu` on `transport_parallel_2min.input.namelist`.
 - `benchmark_transport_l11_vs_fortran.py` — reproduce the 2x2 L11 parity/runtime figure used in the README/docs.

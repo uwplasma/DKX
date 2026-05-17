@@ -55,6 +55,8 @@ class ShardedSolveScalingAudit:
     deterministic_output_check: bool = False
     operator_reuse_gate: bool = False
     deterministic_output_gate: bool = False
+    release_promotion_supported: bool = False
+    release_promotion_blockers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -488,8 +490,19 @@ def _sharded_deterministic_output_gate(
                         f"({observed!r} > {threshold:g})"
                     )
         output_digest = raw.get("output_digest")
-        if output_digest is None or not str(output_digest).strip():
+        baseline_digest = raw.get("baseline_output_digest")
+        comparison_digest = raw.get("comparison_output_digest")
+        has_output_digest = output_digest is not None and bool(str(output_digest).strip())
+        has_baseline_digest = baseline_digest is not None and bool(str(baseline_digest).strip())
+        has_comparison_digest = comparison_digest is not None and bool(str(comparison_digest).strip())
+        if not has_output_digest and not (has_baseline_digest and has_comparison_digest):
             failures.append("deterministic_output_gate.passes=true requires output_digest")
+        if has_baseline_digest != has_comparison_digest:
+            failures.append(
+                "deterministic_output_gate.passes=true requires both baseline and comparison digests"
+            )
+        if has_output_digest and has_comparison_digest and str(output_digest).strip() != str(comparison_digest).strip():
+            failures.append("deterministic_output_gate.output_digest must match comparison_output_digest")
     else:
         raw_failures = raw.get("failures")
         if raw_failures is not None:
@@ -505,6 +518,9 @@ def _sharded_deterministic_output_gate(
             notes.extend(str(note) for note in raw_notes)  # type: ignore[arg-type]
         except TypeError as exc:
             raise ValueError("deterministic_output_gate.notes must be an iterable") from exc
+    evidence_source = raw.get("evidence_source")
+    if evidence_source is not None:
+        notes.append(f"deterministic output evidence_source={evidence_source}")
 
     return passes and not failures, tuple(failures), tuple(notes)
 
@@ -1065,6 +1081,13 @@ def audit_sharded_solve_scaling_summary(
     legacy_deterministic_output_check = bool(
         _optional_bool(summary.get("deterministic_output_check"), name="deterministic_output_check") or False
     )
+    deterministic_output_probe_requested = bool(
+        _optional_bool(
+            summary.get("deterministic_output_probe_requested"),
+            name="deterministic_output_probe_requested",
+        )
+        or False
+    )
     requested_release = bool(_optional_bool(summary.get("release_scaling_claim"), name="release_scaling_claim") or False)
 
     raw_results = summary.get("results")
@@ -1115,34 +1138,68 @@ def audit_sharded_solve_scaling_summary(
 
     failures: list[str] = []
     notes: list[str] = []
+    release_promotion_blockers: list[str] = [
+        "single-case sharded solve is experimental and not independent transport throughput"
+    ]
     if claim_devices < min_parallel_devices_value:
         failures.append(f"only {claim_devices} device count audited; need at least {min_parallel_devices_value}")
+        release_promotion_blockers.append(
+            f"only {claim_devices} device count audited; need at least {min_parallel_devices_value}"
+        )
     if requested_release:
         failures.append("single-case sharded-solve summaries must not set release_scaling_claim=true")
+        release_promotion_blockers.append("artifact requested release_scaling_claim=true")
+    else:
+        release_promotion_blockers.append("artifact records release_scaling_claim=false")
     if not experimental_single_case_scaling:
         failures.append("single-case sharded-solve summary must be marked experimental/non-release")
+        release_promotion_blockers.append("artifact is not marked experimental/non-release")
     if timing_semantics is None:
         failures.append("timing semantics were not recorded")
+        release_promotion_blockers.append("timing semantics were not recorded")
     elif timing_semantics in {"cold", "cold_start", "cold_cache"}:
         notes.append(f"timing semantics {timing_semantics!r} include cold setup")
+        release_promotion_blockers.append(
+            f"timing semantics {timing_semantics!r} include cold setup"
+        )
     if operator_gate_recorded:
         failures.extend(operator_failures)
+        if not operator_gate_ok:
+            release_promotion_blockers.append("compiled sharded operator-reuse gate did not pass")
     else:
         failures.append("compiled sharded operator-reuse gate metadata was not recorded")
+        release_promotion_blockers.append(
+            "compiled sharded operator-reuse gate metadata was not recorded"
+        )
     if backend == "gpu":
         device_count, device_note = _scaling_device_count(summary, backend=backend)
         if device_note is not None:
             notes.append(device_note)
         if device_count is not None and device_count < claim_devices:
             failures.append(f"only {device_count} GPU devices recorded for {claim_devices} sharded devices")
+            release_promotion_blockers.append(
+                f"only {device_count} GPU devices recorded for {claim_devices} sharded devices"
+            )
     if not deterministic_output_check:
         notes.append("deterministic output parity was not recorded for this timing-only sharded benchmark")
+        release_promotion_blockers.append("deterministic residual/output parity was not proven")
+    if deterministic_output_probe_requested and not deterministic_gate_ok:
+        failures.append("requested deterministic output probe did not pass")
+        release_promotion_blockers.append("requested deterministic output probe did not pass")
     failures.extend(deterministic_failures)
+    if deterministic_failures:
+        release_promotion_blockers.append("deterministic residual/output gate metadata is invalid")
+    elif not deterministic_gate_ok:
+        release_promotion_blockers.append("deterministic residual/output gate did not pass")
     notes.extend(operator_notes)
     notes.extend(deterministic_notes)
     if timing_note is not None:
         notes.append(timing_note)
     notes.append("single-case sharded solve remains experimental and is not a release scaling claim")
+    notes.append(
+        "release promotion blocked: "
+        + "; ".join(dict.fromkeys(release_promotion_blockers))
+    )
 
     return ShardedSolveScalingAudit(
         backend=backend,
@@ -1161,6 +1218,8 @@ def audit_sharded_solve_scaling_summary(
         deterministic_output_check=deterministic_output_check,
         operator_reuse_gate=operator_gate_ok,
         deterministic_output_gate=deterministic_gate_ok,
+        release_promotion_supported=False,
+        release_promotion_blockers=tuple(dict.fromkeys(release_promotion_blockers)),
     )
 
 

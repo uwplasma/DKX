@@ -1197,7 +1197,8 @@ correction level can be enabled automatically. This improves the worst
 high-device fragmentation cases without changing the operator or output parity.
 
 The sharded solve benchmark driver also now supports explicit backend
-selection, hot-solve timing, and bounded child-process samples:
+selection, hot-solve timing, bounded child-process samples, and an optional
+deterministic output probe:
 
 .. code-block:: bash
 
@@ -1219,13 +1220,23 @@ selection, hot-solve timing, and bounded child-process samples:
      --inner-warmup-solves 1 \
      --sample-timeout-s 300 \
      --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2
+     --schwarz-coarse-levels 2 \
+     --deterministic-output-probe
 
 For the GPU benchmark path, the runner now uses ``CUDA_VISIBLE_DEVICES`` and
 disables JAX preallocation by default in the subprocess. It also enables the
 ``cuda_malloc_async`` allocator in the benchmark subprocess so multi-GPU
 benchmarking is less sensitive to fragmentation than the plain default allocator
 path.
+
+``--deterministic-output-probe`` launches one bounded solve on the 1-device
+baseline and one on the largest requested device count, writes their solution
+vectors under ``deterministic_output_probe/``, and records
+``baseline_output_digest``, ``comparison_output_digest``,
+``max_relative_residual_norm``, and ``evidence_source`` in
+``deterministic_output_gate``. If the probe is omitted or fails, the saved audit
+keeps ``release_scaling_claim=false`` and records the missing parity evidence in
+``release_promotion_blockers``.
 
 See also:
 

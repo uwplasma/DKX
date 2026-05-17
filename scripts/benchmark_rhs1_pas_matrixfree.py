@@ -19,7 +19,7 @@ import resource
 import subprocess
 import sys
 import time
-from typing import Any
+from typing import Any, Callable
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +39,13 @@ DEFAULT_ARTIFACT_INPUTS = (
     _REPO_ROOT / "examples" / "performance" / "output" / "pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json",
 )
 PRODUCTION_FLOOR_TARGETS = ("geometry4", "hsx", "geometry11")
+PRODUCTION_GUARDED_CORRECTION_VARIANTS = frozenset(
+    {
+        "collision_tzfft",
+        "collision_tzfft_correction",
+        "tzfft_correction",
+    }
+)
 RESULT_MARKER = "__SFINCS_JAX_RHS1_PAS_MATRIXFREE_RESULT__="
 DEFAULT_SYSTEMS = (
     "diagonal_keep",
@@ -120,6 +127,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "--max-candidate-bytes",
         type=_positive_int,
         help="Reject matrix-free candidates whose estimated live vector bytes exceed this limit.",
+    )
+    parser.add_argument(
+        "--stream-update-chunks",
+        action="store_true",
+        help=(
+            "Run bounded matrix-free probes through the streamed PAS update path. "
+            "This measures chunked candidate assembly for synthetic and "
+            "geometry-metadata cases only; production real-solve promotion still "
+            "requires streamed row metadata from the PAS-TZ solve harness."
+        ),
+    )
+    parser.add_argument(
+        "--max-update-chunk-bytes",
+        type=_positive_int,
+        help="Per-update chunk byte budget used with --stream-update-chunks.",
     )
     parser.add_argument(
         "--run-production-solve-probe",
@@ -351,6 +373,10 @@ def _config_record(args: argparse.Namespace) -> dict[str, Any]:
         "max_candidate_bytes": None
         if getattr(args, "max_candidate_bytes", None) is None
         else int(args.max_candidate_bytes),
+        "stream_update_chunks": bool(getattr(args, "stream_update_chunks", False)),
+        "max_update_chunk_bytes": None
+        if getattr(args, "max_update_chunk_bytes", None) is None
+        else int(args.max_update_chunk_bytes),
     }
 
 
@@ -395,6 +421,10 @@ def _candidate_byte_preflight_record(
         "candidate_element_budget_configured": bool(element_budget_configured),
         "candidate_byte_budget_configured": bool(byte_budget_configured),
         "candidate_byte_budget_margin": None if max_bytes is None else int(max_bytes) - live_bytes,
+        "stream_update_chunks": bool(config.get("stream_update_chunks", False)),
+        "max_update_chunk_bytes": None
+        if config.get("max_update_chunk_bytes") is None
+        else int(config["max_update_chunk_bytes"]),
         "safe": safe,
         "reason": reason,
         "promotion_gate_passed": bool(safe and byte_budget_configured),
@@ -597,6 +627,49 @@ def _requested_production_solve_targets(args: argparse.Namespace) -> list[str]:
     return requested or list(PRODUCTION_FLOOR_TARGETS)
 
 
+def _normalized_production_variant(value: Any) -> str:
+    return str(value).strip().lower().replace("-", "_").removesuffix("_lgmres")
+
+
+def _production_guarded_correction_variants(args: argparse.Namespace) -> list[str]:
+    variants: list[str] = []
+    for variant in getattr(args, "production_solve_variants", ()):
+        normalized = _normalized_production_variant(variant)
+        if normalized in PRODUCTION_GUARDED_CORRECTION_VARIANTS:
+            variants.append(str(variant))
+    return variants
+
+
+def _production_streamed_guarded_correction_gate(args: argparse.Namespace) -> dict[str, Any]:
+    guarded_variants = _production_guarded_correction_variants(args)
+    if not guarded_variants:
+        return _gate(
+            "pass",
+            "no production guarded-correction variant requested",
+            guarded_correction_variants=[],
+            production_streamed_update_available=False,
+            diagnostic_only=True,
+        )
+    return _gate(
+        "fail",
+        "production-pas-tz-guarded-correction-streaming-not-implemented",
+        guarded_correction_variants=guarded_variants,
+        production_streamed_update_available=False,
+        diagnostic_only=True,
+        blocker=(
+            "the current production PAS-TZ guarded correction uses "
+            "_apply_preconditioned_minres_correction, which needs the full residual, "
+            "full preconditioned direction, A*direction, and trial residual; no "
+            "chunked PAS-TZ correction callback exists yet"
+        ),
+        required_row_metadata=[
+            "stream_update_chunks=true",
+            "pas_tz_guarded_correction_streamed=true",
+            "pas_tz_guarded_correction_full_update_materialized=false",
+        ],
+    )
+
+
 def _validate_production_solve_bounds(args: argparse.Namespace) -> None:
     _requested_production_solve_targets(args)
     if (
@@ -760,6 +833,7 @@ def build_bounded_real_solve_probe(
             "byte_preflight_required": byte_preflight_required,
             "byte_preflight_promotion_ready": byte_preflight_promotion_ready,
             "candidate_byte_preflight": byte_preflight_gate,
+            "streamed_guarded_correction_gate": _production_streamed_guarded_correction_gate(args),
             "planned_parent_timeout_s": per_target_timeout_s,
             "total_wall_timeout_budget_s": total_timeout_s,
             "selected_by_budget": selected_by_budget,
@@ -1073,6 +1147,48 @@ def _artifact_matches(artifacts: list[dict[str, Any]], target: str) -> list[dict
     return [artifact for artifact in artifacts if artifact.get("target") == target]
 
 
+def _streamed_update_probe_gate(target_cases: list[dict[str, Any]]) -> dict[str, Any]:
+    configs = [case.get("config", {}) for case in target_cases if isinstance(case.get("config", {}), dict)]
+    stream_requested = any(config.get("stream_update_chunks") is True for config in configs)
+    chunk_budget_configured = any(config.get("max_update_chunk_bytes") is not None for config in configs)
+    planned_case_ids = [case.get("case_id") for case in target_cases]
+    if not target_cases:
+        return _gate(
+            "pass",
+            "no bounded metadata case available for streamed-update diagnostics",
+            stream_update_chunks_requested=False,
+            max_update_chunk_bytes_configured=False,
+            planned_case_ids=planned_case_ids,
+            diagnostic_only=True,
+        )
+    if stream_requested and chunk_budget_configured:
+        return _gate(
+            "pass",
+            "bounded streamed-update probe planned with an update chunk byte budget",
+            stream_update_chunks_requested=True,
+            max_update_chunk_bytes_configured=True,
+            planned_case_ids=planned_case_ids,
+            diagnostic_only=True,
+        )
+    if stream_requested:
+        return _gate(
+            "pass",
+            "bounded streamed-update probe planned without an explicit update chunk byte budget",
+            stream_update_chunks_requested=True,
+            max_update_chunk_bytes_configured=False,
+            planned_case_ids=planned_case_ids,
+            diagnostic_only=True,
+        )
+    return _gate(
+        "pass",
+        "bounded streamed-update probe not requested; production promotion still requires streamed row metadata",
+        stream_update_chunks_requested=False,
+        max_update_chunk_bytes_configured=False,
+        planned_case_ids=planned_case_ids,
+        diagnostic_only=True,
+    )
+
+
 def build_production_floor_preflight(
     *, cases: list[dict[str, Any]], artifacts: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -1111,6 +1227,7 @@ def build_production_floor_preflight(
                 planned_case_ids=[case.get("case_id") for case in target_cases],
                 planned_sizes=[case.get("size") for case in target_cases],
             ),
+            "bounded_streamed_update_probe": _streamed_update_probe_gate(target_cases),
             "candidate_byte_preflight": _gate(
                 "pass" if byte_records and not unsafe_byte_records else "fail",
                 "candidate byte preflight is within configured budget"
@@ -1220,10 +1337,19 @@ def _deterministic_vector(jnp: Any, size: int, *, phase: float) -> Any:
     return jnp.sin((idx + 1.0) * (0.13 + 0.01 * phase)) + 0.5 * jnp.cos((idx + 1.0) * (0.07 + 0.02 * phase))
 
 
-def _build_probe_system(case: dict[str, Any]) -> tuple[Any, Any, Any, Any, dict[str, int]]:
+def _build_probe_system(
+    case: dict[str, Any],
+) -> tuple[
+    Any,
+    Any,
+    Callable[[Any], Any],
+    Callable[[Any], Any],
+    Callable[[Any, int, int], Any],
+    dict[str, int],
+]:
     import jax.numpy as jnp
 
-    counters = {"matvec_calls": 0, "correction_calls": 0}
+    counters = {"matvec_calls": 0, "correction_calls": 0, "chunked_correction_calls": 0}
     size = int(case["size"])
     kind = str(case["system_kind"])
     phase = float(case.get("phase", 0.0))
@@ -1241,7 +1367,12 @@ def _build_probe_system(case: dict[str, Any]) -> tuple[Any, Any, Any, Any, dict[
             counters["correction_calls"] += 1
             return jnp.zeros_like(residual)
 
-        return rhs, x0, matvec, correction, counters
+        def chunked_correction(residual_chunk: Any, start: int, stop: int) -> Any:
+            del start, stop
+            counters["chunked_correction_calls"] += 1
+            return jnp.zeros_like(residual_chunk)
+
+        return rhs, x0, matvec, correction, chunked_correction, counters
 
     if kind == "diagonal":
         idx = jnp.arange(size, dtype=jnp.float32)
@@ -1257,7 +1388,11 @@ def _build_probe_system(case: dict[str, Any]) -> tuple[Any, Any, Any, Any, dict[
             counters["correction_calls"] += 1
             return residual / diag
 
-        return rhs, x0, matvec, correction, counters
+        def chunked_correction(residual_chunk: Any, start: int, stop: int) -> Any:
+            counters["chunked_correction_calls"] += 1
+            return residual_chunk / diag[int(start) : int(stop)]
+
+        return rhs, x0, matvec, correction, chunked_correction, counters
 
     if kind in {"coupled_jacobi", "metadata_coupled_jacobi"}:
         idx = jnp.arange(size, dtype=jnp.float32)
@@ -1279,7 +1414,11 @@ def _build_probe_system(case: dict[str, Any]) -> tuple[Any, Any, Any, Any, dict[
             counters["correction_calls"] += 1
             return residual / jacobi_diag
 
-        return rhs, x0, matvec, correction, counters
+        def chunked_correction(residual_chunk: Any, start: int, stop: int) -> Any:
+            counters["chunked_correction_calls"] += 1
+            return residual_chunk / jacobi_diag[int(start) : int(stop)]
+
+        return rhs, x0, matvec, correction, chunked_correction, counters
 
     if kind == "zero_update":
         rhs = _deterministic_vector(jnp, size, phase=phase)
@@ -1292,7 +1431,12 @@ def _build_probe_system(case: dict[str, Any]) -> tuple[Any, Any, Any, Any, dict[
             counters["correction_calls"] += 1
             return jnp.zeros_like(residual)
 
-        return rhs, x0, matvec, correction, counters
+        def chunked_correction(residual_chunk: Any, start: int, stop: int) -> Any:
+            del start, stop
+            counters["chunked_correction_calls"] += 1
+            return jnp.zeros_like(residual_chunk)
+
+        return rhs, x0, matvec, correction, chunked_correction, counters
 
     if kind == "tiny_update":
         rhs = _deterministic_vector(jnp, size, phase=phase)
@@ -1306,7 +1450,12 @@ def _build_probe_system(case: dict[str, Any]) -> tuple[Any, Any, Any, Any, dict[
             counters["correction_calls"] += 1
             return jnp.asarray(update_scale, dtype=residual.dtype) * residual
 
-        return rhs, x0, matvec, correction, counters
+        def chunked_correction(residual_chunk: Any, start: int, stop: int) -> Any:
+            del start, stop
+            counters["chunked_correction_calls"] += 1
+            return jnp.asarray(update_scale, dtype=residual_chunk.dtype) * residual_chunk
+
+        return rhs, x0, matvec, correction, chunked_correction, counters
 
     if kind == "nonfinite_candidate":
         rhs = _deterministic_vector(jnp, size, phase=phase)
@@ -1321,7 +1470,12 @@ def _build_probe_system(case: dict[str, Any]) -> tuple[Any, Any, Any, Any, dict[
             counters["correction_calls"] += 1
             return residual
 
-        return rhs, x0, matvec, correction, counters
+        def chunked_correction(residual_chunk: Any, start: int, stop: int) -> Any:
+            del start, stop
+            counters["chunked_correction_calls"] += 1
+            return residual_chunk
+
+        return rhs, x0, matvec, correction, chunked_correction, counters
 
     raise ValueError(f"Unknown probe system kind: {kind}")
 
@@ -1330,13 +1484,14 @@ def _child_payload(case: dict[str, Any]) -> dict[str, Any]:
     from sfincs_jax.rhs1_pas_matrixfree import Rhs1PasMatrixFreeConfig, rhs1_pas_matrixfree_correction
 
     config = dict(case["config"])
-    rhs, x0, matvec, correction, counters = _build_probe_system(case)
+    rhs, x0, matvec, correction, chunked_correction, counters = _build_probe_system(case)
     t0 = time.perf_counter()
     result = rhs1_pas_matrixfree_correction(
         matvec=matvec,
         rhs=rhs,
         x0=x0,
         correction=correction,
+        chunked_correction=chunked_correction if bool(config.get("stream_update_chunks", False)) else None,
         config=Rhs1PasMatrixFreeConfig(
             max_steps=int(config["max_steps"]),
             omega=float(config["omega"]),
@@ -1350,6 +1505,10 @@ def _child_payload(case: dict[str, Any]) -> dict[str, Any]:
             max_candidate_bytes=None
             if config.get("max_candidate_bytes") is None
             else int(config["max_candidate_bytes"]),
+            stream_update_chunks=bool(config.get("stream_update_chunks", False)),
+            max_update_chunk_bytes=None
+            if config.get("max_update_chunk_bytes") is None
+            else int(config["max_update_chunk_bytes"]),
         ),
     )
     elapsed_s = time.perf_counter() - t0
@@ -1386,6 +1545,7 @@ def _child_payload(case: dict[str, Any]) -> dict[str, Any]:
             "size": int(case["size"]),
             "matvec_calls": int(counters["matvec_calls"]),
             "correction_calls": int(counters["correction_calls"]),
+            "chunked_correction_calls": int(counters["chunked_correction_calls"]),
         },
     }
 

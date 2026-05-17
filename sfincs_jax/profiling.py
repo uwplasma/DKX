@@ -1,3 +1,10 @@
+"""Opt-in runtime and memory profiling helpers for solver/output traces.
+
+The profiler is intentionally lightweight: it emits coarse phase timings, RSS
+high-water marks, and optional JAX device-memory samples without requiring the
+heavy solve path to import profiling-specific dependencies up front.
+"""
+
 from __future__ import annotations
 
 import os
@@ -85,6 +92,8 @@ def _profile_device_mem_enabled() -> bool:
 
 @dataclass
 class SimpleProfiler:
+    """Collect phase-level timing and memory samples for trace metadata."""
+
     emit: Callable[[int, str], None] | None = None
     sample_device_mem: bool = False
     t0: float = field(default_factory=time.perf_counter)
@@ -129,6 +138,8 @@ class SimpleProfiler:
 
 
 def maybe_profiler(emit: Callable[[int, str], None] | None = None) -> SimpleProfiler | None:
+    """Create a profiler only when ``SFINCS_JAX_PROFILE`` opts in."""
+
     if _profile_enabled():
         return SimpleProfiler(emit=emit, sample_device_mem=_profile_device_mem_enabled())
     return None

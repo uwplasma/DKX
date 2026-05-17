@@ -310,6 +310,7 @@ def _variant_env(variant: str, *, block: int, overlap: int, maxiter: int, restar
     }
     if variant_core in {"collision_tzfft", "collision_tzfft_correction", "tzfft_correction"}:
         env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION"] = "tzfft"
+        env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STREAM_UPDATE"] = "1"
     if structured_levels:
         env["SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS"] = structured_levels
     return env
@@ -387,12 +388,21 @@ def _iter_nested_dicts(value: Any):
             yield from _iter_nested_dicts(item)
 
 
-def _streamed_guarded_correction_evidence(row: dict[str, Any]) -> tuple[bool, list[str]]:
-    """Return whether a row proves the guarded correction avoided dense updates."""
+def _streamed_guarded_correction_diagnostics(row: dict[str, Any]) -> dict[str, Any]:
+    """Return diagnostics for streamed/no-full-update guarded correction evidence."""
     evidence: list[str] = []
+    blockers: list[str] = []
     full_update_materialized = False
+    stream_requested = False
+    streamed_flag = False
+    roots_checked = ("metadata", "diagnostics", "matrix_free_metadata")
     for root_key in ("metadata", "diagnostics", "matrix_free_metadata"):
         for metadata in _iter_nested_dicts(row.get(root_key, {})):
+            if metadata.get("pas_tz_guarded_correction_stream_requested") is True:
+                stream_requested = True
+            blocker = metadata.get("pas_tz_guarded_correction_stream_blocker")
+            if blocker:
+                blockers.append(f"{root_key}:{blocker}")
             if metadata.get("full_update_materialized") is True:
                 full_update_materialized = True
             if metadata.get("pas_tz_guarded_correction_full_update_materialized") is True:
@@ -400,6 +410,7 @@ def _streamed_guarded_correction_evidence(row: dict[str, Any]) -> tuple[bool, li
             if metadata.get("stream_update_chunks") is True:
                 evidence.append(f"{root_key}.stream_update_chunks")
             if metadata.get("pas_tz_guarded_correction_streamed") is True:
+                streamed_flag = True
                 evidence.append(f"{root_key}.pas_tz_guarded_correction_streamed")
     messages = row.get("messages_tail", [])
     if isinstance(messages, list):
@@ -407,7 +418,29 @@ def _streamed_guarded_correction_evidence(row: dict[str, Any]) -> tuple[bool, li
             message_s = str(message).lower()
             if "pas-tz" in message_s and "stream" in message_s and "correction" in message_s:
                 evidence.append("messages_tail.streamed_pas_tz_correction")
-    return bool(evidence) and not full_update_materialized, evidence[-5:]
+            if "pas-tz" in message_s and "stream" in message_s and "unavailable" in message_s:
+                blockers.append(f"messages_tail:{str(message)}")
+    streamed = bool(evidence) and bool(streamed_flag or any("stream_update_chunks" in item for item in evidence))
+    streamed = bool(streamed and not full_update_materialized)
+    return _json_safe(
+        {
+            "streamed": streamed,
+            "evidence": evidence[-5:],
+            "stream_requested": stream_requested,
+            "streamed_metadata_seen": streamed_flag,
+            "full_update_materialized": full_update_materialized,
+            "blockers": blockers[-5:],
+            "metadata_roots_checked": list(roots_checked),
+        }
+    )
+
+
+def _streamed_guarded_correction_evidence(row: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Return whether a row proves the guarded correction avoided dense updates."""
+
+    diagnostics = _streamed_guarded_correction_diagnostics(row)
+    evidence = diagnostics.get("evidence", [])
+    return bool(diagnostics.get("streamed")), [str(item) for item in evidence] if isinstance(evidence, list) else []
 
 
 def _phase_record(name: str, start_s: float, end_s: float, *, status: str = "ok") -> dict[str, Any]:
@@ -678,6 +711,7 @@ def result_gates(args: argparse.Namespace, row: dict[str, Any], variant: str) ->
         )
 
     correction_streamed, correction_evidence = _streamed_guarded_correction_evidence(row)
+    correction_diagnostics = _streamed_guarded_correction_diagnostics(row)
     if status != "ok":
         guarded_correction_memory_gate = _gate("fail", "non-ok-status", status=status)
     elif not _variant_requests_guarded_correction(variant):
@@ -687,6 +721,7 @@ def result_gates(args: argparse.Namespace, row: dict[str, Any], variant: str) ->
             "pass",
             "streamed-guarded-correction-evidence-recorded",
             evidence=correction_evidence,
+            diagnostics=correction_diagnostics,
         )
     else:
         guarded_correction_memory_gate = _gate(
@@ -699,6 +734,7 @@ def result_gates(args: argparse.Namespace, row: dict[str, Any], variant: str) ->
                 "full_update_materialized=false",
             ],
             evidence=correction_evidence,
+            diagnostics=correction_diagnostics,
         )
 
     if not bool(getattr(args, "require_default_promotion_gate", False)):

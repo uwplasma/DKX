@@ -19,6 +19,7 @@ from sfincs_jax.jax_geometry_adapters import (
     boozer_bhat_from_spectrum,
     boozer_spectrum_geometry_proxy_objective,
     boozer_spectrum_proxy_transport_objective,
+    geometry_proxy_no_solve_provenance_gate,
     geometry_proxy_workflow_contract,
     geometry_proxy_workflow_summary,
     kinetic_transport_scalar_no_overclaim_gate,
@@ -216,6 +217,68 @@ def test_geometry_proxy_workflow_summary_records_stage_claims_and_gate() -> None
     )
     assert summary["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
     assert summary["no_overclaim_gate"]["kinetic_transport_scalar_contract_gate"]["status"] == "pass"
+
+
+def test_geometry_proxy_no_solve_gate_validates_file_provenance_and_scalar_contract() -> None:
+    summary = geometry_proxy_workflow_summary(
+        provenance="unit-test wout",
+        requested_surface=0.5,
+        selected_surface=0.49,
+        boozer_resolution={"mboz": 3, "nboz": 3},
+        grid_shape={"n_theta": 8, "n_zeta": 6},
+        scale=1.0,
+        proxy_objective=0.125,
+        autodiff_gradient=2.0,
+        finite_difference_gradient=2.000001,
+        finite_difference_step=1.0e-4,
+        backend_status={"vmec_jax": True, "booz_xform_jax": True},
+    )
+
+    gate = geometry_proxy_no_solve_provenance_gate(
+        summary,
+        require_file_provenance=True,
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["kinetic_solve_executed"] is False
+    assert gate["kinetic_transport_scalar_claimed"] is False
+    assert gate["current_public_scalar_kind"] == "boozer_spectrum_proxy_not_kinetic"
+    assert gate["missing_file_provenance_fields"] == []
+    assert set(gate["present_file_provenance_fields"]) == {
+        "source",
+        "selected_surface",
+        "boozer_resolution",
+        "grid_shape",
+        "scale",
+    }
+    assert "linear_kinetic_solve" in gate["required_kinetic_transport_scalar_stages"]
+    assert "kinetic_operator_assembly" in gate["differentiability_boundary"][
+        "not_covered_stage_names"
+    ]
+
+    missing_provenance = geometry_proxy_no_solve_provenance_gate(
+        geometry_proxy_workflow_summary(),
+        require_file_provenance=True,
+    )
+    assert missing_provenance["status"] == "fail"
+    assert missing_provenance["missing_file_provenance_fields"] == [
+        "source",
+        "selected_surface",
+        "boozer_resolution",
+        "grid_shape",
+        "scale",
+    ]
+
+    tampered = json.loads(json.dumps(summary))
+    tampered["kinetic_transport_scalar_contract"]["current_public_scalar"][
+        "kinetic_transport_scalar_claimed"
+    ] = True
+    tampered_gate = geometry_proxy_no_solve_provenance_gate(
+        tampered,
+        require_file_provenance=True,
+    )
+    assert tampered_gate["status"] == "fail"
+    assert tampered_gate["kinetic_transport_scalar_claimed"] is True
 
 
 def test_geometry_proxy_workflow_summary_marks_failed_gradient_gate() -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+import hashlib
 import json
 import os
 import subprocess
@@ -155,11 +156,41 @@ def _operator_reuse_gate(
     ).to_dict()
 
 
-def _deterministic_output_gate(*, devices: list[int]) -> dict[str, object]:
+def _deterministic_output_gate(
+    *,
+    devices: list[int],
+    residual_tolerance: float = 1.0e-10,
+    evidence_source: str = "not_measured",
+) -> dict[str, object]:
     return plan_sharded_solve_deterministic_output_gate(
         baseline_devices=1,
         comparison_devices=max(int(d) for d in devices),
+        residual_tolerance=float(residual_tolerance),
+        evidence_source=str(evidence_source),
     ).to_dict()
+
+
+def _array_output_digest(array: np.ndarray, *, algorithm: str = "sha256") -> str:
+    values = np.ascontiguousarray(array)
+    digest = hashlib.new(str(algorithm).strip().lower() or "sha256")
+    digest.update(str(values.dtype).encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(json.dumps(list(values.shape), separators=(",", ":")).encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(values.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+def _relative_l2_difference(baseline: np.ndarray, comparison: np.ndarray) -> float:
+    if baseline.shape != comparison.shape:
+        raise ValueError(
+            "deterministic output comparison requires matching shapes; "
+            f"got {baseline.shape} and {comparison.shape}"
+        )
+    base = np.asarray(baseline, dtype=np.float64).reshape(-1)
+    other = np.asarray(comparison, dtype=np.float64).reshape(-1)
+    denom = max(float(np.linalg.norm(base)), 1.0)
+    return float(np.linalg.norm(other - base) / denom)
 
 
 def _run_scaling_audit(payload: dict[str, object]) -> None:
@@ -255,6 +286,86 @@ def _run_once_command(
     ]
 
 
+def _run_once_output_digest_args(
+    *,
+    input_path: Path | str,
+    output_vector_path: Path | str,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    inner_warmup_solves: int,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+) -> list[str]:
+    args = [
+        "--run-once-output-digest",
+        "--input",
+        str(input_path),
+        "--output-vector-path",
+        str(output_vector_path),
+        "--inner-warmup-solves",
+        str(int(inner_warmup_solves)),
+        "--shard-axis",
+        str(shard_axis),
+        "--gmres-distributed",
+        str(gmres_distributed),
+        "--distributed-krylov",
+        str(distributed_krylov),
+        "--periodic-stencil-on-sharded",
+        str(periodic_stencil_on_sharded),
+        "--backend",
+        str(backend),
+    ]
+    if rhs1_precond:
+        args.extend(["--rhs1-precond", str(rhs1_precond)])
+    if schwarz_coarse_levels is not None:
+        args.extend(["--schwarz-coarse-levels", str(int(schwarz_coarse_levels))])
+    if schwarz_coarse_steps is not None:
+        args.extend(["--schwarz-coarse-steps", str(int(schwarz_coarse_steps))])
+    if schwarz_coarse_damp is not None:
+        args.extend(["--schwarz-coarse-damp", str(float(schwarz_coarse_damp))])
+    return args
+
+
+def _run_once_output_digest_command(
+    *,
+    input_path: Path,
+    output_vector_path: Path,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    inner_warmup_solves: int,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+) -> list[str]:
+    return [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        *_run_once_output_digest_args(
+            input_path=input_path,
+            output_vector_path=output_vector_path,
+            shard_axis=shard_axis,
+            gmres_distributed=gmres_distributed,
+            distributed_krylov=distributed_krylov,
+            periodic_stencil_on_sharded=periodic_stencil_on_sharded,
+            inner_warmup_solves=inner_warmup_solves,
+            rhs1_precond=rhs1_precond,
+            backend=backend,
+            schwarz_coarse_levels=schwarz_coarse_levels,
+            schwarz_coarse_steps=schwarz_coarse_steps,
+            schwarz_coarse_damp=schwarz_coarse_damp,
+        ),
+    ]
+
+
 def _benchmark_command(
     *,
     input_path: Path,
@@ -277,6 +388,8 @@ def _benchmark_command(
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
     audit: bool,
+    deterministic_output_probe: bool,
+    deterministic_output_tolerance: float,
     repo_root: Path,
 ) -> list[str]:
     cmd = [
@@ -321,6 +434,14 @@ def _benchmark_command(
         cmd.extend(["--schwarz-coarse-steps", str(int(schwarz_coarse_steps))])
     if schwarz_coarse_damp is not None:
         cmd.extend(["--schwarz-coarse-damp", str(float(schwarz_coarse_damp))])
+    if deterministic_output_probe:
+        cmd.extend(
+            [
+                "--deterministic-output-probe",
+                "--deterministic-output-tolerance",
+                str(float(deterministic_output_tolerance)),
+            ]
+        )
     if audit:
         cmd.append("--audit")
     return cmd
@@ -382,6 +503,9 @@ def _build_sharded_solve_benchmark_plan(
     schwarz_coarse_steps: int | None,
     schwarz_coarse_damp: float | None,
     audit: bool = False,
+    deterministic_output_probe: bool = False,
+    deterministic_output_tolerance: float = 1.0e-10,
+    deterministic_output_dir: Path | None = None,
 ) -> dict[str, object]:
     repo_root = Path(__file__).resolve().parents[2]
     normalized_devices = _normalize_device_counts(devices)
@@ -400,6 +524,13 @@ def _build_sharded_solve_benchmark_plan(
         nsolve=int(nsolve),
         cache_dir=cache_dir,
         repo_root=repo_root,
+    )
+    deterministic_gate = _deterministic_output_gate(
+        devices=normalized_devices,
+        residual_tolerance=float(deterministic_output_tolerance),
+        evidence_source="plan_only_probe_requested"
+        if deterministic_output_probe
+        else "not_measured",
     )
     device_plan = []
     for d in normalized_devices:
@@ -491,9 +622,18 @@ def _build_sharded_solve_benchmark_plan(
         "per_device_warmup": int(warmup),
         "repeats": int(repeats),
         "deterministic_output_check": False,
-        "deterministic_output_gate": _deterministic_output_gate(devices=normalized_devices),
+        "deterministic_output_probe_requested": bool(deterministic_output_probe),
+        "deterministic_output_tolerance": float(deterministic_output_tolerance),
+        "deterministic_output_dir": _display_path(
+            deterministic_output_dir
+            if deterministic_output_dir is not None
+            else out_dir / "deterministic_output_probe",
+            repo_root=repo_root,
+        ),
+        "deterministic_output_gate": deterministic_gate,
         "estimated_child_process_samples": int(max(global_warmup, 0))
-        + len(normalized_devices) * (max(int(warmup), 0) + max(int(repeats), 1)),
+        + len(normalized_devices) * (max(int(warmup), 0) + max(int(repeats), 1))
+        + (2 if deterministic_output_probe and max(normalized_devices) >= 2 else 0),
         "speedup_gate_semantics": {
             "release_scaling_claim": False,
             "evaluated_by": "audit_sharded_solve_scaling_summary",
@@ -530,6 +670,8 @@ def _build_sharded_solve_benchmark_plan(
             schwarz_coarse_steps=schwarz_coarse_steps,
             schwarz_coarse_damp=schwarz_coarse_damp,
             audit=bool(audit),
+            deterministic_output_probe=bool(deterministic_output_probe),
+            deterministic_output_tolerance=float(deterministic_output_tolerance),
             repo_root=repo_root,
         ),
     }
@@ -584,6 +726,61 @@ def _run_once(
         )
         jax.block_until_ready(res.x)
     return time.perf_counter() - t0
+
+
+def _run_once_output_digest(
+    input_path: Path,
+    *,
+    output_vector_path: Path,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    inner_warmup_solves: int,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+) -> dict[str, object]:
+    _normalized_backend(backend)
+    _configure_solver_env(
+        env=os.environ,
+        shard_axis=shard_axis,
+        gmres_distributed=gmres_distributed,
+        distributed_krylov=distributed_krylov,
+        periodic_stencil_on_sharded=periodic_stencil_on_sharded,
+        rhs1_precond=rhs1_precond,
+        schwarz_coarse_levels=schwarz_coarse_levels,
+        schwarz_coarse_steps=schwarz_coarse_steps,
+        schwarz_coarse_damp=schwarz_coarse_damp,
+    )
+    nml = read_sfincs_input(input_path)
+    for _ in range(max(0, int(inner_warmup_solves))):
+        warm = solve_v3_full_system_linear_gmres(
+            nml=nml,
+            tol=1e-10,
+        )
+        jax.block_until_ready(warm.x)
+    t0 = time.perf_counter()
+    res = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        tol=1e-10,
+    )
+    jax.block_until_ready(res.x)
+    solve_s = time.perf_counter() - t0
+    values = np.ascontiguousarray(np.asarray(jax.device_get(res.x), dtype=np.float64))
+    output_vector_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(output_vector_path, values)
+    return {
+        "output_digest_algorithm": "sha256",
+        "output_digest": _array_output_digest(values),
+        "shape": list(values.shape),
+        "dtype": str(values.dtype),
+        "l2_norm": float(np.linalg.norm(values.reshape(-1))),
+        "solve_s": float(solve_s),
+        "output_vector_path": str(output_vector_path),
+    }
 
 
 def _run_once_subprocess(
@@ -644,6 +841,178 @@ def _run_once_subprocess(
             "increase --sample-timeout-s or use a smaller case."
         ) from exc
     return float(out.strip().splitlines()[-1])
+
+
+def _run_once_output_digest_subprocess(
+    *,
+    input_path: Path,
+    devices: int,
+    cache_dir: Path | None,
+    output_vector_path: Path,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    inner_warmup_solves: int,
+    sample_timeout_s: float | None,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+) -> dict[str, object]:
+    env = os.environ.copy()
+    _configure_benchmark_subprocess_env(env)
+    _configure_backend_env(env=env, devices=devices, backend=backend)
+    _configure_solver_env(
+        env=env,
+        shard_axis=shard_axis,
+        gmres_distributed=gmres_distributed,
+        distributed_krylov=distributed_krylov,
+        periodic_stencil_on_sharded=periodic_stencil_on_sharded,
+        rhs1_precond=rhs1_precond,
+        schwarz_coarse_levels=schwarz_coarse_levels,
+        schwarz_coarse_steps=schwarz_coarse_steps,
+        schwarz_coarse_damp=schwarz_coarse_damp,
+    )
+    if cache_dir is not None:
+        env["JAX_COMPILATION_CACHE_DIR"] = str(cache_dir)
+
+    cmd = _run_once_output_digest_command(
+        input_path=input_path,
+        output_vector_path=output_vector_path,
+        shard_axis=str(shard_axis),
+        gmres_distributed=str(gmres_distributed),
+        distributed_krylov=str(distributed_krylov),
+        periodic_stencil_on_sharded=str(periodic_stencil_on_sharded),
+        inner_warmup_solves=int(inner_warmup_solves),
+        rhs1_precond=str(rhs1_precond),
+        backend=str(backend),
+        schwarz_coarse_levels=schwarz_coarse_levels,
+        schwarz_coarse_steps=schwarz_coarse_steps,
+        schwarz_coarse_damp=schwarz_coarse_damp,
+    )
+    timeout = None if sample_timeout_s is None or sample_timeout_s <= 0 else float(sample_timeout_s)
+    try:
+        out = subprocess.check_output(cmd, env=env, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Timed out after {timeout:.1f}s while probing deterministic output "
+            f"for devices={devices}; increase --sample-timeout-s or use a smaller case."
+        ) from exc
+    return json.loads(out.strip().splitlines()[-1])
+
+
+def _failed_deterministic_output_gate(
+    *,
+    devices: list[int],
+    residual_tolerance: float,
+    evidence_source: str,
+    failure: str,
+) -> dict[str, object]:
+    gate = _deterministic_output_gate(
+        devices=devices,
+        residual_tolerance=float(residual_tolerance),
+        evidence_source=evidence_source,
+    )
+    gate["status"] = "probe_failed"
+    gate["failures"] = [*list(gate.get("failures", ())), failure]
+    return gate
+
+
+def _measure_deterministic_output_gate(
+    *,
+    input_path: Path,
+    devices: list[int],
+    cache_dir: Path | None,
+    deterministic_output_dir: Path,
+    shard_axis: str,
+    gmres_distributed: str,
+    distributed_krylov: str,
+    periodic_stencil_on_sharded: str,
+    inner_warmup_solves: int,
+    sample_timeout_s: float | None,
+    rhs1_precond: str,
+    backend: str,
+    schwarz_coarse_levels: int | None,
+    schwarz_coarse_steps: int | None,
+    schwarz_coarse_damp: float | None,
+    residual_tolerance: float,
+    repo_root: Path,
+) -> dict[str, object]:
+    comparison_devices = max(int(d) for d in devices)
+    if comparison_devices < 2:
+        return _deterministic_output_gate(
+            devices=devices,
+            residual_tolerance=float(residual_tolerance),
+            evidence_source="not_enough_devices",
+        )
+
+    deterministic_output_dir.mkdir(parents=True, exist_ok=True)
+    baseline_vector = deterministic_output_dir / "baseline_devices1.npy"
+    comparison_vector = deterministic_output_dir / f"comparison_devices{comparison_devices}.npy"
+    baseline_probe = _run_once_output_digest_subprocess(
+        input_path=input_path,
+        devices=1,
+        cache_dir=cache_dir,
+        output_vector_path=baseline_vector,
+        shard_axis=shard_axis,
+        gmres_distributed=gmres_distributed,
+        distributed_krylov=distributed_krylov,
+        periodic_stencil_on_sharded=periodic_stencil_on_sharded,
+        inner_warmup_solves=inner_warmup_solves,
+        sample_timeout_s=sample_timeout_s,
+        rhs1_precond=rhs1_precond,
+        backend=backend,
+        schwarz_coarse_levels=schwarz_coarse_levels,
+        schwarz_coarse_steps=schwarz_coarse_steps,
+        schwarz_coarse_damp=schwarz_coarse_damp,
+    )
+    comparison_probe = _run_once_output_digest_subprocess(
+        input_path=input_path,
+        devices=comparison_devices,
+        cache_dir=cache_dir,
+        output_vector_path=comparison_vector,
+        shard_axis=shard_axis,
+        gmres_distributed=gmres_distributed,
+        distributed_krylov=distributed_krylov,
+        periodic_stencil_on_sharded=periodic_stencil_on_sharded,
+        inner_warmup_solves=inner_warmup_solves,
+        sample_timeout_s=sample_timeout_s,
+        rhs1_precond=rhs1_precond,
+        backend=backend,
+        schwarz_coarse_levels=schwarz_coarse_levels,
+        schwarz_coarse_steps=schwarz_coarse_steps,
+        schwarz_coarse_damp=schwarz_coarse_damp,
+    )
+
+    baseline_values = np.load(baseline_vector)
+    comparison_values = np.load(comparison_vector)
+    max_relative_residual_norm = _relative_l2_difference(
+        baseline_values,
+        comparison_values,
+    )
+    gate = plan_sharded_solve_deterministic_output_gate(
+        baseline_devices=1,
+        comparison_devices=comparison_devices,
+        residual_tolerance=float(residual_tolerance),
+        max_relative_residual_norm=max_relative_residual_norm,
+        baseline_output_digest=str(baseline_probe["output_digest"]),
+        comparison_output_digest=str(comparison_probe["output_digest"]),
+        output_digest_algorithm=str(comparison_probe["output_digest_algorithm"]),
+        evidence_source="measured_solve_output_digest",
+    ).to_dict()
+    gate["baseline_probe"] = {
+        "devices": 1,
+        "solve_s": baseline_probe["solve_s"],
+        "output_vector_path": _display_path(baseline_vector, repo_root=repo_root),
+    }
+    gate["comparison_probe"] = {
+        "devices": comparison_devices,
+        "solve_s": comparison_probe["solve_s"],
+        "output_vector_path": _display_path(comparison_vector, repo_root=repo_root),
+    }
+    return gate
 
 
 def main() -> None:
@@ -715,6 +1084,17 @@ def main() -> None:
         help="Run once and print wall time (internal).",
     )
     parser.add_argument(
+        "--run-once-output-digest",
+        action="store_true",
+        help="Run one solve, save the solution vector, and print digest JSON (internal).",
+    )
+    parser.add_argument(
+        "--output-vector-path",
+        type=Path,
+        default=None,
+        help="Internal path used with --run-once-output-digest.",
+    )
+    parser.add_argument(
         "--shard-axis",
         type=str,
         default="theta",
@@ -776,6 +1156,23 @@ def main() -> None:
         help="Fail fast if the saved payload does not pass the sharded-solve schema/honesty gate.",
     )
     parser.add_argument(
+        "--deterministic-output-probe",
+        action="store_true",
+        help="Measure a 1-vs-max-devices output digest/residual gate before writing the payload.",
+    )
+    parser.add_argument(
+        "--deterministic-output-tolerance",
+        type=float,
+        default=1.0e-10,
+        help="Relative L2 tolerance for --deterministic-output-probe.",
+    )
+    parser.add_argument(
+        "--deterministic-output-dir",
+        type=Path,
+        default=None,
+        help="Directory for deterministic output probe vectors (default: --out-dir/deterministic_output_probe).",
+    )
+    parser.add_argument(
         "--plan-only",
         action="store_true",
         help="Write a deterministic benchmark plan JSON without launching child solve processes.",
@@ -810,9 +1207,34 @@ def main() -> None:
         print(f"{dt:.6f}")
         return
 
+    if args.run_once_output_digest:
+        if args.output_vector_path is None:
+            raise ValueError("--run-once-output-digest requires --output-vector-path")
+        payload = _run_once_output_digest(
+            input_path,
+            output_vector_path=args.output_vector_path,
+            shard_axis=str(args.shard_axis),
+            gmres_distributed=str(args.gmres_distributed),
+            distributed_krylov=str(args.distributed_krylov),
+            periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
+            inner_warmup_solves=int(args.inner_warmup_solves),
+            rhs1_precond=str(args.rhs1_precond),
+            backend=str(args.backend),
+            schwarz_coarse_levels=args.schwarz_coarse_levels,
+            schwarz_coarse_steps=args.schwarz_coarse_steps,
+            schwarz_coarse_damp=args.schwarz_coarse_damp,
+        )
+        print(json.dumps(payload, sort_keys=True))
+        return
+
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = args.cache_dir
+    deterministic_output_dir = (
+        args.deterministic_output_dir
+        if args.deterministic_output_dir is not None
+        else out_dir / "deterministic_output_probe"
+    )
 
     devices = _normalize_device_counts([int(d) for d in args.devices])
 
@@ -838,6 +1260,9 @@ def main() -> None:
             schwarz_coarse_steps=args.schwarz_coarse_steps,
             schwarz_coarse_damp=args.schwarz_coarse_damp,
             audit=bool(args.audit),
+            deterministic_output_probe=bool(args.deterministic_output_probe),
+            deterministic_output_tolerance=float(args.deterministic_output_tolerance),
+            deterministic_output_dir=deterministic_output_dir,
         )
         plan_path = args.plan_json if args.plan_json is not None else out_dir / "sharded_solve_benchmark_plan.json"
         _write_plan_json(plan, plan_path)
@@ -941,6 +1366,45 @@ def main() -> None:
         for r in results:
             r["speedup"] = None
 
+    deterministic_output_gate = _deterministic_output_gate(
+        devices=devices,
+        residual_tolerance=float(args.deterministic_output_tolerance),
+        evidence_source="not_measured",
+    )
+    if args.deterministic_output_probe:
+        print(
+            f"[deterministic-output] probing 1 vs {max(devices)} devices "
+            f"with tolerance={float(args.deterministic_output_tolerance):.3g}",
+            flush=True,
+        )
+        try:
+            deterministic_output_gate = _measure_deterministic_output_gate(
+                input_path=input_path,
+                devices=devices,
+                cache_dir=cache_dir,
+                deterministic_output_dir=deterministic_output_dir,
+                shard_axis=str(args.shard_axis),
+                gmres_distributed=str(args.gmres_distributed),
+                distributed_krylov=str(args.distributed_krylov),
+                periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
+                inner_warmup_solves=int(args.inner_warmup_solves),
+                sample_timeout_s=float(args.sample_timeout_s),
+                rhs1_precond=str(args.rhs1_precond),
+                backend=str(args.backend),
+                schwarz_coarse_levels=args.schwarz_coarse_levels,
+                schwarz_coarse_steps=args.schwarz_coarse_steps,
+                schwarz_coarse_damp=args.schwarz_coarse_damp,
+                residual_tolerance=float(args.deterministic_output_tolerance),
+                repo_root=repo_root,
+            )
+        except Exception as exc:  # noqa: BLE001
+            deterministic_output_gate = _failed_deterministic_output_gate(
+                devices=devices,
+                residual_tolerance=float(args.deterministic_output_tolerance),
+                evidence_source="probe_failed",
+                failure=f"deterministic output probe failed: {type(exc).__name__}: {exc}",
+            )
+
     payload = {
         "benchmark_kind": "single_case_sharded_solve",
         "scaling_status": "experimental_single_case_sharding",
@@ -985,12 +1449,17 @@ def main() -> None:
         "global_warmup": int(args.global_warmup),
         "per_device_warmup": int(args.warmup),
         "repeats": int(args.repeats),
-        "deterministic_output_check": False,
-        "deterministic_output_gate": _deterministic_output_gate(devices=devices),
+        "deterministic_output_check": bool(deterministic_output_gate.get("passes")),
+        "deterministic_output_probe_requested": bool(args.deterministic_output_probe),
+        "deterministic_output_tolerance": float(args.deterministic_output_tolerance),
+        "deterministic_output_dir": _display_path(deterministic_output_dir, repo_root=repo_root),
+        "deterministic_output_gate": deterministic_output_gate,
     }
     if _normalized_backend(args.backend) == "gpu":
         payload["gpu_device_count"] = int(max(devices))
         payload["visible_gpu_ids"] = [str(i) for i in range(int(max(devices)))]
+
+    payload["sharded_solve_audit"] = asdict(audit_sharded_solve_scaling_summary(payload))
 
     json_path = out_dir / "sharded_solve_scaling.json"
     json_path.write_text(json.dumps(payload, indent=2))

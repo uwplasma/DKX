@@ -1,0 +1,2555 @@
+{
+  "kind": "rhs1_pas_matrixfree_probe",
+  "plan": {
+    "artifact_inputs": [
+      "docs/_static/rhs1_pas_production_solve_geometry4.json",
+      "docs/_static/rhs1_pas_production_solve_hsx.json",
+      "docs/_static/rhs1_pas_matrixfree_byte_budget_gate_2026_05_15.json"
+    ],
+    "artifact_probe": {
+      "artifacts": [
+        {
+          "artifact_gates": {
+            "guarded_pas_tz": {
+              "reason": "guarded PAS-TZ evidence recorded",
+              "status": "pass"
+            },
+            "memory": {
+              "limit_mb": 4096.0,
+              "max_rss_mb_peak": 3044.109375,
+              "reason": "rss-within-short-probe-bound",
+              "status": "pass"
+            },
+            "residual": {
+              "best_residual_norm": 5.8681915568091774e-08,
+              "max_residual_norm": 0.001,
+              "reason": "residual-clean",
+              "status": "pass"
+            },
+            "row_gates": {
+              "all_gates_passed": false,
+              "failed_variants": [
+                "tzfft",
+                "tzfft_lgmres"
+              ],
+              "failure_reasons": {
+                "default_promotion:runtime-and-memory-regression": 2
+              },
+              "promotion_eligible_variants": [],
+              "reason": "artifact row gates failed",
+              "status": "fail"
+            },
+            "runtime": {
+              "elapsed_s_max": 38.250824749993626,
+              "limit_s": 240.0,
+              "reason": "runtime-within-short-probe-bound",
+              "status": "pass"
+            }
+          },
+          "artifact_gates_passed": false,
+          "best_residual_norm": 5.8681915568091774e-08,
+          "elapsed_s_max": 38.250824749993626,
+          "finite_residual_count": 2,
+          "guarded_pas_tz_seen": true,
+          "kind": "pas_tz_memory_fallback_benchmark",
+          "max_rss_mb_peak": 3044.109375,
+          "ok_result_count": 2,
+          "pas_constraint_size_max": 571200.0,
+          "path": "docs/_static/rhs1_pas_production_solve_geometry4.json",
+          "plan_input": "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+          "ready_evidence": false,
+          "result_count": 2,
+          "status": "ok",
+          "target": "geometry4",
+          "total_size_max": 1020008.0,
+          "variants": [
+            "tzfft",
+            "tzfft_lgmres"
+          ]
+        },
+        {
+          "artifact_gates": {
+            "guarded_pas_tz": {
+              "reason": "guarded PAS-TZ evidence recorded",
+              "status": "pass"
+            },
+            "memory": {
+              "limit_mb": 4096.0,
+              "max_rss_mb_peak": 3144.765625,
+              "reason": "rss-within-short-probe-bound",
+              "status": "pass"
+            },
+            "residual": {
+              "best_residual_norm": 0.00015976732694005034,
+              "max_residual_norm": 0.001,
+              "reason": "residual-clean",
+              "status": "pass"
+            },
+            "row_gates": {
+              "all_gates_passed": false,
+              "failed_variants": [
+                "tzfft",
+                "tzfft_lgmres"
+              ],
+              "failure_reasons": {
+                "default_promotion:memory-regression": 1,
+                "default_promotion:runtime-regression": 1
+              },
+              "promotion_eligible_variants": [],
+              "reason": "artifact row gates failed",
+              "status": "fail"
+            },
+            "runtime": {
+              "elapsed_s_max": 56.55105733295204,
+              "limit_s": 240.0,
+              "reason": "runtime-within-short-probe-bound",
+              "status": "pass"
+            }
+          },
+          "artifact_gates_passed": false,
+          "best_residual_norm": 0.00015976732694005034,
+          "elapsed_s_max": 56.55105733295204,
+          "finite_residual_count": 2,
+          "guarded_pas_tz_seen": true,
+          "kind": "pas_tz_memory_fallback_benchmark",
+          "max_rss_mb_peak": 3144.765625,
+          "ok_result_count": 2,
+          "pas_constraint_size_max": 571200.0,
+          "path": "docs/_static/rhs1_pas_production_solve_hsx.json",
+          "plan_input": "examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
+          "ready_evidence": false,
+          "result_count": 2,
+          "status": "ok",
+          "target": "hsx",
+          "total_size_max": 1020008.0,
+          "variants": [
+            "tzfft",
+            "tzfft_lgmres"
+          ]
+        },
+        {
+          "artifact_gates": {
+            "guarded_pas_tz": {
+              "reason": "missing guarded PAS-TZ evidence",
+              "status": "fail"
+            },
+            "memory": {
+              "limit_mb": 4096.0,
+              "max_rss_mb_peak": null,
+              "reason": "missing-or-high-rss",
+              "status": "fail"
+            },
+            "residual": {
+              "best_residual_norm": null,
+              "max_residual_norm": 0.001,
+              "reason": "missing-or-high-residual",
+              "status": "fail"
+            },
+            "row_gates": {
+              "all_gates_passed": null,
+              "failed_variants": [],
+              "failure_reasons": {},
+              "promotion_eligible_variants": [],
+              "reason": "missing-artifact-row-gate-summary",
+              "status": "fail"
+            },
+            "runtime": {
+              "elapsed_s_max": null,
+              "limit_s": 240.0,
+              "reason": "missing-or-slow-runtime",
+              "status": "fail"
+            }
+          },
+          "artifact_gates_passed": false,
+          "best_residual_norm": null,
+          "elapsed_s_max": null,
+          "finite_residual_count": 0,
+          "guarded_pas_tz_seen": false,
+          "kind": "rhs1_pas_matrixfree_probe",
+          "max_rss_mb_peak": null,
+          "ok_result_count": 0,
+          "pas_constraint_size_max": null,
+          "path": "docs/_static/rhs1_pas_matrixfree_byte_budget_gate_2026_05_15.json",
+          "plan_input": "",
+          "ready_evidence": false,
+          "result_count": 0,
+          "status": "ok",
+          "target": "unknown",
+          "total_size_max": null,
+          "variants": []
+        }
+      ],
+      "description": "Inspects existing PAS benchmark JSON; does not launch production solves.",
+      "mode": "checked_in_artifact_dry_run",
+      "ready_evidence_by_target": {
+        "geometry11": 0,
+        "geometry4": 0,
+        "hsx": 0
+      }
+    },
+    "bounded_real_solve_probe": {
+      "allow_long_run": false,
+      "description": "Opt-in subprocess layer using benchmark_pas_tz_memory_fallback.py; default planning launches no solves.",
+      "dry_run": false,
+      "gates": {
+        "baseline_elapsed_s": null,
+        "baseline_rss_mb": null,
+        "candidate_byte_preflight_required": true,
+        "default_promotion_required": false,
+        "expected_backend": "auto",
+        "max_residual_norm": 0.001,
+        "max_rss_mb": 4096.0,
+        "min_memory_reduction": 1.05,
+        "min_runtime_speedup": 1.05,
+        "promotion_policy": "real-solve candidates must not regress elapsed_s or max_rss_mb against baseline when default promotion is required",
+        "solver_path_churn_allowed": false,
+        "stall_s": 180.0
+      },
+      "grid_overrides": {
+        "Ntheta": 25,
+        "Nx": 4,
+        "Nxi": 100,
+        "Nzeta": 51
+      },
+      "max_default_runtime_s": 600.0,
+      "mode": "bounded_real_solve_probe",
+      "parent_wall_timeout_s": 210.0,
+      "planned_wall_timeout_s": 0.0,
+      "requested_targets": [
+        "geometry4",
+        "hsx",
+        "geometry11"
+      ],
+      "run_requested": true,
+      "safety_policy": {
+        "allow_unbudgeted_candidate": false,
+        "default_batch_cap_s": 600.0,
+        "dry_run_launches_subprocesses": false,
+        "invalid_targets_fail_closed": true,
+        "requires_candidate_byte_budget_by_default": true,
+        "requires_explicit_run_flag": true
+      },
+      "selected_targets": [],
+      "selection_policy": "ready requested targets in production-floor order until the total wall-time budget is exhausted",
+      "targets": {
+        "geometry11": {
+          "budget_fit": true,
+          "byte_preflight_promotion_ready": true,
+          "byte_preflight_required": true,
+          "candidate_byte_preflight": {
+            "byte_budget_configured": true,
+            "promotion_gate_passed": true,
+            "reason": "candidate byte preflight is within configured budget",
+            "records": [
+              {
+                "array_bytes": 5380800,
+                "candidate_byte_budget_configured": true,
+                "candidate_byte_budget_margin": 373096000,
+                "candidate_element_budget_configured": false,
+                "dtype_assumption": "float64_conservative_production_floor",
+                "element_count": 672600,
+                "estimated_live_array_bytes": 26904000,
+                "estimated_live_array_count": 5,
+                "itemsize_bytes": 8,
+                "max_candidate_bytes": 400000000,
+                "max_candidate_elements": null,
+                "max_update_chunk_bytes": 4096,
+                "preflight_kind": "rhs1_pas_matrixfree_candidate",
+                "promotion_gate_passed": true,
+                "reason": "within-candidate-memory-limit",
+                "safe": true,
+                "stream_update_chunks": true
+              }
+            ],
+            "status": "pass",
+            "unsafe_count": 0
+          },
+          "command": [
+            "/opt/local/bin/python",
+            "/Users/rogeriojorge/local/tests/sfincs_jax/scripts/benchmark_pas_tz_memory_fallback.py",
+            "--input",
+            "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
+            "--out",
+            "docs/_static/rhs1_pas_production_solve_geometry11.json",
+            "--variants",
+            "collision_tzfft_correction",
+            "--timeout-s",
+            "180.0",
+            "--stall-s",
+            "180.0",
+            "--maxiter",
+            "20",
+            "--restart",
+            "20",
+            "--solve-method",
+            "incremental",
+            "--Ntheta",
+            "25",
+            "--Nzeta",
+            "51",
+            "--Nxi",
+            "100",
+            "--Nx",
+            "4",
+            "--max-rss-mb",
+            "4096.0",
+            "--max-residual-norm",
+            "0.001",
+            "--expected-backend",
+            "auto"
+          ],
+          "input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
+          "out": "docs/_static/rhs1_pas_production_solve_geometry11.json",
+          "planned_parent_timeout_s": 210.0,
+          "ready": false,
+          "requested": true,
+          "selected_by_budget": false,
+          "skip_reason": "hold_for_missing_evidence",
+          "streamed_guarded_correction_gate": {
+            "blocker": "the current production PAS-TZ guarded correction uses _apply_preconditioned_minres_correction, which needs the full residual, full preconditioned direction, A*direction, and trial residual; no chunked PAS-TZ correction callback exists yet",
+            "diagnostic_only": true,
+            "guarded_correction_variants": [
+              "collision_tzfft_correction"
+            ],
+            "production_streamed_update_available": false,
+            "reason": "production-pas-tz-guarded-correction-streaming-not-implemented",
+            "required_row_metadata": [
+              "stream_update_chunks=true",
+              "pas_tz_guarded_correction_streamed=true",
+              "pas_tz_guarded_correction_full_update_materialized=false"
+            ],
+            "status": "fail"
+          },
+          "total_wall_timeout_budget_s": 600.0,
+          "will_run": false
+        },
+        "geometry4": {
+          "budget_fit": true,
+          "byte_preflight_promotion_ready": true,
+          "byte_preflight_required": true,
+          "candidate_byte_preflight": {
+            "byte_budget_configured": true,
+            "promotion_gate_passed": true,
+            "reason": "candidate byte preflight is within configured budget",
+            "records": [
+              {
+                "array_bytes": 1148160,
+                "candidate_byte_budget_configured": true,
+                "candidate_byte_budget_margin": 394259200,
+                "candidate_element_budget_configured": false,
+                "dtype_assumption": "float64_conservative_production_floor",
+                "element_count": 143520,
+                "estimated_live_array_bytes": 5740800,
+                "estimated_live_array_count": 5,
+                "itemsize_bytes": 8,
+                "max_candidate_bytes": 400000000,
+                "max_candidate_elements": null,
+                "max_update_chunk_bytes": 4096,
+                "preflight_kind": "rhs1_pas_matrixfree_candidate",
+                "promotion_gate_passed": true,
+                "reason": "within-candidate-memory-limit",
+                "safe": true,
+                "stream_update_chunks": true
+              }
+            ],
+            "status": "pass",
+            "unsafe_count": 0
+          },
+          "command": [
+            "/opt/local/bin/python",
+            "/Users/rogeriojorge/local/tests/sfincs_jax/scripts/benchmark_pas_tz_memory_fallback.py",
+            "--input",
+            "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+            "--out",
+            "docs/_static/rhs1_pas_production_solve_geometry4.json",
+            "--variants",
+            "collision_tzfft_correction",
+            "--timeout-s",
+            "180.0",
+            "--stall-s",
+            "180.0",
+            "--maxiter",
+            "20",
+            "--restart",
+            "20",
+            "--solve-method",
+            "incremental",
+            "--Ntheta",
+            "25",
+            "--Nzeta",
+            "51",
+            "--Nxi",
+            "100",
+            "--Nx",
+            "4",
+            "--max-rss-mb",
+            "4096.0",
+            "--max-residual-norm",
+            "0.001",
+            "--expected-backend",
+            "auto"
+          ],
+          "input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+          "out": "docs/_static/rhs1_pas_production_solve_geometry4.json",
+          "planned_parent_timeout_s": 210.0,
+          "ready": false,
+          "requested": true,
+          "selected_by_budget": false,
+          "skip_reason": "hold_for_missing_evidence",
+          "streamed_guarded_correction_gate": {
+            "blocker": "the current production PAS-TZ guarded correction uses _apply_preconditioned_minres_correction, which needs the full residual, full preconditioned direction, A*direction, and trial residual; no chunked PAS-TZ correction callback exists yet",
+            "diagnostic_only": true,
+            "guarded_correction_variants": [
+              "collision_tzfft_correction"
+            ],
+            "production_streamed_update_available": false,
+            "reason": "production-pas-tz-guarded-correction-streaming-not-implemented",
+            "required_row_metadata": [
+              "stream_update_chunks=true",
+              "pas_tz_guarded_correction_streamed=true",
+              "pas_tz_guarded_correction_full_update_materialized=false"
+            ],
+            "status": "fail"
+          },
+          "total_wall_timeout_budget_s": 600.0,
+          "will_run": false
+        },
+        "hsx": {
+          "budget_fit": true,
+          "byte_preflight_promotion_ready": true,
+          "byte_preflight_required": true,
+          "candidate_byte_preflight": {
+            "byte_budget_configured": true,
+            "promotion_gate_passed": true,
+            "reason": "candidate byte preflight is within configured budget",
+            "records": [
+              {
+                "array_bytes": 15078800,
+                "candidate_byte_budget_configured": true,
+                "candidate_byte_budget_margin": 324606000,
+                "candidate_element_budget_configured": false,
+                "dtype_assumption": "float64_conservative_production_floor",
+                "element_count": 1884850,
+                "estimated_live_array_bytes": 75394000,
+                "estimated_live_array_count": 5,
+                "itemsize_bytes": 8,
+                "max_candidate_bytes": 400000000,
+                "max_candidate_elements": null,
+                "max_update_chunk_bytes": 4096,
+                "preflight_kind": "rhs1_pas_matrixfree_candidate",
+                "promotion_gate_passed": true,
+                "reason": "within-candidate-memory-limit",
+                "safe": true,
+                "stream_update_chunks": true
+              }
+            ],
+            "status": "pass",
+            "unsafe_count": 0
+          },
+          "command": [
+            "/opt/local/bin/python",
+            "/Users/rogeriojorge/local/tests/sfincs_jax/scripts/benchmark_pas_tz_memory_fallback.py",
+            "--input",
+            "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
+            "--out",
+            "docs/_static/rhs1_pas_production_solve_hsx.json",
+            "--variants",
+            "collision_tzfft_correction",
+            "--timeout-s",
+            "180.0",
+            "--stall-s",
+            "180.0",
+            "--maxiter",
+            "20",
+            "--restart",
+            "20",
+            "--solve-method",
+            "incremental",
+            "--Ntheta",
+            "25",
+            "--Nzeta",
+            "51",
+            "--Nxi",
+            "100",
+            "--Nx",
+            "4",
+            "--max-rss-mb",
+            "4096.0",
+            "--max-residual-norm",
+            "0.001",
+            "--expected-backend",
+            "auto"
+          ],
+          "input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
+          "out": "docs/_static/rhs1_pas_production_solve_hsx.json",
+          "planned_parent_timeout_s": 210.0,
+          "ready": false,
+          "requested": true,
+          "selected_by_budget": false,
+          "skip_reason": "hold_for_missing_evidence",
+          "streamed_guarded_correction_gate": {
+            "blocker": "the current production PAS-TZ guarded correction uses _apply_preconditioned_minres_correction, which needs the full residual, full preconditioned direction, A*direction, and trial residual; no chunked PAS-TZ correction callback exists yet",
+            "diagnostic_only": true,
+            "guarded_correction_variants": [
+              "collision_tzfft_correction"
+            ],
+            "production_streamed_update_available": false,
+            "reason": "production-pas-tz-guarded-correction-streaming-not-implemented",
+            "required_row_metadata": [
+              "stream_update_chunks=true",
+              "pas_tz_guarded_correction_streamed=true",
+              "pas_tz_guarded_correction_full_update_materialized=false"
+            ],
+            "status": "fail"
+          },
+          "total_wall_timeout_budget_s": 600.0,
+          "will_run": false
+        }
+      },
+      "timeout_s": 180.0,
+      "total_wall_timeout_budget_s": 600.0,
+      "variants": [
+        "collision_tzfft_correction"
+      ]
+    },
+    "cases": [
+      {
+        "byte_preflight": {
+          "array_bytes": 64,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999680,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float32_bounded_probe",
+          "element_count": 16,
+          "estimated_live_array_bytes": 320,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 4,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "case_id": "diagonal_keep",
+        "config": {
+          "block_size": 64,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_steps": 1,
+          "max_update_chunk_bytes": 4096,
+          "max_update_norm_ratio": 10.0,
+          "min_residual_reduction": 0.001,
+          "min_update_norm_ratio": 1e-12,
+          "omega": 1.0,
+          "stream_update_chunks": true
+        },
+        "expected_gate": "keep",
+        "expected_reason": "accepted",
+        "size": 16,
+        "source_type": "synthetic",
+        "system_kind": "diagonal"
+      },
+      {
+        "byte_preflight": {
+          "array_bytes": 128,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999360,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float32_bounded_probe",
+          "element_count": 32,
+          "estimated_live_array_bytes": 640,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 4,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "case_id": "coupled_jacobi_keep",
+        "config": {
+          "block_size": 64,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_steps": 1,
+          "max_update_chunk_bytes": 4096,
+          "max_update_norm_ratio": 10.0,
+          "min_residual_reduction": 0.001,
+          "min_update_norm_ratio": 1e-12,
+          "omega": 1.0,
+          "stream_update_chunks": true
+        },
+        "coupling": 0.03,
+        "expected_gate": "keep",
+        "expected_reason": "accepted",
+        "phase": 0.0,
+        "size": 32,
+        "source_type": "synthetic",
+        "system_kind": "coupled_jacobi"
+      },
+      {
+        "byte_preflight": {
+          "array_bytes": 64,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999680,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float32_bounded_probe",
+          "element_count": 16,
+          "estimated_live_array_bytes": 320,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 4,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "case_id": "zero_update_reject",
+        "config": {
+          "block_size": 64,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_steps": 1,
+          "max_update_chunk_bytes": 4096,
+          "max_update_norm_ratio": 10.0,
+          "min_residual_reduction": 0.001,
+          "min_update_norm_ratio": 1e-12,
+          "omega": 1.0,
+          "stream_update_chunks": true
+        },
+        "expected_gate": "reject",
+        "expected_reason": "insufficient-residual-improvement",
+        "size": 16,
+        "source_type": "synthetic",
+        "system_kind": "zero_update"
+      },
+      {
+        "byte_preflight": {
+          "array_bytes": 64,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999680,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float32_bounded_probe",
+          "element_count": 16,
+          "estimated_live_array_bytes": 320,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 4,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "case_id": "tiny_update_reject",
+        "config": {
+          "block_size": 64,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_steps": 1,
+          "max_update_chunk_bytes": 4096,
+          "max_update_norm_ratio": 10.0,
+          "min_residual_reduction": 0.001,
+          "min_update_norm_ratio": 1e-12,
+          "omega": 1.0,
+          "stream_update_chunks": true
+        },
+        "expected_gate": "reject",
+        "expected_reason": "update-norm-too-small",
+        "size": 16,
+        "source_type": "synthetic",
+        "system_kind": "tiny_update",
+        "update_scale": 1e-14
+      },
+      {
+        "byte_preflight": {
+          "array_bytes": 64,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999680,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float32_bounded_probe",
+          "element_count": 16,
+          "estimated_live_array_bytes": 320,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 4,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "case_id": "nonfinite_candidate_reject",
+        "config": {
+          "block_size": 64,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_steps": 1,
+          "max_update_chunk_bytes": 4096,
+          "max_update_norm_ratio": 10.0,
+          "min_residual_reduction": 0.001,
+          "min_update_norm_ratio": 1e-12,
+          "omega": 1.0,
+          "stream_update_chunks": true
+        },
+        "expected_gate": "reject",
+        "expected_reason": "nonfinite-candidate-residual",
+        "size": 16,
+        "source_type": "synthetic",
+        "system_kind": "nonfinite_candidate"
+      },
+      {
+        "byte_preflight": {
+          "array_bytes": 232,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399998840,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float32_bounded_probe",
+          "element_count": 58,
+          "estimated_live_array_bytes": 1160,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 4,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "case_id": "metadata_geometryscheme4_2species_pas_noer",
+        "config": {
+          "block_size": 64,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_steps": 1,
+          "max_update_chunk_bytes": 4096,
+          "max_update_norm_ratio": 10.0,
+          "min_residual_reduction": 0.001,
+          "min_update_norm_ratio": 1e-12,
+          "omega": 1.0,
+          "stream_update_chunks": true
+        },
+        "coupling": 0.018000000000000002,
+        "expected_gate": "keep",
+        "expected_reason": "accepted",
+        "phase": 0.17647058823529413,
+        "production_floor_byte_preflight": {
+          "array_bytes": 1148160,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 394259200,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float64_conservative_production_floor",
+          "element_count": 143520,
+          "estimated_live_array_bytes": 5740800,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 8,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "production_floor_target": "geometry4",
+        "size": 58,
+        "source_metadata": {
+          "case": "geometryScheme4_2species_PAS_noEr",
+          "collision_operator": 1,
+          "equilibrium_file": null,
+          "er": 0.0,
+          "estimated_full_unknowns": 143520,
+          "geometry_scheme": 4,
+          "include_electric_field_term_in_xi_dot": true,
+          "include_phi1": false,
+          "include_x_dot_term": true,
+          "input": "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+          "production_floor_target": "geometry4",
+          "resolution": {
+            "Ntheta": 13,
+            "Nx": 5,
+            "Nxi": 48,
+            "Nzeta": 23
+          },
+          "source_type": "production_floor_geometry_metadata",
+          "species_count": 2,
+          "use_dkes_exb_drift": false
+        },
+        "source_type": "production_floor_geometry_metadata",
+        "system_kind": "metadata_coupled_jacobi"
+      },
+      {
+        "byte_preflight": {
+          "array_bytes": 512,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399997440,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float32_bounded_probe",
+          "element_count": 128,
+          "estimated_live_array_bytes": 2560,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 4,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "case_id": "metadata_hsx_pascollisions_dkestrajectories",
+        "config": {
+          "block_size": 64,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_steps": 1,
+          "max_update_chunk_bytes": 4096,
+          "max_update_norm_ratio": 10.0,
+          "min_residual_reduction": 0.001,
+          "min_update_norm_ratio": 1e-12,
+          "omega": 1.0,
+          "stream_update_chunks": true
+        },
+        "coupling": 0.012,
+        "expected_gate": "keep",
+        "expected_reason": "accepted",
+        "phase": 0.4117647058823529,
+        "production_floor_byte_preflight": {
+          "array_bytes": 15078800,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 324606000,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float64_conservative_production_floor",
+          "element_count": 1884850,
+          "estimated_live_array_bytes": 75394000,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 8,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "production_floor_target": "hsx",
+        "size": 128,
+        "source_metadata": {
+          "case": "HSX_PASCollisions_DKESTrajectories",
+          "collision_operator": 1,
+          "equilibrium_file": "../../../../equilibria/hsx3free.bc",
+          "er": 1.86863,
+          "estimated_full_unknowns": 1884850,
+          "geometry_scheme": 11,
+          "include_electric_field_term_in_xi_dot": false,
+          "include_phi1": false,
+          "include_x_dot_term": false,
+          "input": "examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
+          "production_floor_target": "hsx",
+          "resolution": {
+            "Ntheta": 11,
+            "Nx": 5,
+            "Nxi": 149,
+            "Nzeta": 115
+          },
+          "source_type": "production_floor_geometry_metadata",
+          "species_count": 2,
+          "use_dkes_exb_drift": true
+        },
+        "source_type": "production_floor_geometry_metadata",
+        "system_kind": "metadata_coupled_jacobi"
+      },
+      {
+        "byte_preflight": {
+          "array_bytes": 412,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399997940,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float32_bounded_probe",
+          "element_count": 103,
+          "estimated_live_array_bytes": 2060,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 4,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "case_id": "metadata_sfincspaperfigure3_geometryscheme11_pascollisions_2species_dkestrajectories",
+        "config": {
+          "block_size": 64,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_steps": 1,
+          "max_update_chunk_bytes": 4096,
+          "max_update_norm_ratio": 10.0,
+          "min_residual_reduction": 0.001,
+          "min_update_norm_ratio": 1e-12,
+          "omega": 1.0,
+          "stream_update_chunks": true
+        },
+        "coupling": 0.012,
+        "expected_gate": "keep",
+        "expected_reason": "accepted",
+        "phase": 0.8235294117647058,
+        "production_floor_byte_preflight": {
+          "array_bytes": 5380800,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 373096000,
+          "candidate_element_budget_configured": false,
+          "dtype_assumption": "float64_conservative_production_floor",
+          "element_count": 672600,
+          "estimated_live_array_bytes": 26904000,
+          "estimated_live_array_count": 5,
+          "itemsize_bytes": 8,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_update_chunk_bytes": 4096,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "promotion_gate_passed": true,
+          "reason": "within-candidate-memory-limit",
+          "safe": true,
+          "stream_update_chunks": true
+        },
+        "production_floor_target": "geometry11",
+        "size": 103,
+        "source_metadata": {
+          "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories",
+          "collision_operator": 1,
+          "equilibrium_file": "../../../../equilibria/w7x-sc1.bc",
+          "er": -8.5897,
+          "estimated_full_unknowns": 672600,
+          "geometry_scheme": 11,
+          "include_electric_field_term_in_xi_dot": false,
+          "include_phi1": false,
+          "include_x_dot_term": false,
+          "input": "examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
+          "production_floor_target": "geometry11",
+          "resolution": {
+            "Ntheta": 19,
+            "Nx": 5,
+            "Nxi": 60,
+            "Nzeta": 59
+          },
+          "source_type": "production_floor_geometry_metadata",
+          "species_count": 2,
+          "use_dkes_exb_drift": true
+        },
+        "source_type": "production_floor_geometry_metadata",
+        "system_kind": "metadata_coupled_jacobi"
+      }
+    ],
+    "dry_run": false,
+    "gates": {
+      "keep": {
+        "requires": [
+          "child status is ok",
+          "correction result is accepted",
+          "residual norms are finite",
+          "observed residual reduction meets min_residual_reduction"
+        ]
+      },
+      "reject": {
+        "requires": [
+          "child timeout/error",
+          "non-finite residual/update",
+          "shape mismatch",
+          "candidate element or byte preflight budget exceeded",
+          "insufficient residual improvement"
+        ],
+        "safe_default": true
+      }
+    },
+    "max_size": 128,
+    "metadata_inputs": [
+      "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+      "examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
+      "examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist"
+    ],
+    "production_floor_preflight": {
+      "all_required_targets_ready": false,
+      "mode": "production_floor_preflight",
+      "ready_targets": [],
+      "required_targets": [
+        "geometry4",
+        "hsx",
+        "geometry11"
+      ],
+      "targets": {
+        "geometry11": {
+          "gates": {
+            "bounded_matrixfree_case": {
+              "planned_case_ids": [
+                "metadata_sfincspaperfigure3_geometryscheme11_pascollisions_2species_dkestrajectories"
+              ],
+              "planned_sizes": [
+                103
+              ],
+              "reason": "bounded metadata-parameterized matrix-free probe case planned",
+              "status": "pass"
+            },
+            "bounded_streamed_update_probe": {
+              "diagnostic_only": true,
+              "max_update_chunk_bytes_configured": true,
+              "planned_case_ids": [
+                "metadata_sfincspaperfigure3_geometryscheme11_pascollisions_2species_dkestrajectories"
+              ],
+              "reason": "bounded streamed-update probe planned with an update chunk byte budget",
+              "status": "pass",
+              "stream_update_chunks_requested": true
+            },
+            "candidate_byte_preflight": {
+              "byte_budget_configured": true,
+              "promotion_gate_passed": true,
+              "reason": "candidate byte preflight is within configured budget",
+              "records": [
+                {
+                  "array_bytes": 5380800,
+                  "candidate_byte_budget_configured": true,
+                  "candidate_byte_budget_margin": 373096000,
+                  "candidate_element_budget_configured": false,
+                  "dtype_assumption": "float64_conservative_production_floor",
+                  "element_count": 672600,
+                  "estimated_live_array_bytes": 26904000,
+                  "estimated_live_array_count": 5,
+                  "itemsize_bytes": 8,
+                  "max_candidate_bytes": 400000000,
+                  "max_candidate_elements": null,
+                  "max_update_chunk_bytes": 4096,
+                  "preflight_kind": "rhs1_pas_matrixfree_candidate",
+                  "promotion_gate_passed": true,
+                  "reason": "within-candidate-memory-limit",
+                  "safe": true,
+                  "stream_update_chunks": true
+                }
+              ],
+              "status": "pass",
+              "unsafe_count": 0
+            },
+            "checked_artifact_evidence": {
+              "artifact_paths": [],
+              "ready_artifact_paths": [],
+              "reason": "no checked-in artifact with guarded residual/runtime/memory evidence",
+              "status": "fail"
+            },
+            "long_solve_avoidance": {
+              "reason": "preflight inspects metadata and checked-in artifacts only; production solves are not launched",
+              "status": "pass"
+            },
+            "metadata_present": {
+              "count": 1,
+              "reason": "production-floor namelist metadata found",
+              "status": "pass"
+            },
+            "pas_collision_operator": {
+              "observed": [
+                1
+              ],
+              "reason": "all matching metadata uses PAS collisions",
+              "status": "pass"
+            }
+          },
+          "next_solve_recommendation": "hold_for_missing_evidence",
+          "ready": false
+        },
+        "geometry4": {
+          "gates": {
+            "bounded_matrixfree_case": {
+              "planned_case_ids": [
+                "metadata_geometryscheme4_2species_pas_noer"
+              ],
+              "planned_sizes": [
+                58
+              ],
+              "reason": "bounded metadata-parameterized matrix-free probe case planned",
+              "status": "pass"
+            },
+            "bounded_streamed_update_probe": {
+              "diagnostic_only": true,
+              "max_update_chunk_bytes_configured": true,
+              "planned_case_ids": [
+                "metadata_geometryscheme4_2species_pas_noer"
+              ],
+              "reason": "bounded streamed-update probe planned with an update chunk byte budget",
+              "status": "pass",
+              "stream_update_chunks_requested": true
+            },
+            "candidate_byte_preflight": {
+              "byte_budget_configured": true,
+              "promotion_gate_passed": true,
+              "reason": "candidate byte preflight is within configured budget",
+              "records": [
+                {
+                  "array_bytes": 1148160,
+                  "candidate_byte_budget_configured": true,
+                  "candidate_byte_budget_margin": 394259200,
+                  "candidate_element_budget_configured": false,
+                  "dtype_assumption": "float64_conservative_production_floor",
+                  "element_count": 143520,
+                  "estimated_live_array_bytes": 5740800,
+                  "estimated_live_array_count": 5,
+                  "itemsize_bytes": 8,
+                  "max_candidate_bytes": 400000000,
+                  "max_candidate_elements": null,
+                  "max_update_chunk_bytes": 4096,
+                  "preflight_kind": "rhs1_pas_matrixfree_candidate",
+                  "promotion_gate_passed": true,
+                  "reason": "within-candidate-memory-limit",
+                  "safe": true,
+                  "stream_update_chunks": true
+                }
+              ],
+              "status": "pass",
+              "unsafe_count": 0
+            },
+            "checked_artifact_evidence": {
+              "artifact_paths": [
+                "docs/_static/rhs1_pas_production_solve_geometry4.json"
+              ],
+              "ready_artifact_paths": [],
+              "reason": "no checked-in artifact with guarded residual/runtime/memory evidence",
+              "status": "fail"
+            },
+            "long_solve_avoidance": {
+              "reason": "preflight inspects metadata and checked-in artifacts only; production solves are not launched",
+              "status": "pass"
+            },
+            "metadata_present": {
+              "count": 1,
+              "reason": "production-floor namelist metadata found",
+              "status": "pass"
+            },
+            "pas_collision_operator": {
+              "observed": [
+                1
+              ],
+              "reason": "all matching metadata uses PAS collisions",
+              "status": "pass"
+            }
+          },
+          "next_solve_recommendation": "hold_for_missing_evidence",
+          "ready": false
+        },
+        "hsx": {
+          "gates": {
+            "bounded_matrixfree_case": {
+              "planned_case_ids": [
+                "metadata_hsx_pascollisions_dkestrajectories"
+              ],
+              "planned_sizes": [
+                128
+              ],
+              "reason": "bounded metadata-parameterized matrix-free probe case planned",
+              "status": "pass"
+            },
+            "bounded_streamed_update_probe": {
+              "diagnostic_only": true,
+              "max_update_chunk_bytes_configured": true,
+              "planned_case_ids": [
+                "metadata_hsx_pascollisions_dkestrajectories"
+              ],
+              "reason": "bounded streamed-update probe planned with an update chunk byte budget",
+              "status": "pass",
+              "stream_update_chunks_requested": true
+            },
+            "candidate_byte_preflight": {
+              "byte_budget_configured": true,
+              "promotion_gate_passed": true,
+              "reason": "candidate byte preflight is within configured budget",
+              "records": [
+                {
+                  "array_bytes": 15078800,
+                  "candidate_byte_budget_configured": true,
+                  "candidate_byte_budget_margin": 324606000,
+                  "candidate_element_budget_configured": false,
+                  "dtype_assumption": "float64_conservative_production_floor",
+                  "element_count": 1884850,
+                  "estimated_live_array_bytes": 75394000,
+                  "estimated_live_array_count": 5,
+                  "itemsize_bytes": 8,
+                  "max_candidate_bytes": 400000000,
+                  "max_candidate_elements": null,
+                  "max_update_chunk_bytes": 4096,
+                  "preflight_kind": "rhs1_pas_matrixfree_candidate",
+                  "promotion_gate_passed": true,
+                  "reason": "within-candidate-memory-limit",
+                  "safe": true,
+                  "stream_update_chunks": true
+                }
+              ],
+              "status": "pass",
+              "unsafe_count": 0
+            },
+            "checked_artifact_evidence": {
+              "artifact_paths": [
+                "docs/_static/rhs1_pas_production_solve_hsx.json"
+              ],
+              "ready_artifact_paths": [],
+              "reason": "no checked-in artifact with guarded residual/runtime/memory evidence",
+              "status": "fail"
+            },
+            "long_solve_avoidance": {
+              "reason": "preflight inspects metadata and checked-in artifacts only; production solves are not launched",
+              "status": "pass"
+            },
+            "metadata_present": {
+              "count": 1,
+              "reason": "production-floor namelist metadata found",
+              "status": "pass"
+            },
+            "pas_collision_operator": {
+              "observed": [
+                1
+              ],
+              "reason": "all matching metadata uses PAS collisions",
+              "status": "pass"
+            }
+          },
+          "next_solve_recommendation": "hold_for_missing_evidence",
+          "ready": false
+        }
+      }
+    },
+    "systems": [
+      "diagonal_keep",
+      "coupled_jacobi_keep",
+      "zero_update_reject",
+      "tiny_update_reject",
+      "nonfinite_candidate_reject"
+    ],
+    "timeout_s": 5.0
+  },
+  "production_solve_results": [],
+  "results": [
+    {
+      "accepted": true,
+      "accepted_steps": 1,
+      "byte_preflight": {
+        "array_bytes": 64,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 399999680,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float32_bounded_probe",
+        "element_count": 16,
+        "estimated_live_array_bytes": 320,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 4,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "case_id": "diagonal_keep",
+      "elapsed_s": 0.03813204204197973,
+      "expected_gate": "keep",
+      "expected_reason": "accepted",
+      "gate": "keep",
+      "gate_diagnostics": {
+        "accepted_steps": 1,
+        "candidate_residual_finite": true,
+        "candidate_residual_norm": 0.0,
+        "initial_residual_finite": true,
+        "initial_residual_norm": 5.796841438792673,
+        "matrix_free_metadata": {
+          "array_bytes": 64,
+          "block_size": 16,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999744,
+          "candidate_element_budget_configured": false,
+          "candidate_matvecs": 1,
+          "dtype": "float32",
+          "element_count": 16,
+          "estimated_live_array_bytes": 256,
+          "estimated_live_array_count": 4,
+          "full_update_materialized": false,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_reduction_bytes": 100000000,
+          "max_update_chunk_bytes": 4096,
+          "min_update_norm_ratio": 1e-12,
+          "planned_norm_block_size": 16,
+          "planned_update_block_size": 16,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "reason": "within-candidate-memory-limit",
+          "reduction_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 256,
+            "estimated_reduction_bytes": 128,
+            "itemsize": 4,
+            "live_array_count": 4,
+            "live_byte_margin": 399999744,
+            "max_live_bytes": 400000000,
+            "max_reduction_bytes": 100000000,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 2,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "safe": true,
+          "shape": [
+            16
+          ],
+          "stream_update_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 64,
+            "estimated_reduction_bytes": 64,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "stream_update_chunks": true
+        },
+        "min_residual_reduction": 0.001,
+        "reason": "accepted",
+        "required_residual_norm": 5.79104459735388,
+        "residual_reduction": 1.0,
+        "streamed_update_metadata": {
+          "full_update_materialized": false,
+          "max_update_chunk_bytes": 4096,
+          "max_update_chunk_elements": 16,
+          "planned_update_block_size": 16,
+          "reason": "streamed-update-built",
+          "stream_update_chunks": true,
+          "update_chunk_count": 1,
+          "update_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 64,
+            "estimated_reduction_bytes": 64,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "update_norm": 4.61834258268695
+        }
+      },
+      "gate_reason": "accepted",
+      "initial_residual_norm": 5.796841438792673,
+      "max_rss_mb": 193.859375,
+      "meets_expected_gate": true,
+      "metrics": {
+        "chunked_correction_calls": 1,
+        "correction_calls": 0,
+        "matvec_calls": 2,
+        "size": 16
+      },
+      "production_floor_byte_preflight": {},
+      "production_floor_target": "",
+      "residual_history": [
+        5.796841438792673,
+        0.0
+      ],
+      "residual_history_nonfinite_count": 0,
+      "residual_norm": 0.0,
+      "residual_reduction": 1.0,
+      "returncode": 0,
+      "source_type": "synthetic",
+      "status": "ok",
+      "system_kind": "diagonal",
+      "tail_metadata": {
+        "stderr_tail_chars": 0,
+        "stdout_tail_chars": 3816,
+        "tail_limit_chars": 4000
+      }
+    },
+    {
+      "accepted": true,
+      "accepted_steps": 1,
+      "byte_preflight": {
+        "array_bytes": 128,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 399999360,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float32_bounded_probe",
+        "element_count": 32,
+        "estimated_live_array_bytes": 640,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 4,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "case_id": "coupled_jacobi_keep",
+      "elapsed_s": 0.03741787502076477,
+      "expected_gate": "keep",
+      "expected_reason": "accepted",
+      "gate": "keep",
+      "gate_diagnostics": {
+        "accepted_steps": 1,
+        "candidate_residual_finite": true,
+        "candidate_residual_norm": 0.29974542336473786,
+        "initial_residual_finite": true,
+        "initial_residual_norm": 7.294116264502378,
+        "matrix_free_metadata": {
+          "array_bytes": 128,
+          "block_size": 32,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999488,
+          "candidate_element_budget_configured": false,
+          "candidate_matvecs": 1,
+          "dtype": "float32",
+          "element_count": 32,
+          "estimated_live_array_bytes": 512,
+          "estimated_live_array_count": 4,
+          "full_update_materialized": false,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_reduction_bytes": 100000000,
+          "max_update_chunk_bytes": 4096,
+          "min_update_norm_ratio": 1e-12,
+          "planned_norm_block_size": 32,
+          "planned_update_block_size": 32,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "reason": "within-candidate-memory-limit",
+          "reduction_chunk_plan": {
+            "array_bytes": 128,
+            "block_size": 32,
+            "element_count": 32,
+            "estimated_live_array_bytes": 512,
+            "estimated_reduction_bytes": 256,
+            "itemsize": 4,
+            "live_array_count": 4,
+            "live_byte_margin": 399999488,
+            "max_live_bytes": 400000000,
+            "max_reduction_bytes": 100000000,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 2,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "safe": true,
+          "shape": [
+            32
+          ],
+          "stream_update_chunk_plan": {
+            "array_bytes": 128,
+            "block_size": 32,
+            "element_count": 32,
+            "estimated_live_array_bytes": 128,
+            "estimated_reduction_bytes": 128,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "stream_update_chunks": true
+        },
+        "min_residual_reduction": 0.001,
+        "reason": "accepted",
+        "required_residual_norm": 7.286822148237875,
+        "residual_reduction": 0.9589058615882664,
+        "streamed_update_metadata": {
+          "full_update_materialized": false,
+          "max_update_chunk_bytes": 4096,
+          "max_update_chunk_elements": 32,
+          "planned_update_block_size": 32,
+          "reason": "streamed-update-built",
+          "stream_update_chunks": true,
+          "update_chunk_count": 1,
+          "update_chunk_plan": {
+            "array_bytes": 128,
+            "block_size": 32,
+            "element_count": 32,
+            "estimated_live_array_bytes": 128,
+            "estimated_reduction_bytes": 128,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "update_norm": 5.184076489390522
+        }
+      },
+      "gate_reason": "accepted",
+      "initial_residual_norm": 7.294116264502378,
+      "max_rss_mb": 199.0,
+      "meets_expected_gate": true,
+      "metrics": {
+        "chunked_correction_calls": 1,
+        "correction_calls": 0,
+        "matvec_calls": 2,
+        "size": 32
+      },
+      "production_floor_byte_preflight": {},
+      "production_floor_target": "",
+      "residual_history": [
+        7.294116264502378,
+        0.29974542336473786
+      ],
+      "residual_history_nonfinite_count": 0,
+      "residual_norm": 0.29974542336473786,
+      "residual_reduction": 0.9589058615882664,
+      "returncode": 0,
+      "source_type": "synthetic",
+      "status": "ok",
+      "system_kind": "coupled_jacobi",
+      "tail_metadata": {
+        "stderr_tail_chars": 0,
+        "stdout_tail_chars": 3912,
+        "tail_limit_chars": 4000
+      }
+    },
+    {
+      "accepted": false,
+      "accepted_steps": 0,
+      "byte_preflight": {
+        "array_bytes": 64,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 399999680,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float32_bounded_probe",
+        "element_count": 16,
+        "estimated_live_array_bytes": 320,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 4,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "case_id": "zero_update_reject",
+      "elapsed_s": 0.014748833025805652,
+      "expected_gate": "reject",
+      "expected_reason": "insufficient-residual-improvement",
+      "gate": "reject",
+      "gate_diagnostics": {
+        "accepted_steps": 0,
+        "candidate_residual_finite": true,
+        "candidate_residual_norm": 4.61834258268695,
+        "initial_residual_finite": true,
+        "initial_residual_norm": 4.61834258268695,
+        "matrix_free_metadata": {
+          "array_bytes": 64,
+          "block_size": 16,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999808,
+          "candidate_element_budget_configured": false,
+          "candidate_matvecs": 0,
+          "dtype": "float32",
+          "element_count": 16,
+          "estimated_live_array_bytes": 192,
+          "estimated_live_array_count": 3,
+          "full_update_materialized": false,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_reduction_bytes": 133333333,
+          "max_update_chunk_bytes": 4096,
+          "min_update_norm_ratio": 1e-12,
+          "planned_norm_block_size": 16,
+          "planned_update_block_size": 16,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "reason": "within-candidate-memory-limit",
+          "reduction_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 192,
+            "estimated_reduction_bytes": 128,
+            "itemsize": 4,
+            "live_array_count": 3,
+            "live_byte_margin": 399999808,
+            "max_live_bytes": 400000000,
+            "max_reduction_bytes": 133333333,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 2,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "safe": true,
+          "shape": [
+            16
+          ],
+          "stream_update_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 64,
+            "estimated_reduction_bytes": 64,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "stream_update_chunks": true
+        },
+        "min_residual_reduction": 0.001,
+        "reason": "insufficient-residual-improvement",
+        "required_residual_norm": 4.613724240104263,
+        "residual_reduction": 0.0,
+        "streamed_update_metadata": {
+          "full_update_materialized": false,
+          "max_update_chunk_bytes": 4096,
+          "max_update_chunk_elements": 16,
+          "planned_update_block_size": 16,
+          "reason": "streamed-update-built",
+          "stream_update_chunks": true,
+          "update_chunk_count": 1,
+          "update_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 64,
+            "estimated_reduction_bytes": 64,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "update_norm": 0.0
+        }
+      },
+      "gate_reason": "insufficient-residual-improvement",
+      "initial_residual_norm": 4.61834258268695,
+      "max_rss_mb": 159.75,
+      "meets_expected_gate": true,
+      "metrics": {
+        "chunked_correction_calls": 1,
+        "correction_calls": 0,
+        "matvec_calls": 1,
+        "size": 16
+      },
+      "production_floor_byte_preflight": {},
+      "production_floor_target": "",
+      "residual_history": [
+        4.61834258268695,
+        4.61834258268695
+      ],
+      "residual_history_nonfinite_count": 0,
+      "residual_norm": 4.61834258268695,
+      "residual_reduction": 0.0,
+      "returncode": 0,
+      "source_type": "synthetic",
+      "status": "ok",
+      "system_kind": "zero_update",
+      "tail_metadata": {
+        "stderr_tail_chars": 0,
+        "stdout_tail_chars": 3925,
+        "tail_limit_chars": 4000
+      }
+    },
+    {
+      "accepted": false,
+      "accepted_steps": 0,
+      "byte_preflight": {
+        "array_bytes": 64,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 399999680,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float32_bounded_probe",
+        "element_count": 16,
+        "estimated_live_array_bytes": 320,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 4,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "case_id": "tiny_update_reject",
+      "elapsed_s": 0.019365042040590197,
+      "expected_gate": "reject",
+      "expected_reason": "update-norm-too-small",
+      "gate": "reject",
+      "gate_diagnostics": {
+        "accepted_steps": 0,
+        "damped_update_norm": 4.618342421849597e-14,
+        "matrix_free_metadata": {
+          "array_bytes": 64,
+          "block_size": 16,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999808,
+          "candidate_element_budget_configured": false,
+          "candidate_matvecs": 0,
+          "dtype": "float32",
+          "element_count": 16,
+          "estimated_live_array_bytes": 192,
+          "estimated_live_array_count": 3,
+          "full_update_materialized": false,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_reduction_bytes": 133333333,
+          "max_update_chunk_bytes": 4096,
+          "min_update_norm_ratio": 1e-12,
+          "planned_norm_block_size": 16,
+          "planned_update_block_size": 16,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "reason": "within-candidate-memory-limit",
+          "reduction_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 192,
+            "estimated_reduction_bytes": 128,
+            "itemsize": 4,
+            "live_array_count": 3,
+            "live_byte_margin": 399999808,
+            "max_live_bytes": 400000000,
+            "max_reduction_bytes": 133333333,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 2,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "safe": true,
+          "shape": [
+            16
+          ],
+          "stream_update_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 64,
+            "estimated_reduction_bytes": 64,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "stream_update_chunks": true
+        },
+        "min_update_norm": 4.6183425826869504e-12,
+        "min_update_norm_ratio": 1e-12,
+        "reason": "update-norm-too-small",
+        "streamed_update_metadata": {
+          "full_update_materialized": false,
+          "max_update_chunk_bytes": 4096,
+          "max_update_chunk_elements": 16,
+          "planned_update_block_size": 16,
+          "reason": "streamed-update-built",
+          "stream_update_chunks": true,
+          "update_chunk_count": 1,
+          "update_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 64,
+            "estimated_reduction_bytes": 64,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "update_norm": 4.618342421849597e-14
+        },
+        "update_norm": 4.618342421849597e-14
+      },
+      "gate_reason": "update-norm-too-small",
+      "initial_residual_norm": 4.61834258268695,
+      "max_rss_mb": 161.125,
+      "meets_expected_gate": true,
+      "metrics": {
+        "chunked_correction_calls": 1,
+        "correction_calls": 0,
+        "matvec_calls": 1,
+        "size": 16
+      },
+      "production_floor_byte_preflight": {},
+      "production_floor_target": "",
+      "residual_history": [
+        4.61834258268695,
+        4.61834258268695
+      ],
+      "residual_history_nonfinite_count": 0,
+      "residual_norm": 4.61834258268695,
+      "residual_reduction": 0.0,
+      "returncode": 0,
+      "source_type": "synthetic",
+      "status": "ok",
+      "system_kind": "tiny_update",
+      "tail_metadata": {
+        "stderr_tail_chars": 0,
+        "stdout_tail_chars": 3805,
+        "tail_limit_chars": 4000
+      }
+    },
+    {
+      "accepted": false,
+      "accepted_steps": 0,
+      "byte_preflight": {
+        "array_bytes": 64,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 399999680,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float32_bounded_probe",
+        "element_count": 16,
+        "estimated_live_array_bytes": 320,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 4,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "case_id": "nonfinite_candidate_reject",
+      "elapsed_s": 0.030673458997625858,
+      "expected_gate": "reject",
+      "expected_reason": "nonfinite-candidate-residual",
+      "gate": "reject",
+      "gate_diagnostics": {
+        "accepted_steps": 0,
+        "candidate_residual_finite": false,
+        "candidate_residual_norm": null,
+        "initial_residual_finite": true,
+        "initial_residual_norm": 4.61834258268695,
+        "matrix_free_metadata": {
+          "array_bytes": 64,
+          "block_size": 16,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999680,
+          "candidate_element_budget_configured": false,
+          "candidate_matvecs": 1,
+          "dtype": "float32",
+          "element_count": 16,
+          "estimated_live_array_bytes": 320,
+          "estimated_live_array_count": 5,
+          "full_update_materialized": false,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_reduction_bytes": 80000000,
+          "max_update_chunk_bytes": 4096,
+          "min_update_norm_ratio": 1e-12,
+          "planned_norm_block_size": 16,
+          "planned_update_block_size": 16,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "reason": "within-candidate-memory-limit",
+          "reduction_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 320,
+            "estimated_reduction_bytes": 128,
+            "itemsize": 4,
+            "live_array_count": 5,
+            "live_byte_margin": 399999680,
+            "max_live_bytes": 400000000,
+            "max_reduction_bytes": 80000000,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 2,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "safe": true,
+          "shape": [
+            16
+          ],
+          "stream_update_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 64,
+            "estimated_reduction_bytes": 64,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "stream_update_chunks": true
+        },
+        "min_residual_reduction": 0.001,
+        "reason": "nonfinite-candidate-residual",
+        "required_residual_norm": 4.613724240104263,
+        "streamed_update_metadata": {
+          "full_update_materialized": false,
+          "max_update_chunk_bytes": 4096,
+          "max_update_chunk_elements": 16,
+          "planned_update_block_size": 16,
+          "reason": "streamed-update-built",
+          "stream_update_chunks": true,
+          "update_chunk_count": 1,
+          "update_chunk_plan": {
+            "array_bytes": 64,
+            "block_size": 16,
+            "element_count": 16,
+            "estimated_live_array_bytes": 64,
+            "estimated_reduction_bytes": 64,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "update_norm": 4.61834258268695
+        }
+      },
+      "gate_reason": "nonfinite-candidate-residual",
+      "initial_residual_norm": 4.61834258268695,
+      "max_rss_mb": 161.125,
+      "meets_expected_gate": true,
+      "metrics": {
+        "chunked_correction_calls": 1,
+        "correction_calls": 0,
+        "matvec_calls": 2,
+        "size": 16
+      },
+      "production_floor_byte_preflight": {},
+      "production_floor_target": "",
+      "residual_history": [
+        4.61834258268695,
+        null
+      ],
+      "residual_history_nonfinite_count": 1,
+      "residual_norm": 4.61834258268695,
+      "residual_reduction": 0.0,
+      "returncode": 0,
+      "source_type": "synthetic",
+      "status": "ok",
+      "system_kind": "nonfinite_candidate",
+      "tail_metadata": {
+        "stderr_tail_chars": 0,
+        "stdout_tail_chars": 3888,
+        "tail_limit_chars": 4000
+      }
+    },
+    {
+      "accepted": true,
+      "accepted_steps": 1,
+      "byte_preflight": {
+        "array_bytes": 232,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 399998840,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float32_bounded_probe",
+        "element_count": 58,
+        "estimated_live_array_bytes": 1160,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 4,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "case_id": "metadata_geometryscheme4_2species_pas_noer",
+      "elapsed_s": 0.043998709006700665,
+      "expected_gate": "keep",
+      "expected_reason": "accepted",
+      "gate": "keep",
+      "gate_diagnostics": {
+        "accepted_steps": 1,
+        "candidate_residual_finite": true,
+        "candidate_residual_norm": 0.2554118340928597,
+        "initial_residual_finite": true,
+        "initial_residual_norm": 9.911763194385852,
+        "matrix_free_metadata": {
+          "array_bytes": 232,
+          "block_size": 58,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399999072,
+          "candidate_element_budget_configured": false,
+          "candidate_matvecs": 1,
+          "dtype": "float32",
+          "element_count": 58,
+          "estimated_live_array_bytes": 928,
+          "estimated_live_array_count": 4,
+          "full_update_materialized": false,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_reduction_bytes": 100000000,
+          "max_update_chunk_bytes": 4096,
+          "min_update_norm_ratio": 1e-12,
+          "planned_norm_block_size": 58,
+          "planned_update_block_size": 58,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "reason": "within-candidate-memory-limit",
+          "reduction_chunk_plan": {
+            "array_bytes": 232,
+            "block_size": 58,
+            "element_count": 58,
+            "estimated_live_array_bytes": 928,
+            "estimated_reduction_bytes": 464,
+            "itemsize": 4,
+            "live_array_count": 4,
+            "live_byte_margin": 399999072,
+            "max_live_bytes": 400000000,
+            "max_reduction_bytes": 100000000,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 2,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "safe": true,
+          "shape": [
+            58
+          ],
+          "stream_update_chunk_plan": {
+            "array_bytes": 232,
+            "block_size": 58,
+            "element_count": 58,
+            "estimated_live_array_bytes": 232,
+            "estimated_reduction_bytes": 232,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "stream_update_chunks": true
+        },
+        "min_residual_reduction": 0.001,
+        "reason": "accepted",
+        "required_residual_norm": 9.901851431191465,
+        "residual_reduction": 0.974231443075887,
+        "streamed_update_metadata": {
+          "full_update_materialized": false,
+          "max_update_chunk_bytes": 4096,
+          "max_update_chunk_elements": 58,
+          "planned_update_block_size": 58,
+          "reason": "streamed-update-built",
+          "stream_update_chunks": true,
+          "update_chunk_count": 1,
+          "update_chunk_plan": {
+            "array_bytes": 232,
+            "block_size": 58,
+            "element_count": 58,
+            "estimated_live_array_bytes": 232,
+            "estimated_reduction_bytes": 232,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "update_norm": 7.140318615640434
+        }
+      },
+      "gate_reason": "accepted",
+      "initial_residual_norm": 9.911763194385852,
+      "max_rss_mb": 196.484375,
+      "meets_expected_gate": true,
+      "metrics": {
+        "chunked_correction_calls": 1,
+        "correction_calls": 0,
+        "matvec_calls": 2,
+        "size": 58
+      },
+      "production_floor_byte_preflight": {
+        "array_bytes": 1148160,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 394259200,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float64_conservative_production_floor",
+        "element_count": 143520,
+        "estimated_live_array_bytes": 5740800,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 8,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "production_floor_target": "geometry4",
+      "residual_history": [
+        9.911763194385852,
+        0.2554118340928597
+      ],
+      "residual_history_nonfinite_count": 0,
+      "residual_norm": 0.2554118340928597,
+      "residual_reduction": 0.974231443075887,
+      "returncode": 0,
+      "source_type": "production_floor_geometry_metadata",
+      "status": "ok",
+      "system_kind": "metadata_coupled_jacobi",
+      "tail_metadata": {
+        "stderr_tail_chars": 0,
+        "stdout_tail_chars": 4000,
+        "tail_limit_chars": 4000
+      }
+    },
+    {
+      "accepted": true,
+      "accepted_steps": 1,
+      "byte_preflight": {
+        "array_bytes": 512,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 399997440,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float32_bounded_probe",
+        "element_count": 128,
+        "estimated_live_array_bytes": 2560,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 4,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "case_id": "metadata_hsx_pascollisions_dkestrajectories",
+      "elapsed_s": 0.05144287500297651,
+      "expected_gate": "keep",
+      "expected_reason": "accepted",
+      "gate": "keep",
+      "gate_diagnostics": {
+        "accepted_steps": 1,
+        "candidate_residual_finite": true,
+        "candidate_residual_norm": 0.21665348861504916,
+        "initial_residual_finite": true,
+        "initial_residual_norm": 12.675047076436938,
+        "matrix_free_metadata": {
+          "array_bytes": 512,
+          "block_size": 64,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399997952,
+          "candidate_element_budget_configured": false,
+          "candidate_matvecs": 1,
+          "dtype": "float32",
+          "element_count": 128,
+          "estimated_live_array_bytes": 2048,
+          "estimated_live_array_count": 4,
+          "full_update_materialized": false,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_reduction_bytes": 100000000,
+          "max_update_chunk_bytes": 4096,
+          "min_update_norm_ratio": 1e-12,
+          "planned_norm_block_size": 64,
+          "planned_update_block_size": 64,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "reason": "within-candidate-memory-limit",
+          "reduction_chunk_plan": {
+            "array_bytes": 512,
+            "block_size": 64,
+            "element_count": 128,
+            "estimated_live_array_bytes": 2048,
+            "estimated_reduction_bytes": 512,
+            "itemsize": 4,
+            "live_array_count": 4,
+            "live_byte_margin": 399997952,
+            "max_live_bytes": 400000000,
+            "max_reduction_bytes": 100000000,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 2,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "safe": true,
+          "shape": [
+            128
+          ],
+          "stream_update_chunk_plan": {
+            "array_bytes": 512,
+            "block_size": 64,
+            "element_count": 128,
+            "estimated_live_array_bytes": 512,
+            "estimated_reduction_bytes": 256,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "stream_update_chunks": true
+        },
+        "min_residual_reduction": 0.001,
+        "reason": "accepted",
+        "required_residual_norm": 12.662372029360501,
+        "residual_reduction": 0.9829070860795609,
+        "streamed_update_metadata": {
+          "full_update_materialized": false,
+          "max_update_chunk_bytes": 4096,
+          "max_update_chunk_elements": 64,
+          "planned_update_block_size": 64,
+          "reason": "streamed-update-built",
+          "stream_update_chunks": true,
+          "update_chunk_count": 2,
+          "update_chunk_plan": {
+            "array_bytes": 512,
+            "block_size": 64,
+            "element_count": 128,
+            "estimated_live_array_bytes": 512,
+            "estimated_reduction_bytes": 256,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "update_norm": 9.210490001520833
+        }
+      },
+      "gate_reason": "accepted",
+      "initial_residual_norm": 12.675047076436938,
+      "max_rss_mb": 205.390625,
+      "meets_expected_gate": true,
+      "metrics": {
+        "chunked_correction_calls": 2,
+        "correction_calls": 0,
+        "matvec_calls": 2,
+        "size": 128
+      },
+      "production_floor_byte_preflight": {
+        "array_bytes": 15078800,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 324606000,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float64_conservative_production_floor",
+        "element_count": 1884850,
+        "estimated_live_array_bytes": 75394000,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 8,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "production_floor_target": "hsx",
+      "residual_history": [
+        12.675047076436938,
+        0.21665348861504916
+      ],
+      "residual_history_nonfinite_count": 0,
+      "residual_norm": 0.21665348861504916,
+      "residual_reduction": 0.9829070860795609,
+      "returncode": 0,
+      "source_type": "production_floor_geometry_metadata",
+      "status": "ok",
+      "system_kind": "metadata_coupled_jacobi",
+      "tail_metadata": {
+        "stderr_tail_chars": 0,
+        "stdout_tail_chars": 4000,
+        "tail_limit_chars": 4000
+      }
+    },
+    {
+      "accepted": true,
+      "accepted_steps": 1,
+      "byte_preflight": {
+        "array_bytes": 412,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 399997940,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float32_bounded_probe",
+        "element_count": 103,
+        "estimated_live_array_bytes": 2060,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 4,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "case_id": "metadata_sfincspaperfigure3_geometryscheme11_pascollisions_2species_dkestrajectories",
+      "elapsed_s": 0.12127212504856288,
+      "expected_gate": "keep",
+      "expected_reason": "accepted",
+      "gate": "keep",
+      "gate_diagnostics": {
+        "accepted_steps": 1,
+        "candidate_residual_finite": true,
+        "candidate_residual_norm": 0.19764200741639296,
+        "initial_residual_finite": true,
+        "initial_residual_norm": 11.423222411453594,
+        "matrix_free_metadata": {
+          "array_bytes": 412,
+          "block_size": 64,
+          "candidate_byte_budget_configured": true,
+          "candidate_byte_budget_margin": 399998352,
+          "candidate_element_budget_configured": false,
+          "candidate_matvecs": 1,
+          "dtype": "float32",
+          "element_count": 103,
+          "estimated_live_array_bytes": 1648,
+          "estimated_live_array_count": 4,
+          "full_update_materialized": false,
+          "max_candidate_bytes": 400000000,
+          "max_candidate_elements": null,
+          "max_reduction_bytes": 100000000,
+          "max_update_chunk_bytes": 4096,
+          "min_update_norm_ratio": 1e-12,
+          "planned_norm_block_size": 64,
+          "planned_update_block_size": 64,
+          "preflight_kind": "rhs1_pas_matrixfree_candidate",
+          "reason": "within-candidate-memory-limit",
+          "reduction_chunk_plan": {
+            "array_bytes": 412,
+            "block_size": 64,
+            "element_count": 103,
+            "estimated_live_array_bytes": 1648,
+            "estimated_reduction_bytes": 512,
+            "itemsize": 4,
+            "live_array_count": 4,
+            "live_byte_margin": 399998352,
+            "max_live_bytes": 400000000,
+            "max_reduction_bytes": 100000000,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 2,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "safe": true,
+          "shape": [
+            103
+          ],
+          "stream_update_chunk_plan": {
+            "array_bytes": 412,
+            "block_size": 64,
+            "element_count": 103,
+            "estimated_live_array_bytes": 412,
+            "estimated_reduction_bytes": 256,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "stream_update_chunks": true
+        },
+        "min_residual_reduction": 0.001,
+        "reason": "accepted",
+        "required_residual_norm": 11.41179918904214,
+        "residual_reduction": 0.9826982264463112,
+        "streamed_update_metadata": {
+          "full_update_materialized": false,
+          "max_update_chunk_bytes": 4096,
+          "max_update_chunk_elements": 64,
+          "planned_update_block_size": 64,
+          "reason": "streamed-update-built",
+          "stream_update_chunks": true,
+          "update_chunk_count": 2,
+          "update_chunk_plan": {
+            "array_bytes": 412,
+            "block_size": 64,
+            "element_count": 103,
+            "estimated_live_array_bytes": 412,
+            "estimated_reduction_bytes": 256,
+            "itemsize": 4,
+            "live_array_count": 1,
+            "live_byte_margin": null,
+            "max_live_bytes": null,
+            "max_reduction_bytes": 4096,
+            "reason": "within-pas-runtime-memory-limit",
+            "reduction_work_arrays": 1,
+            "requested_block_size": 64,
+            "safe": true
+          },
+          "update_norm": 8.297348008977698
+        }
+      },
+      "gate_reason": "accepted",
+      "initial_residual_norm": 11.423222411453594,
+      "max_rss_mb": 220.390625,
+      "meets_expected_gate": true,
+      "metrics": {
+        "chunked_correction_calls": 2,
+        "correction_calls": 0,
+        "matvec_calls": 2,
+        "size": 103
+      },
+      "production_floor_byte_preflight": {
+        "array_bytes": 5380800,
+        "candidate_byte_budget_configured": true,
+        "candidate_byte_budget_margin": 373096000,
+        "candidate_element_budget_configured": false,
+        "dtype_assumption": "float64_conservative_production_floor",
+        "element_count": 672600,
+        "estimated_live_array_bytes": 26904000,
+        "estimated_live_array_count": 5,
+        "itemsize_bytes": 8,
+        "max_candidate_bytes": 400000000,
+        "max_candidate_elements": null,
+        "max_update_chunk_bytes": 4096,
+        "preflight_kind": "rhs1_pas_matrixfree_candidate",
+        "promotion_gate_passed": true,
+        "reason": "within-candidate-memory-limit",
+        "safe": true,
+        "stream_update_chunks": true
+      },
+      "production_floor_target": "geometry11",
+      "residual_history": [
+        11.423222411453594,
+        0.19764200741639296
+      ],
+      "residual_history_nonfinite_count": 0,
+      "residual_norm": 0.19764200741639296,
+      "residual_reduction": 0.9826982264463112,
+      "returncode": 0,
+      "source_type": "production_floor_geometry_metadata",
+      "status": "ok",
+      "system_kind": "metadata_coupled_jacobi",
+      "tail_metadata": {
+        "stderr_tail_chars": 0,
+        "stdout_tail_chars": 4000,
+        "tail_limit_chars": 4000
+      }
+    }
+  ],
+  "schema_version": 1,
+  "summary": {
+    "all_expected_gates_met": true,
+    "by_gate": {
+      "keep": 5,
+      "reject": 3
+    },
+    "by_status": {
+      "ok": 8
+    },
+    "candidate_byte_preflight": {
+      "promotion_safe_target_count": 3,
+      "targets": {
+        "geometry11": {
+          "byte_budget_configured": true,
+          "promotion_gate_passed": true,
+          "status": "pass",
+          "unsafe_count": 0
+        },
+        "geometry4": {
+          "byte_budget_configured": true,
+          "promotion_gate_passed": true,
+          "status": "pass",
+          "unsafe_count": 0
+        },
+        "hsx": {
+          "byte_budget_configured": true,
+          "promotion_gate_passed": true,
+          "status": "pass",
+          "unsafe_count": 0
+        }
+      },
+      "unsafe_target_count": 0
+    },
+    "lane_state": "harness_only_no_solver_default_change",
+    "next_real_solve_recommendation": "hold_for_missing_or_unexpected_probe_evidence",
+    "production_floor_probe_ready": false,
+    "production_real_solve_all_gates_passed": false,
+    "production_real_solve_failures": [],
+    "production_real_solve_result_count": 0,
+    "unexpected_cases": []
+  }
+}

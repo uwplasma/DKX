@@ -43,8 +43,9 @@ Relevant implementation:
   solver trace artifacts, satisfy residual/observable gates, and avoid host
   fallback for a true device-QI claim.
 - ``sfincs_jax/rhs1_qi_device_smoother.py`` provides the first standalone
-  device-local ``S_local`` candidate: a bounded CSR-backed damped
-  Jacobi/stationary smoother with fail-closed diagonal validation.
+  device-local ``S_local`` candidate: a bounded CSR-backed Jacobi smoother with
+  fail-closed diagonal validation, an opt-in residual-minimizing step policy, and
+  a true-residual seed probe.
 - ``sfincs_jax/rhs1_device_operator.py`` provides bounded device CSR matvec
   utilities.
 - ``sfincs_jax/rhs1_qi_galerkin_policy.py`` rejects Galerkin candidates unless
@@ -241,12 +242,17 @@ Current evidence
   x-block factorization path, with low GPU utilization, so the remaining GPU
   blocker is architectural: a device-local local smoother/operator-reuse path
   is required before production-resolution GPU QI can be promoted.
-- A standalone device CSR Jacobi/stationary smoother now exists for that
-  architectural blocker. Focused tests show CSR diagonal extraction, JIT-safe
-  stationary sweeps, fail-closed rejection of missing/invalid diagonals, and
-  compatibility with the existing two-level true-residual probe on a synthetic
-  coupled global mode. This is implementation infrastructure only: no
-  scale-0.60 CPU/GPU hard-seed artifact has been promoted from it.
+- A standalone device CSR Jacobi smoother now exists for that architectural
+  blocker. Focused tests show CSR diagonal extraction, JIT-safe stationary
+  sweeps, fail-closed rejection of missing/invalid diagonals, and compatibility
+  with the existing two-level true-residual probe on a synthetic coupled global
+  mode. The residual-minimizing device policy now turns a deliberately bad fixed
+  Jacobi step into a measured local reduction on a coupled triangular probe:
+  fixed Jacobi worsens the residual norm from ``1.0`` to ``2.0``, while the
+  residual-minimizing seed reduces it to ``0.8944`` and rejects itself when a
+  stricter 20% material-improvement gate is requested. This is implementation
+  infrastructure only: no scale-0.60 CPU/GPU hard-seed artifact has been promoted
+  from it.
 
 Promotion gate
 ~~~~~~~~~~~~~~

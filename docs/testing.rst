@@ -503,6 +503,9 @@ For long RHSMode=1 profiling runs, keep the trace helper's phase log in the arti
 bundle. Its default ``profile_write_output_trace_phases.json`` sidecar makes it
 clear whether a nonzero wrapper status came from the solve itself or from profiler
 finalization after a valid output file was already written.
+``tests/test_profiling_helpers.py`` keeps the lightweight profiler directly
+covered: environment opt-ins, resource fallback units, unavailable OS/JAX memory
+sampling, and ``na`` formatting are checked without launching a solver run.
 
 Research reproducibility
 ------------------------
@@ -1005,7 +1008,9 @@ is absent.
 The measured conclusion from the current local Lineax run is intentionally conservative:
 the synthetic system is faster and residual-clean with ``lineax``, but the tiny real
 matrix-free SFINCS operator still returns Lineax failure statuses despite tiny residuals,
-so the in-tree implicit solve remains the only admissible production path.
+so the in-tree implicit solve remains the only admissible production path. The summary
+gate records these as ``residual_clean_status_mismatch_rows`` and keeps the adoption
+decision at ``do_not_promote_lineax_status_mismatch`` for real SFINCS rows.
 
 The Equinox/JAXopt gate is a separate objective-wrapper check on a real differentiable
 ``geometryScheme=4`` harmonic-fit problem. Its associated test

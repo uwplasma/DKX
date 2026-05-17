@@ -11,6 +11,7 @@ from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetada
 from sfincs_jax.rhs1_qi_device_smoother import (
     build_rhs1_qi_device_jacobi_smoother,
     extract_device_csr_diagonal,
+    probe_rhs1_qi_device_smoother_correction,
 )
 from sfincs_jax.rhs1_qi_two_level import (
     build_rhs1_qi_two_level_preconditioner,
@@ -103,6 +104,64 @@ def test_device_jacobi_smoother_rejects_invalid_diagonal_by_default() -> None:
         smoother.apply(jnp.asarray([2.0, 8.0], dtype=jnp.float64)),
         jnp.asarray([0.0, 1.0], dtype=jnp.float64),
     )
+
+
+def test_device_jacobi_residual_minimizing_policy_reduces_and_fails_closed() -> None:
+    matrix = sp.csr_matrix(
+        [
+            [1.0, 2.0],
+            [0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    device_operator = device_csr_from_scipy_csr(matrix, max_csr_mb=1.0)
+    rhs = jnp.asarray([0.0, 1.0], dtype=jnp.float64)
+    x0 = jnp.zeros_like(rhs)
+
+    stationary = build_rhs1_qi_device_jacobi_smoother(
+        device_operator,
+        damping=1.0,
+        sweeps=1,
+    )
+    minres = build_rhs1_qi_device_jacobi_smoother(
+        device_operator,
+        damping=1.0,
+        sweeps=1,
+        step_policy="residual_minimizing",
+    )
+
+    stationary_residual_norm = float(
+        jnp.linalg.norm(rhs - device_operator.matvec(stationary.apply(rhs)))
+    )
+    x, probe = probe_rhs1_qi_device_smoother_correction(
+        rhs=rhs,
+        x0=x0,
+        smoother=minres,
+        min_relative_improvement=0.05,
+    )
+    rejected_x, rejected_probe = probe_rhs1_qi_device_smoother_correction(
+        rhs=rhs,
+        x0=x0,
+        smoother=minres,
+        min_relative_improvement=0.2,
+    )
+    compiled = jax.jit(minres.as_preconditioner())(rhs)
+
+    assert stationary.metadata.step_policy == "stationary"
+    assert minres.metadata.step_policy == "residual_minimizing"
+    assert stationary_residual_norm == pytest.approx(2.0)
+    assert probe.accepted is True
+    assert probe.reason == "residual_reduced"
+    assert probe.improvement_ratio == pytest.approx(np.sqrt(0.8), rel=1.0e-12)
+    assert probe.residual_after_norm < 0.9 * probe.residual_before_norm
+    assert float(jnp.linalg.norm(rhs - device_operator.matvec(x))) == pytest.approx(
+        probe.residual_after_norm
+    )
+    assert rejected_probe.accepted is False
+    assert rejected_probe.reason == "residual_not_reduced"
+    assert rejected_probe.improvement_ratio == pytest.approx(probe.improvement_ratio)
+    np.testing.assert_allclose(rejected_x, x0, atol=0.0)
+    np.testing.assert_allclose(compiled, minres.apply(rhs), rtol=1.0e-12, atol=1.0e-12)
 
 
 def test_device_jacobi_smoother_feeds_two_level_qi_probe() -> None:

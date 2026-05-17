@@ -179,6 +179,38 @@ def test_child_payload_covers_keep_and_reject_gates() -> None:
     json.dumps({"results": [keep, reject]}, allow_nan=False)
 
 
+def test_child_payload_streamed_update_covers_geometry_metadata_case(tmp_path: Path) -> None:
+    input_path = _write_input(tmp_path, geometry_scheme=4, case_name="geometryScheme4_2species_PAS_noEr")
+    args = _parse_args(
+        [
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+            str(input_path),
+            "--stream-update-chunks",
+            "--max-update-chunk-bytes",
+            "16",
+            "--block-size",
+            "2",
+        ]
+    )
+    cases = {case["case_id"]: case for case in build_probe_cases(args)}
+
+    row = _child_payload(cases["metadata_geometryscheme4_2species_pas_noer"])
+
+    assert row["status"] == "ok"
+    assert row["gate"] == "keep"
+    assert row["metrics"]["correction_calls"] == 0
+    assert row["metrics"]["chunked_correction_calls"] > 0
+    metadata = row["gate_diagnostics"]["matrix_free_metadata"]
+    streamed = row["gate_diagnostics"]["streamed_update_metadata"]
+    assert metadata["stream_update_chunks"] is True
+    assert metadata["full_update_materialized"] is False
+    assert metadata["planned_update_block_size"] == 2
+    assert streamed["full_update_materialized"] is False
+    assert streamed["max_update_chunk_elements"] == 2
+
+
 def test_child_payload_tiny_update_rejects_before_candidate_matvec() -> None:
     args = _parse_args(
         [
@@ -388,6 +420,10 @@ def test_production_floor_preflight_ready_from_metadata_and_checked_in_artifacts
     assert preflight["all_required_targets_ready"] is True
     assert set(preflight["ready_targets"]) == {"geometry4", "hsx", "geometry11"}
     assert preflight["targets"]["geometry4"]["gates"]["candidate_byte_preflight"]["status"] == "pass"
+    assert (
+        preflight["targets"]["geometry4"]["gates"]["bounded_streamed_update_probe"]["reason"]
+        == "bounded streamed-update probe not requested; production promotion still requires streamed row metadata"
+    )
     assert preflight["targets"]["geometry4"]["gates"]["candidate_byte_preflight"][
         "promotion_gate_passed"
     ] is False
@@ -410,6 +446,42 @@ def test_production_floor_preflight_ready_from_metadata_and_checked_in_artifacts
         "synthetic",
         "production_floor_geometry_metadata",
     }
+
+
+def test_production_real_solve_plan_reports_streamed_guarded_correction_blocker(
+    tmp_path: Path,
+) -> None:
+    geom4 = _write_input(tmp_path, geometry_scheme=4, case_name="geometryScheme4_2species_PAS_noEr")
+    artifact = _write_artifact(tmp_path / "artifacts" / "geometry4.json", target_input=str(geom4))
+    args = _parse_args(
+        [
+            "--run-production-solve-probe",
+            "--out",
+            str(tmp_path / "probe.json"),
+            "--systems",
+            "diagonal_keep",
+            "--metadata-inputs",
+            str(geom4),
+            "--artifact-inputs",
+            str(artifact),
+            "--max-candidate-bytes",
+            "1000000000",
+            "--production-solve-targets",
+            "geometry4",
+            "--production-solve-variants",
+            "collision_tzfft_correction",
+        ]
+    )
+
+    plan = build_plan(args)
+    target = plan["bounded_real_solve_probe"]["targets"]["geometry4"]
+    gate = target["streamed_guarded_correction_gate"]
+
+    assert target["will_run"] is True
+    assert gate["status"] == "fail"
+    assert gate["reason"] == "production-pas-tz-guarded-correction-streaming-not-implemented"
+    assert gate["guarded_correction_variants"] == ["collision_tzfft_correction"]
+    assert "full preconditioned direction" in gate["blocker"]
 
 
 def test_production_floor_preflight_fails_non_pas_metadata(tmp_path: Path) -> None:

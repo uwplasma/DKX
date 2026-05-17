@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from examples.performance.benchmark_sharded_matvec_scaling import _build_sharded_matvec_benchmark_plan
 from examples.performance.benchmark_sharded_solve_scaling import (
     _build_sharded_solve_benchmark_plan,
     _configure_backend_env,
     _configure_benchmark_subprocess_env,
     _configure_solver_env,
+    _measure_deterministic_output_gate,
     _run_once_command,
+    _run_once_output_digest_command,
+    _run_once_output_digest_subprocess,
     _run_once_subprocess,
     _timing_semantics,
 )
@@ -160,6 +165,114 @@ def test_run_once_command_records_all_sharded_solver_options() -> None:
     assert cmd[cmd.index("--schwarz-coarse-levels") + 1] == "2"
 
 
+def test_run_once_output_digest_command_records_vector_artifact_path() -> None:
+    cmd = _run_once_output_digest_command(
+        input_path=Path("case.input.namelist"),
+        output_vector_path=Path("out/vector.npy"),
+        shard_axis="theta",
+        gmres_distributed="1",
+        distributed_krylov="auto",
+        periodic_stencil_on_sharded="auto",
+        inner_warmup_solves=1,
+        rhs1_precond="theta_schwarz",
+        backend="gpu",
+        schwarz_coarse_levels=2,
+        schwarz_coarse_steps=None,
+        schwarz_coarse_damp=None,
+    )
+
+    assert cmd[1].endswith("benchmark_sharded_solve_scaling.py")
+    assert "--run-once-output-digest" in cmd
+    assert cmd[cmd.index("--output-vector-path") + 1] == "out/vector.npy"
+    assert cmd[cmd.index("--inner-warmup-solves") + 1] == "1"
+    assert cmd[cmd.index("--backend") + 1] == "gpu"
+
+
+def test_run_once_output_digest_subprocess_records_backend_env(monkeypatch, tmp_path: Path) -> None:
+    calls: list[tuple[list[str], dict[str, str], float | None]] = []
+
+    def fake_check_output(cmd, *, env, text, timeout):  # noqa: ANN001
+        calls.append((list(cmd), dict(env), timeout))
+        return '{"output_digest_algorithm":"sha256","output_digest":"abc","solve_s":0.5}\n'
+
+    monkeypatch.setattr("subprocess.check_output", fake_check_output)
+
+    payload = _run_once_output_digest_subprocess(
+        input_path=Path("case.input.namelist"),
+        devices=2,
+        cache_dir=tmp_path / "cache",
+        output_vector_path=tmp_path / "vector.npy",
+        shard_axis="theta",
+        gmres_distributed="1",
+        distributed_krylov="auto",
+        periodic_stencil_on_sharded="auto",
+        inner_warmup_solves=1,
+        sample_timeout_s=42.0,
+        rhs1_precond="theta_schwarz",
+        backend="gpu",
+        schwarz_coarse_levels=2,
+        schwarz_coarse_steps=None,
+        schwarz_coarse_damp=None,
+    )
+
+    assert payload["output_digest"] == "abc"
+    cmd, env, timeout = calls[0]
+    assert "--run-once-output-digest" in cmd
+    assert env["CUDA_VISIBLE_DEVICES"] == "0,1"
+    assert env["JAX_COMPILATION_CACHE_DIR"] == str(tmp_path / "cache")
+    assert timeout == 42.0
+
+
+def test_measure_deterministic_output_gate_builds_residual_digest_schema(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    def fake_digest_subprocess(*, devices, output_vector_path, **_kwargs):  # noqa: ANN001
+        values = np.array([1.0, 2.0], dtype=np.float64)
+        if int(devices) == 2:
+            values = np.array([1.0, 2.0 + 1.0e-12], dtype=np.float64)
+        np.save(output_vector_path, values)
+        return {
+            "output_digest_algorithm": "sha256",
+            "output_digest": f"digest-devices-{devices}",
+            "solve_s": 0.25,
+        }
+
+    monkeypatch.setattr(
+        "examples.performance.benchmark_sharded_solve_scaling._run_once_output_digest_subprocess",
+        fake_digest_subprocess,
+    )
+
+    gate = _measure_deterministic_output_gate(
+        input_path=Path("case.input.namelist"),
+        devices=[1, 2],
+        cache_dir=tmp_path / "cache",
+        deterministic_output_dir=tmp_path / "deterministic",
+        shard_axis="theta",
+        gmres_distributed="1",
+        distributed_krylov="auto",
+        periodic_stencil_on_sharded="auto",
+        inner_warmup_solves=1,
+        sample_timeout_s=60.0,
+        rhs1_precond="theta_schwarz",
+        backend="gpu",
+        schwarz_coarse_levels=2,
+        schwarz_coarse_steps=None,
+        schwarz_coarse_damp=None,
+        residual_tolerance=1.0e-9,
+        repo_root=tmp_path,
+    )
+
+    assert gate["passes"] is True
+    assert gate["status"] == "pass"
+    assert gate["baseline_output_digest"] == "digest-devices-1"
+    assert gate["comparison_output_digest"] == "digest-devices-2"
+    assert gate["output_digest_match"] is False
+    assert gate["max_relative_residual_norm"] < 1.0e-9
+    assert gate["baseline_probe"]["devices"] == 1
+    assert gate["comparison_probe"]["devices"] == 2
+
+
 def test_sharded_solve_plan_records_hot_timing_timeout_and_non_release_gate(tmp_path: Path) -> None:
     plan = _build_sharded_solve_benchmark_plan(
         input_path=Path("examples/performance/rhsmode1_sharded_scaling.input.namelist"),
@@ -194,6 +307,8 @@ def test_sharded_solve_plan_records_hot_timing_timeout_and_non_release_gate(tmp_
     assert plan["operator_reuse_gate"]["compile_in_timed_region"] is False
     assert plan["deterministic_output_gate"]["passes"] is False
     assert plan["deterministic_output_gate"]["status"] == "not_measured"
+    assert plan["deterministic_output_gate"]["evidence_source"] == "not_measured"
+    assert plan["deterministic_output_probe_requested"] is False
     assert plan["release_scaling_claim"] is False
     assert plan["speedup_gate_semantics"]["gate_scope"] == "schema_and_honesty_only"
     assert plan["speedup_gate_semantics"]["requires_operator_reuse_gate"] is True

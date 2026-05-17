@@ -13363,6 +13363,7 @@ def solve_v3_full_system_linear_gmres(
     active_idx_jnp: jnp.ndarray | None = None
     full_to_active_jnp: jnp.ndarray | None = None
     active_size = int(op.total_size)
+    pas_tz_guarded_correction_metadata: dict[str, object] = {}
     if use_active_dof_mode:
         if use_pas_projection:
             active_idx_np = _transport_active_dof_indices(op)
@@ -19942,6 +19943,10 @@ def solve_v3_full_system_linear_gmres(
         pas_precond_force_collision = False
         rhs1_pas_tz_guarded_fallback = False
         rhs1_pas_tz_guarded_axis: str | None = None
+        pas_tz_guarded_stream_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STREAM_UPDATE",
+            default=False,
+        )
         dense_matrix_cache: np.ndarray | None = None
         host_dense_shortcut = _rhsmode1_host_dense_shortcut_allowed(
             op=op,
@@ -20953,6 +20958,28 @@ def solve_v3_full_system_linear_gmres(
             correction_kind = resolve_pas_tz_guarded_correction_kind(
                 requested=os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION", "")
             )
+            if correction_kind is not None or pas_tz_guarded_stream_requested:
+                pas_tz_guarded_correction_metadata.update(
+                    {
+                        "pas_tz_guarded_correction_kind": correction_kind,
+                        "pas_tz_guarded_correction_stream_requested": bool(pas_tz_guarded_stream_requested),
+                        "pas_tz_guarded_correction_streamed": False,
+                        "pas_tz_guarded_correction_full_update_materialized": False,
+                    }
+                )
+            if pas_tz_guarded_stream_requested:
+                blocker = (
+                    "production-pas-tz-minres-correction-requires-full-residual-direction"
+                )
+                pas_tz_guarded_correction_metadata["pas_tz_guarded_correction_stream_blocker"] = blocker
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: PAS-TZ guarded streamed "
+                        "correction requested but unavailable; using dense minres "
+                        "correction because the production preconditioner requires "
+                        "a full residual and full preconditioned direction",
+                    )
             if correction_kind == "tzfft" and rhs1_pas_tz_guarded_axis != "tzfft":
                 try:
                     correction_preconditioner = _build_rhsmode23_tzfft_preconditioner(
@@ -20991,6 +21018,13 @@ def solve_v3_full_system_linear_gmres(
             except ValueError:
                 minres_improve = 0.0
             if minres_steps > 0:
+                if pas_tz_guarded_correction_metadata:
+                    pas_tz_guarded_correction_metadata[
+                        "pas_tz_guarded_correction_full_update_materialized"
+                    ] = True
+                    pas_tz_guarded_correction_metadata["pas_tz_guarded_correction_minres_steps"] = int(
+                        minres_steps
+                    )
                 x_minres, residual_minres, minres_history, minres_alphas = _apply_preconditioned_minres_correction(
                     matvec=mv_reduced,
                     rhs=rhs_reduced,
@@ -25308,7 +25342,12 @@ def solve_v3_full_system_linear_gmres(
     if emit is not None:
         emit(0, f"solve_v3_full_system_linear_gmres: residual_norm={float(result.residual_norm):.6e}")
         emit(1, f"solve_v3_full_system_linear_gmres: elapsed_s={t.elapsed_s():.3f}")
-    return V3LinearSolveResult(op=op, rhs=rhs, gmres=result)
+    return V3LinearSolveResult(
+        op=op,
+        rhs=rhs,
+        gmres=result,
+        metadata=dict(pas_tz_guarded_correction_metadata) if pas_tz_guarded_correction_metadata else None,
+    )
 
 
 solve_v3_full_system_linear_gmres_jit = jax.jit(

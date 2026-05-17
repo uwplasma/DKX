@@ -513,6 +513,103 @@ def geometry_proxy_workflow_summary(
     }
 
 
+def geometry_proxy_no_solve_provenance_gate(
+    summary: dict[str, Any],
+    *,
+    require_file_provenance: bool = False,
+) -> dict[str, Any]:
+    """Validate that a workflow summary remains a no-solve proxy contract.
+
+    The VMEC/Boozer public lane currently differentiates only a Boozer-spectrum
+    proxy scalar.  This gate is shared by examples and tests so the no-solve
+    provenance requirements cannot drift independently of the scalar contract.
+    """
+    provenance = dict(summary.get("provenance") or {})
+    no_overclaim = dict(summary.get("no_overclaim_gate") or {})
+    gradient_gate = dict(summary.get("numerical_gradient_gate") or {})
+    kinetic_contract = dict(summary.get("kinetic_transport_scalar_contract") or {})
+    kinetic_contract_gate = dict(kinetic_contract.get("no_overclaim_gate") or {})
+    current_scalar = dict(kinetic_contract.get("current_public_scalar") or {})
+    required_kinetic_stages = [
+        str(stage.get("name"))
+        for stage in list(kinetic_contract.get("required_stages") or [])
+    ]
+
+    required_fields = (
+        "source",
+        "selected_surface",
+        "boozer_resolution",
+        "grid_shape",
+        "scale",
+    )
+    present_fields = [
+        field
+        for field in required_fields
+        if provenance.get(field) not in (None, {}, [])
+    ]
+    missing_fields = [
+        field
+        for field in required_fields
+        if require_file_provenance and provenance.get(field) in (None, {}, [])
+    ]
+
+    proxy_status = str(gradient_gate.get("status", "not_run"))
+    proxy_ok = (
+        proxy_status == "pass"
+        if require_file_provenance
+        else proxy_status in {"pass", "not_run"}
+    )
+    kinetic_claimed = bool(no_overclaim.get("full_transport_gradients_claimed", True))
+    current_scalar_claimed = bool(
+        current_scalar.get("kinetic_transport_scalar_claimed", True)
+    )
+    kinetic_solve_executed = bool(current_scalar.get("kinetic_solve_executed", True))
+    scalar_kind = str(current_scalar.get("scalar_kind", ""))
+    current_scalar_ok = (
+        not current_scalar_claimed
+        and not kinetic_solve_executed
+        and scalar_kind == "boozer_spectrum_proxy_not_kinetic"
+    )
+    kinetic_contract_ok = kinetic_contract_gate.get("status") == "pass"
+    passed = (
+        (not kinetic_claimed)
+        and proxy_ok
+        and not missing_fields
+        and kinetic_contract_ok
+        and current_scalar_ok
+    )
+    return {
+        "status": "pass" if passed else "fail",
+        "claim_scope": "no_solve_boozer_spectrum_proxy_gradient",
+        "kinetic_solve_executed": False,
+        "kinetic_transport_scalar_claimed": current_scalar_claimed,
+        "current_public_scalar_kind": scalar_kind,
+        "full_vmec_boundary_to_sfincs_kinetic_gradients": "deferred_not_covered_by_this_lane",
+        "kinetic_transport_scalar_contract_gate": kinetic_contract_gate,
+        "required_kinetic_transport_scalar_stages": required_kinetic_stages,
+        "differentiability_boundary": {
+            "differentiated_stage_names": list(
+                current_scalar.get("differentiated_stage_names") or []
+            ),
+            "setup_only_stage_names": list(
+                current_scalar.get("setup_only_stage_names") or []
+            ),
+            "not_covered_stage_names": list(
+                current_scalar.get("not_covered_stage_names") or []
+            ),
+        },
+        "requires_file_provenance": bool(require_file_provenance),
+        "required_file_provenance_fields": list(required_fields),
+        "present_file_provenance_fields": present_fields,
+        "missing_file_provenance_fields": missing_fields,
+        "proxy_gradient_gate_status": proxy_status,
+        "proxy_vs_kinetic": {
+            "proxy": "differentiated Boozer-spectrum transport-like scalar",
+            "kinetic": "not run and not differentiated by this workflow",
+        },
+    }
+
+
 def _attr(obj: Any, *names: str, default: Any = None, required: bool = True) -> Any:
     for name in names:
         if hasattr(obj, name):
@@ -855,6 +952,7 @@ __all__ = [
     "boozer_spectrum_geometry_proxy_objective",
     "boozer_spectrum_proxy_transport_gradient_gate",
     "boozer_spectrum_proxy_transport_objective",
+    "geometry_proxy_no_solve_provenance_gate",
     "geometry_proxy_workflow_contract",
     "geometry_proxy_workflow_summary",
     "kinetic_transport_scalar_no_overclaim_gate",

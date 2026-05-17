@@ -45,6 +45,7 @@ if str(_REPO_ROOT) not in sys.path:
 from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
     boozer_spectrum_proxy_transport_gradient_gate,
     boozer_spectrum_proxy_transport_objective,
+    geometry_proxy_no_solve_provenance_gate,
     geometry_proxy_workflow_summary,
     optional_jax_geometry_backend_report,
 )
@@ -130,62 +131,6 @@ def _print_backend_status() -> None:
 def _write_summary_json(path: Path, summary: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _no_solve_provenance_gate(
-    summary: dict[str, object],
-    *,
-    require_file_provenance: bool,
-) -> dict[str, object]:
-    """Return a machine-readable gate that separates proxy gradients from solves."""
-    provenance = dict(summary.get("provenance") or {})
-    no_overclaim = dict(summary.get("no_overclaim_gate") or {})
-    gradient_gate = dict(summary.get("numerical_gradient_gate") or {})
-    kinetic_contract = dict(summary.get("kinetic_transport_scalar_contract") or {})
-    kinetic_contract_gate = dict(kinetic_contract.get("no_overclaim_gate") or {})
-    required_kinetic_stages = [
-        str(stage.get("name"))
-        for stage in list(kinetic_contract.get("required_stages") or [])
-    ]
-    current_scalar = dict(kinetic_contract.get("current_public_scalar") or {})
-    required_fields = ("source", "selected_surface", "boozer_resolution", "grid_shape", "scale")
-    present_fields = [
-        field
-        for field in required_fields
-        if provenance.get(field) not in (None, {}, [])
-    ]
-    missing_fields = [
-        field
-        for field in required_fields
-        if require_file_provenance and provenance.get(field) in (None, {}, [])
-    ]
-    proxy_status = str(gradient_gate.get("status", "not_run"))
-    proxy_ok = proxy_status == "pass" if require_file_provenance else proxy_status in {"pass", "not_run"}
-    kinetic_claimed = bool(no_overclaim.get("full_transport_gradients_claimed", True))
-    kinetic_contract_ok = kinetic_contract_gate.get("status") == "pass"
-    passed = (not kinetic_claimed) and proxy_ok and not missing_fields and kinetic_contract_ok
-    return {
-        "status": "pass" if passed else "fail",
-        "claim_scope": "no_solve_boozer_spectrum_proxy_gradient",
-        "kinetic_solve_executed": False,
-        "full_vmec_boundary_to_sfincs_kinetic_gradients": "deferred_not_covered_by_this_lane",
-        "kinetic_transport_scalar_contract_gate": kinetic_contract_gate,
-        "required_kinetic_transport_scalar_stages": required_kinetic_stages,
-        "differentiability_boundary": {
-            "differentiated_stage_names": list(current_scalar.get("differentiated_stage_names") or []),
-            "setup_only_stage_names": list(current_scalar.get("setup_only_stage_names") or []),
-            "not_covered_stage_names": list(current_scalar.get("not_covered_stage_names") or []),
-        },
-        "requires_file_provenance": bool(require_file_provenance),
-        "required_file_provenance_fields": list(required_fields),
-        "present_file_provenance_fields": present_fields,
-        "missing_file_provenance_fields": missing_fields,
-        "proxy_gradient_gate_status": proxy_status,
-        "proxy_vs_kinetic": {
-            "proxy": "differentiated Boozer-spectrum transport-like scalar",
-            "kinetic": "not run and not differentiated by this example",
-        },
-    }
 
 
 def _synthetic_backend_readiness_gate() -> dict[str, object]:
@@ -303,7 +248,7 @@ def main() -> int:
     if args.check_backends:
         summary = geometry_proxy_workflow_summary()
         summary["backend_readiness_gate"] = _synthetic_backend_readiness_gate()
-        summary["no_solve_provenance_gate"] = _no_solve_provenance_gate(
+        summary["no_solve_provenance_gate"] = geometry_proxy_no_solve_provenance_gate(
             summary,
             require_file_provenance=False,
         )
@@ -383,7 +328,7 @@ def main() -> int:
         finite_difference_gradient=float(finite_difference),
         finite_difference_step=step,
     )
-    summary["no_solve_provenance_gate"] = _no_solve_provenance_gate(
+    summary["no_solve_provenance_gate"] = geometry_proxy_no_solve_provenance_gate(
         summary,
         require_file_provenance=True,
     )

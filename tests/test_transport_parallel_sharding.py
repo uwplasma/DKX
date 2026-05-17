@@ -139,6 +139,19 @@ def test_sharded_solve_deterministic_output_gate_schema_is_fail_closed() -> None
     assert measured.passes is True
     assert measured.status == "pass"
 
+    measured_pair = plan_sharded_solve_deterministic_output_gate(
+        comparison_devices=2,
+        max_relative_residual_norm=2.0e-12,
+        baseline_output_digest="baseline",
+        comparison_output_digest="comparison",
+        evidence_source="measured_solve_output_digest",
+    )
+    assert measured_pair.passes is True
+    assert measured_pair.output_digest == "comparison"
+    assert measured_pair.output_digest_match is False
+    assert measured_pair.evidence_source == "measured_solve_output_digest"
+    assert any("digests differ" in note for note in measured_pair.notes)
+
 
 def test_sharded_solve_amortization_rejects_communication_dominated_claim() -> None:
     diagnostics = estimate_sharded_solve_amortization(
