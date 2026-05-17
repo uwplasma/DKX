@@ -231,6 +231,16 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_raw": raw_rss,
             "SFINCS_JAX_IMPLICIT_SOLVE": "1" if args.differentiable else "0",
         }
     )
+    # Keep child benchmark processes predictable under pytest-xdist/CI, where
+    # many workers may otherwise ask JAX/BLAS to create large CPU thread pools.
+    base_env.setdefault("OMP_NUM_THREADS", "1")
+    base_env.setdefault("OPENBLAS_NUM_THREADS", "1")
+    base_env.setdefault("MKL_NUM_THREADS", "1")
+    base_env.setdefault("NUMEXPR_NUM_THREADS", "1")
+    base_env.setdefault(
+        "XLA_FLAGS",
+        "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1",
+    )
     if args.profile:
         base_env["SFINCS_JAX_PROFILE"] = "1"
 

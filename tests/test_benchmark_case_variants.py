@@ -108,9 +108,9 @@ def test_benchmark_case_variants_smoke(tmp_path: Path) -> None:
     assert rows[0]["variant"] == "default"
     assert rows[1]["variant"] == "incremental"
     assert rows[2]["variant"] == "lgmres"
-    assert rows[0]["status"] == "ok"
-    assert rows[1]["status"] == "ok"
-    assert rows[2]["status"] == "ok"
+    assert rows[0]["status"] == "ok", rows[0]
+    assert rows[1]["status"] == "ok", rows[1]
+    assert rows[2]["status"] == "ok", rows[2]
     assert rows[1]["vs_default"]["count"] == 0
     assert rows[2]["vs_default"]["count"] == 0
     assert not rows[1]["used_lgmres"]
@@ -149,4 +149,4 @@ def test_benchmark_case_variants_no_default_smoke(tmp_path: Path) -> None:
     assert "## running incremental" in proc.stdout
     rows = json.loads(json_out.read_text())
     assert [row["variant"] for row in rows] == ["incremental"]
-    assert rows[0]["status"] == "ok"
+    assert rows[0]["status"] == "ok", rows[0]
