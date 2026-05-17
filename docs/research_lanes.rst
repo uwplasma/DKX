@@ -343,6 +343,16 @@ they have deterministic, audited throughput evidence. Single-case multi-GPU
 RHSMode=1 sharding remains experimental because current sharded solves are
 compile/setup/synchronization dominated.
 
+The 2026-05-17 clean ``office`` run closed the last unknown in this lane as a
+measured blocker, not a promotion. On two RTX A4000 GPUs, a fresh checkout at
+``8e34341`` completed the one-GPU hot solve in ``4.047 s`` but timed out the
+two-GPU sharded child at the ``300 s`` cap. The checked artifact
+``docs/_static/transport_sharded_solve_gpu_1v2_failclosed_2026_05_17.json``
+keeps ``release_scaling_claim=false``, marks ``devices=2`` as timed out, and
+skips the deterministic-output probe after timing failure. This prevents a
+stale dry-run or incomplete trace from being mistaken for strong-scaling
+evidence.
+
 Relevant implementation:
 
 - ``examples/performance/benchmark_sharded_solve_scaling.py`` and
@@ -355,6 +365,8 @@ Relevant implementation:
   workload balance, estimates setup/communication amortization, and fail-closes
   release scaling claims for experimental single-case sharding.
 - ``sfincs_jax/v3_system.py`` contains the sharded matrix-free operator path.
+- ``docs/_static/transport_sharded_solve_gpu_1v2_failclosed_2026_05_17.json``
+  is the current negative 1-vs-2 GPU evidence artifact.
 
 Next implementation
 ~~~~~~~~~~~~~~~~~~~

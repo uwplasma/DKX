@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-17T20:21:08+01:00",
+  "generated_at": "2026-05-17T21:18:00+01:00",
   "lanes": [
     {
       "before_percent": 23,
@@ -371,6 +371,14 @@
         {
           "claim": "Dry-run 1-vs-2 GPU sharded-solve artifact records operator_reuse_gate.passes=true, deterministic_output_gate.passes=false with plan_only_probe_requested evidence, and release_scaling_supported=false because office was dirty/outdated.",
           "path": "docs/_static/transport_sharded_solve_gpu_1v2_dryrun_2026_05_17.json"
+        },
+        {
+          "claim": "Clean-office 1-vs-2 GPU sharded-solve fail-closed artifact records a stable 1-GPU hot solve (4.047 s) and a 2-GPU timeout at the 300 s cap; deterministic output was skipped after timing failure, so this is blocker evidence rather than a scaling claim.",
+          "path": "docs/_static/transport_sharded_solve_gpu_1v2_failclosed_2026_05_17.json"
+        },
+        {
+          "claim": "Companion figure visualizes the clean-office fail-closed single-case 1-vs-2 GPU sharded solve attempt.",
+          "path": "docs/_static/figures/parallel/sharded_solve_gpu_1v2_failclosed_2026_05_17.png"
         }
       ],
       "gates": [
@@ -380,11 +388,12 @@
       ],
       "id": "parallel_scaling",
       "next_actions": [
-        "Run the deterministic-output 1-vs-2 GPU probe from a clean current office checkout before any single-case multi-GPU promotion; the current artifact is dry-run blocker evidence only.",
-        "Improve compiled-executable reuse across case-parallel GPU workers before broadening release scaling claims beyond independent-work throughput."
+        "Do not promote single-case multi-GPU strong scaling from the current sharded solve path: clean-office measured evidence times out on 2 GPUs even though 1 GPU completes the hot solve in about 4 s.",
+        "Next algorithmic step is a true compiled device operator/coarse-reuse path that keeps the state sharded across Krylov iterations and avoids per-child setup/host-collective overhead; rerun the same deterministic-output artifact only after that implementation changes.",
+        "Keep release-facing parallel claims scoped to independent transport-worker/case throughput until the 1-vs-2 single-case artifact both beats 1 GPU and passes deterministic output parity."
       ],
       "second_push_delta_percent": 29,
-      "second_push_result": "release-facing transport-worker parallelism is now evidence-ready with audited GPU throughput artifacts, claim-scope metadata, strict non-release classification for setup-dominated two-GPU/single-case experiments, fail-closed compiled operator-reuse gates, and a deterministic-output probe path that produces digest/residual evidence before future sharded-solve claims",
+      "second_push_result": "release-facing transport-worker parallelism is now evidence-ready with audited GPU throughput artifacts, claim-scope metadata, strict non-release classification for setup-dominated two-GPU/single-case experiments, fail-closed compiled operator-reuse gates, and a deterministic-output probe path that produces digest/residual evidence before future sharded-solve claims Clean-office follow-up on 2026-05-17 converted the remaining 1-vs-2 GPU sharded-solve item from dry-run uncertainty into measured fail-closed blocker evidence: 1 GPU completes the hot solve in 4.047 s, while the 2-GPU child times out at the 300 s cap and skips deterministic-output probing.",
       "status": "evidence_ready",
       "target_percent": 95,
       "title": "Executable parallelism and strong-scaling evidence"
