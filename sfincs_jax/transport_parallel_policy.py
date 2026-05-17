@@ -1180,6 +1180,28 @@ def audit_sharded_solve_scaling_summary(
             release_promotion_blockers.append(
                 f"only {device_count} GPU devices recorded for {claim_devices} sharded devices"
             )
+    for result in raw_results:
+        if not isinstance(result, dict):
+            continue
+        devices = validate_transport_parallel_worker_count(result.get("devices"), context="results")
+        sample_failures = result.get("sample_failures", result.get("failures", ()))
+        try:
+            failure_list = tuple(str(item) for item in sample_failures)  # type: ignore[arg-type]
+        except TypeError:
+            failure_list = (str(sample_failures),)
+        timed_out = bool(_optional_bool(result.get("timed_out"), name="results.timed_out") or False)
+        failed_samples = result.get("failed_samples")
+        failed_sample_count = 0
+        if failed_samples is not None:
+            try:
+                failed_sample_count = len(tuple(failed_samples))  # type: ignore[arg-type]
+            except TypeError:
+                failed_sample_count = 1
+        if timed_out or failure_list or failed_sample_count:
+            failures.append(f"devices={devices} recorded failed/timed-out sharded-solve samples")
+            release_promotion_blockers.append(
+                f"devices={devices} recorded failed/timed-out sharded-solve samples"
+            )
     if not deterministic_output_check:
         notes.append("deterministic output parity was not recorded for this timing-only sharded benchmark")
         release_promotion_blockers.append("deterministic residual/output parity was not proven")

@@ -76,9 +76,9 @@ Current active lane (2026-05-16, v1.1.4 completion push):
 - [x] Local final release validation passed: release-gate checks, research-lane
   checks, `git diff --check`, Sphinx `-W` docs build, full local suite
   (`1651 passed in 712.28 s`), `python -m build`, and `twine check dist/*`.
-- [ ] Final v1.1.4 remote gate: push to `main`, require CI/docs success, then
-  tag `v1.1.4` only if the tree stays clean and the tag matches
-  `pyproject.toml` / `sfincs_jax.__version__`.
+- [x] Final v1.1.4 remote gate passed after commit `8e34341`: `origin/main`
+  CI and docs both succeeded, and the local full suite reported
+  `1700 passed in 717.39 s`.
 
 Current active lane (2026-05-16, post-v1.1.4 deferred-lane push):
 - [x] Literature-guided algorithm choice: stop adding solver-path thresholds
@@ -151,6 +151,21 @@ Current active lane (2026-05-16, post-v1.1.4 deferred-lane push):
   smoother or assembled block action that avoids per-matvec host/device
   transfers, then re-run the scale-0.60 GPU hard seed before launching any
   wider production-resolution QI ladder.
+- [x] Clean-office single-case 1-vs-2 GPU sharded-solve follow-up completed
+  on 2026-05-17 from a fresh scratch checkout at `8e34341`, without touching
+  the dirty `/home/rjorge/sfincs_jax` tree. The one-GPU hot solve completed in
+  `4.047 s` on an RTX A4000, but the two-GPU child timed out at the `300 s`
+  sample cap. The patched harness now writes a fail-closed artifact instead of
+  exiting before JSON:
+  `docs/_static/transport_sharded_solve_gpu_1v2_failclosed_2026_05_17.json`
+  with `sharded_solve_audit.ci_gate_pass=false`,
+  `devices=2` marked as timed out, and the deterministic-output gate skipped
+  after timing failure.
+- [ ] Next single-case multi-GPU implementation target: a real compiled
+  device operator/coarse-reuse path that keeps the state sharded across Krylov
+  iterations and avoids per-child setup/host-collective overhead. Do not
+  promote single-case GPU strong scaling until the same deterministic-output
+  artifact beats the one-GPU hot solve and passes residual/output parity.
 
 Current active lane (2026-05-12, coordinated large-push research/performance closure):
 - [ ] Second larger push requested on 2026-05-12: increase each open lane by at

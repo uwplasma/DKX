@@ -317,6 +317,47 @@ def test_audit_sharded_solve_scaling_summary_requires_operator_reuse_gate() -> N
     assert any("operator-reuse gate metadata" in failure for failure in audit.failures)
 
 
+def test_audit_sharded_solve_scaling_summary_rejects_timed_out_samples() -> None:
+    audit = audit_sharded_solve_scaling_summary(
+        {
+            "benchmark_kind": "single_case_sharded_solve",
+            "scaling_status": "experimental_single_case_sharding",
+            "experimental_single_case_scaling": True,
+            "release_scaling_claim": False,
+            "backend": "gpu",
+            "gpu_device_count": 2,
+            "timing_semantics": "hot_solve",
+            "operator_reuse_gate": {
+                "passes": True,
+                "timing_semantics": "hot_solve",
+                "timed_repeats": 1,
+                "min_timed_repeats": 1,
+                "compile_in_timed_region": False,
+                "warm_run_amortization_pass": True,
+                "persistent_compile_cache": True,
+                "compile_cache_dir": "examples/performance/output/cache",
+            },
+            "deterministic_output_check": False,
+            "devices": [1, 2],
+            "results": [
+                {"devices": 1, "mean_s": 4.0, "speedup": 1.0, "samples": [4.0]},
+                {
+                    "devices": 2,
+                    "mean_s": 300.0,
+                    "speedup": 4.0 / 300.0,
+                    "samples": [],
+                    "timed_out": True,
+                    "sample_failures": ["repeat 1/1 failed: RuntimeError: Timed out after 300.0s"],
+                },
+            ],
+        }
+    )
+
+    assert not audit.ci_gate_pass
+    assert any("devices=2 recorded failed/timed-out" in failure for failure in audit.failures)
+    assert any("devices=2 recorded failed/timed-out" in blocker for blocker in audit.release_promotion_blockers)
+
+
 def test_audit_sharded_solve_scaling_summary_fails_requested_output_probe() -> None:
     audit = audit_sharded_solve_scaling_summary(
         {

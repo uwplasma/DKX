@@ -1326,36 +1326,64 @@ def main() -> None:
             )
             print(f"[device {d}] warmup {i + 1}/{max(args.warmup, 0)} done", flush=True)
         times = []
+        sample_failures: list[str] = []
+        failed_samples: list[dict[str, object]] = []
         for i in range(max(args.repeats, 1)):
             print(f"[device {d}] repeat {i + 1}/{max(args.repeats, 1)} starting", flush=True)
-            dt = _run_once_subprocess(
-                input_path=input_path,
-                devices=d,
-                cache_dir=cache_dir,
-                shard_axis=str(args.shard_axis),
-                gmres_distributed=str(args.gmres_distributed),
-                distributed_krylov=str(args.distributed_krylov),
-                periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
-                nsolve=int(args.nsolve),
-                inner_warmup_solves=int(args.inner_warmup_solves),
-                sample_timeout_s=float(args.sample_timeout_s),
-                rhs1_precond=str(args.rhs1_precond),
-                backend=str(args.backend),
-                schwarz_coarse_levels=args.schwarz_coarse_levels,
-                schwarz_coarse_steps=args.schwarz_coarse_steps,
-                schwarz_coarse_damp=args.schwarz_coarse_damp,
-            )
+            try:
+                dt = _run_once_subprocess(
+                    input_path=input_path,
+                    devices=d,
+                    cache_dir=cache_dir,
+                    shard_axis=str(args.shard_axis),
+                    gmres_distributed=str(args.gmres_distributed),
+                    distributed_krylov=str(args.distributed_krylov),
+                    periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
+                    nsolve=int(args.nsolve),
+                    inner_warmup_solves=int(args.inner_warmup_solves),
+                    sample_timeout_s=float(args.sample_timeout_s),
+                    rhs1_precond=str(args.rhs1_precond),
+                    backend=str(args.backend),
+                    schwarz_coarse_levels=args.schwarz_coarse_levels,
+                    schwarz_coarse_steps=args.schwarz_coarse_steps,
+                    schwarz_coarse_damp=args.schwarz_coarse_damp,
+                )
+            except Exception as exc:  # noqa: BLE001
+                failure = f"repeat {i + 1}/{max(args.repeats, 1)} failed: {type(exc).__name__}: {exc}"
+                sample_failures.append(failure)
+                failed_samples.append(
+                    {
+                        "repeat": i + 1,
+                        "failure": failure,
+                        "timeout_s": float(args.sample_timeout_s),
+                    }
+                )
+                print(f"[device {d}] repeat {i + 1}/{max(args.repeats, 1)} failed: {failure}", flush=True)
+                continue
             times.append(dt)
             print(f"[device {d}] repeat {i + 1}/{max(args.repeats, 1)} done in {dt:.3f}s", flush=True)
         times = np.asarray(times, dtype=float)
-        results.append(
-            {
+        if times.size:
+            result = {
                 "devices": d,
                 "mean_s": float(np.mean(times)),
                 "std_s": float(np.std(times, ddof=1)) if times.size > 1 else 0.0,
                 "samples": [float(v) for v in times],
             }
-        )
+        else:
+            timeout_s = float(args.sample_timeout_s)
+            fallback_s = timeout_s if timeout_s > 0 else 1.0
+            result = {
+                "devices": d,
+                "mean_s": fallback_s,
+                "std_s": 0.0,
+                "samples": [],
+                "timed_out": any("Timed out" in failure for failure in sample_failures),
+            }
+        if sample_failures:
+            result["sample_failures"] = sample_failures
+            result["failed_samples"] = failed_samples
+        results.append(result)
         print(f"devices={d} mean_s={results[-1]['mean_s']:.3f} std_s={results[-1]['std_s']:.3f}", flush=True)
 
     base = next((r for r in results if r["devices"] == 1), None)
@@ -1377,33 +1405,47 @@ def main() -> None:
             f"with tolerance={float(args.deterministic_output_tolerance):.3g}",
             flush=True,
         )
-        try:
-            deterministic_output_gate = _measure_deterministic_output_gate(
-                input_path=input_path,
-                devices=devices,
-                cache_dir=cache_dir,
-                deterministic_output_dir=deterministic_output_dir,
-                shard_axis=str(args.shard_axis),
-                gmres_distributed=str(args.gmres_distributed),
-                distributed_krylov=str(args.distributed_krylov),
-                periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
-                inner_warmup_solves=int(args.inner_warmup_solves),
-                sample_timeout_s=float(args.sample_timeout_s),
-                rhs1_precond=str(args.rhs1_precond),
-                backend=str(args.backend),
-                schwarz_coarse_levels=args.schwarz_coarse_levels,
-                schwarz_coarse_steps=args.schwarz_coarse_steps,
-                schwarz_coarse_damp=args.schwarz_coarse_damp,
-                residual_tolerance=float(args.deterministic_output_tolerance),
-                repo_root=repo_root,
-            )
-        except Exception as exc:  # noqa: BLE001
+        timing_failures = [
+            f"devices={result['devices']}: {failure}"
+            for result in results
+            for failure in result.get("sample_failures", [])
+        ]
+        if timing_failures:
             deterministic_output_gate = _failed_deterministic_output_gate(
                 devices=devices,
                 residual_tolerance=float(args.deterministic_output_tolerance),
-                evidence_source="probe_failed",
-                failure=f"deterministic output probe failed: {type(exc).__name__}: {exc}",
+                evidence_source="skipped_after_timing_failure",
+                failure="deterministic output probe skipped because timed samples failed: "
+                + "; ".join(timing_failures),
             )
+        else:
+            try:
+                deterministic_output_gate = _measure_deterministic_output_gate(
+                    input_path=input_path,
+                    devices=devices,
+                    cache_dir=cache_dir,
+                    deterministic_output_dir=deterministic_output_dir,
+                    shard_axis=str(args.shard_axis),
+                    gmres_distributed=str(args.gmres_distributed),
+                    distributed_krylov=str(args.distributed_krylov),
+                    periodic_stencil_on_sharded=str(args.periodic_stencil_on_sharded),
+                    inner_warmup_solves=int(args.inner_warmup_solves),
+                    sample_timeout_s=float(args.sample_timeout_s),
+                    rhs1_precond=str(args.rhs1_precond),
+                    backend=str(args.backend),
+                    schwarz_coarse_levels=args.schwarz_coarse_levels,
+                    schwarz_coarse_steps=args.schwarz_coarse_steps,
+                    schwarz_coarse_damp=args.schwarz_coarse_damp,
+                    residual_tolerance=float(args.deterministic_output_tolerance),
+                    repo_root=repo_root,
+                )
+            except Exception as exc:  # noqa: BLE001
+                deterministic_output_gate = _failed_deterministic_output_gate(
+                    devices=devices,
+                    residual_tolerance=float(args.deterministic_output_tolerance),
+                    evidence_source="probe_failed",
+                    failure=f"deterministic output probe failed: {type(exc).__name__}: {exc}",
+                )
 
     payload = {
         "benchmark_kind": "single_case_sharded_solve",
@@ -1476,16 +1518,31 @@ def main() -> None:
         d = np.array([r["devices"] for r in results], dtype=int)
         mean_s = np.array([r["mean_s"] for r in results], dtype=float)
         speedup = np.array([r.get("speedup", np.nan) for r in results], dtype=float)
+        timed_out = np.array([bool(r.get("timed_out", False)) for r in results], dtype=bool)
 
         fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.2))
-        axes[0].plot(d, mean_s, "o-", label="measured")
+        axes[0].plot(d[~timed_out], mean_s[~timed_out], "o-", label="measured")
+        if np.any(timed_out):
+            axes[0].plot(d[timed_out], mean_s[timed_out], "x", color="crimson", markersize=10, label="timeout cap")
+            for x_value, y_value in zip(d[timed_out], mean_s[timed_out], strict=True):
+                axes[0].annotate(
+                    "timeout",
+                    (x_value, y_value),
+                    textcoords="offset points",
+                    xytext=(0, 8),
+                    ha="center",
+                    color="crimson",
+                )
         device_label = "GPU devices" if _normalized_backend(args.backend) == "gpu" else "CPU devices"
         axes[0].set_xlabel(device_label)
         axes[0].set_ylabel("time (s)")
         axes[0].set_title("Runtime vs devices")
         axes[0].grid(True, alpha=0.3)
+        axes[0].legend(frameon=False)
 
-        axes[1].plot(d, speedup, "o-", label="measured")
+        axes[1].plot(d[~timed_out], speedup[~timed_out], "o-", label="measured")
+        if np.any(timed_out):
+            axes[1].plot(d[timed_out], speedup[timed_out], "x", color="crimson", markersize=10, label="timeout cap")
         axes[1].plot(d, d, "--", label="ideal")
         axes[1].set_xlabel(device_label)
         axes[1].set_ylabel("speedup")
@@ -1493,8 +1550,8 @@ def main() -> None:
         axes[1].grid(True, alpha=0.3)
         axes[1].legend(frameon=False)
 
-        fig.suptitle(f"Sharded solve scaling: {payload['case']}", y=1.02)
-        fig.tight_layout()
+        fig.suptitle(f"Sharded solve scaling: {payload['case']}", y=0.98)
+        fig.tight_layout(rect=(0, 0, 1, 0.94))
         fig_path = out_dir / "sharded_solve_scaling.png"
         fig.savefig(fig_path, dpi=200)
         print(f"Saved figure -> {fig_path}")

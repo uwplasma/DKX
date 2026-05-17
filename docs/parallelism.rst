@@ -1238,6 +1238,26 @@ vectors under ``deterministic_output_probe/``, and records
 keeps ``release_scaling_claim=false`` and records the missing parity evidence in
 ``release_promotion_blockers``.
 
+The clean ``office`` follow-up on 2026-05-17 makes this lane evidence-defined
+rather than ambiguous. From a fresh checkout at ``8e34341``, the one-GPU hot
+solve completed in ``4.047 s`` on an RTX A4000, but the two-GPU child timed out
+at the ``300 s`` sample cap before producing a timed solve. The saved artifact
+``docs/_static/transport_sharded_solve_gpu_1v2_failclosed_2026_05_17.json``
+therefore records ``sharded_solve_audit.ci_gate_pass=false``,
+``devices=2`` as a failed/timed-out sample, and
+``deterministic_output_gate.evidence_source="skipped_after_timing_failure"``.
+This is the correct current state: single-case multi-GPU sharding is a
+documented research lane, not a user-facing performance claim. The next real
+implementation step is compiled device operator/coarse reuse across Krylov
+iterations, not another solver-label toggle.
+
+.. figure:: _static/figures/parallel/sharded_solve_gpu_1v2_failclosed_2026_05_17.png
+   :alt: Clean-office fail-closed one-vs-two GPU sharded-solve benchmark.
+
+   Clean-office one-vs-two GPU sharded-solve attempt. The one-GPU hot solve
+   completes, while the two-GPU child reaches the bounded timeout cap and is
+   recorded as negative evidence rather than a scaling claim.
+
 See also:
 
 - `docs/performance_techniques.rst`
