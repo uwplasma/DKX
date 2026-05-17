@@ -14,7 +14,7 @@ repo_root = Path(__file__).resolve().parents[2]
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
-from sfincs_jax.compare import compare_sfincs_outputs
+from sfincs_jax.compare import compare_sfincs_outputs  # noqa: E402
 
 
 def main() -> int:
@@ -33,6 +33,7 @@ def main() -> int:
         str(input_path),
         "--out",
         str(out_path),
+        "--geometry-only",
     ]
     subprocess.run(cmd, check=True)
 
