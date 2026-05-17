@@ -5,8 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 
 def _run_script(script: Path, *args: str) -> None:
     env = os.environ.copy()
@@ -90,4 +88,44 @@ def test_cli_plot_shortcut_accepts_netcdf(tmp_path: Path) -> None:
         env=env,
         check=True,
     )
+    assert output_pdf.exists()
+
+
+def test_readme_quick_solve_command_uses_public_auto_path(tmp_path: Path) -> None:
+    repo = Path(__file__).resolve().parents[1]
+    input_path = repo / "examples" / "sfincs_examples" / "quick_2species_FPCollisions_noEr" / "input.namelist"
+    output_h5 = tmp_path / "sfincsOutput.h5"
+    output_pdf = tmp_path / "sfincsOutput_summary.pdf"
+    env = os.environ.copy()
+    env["MPLBACKEND"] = "Agg"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "sfincs_jax",
+            str(input_path),
+            "--out",
+            str(output_h5),
+            "--quiet",
+        ],
+        cwd=str(repo),
+        env=env,
+        check=True,
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "sfincs_jax",
+            "--plot",
+            str(output_h5),
+            "--out",
+            str(output_pdf),
+            "--quiet",
+        ],
+        cwd=str(repo),
+        env=env,
+        check=True,
+    )
+    assert output_h5.exists()
     assert output_pdf.exists()

@@ -49,107 +49,50 @@ cd sfincs_jax
 pip install .
 ```
 
-After installing from a source checkout, you can run the CLI immediately on the
-bundled tiny example. The suffix of `--out` selects the output format:
-`.h5`/`.hdf5` for the Fortran-compatible HDF5 file, `.nc`/`.netcdf` for NetCDF4,
-and `.npz` for a fast NumPy archive.
+After installing, run the CLI on an input file. For most users this is the
+entire workflow: provide `input.namelist`, optionally override the geometry file
+with `--wout-path`, and let the default `auto` policy choose the fastest
+validated solve path for the problem.
 
 ```bash
 cd sfincs_jax
-sfincs_jax write-output \
-  --input examples/getting_started/input.namelist \
-  --out sfincsOutput.h5 \
-  --solver-trace solver_trace.json \
-  --geometry-only
+sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.h5
 sfincs_jax --plot sfincsOutput.h5
 ```
 
-This is the fast installation smoke test. It writes `sfincsOutput.h5` and then
-writes a multi-page PDF diagnostics panel next to it as
-`sfincsOutput_summary.pdf`. The optional `--solver-trace` sidecar records the
-backend, selected solve lane, timing, and output metadata without changing the
-parity-oriented output file. The same command works for NetCDF and NPZ:
+This writes `sfincsOutput.h5` and then creates a multi-page PDF diagnostics panel
+next to it as `sfincsOutput_summary.pdf`. The same command works for NetCDF and
+NPZ by changing the output suffix:
 
 ```bash
-sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.nc --geometry-only
-sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.npz --geometry-only
+sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.nc
+sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.npz
 sfincs_jax --plot sfincsOutput.nc
 ```
 
-For larger non-differentiable RHSMode=1 production runs, the CLI can leave the
-matrix-free Krylov path when a measured policy is safer or faster. Audited CPU
-3D full-FP systems auto-select sparse-PC GMRES inside a measured size window
-when it is faster and lower-memory than dense FP. Bounded CPU tokamak
-electric-field systems auto-select dense LU only in the validated active-size
-window where it avoids the slow Krylov/strong/sparse-rescue ladder; this is a
-runtime win with a higher transient memory footprint, so it is CPU-only and
-size-capped. Measured GPU tokamak full-FP no-Er/Er production-floor rows
-auto-select structured x-block sparse-PC GMRES when that is the parity-clean,
-lower-memory route; this avoids the global dense-velocity sparse-pattern setup
-that dominated earlier production-floor runs. On the non-differentiable
-full-FP x-block path, per-x/TZ blocks up to size `30000` use exact sparse LU
-before falling back to ILU; this measured policy removes the medium-QI and
-production-floor full-trajectory cliffs without changing PAS or autodiff paths.
-For explicit large-QI requests that opt into JAX-native x-block Krylov, the
-documented non-autodiff host fallback can rewrite the solve to the accepted host
-x-block auto policy before JAX factors are built, keeping the measured side-probe
-seed plus LGMRES rescue. That is the production escape hatch for robust large
-RHSMode=1 QI solves today; it is distinct from the still-deferred true
-differentiable device-QI lane.
-For tokamak full-FP Er and 3D full-FP full-trajectory x-block solves, the same
-right-preconditioned path is now the default on CPU and GPU. For one-species
-decks, the Fortran-style `preconditioner_species = 0` setting is treated as
-equivalent to the compact per-species x-block because there is no inter-species
-coupling to preserve. The
-production-floor CPU Er rows now run in about `1 s` logged / `1.7-1.9 s` cold
-external time with about `0.42-0.44 GB` RSS instead of multi-GB dense-assembly
-setup. On an RTX A4000, the same rows are residual-clean at about `23.3 s` for
-DKES trajectories and `11.0 s` for full trajectories, with active RSS deltas
-near `1.1 GB`; the full-trajectory row uses right-preconditioned GMRES with a
-short restart.
-Large constrained-PAS profile-current decks also auto-select sparse-PC GMRES
-when the problem size is in the validated production window. Tokamak PAS no-Er
-production-floor sparse-PC runs use the measured `MMD_ATA` SuperLU ordering by
-default; PAS+Er full-trajectory runs use the lower-fill measured
-`MMD_AT_PLUS_A` ordering, and the one-species PAS+Er row caps the default
-sparse-PC GMRES restart at `40` unless the user explicitly overrides it. Both
-routes factor only the active `Nxi_for_x` degrees of freedom, which cuts
-sparse-factor fill while preserving strict Fortran parity on the audited CPU
-and RTX A4000 GPU rows. On the public no-Er production rows,
-this lowers the two-species CPU active RSS to about `0.39 GB`, cuts the
-two-species GPU runtime to about `5.2 s`, and cuts the one-species `Nx=4` GPU
-runtime from about `28.8 s` to about `3.0 s`, all with zero Fortran output
-mismatches. Explicit sparse-host LU and x-block sparse PC remain available:
+For VMEC geometry, either put the VMEC `wout` path in the namelist or pass it at
+runtime:
 
 ```bash
-sfincs_jax write-output \
-  --input /path/to/input.namelist \
-  --out sfincsOutput.h5 \
-  --solve-method sparse_host_safe \
-  --solver-trace solver_trace.json
-
-sfincs_jax write-output \
-  --input /path/to/input.namelist \
-  --out sfincsOutput.h5 \
-  --solve-method xblock_sparse_pc_gmres \
-  --solver-trace solver_trace.json
+sfincs_jax /path/to/input.namelist --wout-path /path/to/wout.nc --out sfincsOutput.h5
 ```
 
-This path keeps the full SFINCS system, builds a conservative sparse pattern,
-probes only colored structural nonzeros, and first tries host sparse LU. The
-`sparse_host_safe` mode falls back only for constrained PAS systems where sparse
-LU exposes a singular/gauge-sensitive branch; that fallback is labeled as
-PETSc-compatible minimum-norm output instead of pretending the true residual
-target was met. RHSMode=1 outputs include `linearSolverMethod`,
-`linearSolverResidualNorm`, `linearSolverResidualTarget`,
-`linearSolverResidualTargetRatio`, `linearSolverConverged`,
-`linearSolverAccepted`, and `linearSolverAcceptanceCriterion` in the main output
-file. Sparse-PC runs also write setup/solve/factorization timings and
-sparse-pattern counters such as `linearSolverMatvecs`,
-`linearSolverSetupTime`, `linearSolverSolveTime`,
-`linearSolverSparsePCFactorTime`, `linearSolverSparsePatternNnz`,
-`linearSolverSparsePCXBlockPreconditionerXi`, and
-`linearSolverSparsePCXBlockAssembledHost`.
+Advanced users can still force solver methods and write solver traces for
+profiling or reproducibility, but these are not required for normal production
+runs:
+
+```bash
+sfincs_jax /path/to/input.namelist \
+  --out sfincsOutput.h5 \
+  --solver-trace solver_trace.json \
+  --solve-method xblock_sparse_pc_gmres
+```
+
+RHSMode=1 outputs include `linearSolverMethod`, `linearSolverResidualNorm`,
+`linearSolverResidualTarget`, `linearSolverResidualTargetRatio`,
+`linearSolverConverged`, `linearSolverAccepted`, and
+`linearSolverAcceptanceCriterion` in the output file so automatic choices remain
+auditable after the run.
 The production benchmark manifest now enforces large research-scale floors:
 `25 x 51 x 4 x 100` (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and
 `25 x 1 x 4 x 100` for tokamak cases. Public production timing rows target
@@ -285,11 +228,11 @@ write_sfincs_jax_output_h5(
 )
 ```
 
-`sfincs_jax write-output` and the scan utilities use the explicit
-performance-oriented solve path by default. When calling
-`write_sfincs_jax_output_h5(...)` directly, pass `differentiable=False` for the
-same fast path or request the implicit/differentiable linear-solve path only when
-you need gradients:
+`sfincs_jax write-output` and the scan utilities use `solve_method="auto"` and
+`differentiable=False` by default. When calling
+`write_sfincs_jax_output_h5(...)` directly, keep those defaults for production
+runs or request the implicit/differentiable linear-solve path only when you need
+gradients:
 
 ```python
 write_sfincs_jax_output_h5(
@@ -314,7 +257,7 @@ write_sfincs_jax_output_h5(
 
 Repository examples that map directly onto common first tasks:
 
-- run the bundled tiny CLI example: `sfincs_jax examples/getting_started/input.namelist`
+- run the bundled solved CLI example: `sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist`
 - write a tiny tokamak output: `python examples/getting_started/write_sfincs_output_tokamak.py`
 - write a tiny VMEC output with `wout_path`: `python examples/getting_started/write_sfincs_output_vmec.py`
 - run a finite-beta `vmec_jax` equilibrium into convergence-gated `sfincs_jax` radial profiles of ambipolar `E_r` and bootstrap current: `python examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py`
