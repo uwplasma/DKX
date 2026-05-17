@@ -20,15 +20,18 @@ from sfincs_jax.io import (
 
 class _FakeNamelist:
     def __init__(self, rhs_mode: int = 1) -> None:
-        self._groups = {
+        self.groups = {
             "general": {"RHSMODE": rhs_mode},
-            "geometryParameters": {},
-            "physicsParameters": {},
-            "resolutionParameters": {},
+            "geometryparameters": {},
+            "physicsparameters": {},
+            "resolutionparameters": {},
         }
+        self.indexed = {}
+        self.source_path = None
+        self.source_text = None
 
     def group(self, name: str):
-        return self._groups.get(name, {})
+        return self.groups.get(name.lower(), {})
 
 
 def test_cmd_write_output_forces_explicit_mode(monkeypatch, tmp_path: Path) -> None:
@@ -693,6 +696,51 @@ def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> Non
 
     assert rc == 0
     assert captured["output_path"] == Path(tmp_path / "sfincsOutput.h5")
+
+
+def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_write_output_h5(**kwargs):
+        captured.update(kwargs)
+        out = Path(kwargs["output_path"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", _fake_write_output_h5)
+
+    rc = cli.main(
+        [
+            str(tmp_path / "input.namelist"),
+            "--wout-path",
+            str(tmp_path / "wout.nc"),
+            "--out",
+            str(tmp_path / "sfincsOutput.h5"),
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["solve_method"] == "auto"
+    assert captured["differentiable"] is False
+    assert captured["compute_solution"] is True
+    assert captured["compute_transport_matrix"] is False
+    assert captured["wout_path"] == str(tmp_path / "wout.nc")
+
+
+def test_write_output_help_presents_solver_override_as_advanced(capsys) -> None:
+    try:
+        cli.main(["write-output", "--help"])
+    except SystemExit as exc:
+        assert exc.code == 0
+
+    out = capsys.readouterr().out
+    assert "Advanced RHSMode=1 solver override" in out
+    assert "Default" in out
+    assert "'auto'" in out
+    assert "recommended" in out
 
 
 def test_main_write_output_forwards_solver_trace_sidecar(monkeypatch, tmp_path: Path) -> None:
