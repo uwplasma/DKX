@@ -115,34 +115,31 @@ you can invoke the CLI module directly:
 
    python -m sfincs_jax run-fortran --input /path/to/input.namelist
 
-Fast CLI smoke test
--------------------
+First CLI run
+-------------
 
 The repository ships a tiny runnable input for quick installation checks:
 
 .. code-block:: bash
 
-   sfincs_jax write-output \
-     --input examples/getting_started/input.namelist \
-     --out sfincsOutput.h5 \
-     --solver-trace solver_trace.json \
-     --geometry-only
+   sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.h5
    sfincs_jax --plot sfincsOutput.h5
 
-The first command is the fast installation smoke test. It writes
-``sfincsOutput.h5`` in the current working directory without a full solve. The
-optional ``--solver-trace`` sidecar writes versioned backend/path/timing metadata
-without changing the parity-oriented output file. The second command writes
+The first command solves the input with the default ``auto`` policy and writes
+``sfincsOutput.h5`` in the current working directory. The second command writes
 ``sfincsOutput_summary.pdf`` next to it unless ``--out`` is given explicitly.
+For normal production use, this is the intended public contract: provide one
+input file, optionally override the equilibrium file, and let ``sfincs_jax``
+choose the validated solve path.
 Change only the output suffix to write NetCDF4 or NPZ instead:
 
 .. code-block:: bash
 
-   sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.nc --geometry-only
-   sfincs_jax write-output --input examples/getting_started/input.namelist --out sfincsOutput.npz --geometry-only
+   sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.nc
+   sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.npz
 
-Solving a supported v3 linear run (matrix-free)
-------------------------------------------------------------
+Advanced linear-state export
+----------------------------
 
 .. code-block:: bash
 
@@ -165,39 +162,21 @@ Solving a supported v3 linear run (matrix-free)
    differentiable. Disable history logging with ``SFINCS_JAX_FORTRAN_STDOUT=0`` and
    ``SFINCS_JAX_SOLVER_ITER_STATS=0`` when tracing gradients.
 
-.. note::
+Advanced solver controls
+------------------------
 
-   The default ``--solve-method auto`` uses GMRES for RHSMode=1 robust implicit solves and BiCGStab for
-   RHSMode=2/3 transport solves. BiCGStab remains available for low-memory RHSMode=1 runs via
-   ``--solve-method bicgstab``. Transport solves apply a cheap collision-diagonal
-   preconditioner by default, while RHSMode=1 preconditioning follows the v3 namelist defaults
-   (point-block Jacobi unless line preconditioners are requested). For ``constraintScheme=2``,
-   ``sfincs_jax`` will auto-try a Schur-complement strong preconditioner if the initial solve
-   stalls, preserving the source constraints; PAS cases that already used a strong base
-   preconditioner now skip that extra retry when the residual is already within a small
-   multiple of the target. CPU 3D full-FP RHSMode=1 cases in the audited size
-   window can auto-select sparse-PC GMRES when it beats dense FP on both runtime
-   and memory. Bounded CPU tokamak electric-field RHSMode=1 cases can auto-select
-   dense LU inside the measured active-size and dense-byte caps when it avoids
-   the slow Krylov/strong/sparse-rescue ladder; this is a runtime path with
-   higher transient memory, not a GPU default. Large non-differentiable
-   constrained-PAS RHSMode=1 profile-current decks auto-select the sparse-PC GMRES
-   host lane inside the
-   validated production size window so they do not spend minutes in a
-   matrix-free fallback that stalls at a large residual. Measured GPU tokamak
-   full-FP no-Er/Er production-floor rows also auto-select structured x-block
-   sparse-PC GMRES in a narrow ``N_zeta=1`` size window. This avoids the
-   global dense-velocity sparse-pattern setup from the older sparse-PC path
-   while preserving the true-residual and Fortran-parity gates. On that
-   non-differentiable full-FP x-block path, per-x/TZ blocks up to size ``30000``
-   use exact sparse LU before falling back to ILU; PAS and autodiff paths keep
-   their stricter caps. For PAS tokamak-like ``N_zeta=1`` cases with
-   constraint projection enabled, ``sfincs_jax`` upgrades to the ``xblock_tz`` preconditioner by
-   default to reduce Krylov iterations. For strict PETSc-style iteration histories, use
-   ``--solve-method incremental``. For non-differentiable full-system RHSMode=1
-   production runs where the sparse structure is the right representation, use
-   ``--solve-method sparse_host`` to build a conservative structural sparse
-   pattern, probe colored nonzeros, and solve with host sparse LU.
+Most runs should keep ``--solve-method auto``. The automatic policy is measured
+against parity, residual, runtime, and memory gates before a branch is promoted.
+Only force a solver when reproducing a benchmark, debugging a path choice, or
+running an expert study where the output ``linearSolver*`` diagnostics and
+``--solver-trace`` sidecar will be inspected.
+
+The currently supported RHSMode=1 overrides are ``incremental``, ``dense``,
+``sparse_host``, ``sparse_host_safe``, ``sparse_pc_gmres``,
+``xblock_sparse_pc_gmres``, ``sparse_lsmr``, and ``petsc_compat``. Transport
+matrix overrides include ``bicgstab``, ``batched``, ``incremental``, and
+``dense``. These names are intentionally advanced API: scripts intended for
+general users should omit them and rely on ``auto``.
 
 .. code-block:: bash
 
@@ -1157,9 +1136,10 @@ environment variables or forcing a preconditioner.
        wout_path=Path("/path/to/wout.nc"),
    )
 
-The CLI ``write-output`` command uses the fast explicit linear-solve path by default.
-For Python workflows, keep the same explicit behavior or request the implicit/
-differentiable path explicitly:
+The CLI ``write-output`` command uses ``solve_method="auto"`` and
+``differentiable=False`` by default. That is the recommended production path.
+For Python workflows, keep the same behavior unless you explicitly need
+end-to-end differentiation:
 
 .. code-block:: python
 

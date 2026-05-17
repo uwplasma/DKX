@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-16 (Europe/Lisbon)
+Last updated: 2026-05-17 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -79,6 +79,78 @@ Current active lane (2026-05-16, v1.1.4 completion push):
 - [ ] Final v1.1.4 remote gate: push to `main`, require CI/docs success, then
   tag `v1.1.4` only if the tree stays clean and the tag matches
   `pyproject.toml` / `sfincs_jax.__version__`.
+
+Current active lane (2026-05-16, post-v1.1.4 deferred-lane push):
+- [x] Literature-guided algorithm choice: stop adding solver-path thresholds
+  for QI hard seeds and move to residual-deflated / field-split coarse
+  corrections. Anchors: PETSc field-split Schur preconditioning, deflated /
+  recycling Krylov methods, communication-avoiding GMRES, ICNTS monoenergetic
+  coefficient benchmarks, MONKES block-sparse spectral performance, and
+  Landreman-Catto QI theory.
+- [x] Added `sfincs_jax/rhs1_qi_deflation.py`, a standalone device-compatible
+  residual-deflated QI preconditioner primitive. It builds a bounded
+  preconditioned-Krylov basis from the current residual, accepts optional
+  block-Schur directions, applies a local-plus-deflated least-squares action,
+  and probes true-residual improvement fail-closed.
+- [x] Added `sfincs_jax/rhs1_qi_promotion.py`, a pure production-ladder gate so
+  true device-QI cannot be promoted without complete CPU/GPU seed coverage,
+  convergence, output/trace provenance, residual and observable bounds, and no
+  accidental host fallback.
+- [x] Extended `sfincs_jax/transport_parallel_sharding.py` with an amortization
+  model for single-case sharding. The gate estimates whether per-device work is
+  large enough to dominate setup, halo exchange, and Krylov collectives before a
+  multi-GPU scaling claim can be promoted.
+- [x] Wired the residual-deflated QI primitive into the existing opt-in
+  x-block sparse-PC hard-seed hook through
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER=1`. The hook
+  builds a device-resident local-plus-deflated preconditioner, optionally
+  enriches it with smoothed global load directions, probes the true residual,
+  seeds Krylov only after a material 5% improvement, and records full solver
+  metadata. It is still off by default until hard-seed CPU/GPU evidence passes.
+- [x] Ran the bounded scale-0.60 seed-3 CPU hard-seed probe with the
+  residual-deflated hook enabled. It converged safely and wrote
+  `docs/_static/qi_seed_robustness_scale060_qi_deflated_seed3_cpu_2026_05_16.json`,
+  but the one-application probe only improved `3.0215e-5 -> 2.9842e-5`
+  (ratio `0.9876`), below the 5% material gate. The candidate rejected before
+  Krylov, the fallback route converged with residual ratio `7.18e-3`, and no
+  matching GPU promotion run is justified from this configuration.
+- [ ] Next algorithmic step: the current residual-deflated Krylov/load basis is
+  safe but still too weak. The next true device-QI attempt needs either a
+  physically assembled block-Schur/angular/radial coarse operator with
+  constraint-current moment rows, or a device GCRO/FGMRES recycle space that is
+  learned across nearby QI seeds and validated by the same hard-seed gate.
+- [x] Implemented the first GCRO/GMRES-like seed algorithm for the
+  residual-deflated QI hook. The opt-in now defaults to eight bounded
+  residual-propagation cycles and a seed-only least-squares combination:
+  `z_k = M_0^{-1} r_k`, `r_{k+1} = r_k - A z_k`, then
+  `min_c ||A Z c - r_0||`. This keeps the reusable preconditioner linear while
+  allowing the current hard-seed residual to choose an optimal physical initial
+  guess.
+- [x] Scale-0.60 seed-3 CPU evidence for the new cycle-minres seed is checked
+  in as
+  `docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_seed3_cpu_2026_05_17.json`.
+  The eight-cycle stationary variant rejected (`3.0215e-5 -> 2.9695e-5`,
+  ratio `0.9828`) while the residual-minimizing combination accepted
+  (`3.0215e-5 -> 2.8146e-5`, ratio `0.9315`) and completed residual-clean in
+  266.7 s / 3033 matvecs. This closes a real CPU hard-seed residual-reduction
+  step, but it is not yet a performance promotion versus the best fail-closed
+  baseline.
+- [x] One-GPU `office` A/B evidence is checked in for the same hard seed. Both
+  GPU runs preserved the seed-level residual improvement, but neither closed
+  the solve within the 420 s gate: default GPU side-probe selection timed out
+  at 875 matvecs with right-GMRES, and forced LGMRES rescue timed out at 675
+  matvecs. This identifies the next real GPU algorithmic target as a
+  device-local local smoother/operator-reuse path; further host-xblock SciPy
+  method switching is documented negative evidence, not a promotion path.
+- [x] Timeout artifacts now recover QI residual-deflated probe metadata from
+  progress logs when solver traces do not flush. This preserves true-residual
+  acceptance/rejection evidence for long GPU runs and keeps release/research
+  gates auditable.
+- [ ] Next true device-QI implementation target: replace the host LU/ILU
+  x-block smoother used inside GPU QI hard-seed probes with a device-resident
+  smoother or assembled block action that avoids per-matvec host/device
+  transfers, then re-run the scale-0.60 GPU hard seed before launching any
+  wider production-resolution QI ladder.
 
 Current active lane (2026-05-12, coordinated large-push research/performance closure):
 - [ ] Second larger push requested on 2026-05-12: increase each open lane by at
@@ -12232,3 +12304,58 @@ Updated lane status:
 - Remaining gap to `95%`: split more `v3_driver.py` validation/diagnostic
   control flow into pure helpers and run a JAX-safe coverage job before making
   package-wide coverage claims.
+
+## 2026-05-17 public auto-solve contract hardening
+
+Goal:
+
+- Make the default user workflow match the intended public contract: one
+  `input.namelist`, optional geometry override, and no solver-method knowledge
+  required. Advanced solver controls remain available for reproducible audits
+  and expert debugging, but they should not dominate the first-run docs or CLI
+  help.
+
+Implementation:
+
+- Simplified the README installation/first-run section so the primary command is
+  `sfincs_jax input.namelist --out sfincsOutput.h5`, followed by
+  `sfincs_jax --plot sfincsOutput.h5`.
+- Documented `--wout-path` as the normal runtime VMEC geometry override and
+  moved explicit solver choices into an advanced-audit role.
+- Updated CLI help for `--solve-method` on `solve-v3`, `write-output`, and
+  `transport-matrix-v3` so it presents solver selection as an advanced override
+  and clearly recommends default `auto`.
+- Added CLI regression coverage that the bare input form forwards
+  `solve_method="auto"`, `differentiable=False`, the expected RHSMode=1 solve
+  intent, and the `--wout-path` override.
+- Added an end-to-end README-command regression test that runs the documented
+  quick two-species input through the bare CLI form, writes HDF5, and then
+  plots the output PDF without exposing any solver-method choice.
+
+Validation:
+
+- `ruff check sfincs_jax/cli.py tests/test_cli_solve_mode.py`: passed.
+- `pytest -q tests/test_cli_solve_mode.py`: `46 passed in 0.85 s`.
+- `python -m sphinx -W -b html docs docs/_build/html`: passed.
+- Real CLI solve/plot check on
+  `examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist`:
+  HDF5 write completed in `2.05 s` warm and PDF plotting completed in `2.08 s`
+  warm, writing `/tmp/sfincs_jax_quick_solve_timecheck.h5` and
+  `/tmp/sfincs_jax_quick_solve_timecheck_summary.pdf`.
+- `git diff --check`: passed.
+- Full local suite after the public auto-solve docs/CLI change and QI
+  residual-deflation changes: `pytest -q` passed with `1663 passed in
+  713.10 s`.
+- Focused README-command regression after adding the end-to-end test:
+  `pytest -q tests/test_getting_started_examples.py::test_readme_quick_solve_command_uses_public_auto_path tests/test_cli_solve_mode.py::test_main_bare_input_uses_public_auto_contract tests/test_cli_solve_mode.py::test_write_output_help_presents_solver_override_as_advanced`
+  passed (`3 passed in 4.79 s`).
+- Repo-wide lint status: `ruff check .` and
+  `ruff check sfincs_jax scripts tests` are not current release gates. They
+  fail on pre-existing broad style debt, especially E402 imports in scripts and
+  examples that patch `sys.path`, legacy Legendre-index variable names, and old
+  utility scripts. The active lint gate for this coherent change set is
+  touched-file ruff plus focused py_compile; do not add broad ignores just to
+  hide this debt.
+- Keep true device-QI and production-resolution QI ladders as deferred research
+  lanes unless new residual-clean GPU artifacts replace the current negative
+  evidence.

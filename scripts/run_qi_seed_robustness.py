@@ -68,6 +68,26 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT
     / "docs"
     / "_static"
+    / "qi_seed_robustness_scale060_qi_deflated_seed3_cpu_2026_05_16.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_deflated_cycles8_seed3_cpu_2026_05_17.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_deflated_minres8_seed3_cpu_2026_05_17.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_deflated_minres8_seed3_gpu0_2026_05_17.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_deflated_minres8_lgmres_forced_seed3_gpu0_2026_05_17.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
     / "qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json",
     REPO_ROOT
     / "docs"
@@ -166,6 +186,26 @@ QI_TWO_LEVEL_TRACE_KEYS = (
     "xblock_qi_two_level_preconditioner_smoothed_load_metadata",
     "xblock_qi_two_level_preconditioner_setup_s",
 )
+QI_DEFLATED_TRACE_KEYS = (
+    "xblock_qi_deflated_preconditioner_enabled",
+    "xblock_qi_deflated_preconditioner_built",
+    "xblock_qi_deflated_preconditioner_used",
+    "xblock_qi_deflated_preconditioner_reason",
+    "xblock_qi_deflated_preconditioner_rank",
+    "xblock_qi_deflated_preconditioner_candidate_count",
+    "xblock_qi_deflated_preconditioner_residual_before",
+    "xblock_qi_deflated_preconditioner_residual_after",
+    "xblock_qi_deflated_preconditioner_improvement_ratio",
+    "xblock_qi_deflated_preconditioner_metadata",
+    "xblock_qi_deflated_preconditioner_setup_s",
+    "xblock_qi_deflated_preconditioner_applies",
+    "xblock_qi_deflated_preconditioner_local_applies",
+    "xblock_qi_deflated_preconditioner_cycles",
+    "xblock_qi_deflated_preconditioner_seed_solver",
+    "xblock_qi_deflated_preconditioner_cycle_residual_history",
+    "xblock_qi_deflated_preconditioner_cycle_coefficients",
+    "xblock_qi_deflated_preconditioner_use_in_krylov",
+)
 MOMENT_SCHUR_TRACE_KEYS = (
     "xblock_moment_schur_enabled",
     "xblock_moment_schur_built",
@@ -188,6 +228,7 @@ PROGRESS_MARKERS = (
     "strong preconditioner fallback",
     "targeted sparse",
     "xblock factorization",
+    "QI residual-deflated preconditioner",
     "explicit FP x-block seed",
     "fallback",
     "QI coarse seed",
@@ -232,6 +273,13 @@ _SIDE_PROBE_RE = re.compile(
     r"|\s+(?P<side_from_short>left|right)->(?P<side_to_short>left|right))"
     r"(?:\s+method=(?P<method_from>[A-Za-z0-9_.-]+)->(?P<method_to>[A-Za-z0-9_.-]+)"
     r"|\s+(?P<method_from_short>[A-Za-z0-9_.-]+)->(?P<method_to_short>[A-Za-z0-9_.-]+))",
+    re.IGNORECASE,
+)
+_QI_DEFLATED_PROGRESS_RE = re.compile(
+    rf"\bQI residual-deflated preconditioner\s+(?P<decision>accepted|rejected)\s+"
+    rf"(?:reason=(?P<reason>[A-Za-z0-9_.:-]+)\s+)?"
+    rf"(?:residual\s+(?P<before>{_FLOAT_PATTERN})\s*->\s*(?P<after>{_FLOAT_PATTERN})"
+    rf"|residual=(?P<residual>{_FLOAT_PATTERN}))",
     re.IGNORECASE,
 )
 
@@ -564,6 +612,7 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
         "solver_kind": solver_metadata.get("solver_kind"),
     }
     summary.update({key: solver_metadata.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
+    summary.update({key: solver_metadata.get(key) for key in QI_DEFLATED_TRACE_KEYS})
     summary.update({key: solver_metadata.get(key) for key in MOMENT_SCHUR_TRACE_KEYS})
     return summary
 
@@ -666,6 +715,51 @@ def _infer_side_probe_progress(events: Iterable[object]) -> dict[str, object]:
             ),
             "xblock_side_probe_residual_ratio": _float_from_log_value(
                 key_values.get("ratio") or key_values.get("residual_ratio")
+            ),
+        }
+    return summary
+
+
+def _infer_qi_deflated_progress(events: Iterable[object]) -> dict[str, object]:
+    """Infer residual-deflated QI probe metadata from progress lines.
+
+    Long GPU attempts can time out before the solver trace is flushed. The
+    progress stream still carries the fail-closed acceptance line, so preserve
+    that evidence in compact artifacts instead of dropping it on timeout.
+    """
+
+    summary: dict[str, object] = {}
+    for event in events:
+        text = str(event)
+        match = _QI_DEFLATED_PROGRESS_RE.search(text)
+        if match is None:
+            continue
+        key_values = _log_key_values(text)
+        decision = match.group("decision").lower()
+        residual_before = _float_from_log_value(match.group("before"))
+        residual_after = _float_from_log_value(match.group("after") or match.group("residual"))
+        ratio = _float_from_log_value(key_values.get("ratio"))
+        if ratio is None and residual_before is not None and residual_after is not None and residual_before > 0.0:
+            ratio = residual_after / residual_before
+        rank = _int_from_log_value(key_values.get("rank"))
+        cycles = _int_from_log_value(key_values.get("cycles"))
+        use_in_krylov_raw = key_values.get("use_in_krylov")
+        seed_solver = key_values.get("seed_solver")
+        summary = {
+            "xblock_qi_deflated_preconditioner_enabled": True,
+            "xblock_qi_deflated_preconditioner_built": True,
+            "xblock_qi_deflated_preconditioner_used": decision == "accepted",
+            "xblock_qi_deflated_preconditioner_reason": (
+                "residual_reduced" if decision == "accepted" else match.group("reason") or "residual_not_reduced"
+            ),
+            "xblock_qi_deflated_preconditioner_rank": rank,
+            "xblock_qi_deflated_preconditioner_residual_before": residual_before,
+            "xblock_qi_deflated_preconditioner_residual_after": residual_after,
+            "xblock_qi_deflated_preconditioner_improvement_ratio": ratio,
+            "xblock_qi_deflated_preconditioner_cycles": cycles,
+            "xblock_qi_deflated_preconditioner_seed_solver": seed_solver,
+            "xblock_qi_deflated_preconditioner_use_in_krylov": (
+                None if use_in_krylov_raw is None else str(use_in_krylov_raw).strip().lower() not in {"0", "false"}
             ),
         }
     return summary
@@ -1059,6 +1153,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
             *(stderr_tail if isinstance(stderr_tail, list) else []),
         ]
         side_probe_progress = _infer_side_probe_progress(log_context)
+        qi_deflated_progress = _infer_qi_deflated_progress(log_context)
         lgmres_rescue_status = _infer_lgmres_rescue_status(log_context, side_probe_progress)
         last_residual_progress = _infer_last_residual_progress(log_context) or {}
         last_matvecs, last_matvec_elapsed_s = _infer_last_matvec_progress(log_context)
@@ -1071,6 +1166,12 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
             if trace_value is not None:
                 return trace_value
             return side_probe_progress.get(key)
+
+        def trace_or_qi_deflated_progress(key: str) -> object:
+            trace_value = trace_summary.get(key)
+            if trace_value is not None:
+                return trace_value
+            return qi_deflated_progress.get(key)
 
         trace_lgmres_rescue = trace_summary.get("xblock_side_probe_lgmres_rescue")
         if lgmres_rescue_status is None and isinstance(trace_lgmres_rescue, bool):
@@ -1141,6 +1242,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
             "heartbeat_count": result.get("heartbeat_count"),
         }
         seed_summary.update({key: trace_summary.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
+        seed_summary.update({key: trace_or_qi_deflated_progress(key) for key in QI_DEFLATED_TRACE_KEYS})
         seed_summary.update({key: trace_summary.get(key) for key in MOMENT_SCHUR_TRACE_KEYS})
         seed_summaries.append(seed_summary)
 

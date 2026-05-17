@@ -71,6 +71,11 @@ from .rhs1_qi_galerkin_policy import (
     parse_rhs1_qi_galerkin_modes,
     select_rhs1_qi_galerkin_probe_candidate,
 )
+from .rhs1_qi_deflation import (
+    build_rhs1_qi_residual_deflated_preconditioner,
+    probe_rhs1_qi_deflated_correction,
+    probe_rhs1_qi_deflated_minres_seed,
+)
 from .rhs1_qi_two_level import build_rhs1_qi_two_level_preconditioner
 from .memory_model import bicgstab_work_nbytes, estimate_sparse_pc_memory, gmres_basis_nbytes, tfqmr_work_nbytes
 from .rhs1_pas_policy import (
@@ -14921,6 +14926,22 @@ def solve_v3_full_system_linear_gmres(
             qi_two_level_preconditioner_probe_candidates: list[dict[str, object]] = []
             qi_two_level_preconditioner_selected_index: int | None = None
             qi_two_level_stats = {"applies": 0, "local_applies": 0}
+            qi_deflated_preconditioner_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER",
+                default=False,
+            )
+            qi_deflated_preconditioner_built = False
+            qi_deflated_preconditioner_used = False
+            qi_deflated_preconditioner_used_in_krylov = False
+            qi_deflated_preconditioner_reason: str | None = None
+            qi_deflated_preconditioner_rank = 0
+            qi_deflated_preconditioner_candidate_count = 0
+            qi_deflated_preconditioner_residual_before: float | None = None
+            qi_deflated_preconditioner_residual_after: float | None = None
+            qi_deflated_preconditioner_improvement_ratio: float | None = None
+            qi_deflated_preconditioner_metadata: dict[str, object] = {}
+            qi_deflated_preconditioner_setup_s = 0.0
+            qi_deflated_stats = {"applies": 0, "local_applies": 0}
             if qi_coarse_seed_enabled or qi_galerkin_preconditioner_enabled or qi_two_level_preconditioner_enabled:
                 qi_seed_max_rank = _rhs1_int_env(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK",
@@ -15582,6 +15603,256 @@ def solve_v3_full_system_linear_gmres(
                         )
                 qi_two_level_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_two_level_start_s)
                 pc_factor_s += float(qi_two_level_preconditioner_setup_s)
+            if qi_deflated_preconditioner_enabled and bool(xblock_device_host_fallback_decision.used):
+                qi_deflated_preconditioner_reason = "disabled_by_device_host_fallback"
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "QI residual-deflated preconditioner disabled because device-host fallback is active",
+                    )
+            elif qi_deflated_preconditioner_enabled and precondition_side == "none":
+                qi_deflated_preconditioner_reason = "disabled_by_precondition_side_none"
+            elif qi_deflated_preconditioner_enabled:
+                qi_deflated_start_s = sparse_timer.elapsed_s()
+                qi_deflated_krylov_depth = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_KRYLOV_DEPTH",
+                    default=4,
+                    minimum=0,
+                )
+                qi_deflated_max_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_MAX_RANK",
+                    default=16,
+                    minimum=1,
+                )
+                qi_deflated_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                qi_deflated_basis_rtol = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_BASIS_RTOL",
+                    default=1.0e-10,
+                    minimum=0.0,
+                )
+                qi_deflated_min_improvement = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_MIN_IMPROVEMENT",
+                    default=0.05,
+                    minimum=0.0,
+                )
+                qi_deflated_damping = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_DAMPING",
+                    default=1.0,
+                    minimum=0.0,
+                )
+                qi_deflated_correction_cycles = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_CYCLES",
+                    default=8,
+                    minimum=1,
+                )
+                qi_deflated_use_in_krylov = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_USE_IN_KRYLOV",
+                    default=False,
+                )
+                qi_deflated_seed_solver = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_SEED_SOLVER",
+                        "cycle_minres",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                if qi_deflated_seed_solver in {"minres", "cycle_minres", "cycle_lstsq", "gcro_seed"}:
+                    qi_deflated_seed_solver = "cycle_minres"
+                else:
+                    qi_deflated_seed_solver = "linear_apply"
+                qi_deflated_composition = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_COMPOSITION",
+                        "multiplicative",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_deflated_include_raw_residual = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_INCLUDE_RAW_RESIDUAL",
+                    default=False,
+                )
+                qi_deflated_extra_global_loads = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_GLOBAL_LOADS",
+                    default=True,
+                )
+                qi_deflated_extra_smooth_loads = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_SMOOTH_LOADS",
+                    default=True,
+                )
+                qi_deflated_extra_max_directions = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_MAX_DIRECTIONS",
+                    default=16,
+                    minimum=0,
+                )
+                qi_deflated_extra_fsavg_lmax = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_FSAVG_LMAX",
+                    default=4,
+                    minimum=0,
+                )
+                qi_deflated_extra_angular_lmax = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_ANGULAR_LMAX",
+                    default=1,
+                    minimum=0,
+                )
+                qi_deflated_extra_max_extra_units = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_MAX_EXTRA_UNITS",
+                    default=8,
+                    minimum=0,
+                )
+                qi_deflated_extra_include_rhs = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_INCLUDE_RHS",
+                    default=True,
+                )
+                try:
+                    base_precond_xblock_krylov = precond_xblock_krylov
+
+                    def _qi_deflated_local_smoother(v: jnp.ndarray) -> jnp.ndarray:
+                        qi_deflated_stats["local_applies"] += 1
+                        return jnp.asarray(
+                            base_precond_xblock_krylov(jnp.asarray(v, dtype=jnp.float64)),
+                            dtype=jnp.float64,
+                        )
+
+                    qi_current = (
+                        jnp.zeros_like(xblock_rhs)
+                        if x0_full is None
+                        else jnp.asarray(x0_full, dtype=jnp.float64)
+                    )
+                    residual_deflated_before = xblock_rhs - jnp.asarray(
+                        _mv_true_no_count(qi_current),
+                        dtype=jnp.float64,
+                    )
+                    extra_directions: list[tuple[str, jnp.ndarray]] = []
+                    if bool(qi_deflated_extra_global_loads) and int(qi_deflated_extra_max_directions) > 0:
+                        raw_loads = _rhs1_xblock_global_coupling_load_basis(
+                            op=op,
+                            rhs=rhs,
+                            include_rhs=bool(qi_deflated_extra_include_rhs),
+                            fsavg_lmax=int(qi_deflated_extra_fsavg_lmax),
+                            angular_lmax=int(qi_deflated_extra_angular_lmax),
+                            max_extra_units=int(qi_deflated_extra_max_extra_units),
+                            max_directions=int(qi_deflated_extra_max_directions),
+                        )
+                        for load_name, load_values in raw_loads[: int(qi_deflated_extra_max_directions)]:
+                            load_vec = jnp.asarray(load_values, dtype=jnp.float64).reshape((-1,))
+                            if xblock_use_active_dof:
+                                load_vec = _xblock_reduce_full(load_vec)
+                            load_norm = float(jnp.linalg.norm(load_vec))
+                            if not np.isfinite(load_norm) or load_norm <= 0.0:
+                                continue
+                            load_vec = load_vec / jnp.asarray(load_norm, dtype=load_vec.dtype)
+                            if bool(qi_deflated_extra_smooth_loads):
+                                load_vec = _qi_deflated_local_smoother(load_vec)
+                            extra_directions.append((f"global_load:{load_name}", load_vec))
+                    qi_deflated = build_rhs1_qi_residual_deflated_preconditioner(
+                        operator=_mv_xblock_krylov,
+                        local_smoother=_qi_deflated_local_smoother,
+                        residual_seed=residual_deflated_before,
+                        extra_directions=tuple(extra_directions),
+                        krylov_depth=int(qi_deflated_krylov_depth),
+                        max_rank=int(qi_deflated_max_rank),
+                        regularization_rcond=float(qi_deflated_rcond),
+                        basis_rtol=float(qi_deflated_basis_rtol),
+                        damping=float(qi_deflated_damping),
+                        correction_cycles=int(qi_deflated_correction_cycles),
+                        composition=qi_deflated_composition,
+                        include_raw_residual=bool(qi_deflated_include_raw_residual),
+                    )
+                    qi_deflated_preconditioner_built = True
+                    if qi_deflated_seed_solver == "cycle_minres":
+                        x_deflated_candidate, qi_deflated_probe = probe_rhs1_qi_deflated_minres_seed(
+                            operator=_mv_true_no_count,
+                            rhs=xblock_rhs,
+                            x0=qi_current,
+                            preconditioner=qi_deflated,
+                            cycles=int(qi_deflated_correction_cycles),
+                            min_relative_improvement=float(qi_deflated_min_improvement),
+                            regularization_rcond=float(qi_deflated_rcond),
+                        )
+                    else:
+                        x_deflated_candidate, qi_deflated_probe = probe_rhs1_qi_deflated_correction(
+                            operator=_mv_true_no_count,
+                            rhs=xblock_rhs,
+                            x0=qi_current,
+                            preconditioner=qi_deflated,
+                            min_relative_improvement=float(qi_deflated_min_improvement),
+                        )
+                    qi_deflated_preconditioner_metadata = {
+                        **qi_deflated_probe.metadata.to_dict(),
+                        "seed_solver": qi_deflated_probe.seed_solver,
+                        "cycle_residual_history": qi_deflated_probe.cycle_residual_history,
+                        "cycle_coefficients": qi_deflated_probe.cycle_coefficients,
+                    }
+                    qi_deflated_preconditioner_rank = int(qi_deflated_probe.metadata.rank)
+                    qi_deflated_preconditioner_candidate_count = int(
+                        qi_deflated_probe.metadata.candidate_count
+                    )
+                    qi_deflated_preconditioner_residual_before = float(
+                        qi_deflated_probe.residual_before_norm
+                    )
+                    qi_deflated_preconditioner_residual_after = float(
+                        qi_deflated_probe.residual_after_norm
+                    )
+                    qi_deflated_preconditioner_improvement_ratio = (
+                        qi_deflated_probe.improvement_ratio
+                    )
+                    qi_deflated_preconditioner_reason = str(qi_deflated_probe.reason)
+
+                    def _precond_xblock_qi_deflated(v: jnp.ndarray) -> jnp.ndarray:
+                        qi_deflated_stats["applies"] += 1
+                        return jnp.asarray(
+                            qi_deflated.apply(jnp.asarray(v, dtype=jnp.float64)),
+                            dtype=jnp.float64,
+                        )
+
+                    if bool(qi_deflated_probe.accepted):
+                        x0_full = jnp.asarray(x_deflated_candidate, dtype=jnp.float64)
+                        if bool(qi_deflated_use_in_krylov):
+                            precond_xblock_krylov = _precond_xblock_qi_deflated
+                            qi_deflated_preconditioner_used_in_krylov = True
+                        qi_deflated_preconditioner_used = True
+                        if emit is not None:
+                            emit(
+                                0,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                "QI residual-deflated preconditioner accepted "
+                                f"residual {qi_deflated_preconditioner_residual_before:.6e} "
+                                f"-> {qi_deflated_preconditioner_residual_after:.6e} "
+                                f"(rank={int(qi_deflated_preconditioner_rank)} "
+                                f"seed_solver={qi_deflated_probe.seed_solver} "
+                                f"cycles={int(qi_deflated_correction_cycles)} "
+                                f"use_in_krylov={int(qi_deflated_use_in_krylov)} "
+                                f"ratio={float(qi_deflated_preconditioner_improvement_ratio):.6e})",
+                            )
+                    elif emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "QI residual-deflated preconditioner rejected "
+                            f"reason={qi_deflated_preconditioner_reason} "
+                            f"residual={float(qi_deflated_preconditioner_residual_before):.6e}",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    qi_deflated_preconditioner_reason = f"{type(exc).__name__}: {exc}"
+                    qi_deflated_preconditioner_metadata = {"error": qi_deflated_preconditioner_reason}
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "QI residual-deflated preconditioner disabled after build failure "
+                            f"({type(exc).__name__}: {exc})",
+                        )
+                qi_deflated_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_deflated_start_s)
+                pc_factor_s += float(qi_deflated_preconditioner_setup_s)
             xblock_side_probe_enabled = _rhs1_xblock_policy.rhs1_xblock_side_probe_enabled(
                 env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE", ""),
                 explicit_side_env_value=side_env,
@@ -17081,6 +17352,44 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_qi_two_level_preconditioner_applies": int(qi_two_level_stats.get("applies", 0)),
                     "xblock_qi_two_level_preconditioner_local_applies": int(
                         qi_two_level_stats.get("local_applies", 0)
+                    ),
+                    "xblock_qi_deflated_preconditioner_enabled": bool(qi_deflated_preconditioner_enabled),
+                    "xblock_qi_deflated_preconditioner_built": bool(qi_deflated_preconditioner_built),
+                    "xblock_qi_deflated_preconditioner_used": bool(qi_deflated_preconditioner_used),
+                    "xblock_qi_deflated_preconditioner_reason": qi_deflated_preconditioner_reason,
+                    "xblock_qi_deflated_preconditioner_rank": int(qi_deflated_preconditioner_rank),
+                    "xblock_qi_deflated_preconditioner_candidate_count": int(
+                        qi_deflated_preconditioner_candidate_count
+                    ),
+                    "xblock_qi_deflated_preconditioner_residual_before": (
+                        qi_deflated_preconditioner_residual_before
+                    ),
+                    "xblock_qi_deflated_preconditioner_residual_after": (
+                        qi_deflated_preconditioner_residual_after
+                    ),
+                    "xblock_qi_deflated_preconditioner_improvement_ratio": (
+                        qi_deflated_preconditioner_improvement_ratio
+                    ),
+                    "xblock_qi_deflated_preconditioner_metadata": qi_deflated_preconditioner_metadata,
+                    "xblock_qi_deflated_preconditioner_setup_s": float(qi_deflated_preconditioner_setup_s),
+                    "xblock_qi_deflated_preconditioner_applies": int(qi_deflated_stats.get("applies", 0)),
+                    "xblock_qi_deflated_preconditioner_local_applies": int(
+                        qi_deflated_stats.get("local_applies", 0)
+                    ),
+                    "xblock_qi_deflated_preconditioner_cycles": int(
+                        qi_deflated_preconditioner_metadata.get("correction_cycles", 0)
+                    ),
+                    "xblock_qi_deflated_preconditioner_seed_solver": (
+                        qi_deflated_preconditioner_metadata.get("seed_solver")
+                    ),
+                    "xblock_qi_deflated_preconditioner_cycle_residual_history": (
+                        qi_deflated_preconditioner_metadata.get("cycle_residual_history", ())
+                    ),
+                    "xblock_qi_deflated_preconditioner_cycle_coefficients": (
+                        qi_deflated_preconditioner_metadata.get("cycle_coefficients", ())
+                    ),
+                    "xblock_qi_deflated_preconditioner_use_in_krylov": bool(
+                        qi_deflated_preconditioner_used_in_krylov
                     ),
                     "xblock_side_probe_enabled": bool(xblock_side_probe_enabled),
                     "xblock_side_probe_used": bool(xblock_side_probe_used),

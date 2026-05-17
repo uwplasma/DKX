@@ -821,11 +821,7 @@ def main(argv: list[str] | None = None) -> int:
     p_solve.add_argument(
         "--solve-method",
         default="auto",
-        help=(
-            "Linear solver mode "
-            "(auto|bicgstab|batched|incremental|dense|sparse_host|sparse_host_safe|"
-            "sparse_pc_gmres|xblock_sparse_pc_gmres|sparse_lsmr|petsc_compat)"
-        ),
+        help="Advanced solver override. Default 'auto' is recommended for normal runs; see docs/usage.rst.",
     )
     p_solve.add_argument(
         "--which-rhs",
@@ -934,12 +930,7 @@ def main(argv: list[str] | None = None) -> int:
     p_out.add_argument(
         "--solve-method",
         default="auto",
-        help=(
-            "RHSMode=1 linear solver mode for output generation "
-            "(auto|incremental|dense|sparse_host|sparse_host_safe|sparse_pc_gmres|"
-            "xblock_sparse_pc_gmres|"
-            "sparse_lsmr|petsc_compat)."
-        ),
+        help="Advanced RHSMode=1 solver override. Default 'auto' is recommended for normal runs; see docs/usage.rst.",
     )
     _add_equilibrium_override_args(p_out)
     p_out.set_defaults(func=_cmd_write_output)
@@ -961,7 +952,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tm.add_argument(
         "--solve-method",
         default="auto",
-        help="Linear solver mode for transport matrix (auto|bicgstab|batched|incremental|dense)",
+        help="Advanced transport solver override. Default 'auto' is recommended for normal runs; see docs/usage.rst.",
     )
     _add_equilibrium_override_args(p_tm)
     p_tm.set_defaults(func=_cmd_transport_matrix_v3)

@@ -30,15 +30,25 @@ Relevant implementation:
 - ``sfincs_jax/rhs1_qi_block_schur.py`` provides the next standalone
   block-Schur/angular/radial coarse-preconditioner primitive. It is
   JAX-compatible, emits rank/conditioning metadata, and has a fail-closed
-  true-residual probe, but it is not yet wired into the production driver.
+  true-residual probe. It remains standalone until the residual-deflated driver
+  hook below produces hard-seed evidence worth expanding.
+- ``sfincs_jax/rhs1_qi_deflation.py`` provides a residual-deflated,
+  device-compatible two-level action. It builds a bounded preconditioned Krylov
+  basis from the current residual, optionally accepts physics-informed
+  block-Schur directions, and fails closed unless the true residual improves.
 - ``sfincs_jax/rhs1_qi_two_level.py`` provides the first device-compatible
   local-smoother plus coarse-correction primitive for the next hard-seed probe.
+- ``sfincs_jax/rhs1_qi_promotion.py`` defines the production ladder promotion
+  gate: every requested seed/backend pair must converge, write output and
+  solver trace artifacts, satisfy residual/observable gates, and avoid host
+  fallback for a true device-QI claim.
 - ``sfincs_jax/rhs1_device_operator.py`` provides bounded device CSR matvec
   utilities.
 - ``sfincs_jax/rhs1_qi_galerkin_policy.py`` rejects Galerkin candidates unless
   a true residual probe improves.
 - ``sfincs_jax/v3_driver.py`` wires the x-block sparse-PC, device-Krylov,
-  two-level-QI opt-in, and non-autodiff host fallback paths.
+  two-level-QI opt-in, residual-deflated QI opt-in, and non-autodiff host
+  fallback paths.
 
 Audit conclusion
 ~~~~~~~~~~~~~~~~
@@ -76,17 +86,49 @@ apply cheap local solves, then correct global low-dimensional coupling. It
 should be tested first as a preconditioner action on physics load bases before
 launching long Krylov solves.
 
+The next candidate is residual-deflated rather than threshold-driven:
+
+.. math::
+
+   Z = \operatorname{orth}\left\{
+   S_\mathrm{local}^{-1} r,\,
+   \left(S_\mathrm{local}^{-1} A\right) S_\mathrm{local}^{-1} r,\,
+   \ldots
+   \right\},
+
+followed by the coarse action
+
+.. math::
+
+   c = \arg\min_c \left\|A Z c -
+   \left(r - A S_\mathrm{local}^{-1}r\right)\right\|_2 .
+
+This is the first step toward a GCRO/deflated-GMRES style device path: the
+small basis targets the current hard residual instead of relying only on fixed
+geometry modes.
+
 The current environment switch is::
 
    SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER=1
 
-This switch is fail-closed: the driver probes the true physical residual and
-keeps the baseline x-block preconditioner unless the two-level action improves
-the current seed by a material margin. The default margin is 5% because a
-scale-0.60 CPU hard-seed preflight showed that accepting a tiny 0.7% damped
-one-step decrease can make the subsequent Krylov phase substantially worse.
-The default path tests only the requested damping; damping scans are
-explicit-only with
+The residual-deflated variant is now also wired as an explicit opt-in::
+
+   SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER=1
+
+It uses the current x-block preconditioner as ``S_local^{-1}``, builds
+``Z`` from the preconditioned residual Krylov sequence, can append smoothed
+global load directions, and only replaces the baseline preconditioner after
+the true residual probe passes. The public default remains unchanged until the
+scale-0.60 CPU/GPU hard seed accepts this gate and converges.
+
+Both QI opt-ins are fail-closed: the driver probes the true physical residual
+and keeps the baseline x-block preconditioner unless the candidate action
+improves the current seed by a material margin. The default margin is 5%
+because a scale-0.60 CPU hard-seed preflight showed that accepting a tiny 0.7%
+damped one-step decrease can make the subsequent Krylov phase substantially
+worse.
+For the older two-level path, the default tests only the requested damping;
+damping scans are explicit-only with
 ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_DAMPINGS``.
 The opt-in coarse solve can use either the projected Galerkin operator
 ``Q^T A Q`` or an action least-squares solve against ``A Q``. Residual-adaptive
@@ -155,6 +197,41 @@ Current evidence
   stable rank/conditioning metadata, and JAX transform compatibility. This moves
   the implementation surface forward, but it is not a promotion artifact until
   the driver hook and scale-0.60 CPU/GPU hard-seed runs accept and converge.
+- A standalone residual-deflated QI primitive now exists. Unit tests show
+  reduction of a coupled slow mode beyond the local smoother, JIT-compatible
+  application, fail-closed rejection without material improvement, and retention
+  of extra block-Schur directions. It is wired into the x-block sparse-PC
+  driver behind
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER=1`` with the same
+  5% material true-residual gate. The current default for this opt-in uses a
+  seed-only residual-minimizing cycle combination: build fixed-basis correction
+  columns ``z_k = M_0^{-1} r_k`` with ``r_{k+1} = r_k - A z_k``, then solve the
+  small least-squares problem ``min_c ||A Z c - r_0||`` and use ``Z c`` as a
+  physical initial guess. This is GCRO/GMRES-like recycling evidence without
+  exposing residual-dependent coefficients as a reusable linear
+  preconditioner.
+- The first bounded scale-0.60 seed-3 CPU hard-seed artifact for the
+  residual-deflated hook is checked in as
+  ``docs/_static/qi_seed_robustness_scale060_qi_deflated_seed3_cpu_2026_05_16.json``.
+  The solve stayed safe and residual-clean, but the one-application probe only
+  improved ``3.0215e-5 -> 2.9842e-5`` (ratio ``0.9876``), below the 5%
+  material gate. The candidate therefore rejected before Krylov; no matching
+  GPU promotion run is justified from this configuration.
+- A stronger 2026-05-17 CPU hard-seed artifact,
+  ``docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_seed3_cpu_2026_05_17.json``,
+  shows the residual-minimizing cycle seed accepting:
+  ``3.0215e-5 -> 2.8146e-5`` (ratio ``0.9315``), with a residual-clean final
+  solve in 266.7 s / 3033 matvecs. The simpler eight-cycle stationary variant
+  remained below the gate (ratio ``0.9828``), so the accepted improvement comes
+  from the small residual-minimizing combination, not from blindly adding more
+  local cycles.
+- The matching one-GPU ``office`` artifacts preserve the same seed-level
+  residual improvement, but they do not close true device-QI. Default GPU
+  side-probe selection timed out at 420 s after 875 matvecs, and forced
+  LGMRES-rescue timed out at 420 s after 675 matvecs. Both runs used the host
+  x-block factorization path, with low GPU utilization, so the remaining GPU
+  blocker is architectural: a device-local local smoother/operator-reuse path
+  is required before production-resolution GPU QI can be promoted.
 
 Promotion gate
 ~~~~~~~~~~~~~~
@@ -186,6 +263,12 @@ After the two-level device preconditioner clears the hard seed, run:
   equivalent production manifest inputs;
 - parity and residual audits against the current host fallback and Fortran v3
   reference outputs where available.
+
+The checked promotion helper in ``sfincs_jax/rhs1_qi_promotion.py`` should be
+used for every ladder artifact. A production-resolution claim is not a loose
+collection of successful runs; it requires complete CPU/GPU seed coverage,
+convergence, output and trace provenance, residual gates, observable gates, and
+explicit rejection of accidental host fallback in true-device mode.
 
 Promotion gate
 ~~~~~~~~~~~~~~
@@ -248,8 +331,8 @@ Relevant implementation:
   scaling payloads from becoming release claims.
 - ``sfincs_jax/transport_parallel_sharding.py`` records pure single-case
   sharded-solve plans, caps requested devices to available work, reports
-  workload balance, and fail-closes release scaling claims for experimental
-  single-case sharding.
+  workload balance, estimates setup/communication amortization, and fail-closes
+  release scaling claims for experimental single-case sharding.
 - ``sfincs_jax/v3_system.py`` contains the sharded matrix-free operator path.
 
 Next implementation
@@ -263,13 +346,17 @@ Move from process-per-sample benchmarking to compiled operator reuse:
 - avoid host collectives inside every Krylov step;
 - use the persistent compilation cache on a shared filesystem for repeated
   device-count runs.
+- promote single-case sharding only when the amortization model predicts enough
+  per-device work to dominate setup, halo exchange, and Krylov collectives.
 
 Promotion gate
 ~~~~~~~~~~~~~~
 
 The warm two-GPU single-case solve must beat the warm one-GPU solve by at least
 1.15x, per-device memory must not increase, and the residual/output comparison
-must pass. Until then, public docs should continue to recommend one GPU per case
+must pass. The amortization gate must also pass with predicted speedup and
+efficiency above the configured thresholds and communication below the configured
+fraction. Until then, public docs should continue to recommend one GPU per case
 or transport RHS.
 
 External numerical anchors
@@ -281,6 +368,23 @@ infrastructure:
 - `PETSc PCFIELDSPLIT <https://petsc.org/main/manualpages/PC/PCFIELDSPLIT/>`_
   documents block and Schur-complement preconditioners, including local sub-KSP
   solvers and explicit Schur actions.
+- Communication-avoiding GMRES and domain-decomposition preconditioners provide
+  the scaling model for this lane: fewer global reductions help only when the
+  local subdomain work and coarse correction amortize communication.
+- The `ICNTS monoenergetic coefficient benchmark
+  <https://www.ornl.gov/publication/benchmarking-mono-energetic-transport-coefficients-results-international-collaboration>`_
+  remains the relevant physics validation anchor for radial, parallel, and
+  bootstrap-current coefficients.
+- `MONKES <https://arxiv.org/abs/2312.12248>`_ is the algorithmic comparison
+  point for fast monoenergetic stellarator coefficients: spectral
+  discretization plus block sparsity is the performance target to keep in mind
+  for future QI/PAS paths.
+- `Landreman & Catto's quasi-isodynamic theory paper
+  <https://arxiv.org/abs/1011.5184>`_ anchors QI-specific flow, radial
+  electric-field, and bootstrap-current expectations for hard-seed validation.
+- `Landreman & Ernst's velocity-space discretization paper
+  <https://arxiv.org/abs/1210.5289>`_ anchors the Fokker-Planck/velocity-grid
+  pieces that any production-resolution QI ladder must preserve.
 - The SFINCS v3 manual and paper explain the existing performance baseline:
   GMRES/KSP with a cheaper LU-factorized preconditioner formed by dropping speed
   and species coupling.

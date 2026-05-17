@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 53,
+    "artifact_count": 58,
     "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
@@ -32,8 +32,8 @@
     "max_checked_per_axis_resolution_fraction": 0.6,
     "max_checked_total_size": 139502,
     "max_checked_total_size_fraction": 0.13676639849725786,
-    "nonpassing_artifact_count": 30,
-    "passing_artifact_count": 23,
+    "nonpassing_artifact_count": 32,
+    "passing_artifact_count": 26,
     "production_total_size_uncovered_percent": 86.32
   },
   "lane": "qi_seed_robustness",
@@ -82,6 +82,8 @@
       "claim_status": "closed_deferred",
       "closed_or_deferred_reason": "Closed post-release: scale-0.60 GPU hard-seed device/Galerkin/x-block routes time out or fail residual probes; production fallback is covered by the non-autodiff host path.",
       "evidence": [
+        "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_seed3_gpu0_2026_05_17.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_lgmres_forced_seed3_gpu0_2026_05_17.json",
         "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_right_gmres_seed3_gpu_timeout.json",
@@ -794,6 +796,137 @@
       "max_residual_ratio": 0.007912546888986167,
       "passed": true,
       "path": "docs/_static/qi_seed_robustness_scale060_moment_schur_probe_seed3_cpu_2026_05_16.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 282.1756486670347,
+      "max_residual_ratio": 0.00718121824593792,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_deflated_seed3_cpu_2026_05_16.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 309.1457160409773,
+      "max_residual_ratio": 0.004633103180647986,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_deflated_cycles8_seed3_cpu_2026_05_17.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [
+        "cpu"
+      ],
+      "case_count": 1,
+      "max_elapsed_s": 266.73144662496634,
+      "max_residual_ratio": 0.0091956103176935,
+      "passed": true,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_seed3_cpu_2026_05_17.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "max_elapsed_s": 420.31683718785644,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_seed3_gpu0_2026_05_17.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": null,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "max_elapsed_s": 420.31703859521076,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_lgmres_forced_seed3_gpu0_2026_05_17.json",
       "public_cli_default_path": false,
       "resolution": {
         "NTHETA": 15,

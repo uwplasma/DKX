@@ -74,6 +74,34 @@ class ShardedSolveExecutionPlan:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class ShardedSolveAmortizationDiagnostics:
+    """Communication/setup model for a single-case sharded solve claim."""
+
+    active_devices: int
+    serial_work_units: float
+    per_device_work_units: float
+    setup_work_units: float
+    krylov_iterations: int
+    collectives_per_iteration: int
+    collective_latency_units: float
+    halo_bytes_per_iteration: float
+    bandwidth_bytes_per_unit: float
+    communication_work_units: float
+    predicted_parallel_units: float
+    predicted_speedup: float
+    parallel_efficiency: float
+    communication_fraction: float
+    release_scaling_supported: bool
+    failures: tuple[str, ...]
+    notes: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-serializable diagnostics dictionary."""
+
+        return asdict(self)
+
+
 def _positive_int(value: object, *, name: str) -> int:
     try:
         parsed = int(value)
@@ -308,9 +336,104 @@ def plan_single_case_sharded_solve(
     )
 
 
+def estimate_sharded_solve_amortization(
+    *,
+    active_devices: int,
+    serial_work_units: float,
+    setup_work_units: float = 0.0,
+    krylov_iterations: int = 0,
+    collectives_per_iteration: int = 2,
+    collective_latency_units: float = 0.0,
+    halo_bytes_per_iteration: float = 0.0,
+    bandwidth_bytes_per_unit: float = math.inf,
+    min_work_units_per_device: float = 1.0,
+    min_speedup: float = 1.25,
+    min_efficiency: float = 0.55,
+    max_communication_fraction: float = 0.35,
+) -> ShardedSolveAmortizationDiagnostics:
+    """Estimate whether single-case sharding can be promoted as strong scaling.
+
+    The units are intentionally abstract: callers can pass seconds, matvec-cost
+    units, or normalized benchmark work. The gate captures the basic
+    communication-avoiding/domain-decomposition requirement that useful strong
+    scaling needs enough local work to amortize setup, halo exchange, and Krylov
+    collectives.
+    """
+
+    devices = _positive_int(active_devices, name="active_devices")
+    iterations = _nonnegative_int(krylov_iterations, name="krylov_iterations")
+    collectives = _nonnegative_int(collectives_per_iteration, name="collectives_per_iteration")
+    serial = float(serial_work_units)
+    setup = max(0.0, float(setup_work_units))
+    latency = max(0.0, float(collective_latency_units))
+    halo_bytes = max(0.0, float(halo_bytes_per_iteration))
+    bandwidth = float(bandwidth_bytes_per_unit)
+    if not math.isfinite(serial) or serial <= 0.0:
+        raise ValueError("serial_work_units must be positive and finite")
+    if bandwidth <= 0.0:
+        raise ValueError("bandwidth_bytes_per_unit must be positive")
+
+    bandwidth_cost = 0.0 if math.isinf(bandwidth) else halo_bytes / bandwidth
+    communication = float(iterations) * (float(collectives) * latency + bandwidth_cost)
+    per_device_work = serial / float(devices)
+    parallel_units = per_device_work + setup + communication
+    predicted_speedup = serial / parallel_units if parallel_units > 0.0 else math.inf
+    efficiency = predicted_speedup / float(devices)
+    communication_fraction = communication / parallel_units if parallel_units > 0.0 else math.inf
+
+    failures: list[str] = []
+    notes: list[str] = []
+    if devices < 2:
+        failures.append("single-case strong scaling requires at least 2 active devices")
+    if per_device_work < float(min_work_units_per_device):
+        failures.append(
+            "per-device work below amortization floor "
+            f"({per_device_work:.3g} < {float(min_work_units_per_device):.3g})"
+        )
+    if predicted_speedup < float(min_speedup):
+        failures.append(
+            f"predicted speedup {predicted_speedup:.3g}x below gate {float(min_speedup):.3g}x"
+        )
+    if efficiency < float(min_efficiency):
+        failures.append(
+            f"parallel efficiency {efficiency:.3g} below gate {float(min_efficiency):.3g}"
+        )
+    if communication_fraction > float(max_communication_fraction):
+        failures.append(
+            "communication fraction above gate "
+            f"({communication_fraction:.3g} > {float(max_communication_fraction):.3g})"
+        )
+    if setup > per_device_work:
+        notes.append("setup cost exceeds per-device compute work")
+    if communication > per_device_work:
+        notes.append("communication cost exceeds per-device compute work")
+
+    return ShardedSolveAmortizationDiagnostics(
+        active_devices=devices,
+        serial_work_units=serial,
+        per_device_work_units=per_device_work,
+        setup_work_units=setup,
+        krylov_iterations=iterations,
+        collectives_per_iteration=collectives,
+        collective_latency_units=latency,
+        halo_bytes_per_iteration=halo_bytes,
+        bandwidth_bytes_per_unit=bandwidth,
+        communication_work_units=communication,
+        predicted_parallel_units=parallel_units,
+        predicted_speedup=predicted_speedup,
+        parallel_efficiency=efficiency,
+        communication_fraction=communication_fraction,
+        release_scaling_supported=not failures,
+        failures=tuple(failures),
+        notes=tuple(notes),
+    )
+
+
 __all__ = [
+    "ShardedSolveAmortizationDiagnostics",
     "ShardedSolveBalanceDiagnostics",
     "ShardedSolveDeviceAssignment",
     "ShardedSolveExecutionPlan",
+    "estimate_sharded_solve_amortization",
     "plan_single_case_sharded_solve",
 ]

@@ -242,6 +242,9 @@ def test_qi_seed_runner_infers_latest_matvec_progress() -> None:
 
 def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
     events = [
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres QI residual-deflated "
+        "preconditioner accepted residual 3.021487e-05 -> 2.814560e-05 "
+        "(rank=16 seed_solver=cycle_minres cycles=8 use_in_krylov=0 ratio=9.315148e-01)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe method_rescue "
         "side=left->left method=gmres->lgmres iters=20 matvecs=23 residual=4.565805e-06 "
         "ratio=1.511112e+07 seed_used=1",
@@ -261,6 +264,16 @@ def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
     assert side_probe["xblock_side_probe_residual_ratio"] == 1.511112e7
     assert qi_seed._infer_lgmres_rescue_status(events, side_probe) == "used"
 
+    qi_deflated = qi_seed._infer_qi_deflated_progress(events)
+    assert qi_deflated["xblock_qi_deflated_preconditioner_used"] is True
+    assert qi_deflated["xblock_qi_deflated_preconditioner_rank"] == 16
+    assert qi_deflated["xblock_qi_deflated_preconditioner_seed_solver"] == "cycle_minres"
+    assert qi_deflated["xblock_qi_deflated_preconditioner_cycles"] == 8
+    assert qi_deflated["xblock_qi_deflated_preconditioner_use_in_krylov"] is False
+    assert qi_deflated["xblock_qi_deflated_preconditioner_residual_before"] == 3.021487e-05
+    assert qi_deflated["xblock_qi_deflated_preconditioner_residual_after"] == 2.814560e-05
+    assert qi_deflated["xblock_qi_deflated_preconditioner_improvement_ratio"] == 9.315148e-01
+
     residual = qi_seed._infer_last_residual_progress(events)
     assert residual is not None
     assert residual["event"] == events[-1]
@@ -275,6 +288,9 @@ def test_qi_seed_runner_records_timeout_attempt_from_synthetic_tails(tmp_path: P
     progress_events = [
         "solve_v3_full_system_linear_gmres: active-DOF mode enabled (size=81377/139502)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres LGMRES rescue disabled by explicit gmres method",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres QI residual-deflated "
+        "preconditioner accepted residual 3.021487e-05 -> 2.814560e-05 "
+        "(rank=16 seed_solver=cycle_minres cycles=8 use_in_krylov=0 ratio=9.315148e-01)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe switch "
         "side=left->right method=gmres->gmres iters=20 matvecs=23 residual=4.565805e-06 "
         "ratio=1.511112e+07 seed_used=1 preserved_physical_seed=1",
@@ -337,7 +353,15 @@ def test_qi_seed_runner_records_timeout_attempt_from_synthetic_tails(tmp_path: P
     assert seed["xblock_lgmres_rescue_status"] == "disabled"
     assert seed["xblock_side_probe_residual_norm"] == 4.565805e-06
     assert seed["xblock_side_probe_residual_ratio"] == 1.511112e7
-    assert seed["last_progress_residual_event"] == progress_events[3]
+    assert seed["xblock_qi_deflated_preconditioner_used"] is True
+    assert seed["xblock_qi_deflated_preconditioner_reason"] == "residual_reduced"
+    assert seed["xblock_qi_deflated_preconditioner_residual_before"] == 3.021487e-05
+    assert seed["xblock_qi_deflated_preconditioner_residual_after"] == 2.814560e-05
+    assert seed["xblock_qi_deflated_preconditioner_improvement_ratio"] == 9.315148e-01
+    assert seed["xblock_qi_deflated_preconditioner_seed_solver"] == "cycle_minres"
+    assert seed["xblock_qi_deflated_preconditioner_cycles"] == 8
+    assert seed["xblock_qi_deflated_preconditioner_use_in_krylov"] is False
+    assert seed["last_progress_residual_event"] == progress_events[4]
     assert seed["last_progress_residual_before"] == 4.565805e-06
     assert seed["last_progress_residual_norm"] == 2.830374e-06
     assert seed["last_matvecs"] == 900

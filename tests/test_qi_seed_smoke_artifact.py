@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 53
-    assert current["passing_artifact_count"] == 23
-    assert current["nonpassing_artifact_count"] == 30
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 58
+    assert current["passing_artifact_count"] == 26
+    assert current["nonpassing_artifact_count"] == 32
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -890,6 +890,14 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale060_device_host_fallback_seed3_cpu_2026_05_15.json",
         "docs/_static/qi_seed_robustness_scale060_qi_two_level_smoothed_load_seed3_cpu_2026_05_16.json",
         "docs/_static/qi_seed_robustness_scale060_moment_schur_probe_seed3_cpu_2026_05_16.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_deflated_seed3_cpu_2026_05_16.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_deflated_cycles8_seed3_cpu_2026_05_17.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_seed3_cpu_2026_05_17.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_seed3_gpu0_2026_05_17.json",
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_qi_deflated_minres8_lgmres_forced_seed3_gpu0_2026_05_17.json"
+        ),
         "docs/_static/qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json",
         "docs/_static/qi_seed_robustness_scale060_lower_fill_seed3_cpu_rejected_2026_05_14.json",
         "docs/_static/qi_seed_robustness_scale060_lower_fill8_seed3_cpu_rejected_2026_05_14.json",
@@ -1008,6 +1016,33 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert moment_schur_cpu["active_size"] == 81377
     assert moment_schur_cpu["total_size"] == 139502
     assert moment_schur_cpu["max_elapsed_s"] > host_fallback_cpu["max_elapsed_s"]
+    qi_deflated_minres_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"] == "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_seed3_cpu_2026_05_17.json"
+    )
+    assert qi_deflated_minres_cpu["passed"] is True
+    assert qi_deflated_minres_cpu["backends"] == ["cpu"]
+    assert qi_deflated_minres_cpu["active_size"] == 81377
+    assert qi_deflated_minres_cpu["total_size"] == 139502
+    assert qi_deflated_minres_cpu["max_residual_ratio"] < 0.01
+    qi_deflated_gpu_timeout = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"] == "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_seed3_gpu0_2026_05_17.json"
+    )
+    assert qi_deflated_gpu_timeout["passed"] is False
+    assert qi_deflated_gpu_timeout["total_size"] == 139502
+    assert qi_deflated_gpu_timeout["max_elapsed_s"] > 420.0
+    qi_deflated_lgmres_gpu_timeout = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_qi_deflated_minres8_lgmres_forced_seed3_gpu0_2026_05_17.json"
+    )
+    assert qi_deflated_lgmres_gpu_timeout["passed"] is False
+    assert qi_deflated_lgmres_gpu_timeout["total_size"] == 139502
+    assert qi_deflated_lgmres_gpu_timeout["max_elapsed_s"] > 420.0
     lower_fill = next(
         artifact
         for artifact in payload["source_artifacts"]
