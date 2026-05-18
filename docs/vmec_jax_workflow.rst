@@ -171,7 +171,7 @@ proxy transport objective is unchanged by global :math:`|B|` spectrum scaling
 and is exactly zero, with zero gradient, for a constant-:math:`B` spectrum.
 
 Run the optional JAX ecosystem gates that protect future Lineax, Equinox, and
-JAXopt adoption:
+opt-in JAXopt adoption:
 
 .. code-block:: bash
 
@@ -198,6 +198,8 @@ without changing their row-list JSON outputs:
 Those summaries keep the production decision conservative: optional packages may
 be candidates for bounded experiments only when the measured gate is clean; they
 do not become hard dependencies or production solver defaults from these gates.
+Default CI installs ``lineax`` and ``equinox`` and leaves the JAXopt row
+skip-safe unless a developer installs JAXopt explicitly for local comparison.
 
 The optional VMEC/Boozer integration tests use ``pytest.importorskip`` or a
 skip-status payload. Missing optional packages therefore record a skipped lane,

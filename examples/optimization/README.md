@@ -9,4 +9,4 @@ Optimization examples that leverage differentiability:
 Examples:
 - `fit_geometry_harmonics_with_optax.py`
 - `calibrate_nu_n_to_fortran_residual_fixture.py`
-- `benchmark_optional_eqx_jaxopt_scheme4_gate.py` — optional Equinox/JAXopt gate on a real `geometryScheme=4` harmonic-fit objective; it verifies gradient agreement for an `equinox.Module` wrapper and bounded loss reduction for `jaxopt.GradientDescent`, and it skips cleanly when those packages are not installed.
+- `benchmark_optional_eqx_jaxopt_scheme4_gate.py` — optional Equinox/JAXopt gate on a real `geometryScheme=4` harmonic-fit objective; it verifies gradient agreement for an `equinox.Module` wrapper and, when JAXopt is installed explicitly, bounded loss reduction for `jaxopt.GradientDescent`. The JAXopt row skips cleanly in default CI.

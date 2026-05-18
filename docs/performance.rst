@@ -314,12 +314,16 @@ A second optional ecosystem gate checks objective-wrapper libraries on a real
      --maxiter 5 \
      --stepsize 0.1
 
-This gate keeps ``equinox`` and ``jaxopt`` outside the production solver path while
-verifying that they can wrap a real repository objective cleanly. In the current local
-run, the ``equinox`` wrapper matched a centered finite-difference directional derivative
-to about ``1.1e-11`` absolute error, and the bounded ``jaxopt.GradientDescent`` lane
-reduced the loss by about ``4.1e-14`` relative to the initial value while recovering
-the target harmonic amplitudes to about ``1.6e-08`` in Euclidean norm.
+This gate keeps ``equinox`` and the historical ``jaxopt`` backend outside the
+production solver path while verifying that objective-wrapper tooling can wrap a
+real repository objective cleanly. The default CI optional-dependency lane
+installs ``equinox`` and exercises the ``jaxopt`` skip-safe path rather than
+installing JAXopt. In the current local opt-in run, the ``equinox`` wrapper
+matched a centered finite-difference directional derivative to about
+``1.1e-11`` absolute error, and the bounded ``jaxopt.GradientDescent`` lane
+reduced the loss by about ``4.1e-14`` relative to the initial value while
+recovering the target harmonic amplitudes to about ``1.6e-08`` in Euclidean
+norm.
 
 A no-optional-dependency VMEC/Boozer readiness gate also runs as part of
 ``tests/test_optional_ecosystem_gates.py``. It evaluates a small Boozer spectrum

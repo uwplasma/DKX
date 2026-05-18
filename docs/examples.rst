@@ -184,8 +184,11 @@ For bounded optional ecosystem checks around differentiable objective wrappers:
 
 .. code-block:: bash
 
-   pip install equinox jaxopt
+   pip install equinox
    python examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py --backend all
+
+The ``jaxopt`` row in that command is intentionally skip-safe unless you install
+``jaxopt`` yourself for a local historical comparison.
 
 Implicit differentiation through solves
 ---------------------------------------

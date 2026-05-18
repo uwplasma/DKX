@@ -2293,8 +2293,9 @@ time about ``0.36 s``. This supports keeping Lineax under evaluation, but it
 does not promote it to production because the real tiny SFINCS gate still has to
 stay status-clean, parity-clean, and faster or lower-memory.
 
-Equinox and JAXopt are checked as objective-wrapper tooling around a real
-``geometryScheme=4`` differentiable objective:
+Equinox and the historical opt-in JAXopt backend are checked as
+objective-wrapper tooling around a real ``geometryScheme=4`` differentiable
+objective:
 
 .. code-block:: bash
 
@@ -2306,12 +2307,13 @@ Equinox and JAXopt are checked as objective-wrapper tooling around a real
      --stepsize 0.1 \
      --out-json /tmp/sfincs_eqx_jaxopt_gate.json
 
-On the local 2026-05-12 smoke, the Equinox wrapper matched a centered
+On the local 2026-05-12 opt-in smoke, the Equinox wrapper matched a centered
 finite-difference directional derivative with about ``1.1e-11`` absolute error
 and elapsed time about ``0.038 s``. The JAXopt gradient-descent row reduced the
 loss to a ratio of about ``4.1e-14`` and recovered the target harmonic
 amplitudes to about ``1.6e-08`` in Euclidean norm with elapsed time about
-``0.15 s``.
+``0.15 s``. Default CI does not install JAXopt; it verifies that this row skips
+cleanly while keeping the Equinox wrapper gate active.
 
 The focused regression test for the measured summaries is:
 

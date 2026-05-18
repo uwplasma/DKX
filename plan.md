@@ -12533,3 +12533,40 @@ Validation results:
   deterministic output gate with identical SHA256 solution digests. The tiny
   case remains overhead dominated: 1 GPU took 1.45 s and 2 GPUs took 31.8 s, so
   this validates correctness/reuse plumbing but is not a strong-scaling claim.
+
+## 2026-05-18 optional ecosystem CI hygiene
+
+Goal:
+
+- Keep optional JAX ecosystem gates useful without making unpromoted historical
+  backends part of default CI or release dependencies.
+
+Implementation:
+
+- The optional ecosystem CI job now installs `lineax` and `equinox`, but no
+  longer installs `jaxopt` by default. This keeps the maintained Lineax and
+  Equinox gates active while exercising the JAXopt skip-safe path in CI.
+- Documentation now describes JAXopt as an explicit local opt-in comparison for
+  `examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py`, not as
+  part of the default optional-dependency install.
+
+Validation plan:
+
+- Run the optional ecosystem gate tests with the current environment.
+- Build the Sphinx docs with warnings as errors.
+- Push after local checks pass and verify the GitHub CI optional ecosystem job
+  remains green without the prior JAXopt import warning.
+
+Validation results:
+
+- `python -m pytest -q tests/test_optional_lineax_implicit_gate.py tests/test_optional_eqx_jaxopt_scheme4_gate.py tests/test_optional_ecosystem_gates.py`
+  passed (`20 passed in 12.45 s`) in the local environment where JAXopt is
+  installed.
+- A subprocess with a shadowed `jaxopt` import verified the CI-style skip path:
+  `equinox_wrapper` stayed `ok`, `jaxopt_gradient_descent` reported `skipped`,
+  and the summary adoption decision was
+  `not_evaluated_missing_optional_dependency`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python -m py_compile examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py`
+  passed.
+- `git diff --check` passed.
