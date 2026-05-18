@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 import numpy as np
+import subprocess
+import sys
 import jax.numpy as jnp
 import pytest
 
@@ -993,7 +996,7 @@ def test_materialize_distributed_input_preserves_values_and_dtype() -> None:
 
 def test_distributed_solver_pjit_factories_reuse_wrappers() -> None:
     if solver_module._pjit is None:  # pragma: no cover - depends on optional JAX internals
-        pytest.skip("pjit unavailable")
+        pytest.skip("sharded JIT unavailable")
     solver_module._get_distributed_solve_pjit.cache_clear()
     solver_module._get_distributed_solve_with_residual_pjit.cache_clear()
 
@@ -1001,3 +1004,64 @@ def test_distributed_solver_pjit_factories_reuse_wrappers() -> None:
     assert solver_module._get_distributed_solve_with_residual_pjit(
         "p"
     ) is solver_module._get_distributed_solve_with_residual_pjit("p")
+
+
+def test_distributed_solver_sharded_jit_smoke_two_cpu_devices() -> None:
+    code = r"""
+import numpy as np
+import jax
+import jax.numpy as jnp
+from sfincs_jax.solver import (
+    distributed_gmres_enabled,
+    gmres_solve_distributed,
+    gmres_solve_with_residual_distributed,
+)
+
+assert len(jax.local_devices()) == 2
+assert distributed_gmres_enabled()
+
+A = jnp.asarray(
+    [
+        [4.0, 1.0, 0.0, 0.0],
+        [1.0, 3.0, 1.0, 0.0],
+        [0.0, 1.0, 2.5, 1.0],
+        [0.0, 0.0, 1.0, 2.0],
+    ],
+    dtype=jnp.float64,
+)
+b = jnp.asarray([1.0, 2.0, 0.5, -1.0], dtype=jnp.float64)
+ref = np.linalg.solve(np.asarray(A), np.asarray(b))
+
+def mv(x):
+    return A @ x
+
+res = gmres_solve_distributed(matvec=mv, b=b, axis_name="p", tol=1e-12, restart=4, maxiter=16)
+res.x.block_until_ready()
+np.testing.assert_allclose(np.asarray(res.x), ref, rtol=1e-8, atol=1e-8)
+
+res2, r = gmres_solve_with_residual_distributed(
+    matvec=mv,
+    b=b,
+    axis_name="p",
+    tol=1e-12,
+    restart=4,
+    maxiter=16,
+)
+r.block_until_ready()
+np.testing.assert_allclose(np.asarray(res2.x), ref, rtol=1e-8, atol=1e-8)
+np.testing.assert_allclose(np.asarray(r), np.asarray(b - mv(res2.x)), rtol=1e-8, atol=1e-8)
+"""
+    env = os.environ.copy()
+    env["XLA_FLAGS"] = "--xla_force_host_platform_device_count=2"
+    env["JAX_ENABLE_X64"] = "True"
+    env["SFINCS_JAX_GMRES_DISTRIBUTED"] = "on"
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=os.getcwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=45,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr

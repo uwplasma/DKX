@@ -16,10 +16,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax import tree_util as jtu
 from jax.sharding import Mesh, PartitionSpec
-try:  # JAX>=0.4
-    from jax import pjit as _pjit
-except Exception:  # pragma: no cover
-    from jax.experimental import pjit as _pjit  # type: ignore[no-redef]
+
+_spmd_jit = jax.jit
 
 from .boozer_bc import read_boozer_bc_header, selected_r_n_from_bc
 from .diagnostics import b0_over_bbar as b0_over_bbar_jax
@@ -1499,6 +1497,12 @@ def _get_matvec_mesh(axis_name: str) -> Mesh | None:
     return Mesh(mesh_devices, (axis_name,))
 
 
+def _mesh_context(mesh):
+    """Return the active-mesh context required by current and older JAX releases."""
+    set_mesh = getattr(jax, "set_mesh", None)
+    return set_mesh(mesh) if set_mesh is not None else mesh
+
+
 @lru_cache(maxsize=32)
 def _get_apply_full_system_operator_jit(_signature: tuple[object, ...]):
     def _apply(
@@ -1535,9 +1539,7 @@ def _get_apply_full_system_operator_pjit(_signature: tuple[object, ...], shard_a
             allow_sharding=True,
         )
 
-    if _pjit is None:
-        return jax.jit(_apply, static_argnums=(2,))
-    return _pjit.pjit(
+    return _spmd_jit(
         _apply,
         in_shardings=(None, None),
         out_shardings=None,
@@ -1564,9 +1566,7 @@ def _get_apply_full_system_operator_pjit_flat(_signature: tuple[object, ...]):
             y = jnp.pad(y, (0, int(pad)))
         return y
 
-    if _pjit is None:
-        return jax.jit(_apply, static_argnums=(2, 3))
-    return _pjit.pjit(
+    return _spmd_jit(
         _apply,
         in_shardings=(None, PartitionSpec("p")),
         out_shardings=PartitionSpec("p"),
@@ -1595,7 +1595,7 @@ def apply_v3_full_system_operator_cached(
                     op_pad = _pad_full_system_operator(op, axis=shard_axis, pad=pad)
                     x_pad = _pad_full_vector(x_full, op=op, op_pad=op_pad, axis=shard_axis, pad=pad)
                     fn = _get_apply_full_system_operator_pjit(_operator_signature_cached(op_pad), shard_axis)
-                    with mesh:
+                    with _mesh_context(mesh):
                         y_pad = fn(op_pad, x_pad, include_jacobian_terms)
                     y = _unpad_full_vector(y_pad, op=op, op_pad=op_pad, axis=shard_axis, pad=pad)
                     return y
@@ -1603,7 +1603,7 @@ def apply_v3_full_system_operator_cached(
                     fn = _get_apply_full_system_operator_jit(_operator_signature_cached(op))
                     return fn(op, x_full, include_jacobian_terms, 0)
                 fn = _get_apply_full_system_operator_pjit(_operator_signature_cached(op), shard_axis)
-                with mesh:
+                with _mesh_context(mesh):
                     y = fn(op, x_full, include_jacobian_terms)
                 return y
             if shard_axis == "flat":
@@ -1611,7 +1611,7 @@ def apply_v3_full_system_operator_cached(
                 n = int(x_full.shape[0])
                 pad = (-n) % n_devices if n_devices > 0 else 0
                 x_use = jnp.pad(x_full, (0, pad)) if pad else x_full
-                with mesh:
+                with _mesh_context(mesh):
                     x_use = jax.lax.with_sharding_constraint(x_use, PartitionSpec("p"))
                     y = fn(op, x_use, include_jacobian_terms, pad)
                 return y[:n] if pad else y

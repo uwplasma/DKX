@@ -20,12 +20,14 @@ from jax import vmap
 from jax.scipy.sparse.linalg import gmres
 
 try:  # pragma: no cover - optional for distributed GMRES
-    from jax.experimental import pjit as _pjit  # noqa: PLC0415
     from jax.sharding import Mesh, PartitionSpec  # noqa: PLC0415
 except Exception:  # noqa: BLE001
-    _pjit = None
     Mesh = None
     PartitionSpec = None
+    _spmd_jit = None
+else:
+    _spmd_jit = jax.jit
+_pjit = _spmd_jit  # Backward-compatible private alias for older tests/users.
 from scipy.sparse.linalg import LinearOperator as _LinearOperator
 from scipy.sparse.linalg import gmres as _scipy_gmres
 from scipy.sparse.linalg import bicgstab as _scipy_bicgstab
@@ -218,7 +220,7 @@ def _maybe_limit_restart(n: int, restart: int, dtype: jnp.dtype) -> int:
 
 
 def _materialize_distributed_input(arr: jnp.ndarray | None, *, dtype: jnp.dtype | None = None) -> jnp.ndarray | None:
-    """Return an unsharded host-materialized copy suitable for pjit input resharding."""
+    """Return an unsharded host-materialized copy suitable for sharded-JIT input resharding."""
     if arr is None:
         return None
     host_arr = jax.device_get(arr)
@@ -2319,30 +2321,25 @@ def _get_gmres_mesh(axis_name: str) -> Mesh | None:
     return Mesh(mesh_devices, (axis_name,))
 
 
+def _mesh_context(mesh):
+    """Return the active-mesh context required by current and older JAX releases."""
+    set_mesh = getattr(jax, "set_mesh", None)
+    return set_mesh(mesh) if set_mesh is not None else mesh
+
+
 def distributed_gmres_enabled() -> bool:
     axis_name = _distributed_gmres_axis()
-    if axis_name is None or _pjit is None or PartitionSpec is None:
+    if axis_name is None or _spmd_jit is None or PartitionSpec is None:
         return False
     return _get_gmres_mesh(axis_name) is not None
 
 
-_DISTRIBUTED_SOLVE_STATIC_ARGS = (
-    "matvec",
-    "preconditioner",
-    "solver_kind",
-    "tol",
-    "atol",
-    "restart",
-    "maxiter",
-    "solve_method",
-    "precondition_side",
-)
+_DISTRIBUTED_SOLVE_STATIC_ARGNUMS = tuple(range(2, 11))
 
 
 def _distributed_solve_kernel(
     b_in: jnp.ndarray,
     x0_in: jnp.ndarray,
-    *,
     matvec,
     preconditioner,
     solver_kind: str,
@@ -2383,7 +2380,6 @@ def _distributed_solve_kernel(
 def _distributed_solve_with_residual_kernel(
     b_in: jnp.ndarray,
     x0_in: jnp.ndarray,
-    *,
     matvec,
     preconditioner,
     solver_kind: str,
@@ -2425,13 +2421,13 @@ def _distributed_solve_with_residual_kernel(
 def _get_distributed_solve_pjit(axis_name: str):
     """Return the cached sharded Krylov executable wrapper for an axis."""
 
-    if _pjit is None or PartitionSpec is None:
+    if _spmd_jit is None or PartitionSpec is None:
         return None
-    return _pjit.pjit(
+    return _spmd_jit(
         _distributed_solve_kernel,
         in_shardings=(PartitionSpec(axis_name), PartitionSpec(axis_name)),
         out_shardings=(PartitionSpec(axis_name), None),
-        static_argnames=_DISTRIBUTED_SOLVE_STATIC_ARGS,
+        static_argnums=_DISTRIBUTED_SOLVE_STATIC_ARGNUMS,
     )
 
 
@@ -2439,13 +2435,13 @@ def _get_distributed_solve_pjit(axis_name: str):
 def _get_distributed_solve_with_residual_pjit(axis_name: str):
     """Return the cached sharded Krylov executable wrapper that also returns r."""
 
-    if _pjit is None or PartitionSpec is None:
+    if _spmd_jit is None or PartitionSpec is None:
         return None
-    return _pjit.pjit(
+    return _spmd_jit(
         _distributed_solve_with_residual_kernel,
         in_shardings=(PartitionSpec(axis_name), PartitionSpec(axis_name)),
         out_shardings=(PartitionSpec(axis_name), None, PartitionSpec(axis_name)),
-        static_argnames=_DISTRIBUTED_SOLVE_STATIC_ARGS,
+        static_argnums=_DISTRIBUTED_SOLVE_STATIC_ARGNUMS,
     )
 
 
@@ -2464,7 +2460,7 @@ def gmres_solve_distributed(
     precondition_side: str = "left",
 ) -> GMRESSolveResult:
     axis_name = _distributed_gmres_axis() if axis_name is None else axis_name
-    if axis_name is None or _pjit is None or PartitionSpec is None:
+    if axis_name is None or _spmd_jit is None or PartitionSpec is None:
         return gmres_solve(
             matvec=matvec,
             b=b,
@@ -2529,19 +2525,19 @@ def gmres_solve_distributed(
             solve_method=solve_method,
             precondition_side=precondition_side,
         )
-    with mesh:
+    with _mesh_context(mesh):
         x, rn = solve_pjit(
             b_use,
             x0_use,
-            matvec=matvec_use,
-            preconditioner=preconditioner_use,
-            solver_kind=solver_kind,
-            tol=tol,
-            atol=atol,
-            restart=restart,
-            maxiter=maxiter,
-            solve_method=solve_method_use,
-            precondition_side=precondition_side,
+            matvec_use,
+            preconditioner_use,
+            solver_kind,
+            tol,
+            atol,
+            restart,
+            maxiter,
+            solve_method_use,
+            precondition_side,
         )
         if pad:
             r_pad = b_use - matvec_use(x)
@@ -2567,7 +2563,7 @@ def gmres_solve_with_residual_distributed(
     precondition_side: str = "left",
 ) -> tuple[GMRESSolveResult, jnp.ndarray]:
     axis_name = _distributed_gmres_axis() if axis_name is None else axis_name
-    if axis_name is None or _pjit is None or PartitionSpec is None:
+    if axis_name is None or _spmd_jit is None or PartitionSpec is None:
         return gmres_solve_with_residual(
             matvec=matvec,
             b=b,
@@ -2632,19 +2628,19 @@ def gmres_solve_with_residual_distributed(
             solve_method=solve_method,
             precondition_side=precondition_side,
         )
-    with mesh:
+    with _mesh_context(mesh):
         x, rn, r = solve_pjit(
             b_use,
             x0_use,
-            matvec=matvec_use,
-            preconditioner=preconditioner_use,
-            solver_kind=solver_kind,
-            tol=tol,
-            atol=atol,
-            restart=restart,
-            maxiter=maxiter,
-            solve_method=solve_method_use,
-            precondition_side=precondition_side,
+            matvec_use,
+            preconditioner_use,
+            solver_kind,
+            tol,
+            atol,
+            restart,
+            maxiter,
+            solve_method_use,
+            precondition_side,
         )
         if pad:
             r_pad = b_use - matvec_use(x)

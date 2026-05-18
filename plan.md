@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-17 (Europe/Lisbon)
+Last updated: 2026-05-18 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -42,6 +42,26 @@ Immediate priorities:
 - Eliminate remaining solver branch fragility while preserving differentiability,
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
+
+Current active lane (2026-05-18, CI/CD and sharded-JIT modernization):
+- [x] GitHub Actions CI and docs are green on `main` after commit `f363009`;
+  coverage/action artifact upload/download now use Node 24 action majors, and
+  the manual production-benchmark-input workflow also passes.
+- [x] Replaced the deprecated distributed Krylov `jax.experimental.pjit` calls
+  with the current explicit-sharding `jax.jit` API in `sfincs_jax.solver` and
+  `sfincs_jax.v3_system`. The implementation now activates meshes through
+  `jax.set_mesh` when available, with a fallback to the older mesh context
+  manager for older JAX releases.
+- [x] Added a subprocess regression that forces two CPU JAX devices and solves
+  a small distributed Krylov system through both the solution-only and
+  solution-plus-residual paths. This catches the `jax.jit` sharding contract
+  that rejects keyword-only static arguments and requires an active mesh.
+- [x] Local validation for the migration passed: py-compile of touched runtime
+  files, a real two-CPU-device distributed Krylov smoke, focused
+  sharded/operator-reuse tests (`52 passed`), changed-file ruff checks, and
+  Sphinx `-W` docs build.
+- [ ] Next validation gate for this lane: push and require full CI/docs to pass;
+  then inspect the CI log for the previous `pjit` deprecation warning.
 
 Current active lane (2026-05-16, v1.1.4 completion push):
 - [x] Coordinated a four-lane completion push on clean `main` after

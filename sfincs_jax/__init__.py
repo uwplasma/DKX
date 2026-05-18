@@ -85,7 +85,7 @@ if _cores_env:
             os.environ.setdefault("SFINCS_JAX_MATVEC_SHARD_AXIS", "auto")
             os.environ.setdefault("SFINCS_JAX_AUTO_SHARD", "1")
 
-# Allow users to request multiple CPU devices for JAX SPMD/pjit on host platforms.
+# Allow users to request multiple CPU devices for JAX SPMD sharded-JIT on host platforms.
 # This must be set before importing JAX.
 _cpu_devices_env = os.environ.get("SFINCS_JAX_CPU_DEVICES", "").strip()
 if _cpu_devices_env:

@@ -716,7 +716,8 @@ performance without changing the input file:
 - ``SFINCS_JAX_COMPILATION_CACHE_DIR``: convenience override for the default cache path when
   ``JAX_COMPILATION_CACHE_DIR`` is not set.
 
-- ``SFINCS_JAX_CPU_DEVICES``: request multiple host CPU devices for JAX SPMD/pjit.
+- ``SFINCS_JAX_CPU_DEVICES``: request multiple host CPU devices for JAX SPMD
+  sharded-JIT execution.
   Must be set **before** importing JAX (i.e., before running `python -m sfincs_jax`).
 
 - ``SFINCS_JAX_MATVEC_SHARD_AXIS``: control SPMD sharding of the matvec along ``theta``,
@@ -739,8 +740,9 @@ performance without changing the input file:
   ghost planes with zero weights and does not change outputs.
 
 - ``SFINCS_JAX_GMRES_DISTRIBUTED``: enable distributed GMRES when using ``flat``
-  sharding. Set to ``1`` to run the Krylov solver under `pjit`, keeping vectors
-  sharded across devices. Default: off (fall back to single‑device GMRES).
+  sharding. Set to ``1`` to run the Krylov solver under explicit
+  ``jax.jit`` sharding, keeping vectors sharded across devices. Default: off
+  (fall back to single‑device GMRES).
 - ``SFINCS_JAX_DISTRIBUTED_KRYLOV``: distributed Krylov preference for
   ``solve_method=auto`` under sharded solves. ``auto`` (default) selects
   communication-reduced BiCGStab, while ``gmres`` forces distributed GMRES.

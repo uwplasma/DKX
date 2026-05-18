@@ -28,10 +28,11 @@ JAX supports two broad modes of parallelism:
 - **Multi‑process**: Run independent problems in separate Python processes. This is
   the simplest and most robust path on CPUs (and also works for GPUs if each
   process is pinned to a device).
-- **SPMD / sharding**: Use `pjit` and sharded arrays to split a *single* linear
-  system across multiple devices. This is the mechanism needed for per-solve
-  strong scaling, but in ``sfincs_jax`` it remains an experimental path that
-  must prove it amortizes synchronization and compilation overhead.
+- **SPMD / sharding**: Use explicit ``jax.jit`` sharding and sharded arrays to
+  split a *single* linear system across multiple devices. This is the mechanism
+  needed for per-solve strong scaling, but in ``sfincs_jax`` it remains an
+  experimental path that must prove it amortizes synchronization and compilation
+  overhead.
 
 Key tradeoffs for `sfincs_jax`:
 
@@ -83,7 +84,8 @@ preserving differentiability:
    state vector across multiple devices along :math:`\theta` or :math:`\zeta`.
 
    Implementation: `apply_v3_full_system_operator_cached` in
-   `sfincs_jax.v3_system` with `pjit` + `with_sharding_constraint`.
+   `sfincs_jax.v3_system` with explicit ``jax.jit`` sharding plus
+   `with_sharding_constraint`.
 
    **Host‑device setup (CPU).** To emulate MPI‑style domain decomposition on a
    multi‑core CPU, request multiple host devices *before importing JAX*. You can
@@ -499,7 +501,7 @@ On GPUs, JAX will automatically see all local devices.
   divisible by the device count. Because v3 forces **odd** ``Ntheta``/``Nzeta``,
   only odd device counts activate theta/zeta sharding by default. Set
   ``SFINCS_JAX_SHARD_PAD=1`` (default) to pad ghost planes so even device counts
-  can still shard without changing outputs in the cached/pjit matvec path.
+  can still shard without changing outputs in the cached sharded-JIT matvec path.
   (The current RHSMode=1 distributed-GMRES matvec path still requires
   divisible theta/zeta partitions.)
 - ``x`` sharding is available as a fallback when odd ``Ntheta``/``Nzeta`` block
