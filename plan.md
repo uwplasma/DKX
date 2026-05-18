@@ -12570,3 +12570,16 @@ Validation results:
 - `python -m py_compile examples/optimization/benchmark_optional_eqx_jaxopt_scheme4_gate.py`
   passed.
 - `git diff --check` passed.
+- First post-push CI observation found the optional ecosystem and examples jobs
+  green, but coverage shard 1 was a slow outlier because `pytest-split` had no
+  duration cache and `duration_based_chunks` assigned the first contiguous
+  alphabetical quarter of the suite to that shard. The CI coverage command now
+  uses `--splitting-algorithm least_duration`, which round-robins equal-duration
+  tests across the four existing shards without adding runners or dropping
+  coverage.
+- That same CI shard exposed a stale expensive auto-selection assertion:
+  `test_geometry4_pas_example_tiny_defaults_to_species_block` depended on a
+  default solve path and took 12 minutes on Linux before failing the log check.
+  The end-to-end test is now an explicit species-block override check, while
+  the default auto-selection assertion lives in the cheap
+  `rhs1_schur_policy` unit test surface.

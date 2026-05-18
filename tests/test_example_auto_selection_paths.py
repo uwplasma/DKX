@@ -51,7 +51,7 @@ def _patch_export_block(txt: str) -> str:
     return txt[: start.end()] + block + txt[end_pos:]
 
 
-def test_geometry4_pas_example_tiny_defaults_to_species_block(tmp_path: Path, monkeypatch) -> None:
+def test_geometry4_pas_example_tiny_honors_species_block_override(tmp_path: Path, monkeypatch) -> None:
     input_path = (
         Path(__file__).resolve().parents[1]
         / "examples"
@@ -76,6 +76,7 @@ def test_geometry4_pas_example_tiny_defaults_to_species_block(tmp_path: Path, mo
     monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SOLVE_METHOD", "incremental")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECONDITIONER", "species_block")
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", raising=False)
 

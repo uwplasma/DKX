@@ -63,6 +63,32 @@ def test_resolve_schur_base_small_pas_fallback_uses_pas_schur(monkeypatch) -> No
     )
 
 
+def test_resolve_schur_base_small_pas_prefers_species_block(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHUR_BASE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPECIES_BLOCK_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", raising=False)
+
+    assert (
+        resolve_rhs1_schur_base_kind(
+            base_kind_env="",
+            n_theta=7,
+            n_zeta=7,
+            n_species=2,
+            total_size=410,
+            nxi_for_x=[4, 4],
+            has_pas=True,
+            has_fp=False,
+            has_er_xdot=False,
+            has_er_xidot=False,
+            use_dkes_exb=False,
+            pas_tokamak_theta_applicable=False,
+            pas_tz_applicable=False,
+            geom_scheme=4,
+        )
+        == "species_block"
+    )
+
+
 def test_resolve_schur_base_dkes_uses_bounded_xblock_else_pas_ilu(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DKES_XBLOCK_TZ_MAX_BYTES", raising=False)
     kwargs = dict(
