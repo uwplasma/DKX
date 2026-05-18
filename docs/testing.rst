@@ -1016,5 +1016,8 @@ The Equinox/JAXopt gate is a separate objective-wrapper check on a real differen
 ``geometryScheme=4`` harmonic-fit problem. Its associated test
 ``tests/test_optional_eqx_jaxopt_scheme4_gate.py`` verifies deterministic problem
 construction, directional-derivative agreement for an ``equinox.Module`` wrapper,
-bounded loss reduction and parameter recovery for ``jaxopt.GradientDescent``, JSON
-output, and clean skip behavior when either optional package is absent.
+the opt-in JAXopt gradient-descent row when that package is installed, JSON
+output, and clean skip behavior when either optional package is absent. Default
+CI installs ``equinox`` but not ``jaxopt`` so the maintained wrapper path and the
+historical JAXopt skip path are both exercised without making JAXopt a release
+dependency.
