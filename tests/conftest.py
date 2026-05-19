@@ -13,6 +13,19 @@ def pytest_configure() -> None:
     os.environ.setdefault("SFINCS_JAX_FORTRAN_STDOUT", "0")
 
 
+@pytest.fixture(autouse=True)
+def _restore_sfincs_jax_environment():
+    """Prevent solver-policy environment overrides from leaking across tests."""
+
+    prefix = "SFINCS_JAX_"
+    before = {key: value for key, value in os.environ.items() if key.startswith(prefix)}
+    yield
+    for key in [key for key in os.environ if key.startswith(prefix) and key not in before]:
+        os.environ.pop(key, None)
+    for key, value in before.items():
+        os.environ[key] = value
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Keep CI runtime under control by skipping the slowest integration tests."""
     if os.environ.get("SFINCS_JAX_CI", "0") != "1":
