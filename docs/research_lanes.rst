@@ -21,7 +21,11 @@ The large-QI production escape hatch is closed for users who do not need
 end-to-end differentiation: explicit large RHSMode=1 QI requests can enter the
 non-autodiff host x-block fallback and record that choice in solver metadata.
 The true differentiable/device lane remains open because the scale-0.60 hard
-seed does not yet have a residual-reducing GPU-compatible preconditioner.
+seed does not yet have a residual-reducing GPU-compatible preconditioner. The
+CPU hard seed now has a bounded orchestration path that writes HDF5 and solver
+trace output at ``15 x 31 x 60 x 5`` without entering the old strong-preconditioner
+or SciPy-rescue time sinks, but the QI-device correction itself still rejects
+that seed by the true-residual gate.
 
 Relevant implementation:
 
@@ -46,13 +50,21 @@ Relevant implementation:
   device-local ``S_local`` candidate: a bounded CSR-backed Jacobi smoother with
   fail-closed diagonal validation, an opt-in residual-minimizing step policy, and
   a true-residual seed probe.
+- ``sfincs_jax/rhs1_qi_device_preconditioner.py`` provides the first
+  production-shaped device-QI state. It combines a device Jacobi smoother with
+  a rank-gated coarse basis when device CSR is available, and also provides a
+  matrix-free coarse-only path that builds just ``A Q`` by JAX matvec probes
+  when full CSR materialization is too expensive. Both paths expose
+  setup/apply/probe metadata and keep the timed apply path free of SciPy, host
+  LU/ILU, and Python callbacks.
 - ``sfincs_jax/rhs1_device_operator.py`` provides bounded device CSR matvec
   utilities.
 - ``sfincs_jax/rhs1_qi_galerkin_policy.py`` rejects Galerkin candidates unless
   a true residual probe improves.
 - ``sfincs_jax/v3_driver.py`` wires the x-block sparse-PC, device-Krylov,
-  two-level-QI opt-in, residual-deflated QI opt-in, and non-autodiff host
-  fallback paths.
+  two-level-QI opt-in, residual-deflated QI opt-in, device-QI field-split opt-in,
+  early matrix-free QI probe, bounded post-xblock acceptance, and non-autodiff
+  host fallback paths.
 
 Audit conclusion
 ~~~~~~~~~~~~~~~~
@@ -95,6 +107,151 @@ operator-reuse ``S_local`` prototype. It deliberately validates diagonal
 coverage before construction and performs only JAX CSR matvecs during
 application, so it can probe whether a weaker but genuinely device-resident
 smoother is preferable to host x-block LU/ILU for the hard GPU seed.
+
+The standalone device-QI preconditioner state is now available on top of that
+smoother. It implements the same local-plus-coarse equation above with ``A_c``
+assembled by device matvec probes. When full device CSR is rejected by the memory
+preflight, a second explicit fallback can build only the coarse ``A Q`` matrix
+from the matrix-free JAX operator and use the result as a seed-only correction.
+Focused tests cover JIT, gradient propagation with respect to the residual,
+metadata hygiene, local-only fallback, matrix-free coarse-only setup, and
+fail-closed true-residual probing on synthetic global-coupling systems. It is
+wired through the driver behind the explicit opt-in::
+
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1
+
+The full device-CSR path requires an assembled device CSR operator. The
+matrix-free seed-only fallback is separately enabled with::
+
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1
+
+The matrix-free path now has an optional residual enrichment that adds bounded
+correction-space Krylov vectors without materializing CSR::
+
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT=1
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_DEPTH=2
+
+This builds ``orth([Q, r, A r, A^2 r, ...])`` and still accepts the candidate
+only if a true-residual probe improves by the configured margin. Seed-only
+hard-seed experiments may also move the probe ahead of the expensive strong
+preconditioner stage with::
+
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_EARLY=1
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1
+
+The seed-only probe can also run a short bounded sequence of residual-checked
+corrections::
+
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=4
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=residual_minimizing
+
+The default remains one fixed cycle. With ``STEP_POLICY=residual_minimizing``,
+each correction direction ``d`` is scaled by the scalar ``alpha`` that minimizes
+``||r - alpha A d||_2`` before the true-residual gate is evaluated. Each
+additional cycle recomputes the true residual and stops immediately if the
+candidate is non-finite or fails to reduce ``||r||_2`` by the configured
+material margin, so the knob is safe for GPU hard-seed experiments without
+turning the QI action into an unbounded Krylov preconditioner.
+
+The matrix-free path also has an opt-in recycle enrichment::
+
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT=1
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_CYCLES=2
+
+This appends the residual left after the current coarse correction,
+``r - A Q (A Q)^+ r``, as a new rank-gated candidate direction. It is a
+bounded GCRO-style seed construction, not a production Krylov replacement.
+
+The same matrix-free path now has an opt-in residual-polynomial local smoother::
+
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_minres
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=2
+
+This applies a fixed number of pure-JAX sweeps using the current residual as the
+local direction and the scalar that minimizes ``||r - alpha A r||_2``. The
+operation is bounded, device-compatible, and still guarded by the same
+true-residual acceptance gate.
+
+The stronger block-projected variant is selected with::
+
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=16
+
+It uses the QI x/species block layout to form residual pieces ``D`` and solves
+``min_c ||r - A D c||_2`` as a bounded local action. This is still matrix-free
+and device-compatible, but it is a stronger block/angular/radial correction than
+the scalar residual-polynomial smoother.
+The default grouping keeps contiguous x/species blocks. A stronger experimental
+hybrid grouping is available with::
+
+     SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING=block_x_species
+
+This augments the local projected space with radial-x and species aggregate
+residual directions, giving the least-squares correction a small global-coupling
+handle while keeping the matvec count bounded by ``MAX_GROUPS``.
+
+The latest CPU hard-seed evidence uses this early hook plus the guarded
+``SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK=1`` path. It writes output
+with residual ``7.80e-10`` and acceptance criterion
+``post_xblock_abs_floor``. This is a bounded CPU orchestration result, not a true
+device-QI promotion, because the QI-device probe still reports
+``residual_not_reduced``. Matrix-free QI is allowed even when
+``precondition_side=none``; only
+installation as a Krylov preconditioner is blocked in that case.
+
+The matching one-GPU hard-seed pass on ``office`` no longer reproduces the old
+CUDA illegal-address failure. The rank-26/27 matrix-free QI seed reduces
+residual from ``2.26e-6`` to ``1.42e-6`` in about ``73 s`` and then fails closed
+because the result is still not accurate enough to write production-sized
+RHSMode=1 output. Fixed-step and residual-minimizing scalar variants give the
+same GPU residual on this seed, so scalar line search is not the missing
+physics. The recycle-enriched rank-28 GPU seed improves the same residual to
+``1.06e-6`` in about ``74 s`` without a CUDA failure. Adding the matrix-free
+minimum-residual local smoother improves the seed further to ``7.42e-7`` with
+two sweeps and ``5.17e-7`` with eight sweeps, both in about ``79 s`` with the
+same rank, but still misses the ``3.02e-11`` output target by about ``1.7e4``.
+A forced non-autodiff host
+x-block fallback on the GPU host timed out after ``600 s`` and ``975`` matvecs
+in the earlier run; a later explicit QI-as-Krylov-preconditioner attempt also
+triggered host fallback, disabled the device-QI preconditioner, and timed out
+after ``360 s`` / ``675`` matvecs. The driver now disables only the automatic
+host fallback when the user explicitly requests the matrix-free QI-device
+preconditioner as the Krylov preconditioner. A bounded GPU probe of that
+true-device route ran ``fgmres_jax`` for ``803`` matvecs in ``278 s`` and failed
+closed at ``2.83e-5``. This proves the replacement path is reachable and
+CUDA-safe, but also shows that the current approximate QI action is not a strong
+enough Krylov preconditioner. Host-fallback routes are not promoted as GPU
+production fallbacks.
+The rank-48/depth-2 experiment timed out before useful metadata and should not
+be repeated as the next promotion attempt.
+CPU direction probes show that scalar minimization alone is not enough for this
+hard seed: rank 12 reduces only ``1.736775e-3`` to ``1.735797e-3``, while rank
+27 reduces to ``1.725418e-3``. Both are below the 1% material-improvement gate,
+so the next implementation should add a physically stronger local/global
+smoother or recycle space rather than tune only scalar damping.
+The first block-projected local smoother CPU run at the same scale-0.60 seed
+reduces the QI-device seed residual from ``1.736775e-3`` to ``1.649351e-3``
+before the existing x-block sparse rescue writes accepted output in ``296.6 s``.
+A wider ``max_groups=32`` run keeps the same residual reduction and lowers the
+local wall time to ``285.0 s``. This is the first material CPU seed improvement
+from a true matrix-free local action, but it is not a true device-QI closure
+until the same route passes on GPU and writes output without relying on the
+later sparse x-block rescue.
+The ``block_x_species`` hybrid grouping also completed on CPU in ``289.5 s``
+with the same residual ratio. Since it is slightly slower than contiguous
+``max_groups=32`` on this seed, it remains an opt-in GPU/research probe rather
+than the preferred CPU setting.
+
+Both paths fail closed when host fallback is active or when the true-residual
+probe does not improve. The pre-enrichment scale-0.60 seed-3 CPU artifact
+``docs/_static/qi_seed_robustness_scale060_qi_device_matrixfree_seed3_cpu_2026_05_19.json``
+shows the matrix-free fallback avoiding full CSR, building a rank-9 coarse
+operator in about ``0.57 s``, then rejecting itself because the residual ratio
+was ``0.9999998`` rather than a material improvement. It remains unpromoted
+until real scale-0.60 CPU/GPU hard-seed artifacts pass the gate below. A
+post-enrichment bounded rerun showed that the remaining active blocker is path
+ordering in the large active-DOF RHSMode=1 FP branch: the expensive host x-block
+rescue can dominate before a bounded QI-device probe produces evidence.
 
 The next candidate is residual-deflated rather than threshold-driven:
 
@@ -253,6 +410,14 @@ Current evidence
   stricter 20% material-improvement gate is requested. This is implementation
   infrastructure only: no scale-0.60 CPU/GPU hard-seed artifact has been promoted
   from it.
+- A standalone device-QI field-split state now exists and is wired as an explicit
+  x-block sparse-PC opt-in. Focused tests show no-host-fallback metadata, JIT
+  compatibility, differentiability with respect to the residual, local-only
+  fallback behavior, fail-closed residual probing, coarse-shape validation,
+  driver metadata for accepted opt-in probes, and fail-closed driver metadata
+  when no assembled device CSR operator is available. This advances the
+  implementation surface, but it still needs hard-seed evidence before it can be
+  used for public claims.
 
 Promotion gate
 ~~~~~~~~~~~~~~
