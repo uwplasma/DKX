@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from sfincs_jax.rhs1_post_xblock_policy import (
     rhs1_fast_post_xblock_polish_allowed,
     rhs1_fp_targeted_polish_allowed,
+    rhs1_scipy_rescue_abs_floor_after_xblock,
     rhs1_skip_global_sparse_after_xblock_allowed,
 )
 
@@ -136,3 +137,45 @@ def test_skip_global_sparse_after_xblock_respects_guards(monkeypatch) -> None:
     assert not rhs1_skip_global_sparse_after_xblock_allowed(**{**kwargs, "backend": "gpu"})
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", raising=False)
     assert not rhs1_skip_global_sparse_after_xblock_allowed(**kwargs)
+
+
+def test_scipy_rescue_abs_floor_after_xblock_defaults_for_large_cpu_fp_seed(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS_MIN", raising=False)
+    assert rhs1_scipy_rescue_abs_floor_after_xblock(
+        op=_op(),
+        active_size=81377,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=True,
+        use_implicit=False,
+        backend="cpu",
+    ) == 1.0e-9
+
+
+def test_scipy_rescue_abs_floor_after_xblock_respects_guards_and_override(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS", raising=False)
+    kwargs = dict(
+        op=_op(),
+        active_size=81377,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=True,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert rhs1_scipy_rescue_abs_floor_after_xblock(**{**kwargs, "active_size": 8000}) == 0.0
+    assert (
+        rhs1_scipy_rescue_abs_floor_after_xblock(
+            **{**kwargs, "used_large_cpu_xblock_shortcut": False},
+        )
+        == 0.0
+    )
+    assert (
+        rhs1_scipy_rescue_abs_floor_after_xblock(
+            **{**kwargs, "used_explicit_fp_xblock_seed": False},
+        )
+        == 0.0
+    )
+    assert rhs1_scipy_rescue_abs_floor_after_xblock(**{**kwargs, "use_implicit": True}) == 0.0
+    assert rhs1_scipy_rescue_abs_floor_after_xblock(**{**kwargs, "backend": "gpu"}) == 0.0
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS", "2e-10")
+    assert rhs1_scipy_rescue_abs_floor_after_xblock(**{**kwargs, "backend": "gpu"}) == 2.0e-10

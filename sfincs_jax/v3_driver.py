@@ -76,6 +76,11 @@ from .rhs1_qi_deflation import (
     probe_rhs1_qi_deflated_correction,
     probe_rhs1_qi_deflated_minres_seed,
 )
+from .rhs1_qi_device_preconditioner import (
+    RHS1QIDevicePreconditionerConfig,
+    probe_rhs1_qi_device_preconditioner,
+    setup_rhs1_qi_device_preconditioner,
+)
 from .rhs1_qi_two_level import build_rhs1_qi_two_level_preconditioner
 from .memory_model import bicgstab_work_nbytes, estimate_sparse_pc_memory, gmres_basis_nbytes, tfqmr_work_nbytes
 from .rhs1_pas_policy import (
@@ -167,6 +172,7 @@ from .rhs1_large_cpu_policy import (
 from .rhs1_post_xblock_policy import (
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
     rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
+    rhs1_scipy_rescue_abs_floor_after_xblock as _rhs1_scipy_rescue_abs_floor_after_xblock_impl,
     rhs1_skip_global_sparse_after_xblock_allowed as _rhs1_skip_global_sparse_after_xblock_allowed_impl,
 )
 from .rhs1_acceptance_policy import (
@@ -1301,6 +1307,24 @@ def _rhsmode1_skip_global_sparse_after_xblock_allowed(
         active_size=int(active_size),
         residual_norm=float(residual_norm),
         target=float(target),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def _rhsmode1_scipy_rescue_abs_floor_after_xblock(
+    *,
+    op: V3FullSystemOperator,
+    active_size: int,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    use_implicit: bool,
+) -> float:
+    return _rhs1_scipy_rescue_abs_floor_after_xblock_impl(
+        op=op,
+        active_size=int(active_size),
         used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
         used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
         use_implicit=bool(use_implicit),
@@ -8633,6 +8657,21 @@ def _rhs1_float_env(name: str, *, default: float, minimum: float = 0.0) -> float
     return max(float(minimum), float(value))
 
 
+def _rhs1_qi_device_probe_uses_minres_step() -> bool:
+    """Return whether QI-device seed probes should line-search each correction."""
+
+    raw = (
+        os.environ.get(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY",
+            "fixed",
+        )
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
+    return raw in {"minres", "residual_minimizing", "line_search", "linesearch"}
+
+
 def _rhs1_xblock_fallback_initial_guess(
     *,
     candidate: np.ndarray,
@@ -8902,6 +8941,42 @@ def _rhs1_xblock_qi_coarse_basis(
             axis=0,
         )
     return RHS1QICoarseBasis(vectors=basis_vectors, metadata=basis.metadata)
+
+
+def _rhs1_xblock_qi_block_geometry_metadata(
+    *,
+    op: V3FullSystemOperator,
+    active_dof: bool,
+    linear_size: int,
+) -> dict[str, object]:
+    """Return x/species block metadata for matrix-free QI local smoothers."""
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_l = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    block_sizes: list[int] = []
+    block_x: list[int] = []
+    block_species: list[int] = []
+    for s in range(n_species):
+        for ix in range(n_x):
+            n_lx = int(nxi_for_x[ix]) if bool(active_dof) else n_l
+            size = int(max(0, n_lx) * n_theta * n_zeta)
+            if size <= 0:
+                continue
+            block_sizes.append(size)
+            block_x.append(ix)
+            block_species.append(s)
+    f_block_size = int(sum(block_sizes))
+    return {
+        "qi_block_sizes": tuple(int(value) for value in block_sizes),
+        "qi_block_x": tuple(int(value) for value in block_x),
+        "qi_block_species": tuple(int(value) for value in block_species),
+        "qi_block_f_size": int(f_block_size),
+        "qi_block_tail_size": max(0, int(linear_size) - int(f_block_size)),
+    }
 
 
 def _rhs1_xblock_global_coarse_basis(
@@ -13364,6 +13439,9 @@ def solve_v3_full_system_linear_gmres(
     full_to_active_jnp: jnp.ndarray | None = None
     active_size = int(op.total_size)
     pas_tz_guarded_correction_metadata: dict[str, object] = {}
+    rhsmode1_general_metadata: dict[str, object] = {}
+    cpu_large_xblock_shortcut = False
+    explicit_fp_xblock_seed_used = False
     if use_active_dof_mode:
         if use_pas_projection:
             active_idx_np = _transport_active_dof_indices(op)
@@ -13773,12 +13851,40 @@ def solve_v3_full_system_linear_gmres(
                 or xblock_device_bicgstab_requested
                 or xblock_device_tfqmr_requested
             )
+            xblock_device_host_fallback_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK",
+                "",
+            )
+            xblock_device_host_fallback_auto_disabled_by_qi_device = False
+            qi_device_preconditioner_requested_for_fallback = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
+                default=False,
+            )
+            qi_device_matrix_free_requested_for_fallback = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
+                default=False,
+            )
+            qi_device_use_in_krylov_requested_for_fallback = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV",
+                default=False,
+            )
+            precondition_side_env_for_fallback = (
+                os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
+            )
+            fallback_env_token = xblock_device_host_fallback_env.strip().lower().replace("-", "_")
+            if (
+                bool(xblock_device_krylov_requested)
+                and bool(qi_device_preconditioner_requested_for_fallback)
+                and bool(qi_device_matrix_free_requested_for_fallback)
+                and bool(qi_device_use_in_krylov_requested_for_fallback)
+                and precondition_side_env_for_fallback != "none"
+                and fallback_env_token in {"", "auto", "default"}
+            ):
+                xblock_device_host_fallback_env = "off"
+                xblock_device_host_fallback_auto_disabled_by_qi_device = True
             xblock_device_host_fallback_decision = (
                 _rhs1_xblock_policy.rhs1_xblock_device_host_fallback_decision(
-                    env_value=os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK",
-                        "",
-                    ),
+                    env_value=xblock_device_host_fallback_env,
                     requested_krylov_method=str(xblock_krylov_requested),
                     active_size=int(active_size),
                     min_active_size_env_value=os.environ.get(
@@ -13818,6 +13924,13 @@ def solve_v3_full_system_linear_gmres(
                     "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                     "ignoring unknown SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK value; "
                     f"using auto policy reason={xblock_device_host_fallback_decision.reason}",
+                )
+            elif bool(xblock_device_host_fallback_auto_disabled_by_qi_device) and emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "automatic non-autodiff host fallback disabled by explicit matrix-free "
+                    "QI-device Krylov preconditioner request",
                 )
             xblock_jax_factors_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS", "").strip().lower()
             xblock_jax_factors_requested = _rhs1_bool_env(
@@ -14012,6 +14125,7 @@ def solve_v3_full_system_linear_gmres(
             assembled_operator_built = False
             assembled_operator_device_resident = False
             assembled_operator_metadata: dict[str, object] = {}
+            assembled_device_operator = None
             if assembled_operator_enabled:
                 assembled_operator_start_s = sparse_timer.elapsed_s()
                 try:
@@ -14328,7 +14442,6 @@ def solve_v3_full_system_linear_gmres(
                                     f"scale_range=[{xblock_col_equilibration_metadata['col_scale_min']:.3e}, "
                                     f"{xblock_col_equilibration_metadata['col_scale_max']:.3e}]",
                                 )
-                    assembled_device_operator = None
                     assembled_device_validation_errors: tuple[float, ...] = ()
                     assembled_device_error = None
                     if bool(assembled_device_enabled):
@@ -14927,6 +15040,28 @@ def solve_v3_full_system_linear_gmres(
             qi_two_level_preconditioner_probe_candidates: list[dict[str, object]] = []
             qi_two_level_preconditioner_selected_index: int | None = None
             qi_two_level_stats = {"applies": 0, "local_applies": 0}
+            qi_device_preconditioner_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
+                default=False,
+            )
+            qi_device_preconditioner_built = False
+            qi_device_preconditioner_used = False
+            qi_device_preconditioner_used_in_krylov = False
+            qi_device_preconditioner_reason: str | None = None
+            qi_device_preconditioner_rank = 0
+            qi_device_preconditioner_candidate_count = 0
+            qi_device_preconditioner_coarse_shape: tuple[int, int] = (0, 0)
+            qi_device_preconditioner_operator_on_basis_shape: tuple[int, int] = (0, 0)
+            qi_device_preconditioner_coarse_norm = 0.0
+            qi_device_preconditioner_operator_on_basis_norm = 0.0
+            qi_device_preconditioner_residual_before: float | None = None
+            qi_device_preconditioner_residual_after: float | None = None
+            qi_device_preconditioner_improvement_ratio: float | None = None
+            qi_device_preconditioner_metadata: dict[str, object] = {}
+            qi_device_preconditioner_setup_s = 0.0
+            qi_device_preconditioner_min_improvement = 0.0
+            qi_device_preconditioner_use_in_krylov = False
+            qi_device_stats = {"applies": 0}
             qi_deflated_preconditioner_enabled = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER",
                 default=False,
@@ -14943,7 +15078,12 @@ def solve_v3_full_system_linear_gmres(
             qi_deflated_preconditioner_metadata: dict[str, object] = {}
             qi_deflated_preconditioner_setup_s = 0.0
             qi_deflated_stats = {"applies": 0, "local_applies": 0}
-            if qi_coarse_seed_enabled or qi_galerkin_preconditioner_enabled or qi_two_level_preconditioner_enabled:
+            if (
+                qi_coarse_seed_enabled
+                or qi_galerkin_preconditioner_enabled
+                or qi_two_level_preconditioner_enabled
+                or qi_device_preconditioner_enabled
+            ):
                 qi_seed_max_rank = _rhs1_int_env(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK",
                     default=24,
@@ -15604,6 +15744,441 @@ def solve_v3_full_system_linear_gmres(
                         )
                 qi_two_level_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_two_level_start_s)
                 pc_factor_s += float(qi_two_level_preconditioner_setup_s)
+            if qi_device_preconditioner_enabled and bool(xblock_device_host_fallback_decision.used):
+                qi_device_preconditioner_reason = "disabled_by_device_host_fallback"
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "QI device preconditioner disabled because device-host fallback is active",
+                    )
+            elif qi_device_preconditioner_enabled and assembled_device_operator is None and not _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
+                default=False,
+            ):
+                qi_device_preconditioner_reason = "disabled_missing_assembled_device_operator"
+                qi_device_preconditioner_metadata = {
+                    "reason": qi_device_preconditioner_reason,
+                    "requires": (
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR=1 and device CSR success, "
+                        "or SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1"
+                    ),
+                    "assembled_operator_enabled": bool(assembled_operator_enabled),
+                    "assembled_operator_built": bool(assembled_operator_built),
+                    "assembled_operator_device_resident": bool(assembled_operator_device_resident),
+                    "assembled_operator_device_error": assembled_operator_metadata.get("device_error"),
+                }
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "QI device preconditioner disabled because no assembled device CSR operator is available",
+                    )
+            elif qi_device_preconditioner_enabled:
+                qi_device_start_s = sparse_timer.elapsed_s()
+                qi_device_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                qi_device_damping = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_DAMPING",
+                    default=1.0,
+                    minimum=0.0,
+                )
+                qi_device_jacobi_damping = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_DAMPING",
+                    default=0.7,
+                    minimum=0.0,
+                )
+                qi_device_jacobi_sweeps = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_SWEEPS",
+                    default=1,
+                    minimum=1,
+                )
+                qi_device_jacobi_floor = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_DIAGONAL_FLOOR",
+                    default=1.0e-14,
+                    minimum=0.0,
+                )
+                qi_device_jacobi_require_all_diagonal = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_REQUIRE_ALL_DIAGONAL",
+                    default=True,
+                )
+                qi_device_matrix_free_enabled = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
+                    default=False,
+                )
+                qi_device_local_smoother_kind_default = "none" if assembled_device_operator is None else "auto"
+                qi_device_local_smoother_kind = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER",
+                        qi_device_local_smoother_kind_default,
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_matrix_free_smoother_sweeps = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS",
+                    default=1,
+                    minimum=1,
+                )
+                qi_device_matrix_free_smoother_damping = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_DAMPING",
+                    default=1.0,
+                    minimum=0.0,
+                )
+                qi_device_matrix_free_smoother_step_policy = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY",
+                        "residual_minimizing",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_matrix_free_smoother_alpha_clip = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_ALPHA_CLIP",
+                    default=10.0,
+                    minimum=0.0,
+                )
+                qi_device_matrix_free_block_smoother_max_groups = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS",
+                    default=32,
+                    minimum=1,
+                )
+                qi_device_matrix_free_block_smoother_include_tail = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_INCLUDE_TAIL",
+                    default=True,
+                )
+                qi_device_matrix_free_block_smoother_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                qi_device_matrix_free_block_smoother_grouping = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING",
+                        "contiguous",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_jacobi_step_policy = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_STEP_POLICY",
+                        "stationary",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_coarse_solver = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COARSE_SOLVER",
+                        "action_lstsq",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_preconditioner_min_improvement = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT",
+                    default=0.05,
+                    minimum=0.0,
+                )
+                qi_device_preconditioner_cycles = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES",
+                    default=1,
+                    minimum=1,
+                )
+                qi_device_preconditioner_minres_step = _rhs1_qi_device_probe_uses_minres_step()
+                qi_device_preconditioner_alpha_clip = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ALPHA_CLIP",
+                    default=10.0,
+                    minimum=0.0,
+                )
+                qi_device_preconditioner_use_in_krylov = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV",
+                    default=assembled_device_operator is not None,
+                )
+                qi_device_use_in_krylov_requested = bool(qi_device_preconditioner_use_in_krylov)
+                if precondition_side == "none":
+                    qi_device_preconditioner_use_in_krylov = False
+                qi_device_residual_enrichment = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT",
+                    default=bool(qi_device_matrix_free_enabled),
+                )
+                qi_device_residual_enrichment_depth = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_DEPTH",
+                    default=2 if bool(qi_device_residual_enrichment) else 0,
+                    minimum=0,
+                )
+                qi_device_residual_enrichment_include_residual = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_INCLUDE_RESIDUAL",
+                    default=True,
+                )
+                qi_device_recycle_enrichment = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT",
+                    default=False,
+                )
+                qi_device_recycle_cycles = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_CYCLES",
+                    default=1 if bool(qi_device_recycle_enrichment) else 0,
+                    minimum=0,
+                )
+                qi_device_max_rank_env = os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK",
+                    "",
+                ).strip()
+                qi_device_max_rank: int | None
+                if qi_device_max_rank_env:
+                    try:
+                        qi_device_max_rank = max(1, int(qi_device_max_rank_env))
+                    except ValueError:
+                        qi_device_max_rank = max(
+                            1,
+                            int(qi_seed_max_rank) + int(qi_device_residual_enrichment_depth) + 1,
+                        )
+                elif bool(qi_device_residual_enrichment):
+                    qi_device_max_rank = max(
+                        1,
+                        int(qi_seed_max_rank) + int(qi_device_residual_enrichment_depth) + 1,
+                    )
+                else:
+                    qi_device_max_rank = None
+                try:
+                    if assembled_device_operator is None and not bool(qi_device_matrix_free_enabled):
+                        raise RuntimeError("missing assembled device CSR operator and matrix-free fallback disabled")
+                    qi_device_preconditioner_basis_reused_from_seed = qi_seed_basis_for_galerkin is not None
+                    if qi_seed_basis_for_galerkin is None:
+                        qi_seed_basis_for_galerkin = _rhs1_xblock_qi_coarse_basis(
+                            op=op,
+                            active_dof=bool(xblock_use_active_dof),
+                            linear_size=int(xblock_linear_size),
+                            max_rank=int(qi_seed_max_rank),
+                            rank_rtol=float(qi_seed_rank_rtol),
+                            include_angular=bool(qi_seed_include_angular),
+                            include_blocks=bool(qi_seed_include_blocks),
+                            basis_kind=qi_seed_basis_kind,
+                            max_candidates=int(qi_seed_max_candidates),
+                            max_angular_mode=int(qi_seed_max_angular_mode),
+                            include_radial=bool(qi_seed_include_radial),
+                            include_radial_angular=bool(qi_seed_include_radial_angular),
+                            include_constraint_moments=bool(qi_seed_include_constraint_moments),
+                            include_schur=bool(qi_seed_include_schur),
+                        )
+                    qi_current = (
+                        jnp.zeros_like(xblock_rhs)
+                        if x0_full is None
+                        else jnp.asarray(x0_full, dtype=jnp.float64)
+                    )
+                    qi_device_residual_seed = None
+                    if bool(qi_device_residual_enrichment):
+                        qi_device_residual_seed = xblock_rhs - _mv_true_no_count(qi_current)
+                    qi_operator_for_setup = (
+                        assembled_device_operator if assembled_device_operator is not None else _mv_true_no_count
+                    )
+                    if assembled_device_operator is None and emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "QI device preconditioner using matrix-free coarse-only operator-on-basis fallback",
+                        )
+                    if bool(qi_device_residual_enrichment) and emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "QI device preconditioner residual enrichment "
+                            f"(depth={int(qi_device_residual_enrichment_depth)} "
+                            f"max_rank={qi_device_max_rank})",
+                        )
+                    qi_device_state = setup_rhs1_qi_device_preconditioner(
+                        operator=qi_operator_for_setup,
+                        coarse_basis=qi_seed_basis_for_galerkin,
+                        residual_seed=qi_device_residual_seed,
+                        total_size=int(xblock_linear_size),
+                        dtype=jnp.float64,
+                        operator_metadata=assembled_operator_metadata,
+                        geometry_metadata={
+                            "rhs_mode": int(op.rhs_mode),
+                            "n_theta": int(getattr(op, "n_theta", 1)),
+                            "n_zeta": int(getattr(op, "n_zeta", 1)),
+                            "n_x": int(getattr(op, "n_x", 1)),
+                            "n_species": int(getattr(op, "n_species", 1)),
+                            "active_dof": bool(xblock_use_active_dof),
+                            **_rhs1_xblock_qi_block_geometry_metadata(
+                                op=op,
+                                active_dof=bool(xblock_use_active_dof),
+                                linear_size=int(xblock_linear_size),
+                            ),
+                        },
+                        config=RHS1QIDevicePreconditionerConfig(
+                            regularization_rcond=float(qi_device_rcond),
+                            damping=float(qi_device_damping),
+                            coarse_solver=qi_device_coarse_solver,
+                            jacobi_damping=float(qi_device_jacobi_damping),
+                            jacobi_sweeps=int(qi_device_jacobi_sweeps),
+                            jacobi_step_policy=qi_device_jacobi_step_policy,
+                            jacobi_diagonal_floor=float(qi_device_jacobi_floor),
+                            jacobi_require_all_diagonal=bool(qi_device_jacobi_require_all_diagonal),
+                            local_smoother_kind=qi_device_local_smoother_kind,
+                            matrix_free_smoother_sweeps=int(qi_device_matrix_free_smoother_sweeps),
+                            matrix_free_smoother_damping=float(qi_device_matrix_free_smoother_damping),
+                            matrix_free_smoother_step_policy=qi_device_matrix_free_smoother_step_policy,
+                            matrix_free_smoother_alpha_clip=float(qi_device_matrix_free_smoother_alpha_clip),
+                            matrix_free_block_smoother_max_groups=int(
+                                qi_device_matrix_free_block_smoother_max_groups
+                            ),
+                            matrix_free_block_smoother_include_tail=bool(
+                                qi_device_matrix_free_block_smoother_include_tail
+                            ),
+                            matrix_free_block_smoother_rcond=float(qi_device_matrix_free_block_smoother_rcond),
+                            matrix_free_block_smoother_grouping=qi_device_matrix_free_block_smoother_grouping,
+                            max_rank=qi_device_max_rank,
+                            residual_enrichment=bool(qi_device_residual_enrichment),
+                            residual_enrichment_depth=int(qi_device_residual_enrichment_depth),
+                            residual_enrichment_include_residual=bool(
+                                qi_device_residual_enrichment_include_residual
+                            ),
+                            recycle_enrichment=bool(qi_device_recycle_enrichment),
+                            recycle_enrichment_cycles=int(qi_device_recycle_cycles),
+                        ),
+                    )
+                    qi_device_preconditioner_built = True
+                    qi_device_preconditioner_rank = int(qi_device_state.metadata.rank)
+                    qi_device_preconditioner_candidate_count = int(qi_device_state.basis.metadata.candidate_count)
+                    qi_device_preconditioner_coarse_shape = tuple(
+                        int(value) for value in qi_device_state.metadata.coarse_operator_shape
+                    )
+                    qi_device_preconditioner_operator_on_basis_shape = tuple(
+                        int(value) for value in qi_device_state.metadata.operator_on_basis_shape
+                    )
+                    qi_device_preconditioner_coarse_norm = float(qi_device_state.metadata.coarse_operator_norm)
+                    qi_device_preconditioner_operator_on_basis_norm = float(
+                        qi_device_state.metadata.operator_on_basis_norm
+                    )
+                    x_device_candidate, qi_device_probe = probe_rhs1_qi_device_preconditioner(
+                        rhs=xblock_rhs,
+                        x0=qi_current,
+                        state=qi_device_state,
+                        operator=_mv_true_no_count,
+                        min_relative_improvement=float(qi_device_preconditioner_min_improvement),
+                        max_cycles=int(qi_device_preconditioner_cycles),
+                        residual_minimizing_step=bool(qi_device_preconditioner_minres_step),
+                        alpha_clip=float(qi_device_preconditioner_alpha_clip),
+                    )
+                    qi_device_preconditioner_residual_before = float(qi_device_probe.residual_before_norm)
+                    qi_device_preconditioner_residual_after = float(qi_device_probe.residual_after_norm)
+                    qi_device_preconditioner_improvement_ratio = (
+                        None
+                        if qi_device_probe.improvement_ratio is None
+                        else float(qi_device_probe.improvement_ratio)
+                    )
+                    qi_device_preconditioner_reason = str(qi_device_probe.reason)
+                    qi_device_preconditioner_probe_cycles = int(
+                        getattr(qi_device_probe, "cycles", 1 if bool(qi_device_probe.accepted) else 0)
+                    )
+                    qi_device_preconditioner_residual_history = tuple(
+                        float(value)
+                        for value in getattr(
+                            qi_device_probe,
+                            "residual_history",
+                            (
+                                float(qi_device_probe.residual_before_norm),
+                                float(qi_device_probe.residual_after_norm),
+                            ),
+                        )
+                    )
+                    qi_device_preconditioner_step_history = tuple(
+                        float(value) for value in getattr(qi_device_probe, "step_history", ())
+                    )
+                    qi_device_preconditioner_metadata = {
+                        **qi_device_probe.metadata.to_dict(),
+                        "basis_reused_from_seed": bool(qi_device_preconditioner_basis_reused_from_seed),
+                        "min_improvement": float(qi_device_preconditioner_min_improvement),
+                        "cycles_requested": int(qi_device_preconditioner_cycles),
+                        "cycles": int(qi_device_preconditioner_probe_cycles),
+                        "residual_history": qi_device_preconditioner_residual_history,
+                        "step_policy": "residual_minimizing"
+                        if bool(qi_device_preconditioner_minres_step)
+                        else "fixed",
+                        "alpha_clip": float(qi_device_preconditioner_alpha_clip),
+                        "step_history": qi_device_preconditioner_step_history,
+                        "use_in_krylov": bool(qi_device_preconditioner_use_in_krylov),
+                        "use_in_krylov_requested": bool(qi_device_use_in_krylov_requested),
+                        "precondition_side": precondition_side,
+                        "use_in_krylov_blocked_by_precondition_side_none": bool(
+                            qi_device_use_in_krylov_requested and precondition_side == "none"
+                        ),
+                        "matrix_free_enabled": bool(qi_device_matrix_free_enabled),
+                        "local_smoother_kind_requested": qi_device_local_smoother_kind,
+                        "local_smoother_metadata": (
+                            qi_device_state.local_smoother.metadata.to_dict()
+                            if qi_device_state.local_smoother is not None
+                            and hasattr(qi_device_state.local_smoother.metadata, "to_dict")
+                            else None
+                        ),
+                        "residual_enrichment_requested": bool(qi_device_residual_enrichment),
+                        "residual_enrichment_depth_requested": int(qi_device_residual_enrichment_depth),
+                        "residual_enrichment_include_residual": bool(
+                            qi_device_residual_enrichment_include_residual
+                        ),
+                        "recycle_enrichment_requested": bool(qi_device_recycle_enrichment),
+                        "recycle_enrichment_cycles_requested": int(qi_device_recycle_cycles),
+                        "max_rank_requested": None if qi_device_max_rank is None else int(qi_device_max_rank),
+                    }
+
+                    def _precond_xblock_qi_device(v: jnp.ndarray) -> jnp.ndarray:
+                        qi_device_stats["applies"] += 1
+                        return jnp.asarray(
+                            qi_device_state.apply(jnp.asarray(v, dtype=jnp.float64)),
+                            dtype=jnp.float64,
+                        )
+
+                    if bool(qi_device_probe.accepted):
+                        x0_full = jnp.asarray(x_device_candidate, dtype=jnp.float64)
+                        qi_device_preconditioner_used = True
+                        if bool(qi_device_preconditioner_use_in_krylov):
+                            precond_xblock_krylov = _precond_xblock_qi_device
+                            qi_device_preconditioner_used_in_krylov = True
+                        if emit is not None:
+                            emit(
+                                0,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                "QI device preconditioner accepted "
+                                f"residual {qi_device_preconditioner_residual_before:.6e} "
+                                f"-> {qi_device_preconditioner_residual_after:.6e} "
+                                f"(rank={int(qi_device_preconditioner_rank)} "
+                                f"cycles={int(qi_device_preconditioner_probe_cycles)} "
+                                f"ratio={float(qi_device_preconditioner_improvement_ratio):.6e})",
+                            )
+                    elif emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "QI device preconditioner rejected "
+                            f"reason={qi_device_preconditioner_reason} "
+                            f"residual {float(qi_device_preconditioner_residual_before):.6e} "
+                            f"-> {float(qi_device_preconditioner_residual_after):.6e} "
+                            f"(rank={int(qi_device_preconditioner_rank)} "
+                            f"cycles={int(qi_device_preconditioner_probe_cycles)} "
+                            f"ratio={float(qi_device_preconditioner_improvement_ratio) if qi_device_preconditioner_improvement_ratio is not None else float('nan'):.6e} "
+                            f"step_policy={qi_device_preconditioner_metadata.get('step_policy', 'fixed')})",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    qi_device_preconditioner_reason = f"{type(exc).__name__}: {exc}"
+                    qi_device_preconditioner_metadata = {"error": qi_device_preconditioner_reason}
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"QI device preconditioner disabled after build failure ({type(exc).__name__}: {exc})",
+                        )
+                qi_device_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_device_start_s)
+                pc_factor_s += float(qi_device_preconditioner_setup_s)
             if qi_deflated_preconditioner_enabled and bool(xblock_device_host_fallback_decision.used):
                 qi_deflated_preconditioner_reason = "disabled_by_device_host_fallback"
                 if emit is not None:
@@ -16966,6 +17541,9 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_device_host_fallback_ignored_env": bool(
                         xblock_device_host_fallback_decision.ignored_env
                     ),
+                    "xblock_device_host_fallback_auto_disabled_by_qi_device": bool(
+                        xblock_device_host_fallback_auto_disabled_by_qi_device
+                    ),
                     "xblock_device_host_fallback_non_autodiff": bool(
                         xblock_device_host_fallback_decision.non_autodiff
                     ),
@@ -17354,6 +17932,47 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_qi_two_level_preconditioner_local_applies": int(
                         qi_two_level_stats.get("local_applies", 0)
                     ),
+                    "xblock_qi_device_preconditioner_enabled": bool(qi_device_preconditioner_enabled),
+                    "xblock_qi_device_preconditioner_built": bool(qi_device_preconditioner_built),
+                    "xblock_qi_device_preconditioner_used": bool(qi_device_preconditioner_used),
+                    "xblock_qi_device_preconditioner_used_in_krylov": bool(
+                        qi_device_preconditioner_used_in_krylov
+                    ),
+                    "xblock_qi_device_preconditioner_reason": qi_device_preconditioner_reason,
+                    "xblock_qi_device_preconditioner_rank": int(qi_device_preconditioner_rank),
+                    "xblock_qi_device_preconditioner_candidate_count": int(
+                        qi_device_preconditioner_candidate_count
+                    ),
+                    "xblock_qi_device_preconditioner_coarse_operator_shape": (
+                        qi_device_preconditioner_coarse_shape
+                    ),
+                    "xblock_qi_device_preconditioner_operator_on_basis_shape": (
+                        qi_device_preconditioner_operator_on_basis_shape
+                    ),
+                    "xblock_qi_device_preconditioner_coarse_operator_norm": float(
+                        qi_device_preconditioner_coarse_norm
+                    ),
+                    "xblock_qi_device_preconditioner_operator_on_basis_norm": float(
+                        qi_device_preconditioner_operator_on_basis_norm
+                    ),
+                    "xblock_qi_device_preconditioner_residual_before": (
+                        qi_device_preconditioner_residual_before
+                    ),
+                    "xblock_qi_device_preconditioner_residual_after": (
+                        qi_device_preconditioner_residual_after
+                    ),
+                    "xblock_qi_device_preconditioner_improvement_ratio": (
+                        qi_device_preconditioner_improvement_ratio
+                    ),
+                    "xblock_qi_device_preconditioner_metadata": qi_device_preconditioner_metadata,
+                    "xblock_qi_device_preconditioner_setup_s": float(qi_device_preconditioner_setup_s),
+                    "xblock_qi_device_preconditioner_min_improvement": float(
+                        qi_device_preconditioner_min_improvement
+                    ),
+                    "xblock_qi_device_preconditioner_use_in_krylov": bool(
+                        qi_device_preconditioner_use_in_krylov
+                    ),
+                    "xblock_qi_device_preconditioner_applies": int(qi_device_stats.get("applies", 0)),
                     "xblock_qi_deflated_preconditioner_enabled": bool(qi_deflated_preconditioner_enabled),
                     "xblock_qi_deflated_preconditioner_built": bool(qi_deflated_preconditioner_built),
                     "xblock_qi_deflated_preconditioner_used": bool(qi_deflated_preconditioner_used),
@@ -21360,6 +21979,379 @@ def solve_v3_full_system_linear_gmres(
             and (not bool(op.include_phi1))
             and float(res_reduced.residual_norm) > float(fp_strong_abs)
         )
+
+        def _attempt_matrixfree_qi_device_seed(
+            current_result: GMRESSolveResult,
+            *,
+            hook: str,
+        ) -> GMRESSolveResult:
+            if not (
+                _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
+                    default=False,
+                )
+                and _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
+                    default=False,
+                )
+            ):
+                return current_result
+            if float(current_result.residual_norm) <= float(target_reduced):
+                return current_result
+
+            qi_device_start_s = t.elapsed_s()
+            qi_device_reason = "not_attempted"
+            qi_device_metadata: dict[str, object] = {
+                "hook": hook,
+                "operator_source": "matrix_free",
+                "active_dof": True,
+                "active_size": int(active_size),
+            }
+            try:
+                qi_seed_max_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK",
+                    default=24,
+                    minimum=1,
+                )
+                qi_seed_max_candidates = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES",
+                    default=96,
+                    minimum=1,
+                )
+                qi_seed_max_angular_mode = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_ANGULAR_MODE",
+                    default=2,
+                    minimum=0,
+                )
+                qi_seed_rank_rtol = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RANK_RTOL",
+                    default=1.0e-10,
+                    minimum=0.0,
+                )
+                qi_device_min_improvement = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT",
+                    default=0.05,
+                    minimum=0.0,
+                )
+                qi_device_cycles = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES",
+                    default=1,
+                    minimum=1,
+                )
+                qi_device_minres_step = _rhs1_qi_device_probe_uses_minres_step()
+                qi_device_alpha_clip = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ALPHA_CLIP",
+                    default=10.0,
+                    minimum=0.0,
+                )
+                qi_device_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                qi_device_damping = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_DAMPING",
+                    default=1.0,
+                    minimum=0.0,
+                )
+                qi_device_local_smoother_kind = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER",
+                        "none",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_matrix_free_smoother_sweeps = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS",
+                    default=1,
+                    minimum=1,
+                )
+                qi_device_matrix_free_smoother_damping = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_DAMPING",
+                    default=1.0,
+                    minimum=0.0,
+                )
+                qi_device_matrix_free_smoother_step_policy = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY",
+                        "residual_minimizing",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_matrix_free_smoother_alpha_clip = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_ALPHA_CLIP",
+                    default=10.0,
+                    minimum=0.0,
+                )
+                qi_device_matrix_free_block_smoother_max_groups = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS",
+                    default=32,
+                    minimum=1,
+                )
+                qi_device_matrix_free_block_smoother_include_tail = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_INCLUDE_TAIL",
+                    default=True,
+                )
+                qi_device_matrix_free_block_smoother_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                qi_device_matrix_free_block_smoother_grouping = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING",
+                        "contiguous",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_depth = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_DEPTH",
+                    default=2,
+                    minimum=0,
+                )
+                qi_device_include_residual = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_INCLUDE_RESIDUAL",
+                    default=True,
+                )
+                qi_device_recycle_enrichment = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT",
+                    default=False,
+                )
+                qi_device_recycle_cycles = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_CYCLES",
+                    default=1 if bool(qi_device_recycle_enrichment) else 0,
+                    minimum=0,
+                )
+                qi_device_max_rank_env = os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK",
+                    "",
+                ).strip()
+                if qi_device_max_rank_env:
+                    try:
+                        qi_device_max_rank = max(1, int(qi_device_max_rank_env))
+                    except ValueError:
+                        qi_device_max_rank = max(1, int(qi_seed_max_rank) + int(qi_device_depth) + 1)
+                else:
+                    qi_device_max_rank = max(1, int(qi_seed_max_rank) + int(qi_device_depth) + 1)
+                qi_basis_kind = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS",
+                        "enriched",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_basis = _rhs1_xblock_qi_coarse_basis(
+                    op=op,
+                    active_dof=True,
+                    linear_size=int(active_size),
+                    max_rank=int(qi_seed_max_rank),
+                    rank_rtol=float(qi_seed_rank_rtol),
+                    include_angular=True,
+                    include_blocks=True,
+                    basis_kind=qi_basis_kind,
+                    max_candidates=int(qi_seed_max_candidates),
+                    max_angular_mode=int(qi_seed_max_angular_mode),
+                    include_radial=True,
+                    include_radial_angular=True,
+                    include_constraint_moments=True,
+                    include_schur=True,
+                )
+                residual_seed = rhs_reduced - mv_reduced(jnp.asarray(current_result.x, dtype=jnp.float64))
+                qi_device_state = setup_rhs1_qi_device_preconditioner(
+                    operator=mv_reduced,
+                    coarse_basis=qi_basis,
+                    residual_seed=residual_seed,
+                    total_size=int(active_size),
+                    dtype=jnp.float64,
+                    geometry_metadata={
+                        "rhs_mode": int(op.rhs_mode),
+                        "n_theta": int(getattr(op, "n_theta", 1)),
+                        "n_zeta": int(getattr(op, "n_zeta", 1)),
+                        "n_x": int(getattr(op, "n_x", 1)),
+                        "n_species": int(getattr(op, "n_species", 1)),
+                        "active_dof": True,
+                        **_rhs1_xblock_qi_block_geometry_metadata(
+                            op=op,
+                            active_dof=True,
+                            linear_size=int(active_size),
+                        ),
+                    },
+                    config=RHS1QIDevicePreconditionerConfig(
+                        regularization_rcond=float(qi_device_rcond),
+                        damping=float(qi_device_damping),
+                        coarse_solver="action_lstsq",
+                        local_smoother_kind=qi_device_local_smoother_kind,
+                        matrix_free_smoother_sweeps=int(qi_device_matrix_free_smoother_sweeps),
+                        matrix_free_smoother_damping=float(qi_device_matrix_free_smoother_damping),
+                        matrix_free_smoother_step_policy=qi_device_matrix_free_smoother_step_policy,
+                        matrix_free_smoother_alpha_clip=float(qi_device_matrix_free_smoother_alpha_clip),
+                        matrix_free_block_smoother_max_groups=int(
+                            qi_device_matrix_free_block_smoother_max_groups
+                        ),
+                        matrix_free_block_smoother_include_tail=bool(
+                            qi_device_matrix_free_block_smoother_include_tail
+                        ),
+                        matrix_free_block_smoother_rcond=float(qi_device_matrix_free_block_smoother_rcond),
+                        matrix_free_block_smoother_grouping=qi_device_matrix_free_block_smoother_grouping,
+                        max_rank=int(qi_device_max_rank),
+                        residual_enrichment=True,
+                        residual_enrichment_depth=int(qi_device_depth),
+                        residual_enrichment_include_residual=bool(qi_device_include_residual),
+                        recycle_enrichment=bool(qi_device_recycle_enrichment),
+                        recycle_enrichment_cycles=int(qi_device_recycle_cycles),
+                    ),
+                )
+                x_qi_device, qi_device_probe = probe_rhs1_qi_device_preconditioner(
+                    rhs=rhs_reduced,
+                    x0=current_result.x,
+                    state=qi_device_state,
+                    operator=mv_reduced,
+                    min_relative_improvement=float(qi_device_min_improvement),
+                    max_cycles=int(qi_device_cycles),
+                    residual_minimizing_step=bool(qi_device_minres_step),
+                    alpha_clip=float(qi_device_alpha_clip),
+                )
+                qi_device_reason = str(qi_device_probe.reason)
+                qi_device_probe_cycles = int(
+                    getattr(qi_device_probe, "cycles", 1 if bool(qi_device_probe.accepted) else 0)
+                )
+                qi_device_probe_residual_history = tuple(
+                    float(value)
+                    for value in getattr(
+                        qi_device_probe,
+                        "residual_history",
+                        (
+                            float(qi_device_probe.residual_before_norm),
+                            float(qi_device_probe.residual_after_norm),
+                        ),
+                    )
+                )
+                qi_device_probe_step_history = tuple(
+                    float(value) for value in getattr(qi_device_probe, "step_history", ())
+                )
+                qi_device_metadata = {
+                    **qi_device_probe.metadata.to_dict(),
+                    "hook": hook,
+                    "min_improvement": float(qi_device_min_improvement),
+                    "cycles_requested": int(qi_device_cycles),
+                    "cycles": int(qi_device_probe_cycles),
+                    "residual_history": qi_device_probe_residual_history,
+                    "step_policy": "residual_minimizing" if bool(qi_device_minres_step) else "fixed",
+                    "alpha_clip": float(qi_device_alpha_clip),
+                    "step_history": qi_device_probe_step_history,
+                    "use_in_krylov": False,
+                    "matrix_free_enabled": True,
+                    "precondition_side": "seed_only",
+                    "local_smoother_kind_requested": qi_device_local_smoother_kind,
+                    "local_smoother_metadata": (
+                        qi_device_state.local_smoother.metadata.to_dict()
+                        if qi_device_state.local_smoother is not None
+                        and hasattr(qi_device_state.local_smoother.metadata, "to_dict")
+                        else None
+                    ),
+                    "residual_enrichment_requested": True,
+                    "residual_enrichment_depth_requested": int(qi_device_depth),
+                    "recycle_enrichment_requested": bool(qi_device_recycle_enrichment),
+                    "recycle_enrichment_cycles_requested": int(qi_device_recycle_cycles),
+                    "max_rank_requested": int(qi_device_max_rank),
+                    "residual_before_norm": float(qi_device_probe.residual_before_norm),
+                    "residual_after_norm": float(qi_device_probe.residual_after_norm),
+                    "improvement_ratio": (
+                        None
+                        if qi_device_probe.improvement_ratio is None
+                        else float(qi_device_probe.improvement_ratio)
+                    ),
+                    "accepted": bool(qi_device_probe.accepted),
+                }
+                if bool(qi_device_probe.accepted):
+                    current_result = GMRESSolveResult(
+                        x=jnp.asarray(x_qi_device, dtype=jnp.float64),
+                        residual_norm=jnp.asarray(qi_device_probe.residual_after_norm, dtype=jnp.float64),
+                    )
+                    if emit is not None:
+                        emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "QI device preconditioner accepted "
+                            f"residual {float(qi_device_probe.residual_before_norm):.6e} "
+                            f"-> {float(qi_device_probe.residual_after_norm):.6e} "
+                            f"(rank={int(qi_device_probe.metadata.rank)} "
+                            f"cycles={int(qi_device_probe_cycles)} "
+                            f"ratio={float(qi_device_probe.improvement_ratio):.6e} seed_only=1)",
+                        )
+                elif emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "QI device preconditioner rejected "
+                        f"reason={qi_device_reason} "
+                        f"residual {float(qi_device_probe.residual_before_norm):.6e} "
+                        f"-> {float(qi_device_probe.residual_after_norm):.6e} "
+                        f"(rank={int(qi_device_probe.metadata.rank)} "
+                        f"cycles={int(qi_device_probe_cycles)} "
+                        f"ratio={float(qi_device_probe.improvement_ratio) if qi_device_probe.improvement_ratio is not None else float('nan'):.6e} "
+                        f"step_policy={qi_device_metadata.get('step_policy', 'fixed')} seed_only=1)",
+                    )
+            except Exception as exc:  # noqa: BLE001
+                qi_device_reason = f"{type(exc).__name__}: {exc}"
+                qi_device_metadata = {"hook": hook, "error": qi_device_reason}
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        f"QI device preconditioner disabled after build failure ({type(exc).__name__}: {exc})",
+                    )
+            qi_device_setup_s = float(t.elapsed_s() - qi_device_start_s)
+            qi_device_metadata["setup_s"] = qi_device_setup_s
+            rhsmode1_general_metadata.update(
+                {
+                    "xblock_qi_device_preconditioner_enabled": True,
+                    "xblock_qi_device_preconditioner_built": "error" not in qi_device_metadata,
+                    "xblock_qi_device_preconditioner_used": bool(qi_device_metadata.get("accepted", False)),
+                    "xblock_qi_device_preconditioner_used_in_krylov": False,
+                    "xblock_qi_device_preconditioner_reason": qi_device_reason,
+                    "xblock_qi_device_preconditioner_rank": int(qi_device_metadata.get("rank", 0) or 0),
+                    "xblock_qi_device_preconditioner_candidate_count": int(
+                        qi_device_metadata.get("residual_enrichment_candidate_count", 0) or 0
+                    ),
+                    "xblock_qi_device_preconditioner_residual_before": qi_device_metadata.get(
+                        "residual_before_norm"
+                    ),
+                    "xblock_qi_device_preconditioner_residual_after": qi_device_metadata.get(
+                        "residual_after_norm"
+                    ),
+                    "xblock_qi_device_preconditioner_improvement_ratio": qi_device_metadata.get(
+                        "improvement_ratio"
+                    ),
+                    "xblock_qi_device_preconditioner_metadata": qi_device_metadata,
+                    "xblock_qi_device_preconditioner_setup_s": qi_device_setup_s,
+                    "xblock_qi_device_preconditioner_min_improvement": (
+                        qi_device_metadata.get("min_improvement")
+                    ),
+                    "xblock_qi_device_preconditioner_use_in_krylov": False,
+                }
+            )
+            return current_result
+
+        qi_device_early_enabled = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_EARLY",
+            default=False,
+        )
+        qi_device_skip_strong = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG",
+            default=False,
+        )
+        if bool(qi_device_early_enabled or qi_device_skip_strong):
+            res_reduced = _attempt_matrixfree_qi_device_seed(res_reduced, hook="early_active_dof")
+
         if (
             rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
             and preconditioner_reduced is not None
@@ -21667,6 +22659,16 @@ def solve_v3_full_system_linear_gmres(
                     )
                 strong_precond_kind = None
                 strong_precond_trigger = False
+
+        if bool(qi_device_skip_strong) and strong_precond_kind is not None:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+                    "for QI device preconditioner experiment",
+                )
+            strong_precond_kind = None
+            strong_precond_trigger = False
 
         if (
             strong_precond_kind is not None
@@ -22038,6 +23040,364 @@ def solve_v3_full_system_linear_gmres(
         explicit_fp_xblock_seed_used = False
         explicit_fp_xblock_seed_residual = float("inf")
         explicit_fp_xblock_seed_improvement_ratio = 1.0
+        pre_sparse_qi_device_enabled = bool(
+            int(op.rhs_mode) == 1
+            and _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
+                default=False,
+            )
+            and _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
+                default=False,
+            )
+        )
+        if (
+            pre_sparse_qi_device_enabled
+            and sparse_enabled
+            and float(res_reduced.residual_norm) > target_reduced
+            and not bool(rhsmode1_general_metadata.get("xblock_qi_device_preconditioner_built", False))
+        ):
+            qi_device_start_s = t.elapsed_s()
+            qi_device_reason = "not_attempted"
+            qi_device_metadata: dict[str, object] = {
+                "hook": "pre_sparse_active_dof",
+                "operator_source": "matrix_free",
+                "active_dof": True,
+                "active_size": int(active_size),
+            }
+            try:
+                qi_seed_max_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK",
+                    default=24,
+                    minimum=1,
+                )
+                qi_seed_max_candidates = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES",
+                    default=96,
+                    minimum=1,
+                )
+                qi_seed_max_angular_mode = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_ANGULAR_MODE",
+                    default=2,
+                    minimum=0,
+                )
+                qi_seed_rank_rtol = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RANK_RTOL",
+                    default=1.0e-10,
+                    minimum=0.0,
+                )
+                qi_device_min_improvement = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT",
+                    default=0.05,
+                    minimum=0.0,
+                )
+                qi_device_cycles = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES",
+                    default=1,
+                    minimum=1,
+                )
+                qi_device_minres_step = _rhs1_qi_device_probe_uses_minres_step()
+                qi_device_alpha_clip = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ALPHA_CLIP",
+                    default=10.0,
+                    minimum=0.0,
+                )
+                qi_device_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                qi_device_damping = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_DAMPING",
+                    default=1.0,
+                    minimum=0.0,
+                )
+                qi_device_local_smoother_kind = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER",
+                        "none",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_matrix_free_smoother_sweeps = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS",
+                    default=1,
+                    minimum=1,
+                )
+                qi_device_matrix_free_smoother_damping = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_DAMPING",
+                    default=1.0,
+                    minimum=0.0,
+                )
+                qi_device_matrix_free_smoother_step_policy = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY",
+                        "residual_minimizing",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_matrix_free_smoother_alpha_clip = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_ALPHA_CLIP",
+                    default=10.0,
+                    minimum=0.0,
+                )
+                qi_device_matrix_free_block_smoother_max_groups = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS",
+                    default=32,
+                    minimum=1,
+                )
+                qi_device_matrix_free_block_smoother_include_tail = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_INCLUDE_TAIL",
+                    default=True,
+                )
+                qi_device_matrix_free_block_smoother_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_RCOND",
+                    default=1.0e-12,
+                    minimum=0.0,
+                )
+                qi_device_matrix_free_block_smoother_grouping = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING",
+                        "contiguous",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_device_depth = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_DEPTH",
+                    default=2,
+                    minimum=0,
+                )
+                qi_device_include_residual = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_INCLUDE_RESIDUAL",
+                    default=True,
+                )
+                qi_device_recycle_enrichment = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT",
+                    default=False,
+                )
+                qi_device_recycle_cycles = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_CYCLES",
+                    default=1 if bool(qi_device_recycle_enrichment) else 0,
+                    minimum=0,
+                )
+                qi_device_max_rank_env = os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK",
+                    "",
+                ).strip()
+                if qi_device_max_rank_env:
+                    try:
+                        qi_device_max_rank = max(1, int(qi_device_max_rank_env))
+                    except ValueError:
+                        qi_device_max_rank = max(1, int(qi_seed_max_rank) + int(qi_device_depth) + 1)
+                else:
+                    qi_device_max_rank = max(1, int(qi_seed_max_rank) + int(qi_device_depth) + 1)
+                qi_basis_kind = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS",
+                        "enriched",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                qi_basis = _rhs1_xblock_qi_coarse_basis(
+                    op=op,
+                    active_dof=True,
+                    linear_size=int(active_size),
+                    max_rank=int(qi_seed_max_rank),
+                    rank_rtol=float(qi_seed_rank_rtol),
+                    include_angular=True,
+                    include_blocks=True,
+                    basis_kind=qi_basis_kind,
+                    max_candidates=int(qi_seed_max_candidates),
+                    max_angular_mode=int(qi_seed_max_angular_mode),
+                    include_radial=True,
+                    include_radial_angular=True,
+                    include_constraint_moments=True,
+                    include_schur=True,
+                )
+                residual_seed = rhs_reduced - mv_reduced(jnp.asarray(res_reduced.x, dtype=jnp.float64))
+                qi_device_state = setup_rhs1_qi_device_preconditioner(
+                    operator=mv_reduced,
+                    coarse_basis=qi_basis,
+                    residual_seed=residual_seed,
+                    total_size=int(active_size),
+                    dtype=jnp.float64,
+                    geometry_metadata={
+                        "rhs_mode": int(op.rhs_mode),
+                        "n_theta": int(getattr(op, "n_theta", 1)),
+                        "n_zeta": int(getattr(op, "n_zeta", 1)),
+                        "n_x": int(getattr(op, "n_x", 1)),
+                        "n_species": int(getattr(op, "n_species", 1)),
+                        "active_dof": True,
+                        **_rhs1_xblock_qi_block_geometry_metadata(
+                            op=op,
+                            active_dof=True,
+                            linear_size=int(active_size),
+                        ),
+                    },
+                    config=RHS1QIDevicePreconditionerConfig(
+                        regularization_rcond=float(qi_device_rcond),
+                        damping=float(qi_device_damping),
+                        coarse_solver="action_lstsq",
+                        local_smoother_kind=qi_device_local_smoother_kind,
+                        matrix_free_smoother_sweeps=int(qi_device_matrix_free_smoother_sweeps),
+                        matrix_free_smoother_damping=float(qi_device_matrix_free_smoother_damping),
+                        matrix_free_smoother_step_policy=qi_device_matrix_free_smoother_step_policy,
+                        matrix_free_smoother_alpha_clip=float(qi_device_matrix_free_smoother_alpha_clip),
+                        matrix_free_block_smoother_max_groups=int(
+                            qi_device_matrix_free_block_smoother_max_groups
+                        ),
+                        matrix_free_block_smoother_include_tail=bool(
+                            qi_device_matrix_free_block_smoother_include_tail
+                        ),
+                        matrix_free_block_smoother_rcond=float(qi_device_matrix_free_block_smoother_rcond),
+                        matrix_free_block_smoother_grouping=qi_device_matrix_free_block_smoother_grouping,
+                        max_rank=int(qi_device_max_rank),
+                        residual_enrichment=True,
+                        residual_enrichment_depth=int(qi_device_depth),
+                        residual_enrichment_include_residual=bool(qi_device_include_residual),
+                        recycle_enrichment=bool(qi_device_recycle_enrichment),
+                        recycle_enrichment_cycles=int(qi_device_recycle_cycles),
+                    ),
+                )
+                x_qi_device, qi_device_probe = probe_rhs1_qi_device_preconditioner(
+                    rhs=rhs_reduced,
+                    x0=res_reduced.x,
+                    state=qi_device_state,
+                    operator=mv_reduced,
+                    min_relative_improvement=float(qi_device_min_improvement),
+                    max_cycles=int(qi_device_cycles),
+                    residual_minimizing_step=bool(qi_device_minres_step),
+                    alpha_clip=float(qi_device_alpha_clip),
+                )
+                qi_device_reason = str(qi_device_probe.reason)
+                qi_device_probe_cycles = int(
+                    getattr(qi_device_probe, "cycles", 1 if bool(qi_device_probe.accepted) else 0)
+                )
+                qi_device_probe_residual_history = tuple(
+                    float(value)
+                    for value in getattr(
+                        qi_device_probe,
+                        "residual_history",
+                        (
+                            float(qi_device_probe.residual_before_norm),
+                            float(qi_device_probe.residual_after_norm),
+                        ),
+                    )
+                )
+                qi_device_probe_step_history = tuple(
+                    float(value) for value in getattr(qi_device_probe, "step_history", ())
+                )
+                qi_device_metadata = {
+                    **qi_device_probe.metadata.to_dict(),
+                    "hook": "pre_sparse_active_dof",
+                    "min_improvement": float(qi_device_min_improvement),
+                    "cycles_requested": int(qi_device_cycles),
+                    "cycles": int(qi_device_probe_cycles),
+                    "residual_history": qi_device_probe_residual_history,
+                    "step_policy": "residual_minimizing" if bool(qi_device_minres_step) else "fixed",
+                    "alpha_clip": float(qi_device_alpha_clip),
+                    "step_history": qi_device_probe_step_history,
+                    "use_in_krylov": False,
+                    "matrix_free_enabled": True,
+                    "precondition_side": "seed_only",
+                    "local_smoother_kind_requested": qi_device_local_smoother_kind,
+                    "local_smoother_metadata": (
+                        qi_device_state.local_smoother.metadata.to_dict()
+                        if qi_device_state.local_smoother is not None
+                        and hasattr(qi_device_state.local_smoother.metadata, "to_dict")
+                        else None
+                    ),
+                    "residual_enrichment_requested": True,
+                    "residual_enrichment_depth_requested": int(qi_device_depth),
+                    "recycle_enrichment_requested": bool(qi_device_recycle_enrichment),
+                    "recycle_enrichment_cycles_requested": int(qi_device_recycle_cycles),
+                    "max_rank_requested": int(qi_device_max_rank),
+                    "residual_before_norm": float(qi_device_probe.residual_before_norm),
+                    "residual_after_norm": float(qi_device_probe.residual_after_norm),
+                    "improvement_ratio": (
+                        None
+                        if qi_device_probe.improvement_ratio is None
+                        else float(qi_device_probe.improvement_ratio)
+                    ),
+                    "accepted": bool(qi_device_probe.accepted),
+                }
+                if bool(qi_device_probe.accepted):
+                    res_reduced = GMRESSolveResult(
+                        x=jnp.asarray(x_qi_device, dtype=jnp.float64),
+                        residual_norm=jnp.asarray(qi_device_probe.residual_after_norm, dtype=jnp.float64),
+                    )
+                    ksp_x0 = res_reduced.x
+                    if emit is not None:
+                        emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "QI device preconditioner accepted "
+                            f"residual {float(qi_device_probe.residual_before_norm):.6e} "
+                            f"-> {float(qi_device_probe.residual_after_norm):.6e} "
+                            f"(rank={int(qi_device_probe.metadata.rank)} "
+                            f"cycles={int(qi_device_probe_cycles)} "
+                            f"ratio={float(qi_device_probe.improvement_ratio):.6e} seed_only=1)",
+                        )
+                elif emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "QI device preconditioner rejected "
+                        f"reason={qi_device_reason} "
+                        f"residual {float(qi_device_probe.residual_before_norm):.6e} "
+                        f"-> {float(qi_device_probe.residual_after_norm):.6e} "
+                        f"(rank={int(qi_device_probe.metadata.rank)} "
+                        f"cycles={int(qi_device_probe_cycles)} "
+                        f"ratio={float(qi_device_probe.improvement_ratio) if qi_device_probe.improvement_ratio is not None else float('nan'):.6e} "
+                        f"step_policy={qi_device_metadata.get('step_policy', 'fixed')} seed_only=1)",
+                    )
+            except Exception as exc:  # noqa: BLE001
+                qi_device_reason = f"{type(exc).__name__}: {exc}"
+                qi_device_metadata = {"hook": "pre_sparse_active_dof", "error": qi_device_reason}
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        f"QI device preconditioner disabled after build failure ({type(exc).__name__}: {exc})",
+                    )
+            qi_device_setup_s = float(t.elapsed_s() - qi_device_start_s)
+            qi_device_metadata["setup_s"] = qi_device_setup_s
+            rhsmode1_general_metadata.update(
+                {
+                    "xblock_qi_device_preconditioner_enabled": True,
+                    "xblock_qi_device_preconditioner_built": "error" not in qi_device_metadata,
+                    "xblock_qi_device_preconditioner_used": bool(qi_device_metadata.get("accepted", False)),
+                    "xblock_qi_device_preconditioner_used_in_krylov": False,
+                    "xblock_qi_device_preconditioner_reason": qi_device_reason,
+                    "xblock_qi_device_preconditioner_rank": int(qi_device_metadata.get("rank", 0) or 0),
+                    "xblock_qi_device_preconditioner_candidate_count": int(
+                        qi_device_metadata.get("residual_enrichment_candidate_count", 0) or 0
+                    ),
+                    "xblock_qi_device_preconditioner_residual_before": qi_device_metadata.get(
+                        "residual_before_norm"
+                    ),
+                    "xblock_qi_device_preconditioner_residual_after": qi_device_metadata.get(
+                        "residual_after_norm"
+                    ),
+                    "xblock_qi_device_preconditioner_improvement_ratio": qi_device_metadata.get(
+                        "improvement_ratio"
+                    ),
+                    "xblock_qi_device_preconditioner_metadata": qi_device_metadata,
+                    "xblock_qi_device_preconditioner_setup_s": qi_device_setup_s,
+                    "xblock_qi_device_preconditioner_min_improvement": (
+                        qi_device_metadata.get("min_improvement")
+                    ),
+                    "xblock_qi_device_preconditioner_use_in_krylov": False,
+                }
+            )
         if sparse_order.reason_large_cpu_exact_skips_targeted:
             if emit is not None:
                 emit(
@@ -23663,7 +25023,18 @@ def solve_v3_full_system_linear_gmres(
                 except ValueError:
                     rescue_ratio = 1.0e3
                 rescue_ratio = max(1.0, float(rescue_ratio))
-                if float(res_reduced.residual_norm) > float(target_reduced) * float(rescue_ratio):
+                rescue_abs_floor = _rhsmode1_scipy_rescue_abs_floor_after_xblock(
+                    op=op,
+                    active_size=int(active_size),
+                    used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
+                    used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
+                    use_implicit=bool(use_implicit),
+                )
+                rescue_threshold = max(
+                    float(target_reduced) * float(rescue_ratio),
+                    float(rescue_abs_floor),
+                )
+                if float(res_reduced.residual_norm) > float(rescue_threshold):
                     scipy_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RESTART", "").strip()
                     scipy_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAXITER", "").strip()
                     scipy_strong_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_USE_STRONG", "").strip().lower()
@@ -23752,6 +25123,12 @@ def solve_v3_full_system_linear_gmres(
                     except Exception as exc:  # noqa: BLE001
                         if emit is not None:
                             emit(1, f"solve_v3_full_system_linear_gmres: SciPy rescue failed ({type(exc).__name__}: {exc})")
+                elif emit is not None and float(rescue_abs_floor) > 0.0:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: skipping SciPy rescue after x-block seed "
+                        f"(residual={float(res_reduced.residual_norm):.3e} <= floor={float(rescue_abs_floor):.1e})",
+                    )
         if use_pas_projection:
             f_full = _expand_active_f(res_reduced.x)
             f_full = _project_pas_f(f_full)
@@ -25342,11 +26719,36 @@ def solve_v3_full_system_linear_gmres(
     if emit is not None:
         emit(0, f"solve_v3_full_system_linear_gmres: residual_norm={float(result.residual_norm):.6e}")
         emit(1, f"solve_v3_full_system_linear_gmres: elapsed_s={t.elapsed_s():.3f}")
+    metadata_out = {}
+    metadata_out.update(pas_tz_guarded_correction_metadata)
+    metadata_out.update(rhsmode1_general_metadata)
+    if int(op.rhs_mode) == 1:
+        post_xblock_accept_floor = _rhsmode1_scipy_rescue_abs_floor_after_xblock(
+            op=op,
+            active_size=int(active_size),
+            used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
+            used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
+            use_implicit=bool(use_implicit),
+        )
+        if (
+            float(post_xblock_accept_floor) > 0.0
+            and np.isfinite(float(result.residual_norm))
+            and float(result.residual_norm) <= float(post_xblock_accept_floor)
+        ):
+            true_residual_target = max(float(atol), float(tol) * float(jnp.linalg.norm(rhs)))
+            metadata_out.update(
+                {
+                    "accepted_converged": True,
+                    "acceptance_criterion": "post_xblock_abs_floor",
+                    "true_residual_converged": bool(float(result.residual_norm) <= float(true_residual_target)),
+                    "accepted_residual_floor": float(post_xblock_accept_floor),
+                }
+            )
     return V3LinearSolveResult(
         op=op,
         rhs=rhs,
         gmres=result,
-        metadata=dict(pas_tz_guarded_correction_metadata) if pas_tz_guarded_correction_metadata else None,
+        metadata=metadata_out or None,
     )
 
 

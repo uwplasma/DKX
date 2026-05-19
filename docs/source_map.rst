@@ -174,6 +174,55 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   ``min ||A Z c - r||`` solve before Krylov starts. The production driver
   exposes it through the opt-in
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER`` hook.
+- ``sfincs_jax/rhs1_qi_device_preconditioner.py``:
+  production-shaped device-QI field-split state. It builds a device Jacobi local
+  smoother when device CSR is available, or a matrix-free coarse-only
+  seed-correction path when full CSR is rejected. It can enrich the matrix-free
+  basis with residual-generated Krylov vectors ``orth([Q, r, A r, ...])``,
+  rank-gates the result, assembles ``A_c`` and ``A Q`` by JAX matvec probes,
+  applies a pure-JAX correction, and exposes fail-closed true-residual probe
+  metadata. The probe can optionally run a small bounded sequence of corrections
+  controlled by
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES``; every cycle
+  recomputes the true residual and stops on non-finite or non-improving
+  candidates. With
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_minres``,
+  the matrix-free path also gets a bounded residual-polynomial local smoother.
+  It applies a fixed number of pure-JAX sweeps selected by
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS``
+  and scales each residual direction by a small
+  ``min ||r - alpha A r||`` step before the coarse correction sees the remaining
+  residual. This keeps the action device-compatible and avoids full CSR
+  materialization.
+  With
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres``,
+  the matrix-free path builds residual pieces on x/species blocks from the QI
+  block layout and solves a small projected problem
+  ``min_c ||r - A D c||_2``. This is the first block/angular/radial local action:
+  each block direction keeps all angular content inside the block while the
+  small least-squares solve chooses the coupled correction coefficients.
+  With
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING=block_x_species``,
+  that projected space is augmented with radial-x and species aggregate
+  residual directions, which gives the local action a bounded global-coupling
+  handle without materializing the full sparse operator.
+  With
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=residual_minimizing``,
+  the probe line-searches each correction direction by minimizing
+  ``||r - alpha A d||_2`` before applying the same fail-closed residual gate.
+  With
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT``,
+  setup appends residuals left by the current coarse correction as additional
+  rank-gated GCRO-style seed vectors.
+  The driver exposes it behind the explicit
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER`` opt-in and records
+  accepted/rejected metadata without changing public defaults; the matrix-free
+  fallback is separately gated by
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE``.
+  Seed-only use is allowed when ``precondition_side=none``; Krylov installation
+  is blocked in that mode. When matrix-free QI-device Krylov use is explicitly
+  requested, the driver disables the automatic non-autodiff host fallback so the
+  true device path can be tested. Explicit user-forced host fallback still wins.
 - ``sfincs_jax/rhs1_qi_promotion.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace
@@ -220,8 +269,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   large explicit full-FP CPU sparse rescue, x-block seed, exact-LU promotion,
   host x-block assembly, and species-x-block rescue policy.
 - ``sfincs_jax/rhs1_post_xblock_policy.py``:
-  post-x-block polish, targeted FP polish, and skip-global-sparse-after-xblock
-  policy for large explicit full-FP CPU systems.
+  post-x-block polish, targeted FP polish, skip-global-sparse-after-xblock, and
+  bounded SciPy-rescue absolute-floor policy for large explicit full-FP CPU
+  systems.
 - ``sfincs_jax/solve_mode_policy.py``:
   shared implicit/differentiable solve-mode environment resolution.
 - ``sfincs_jax/solver_path_policy.py``:

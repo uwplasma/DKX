@@ -131,8 +131,42 @@ def rhs1_skip_global_sparse_after_xblock_allowed(
     return float(residual_norm) <= float(threshold)
 
 
+def rhs1_scipy_rescue_abs_floor_after_xblock(
+    *,
+    op: Any,
+    active_size: int,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    use_implicit: bool,
+    backend: str,
+) -> float:
+    """Return an absolute residual floor below which CPU SciPy rescue is skipped.
+
+    Large explicit FP runs can reach a physically tight residual after the
+    x-block seed/refinement while still missing an over-tight relative target
+    caused by a small RHS norm.  In that case a full SciPy rescue tends to chase
+    roundoff for minutes.  The floor is intentionally limited to the same
+    large-CPU, explicit-FP, post-x-block path and remains user-overridable.
+    """
+    env = _env_token("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS")
+    if env:
+        try:
+            return max(0.0, float(env))
+        except ValueError:
+            return 0.0
+    if not bool(used_large_cpu_xblock_shortcut) or not bool(used_explicit_fp_xblock_seed):
+        return 0.0
+    if not _is_explicit_cpu_rhs1_fp_only(op=op, use_implicit=use_implicit, backend=backend):
+        return 0.0
+    floor_min = _env_int("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS_MIN", 12000)
+    if int(active_size) < max(1, int(floor_min)):
+        return 0.0
+    return 1.0e-9
+
+
 __all__ = [
     "rhs1_fast_post_xblock_polish_allowed",
     "rhs1_fp_targeted_polish_allowed",
+    "rhs1_scipy_rescue_abs_floor_after_xblock",
     "rhs1_skip_global_sparse_after_xblock_allowed",
 ]

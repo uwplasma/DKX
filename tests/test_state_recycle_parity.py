@@ -25,6 +25,19 @@ _SOLVER_METADATA_KEYS = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _clear_solver_policy_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep recycle parity independent of solver-policy env overrides."""
+
+    for key in (
+        "SFINCS_JAX_RHSMODE1_PRECONDITIONER",
+        "SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS",
+        "SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS",
+        "SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 def test_state_recycle_preserves_solution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Recycling states should not change the converged solution."""
     here = Path(__file__).parent

@@ -228,6 +228,13 @@ def test_qi_seed_runner_infers_matrix_sizes_from_timeout_progress() -> None:
 
     assert qi_seed._infer_sizes_from_progress_events(events) == (81377, 139502)
 
+    output_refusal = [
+        "sfincs_jax write-output failed: Refusing to write nonconverged RHSMode=1 diagnostics "
+        "for a production-sized solve: active_size=81377 residual_norm=2.833435e-05 "
+        "target=3.021487e-11 solve_method=xblock_sparse_pc_gmres."
+    ]
+    assert qi_seed._infer_sizes_from_progress_events(output_refusal) == (81377, None)
+
 
 def test_qi_seed_runner_infers_latest_matvec_progress() -> None:
     events = [
@@ -245,6 +252,9 @@ def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres QI residual-deflated "
         "preconditioner accepted residual 3.021487e-05 -> 2.814560e-05 "
         "(rank=16 seed_solver=cycle_minres cycles=8 use_in_krylov=0 ratio=9.315148e-01)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres QI device "
+        "preconditioner accepted residual 2.814560e-05 -> 2.533104e-05 "
+        "(rank=12 use_in_krylov=1 ratio=9.000000e-01)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe method_rescue "
         "side=left->left method=gmres->lgmres iters=20 matvecs=23 residual=4.565805e-06 "
         "ratio=1.511112e+07 seed_used=1",
@@ -273,6 +283,13 @@ def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
     assert qi_deflated["xblock_qi_deflated_preconditioner_residual_before"] == 3.021487e-05
     assert qi_deflated["xblock_qi_deflated_preconditioner_residual_after"] == 2.814560e-05
     assert qi_deflated["xblock_qi_deflated_preconditioner_improvement_ratio"] == 9.315148e-01
+    qi_device = qi_seed._infer_qi_device_progress(events)
+    assert qi_device["xblock_qi_device_preconditioner_used"] is True
+    assert qi_device["xblock_qi_device_preconditioner_rank"] == 12
+    assert qi_device["xblock_qi_device_preconditioner_use_in_krylov"] is True
+    assert qi_device["xblock_qi_device_preconditioner_residual_before"] == 2.814560e-05
+    assert qi_device["xblock_qi_device_preconditioner_residual_after"] == 2.533104e-05
+    assert qi_device["xblock_qi_device_preconditioner_improvement_ratio"] == 9.0e-01
 
     residual = qi_seed._infer_last_residual_progress(events)
     assert residual is not None
@@ -291,6 +308,9 @@ def test_qi_seed_runner_records_timeout_attempt_from_synthetic_tails(tmp_path: P
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres QI residual-deflated "
         "preconditioner accepted residual 3.021487e-05 -> 2.814560e-05 "
         "(rank=16 seed_solver=cycle_minres cycles=8 use_in_krylov=0 ratio=9.315148e-01)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres QI device "
+        "preconditioner accepted residual 2.814560e-05 -> 2.533104e-05 "
+        "(rank=12 use_in_krylov=1 ratio=9.000000e-01)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe switch "
         "side=left->right method=gmres->gmres iters=20 matvecs=23 residual=4.565805e-06 "
         "ratio=1.511112e+07 seed_used=1 preserved_physical_seed=1",
@@ -361,7 +381,13 @@ def test_qi_seed_runner_records_timeout_attempt_from_synthetic_tails(tmp_path: P
     assert seed["xblock_qi_deflated_preconditioner_seed_solver"] == "cycle_minres"
     assert seed["xblock_qi_deflated_preconditioner_cycles"] == 8
     assert seed["xblock_qi_deflated_preconditioner_use_in_krylov"] is False
-    assert seed["last_progress_residual_event"] == progress_events[4]
+    assert seed["xblock_qi_device_preconditioner_used"] is True
+    assert seed["xblock_qi_device_preconditioner_rank"] == 12
+    assert seed["xblock_qi_device_preconditioner_residual_before"] == 2.814560e-05
+    assert seed["xblock_qi_device_preconditioner_residual_after"] == 2.533104e-05
+    assert seed["xblock_qi_device_preconditioner_improvement_ratio"] == 9.0e-01
+    assert seed["xblock_qi_device_preconditioner_use_in_krylov"] is True
+    assert seed["last_progress_residual_event"] == progress_events[5]
     assert seed["last_progress_residual_before"] == 4.565805e-06
     assert seed["last_progress_residual_norm"] == 2.830374e-06
     assert seed["last_matvecs"] == 900

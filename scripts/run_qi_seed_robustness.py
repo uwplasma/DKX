@@ -88,6 +88,70 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT
     / "docs"
     / "_static"
+    / "qi_seed_robustness_scale060_qi_device_preconditioner_seed3_cpu_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_matrixfree_seed3_cpu_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_early_qi_skipstrong_skipglobal_seed3_cpu_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_early_seed3_gpu1_reduced_not_output_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_xblock_hostfallback_seed3_gpu1_timeout_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_rank48_depth2_seed3_gpu1_timeout_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_minres_cycles4_rank27_seed3_gpu0_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_fixed_cycles4_rank27_seed3_gpu0_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_krylov_rank27_seed3_gpu0_timeout_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_recycle_cycles2_rank32_seed3_gpu0_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_mfminres_sweeps2_seed3_gpu1_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_mfminres_sweeps8_seed3_gpu1_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_blockminres_sweeps1_seed3_cpu_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_blockminres_groups32_sweeps1_seed3_cpu_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups32_sweeps1_seed3_cpu_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
     / "qi_seed_robustness_scale060_enriched_qi_coarse_seed3_cpu_rejected_2026_05_14.json",
     REPO_ROOT
     / "docs"
@@ -206,6 +270,27 @@ QI_DEFLATED_TRACE_KEYS = (
     "xblock_qi_deflated_preconditioner_cycle_coefficients",
     "xblock_qi_deflated_preconditioner_use_in_krylov",
 )
+QI_DEVICE_TRACE_KEYS = (
+    "xblock_qi_device_preconditioner_enabled",
+    "xblock_qi_device_preconditioner_built",
+    "xblock_qi_device_preconditioner_used",
+    "xblock_qi_device_preconditioner_used_in_krylov",
+    "xblock_qi_device_preconditioner_reason",
+    "xblock_qi_device_preconditioner_rank",
+    "xblock_qi_device_preconditioner_candidate_count",
+    "xblock_qi_device_preconditioner_coarse_operator_shape",
+    "xblock_qi_device_preconditioner_operator_on_basis_shape",
+    "xblock_qi_device_preconditioner_coarse_operator_norm",
+    "xblock_qi_device_preconditioner_operator_on_basis_norm",
+    "xblock_qi_device_preconditioner_residual_before",
+    "xblock_qi_device_preconditioner_residual_after",
+    "xblock_qi_device_preconditioner_improvement_ratio",
+    "xblock_qi_device_preconditioner_metadata",
+    "xblock_qi_device_preconditioner_setup_s",
+    "xblock_qi_device_preconditioner_min_improvement",
+    "xblock_qi_device_preconditioner_use_in_krylov",
+    "xblock_qi_device_preconditioner_applies",
+)
 MOMENT_SCHUR_TRACE_KEYS = (
     "xblock_moment_schur_enabled",
     "xblock_moment_schur_built",
@@ -229,6 +314,7 @@ PROGRESS_MARKERS = (
     "targeted sparse",
     "xblock factorization",
     "QI residual-deflated preconditioner",
+    "QI device preconditioner",
     "explicit FP x-block seed",
     "fallback",
     "QI coarse seed",
@@ -259,6 +345,8 @@ PROGRESS_MARKERS = (
 )
 _FLOAT_PATTERN = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eEdD][-+]?\d+)?"
 _ACTIVE_DOF_SIZE_RE = re.compile(r"active-DOF mode enabled\s+\(size=(?P<active>\d+)/(?P<total>\d+)\)")
+_ACTIVE_SIZE_KEY_RE = re.compile(r"\bactive_size=(?P<active>\d+)\b")
+_TOTAL_SIZE_KEY_RE = re.compile(r"\btotal_size=(?P<total>\d+)\b")
 _MATRIX_SIZE_RE = re.compile(r"The matrix is (?P<size>\d+) x (?P=size) elements\.")
 _KEY_VALUE_RE = re.compile(
     r"\b(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[^,\s)]+)"
@@ -277,6 +365,13 @@ _SIDE_PROBE_RE = re.compile(
 )
 _QI_DEFLATED_PROGRESS_RE = re.compile(
     rf"\bQI residual-deflated preconditioner\s+(?P<decision>accepted|rejected)\s+"
+    rf"(?:reason=(?P<reason>[A-Za-z0-9_.:-]+)\s+)?"
+    rf"(?:residual\s+(?P<before>{_FLOAT_PATTERN})\s*->\s*(?P<after>{_FLOAT_PATTERN})"
+    rf"|residual=(?P<residual>{_FLOAT_PATTERN}))",
+    re.IGNORECASE,
+)
+_QI_DEVICE_PROGRESS_RE = re.compile(
+    rf"\bQI device preconditioner\s+(?P<decision>accepted|rejected)\s+"
     rf"(?:reason=(?P<reason>[A-Za-z0-9_.:-]+)\s+)?"
     rf"(?:residual\s+(?P<before>{_FLOAT_PATTERN})\s*->\s*(?P<after>{_FLOAT_PATTERN})"
     rf"|residual=(?P<residual>{_FLOAT_PATTERN}))",
@@ -613,6 +708,7 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
     }
     summary.update({key: solver_metadata.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
     summary.update({key: solver_metadata.get(key) for key in QI_DEFLATED_TRACE_KEYS})
+    summary.update({key: solver_metadata.get(key) for key in QI_DEVICE_TRACE_KEYS})
     summary.update({key: solver_metadata.get(key) for key in MOMENT_SCHUR_TRACE_KEYS})
     return summary
 
@@ -765,6 +861,41 @@ def _infer_qi_deflated_progress(events: Iterable[object]) -> dict[str, object]:
     return summary
 
 
+def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
+    """Infer true-device QI probe metadata from compact progress lines."""
+
+    summary: dict[str, object] = {}
+    for event in events:
+        text = str(event)
+        match = _QI_DEVICE_PROGRESS_RE.search(text)
+        if match is None:
+            continue
+        key_values = _log_key_values(text)
+        decision = match.group("decision").lower()
+        residual_before = _float_from_log_value(match.group("before"))
+        residual_after = _float_from_log_value(match.group("after") or match.group("residual"))
+        ratio = _float_from_log_value(key_values.get("ratio"))
+        if ratio is None and residual_before is not None and residual_after is not None and residual_before > 0.0:
+            ratio = residual_after / residual_before
+        use_in_krylov_raw = key_values.get("use_in_krylov")
+        summary = {
+            "xblock_qi_device_preconditioner_enabled": True,
+            "xblock_qi_device_preconditioner_built": True,
+            "xblock_qi_device_preconditioner_used": decision == "accepted",
+            "xblock_qi_device_preconditioner_reason": (
+                "residual_reduced" if decision == "accepted" else match.group("reason") or "residual_not_reduced"
+            ),
+            "xblock_qi_device_preconditioner_rank": _int_from_log_value(key_values.get("rank")),
+            "xblock_qi_device_preconditioner_residual_before": residual_before,
+            "xblock_qi_device_preconditioner_residual_after": residual_after,
+            "xblock_qi_device_preconditioner_improvement_ratio": ratio,
+            "xblock_qi_device_preconditioner_use_in_krylov": (
+                None if use_in_krylov_raw is None else str(use_in_krylov_raw).strip().lower() not in {"0", "false"}
+            ),
+        }
+    return summary
+
+
 def _infer_lgmres_rescue_status(events: Iterable[object], side_probe: dict[str, object]) -> str | None:
     """Infer whether LGMRES rescue was visibly forced, disabled, used, or skipped."""
     status: str | None = None
@@ -851,6 +982,12 @@ def _infer_sizes_from_progress_events(events: Iterable[object]) -> tuple[int | N
             active_size = int(active_match.group("active"))
             total_size = int(active_match.group("total"))
             continue
+        active_key_match = _ACTIVE_SIZE_KEY_RE.search(text)
+        if active_key_match is not None and active_size is None:
+            active_size = int(active_key_match.group("active"))
+        total_key_match = _TOTAL_SIZE_KEY_RE.search(text)
+        if total_key_match is not None and total_size is None:
+            total_size = int(total_key_match.group("total"))
         matrix_match = _MATRIX_SIZE_RE.search(text)
         if matrix_match is not None and active_size is None:
             active_size = int(matrix_match.group("size"))
@@ -1154,6 +1291,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         ]
         side_probe_progress = _infer_side_probe_progress(log_context)
         qi_deflated_progress = _infer_qi_deflated_progress(log_context)
+        qi_device_progress = _infer_qi_device_progress(log_context)
         lgmres_rescue_status = _infer_lgmres_rescue_status(log_context, side_probe_progress)
         last_residual_progress = _infer_last_residual_progress(log_context) or {}
         last_matvecs, last_matvec_elapsed_s = _infer_last_matvec_progress(log_context)
@@ -1172,6 +1310,12 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
             if trace_value is not None:
                 return trace_value
             return qi_deflated_progress.get(key)
+
+        def trace_or_qi_device_progress(key: str) -> object:
+            trace_value = trace_summary.get(key)
+            if trace_value is not None:
+                return trace_value
+            return qi_device_progress.get(key)
 
         trace_lgmres_rescue = trace_summary.get("xblock_side_probe_lgmres_rescue")
         if lgmres_rescue_status is None and isinstance(trace_lgmres_rescue, bool):
@@ -1243,6 +1387,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         }
         seed_summary.update({key: trace_summary.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
         seed_summary.update({key: trace_or_qi_deflated_progress(key) for key in QI_DEFLATED_TRACE_KEYS})
+        seed_summary.update({key: trace_or_qi_device_progress(key) for key in QI_DEVICE_TRACE_KEYS})
         seed_summary.update({key: trace_summary.get(key) for key in MOMENT_SCHUR_TRACE_KEYS})
         seed_summaries.append(seed_summary)
 
@@ -1414,6 +1559,25 @@ def _artifact_max_elapsed_s(payload: dict[str, object]) -> float | None:
     return max(candidates) if candidates else None
 
 
+def _artifact_last_reported_residual_norm(payload: dict[str, object]) -> float | None:
+    candidates: list[float] = []
+    seeds = payload.get("seeds")
+    if isinstance(seeds, list):
+        for seed in seeds:
+            if not isinstance(seed, dict):
+                continue
+            for key in (
+                "last_progress_residual_norm",
+                "xblock_qi_device_preconditioner_residual_after",
+                "residual_norm",
+            ):
+                value = _finite_float_or_none(seed.get(key))
+                if value is not None:
+                    candidates.append(value)
+                    break
+    return max(candidates) if candidates else None
+
+
 def _artifact_case_count(payload: dict[str, object]) -> int:
     try:
         case_count = int(payload.get("case_count", 0))
@@ -1449,6 +1613,7 @@ def _summarize_evidence_artifact(path: Path, payload: dict[str, object], product
         "active_size": int(active_size) if active_size is not None else None,
         "max_residual_ratio": _artifact_max_residual_ratio(payload),
         "max_elapsed_s": _artifact_max_elapsed_s(payload),
+        "last_reported_residual_norm": _artifact_last_reported_residual_norm(payload),
     }
 
 

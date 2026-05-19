@@ -14,6 +14,19 @@ import sfincs_jax.v3_driver as v3_driver
 from sfincs_jax.v3_system import full_system_operator_from_namelist, rhs_v3_full_system
 
 
+@pytest.fixture(autouse=True)
+def _clear_solver_policy_env(monkeypatch) -> None:
+    """Keep Schur heuristic tests independent of benchmark/CLI env overrides."""
+
+    for key in (
+        "SFINCS_JAX_RHSMODE1_PRECONDITIONER",
+        "SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS",
+        "SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_STEPS",
+        "SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_DAMP",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 def _patch_block_value(block: str, key: str, value: str) -> str:
     pat = re.compile(rf"(?im)^[ \t]*{re.escape(key)}[ \t]*=[ \t]*([^!\n\r]+)[ \t]*$")
     new_line = f"  {key} = {value}"

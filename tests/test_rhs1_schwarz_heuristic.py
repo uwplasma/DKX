@@ -173,7 +173,8 @@ def test_rhs1_dd_coarse_block_size_widens_local_patch() -> None:
     assert coarse > 12
 
 
-def test_rhs1_dd_coarse_level_count_auto() -> None:
+def test_rhs1_dd_coarse_level_count_auto(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS", raising=False)
     assert vd._rhs1_dd_coarse_level_count(n_dev=2) == 0
     assert vd._rhs1_dd_coarse_level_count(n_dev=4) == 1
     assert vd._rhs1_dd_coarse_level_count(n_dev=8) == 2

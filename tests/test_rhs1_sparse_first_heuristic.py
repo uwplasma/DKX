@@ -15,6 +15,7 @@ from sfincs_jax.v3_driver import (
     _rhsmode1_fp_xblock_assembled_host_allowed,
     _rhsmode1_fp_targeted_polish_allowed,
     _rhsmode1_fast_post_xblock_polish_allowed,
+    _rhsmode1_scipy_rescue_abs_floor_after_xblock,
     _rhsmode1_skip_global_sparse_after_xblock_allowed,
     _rhsmode1_large_cpu_xblock_skip_primary_allowed,
     _rhsmode1_large_cpu_sparse_rescue_allowed,
@@ -837,6 +838,19 @@ def test_skip_global_sparse_after_good_xblock_enabled(monkeypatch) -> None:
         used_explicit_fp_xblock_seed=True,
         use_implicit=False,
     )
+
+
+def test_scipy_rescue_abs_floor_after_large_xblock_seed(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS_MIN", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    assert _rhsmode1_scipy_rescue_abs_floor_after_xblock(
+        op=_op(constraint_scheme=1),
+        active_size=81377,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=True,
+        use_implicit=False,
+    ) == 1.0e-9
 
 
 def test_skip_global_sparse_after_xblock_respects_guards(monkeypatch) -> None:

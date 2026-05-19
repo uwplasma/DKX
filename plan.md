@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-18 (Europe/Lisbon)
+Last updated: 2026-05-19 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -12583,3 +12583,1417 @@ Validation results:
   The end-to-end test is now an explicit species-block override check, while
   the default auto-selection assertion lives in the cheap
   `rhs1_schur_policy` unit test surface.
+
+## 2026-05-19 long-term research lane completion plan
+
+Goal:
+
+- Turn the remaining deferred research lanes into complete, claimable
+  algorithms without weakening the current release claims. The current shipped
+  state is parity-clean for the public suite and operationally robust, but the
+  following lanes remain intentionally unpromoted: true differentiable/device-QI,
+  production-resolution QI ladders, geometry-rich PAS runtime/RSS promotion,
+  single-case multi-GPU strong scaling, wider high-`nu'` validation artifacts,
+  W7-X ambipolar validation with defensible provenance, MONKES/KNOSOS overlap,
+  and the package-wide 95% coverage/refactor target.
+
+Literature and code audit conclusions:
+
+- The SFINCS 2014 paper and SFINCS v3 documentation remain the physics baseline:
+  a radially local 4D drift-kinetic solve with multiple trajectory models,
+  pitch-angle scattering and full linearized Fokker-Planck collisions, and
+  transport-matrix observables. Completion gates must compare physical residuals,
+  output fields, transport coefficients, flow/current observables, and memory/time
+  against this baseline rather than only checking that a linear solve returns.
+- PETSc `PCFIELDSPLIT` and Schur-complement practice support the next RHSMode=1
+  QI direction: split cheap local blocks from global moment/constraint/current
+  coupling, apply local smoothing first, and then apply a small replicated coarse
+  correction. This is stronger than the current threshold-heavy solver-path
+  ladder and matches the existing `rhs1_qi_block_schur.py`,
+  `rhs1_qi_two_level.py`, and `rhs1_qi_deflation.py` infrastructure.
+- Recycled and deflated Krylov methods, including GCRO-DR/block recycled GMRES,
+  are the right mathematical model for QI seed ladders and radial/profile scans:
+  nearby systems should reuse a bounded invariant/slow-mode space instead of
+  repeatedly rediscovering it. The current residual-deflated seed helper is a
+  first step, but it needs to become an operator-reuse/recycle-space API, not a
+  one-off initial-guess trick.
+- Communication-avoiding and pipelined flexible Krylov literature explains the
+  current single-case multi-GPU blocker: strong scaling will not appear while
+  every Krylov step pays host setup and global-reduction overhead larger than
+  local work. The next GPU path needs compiled sharded operator reuse, device
+  resident local smoothers, a replicated coarse solve, and fewer collectives per
+  effective residual decrease.
+- JAX `NamedSharding`, `shard_map`, `custom_linear_solve`, persistent
+  compilation cache, and explicit GPU allocator controls are the implementation
+  tools to use. `jax.experimental.sparse` should remain a compatibility/test
+  surface because JAX documents it as experimental and not performance-critical.
+  Lineax can remain an optional comparison for structured linear operators and
+  least-squares coarse solves, but it should not become a required dependency
+  unless it beats the in-tree path on real SFINCS operators.
+- MONKES and KNOSOS are useful algorithmic/validation comparisons only where the
+  equations and normalizations overlap. MONKES points to block sparsity and
+  spectral/monoenergetic efficiency as a performance target; KNOSOS points to
+  orbit-averaged low-collisionality validation trends. Neither should be used as
+  an unqualified parity oracle for full SFINCS-JAX physics.
+- The current source map is correct: `v3_driver.py` is still the main orchestration
+  bottleneck. The already-extracted policy/helper modules prove that future
+  progress should keep splitting testable algorithms out of `v3_driver.py`
+  before wiring them through the stable public seam.
+
+Lane A: true differentiable/device-QI closure.
+
+- Implement a device-resident field-split/two-level preconditioner object with a
+  stable interface:
+  `setup(operator_metadata, geometry_metadata) -> state`,
+  `apply(state, residual) -> correction`, and
+  `probe(state, residual) -> true_residual_metadata`.
+  The state must contain only JAX arrays or static metadata in true-device mode.
+- Build the local smoother from device CSR/block-diagonal/x-line actions rather
+  than host LU/ILU. The initial production candidate should combine:
+  1. a diagonal or block-Jacobi device smoother over x/species/angular groups;
+  2. deterministic angular/radial/global moment coarse vectors;
+  3. constraint-current rows that directly target flow and bootstrap-current
+     coupling;
+  4. a small dense coarse operator `A_c = R A P` assembled by matvec probes and
+     solved on device.
+- Promote the existing residual-deflated helper into a reusable recycle-space
+  module. It should store accepted slow-mode vectors across nearby seeds/radii,
+  refresh them by true-residual probes, and apply them through a bounded
+  GCRO/FGMRES-style recycle correction.
+- Keep the non-autodiff host fallback as the default large-QI escape hatch until
+  this device path passes hard evidence. True device-QI must not call SciPy,
+  Python callbacks, or host factors in the timed Krylov loop.
+
+Lane A tests and gates:
+
+- Unit tests: basis construction, row/column dimensions, rank truncation,
+  nonfinite rejection, coarse solve conditioning, JIT, `vmap`, and `grad`
+  compatibility on synthetic coupled systems.
+- Differentiability tests: `jax.lax.custom_linear_solve` forward and transpose
+  solve wrappers must match finite differences on a bounded geometry scalar and
+  preserve the existing implicit-gradient tests.
+- Hard-seed gate: scale-0.60 seed 3 must converge on CPU and one GPU, write HDF5
+  and solver traces, reduce the one-application true residual by at least 5%,
+  avoid host fallback, preserve CPU/GPU observables inside current tolerances,
+  and beat the current accepted CPU baseline in matvec count or warm runtime.
+- Only after the hard seed passes: run seeds 0..4 on CPU and GPU, then use
+  `sfincs_jax/rhs1_qi_promotion.py` to fail closed unless every seed/backend pair
+  satisfies residual, observable, timeout, provenance, and no-host-fallback gates.
+
+Lane B: production-resolution QI ladders.
+
+- Freeze a production-resolution manifest with the documented minimum resolution
+  and any collaborator/QI cases that have been used for design decisions. Each
+  entry needs geometry provenance, solver settings, backend, output digest,
+  residual history, wall time, peak RSS/device memory, and observable tolerances.
+- Use the new device-QI path first on the scale ladder, then on the full
+  production manifest. Compare against the existing non-autodiff host fallback
+  and Fortran v3 where the same physics/output exists.
+- Generate publication-ready plots only after the full ladder is complete:
+  residual vs iteration, CPU/GPU observable parity, warm/cold runtime, peak
+  memory, and seed-to-seed robustness.
+
+Lane C: geometry-rich PAS runtime/RSS promotion.
+
+- Move `PasRuntimeChunkPlan` from planning metadata into the actual PAS-heavy
+  execution path. The first target is streamed full-vector norms, residual
+  reductions, and diagnostic/output reductions so geometry4/HSX/geometry11 stop
+  retaining unnecessary full temporary arrays.
+- Replace dense PAS-TZ candidate update materialization with fixed-shape
+  streamed actions over pitch-angle/angular chunks. The operator should expose a
+  matrix-free `apply_chunked(residual, chunk_plan)` and a fallback reason when it
+  cannot be applied safely.
+- Add an output-retention policy for geometry-rich diagnostics: default HDF5/NPZ
+  writes should stream large arrays or skip optional intermediates unless the user
+  explicitly requests full diagnostic dumps.
+
+Lane C tests and gates:
+
+- Tiny equivalence tests must show dense and streamed/chunked PAS actions agree to
+  current tolerances.
+- Memory tests must prove the candidate does not allocate the rejected dense
+  update path; this should be checked by metadata and by device/RSS snapshots on
+  at least one CPU and one GPU benchmark.
+- Promotion requires geometry4, HSX, and geometry11 artifacts to be
+  residual-clean with either at least 20% warm-runtime improvement or at least 25%
+  RSS/device-memory reduction, with no regression in another canonical PAS case.
+
+Lane D: single-case multi-GPU and multi-CPU strong scaling.
+
+- Replace process-per-sample sharded benchmarks with one compiled, reused,
+  sharded operator per device count. Use `NamedSharding`/`shard_map` over
+  theta/zeta slabs, keep state arrays sharded through the full Krylov loop, and
+  keep the coarse problem replicated.
+- Add a low-synchronization Krylov mode for sharded RHSMode=1: start with
+  batched local smoother steps plus a replicated coarse correction, then evaluate
+  pipelined/flexible GMRES only if residual history shows collective latency is
+  still dominant.
+- Use the persistent JAX compilation cache for fair warm scaling on office and
+  future cluster runs. Cold compile time should remain visible in artifacts but
+  must not be mixed into warm strong-scaling claims.
+- Keep the current public recommendation of one GPU per case/transport RHS until
+  the single-case artifact beats one GPU.
+
+Lane D tests and gates:
+
+- Deterministic-output gate: one-device and N-device HDF5/NPZ output digests or
+  reduced observable digests must match inside the residual/output tolerances.
+- Scaling gate: 2 GPU warm single-case solve must beat 1 GPU by at least 1.15x,
+  and 4/8 CPU-device warm solves must beat 1 CPU-device on a larger case with
+  enough per-device work to pass the amortization model.
+- Profiling gate: artifacts must include XLA/Python phase timing, matvec count,
+  collectives-per-iteration estimate, halo bytes, compile cache status, peak host
+  RSS, and peak device memory.
+
+Lane E: physics validation completion.
+
+- Simakov-Helander high-collisionality limit: run the pinned LHD and W7-X
+  high-`nu'` extension grid beyond the current `nu' <= 10` proxy, require
+  residual-clean FP/PAS outputs, regenerate the audit/figure, and promote only if
+  the asymptotic slopes and normalizations pass the configured trend gates.
+- W7-X ambipolar validation: require a checked-in provenance artifact with VMEC,
+  Boozer, profile, impurity/effective-charge, and radial grid sources before
+  claiming literature validation. The figure must show the radial-current scan,
+  finite ambipolar roots, root slope, selected `E_r`, and heat-flux ordering
+  against W7-X literature trends.
+- MONKES/KNOSOS overlap: pin one shared monoenergetic geometry, coefficient
+  normalization, collisionality grid, and electric-field convention before any
+  cross-code agreement claim. Use this lane as trend/cross-model evidence, not a
+  replacement for SFINCS-v3 parity.
+- vmec_jax -> booz_xform_jax -> sfincs_jax workflow: after solver
+  differentiability is stable, add one public end-to-end finite-beta optimization
+  example with bounded gradients of ambipolar `E_r` and bootstrap-current
+  profiles. Until then, keep the existing adapters as optional workflow gates.
+
+Lane F: refactor, coverage, and CI.
+
+- Continue extracting `v3_driver.py` into directly tested modules in this order:
+  RHSMode=1 device-QI setup/apply/probe, PAS streamed execution, sharded operator
+  setup/execution, and output-retention policy.
+- The 95% target should be module-by-module, not a fake package-wide number
+  padded by slow full solves. Promote coverage gates as modules are extracted:
+  new helper modules should target at least 90-95% immediately, while
+  `v3_driver.py` percentage should rise only as code leaves the monolith.
+- CI must stay bounded: fast unit/physics/policy gates on every PR, heavy
+  QI/PAS/scaling/validation artifacts in manual or scheduled workflows with
+  explicit runtime caps and heartbeat files.
+
+Execution order:
+
+1. Implement the true-device QI preconditioner interface and standalone unit
+   tests without touching defaults.
+2. Wire one device-resident local-smoother + block-Schur coarse candidate into
+   the existing opt-in QI hook and run the scale-0.60 CPU hard seed.
+3. If and only if the CPU hard seed passes the one-application residual gate, run
+   the one-GPU hard seed on `office`.
+4. In parallel with the QI hard-seed work, land PAS streamed reductions because
+   that is independent and has clear memory gates.
+5. After QI hard seed CPU/GPU passes, run five-seed ladders, then
+   production-resolution ladders.
+6. After the sharded operator can reuse a compiled single-device path, run the
+   1-vs-2 GPU deterministic-output benchmark and only then attempt stronger
+   scaling plots.
+7. Once algorithms are stable, regenerate docs/readme/manuscript figures and
+   update public claims. Do not update public performance claims from partial or
+   timed-out artifacts.
+
+Immediate next implementation targets:
+
+- Create `sfincs_jax/rhs1_qi_device_preconditioner.py` with the setup/apply/probe
+  protocol, local smoother state, coarse matrix assembly by JAX matvec probes,
+  and JSON metadata.
+- Add `tests/test_rhs1_qi_device_preconditioner.py` with synthetic Schur/global
+  coupling systems, JIT/grad checks, fail-closed residual gates, and no-host-state
+  metadata checks.
+- Integrate the candidate behind a new explicit opt-in environment variable,
+  leaving all public defaults unchanged.
+- Extend `sfincs_jax/rhs1_pas_matrixfree.py` with streamed PAS vector reductions
+  that use `PasRuntimeChunkPlan` during actual computation, not only preflight.
+- Add a sharded-operator-reuse design note to `docs/research_lanes.rst` after the
+  first implementation lands, then run bounded CPU/GPU evidence before making any
+  README claim.
+
+Sources reviewed for this plan:
+
+- SFINCS paper and v3 documentation:
+  https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf
+  and https://github.com/landreman/sfincs
+- PETSc field-split/Schur and KSP guidance:
+  https://petsc.org/main/manualpages/PC/PCFIELDSPLIT/
+  and https://petsc.org/main/manual/ksp/
+- JAX sharding, custom linear solves, persistent cache, memory, and sparse notes:
+  https://docs.jax.dev/en/latest/notebooks/shard_map.html
+  https://docs.jax.dev/en/latest/_autosummary/jax.lax.custom_linear_solve.html
+  https://docs.jax.dev/en/latest/persistent_compilation_cache.html
+  https://docs.jax.dev/en/latest/gpu_memory_allocation.html
+  https://docs.jax.dev/en/latest/jax.experimental.sparse.html
+- Recycled/communication-avoiding Krylov:
+  https://arxiv.org/abs/1604.01713
+  and https://arxiv.org/abs/1511.07226
+- Physics/validation comparison literature:
+  https://arxiv.org/abs/1011.5184
+  https://arxiv.org/abs/1908.11615
+  https://www.researchwithnj.com/en/publications/monkes-a-fast-neoclassical-code-for-the-evaluation-of-monoenerget/
+  https://collaborate.princeton.edu/en/publications/investigation-of-the-neoclassical-ambipolar-electric-field-in-ion/
+- Optional ecosystem checks:
+  https://docs.kidger.site/lineax/
+
+## 2026-05-19 long-term lane implementation step 1
+
+Steps taken:
+
+- Added `sfincs_jax/rhs1_qi_device_preconditioner.py`, the first standalone
+  production-shaped true-device QI field-split state. It has explicit
+  setup/apply/probe surfaces, uses the existing device CSR operator and device
+  Jacobi smoother, assembles `A Q` and `A_c = Q^T A Q` through JAX matvec
+  probes, records no-host-fallback metadata, and keeps the timed apply path free
+  of SciPy, host LU/ILU, and Python callbacks.
+- Added `tests/test_rhs1_qi_device_preconditioner.py` with bounded synthetic
+  global-coupling systems that check:
+  - metadata hygiene and no-host-fallback fields,
+  - local-plus-coarse residual reduction,
+  - fail-closed true-residual probing,
+  - JIT compatibility,
+  - differentiability with respect to the residual,
+  - local-only fallback behavior,
+  - invalid coarse-basis shape rejection.
+- Updated `docs/research_lanes.rst` and `docs/source_map.rst` so the new module
+  is discoverable and explicitly remains unpromoted until real hard-seed evidence
+  passes.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_device_preconditioner.py`
+  passed.
+- `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py` passed:
+  `5 passed in 4.15 s`.
+- Neighboring QI gate passed:
+  `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_device_smoother.py tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_deflation.py tests/test_rhs1_qi_promotion.py tests/test_rhs1_qi_block_schur.py`
+  reported `25 passed in 9.90 s`.
+- `ruff check sfincs_jax/rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_device_preconditioner.py`
+  passed.
+
+Current completion estimate for remaining deferred research lanes:
+
+- True differentiable/device-QI: `66%`. The standalone device field-split state
+  now exists and is tested. Remaining blockers are driver opt-in wiring,
+  scale-0.60 CPU hard seed, scale-0.60 GPU hard seed, five-seed ladder, and
+  production-resolution ladder.
+- Production-resolution QI ladders: `35%`. The promotion gate exists, but this
+  remains blocked until true-device QI passes the hard seed.
+- Geometry-rich PAS runtime/RSS promotion: `70%`. Streamed reductions and
+  matrix-free gates exist; remaining work is production benchmark evidence and
+  default/opt-in promotion only if geometry4/HSX/geometry11 meet runtime or
+  memory gates.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`. Deterministic-output
+  and sharded-JIT plumbing exist; remaining work is a real reused sharded
+  operator/coarse loop that beats the one-device hot solve.
+- Physics validation completion: `60%`. Collisionality, W7-X high-`nu'`, W7-X
+  ambipolar, MONKES/KNOSOS, and vmec_jax/Boozer scaffolds exist; remaining work
+  is heavier provenance-backed artifacts and promotion plots.
+- Refactor/coverage/CI: `62%`. CI is green and policy modules are extracted;
+  remaining work is more `v3_driver.py` extraction and module-level coverage
+  promotion without slow solve padding.
+- Overall remaining-lane completion estimate: `58%`. This score is for the
+  deferred research lanes only; it is not the release-facing parity/readiness
+  score.
+
+Best next steps:
+
+1. Wire `rhs1_qi_device_preconditioner.py` into the x-block sparse-PC QI hook
+   behind a new explicit opt-in environment variable, with metadata that proves
+   whether the true-device path was used or rejected.
+2. Add a driver-level bounded test that monkeypatches a tiny assembled
+   device-operator path and proves the opt-in preconditioner can be selected,
+   fail-closed, and recorded without changing public defaults.
+3. Run a bounded CPU hard-seed probe only after the driver hook accepts a
+   residual drop on the focused test path.
+4. In parallel after that hook, run a PAS geometry-rich memory benchmark because
+   PAS is independent of the QI hard-seed blocker.
+
+## 2026-05-19 long-term lane implementation step 2
+
+Steps taken:
+
+- Wired `sfincs_jax/rhs1_qi_device_preconditioner.py` into the RHSMode=1
+  x-block sparse-PC path behind the explicit opt-in
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1`.
+- The hook requires an assembled device CSR operator from
+  `SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR=1` plus device CSR success. It
+  fails closed when the non-autodiff host fallback is active, when
+  `precondition_side=none`, or when no assembled device operator is available.
+- Added driver metadata for enabled/built/used/used-in-Krylov state, rank,
+  candidate count, coarse shapes/norms, true-residual before/after, improvement
+  ratio, setup time, minimum-improvement gate, and no-host-fallback metadata.
+- Added an opt-in diagnostic knob
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_REQUIRE_ALL_DIAGONAL`.
+  The default stays fail-closed (`true`). Tests use `false` only to exercise the
+  accepted-driver branch on a tiny fixture whose assembled matrix has constraint
+  rows without diagonal entries.
+- Added bounded driver tests proving:
+  - accepted opt-in metadata is recorded when an assembled device CSR operator is
+    present and the true-residual probe accepts,
+  - the opt-in fails closed and records the missing-device-operator reason when
+    assembled device CSR is absent.
+- Updated `docs/research_lanes.rst` and `docs/source_map.rst` to describe the
+  new opt-in and its fail-closed status.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py`
+  passed.
+- `ruff check sfincs_jax/v3_driver.py sfincs_jax/rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py`
+  passed.
+- Focused QI device/driver gate passed:
+  `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_opt_in_records_acceptance tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_fails_closed_without_device_operator`
+  reported `7 passed in 11.50 s`.
+
+Current completion estimate for remaining deferred research lanes:
+
+- True differentiable/device-QI: `69%`. The device field-split primitive is now
+  wired through the driver as an explicit opt-in with fail-closed metadata.
+  Remaining blockers are real scale-0.60 CPU hard-seed evidence, one-GPU hard-seed
+  evidence, five-seed ladders, and production-resolution ladders.
+- Production-resolution QI ladders: `36%`. The driver hook removes one blocker,
+  but the lane remains gated behind hard-seed CPU/GPU acceptance.
+- Geometry-rich PAS runtime/RSS promotion: `70%`. No change in this step.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`. No change in this step.
+- Physics validation completion: `60%`. No change in this step.
+- Refactor/coverage/CI: `64%`. The driver hook adds focused branch coverage and
+  keeps the new algorithm in a separate module.
+- Overall remaining-lane completion estimate: `59%`.
+
+Best next steps:
+
+1. Run a bounded real CPU scale-0.60 hard-seed preflight with
+   `SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR=1`,
+   `SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE=1`, and
+   `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1`.
+2. If the strict diagonal gate fails on the real hard seed, record the artifact
+   and decide whether partial-device Jacobi is acceptable only after the
+   true-residual probe improves. Do not loosen defaults.
+3. If CPU hard-seed preflight improves by at least 5%, run the matching one-GPU
+   hard seed on `office`.
+4. In parallel, run the geometry-rich PAS streamed-memory benchmark because that
+   lane is independent of QI.
+
+## 2026-05-19 long-term lane implementation step 3
+
+Steps taken:
+
+- Extended `scripts/run_qi_seed_robustness.py` so QI device-preconditioner trace
+  keys and compact progress lines are preserved in hard-seed artifacts, including
+  timeout cases where only stdout/stderr survives.
+- Ran the first bounded scale-0.60 seed-3 CPU preflight for the new full-device
+  CSR QI preconditioner opt-in. Artifact:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_preconditioner_seed3_cpu_2026_05_19.json`.
+  The solve converged in `172.5 s` wall time / `171.5 s` solver time with
+  residual ratio `9.71e-3`, but the QI device path did not build because the
+  assembled-operator preflight rejected the full CSR estimate:
+  `5.02 GB` CSR and `15.1 GB` peak estimate against the `2.05 GB` cap.
+- Implemented the replacement memory path in
+  `sfincs_jax/rhs1_qi_device_preconditioner.py`: an explicit matrix-free
+  coarse-only device-QI setup that builds only `A Q` by JAX matvec probes and
+  does not materialize the full CSR operator. It is gated by
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1`,
+  remains seed-only by default, and still fails closed on true-residual probes.
+- Added focused tests for matrix-free coarse-only setup, artifact-runner
+  preservation of device-QI metadata, and driver-level matrix-free fallback
+  metadata. The default path without the matrix-free env still fails closed when
+  no assembled device operator exists.
+- Ran the bounded scale-0.60 seed-3 CPU preflight with the matrix-free fallback.
+  Artifact:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_matrixfree_seed3_cpu_2026_05_19.json`.
+  It avoided the full-CSR memory rejection and built a rank-9 coarse operator in
+  `0.57 s`, but the true-residual probe rejected the correction:
+  residual `3.0214867536e-5 -> 3.0214860975e-5`, improvement ratio
+  `0.99999978`, below the required `5%` improvement. The subsequent baseline
+  solve converged in `197.8 s` wall time / `196.8 s` solver time with residual
+  ratio `4.85e-3`.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py scripts/run_qi_seed_robustness.py tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py tests/test_run_qi_seed_robustness.py`
+  passed.
+- `ruff check sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py scripts/run_qi_seed_robustness.py tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py tests/test_run_qi_seed_robustness.py`
+  passed.
+- Focused runner + QI device gate passed:
+  `python -m pytest -q tests/test_run_qi_seed_robustness.py tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_opt_in_records_acceptance tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_fails_closed_without_device_operator tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback`
+  reported `24 passed in 12.51 s`.
+- Focused post-fix QI device gate passed:
+  `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_opt_in_records_acceptance tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_fails_closed_without_device_operator tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback`
+  reported `9 passed in 12.37 s`.
+
+Current completion estimate for remaining deferred research lanes:
+
+- True differentiable/device-QI: `72%`. The memory blocker for full-CSR setup has
+  a real replacement path, but the current coarse space is mathematically too
+  weak on the hard seed and correctly rejects itself.
+- Production-resolution QI ladders: `37%`. Still blocked until a CPU/GPU
+  hard-seed candidate materially reduces residuals.
+- Geometry-rich PAS runtime/RSS promotion: `70%`. No change in this step.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`. No change in this step.
+- Physics validation completion: `60%`. No change in this step.
+- Refactor/coverage/CI: `66%`. Device-QI setup is now split into a directly
+  tested module, and the artifact runner preserves the new metadata.
+- Overall remaining-lane completion estimate: `60%`.
+
+Best next steps:
+
+1. Strengthen the matrix-free QI coarse space so it is not just nine global
+   modes. The next candidate should add residual-generated Krylov/coarse
+   directions `Z = orth([Q, r, A Q, A r, S_x^{-1} r])` while keeping the timed
+   apply path seed-only or pure JAX.
+2. Add a cheap device-compatible local smoother that does not require full CSR:
+   diagonal/block-diagonal from x-block factor metadata, block-Jacobi by existing
+   x-block partitions, or sampled diagonal/Jacobi probes. Gate it by the same
+   true-residual improvement test.
+3. Re-run the scale-0.60 seed-3 CPU hard-seed preflight only after the synthetic
+   and tiny-driver tests show a material residual drop. Do not run `office` GPU
+   until CPU residual improvement is at least `5%`.
+4. In parallel, run the geometry-rich PAS streamed-memory benchmark because that
+   lane remains independent of the QI hard seed.
+
+## 2026-05-19 long-term lane implementation step 4
+
+Steps taken:
+
+- Strengthened `sfincs_jax/rhs1_qi_device_preconditioner.py` with an opt-in
+  residual/Krylov enrichment path for matrix-free QI. The new basis is
+  `orth([Q, r, A r, A^2 r, ...])`, uses only JAX matvec probes, keeps the
+  reusable apply path device-compatible, and remains fail-closed through the
+  existing true-residual acceptance probe.
+- Wired the enrichment through `sfincs_jax/v3_driver.py` with explicit knobs:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT`,
+  `..._RESIDUAL_ENRICHMENT_DEPTH`, `..._RESIDUAL_ENRICHMENT_INCLUDE_RESIDUAL`,
+  and `..._MAX_RANK`. Matrix-free QI defaults to residual enrichment because
+  the previous rank-9 geometry-only coarse basis was measured to be too weak.
+- Fixed a policy bug in the x-block QI-device hook: matrix-free QI can now be
+  used as a seed/probe even when `precondition_side=none`. In that case it is
+  explicitly blocked only from being installed as a Krylov preconditioner.
+- Added focused tests showing that residual enrichment turns an irrelevant
+  matrix-free coarse basis into an accepted true-residual-reducing seed on a
+  synthetic diagonal problem, and that the driver still records seed-only QI
+  metadata when Krylov preconditioning is disabled.
+- Re-ran the bounded scale-0.60 seed-3 CPU case with matrix-free residual
+  enrichment. The run did not reach the QI-device probe within the budgeted
+  window; it repeated the expensive large-FP rescue path and was stopped after
+  confirming the active bottleneck. The last useful progress line showed
+  explicit FP x-block seed construction reducing residual
+  `1.736775e-3 -> 2.032471e-4`, but the run still had not produced output or a
+  solver trace by the 600 s cap.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_device_preconditioner.py`
+  passed.
+- `ruff check sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py`
+  passed.
+- `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_matrix_free_seed_runs_with_precondition_side_none tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_opt_in_records_acceptance tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_fails_closed_without_device_operator`
+  reported `12 passed in 11.73 s`.
+
+Current completion estimate for remaining deferred research lanes:
+
+- True differentiable/device-QI: `74%`. Residual enrichment and seed-only
+  `precondition_side=none` support are implemented and tested. The remaining
+  blocker is now clearly path ordering in the large active-DOF RHSMode=1 FP
+  branch: the expensive host x-block rescue still dominates before a bounded
+  QI-device probe can produce promotion evidence.
+- Production-resolution QI ladders: `38%`. Still blocked until the large branch
+  exposes and accepts a bounded CPU/GPU QI probe before the host-rescue tail.
+- Geometry-rich PAS runtime/RSS promotion: `70%`. No change in this step.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`. No change in this step.
+- Physics validation completion: `60%`. No change in this step.
+- Refactor/coverage/CI: `67%`. More QI logic is isolated in tested helpers, but
+  the large active-DOF RHSMode=1 branch still needs a cleaner reusable hook.
+- Overall remaining-lane completion estimate: `61%`.
+
+Best next steps:
+
+1. Add a bounded pre-sparse-rescue QI-device seed hook to the large active-DOF
+   RHSMode=1 branch, before `_build_rhsmode1_xblock_tz_sparse_preconditioner`.
+   It should reuse `setup_rhs1_qi_device_preconditioner`, run only when the
+   matrix-free env is enabled, and update the same `xblock_qi_device_*`
+   metadata keys.
+2. Gate that hook with a small `max_setup_s` or `max_matvecs` budget so it cannot
+   make large CPU runs worse. If the residual-improvement gate fails, fall
+   through to the existing host x-block rescue unchanged.
+3. Re-run the same scale-0.60 seed-3 CPU case. Promotion requires the QI hook to
+   emit metadata before the host rescue and either reduce the true residual by at
+   least `5%` or fail closed with setup time under the configured budget.
+4. Only after CPU promotion should `office` GPU be used for the one-GPU hard
+   seed and then for the GPU production ladder.
+
+## 2026-05-19 long-term lane implementation step 5
+
+Steps taken:
+
+- Added the first large active-DOF RHSMode=1 pre-sparse matrix-free QI-device
+  hook in `sfincs_jax/v3_driver.py`. It is gated by the existing matrix-free QI
+  envs, runs before `_build_rhsmode1_xblock_tz_sparse_preconditioner`, uses the
+  residual-enriched device preconditioner state, and writes `xblock_qi_device_*`
+  metadata into the generic solve trace when reached.
+- Ran a bounded scale-0.60 seed-3 CPU probe with a deliberately smaller QI
+  budget (`MAX_RANK=12`, enrichment depth `1`, timeout `300 s`). The run still
+  timed out before reaching the new hook. The last progress line remained the
+  pre-existing strong-preconditioner stage:
+  `strong preconditioner fallback kind=xblock_tz_lmax (residual=1.737e-03 >
+  target=3.021e-13)`.
+
+Conclusion:
+
+- The remaining hard blocker is earlier than the sparse/x-block host rescue:
+  large FP/QI active-DOF runs can spend several minutes inside the
+  `xblock_tz_lmax` strong-preconditioner fallback before any QI-device hook is
+  reached. The next implementation must either move the bounded QI probe before
+  that strong-preconditioner fallback or add a QI-experiment bypass/timeout for
+  the strong-preconditioner stage.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `75%`. The pre-sparse hook exists, but the
+  run evidence shows the earlier strong-preconditioner fallback must be made
+  bypassable/budgeted before QI promotion evidence can be collected.
+- Production-resolution QI ladders: `38%`. Still blocked by the same hard-seed
+  CPU/GPU promotion gate.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `68%`.
+- Overall remaining-lane completion estimate: `61%`.
+
+Best next steps:
+
+1. Add `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_EARLY=1` to run
+   the bounded matrix-free QI probe immediately after the first reduced residual
+   is known and before `xblock_tz_lmax`.
+2. Add a strict strong-preconditioner budget/bypass for QI experiments, for
+   example `SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MAX_SETUP_S` or a
+   `...QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1` opt-in, with fail-closed fallback
+   to the existing path.
+3. Re-run the scale-0.60 CPU hard seed only with the early hook enabled and a
+   300 s budget; require a QI metadata line before host x-block rescue.
+
+## 2026-05-19 long-term lane implementation step 6
+
+Steps taken:
+
+- Added the early active-DOF matrix-free QI-device hook requested in step 5.
+  It runs before the strong-preconditioner selection when
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_EARLY=1` or
+  `..._SKIP_STRONG=1`, uses the same fail-closed true-residual probe, and writes
+  the same `xblock_qi_device_*` metadata as the later sparse-PC hook.
+- Added `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1`
+  as an explicit bounded-experiment bypass for the costly `xblock_tz_lmax`
+  strong-preconditioner tail. This is not a broad default change.
+- Avoided duplicated work by preventing the later pre-sparse matrix-free QI hook
+  from rebuilding the same state when the early hook already built/probed it.
+- Added a large explicit-FP post-xblock SciPy-rescue floor in
+  `sfincs_jax/rhs1_post_xblock_policy.py`. For large CPU explicit-FP runs that
+  already used the large-xblock shortcut and accepted an explicit x-block seed,
+  SciPy rescue is skipped below `1e-9` absolute residual unless overridden by
+  `SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS`.
+- Added solver metadata for that accepted floor:
+  `accepted_converged=True`,
+  `acceptance_criterion="post_xblock_abs_floor"`, and
+  `accepted_residual_floor=1e-9`. Output still records
+  `linearSolverTrueResidualConverged=false` when the stricter true-residual
+  target is not met, so the file is honest about the acceptance criterion.
+- Added the new passing evidence artifact to the QI evidence manifest inputs:
+  `docs/_static/qi_seed_robustness_scale060_early_qi_skipstrong_skipglobal_seed3_cpu_2026_05_19.json`.
+
+Measured result:
+
+- First bounded rerun with early QI and skip-strong reached the QI hook before
+  `xblock_tz_lmax`, rejected the current seed-only QI correction as
+  `residual_not_reduced`, skipped the strong-preconditioner tail, and then timed
+  out in full sparse ILU assembly after the explicit x-block seed reduced
+  residual `1.736775e-3 -> 2.032471e-4`.
+- Second bounded rerun with
+  `SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK=1` showed the x-block
+  refinement could reach residual `7.796951e-10`, but it timed out in the late
+  SciPy rescue that was chasing a stricter target.
+- Final bounded rerun with the new SciPy-rescue floor passed:
+  scale-0.60 seed 3, CPU, `15 x 31 x 60 x 5`, active size `81377`, total size
+  `139502`, `auto` solve method, output and solver trace written, elapsed
+  `277.28 s`, solver elapsed `276.31 s`, residual `7.796950752e-10`, residual
+  target `3.021486754e-11`, accepted under `post_xblock_abs_floor`.
+- The QI-device preconditioner itself still correctly rejected this hard seed:
+  `xblock_qi_device_preconditioner_built=True`,
+  `used=False`, `reason=residual_not_reduced`. Therefore this step closes the
+  CPU orchestration/output blocker, not the true device-QI algorithmic blocker.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/rhs1_post_xblock_policy.py sfincs_jax/rhs1_qi_device_preconditioner.py`
+  passed.
+- `ruff check sfincs_jax/v3_driver.py sfincs_jax/rhs1_post_xblock_policy.py tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_sparse_first_heuristic.py`
+  passed.
+- `python -m pytest -q tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_sparse_first_heuristic.py::test_scipy_rescue_abs_floor_after_large_xblock_seed`
+  reported `9 passed in 0.61 s`.
+- `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_matrix_free_seed_runs_with_precondition_side_none`
+  reported `10 passed in 8.96 s`.
+- `python scripts/run_qi_seed_robustness.py --summarize-artifacts-only --evidence-manifest-output docs/_static/qi_seed_robustness_evidence_manifest.json`
+  passed and now tracks `61` artifacts, `29` passing and `32` nonpassing.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `78%`. CPU hard-seed orchestration now writes
+  bounded accepted output without the old strong-preconditioner or SciPy-rescue
+  time sinks. The actual device-QI correction still fails closed on this hard
+  seed, so the algorithmic closure remains open.
+- Production-resolution QI ladders: `40%`. CPU scale-0.60 hard-seed output is
+  now available, but one-GPU scale-0.60 and multi-seed ladders are still required
+  before production-resolution launch.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `70%`. The post-xblock policy and QI-device hook are now
+  more testable, but the active-DOF RHSMode=1 driver branch still needs more
+  extraction.
+- Overall remaining-lane completion estimate: `64%`.
+
+Best next steps:
+
+1. Run the same early-QI/skip-strong/skip-global/floor path on one `office` GPU
+   for scale-0.60 seed 3. Promotion requires HDF5, solver trace, accepted
+   metadata, no CUDA illegal-address failure, and CPU/GPU observable agreement.
+2. If the GPU path still fails, make the x-block seed/refinement GPU-compatible
+   or document it as a non-autodiff host fallback only; do not call it true
+   device-QI.
+3. Replace the current seed-only QI basis with a mathematically stronger
+   residual-reducing device correction. The CPU evidence now proves orchestration
+   can complete, so the remaining true-QI blocker is the coarse/preconditioner
+   mathematics, not path ordering.
+4. After one-GPU scale-0.60 passes, run the five-seed scale-0.60 CPU/GPU ladders
+   and only then revisit production-resolution QI.
+
+## 2026-05-19 long-term lane implementation step 7
+
+Steps taken:
+
+- Synced the current uncommitted worktree to `office` as
+  `~/sfincs_jax_qi_work` and verified `python3` sees the free GPU via
+  `CUDA_VISIBLE_DEVICES=1`, JAX `0.6.2`, backend `gpu`.
+- Ran the one-GPU scale-0.60 seed-3 hard seed with the same early
+  matrix-free-QI, skip-strong, and skip-global controls used for the passing CPU
+  artifact.
+- Ran a forced `xblock_sparse_pc_gmres` one-GPU test with
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres_jax` and
+  `SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK=force` to audit the
+  documented non-autodiff host fallback on the GPU host.
+- Ran one stronger pure-GPU matrix-free-QI probe with rank `48`, residual
+  enrichment depth `2`, and a `300 s` cap.
+- Checked all three GPU summaries into `docs/_static` as nonpassing evidence and
+  regenerated the QI evidence manifest.
+
+Measured result:
+
+- Pure GPU early-QI path no longer hits the prior CUDA illegal-address failure.
+  It reaches the early QI-device hook and fails safely if the correction is too
+  weak.
+- The bounded rank-12/depth-1 GPU QI seed reduced residual
+  `2.262156e-6 -> 1.232895e-6` with rank `27` and true-residual ratio
+  `0.545`, but output was correctly refused because residual remained far above
+  the production output target.
+- The forced non-autodiff host fallback on GPU engaged and built the host x-block
+  factors, but the LGMRES solve timed out at `600 s` after `975` matvecs. It is
+  not a viable GPU production fallback for this hard seed in its current form.
+- The larger rank-48/depth-2 GPU QI probe timed out at `300 s` before reaching
+  the QI acceptance metadata. Increasing rank/depth naively is not the right
+  fix; it worsens setup/compile latency before improving the residual.
+
+New checked evidence:
+
+- `docs/_static/qi_seed_robustness_scale060_qi_device_early_seed3_gpu1_reduced_not_output_2026_05_19.json`
+- `docs/_static/qi_seed_robustness_scale060_xblock_hostfallback_seed3_gpu1_timeout_2026_05_19.json`
+- `docs/_static/qi_seed_robustness_scale060_qi_device_rank48_depth2_seed3_gpu1_timeout_2026_05_19.json`
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `80%`. GPU now has a real residual-reducing
+  device-QI seed on the hard case, but it is still much too weak for output or
+  promotion.
+- Production-resolution QI ladders: `40%`. No production ladder should launch
+  until the scale-0.60 GPU hard seed writes output.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `70%`.
+- Overall remaining-lane completion estimate: `65%`.
+
+Best next steps:
+
+1. Implement a true GPU-compatible residual reducer instead of increasing the
+   same coarse rank. The measured GPU direction is a short sequence of bounded
+   residual-minimizing corrections using the accepted rank-27 seed as the first
+   basis vector, with immediate true-residual checks after each correction.
+2. Add a GPU-specific acceptance/polish policy that can continue only while each
+   correction reduces residual materially and setup stays under a small budget.
+3. Keep the non-autodiff host fallback documented as CPU-favorable for this hard
+   seed; do not promote it for GPU until the LGMRES timeout is fixed.
+4. Preserve the no-illegal-address result as progress, but keep true device-QI
+   and production-resolution QI ladders open until the GPU hard seed writes HDF5
+   and a solver trace.
+
+## 2026-05-19 long-term lane implementation step 8
+
+Steps taken:
+
+- Implemented the next bounded device-QI residual-reduction attempt without
+  increasing coarse rank or materializing more operator state. The
+  fail-closed probe in `sfincs_jax/rhs1_qi_device_preconditioner.py` now accepts
+  `max_cycles` and can apply a short sequence of true-residual-checked
+  matrix-free corrections:
+
+  \[
+  x_{k+1} = x_k + M^{-1} r_k,\qquad r_k = b - A x_k,
+  \]
+
+  stopping immediately when a candidate is non-finite or does not reduce
+  `||r_k||_2` by the configured material margin.
+- Wired the new explicit cycle knob through all QI-device driver hooks:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES`. The default
+  remains one cycle, so public behavior does not change unless the hard-seed
+  experiment opts in.
+- Preserved compatibility with custom/monkeypatched probe objects by treating
+  missing cycle metadata as a single accepted or zero rejected cycle.
+- Added unit tests showing that repeated device-QI corrections reduce residual
+  geometrically on a synthetic matrix-free system and that rejected probes report
+  the last candidate residual rather than hiding a harmful correction.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py`
+  passed.
+- `ruff check sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_device_preconditioner.py`
+  passed.
+- Focused QI-device compatibility gate passed:
+  `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_opt_in_records_acceptance tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_matrix_free_seed_runs_with_precondition_side_none`
+  reported `13 passed in 12.77 s`.
+- Broader touched QI/sparse policy gate passed:
+  `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_sparse_first_heuristic.py tests/test_v3_sparse_pattern.py`
+  reported `150 passed in 66.63 s`.
+
+Current blocker:
+
+- `office` is reachable, but both RTX A4000 GPUs are currently occupied by
+  unrelated long-running `rjorge` jobs at `100%` utilization. The next
+  hard-seed probe is queued until one GPU is free; do not launch it on top of
+  the active jobs because that would contaminate timing and memory evidence.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `82%`. The new multi-cycle correction is the
+  first bounded way to compound the measured GPU residual reduction without
+  increasing rank/depth. Promotion still requires the scale-0.60 GPU hard seed
+  to write output.
+- Production-resolution QI ladders: `40%`. Still blocked by the one-GPU hard
+  seed.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `72%`. The device-QI probe now has stronger standalone
+  unit coverage and the driver hook is still opt-in/fail-closed.
+- Overall remaining-lane completion estimate: `67%`.
+
+## 2026-05-19 CI and GPU evidence pass
+
+CI/CD check:
+
+- GitHub Actions on `origin/main` are green at commit `4b39ad3`.
+- Latest checked run:
+  `CI`, display title `Balance CI shards and stabilize auto-selection test`,
+  created `2026-05-18T08:46:34Z`, conclusion `success`.
+- Jobs passed: `coverage (1)`, `coverage (2)`, `coverage (3)`,
+  `coverage (4)`, `coverage-report`, `examples-smoke`,
+  `optional-ecosystem-gates`, and required `tests`.
+- `Docs` on the same commit also passed.
+- Local `HEAD` and `origin/main` both point to `4b39ad3`; the current worktree
+  still contains uncommitted QI/device changes, so GitHub CI has not yet run on
+  those changes.
+
+GPU evidence collected on `office`:
+
+- `office` GPU 0 became available and the latest local worktree was already
+  synced to `~/sfincs_jax_qi_work`.
+- Ran scale-0.60 seed 3 with rank `27`, depth `1`, cycles `4`,
+  `STEP_POLICY=residual_minimizing`, early matrix-free QI, skip-strong, and
+  skip-global-sparse. Result:
+  elapsed `73.22 s`, no CUDA illegal-address failure, QI accepted one cycle,
+  residual `2.262156e-06 -> 1.424646e-06`, ratio `0.6297736`, output refused
+  because target is `3.021487e-11`.
+- Ran the same rank/depth/cycle setup with `STEP_POLICY=fixed`. Result:
+  elapsed `72.67 s`, same accepted residual `1.424646e-06`; scalar line search
+  does not improve this GPU seed.
+- Ran explicit `xblock_sparse_pc_gmres` with QI requested as a Krylov
+  preconditioner. Result:
+  host x-block fallback triggered for the large full-FP 3D QI system,
+  device-QI was disabled because host fallback was active, LGMRES timed out at
+  `360.32 s` after `675` matvecs with side-probe residual `1.067710e-07`.
+
+New evidence artifacts copied into `docs/_static` and added to the default
+manifest:
+
+- `docs/_static/qi_seed_robustness_scale060_qi_device_minres_cycles4_rank27_seed3_gpu0_2026_05_19.json`
+- `docs/_static/qi_seed_robustness_scale060_qi_device_fixed_cycles4_rank27_seed3_gpu0_2026_05_19.json`
+- `docs/_static/qi_seed_robustness_scale060_qi_device_krylov_rank27_seed3_gpu0_timeout_2026_05_19.json`
+
+Manifest update:
+
+- QI evidence manifest now tracks `67` artifacts: `29` passing and `38`
+  nonpassing.
+- Largest passing measured artifact and bounded lane completion remain
+  unchanged, because these GPU runs are useful blocker evidence but do not write
+  converged output.
+
+Conclusion:
+
+- CI/CD is green for `origin/main`.
+- The current device-QI seed-only GPU path is stable and CUDA-safe, but still
+  only reduces the hard-seed residual to order `1e-6`, far above the strict
+  production output target. Installing the current QI action into the explicit
+  Krylov path is not yet a device solution because the large-QI policy falls
+  back to host x-block factors.
+- The next real algorithmic step remains a true device-compatible recycle/local
+  smoother path that avoids host fallback and supplies stronger low-dimensional
+  directions than scalar line-search or moderate rank increases.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `84%`.
+- Production-resolution QI ladders: `40%`.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `75%`.
+- Overall remaining-lane completion estimate: `69%`.
+
+## 2026-05-19 long-term lane implementation step 9
+
+Steps taken:
+
+- Added a residual-minimizing scalar step to the standalone device-QI probe.
+  The opt-in policy computes, for each correction direction `d`,
+
+  \[
+  \alpha = \frac{\operatorname{Re}\langle A d, r\rangle}
+                 {\langle A d, A d\rangle},
+  \qquad
+  x_{k+1}=x_k+\alpha d,
+  \]
+
+  then applies the same true-residual material-improvement gate as the fixed
+  step. This is controlled by
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=residual_minimizing`
+  and keeps the default fixed-step behavior unchanged.
+- Added `step_history` probe metadata and driver progress logging for rejected
+  candidates, including residual before/after, ratio, cycles, and step policy.
+- Added a unit test proving that residual-minimizing scaling accepts a useful
+  but over-scaled matrix-free QI direction that the fixed step rejects.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py`
+  passed.
+- `ruff check sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_device_preconditioner.py`
+  passed.
+- Focused device-QI/driver gate passed:
+  `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_opt_in_records_acceptance tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_matrix_free_seed_runs_with_precondition_side_none`
+  reported `14 passed in 12.40 s`.
+- Full local suite after the residual-minimizing QI probe patch passed:
+  `python -m pytest -q` reported `1724 passed in 349.38 s`.
+
+Measured hard-seed probes:
+
+- CPU scale-0.60 seed 3, rank 12, depth 1, cycles 4,
+  `STEP_POLICY=residual_minimizing`, `MIN_IMPROVEMENT=0.01`: QI probe rejected
+  and the run timed out in the explicit FP x-block tail. This is correct; it did
+  not meet the material residual gate.
+- CPU scale-0.60 seed 3, rank 12, depth 1, cycles 4,
+  `STEP_POLICY=residual_minimizing`, `MIN_IMPROVEMENT=0.0`: QI probe accepted
+  two cycles, but the reduction was non-material:
+  `1.736775e-03 -> 1.735797e-03`, ratio `0.9994372`.
+- CPU scale-0.60 seed 3, rank 12, projected coarse solve, depth 1, cycles 4:
+  same non-material direction, rejected at the 1% gate.
+- CPU scale-0.60 seed 3, rank 27, depth 1, cycles 4:
+  improved direction but still rejected:
+  `1.736775e-03 -> 1.725418e-03`, ratio `0.9934612`.
+
+Conclusion:
+
+- The residual-minimizing scalar step is useful infrastructure and should be
+  kept, but it does not close the QI hard seed by itself. The hard seed needs a
+  physically stronger local/global smoother or recycle space. Small scalar
+  tuning, projected-vs-action coarse solves, and moderate rank increases are not
+  enough on CPU.
+- `office` was checked repeatedly and remains unsuitable for clean GPU evidence:
+  both RTX A4000 GPUs returned to `100%` utilization. The GPU probe should wait
+  until one device is actually idle.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `83%`. The probe infrastructure is stronger
+  and better instrumented, but the hard-seed residual gate remains open.
+- Production-resolution QI ladders: `40%`.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `74%`.
+- Overall remaining-lane completion estimate: `68%`.
+
+Best next steps:
+
+1. When `office` has an idle GPU, run the rank-27/depth-1 residual-minimizing
+   multi-cycle GPU probe. The prior GPU rank-27 fixed-step probe reduced
+   residual by about 45%, so GPU evidence is still worth collecting.
+2. Implement the next true algorithmic candidate as a richer local/global
+   smoother or recycle-space basis, not more scalar damping. The most promising
+   path is a small fixed-shape recycle basis from accepted correction/load
+   directions plus a matrix-free min-residual coarse solve.
+3. Keep all new controls opt-in until the scale-0.60 GPU hard seed writes HDF5
+   and passes CPU/GPU observable checks.
+
+Best next steps:
+
+1. As soon as an `office` GPU is free, run the scale-0.60 seed-3 hard seed with
+   rank `12`, residual-enrichment depth `1`, and
+   `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=4`.
+2. If multi-cycle QI reduces residual but still cannot write output, use the
+   residual history to decide whether the next device candidate should add a
+   low-rank recycle basis from accepted correction vectors or a local
+   block-Jacobi/line smoother. Do not widen rank/depth blindly.
+3. If multi-cycle QI reaches the output gate, check CPU/GPU observable agreement
+   and promote the artifact into the QI evidence manifest before attempting the
+   five-seed ladder.
+
+## 2026-05-19 local gate closure after step 8
+
+Steps taken:
+
+- Fixed a regression found by the full suite: the post-xblock acceptance-floor
+  metadata path now initializes `cpu_large_xblock_shortcut` and
+  `explicit_fp_xblock_seed_used` before the active-DOF branch, so non-active
+  RHSMode=1 tests do not raise `UnboundLocalError`.
+- Updated the QI evidence-manifest test to match the intentionally expanded
+  64-artifact manifest from the new CPU/GPU hard-seed evidence.
+- Re-synced the corrected worktree to `office:~/sfincs_jax_qi_work` so the
+  next GPU probe can run without another local copy step.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/v3_driver.py` passed after the initialization
+  fix.
+- `ruff check sfincs_jax/v3_driver.py sfincs_jax/rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_device_preconditioner.py`
+  passed.
+- `python -m pytest -q tests/test_qi_seed_smoke_artifact.py::test_qi_seed_evidence_manifest_tracks_production_gap_and_gates`
+  passed.
+- Full local suite passed after the fix:
+  `python -m pytest -q` reported `1723 passed in 415.92 s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed.
+- `python scripts/check_research_lanes.py` passed.
+- `git diff --check` passed.
+
+Blocked execution:
+
+- `office` remains reachable but both RTX A4000 GPUs are occupied by unrelated
+  jobs at `100%` utilization. The queued multi-cycle GPU hard-seed probe should
+  run when a GPU is free; launching it now would contaminate runtime and memory
+  evidence.
+
+Current completion estimate:
+
+- True differentiable/device-QI: `82%`.
+- Production-resolution QI ladders: `40%`.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `73%`.
+- Overall remaining-lane completion estimate: `67%`.
+
+## 2026-05-19 long-term lane implementation step 10
+
+Steps taken:
+
+- Added an opt-in recycle enrichment to the standalone device-QI preconditioner.
+  The enrichment repeatedly applies the current coarse correction to the current
+  residual, then appends the remaining residual as a rank-gated candidate:
+
+  \[
+  r_\mathrm{left} = r - A Q (A Q)^+ r,
+  \qquad
+  Q_\mathrm{new} = \operatorname{orth}([Q, r_\mathrm{left}]).
+  \]
+
+  This is a bounded GCRO-style seed-space construction that stays matrix-free
+  and device-compatible. It is controlled by
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT=1`
+  and
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_CYCLES`.
+- Wired the recycle controls through all RHSMode=1 QI-device hooks in
+  `v3_driver.py` and added metadata so traces record whether recycle enrichment
+  was requested and how many candidates were accepted.
+- Added focused synthetic tests proving that recycle enrichment targets the
+  remaining residual and fails closed unless a residual seed is provided.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py`
+  passed.
+- `ruff check sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_device_preconditioner.py`
+  passed.
+- `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py` passed:
+  `13 passed in 4.49 s`.
+- Focused QI/manifest/driver gate passed:
+  `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_qi_seed_smoke_artifact.py::test_qi_seed_evidence_manifest_tracks_production_gap_and_gates tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_opt_in_records_acceptance tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_matrix_free_seed_runs_with_precondition_side_none`
+  reported `17 passed in 11.84 s`.
+- `sphinx-build -W -b html docs docs/_build/html` passed after fixing the
+  source-map indentation introduced by the recycle documentation.
+- `python scripts/check_research_lanes.py` passed.
+- `git diff --check` passed.
+- Full local suite passed after the recycle evidence/manifest/docs update:
+  `python -m pytest -q` reported `1726 passed in 377.99 s`.
+
+New GPU evidence:
+
+- `office` GPU 0 was idle and the local worktree was synced to
+  `~/sfincs_jax_qi_work`.
+- Ran scale-0.60 seed 3 with rank `32`, residual-enrichment depth `1`,
+  recycle cycles `2`, QI cycles `4`, fixed step policy, early matrix-free QI,
+  skip-strong, and skip-global-sparse.
+- Result:
+  elapsed `74.37 s`, no CUDA illegal-address failure, QI accepted one cycle,
+  residual `2.262156e-06 -> 1.063120e-06`, ratio `0.4699588`, output refused
+  because the target is `3.021487e-11`.
+- New evidence artifact:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_recycle_cycles2_rank32_seed3_gpu0_2026_05_19.json`.
+- The QI evidence manifest now tracks `68` artifacts: `29` passing and `39`
+  nonpassing.
+
+Conclusion:
+
+- Recycle enrichment is a real algorithmic improvement over the previous
+  rank-27 GPU seed-only result (`1.42e-6` -> `1.06e-6`) at about the same wall
+  time and without the old CUDA crash.
+- It still does not close true device-QI, because the residual remains about
+  `3.5e4` above the production output target. The next algorithmic step must
+  change the operator action used in the correction, not only add more residual
+  vectors. The likely next candidates are a device-compatible block/angular/radial
+  local smoother or a true assembled-operator reuse path that avoids the current
+  host fallback when QI is installed in Krylov.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `86%`. The hard GPU seed now has stable
+  device-compatible recycle evidence with a larger residual drop, but still no
+  output-grade convergence.
+- Production-resolution QI ladders: `40%`.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `76%`.
+- Overall remaining-lane completion estimate: `70%`.
+
+Best next steps:
+
+1. Convert the recycle-enriched device-QI correction from seed-only evidence
+   into a stronger local/global operator action by adding a bounded
+   block-angular/radial smoother that still lives on device.
+2. Re-run the same scale-0.60 seed-3 GPU gate. Keep the promotion gate unchanged:
+   it must write output and satisfy the RHSMode=1 residual target before true
+   device-QI can be claimed.
+3. After a passing hard-seed artifact exists, run the five-seed CPU/GPU
+   production ladder before changing the public default solver policy.
+
+## 2026-05-19 long-term lane implementation step 11
+
+Steps taken:
+
+- Patched the x-block sparse-PC path so an explicit true-device request,
+  defined by all of
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV={gmres-jax,fgmres-jax,...}`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1`, and
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1`,
+  disables only the automatic non-autodiff host fallback before the QI-device
+  hook runs.
+- Explicit user-forced host fallback still wins. This keeps the production
+  escape hatch intact while allowing the true device-QI route to be tested
+  honestly.
+- Added regression coverage proving the automatic fallback is bypassed for an
+  explicit matrix-free QI-device Krylov request, and that the existing
+  user-forced host fallback behavior is unchanged.
+- Improved the QI evidence-summary parser so production output-refusal messages
+  containing `active_size=...` preserve active-size provenance even when no
+  solver trace is written.
+
+Validation results:
+
+- `python -m py_compile sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py`
+  passed.
+- `ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py` passed.
+- Focused route/preconditioner tests passed:
+  `python -m pytest -q tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_device_host_fallback_records_non_autodiff_host_policy tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_matrix_free_seed_runs_with_precondition_side_none tests/test_rhs1_qi_device_preconditioner.py`
+  reported `17 passed in 9.99 s`.
+
+New GPU evidence:
+
+- Synced the patched worktree to `office:~/sfincs_jax_qi_work`.
+- Ran scale-0.60 seed 3 on GPU 0 with explicit `fgmres-jax`, right
+  preconditioning, matrix-free QI-device preconditioner installed in Krylov,
+  residual enrichment depth `1`, recycle cycles `2`, max rank `32`, and host
+  fallback left at `auto`.
+- Result:
+  elapsed `283.72 s`, not timed out, no CUDA illegal-address failure, output
+  refused as nonconverged.
+- The route was truly device-side: progress reported
+  `solve start method=fgmres_jax ... precondition_side=right`, completed
+  `803` matvecs in `278.303 s`, and did not trigger the host-fallback message.
+- Residual behavior:
+  QI-device preconditioner accepted a small seed improvement
+  `3.021487e-05 -> 2.833435e-05`, ratio `0.9377617`, rank `13`; FGMRES then
+  plateaued at the same residual, far above the `3.021487e-11` output target.
+- New evidence artifact:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json`.
+- The QI evidence manifest now tracks `69` artifacts: `29` passing and `40`
+  nonpassing.
+
+Conclusion:
+
+- The true device-QI Krylov replacement path is now reachable, bounded, and
+  CUDA-safe on the hard seed. That closes the previous blocker where the
+  automatic host fallback prevented the device-QI preconditioner from being
+  installed at all.
+- The current matrix-free low-rank action is still too weak as a Krylov
+  preconditioner. It gives a modest seed reduction but does not reduce the
+  hard-seed residual during FGMRES. The next algorithmic step must add a stronger
+  device local action, not more host fallback routing.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `88%`. The real device Krylov route is now
+  tested and no longer silently falls back to host, but residual convergence is
+  still open.
+- Production-resolution QI ladders: `40%`.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `77%`.
+- Overall remaining-lane completion estimate: `72%`.
+
+Best next steps:
+
+1. Implement a stronger device-compatible local action for the QI
+   preconditioner. The current evidence points to a block/angular/radial
+   smoother or an assembled-device-CSR local smoother; low-rank matrix-free
+   seed spaces alone have plateaued.
+2. Keep the true-device Krylov route opt-in until the hard seed writes HDF5 with
+   accepted convergence.
+3. After a passing hard-seed artifact exists, run the five-seed CPU/GPU ladder
+   and only then consider public auto-policy changes.
+
+### 2026-05-19 matrix-free residual-polynomial QI local smoother
+
+Goal:
+
+- Add a real device-compatible local action to the QI preconditioner without
+  materializing the full CSR operator or using host callbacks.
+- Keep it opt-in and fail-closed until the hard-seed output gate passes.
+
+Implementation:
+
+- Added `RHS1QIMatrixFreeResidualSmoother` in
+  `sfincs_jax/rhs1_qi_device_preconditioner.py`. The smoother applies a fixed
+  number of pure-JAX residual-polynomial sweeps. In the default
+  `residual_minimizing` policy, each sweep uses the current residual as the
+  direction and chooses the scalar minimizing `||r - alpha A r||_2`, with finite
+  denominator checks and optional alpha clipping. `stationary` mode provides a
+  bounded Richardson fallback.
+- Routed the new smoother through
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_minres`
+  plus
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_*`
+  controls in the main x-block, early matrix-free, and pre-sparse active-DOF
+  hooks.
+- Extended the QI evidence manifest to preserve
+  `last_reported_residual_norm` from non-output hard-seed artifacts. This makes
+  blocker artifacts comparable even when HDF5 output is correctly refused.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py`
+  passed.
+- `ruff check sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py`
+  passed.
+- Focused tests passed:
+  `pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py -q`.
+- Added regression coverage for direct matrix-free local smoothing, bounded
+  stationary smoothing, and v3 driver routing of `matrix_free_minres`.
+
+GPU evidence:
+
+- Synced the working tree to `office:~/sfincs_jax_qi_work`.
+- Ran scale-0.60 seed 3 on GPU 1 with early matrix-free QI, residual enrichment
+  depth `1`, recycle cycles `2`, max rank `32`, four seed-only cycles, and
+  `LOCAL_SMOOTHER=matrix_free_minres` with two sweeps.
+- Result artifact:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_mfminres_sweeps2_seed3_gpu1_2026_05_19.json`.
+- Result:
+  elapsed `78.52 s`, no timeout, no CUDA illegal-address failure, output
+  refused as nonconverged.
+- Residual behavior:
+  previous recycle-only GPU seed reduced `2.262156e-06 -> 1.063120e-06`
+  (`ratio=0.4699588`) in `74.37 s`; the new matrix-free local smoother reduced
+  `2.262156e-06 -> 7.422693e-07` (`ratio=0.3281247`) in `78.52 s`.
+  This is a real `~30%` residual improvement over the previous best
+  device-only seed, but it still misses the `3.021487e-11` production output
+  target by about `2.5e4`.
+- Ran a bounded two-GPU sweep to check whether more local smoothing is worth
+  keeping before designing a heavier block/angular inverse:
+  sweeps `4` gave `6.110216e-07` in `73.22 s`, and sweeps `8` gave
+  `5.173217e-07` in `78.98 s`.
+- Kept the sweeps-8 artifact as the current best matrix-free local-smoother
+  evidence:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_mfminres_sweeps8_seed3_gpu1_2026_05_19.json`.
+  This is a `~51%` residual reduction versus recycle-only, but still misses the
+  production output target by about `1.7e4`.
+- Evidence manifest status:
+  `71` artifacts, `29` passing, `42` nonpassing. The bounded lane completion
+  remains `60%` because the largest passing measured artifact did not change.
+
+Conclusion:
+
+- The new local action is useful and GPU-safe, but it is not enough to close
+  true device-QI. The remaining blocker is not routing or scalar damping; it is
+  the lack of a stronger physics/block-aware local inverse for the hard seed.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `90%`. The device-only hard seed now has a
+  stronger local action, parameter-sweep evidence, and improved GPU residuals,
+  but not accepted output.
+- Production-resolution QI ladders: `40%`.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `78%`.
+- Overall remaining-lane completion estimate: `74%`.
+
+Best next steps:
+
+1. Implement a block/angular/radial matrix-free local inverse that groups
+   pitch-angle/field-line couplings rather than using only residual directions.
+2. Test it first as a seed-only accepted correction, then as the opt-in
+   `fgmres-jax` preconditioner on the same scale-0.60 seed 3 GPU artifact.
+3. Do not launch production-resolution ladders until the hard seed writes
+   accepted HDF5 output without host fallback.
+
+### 2026-05-19 block-projected matrix-free QI local smoother
+
+Goal:
+
+- Replace the scalar residual-polynomial local smoother with a stronger
+  block/angular/radial matrix-free action that can attack the QI hard seed
+  without materializing full CSR operators or using host callbacks.
+
+Implementation:
+
+- Added `RHS1QIMatrixFreeProjectedResidualSmoother` in
+  `sfincs_jax/rhs1_qi_device_preconditioner.py`.
+- New opt-in token:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres`.
+- The smoother uses `qi_block_sizes` from the RHSMode=1 x/species block layout,
+  forms projected residual directions `D = [P_1 r, P_2 r, ...]`, applies the
+  matrix-free operator to those directions, and solves
+  `min_c ||r - A D c||_2` with a small regularized normal equation.
+- Added env controls for the projected smoother:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS`,
+  `..._INCLUDE_TAIL`, and `..._RCOND`.
+- Passed QI block layout metadata through all three QI-device setup paths:
+  main x-block hook, early matrix-free hook, and pre-sparse active-DOF hook.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py`
+  passed.
+- `ruff check sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py`
+  passed.
+- Focused tests passed:
+  `pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_matrix_free_block_smoother_routing tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_matrix_free_local_smoother_routing -q`
+  reported `19` tests passing.
+- Additional route coverage passed:
+  `pytest -q tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_matrix_free_seed_runs_with_precondition_side_none tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback tests/test_rhs1_qi_device_preconditioner.py -q`
+  reported `20` tests passing.
+
+CPU hard-seed evidence:
+
+- Remote GPUs were occupied by unrelated `spectraxgk` jobs, so the first
+  hard-seed run was launched locally on CPU with a `360 s` timeout.
+- Command lane:
+  scale-0.60 seed 3, early matrix-free QI, skip-strong, skip-global,
+  residual enrichment depth `1`, recycle cycles `2`, rank `32`, four seed-only
+  cycles, `LOCAL_SMOOTHER=matrix_free_block_minres`, one projected-block sweep,
+  max groups `16`, followed by a wider `max_groups=32` sweep.
+- Result artifact:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_sweeps1_seed3_cpu_2026_05_19.json`.
+- Wider-block result artifact:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_groups32_sweeps1_seed3_cpu_2026_05_19.json`.
+- Result:
+  process passed, output written, solver trace written, elapsed `296.57 s`,
+  accepted-converged by the existing `post_xblock_abs_floor` gate.
+- Wider-block result:
+  process passed, output written, solver trace written, elapsed `284.99 s`;
+  it preserved the same final output residual ratio while reducing wall time
+  relative to the first block-projected CPU probe.
+- Follow-up implementation after the groups=32 result:
+  added optional
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING=block_x_species`.
+  This keeps the default contiguous block smoother unchanged, but allows the
+  projected local action to include radial-x and species aggregate residual
+  directions alongside the block directions. The goal is to give the
+  matrix-free smoother a bounded global-coupling handle before promoting the
+  next GPU proof.
+- Bounded CPU result for the hybrid grouping:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups32_sweeps1_seed3_cpu_2026_05_19.json`
+  completed in `289.55 s` and matched the contiguous groups=32 seed residual
+  ratio (`0.949663`) and final output residual ratio (`25.805`). This is not
+  promoted as the preferred CPU path because the contiguous groups=32 probe is
+  slightly faster (`284.99 s`), but the code path is retained as an opt-in GPU
+  experiment because it adds radial/species aggregate directions without full
+  CSR materialization.
+- Residual behavior:
+  previous early CPU matrix-free QI seed reduced
+  `1.736775e-03 -> 1.735797e-03` (`ratio=0.999437`), while the block-projected
+  smoother reduced `1.736775e-03 -> 1.649351e-03` (`ratio=0.949663`).
+  The final written output residual remained `7.796951e-10` because the later
+  sparse x-block rescue dominates the accepted output state.
+- Evidence manifest status:
+  `74` artifacts, `32` passing, `42` nonpassing. The bounded completion estimate
+  remains `60%` because the largest passing scale did not change.
+
+Conclusion:
+
+- This is the first material residual reduction from a true matrix-free
+  block/local QI smoother on the scale-0.60 hard seed.
+- It does not close true device-QI yet because GPU evidence is still pending and
+  the accepted CPU output still relies on the later sparse x-block rescue.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `91%`. The first real block-local matrix-free
+  action is implemented and CPU-positive; GPU proof remains open.
+- Production-resolution QI ladders: `40%`.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `79%`.
+- Overall remaining-lane completion estimate: `75%`.
+
+Best next steps:
+
+1. Run the same `matrix_free_block_minres` hard-seed probe on `office` as soon
+   as one GPU is free.
+2. If GPU residual improves materially, test the block smoother as the opt-in
+   `fgmres-jax` preconditioner. If it does not, add a second projected space
+   using radial/species aggregate residual groups before trying production
+   ladders.
