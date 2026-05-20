@@ -352,6 +352,13 @@ Current open lane board
   compared with ``2.306911e-5`` in ``279 s`` for the previous best checked GPU
   installed operator-Krylov/multilevel route. This is improvement evidence, not
   promotion evidence, because output and solver traces are still absent.
+  The follow-up ``recycled-augmented-device-qi`` GPU0 probe keeps the same
+  reusable ``(U, A U)`` basis inside a longer fixed device-cycle FGMRES solve.
+  It is the best checked hard-seed GPU residual so far, reaching
+  ``7.336295e-6`` in ``158.6 s`` while still refusing HDF5 output because the
+  production write tolerance is ``3.021487e-11``. This closes the question of
+  whether augmented/recycled Krylov materially helps; it does, but it is not
+  enough to promote true device-QI.
   The next implemented coarse-grid candidate is the
   ``coarse-residual-device-qi`` path: separate multilevel coarse bases solve the
   residual equation stage by stage instead of relying on one flat coarse rank
@@ -387,6 +394,9 @@ Current open lane board
   ladders.
   The newer GPU0 best-of artifact improves the final residual to
   ``1.992464e-5`` in ``292 s`` but still fails the production write gate. The
+  adaptive multilevel residual-equation grouping was also tested on GPU0 and
+  finishes at ``2.307995e-5`` in ``288 s``; it is negative evidence relative to
+  the block-Schur best-of and recycled augmented-Krylov artifacts. The
   composite GPU1 artifact combines residual snapshots, residual-Galerkin
   operator-image stages, and block-Schur residual equations; it improves setup
   to ``2.575099e-5`` but finishes at ``2.305955e-5``, so it is retained as

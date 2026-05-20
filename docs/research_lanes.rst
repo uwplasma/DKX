@@ -24,14 +24,15 @@ The true differentiable/device lane remains open because the scale-0.60 hard
 seed does not yet pass the production output/write gate on GPU. The CPU hard
 seed now has a bounded orchestration path that writes HDF5 and solver trace
 output at ``15 x 31 x 60 x 5`` without entering the old strong-preconditioner or
-SciPy-rescue time sinks. The best checked GPU installed-solver
-residual-equation evidence is now the 2026-05-20 augmented-Krylov
-operator-reuse probe in combined mode, which keeps the run on the GPU, avoids
-the old transpose/CUDA crash, and reduces the true residual from the public-auto
-``3.949394e-5`` to ``2.218202e-5``. It still misses the production gate by about
-six orders of magnitude relative to the
-``3.021487e-11`` write tolerance, so it remains blocker evidence rather than a
-promotion artifact.
+SciPy-rescue time sinks. The best checked GPU installed-solver evidence is now
+the 2026-05-20 recycled augmented-Krylov/operator-reuse probe in combined mode.
+It keeps the run on device, preserves the reusable QI coarse/operator action in
+the FGMRES least-squares problem, avoids the old transpose/CUDA crash, and
+reduces the true residual from the public-auto ``3.949394e-5`` and earlier
+augmented-Krylov ``2.218202e-5`` artifacts to ``7.336295e-6`` in ``158.6 s``.
+It still misses the production write gate by roughly five orders of magnitude
+relative to the ``3.021487e-11`` write tolerance, so it remains fail-closed
+blocker evidence rather than a promotion artifact.
 Separate the closed infrastructure blockers from the open claim blockers:
 transpose/VJP safety for the projected block smoother and the prior CUDA
 illegal-address crash are closed for the tested paths, while residual
@@ -67,7 +68,11 @@ Relevant implementation:
   matrix-free coarse-only path that builds just ``A Q`` by JAX matvec probes
   when full CSR materialization is too expensive. Both paths expose
   setup/apply/probe metadata and keep the timed apply path free of SciPy, host
-  LU/ILU, and Python callbacks.
+  LU/ILU, and Python callbacks. It also exposes an opt-in adaptive multilevel
+  residual-equation grouping that forms global, aggregate, and block residual
+  source spaces. The first hard-seed GPU evidence worsened the residual relative
+  to recycled augmented Krylov, so it is retained only as negative evidence and
+  a tested research control.
 - ``sfincs_jax/rhs1_qi_multilevel_coarse.py`` provides the standalone
   multilevel angular-radial coarse prototype. It builds deterministic radial
   aggregate levels, angular/radial candidates, rank-gated prolongation spaces,
@@ -98,7 +103,10 @@ operator-Krylov plus multilevel coarse reuse, but the small rank increase
 current angular/radial/global-load basis. The source tree now includes the
 first true augmented-Krylov replacement path: the stored QI coarse basis and
 its operator action can be coupled directly to the restart least-squares
-problem, ``min ||r - [A U, A Z] c||_2``. The current source tree also includes
+problem, ``min ||r - [A U, A Z] c||_2``. The checked
+``recycled-augmented-device-qi`` hard-seed artifact is the best GPU evidence so
+far, but its slow residual decay shows that a larger Krylov budget alone cannot
+close the production tolerance. The current source tree also includes
 three non-smoother candidate spaces for bounded evidence runs: pitch/xi moments
 in the multilevel coarse hierarchy, current/constraint tail moments for
 flow/bootstrap-current/nullspace error, and an adjoint-normal Krylov basis
@@ -106,7 +114,9 @@ flow/bootstrap-current/nullspace error, and an adjoint-normal Krylov basis
 The first scale-0.60 evidence checks keep them honest: pitch-enabled
 multilevel did not change the GPU final residual, current/constraint moments
 worsened the GPU residual and runtime, and CPU adjoint-normal depth-2 worsened
-the final residual and runtime. None of these variants is promoted.
+the final residual and runtime. None of these variants is promoted. The next
+promotable algorithm must change the physics/error space captured by the coarse
+solve, not simply add more restart cycles or smoother sweeps.
 
 Next implementation
 ~~~~~~~~~~~~~~~~~~~
@@ -294,12 +304,12 @@ true residual and reuses the resulting ``A Q`` action in the coarse
 least-squares solve. With residual/recycle enrichment disabled so the new space
 is isolated, depth ``16`` gives ``4.448e-7`` in ``75.2 s``, depth ``32`` gives
 ``4.199e-7`` in ``75.1 s``, and depth ``64`` gives ``3.627e-7`` in ``76.7 s``.
-This is the current best checked GPU hard-seed evidence and shows a real
-residual trend without memory growth, but it still misses the production gate
-and does not close true device-QI. The next true closure candidate must install
-this coarse-reuse state into the actual Krylov solve or add a mathematically
-stronger multilevel/coarse-grid correction; further projected-smoother
-parameter sweeps are not expected to close the lane.
+This was the best checked seed-only GPU evidence for this stage and showed a
+real residual trend without memory growth, but it still missed the production
+gate and did not close true device-QI. The next true closure candidate had to
+install this coarse-reuse state into the actual Krylov solve or add a
+mathematically stronger multilevel/coarse-grid correction; further
+projected-smoother parameter sweeps were not expected to close the lane.
 
 That installed path is now a named opt-in rather than only a future idea:
 
@@ -337,6 +347,12 @@ evidence for this hard seed so far: CPU reaches ``2.218300e-5`` in ``174 s`` and
 GPU0 reaches ``2.218202e-5`` in ``145 s``.
 That improves on the previous GPU installed operator-Krylov/multilevel
 residual ``2.306911e-5`` while keeping the promotion gate open.
+The final checked recycled augmented-Krylov GPU0 probe uses the same installed
+``(U, A U)`` coarse basis with a larger fixed device-cycle budget. It reduces
+the hard-seed residual further to ``7.336295e-6`` in ``158.6 s``. This is the
+best checked one-GPU QI residual in the evidence set and the current comparison
+target for any future true device-QI work, but it still refuses HDF5 output
+because the production write tolerance is ``3.021487e-11``.
 The next non-smoother implementation is now wired as
 ``coarse-residual-device-qi``. It enables a nested multilevel residual equation:
 each angular/radial/pitch coarse level gets its own rank budget, solves
@@ -391,10 +407,9 @@ than the residual-snapshot CPU path, so it is kept as a tested research
 primitive and not promoted to GPU.
 The later GPU0 best-of artifact
 ``qi_seed_robustness_scale060_block_schur_bestof_device_qi_gpu0_2026_05_20.json``
-improves the final hard-seed residual to ``1.992464e-5`` in ``292 s``. It is the
-best checked one-GPU residual in this evidence set, but it still misses the
-production write gate by about six orders of magnitude and remains
-fail-closed evidence.
+improves the final hard-seed residual to ``1.992464e-5`` in ``292 s``. It was
+the previous best one-GPU residual before the recycled augmented-Krylov rerun,
+but it still misses the production write gate and remains fail-closed evidence.
 The composite coarse-closure GPU1 artifact
 ``qi_seed_robustness_scale060_composite_closure_device_qi_gpu1_2026_05_20.json``
 combines residual snapshots, residual-Galerkin/operator-image stages, and
@@ -633,11 +648,11 @@ Current evidence
   when no assembled device CSR operator is available. This advances the
   implementation surface, but it still needs hard-seed evidence before it can be
   used for public claims.
-- Depth-64 operator-Krylov coarse reuse is the current best checked one-GPU
-  hard-seed evidence. It improves the true residual without observed memory
-  growth, but it still misses the production output/write gate. Treat it as the
-  preferred research probe to install into Krylov, not as a closed true
-  device-QI claim.
+- Recycled augmented-Krylov coarse reuse is the current best checked one-GPU
+  hard-seed evidence. It improves the true residual to ``7.336295e-6`` without
+  reverting to host fallback, but it still misses the production output/write
+  gate. Treat it as the comparison target for the next physics/error-space
+  coarse equation, not as a closed true device-QI claim.
 
 Promotion gate
 ~~~~~~~~~~~~~~
