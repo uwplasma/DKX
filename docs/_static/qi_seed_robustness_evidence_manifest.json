@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 74,
+    "artifact_count": 78,
     "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
@@ -32,7 +32,7 @@
     "max_checked_per_axis_resolution_fraction": 0.6,
     "max_checked_total_size": 139502,
     "max_checked_total_size_fraction": 0.13676639849725786,
-    "nonpassing_artifact_count": 42,
+    "nonpassing_artifact_count": 46,
     "passing_artifact_count": 32,
     "production_total_size_uncovered_percent": 86.32
   },
@@ -93,6 +93,10 @@
         "docs/_static/qi_seed_robustness_scale060_qi_device_recycle_cycles2_rank32_seed3_gpu0_2026_05_19.json",
         "docs/_static/qi_seed_robustness_scale060_qi_device_mfminres_sweeps2_seed3_gpu1_2026_05_19.json",
         "docs/_static/qi_seed_robustness_scale060_qi_device_mfminres_sweeps8_seed3_gpu1_2026_05_19.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_groups32_sweeps1_seed3_gpu0_2026_05_20.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups32_sweeps1_seed3_gpu0_2026_05_20.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps2_cycles8_seed3_gpu0_2026_05_20.json",
+        "docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps4_cycles12_minres_seed3_gpu0_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json",
         "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
@@ -1370,6 +1374,110 @@
       "max_residual_ratio": 25.80501384884834,
       "passed": true,
       "path": "docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups32_sweeps1_seed3_cpu_2026_05_19.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "last_reported_residual_norm": 7.004256e-07,
+      "max_elapsed_s": 75.27090140571818,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_groups32_sweeps1_seed3_gpu0_2026_05_20.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "last_reported_residual_norm": 6.864138e-07,
+      "max_elapsed_s": 73.87407608795911,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups32_sweeps1_seed3_gpu0_2026_05_20.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "last_reported_residual_norm": 5.283122e-07,
+      "max_elapsed_s": 74.92615748522803,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps2_cycles8_seed3_gpu0_2026_05_20.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "last_reported_residual_norm": 4.689216e-07,
+      "max_elapsed_s": 74.92715422715992,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps4_cycles12_minres_seed3_gpu0_2026_05_20.json",
       "public_cli_default_path": true,
       "resolution": {
         "NTHETA": 15,

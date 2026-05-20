@@ -13961,6 +13961,28 @@ CPU hard-seed evidence:
   slightly faster (`284.99 s`), but the code path is retained as an opt-in GPU
   experiment because it adds radial/species aggregate directions without full
   CSR materialization.
+- Bounded GPU results on `office` GPU0:
+  - contiguous groups32/sweep1/cycles4:
+    `docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_groups32_sweeps1_seed3_gpu0_2026_05_20.json`,
+    elapsed `75.27 s`, residual `2.262156e-06 -> 7.004256e-07`,
+    ratio `0.3096275`.
+  - hybrid groups32/sweep1/cycles4:
+    `docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups32_sweeps1_seed3_gpu0_2026_05_20.json`,
+    elapsed `73.87 s`, residual `2.262156e-06 -> 6.864138e-07`,
+    ratio `0.3034335`.
+  - hybrid groups48/sweeps2/cycles8:
+    `docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps2_cycles8_seed3_gpu0_2026_05_20.json`,
+    elapsed `74.93 s`, residual `2.262156e-06 -> 5.283122e-07`,
+    ratio `0.2335437`.
+  - hybrid groups48/sweeps4/cycles12 with residual-minimizing outer steps:
+    `docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps4_cycles12_minres_seed3_gpu0_2026_05_20.json`,
+    elapsed `74.93 s`, residual `2.262156e-06 -> 4.689216e-07`,
+    ratio `0.2072897`.
+  All four GPU probes were CUDA-safe, bounded, and fail-closed at the
+  production write gate (`target=3.021487e-11`). This closes the immediate
+  GPU-proof item for the projected smoother: it is useful, but not sufficient.
+  The next algorithmic step should be a different operator-reuse/coarse
+  architecture, not further tuning of projected-block parameters.
 - Residual behavior:
   previous early CPU matrix-free QI seed reduced
   `1.736775e-03 -> 1.735797e-03` (`ratio=0.999437`), while the block-projected
@@ -13968,26 +13990,28 @@ CPU hard-seed evidence:
   The final written output residual remained `7.796951e-10` because the later
   sparse x-block rescue dominates the accepted output state.
 - Evidence manifest status:
-  `74` artifacts, `32` passing, `42` nonpassing. The bounded completion estimate
+  `78` artifacts, `32` passing, `46` nonpassing. The bounded completion estimate
   remains `60%` because the largest passing scale did not change.
 
 Conclusion:
 
 - This is the first material residual reduction from a true matrix-free
   block/local QI smoother on the scale-0.60 hard seed.
-- It does not close true device-QI yet because GPU evidence is still pending and
-  the accepted CPU output still relies on the later sparse x-block rescue.
+- It does not close true device-QI yet because the GPU proof now shows
+  fail-closed residual reduction, not production-gate convergence, and the
+  accepted CPU output still relies on the later sparse x-block rescue.
 
 Updated completion estimate:
 
-- True differentiable/device-QI: `91%`. The first real block-local matrix-free
-  action is implemented and CPU-positive; GPU proof remains open.
+- True differentiable/device-QI: `93%`. The first real block-local matrix-free
+  action is implemented and CPU/GPU-positive, but it is not strong enough to
+  write production output.
 - Production-resolution QI ladders: `40%`.
 - Geometry-rich PAS runtime/RSS promotion: `70%`.
 - Single-case multi-GPU/multi-CPU strong scaling: `55%`.
 - Physics validation completion: `60%`.
 - Refactor/coverage/CI: `79%`.
-- Overall remaining-lane completion estimate: `75%`.
+- Overall remaining-lane completion estimate: `77%`.
 
 Best next steps:
 

@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 74
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 78
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 42
+    assert current["nonpassing_artifact_count"] == 46
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -977,6 +977,22 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         ),
         (
             "docs/_static/"
+            "qi_seed_robustness_scale060_qi_device_blockminres_groups32_sweeps1_seed3_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups32_sweeps1_seed3_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps2_cycles8_seed3_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps4_cycles12_minres_seed3_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
             "qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json"
         ),
         "docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
@@ -1052,6 +1068,44 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert blockminres_hybrid["total_size"] == 139502
     assert blockminres_hybrid["max_elapsed_s"] > blockminres_groups32["max_elapsed_s"]
     assert blockminres_hybrid["max_residual_ratio"] == pytest.approx(blockminres_groups32["max_residual_ratio"])
+    blockminres_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_qi_device_blockminres_groups32_sweeps1_seed3_gpu0_2026_05_20.json"
+        )
+    )
+    blockminres_hybrid_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups32_sweeps1_seed3_gpu0_2026_05_20.json"
+        )
+    )
+    blockminres_hybrid_gpu_deeper = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps4_cycles12_minres_seed3_gpu0_2026_05_20.json"
+        )
+    )
+    assert blockminres_gpu["passed"] is False
+    assert blockminres_gpu["active_size"] == 81377
+    assert blockminres_gpu["total_size"] == 139502
+    assert blockminres_gpu["last_reported_residual_norm"] == pytest.approx(7.004256e-07)
+    assert blockminres_hybrid_gpu["last_reported_residual_norm"] < blockminres_gpu[
+        "last_reported_residual_norm"
+    ]
+    assert blockminres_hybrid_gpu_deeper["last_reported_residual_norm"] < blockminres_hybrid_gpu[
+        "last_reported_residual_norm"
+    ]
+    assert blockminres_hybrid_gpu_deeper["last_reported_residual_norm"] == pytest.approx(4.689216e-07)
     early_payload = json.loads(
         Path("docs/_static/qi_seed_robustness_scale060_early_qi_skipstrong_skipglobal_seed3_cpu_2026_05_19.json")
         .read_text(encoding="utf-8")

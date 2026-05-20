@@ -148,6 +148,22 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT
     / "docs"
     / "_static"
+    / "qi_seed_robustness_scale060_qi_device_blockminres_groups32_sweeps1_seed3_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups32_sweeps1_seed3_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps2_cycles8_seed3_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps4_cycles12_minres_seed3_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
     / "qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json",
     REPO_ROOT
     / "docs"
