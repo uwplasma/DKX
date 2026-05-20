@@ -241,6 +241,17 @@ The ``block_x_species`` hybrid grouping also completed on CPU in ``289.5 s``
 with the same residual ratio. Since it is slightly slower than contiguous
 ``max_groups=32`` on this seed, it remains an opt-in GPU/research probe rather
 than the preferred CPU setting.
+The 2026-05-20 one-GPU rerun confirms the projected smoother is CUDA-safe and
+materially reduces the hard seed without host fallback: contiguous
+``max_groups=32`` gives ``2.262e-6 -> 7.004e-7`` in ``75.3 s``; hybrid
+``block_x_species`` gives ``6.864e-7`` in ``73.9 s``; and the strongest bounded
+hybrid probe tested here, ``max_groups=48`` with four local sweeps, twelve
+outer cycles, and residual-minimizing outer steps, gives ``4.689e-7`` in
+``74.9 s``. This is a useful improvement over earlier recycle/scalar smoothers,
+but it still misses the ``3.021e-11`` production write gate by about four orders
+of magnitude. The conclusion is now stronger: projected block smoothing is a
+safe device-resident component, but true device-QI closure needs a different
+operator-reuse/coarse architecture rather than more tuning of this smoother.
 
 Both paths fail closed when host fallback is active or when the true-residual
 probe does not improve. The pre-enrichment scale-0.60 seed-3 CPU artifact
