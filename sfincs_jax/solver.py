@@ -1091,7 +1091,7 @@ def _tfqmr_solve_core(
         eta = jnp.where(update, eta_new, eta)
         tau = jnp.where(update, tau_new, tau)
         residual_estimate = jnp.where(update, residual_estimate_new, residual_estimate)
-        residual_history = residual_history.at[k + 1].set(residual_estimate)
+        residual_history = residual_history.at[k + 1].set(residual_estimate, unique_indices=True)
         converged = converged | (update & (residual_estimate <= target))
         running = update & jnp.logical_not(converged)
         if replacement_interval > 0:
@@ -1167,7 +1167,7 @@ def _tfqmr_solve_core(
                 ),
                 operand=None,
             )
-            residual_history = residual_history.at[k + 1].set(residual_estimate)
+            residual_history = residual_history.at[k + 1].set(residual_estimate, unique_indices=True)
         return (
             k + 1,
             y,
@@ -1545,12 +1545,77 @@ def dense_krylov_solve_from_matrix(**kwargs) -> tuple[jnp.ndarray, jnp.ndarray]:
     return result.x, result.residual_norm
 
 
+def _prepare_augmentation_basis(
+    *,
+    augmentation_basis: jnp.ndarray | None,
+    operator_on_augmentation: jnp.ndarray | None,
+    dtype,
+    n: int,
+    work_matvec,
+) -> tuple[jnp.ndarray | None, jnp.ndarray | None]:
+    """Validate or build ``(U, A U)`` columns for augmented Krylov solves."""
+
+    if augmentation_basis is None:
+        return None, None
+    basis = jnp.asarray(augmentation_basis, dtype=dtype)
+    if basis.ndim == 1:
+        basis = basis.reshape((n, 1))
+    if basis.ndim != 2:
+        raise ValueError(f"augmentation_basis must be 1D or 2D, got shape {basis.shape}")
+    if int(basis.shape[0]) != int(n):
+        raise ValueError(f"augmentation_basis row mismatch: expected {n}, got {basis.shape[0]}")
+    rank = int(basis.shape[1])
+    if rank <= 0:
+        return None, None
+    if operator_on_augmentation is None:
+        actions = [jnp.asarray(work_matvec(basis[:, idx]), dtype=dtype).reshape((n,)) for idx in range(rank)]
+        action = jnp.stack(actions, axis=1)
+    else:
+        action = jnp.asarray(operator_on_augmentation, dtype=dtype)
+        if action.ndim == 1:
+            action = action.reshape((n, 1))
+    if action.ndim != 2:
+        raise ValueError(f"operator_on_augmentation must be 1D or 2D, got shape {action.shape}")
+    if tuple(int(v) for v in action.shape) != (int(n), int(rank)):
+        raise ValueError(
+            "operator_on_augmentation shape mismatch: "
+            f"expected {(int(n), int(rank))}, got {tuple(int(v) for v in action.shape)}"
+        )
+    return basis, action
+
+
+def _apply_augmentation_correction(
+    *,
+    x: jnp.ndarray,
+    residual: jnp.ndarray,
+    residual_norm: jnp.ndarray,
+    basis: jnp.ndarray | None,
+    operator_on_basis: jnp.ndarray | None,
+    rcond: float,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Project the residual over a fixed coarse action basis and accept only reductions."""
+
+    if basis is None or operator_on_basis is None:
+        return x, residual, residual_norm, jnp.asarray(False)
+    coeff = jnp.linalg.lstsq(operator_on_basis, residual, rcond=float(rcond))[0]
+    update = basis @ coeff
+    candidate_residual = residual - operator_on_basis @ coeff
+    candidate_norm = jnp.linalg.norm(candidate_residual)
+    accept = jnp.logical_and(jnp.isfinite(candidate_norm), candidate_norm < residual_norm)
+    x_out = jnp.where(accept, x + update, x)
+    residual_out = jnp.where(accept, candidate_residual, residual)
+    residual_norm_out = jnp.where(accept, candidate_norm, residual_norm)
+    return x_out, residual_out, residual_norm_out, accept
+
+
 def fgmres_solve_with_residual(
     *,
     matvec,
     b: jnp.ndarray,
     preconditioner=None,
     x0: jnp.ndarray | None = None,
+    augmentation_basis: jnp.ndarray | None = None,
+    operator_on_augmentation: jnp.ndarray | None = None,
     tol: float = 1e-10,
     atol: float = 0.0,
     restart: int = 50,
@@ -1559,6 +1624,7 @@ def fgmres_solve_with_residual(
     precondition_side: str = "right",
     skip_inactive_work: bool = True,
     block_between_cycles: bool = False,
+    augmentation_rcond: float = 1.0e-12,
 ) -> tuple[FlexibleGMRESSolveResult, jnp.ndarray]:
     """Solve ``A x = b`` with a fixed-shape GMRES/FGMRES implementation in JAX.
 
@@ -1572,6 +1638,16 @@ def fgmres_solve_with_residual(
     preconditioner/matvec calls after convergence for trace-safe device
     preconditioners; set it to ``False`` for legacy host preconditioners that
     intentionally call ``device_get`` inside their apply path.
+
+    ``augmentation_basis`` and ``operator_on_augmentation`` expose a true
+    augmented-Krylov hook for reusable coarse spaces. If provided, columns of
+    ``augmentation_basis`` are physical update directions and columns of
+    ``operator_on_augmentation`` are their action under the working operator
+    used by the solve. At each restart boundary the current residual is
+    projected out through a small least-squares problem over ``A U`` before
+    Arnoldi starts. This is intentionally different from another smoother: it
+    reuses an already-built operator/coarse basis and only accepts residual
+    reductions.
 
     The implementation deliberately uses fixed-shape JAX arrays for the Arnoldi
     and least-squares state. It does not convert residuals to Python scalars
@@ -1633,6 +1709,14 @@ def fgmres_solve_with_residual(
                 return v
             return _apply_preconditioner(v, iteration)
 
+    augmentation_u, augmentation_au = _prepare_augmentation_basis(
+        augmentation_basis=augmentation_basis,
+        operator_on_augmentation=operator_on_augmentation,
+        dtype=dtype,
+        n=n,
+        work_matvec=lambda vector: _work_matvec(vector, 0),
+    )
+    augmentation_rcond_use = max(0.0, float(augmentation_rcond))
     rhs_norm = jnp.linalg.norm(work_b)
     target = jnp.maximum(jnp.asarray(atol, dtype=dtype), jnp.asarray(tol, dtype=dtype) * rhs_norm)
     true_target = jnp.maximum(jnp.asarray(atol, dtype=dtype), jnp.asarray(tol, dtype=dtype) * jnp.linalg.norm(b))
@@ -1646,13 +1730,23 @@ def fgmres_solve_with_residual(
     max_cycles = max(1, int(np.ceil(maxiter_use / restart_use)))
     iteration_index = 0
     for cycle in range(max_cycles):
+        x, residual, residual_norm, _augmented = _apply_augmentation_correction(
+            x=x,
+            residual=residual,
+            residual_norm=residual_norm,
+            basis=augmentation_u,
+            operator_on_basis=augmentation_au,
+            rcond=augmentation_rcond_use,
+        )
+        residual_history = residual_history.at[iteration_index].set(residual_norm, unique_indices=True)
+        converged = jnp.logical_or(converged, residual_norm <= target)
         beta = jnp.linalg.norm(residual)
         cycle_active = jnp.logical_and(~converged, jnp.logical_and(jnp.isfinite(beta), beta > breakdown_threshold))
         v_basis = jnp.zeros((restart_use + 1, n), dtype=dtype)
         z_basis = jnp.zeros((restart_use, n), dtype=dtype)
         hessenberg = jnp.zeros((restart_use + 1, restart_use), dtype=dtype)
         v0 = jnp.where(cycle_active, residual / jnp.where(beta > 0, beta, jnp.asarray(1.0, dtype=dtype)), 0.0)
-        v_basis = v_basis.at[0].set(v0)
+        v_basis = v_basis.at[0].set(v0, unique_indices=True)
         x_cycle_base = x
         cycle_budget = min(restart_use, maxiter_use - iteration_index)
         for j in range(cycle_budget):
@@ -1674,7 +1768,7 @@ def fgmres_solve_with_residual(
                     f"expected {b.shape}, got {z.shape}"
                 )
             z = jnp.where(active_step, z, jnp.zeros_like(z))
-            z_basis = z_basis.at[j].set(z)
+            z_basis = z_basis.at[j].set(z, unique_indices=True)
 
             if bool(skip_inactive_work):
                 w = jax.lax.cond(
@@ -1691,19 +1785,19 @@ def fgmres_solve_with_residual(
                 )
             for i in range(j + 1):
                 hij = jnp.vdot(v_basis[i], w)
-                hessenberg = hessenberg.at[i, j].set(hij)
+                hessenberg = hessenberg.at[i, j].set(hij, unique_indices=True)
                 w = w - hij * v_basis[i]
             h_next = jnp.linalg.norm(w)
-            hessenberg = hessenberg.at[j + 1, j].set(h_next)
+            hessenberg = hessenberg.at[j + 1, j].set(h_next, unique_indices=True)
             arnoldi_ok = jnp.logical_and(jnp.isfinite(h_next), h_next > breakdown_threshold)
             v_next = jnp.where(
                 jnp.logical_and(active_step, arnoldi_ok),
                 w / jnp.where(h_next > 0, h_next, jnp.asarray(1.0, dtype=dtype)),
                 jnp.zeros_like(w),
             )
-            v_basis = v_basis.at[j + 1].set(v_next)
+            v_basis = v_basis.at[j + 1].set(v_next, unique_indices=True)
 
-            small_rhs = jnp.zeros((j + 2,), dtype=dtype).at[0].set(beta)
+            small_rhs = jnp.zeros((j + 2,), dtype=dtype).at[0].set(beta, unique_indices=True)
             small_h = hessenberg[: j + 2, : j + 1]
             coeff = jnp.linalg.lstsq(small_h, small_rhs, rcond=None)[0]
             candidate_update = coeff @ z_basis[: j + 1]
@@ -1722,7 +1816,10 @@ def fgmres_solve_with_residual(
             x = jnp.where(update_ok, candidate_x, x)
             residual = jnp.where(update_ok, candidate_residual, residual)
             residual_norm = jnp.where(update_ok, candidate_norm, residual_norm)
-            residual_history = residual_history.at[iteration_index + 1].set(residual_norm)
+            residual_history = residual_history.at[iteration_index + 1].set(
+                residual_norm,
+                unique_indices=True,
+            )
             converged = jnp.logical_or(converged, jnp.logical_and(update_ok, residual_norm <= target))
             cycle_active = jnp.logical_and(cycle_active, arnoldi_ok)
             iteration_index += 1
@@ -1731,7 +1828,7 @@ def fgmres_solve_with_residual(
 
     residual_final = b - jnp.asarray(matvec(x), dtype=dtype)
     residual_norm_final = jnp.linalg.norm(residual_final)
-    residual_history = residual_history.at[-1].set(residual_norm_final)
+    residual_history = residual_history.at[-1].set(residual_norm_final, unique_indices=True)
     history_finite = jnp.isfinite(residual_history)
     history_converged = jnp.logical_and(history_finite, residual_history <= target)
     first_converged = jnp.min(
@@ -1759,6 +1856,10 @@ def _fgmres_restart_cycle_fixed(
     work_b: jnp.ndarray,
     x: jnp.ndarray,
     residual: jnp.ndarray,
+    augmentation_basis: jnp.ndarray | None = None,
+    operator_on_augmentation: jnp.ndarray | None = None,
+    augmentation_rcond: float = 1.0e-12,
+    augmentation_mode: str = "projected",
     restart: int,
     breakdown_tol: float,
     precondition_side: str,
@@ -1801,7 +1902,7 @@ def _fgmres_restart_cycle_fixed(
     z_basis = jnp.zeros((restart_use, n), dtype=dtype)
     hessenberg = jnp.zeros((restart_use + 1, restart_use), dtype=dtype)
     v0 = jnp.where(active_cycle, residual / jnp.where(beta > 0.0, beta, jnp.asarray(1.0, dtype=dtype)), 0.0)
-    v_basis = v_basis.at[0].set(v0)
+    v_basis = v_basis.at[0].set(v0, unique_indices=True)
 
     def _arnoldi_step(j: jnp.ndarray, state):
         v_basis, z_basis, hessenberg, running = state
@@ -1809,25 +1910,25 @@ def _fgmres_restart_cycle_fixed(
         vj = v_basis[j]
         z = jax.lax.cond(active_step, _search_direction, lambda _v: jnp.zeros_like(_v), vj)
         z = jnp.asarray(z, dtype=dtype)
-        z_basis = z_basis.at[j].set(z)
+        z_basis = z_basis.at[j].set(z, unique_indices=True)
         w0 = jax.lax.cond(active_step, _work_matvec, lambda _z: jnp.zeros_like(_z), z)
 
         def _orthogonalize(i: jnp.ndarray, inner_state):
             w, hessenberg = inner_state
             hij = jnp.vdot(v_basis[i], w)
-            hessenberg = hessenberg.at[i, j].set(hij)
+            hessenberg = hessenberg.at[i, j].set(hij, unique_indices=True)
             return w - hij * v_basis[i], hessenberg
 
         w, hessenberg = jax.lax.fori_loop(0, j + 1, _orthogonalize, (w0, hessenberg))
         h_next = jnp.linalg.norm(w)
-        hessenberg = hessenberg.at[j + 1, j].set(h_next)
+        hessenberg = hessenberg.at[j + 1, j].set(h_next, unique_indices=True)
         arnoldi_ok = jnp.logical_and(jnp.isfinite(h_next), h_next > breakdown_threshold)
         v_next = jnp.where(
             jnp.logical_and(active_step, arnoldi_ok),
             w / jnp.where(h_next > 0.0, h_next, jnp.asarray(1.0, dtype=dtype)),
             jnp.zeros_like(w),
         )
-        v_basis = v_basis.at[j + 1].set(v_next)
+        v_basis = v_basis.at[j + 1].set(v_next, unique_indices=True)
         return v_basis, z_basis, hessenberg, jnp.logical_and(running, arnoldi_ok)
 
     v_basis, z_basis, hessenberg, _running = jax.lax.fori_loop(
@@ -1836,13 +1937,38 @@ def _fgmres_restart_cycle_fixed(
         _arnoldi_step,
         (v_basis, z_basis, hessenberg, active_cycle),
     )
-    small_rhs = jnp.zeros((restart_use + 1,), dtype=dtype).at[0].set(beta)
-    coeff = jnp.linalg.lstsq(hessenberg, small_rhs, rcond=None)[0]
-    update = coeff @ z_basis
+
+    use_combined_augmentation = (
+        str(augmentation_mode).strip().lower().replace("-", "_") == "combined"
+        and augmentation_basis is not None
+        and operator_on_augmentation is not None
+    )
+    if use_combined_augmentation:
+        # Solve the restart least-squares problem in the coupled coarse+Krylov
+        # action space, rather than only projecting over A U before Arnoldi.
+        # This is the device-compatible analogue of augmented/recycled GMRES:
+        # minimize ||r - [A U, A Z] c|| and apply [U, Z] c.
+        krylov_actions = jnp.asarray(v_basis.T @ hessenberg, dtype=dtype)
+        action_matrix = jnp.concatenate(
+            [jnp.asarray(operator_on_augmentation, dtype=dtype), krylov_actions],
+            axis=1,
+        )
+        update_matrix = jnp.concatenate(
+            [jnp.asarray(augmentation_basis, dtype=dtype), z_basis.T],
+            axis=1,
+        )
+        coeff = jnp.linalg.lstsq(action_matrix, residual, rcond=float(augmentation_rcond))[0]
+        update = update_matrix @ coeff
+    else:
+        small_rhs = jnp.zeros((restart_use + 1,), dtype=dtype).at[0].set(beta, unique_indices=True)
+        coeff = jnp.linalg.lstsq(hessenberg, small_rhs, rcond=None)[0]
+        update = coeff @ z_basis
     candidate_x = x + update
     candidate_residual = work_b - _work_matvec(candidate_x)
     candidate_norm = jnp.linalg.norm(candidate_residual)
     accept = jnp.logical_and(active_cycle, jnp.isfinite(candidate_norm))
+    if use_combined_augmentation:
+        accept = jnp.logical_and(accept, candidate_norm <= beta)
     x_out = jnp.where(accept, candidate_x, x)
     residual_out = jnp.where(accept, candidate_residual, residual)
     residual_norm_out = jnp.where(accept, candidate_norm, beta)
@@ -1853,7 +1979,15 @@ def _fgmres_restart_cycle_fixed(
 
 _fgmres_restart_cycle_fixed_jit = jax.jit(
     _fgmres_restart_cycle_fixed,
-    static_argnames=("matvec", "preconditioner", "restart", "breakdown_tol", "precondition_side"),
+    static_argnames=(
+        "matvec",
+        "preconditioner",
+        "augmentation_rcond",
+        "augmentation_mode",
+        "restart",
+        "breakdown_tol",
+        "precondition_side",
+    ),
 )
 
 
@@ -1863,6 +1997,8 @@ def fgmres_cycle_jit_solve_with_residual(
     b: jnp.ndarray,
     preconditioner=None,
     x0: jnp.ndarray | None = None,
+    augmentation_basis: jnp.ndarray | None = None,
+    operator_on_augmentation: jnp.ndarray | None = None,
     tol: float = 1e-10,
     atol: float = 0.0,
     restart: int = 50,
@@ -1873,6 +2009,7 @@ def fgmres_cycle_jit_solve_with_residual(
     block_between_cycles: bool = False,
     outer_k: int = 0,
     augmentation_rcond: float = 1.0e-12,
+    augmentation_mode: str = "projected",
     progress_callback=None,
 ) -> tuple[FlexibleGMRESSolveResult, jnp.ndarray]:
     """Solve with restarted FGMRES using a JIT-compiled single-cycle kernel.
@@ -1880,7 +2017,12 @@ def fgmres_cycle_jit_solve_with_residual(
     The method is designed for large accelerator runs where eager Python-loop
     FGMRES is too slow, but full-solver JIT is too memory hungry. It synchronizes
     once per restart cycle, which gives bounded memory and useful progress
-    points while keeping the Arnoldi/preconditioned matvec work on device. If
+    points while keeping the Arnoldi/preconditioned matvec work on device. When
+    ``augmentation_basis`` and ``operator_on_augmentation`` are supplied, each
+    restart first projects the current residual over the reusable ``(U, A U)``
+    coarse action basis. Set ``augmentation_mode="combined"`` to keep those
+    coarse directions inside the restart least-squares problem itself, solving
+    over ``[A U, A Z]`` and updating through ``[U, Z]``. If
     ``progress_callback`` is provided, it is called after each synchronized
     restart cycle with JSON-ready cycle, iteration, residual, and target values.
     """
@@ -1922,10 +2064,33 @@ def fgmres_cycle_jit_solve_with_residual(
     cycles_done = 0
     outer_k_use = max(0, int(outer_k))
     augmentation_rcond_use = max(0.0, float(augmentation_rcond))
+    augmentation_mode_use = str(augmentation_mode).strip().lower().replace("-", "_")
+    if augmentation_mode_use not in {"projected", "combined"}:
+        augmentation_mode_use = "projected"
+    augmentation_u, augmentation_au = _prepare_augmentation_basis(
+        augmentation_basis=augmentation_basis,
+        operator_on_augmentation=operator_on_augmentation,
+        dtype=dtype,
+        n=n,
+        work_matvec=_work_matvec_physical,
+    )
     recycle_u: list[jnp.ndarray] = []
     recycle_au: list[jnp.ndarray] = []
     converged = bool(jax.device_get(jnp.logical_and(jnp.isfinite(residual_norm), residual_norm <= target)))
     for _cycle in range(max_cycles):
+        if converged:
+            break
+        x, residual, residual_norm, _aug_accept = _apply_augmentation_correction(
+            x=x,
+            residual=residual,
+            residual_norm=residual_norm,
+            basis=augmentation_u,
+            operator_on_basis=augmentation_au,
+            rcond=augmentation_rcond_use,
+        )
+        residual_norm = jax.block_until_ready(residual_norm)
+        history.append(residual_norm)
+        converged = bool(jax.device_get(jnp.logical_and(jnp.isfinite(residual_norm), residual_norm <= target)))
         if converged:
             break
         if recycle_u and recycle_au:
@@ -1951,6 +2116,10 @@ def fgmres_cycle_jit_solve_with_residual(
             work_b=work_b,
             x=x,
             residual=residual,
+            augmentation_basis=augmentation_u,
+            operator_on_augmentation=augmentation_au,
+            augmentation_rcond=augmentation_rcond_use,
+            augmentation_mode=augmentation_mode_use,
             restart=restart_use,
             breakdown_tol=breakdown_tol,
             precondition_side=side,
@@ -2007,6 +2176,7 @@ fgmres_solve_with_residual_jit = jax.jit(
         "precondition_side",
         "skip_inactive_work",
         "block_between_cycles",
+        "augmentation_rcond",
     ),
 )
 

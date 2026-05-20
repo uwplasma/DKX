@@ -200,7 +200,12 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   block layout and solves a small projected problem
   ``min_c ||r - A D c||_2``. This is the first block/angular/radial local action:
   each block direction keeps all angular content inside the block while the
-  small least-squares solve chooses the coupled correction coefficients.
+  small least-squares solve chooses the coupled correction coefficients. The
+  block-projection implementation is covered by a transpose-safety regression,
+  so this differentiable probe path has a finite ``vjp`` rather than relying on
+  a forward-only JAX action. That closes the transpose-safety infrastructure
+  blocker for this projected path; it does not close the residual/output or
+  runtime-performance blockers for true device-QI.
   With
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING=block_x_species``,
   that projected space is augmented with radial-x and species aggregate
@@ -214,6 +219,108 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT``,
   setup appends residuals left by the current coarse correction as additional
   rank-gated GCRO-style seed vectors.
+  With
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1``,
+  setup builds a bounded Arnoldi-like residual Krylov coarse space
+  ``orth([Q, r, A r, A^2 r, ...])`` from the current true residual and reuses
+  the final ``A Q`` action in the small coarse least-squares solve. The depth is
+  controlled by
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH``.
+  This is a stronger operator-reuse coarse construction, not additional
+  smoother tuning. The 2026-05-20 installed depth-64 plus multilevel hard-seed
+  artifact is the current best checked GPU evidence for this route, but it
+  remains below the production gate and is not a closed true device-QI claim.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1``
+  passes the reusable ``(U, A U)`` QI coarse basis directly into JAX FGMRES so
+  each cycle can either project the current residual over the stored operator
+  action before Arnoldi starts or, in the default ``combined`` mode, solve the
+  restart least-squares problem over ``[A U, A Z]`` and update through
+  ``[U, Z]``. This is the current real operator-reuse hook for the device-QI
+  lane: it avoids dense global assembly and differs from seed-only correction
+  because the basis is active inside the Krylov residual equation.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION=1``
+  enables the deeper multilevel coarse-residual path. Setup builds separate
+  per-level bases from the same QI block layout, caches each ``A Q_l`` action,
+  and applies a staged residual equation ``min ||r_l - A Q_l c_l||`` before the
+  optional global coarse polish. The level rank, order
+  (``coarse_to_fine`` or ``fine_to_coarse``), and global-polish toggle are
+  controlled by
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK``,
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER``,
+  and
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_INCLUDE_GLOBAL``.
+  The runner preset ``coarse-residual-device-qi`` records these controls for
+  bounded hard-seed evidence. This is a coarse-grid residual-equation attempt,
+  not a smoother/restart/projection tuning path.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT=1``
+  adds the current hard-seed residual itself to the reusable coarse equation by
+  restricting it to QI blocks and aggregates. With
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_USE_ADJOINT=1``,
+  setup also adds adjoint-normal block snapshots ``A^T r_block`` through JAX
+  VJP. These directions are setup-time only: the installed preconditioner still
+  caches ``A Q`` and applies a forward ``min ||r - A Q c||`` solve. The runner
+  preset ``residual-snapshot-device-qi`` is the checked evidence path; its first
+  CPU hard-seed artifact improves the final residual to ``2.103015e-5`` but is
+  still nonconverged, so it is not a production default.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION=1``
+  promotes those residual snapshots into a staged residual-equation cascade.
+  Setup solves per-stage ``min ||r_l - A Q_l c||`` problems, caches the
+  accepted ``A Q_l`` actions, and the installed preconditioner remains pure JAX.
+  The runner preset ``residual-snapshot-equation-device-qi`` records this path.
+  Its first scale-0.60 CPU hard-seed artifact accepts
+  ``3.021487e-5 -> 2.819970e-5`` but ends at ``2.320763e-5`` in ``260 s``,
+  worse than the plain residual-snapshot path, so no production default or GPU
+  claim is made from it.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION=1``
+  enables a deeper staged block-Schur residual equation. Setup builds
+  QI-block and aggregate source probes, solves small setup-time
+  ``min ||r_l - A D_g c||`` problems, rank-gates each accepted correction, and
+  then reuses cached ``A Q_l`` actions in the installed preconditioner. The
+  runner preset ``block-schur-device-qi`` records this fail-closed path. Its
+  first scale-0.60 CPU hard-seed artifact is negative evidence: it accepts
+  ``3.021487e-5 -> 2.840342e-5`` and ends at ``2.275188e-5`` in ``267 s``,
+  worse than the residual-snapshot path, so no production default or GPU claim
+  is made from it.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION=1``
+  enables a global moment closure over profile, current, and reduced-tail
+  constraint moments. Setup builds a rank-gated Galerkin Schur closure and
+  installs only cached ``A Q`` actions. The checked scale-0.60 CPU artifact
+  accepts ``3.021487e-5 -> 2.840364e-5`` and ends at ``2.420524e-5`` in
+  ``256 s`` before refusing nonconverged output, so it remains fail-closed
+  research evidence.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION=1``
+  enables a residual-derived Galerkin coarse equation. Its coarse variables are
+  built from the actual remaining residual and block residuals, then cached as
+  ``A Q`` for device-compatible apply. The checked scale-0.60 CPU artifact
+  accepts ``3.021487e-5 -> 2.766710e-5`` with rank ``16`` from ``21``
+  candidates and ends at ``2.632208e-5`` in ``244 s`` before refusing
+  nonconverged output. This is stronger than static moments but weaker than the
+  residual-snapshot path, so it is not promoted.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT=1``
+  adds a distinct adjoint-normal coarse space ``orth([A^T r, (A^T A)A^T r,
+  ...])``. This targets non-normal left-error modes that residual-Krylov can
+  miss. The transpose is setup-only through JAX VJP, controlled by
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH``
+  and
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_TRANSPOSE``;
+  apply-time still reuses cached ``A Q`` and remains forward-operator-only.
+  The scale-0.60 CPU hard-seed depth-2 artifact worsened the final residual, so
+  this remains an explicit diagnostic/negative-evidence path rather than a
+  recommended production path.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS=1``
+  prepends bootstrap-current-like pitch moments, species/radial current
+  moments, and reduced-tail constraint moments to the multilevel coarse basis.
+  This is a structural coarse-space probe for flow/current/nullspace error, not
+  a smoother knob. The 2026-05-20 GPU hard-seed artifact increased the rank from
+  ``13`` to ``15`` but worsened the final residual and runtime, so it remains an
+  opt-in negative-evidence path rather than the recommended preset.
+  With
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_ENRICHMENT=1``,
+  setup can also enrich the correction space with rank-gated operator images
+  ``{Q, A Q, A^2 Q, ...}``, controlled by
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_DEPTH``.
+  That path is retained as an opt-in diagnostic because it is CUDA-safe but did
+  not improve the scale-0.60 GPU hard seed.
   The driver exposes it behind the explicit
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER`` opt-in and records
   accepted/rejected metadata without changing public defaults; the matrix-free
@@ -223,6 +330,43 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   is blocked in that mode. When matrix-free QI-device Krylov use is explicitly
   requested, the driver disables the automatic non-autodiff host fallback so the
   true device path can be tested. Explicit user-forced host fallback still wins.
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE``
+  is an opt-in diagnostic that applies the pre-existing x-block/device
+  preconditioner first and then applies QI to the residual left by that base
+  step. The scale-0.60 GPU hard seed showed this composition is slower and less
+  accurate than the installed multilevel route, so it is intentionally not part
+  of the recommended preset.
+  The current installed hard-seed summaries are still failed/nonconverged
+  blocker evidence with no HDF5 or solver trace output, so this routing change
+  is not a validated true device-QI claim.
+- ``sfincs_jax/rhs1_qi_multilevel_coarse.py``:
+  standalone multilevel angular-radial-pitch-current coarse prototype for the next true
+  device-QI architecture. It constructs deterministic radial aggregate levels,
+  angular harmonic directions, radial polynomial directions, pitch/xi moment
+  directions, current/flow pitch moments that tolerate variable active xi
+  counts, reduced-tail constraint moments, and radial-angular/radial-pitch product modes from
+  ``RHS1QICoarseBlockLayout`` metadata,
+  rank-gates the combined prolongation space, assembles ``A Q`` by JAX matvec
+  probes, and applies a pure-JAX local-plus-coarse action-least-squares
+  correction. The module is intentionally independent of ``v3_driver.py`` so it
+  can be tested as architecture before promotion. Current tests cover
+  deterministic hierarchy metadata, synthetic low-frequency angular-radial
+  residual reduction, synthetic pitch-coupled residual reduction, synthetic
+  current/tail residual reduction, fail-closed rejection without the needed
+  coarse family, nested per-level residual-equation recovery of modes discarded
+  by a flat coarse-rank gate, and JIT/gradient compatibility.
+  It is not a production default until real scale-0.60 CPU/GPU hard-seed
+  artifacts pass the promotion gates.
+- ``sfincs_jax/rhs1_qi_global_moment_closure.py``:
+  standalone global-moment closure primitive used to test current/profile/tail
+  moment Schur closures independently from the production driver. It builds a
+  compact moment basis, caches ``A Q`` and ``Q^T A Q``, and fails closed unless
+  the measured setup residual improves.
+- ``sfincs_jax/rhs1_qi_residual_galerkin.py``:
+  standalone residual-derived Galerkin primitive. It builds staged coarse
+  variables from the current operator residual and block residuals, caches
+  ``A Q``, supports action least-squares or Galerkin solves, and fails closed on
+  non-improving setup residuals.
 - ``sfincs_jax/rhs1_qi_promotion.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace
@@ -375,7 +519,9 @@ Linear-algebra infrastructure:
 - Krylov wrappers,
 - host-direct and sparse rescues,
 - differentiable linear solves,
-- JAX-native linear solve utilities.
+- JAX-native linear solve utilities,
+- augmented FGMRES hooks that reuse a checked coarse basis and stored operator
+  action ``(U, A U)`` without assembling a dense global operator.
 
 ``sfincs_jax/transport_matrix.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

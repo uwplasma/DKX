@@ -253,8 +253,11 @@ def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
         "preconditioner accepted residual 3.021487e-05 -> 2.814560e-05 "
         "(rank=16 seed_solver=cycle_minres cycles=8 use_in_krylov=0 ratio=9.315148e-01)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres QI device "
+        "preconditioner multilevel residual equation "
+        "(levels=3 stage_rank=16 order=coarse_to_fine include_global=1)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres QI device "
         "preconditioner accepted residual 2.814560e-05 -> 2.533104e-05 "
-        "(rank=12 use_in_krylov=1 ratio=9.000000e-01)",
+        "(rank=12 use_in_krylov=1 operator_krylov=1 coarse_reuse=1 ratio=9.000000e-01)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe method_rescue "
         "side=left->left method=gmres->lgmres iters=20 matvecs=23 residual=4.565805e-06 "
         "ratio=1.511112e+07 seed_used=1",
@@ -287,6 +290,12 @@ def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
     assert qi_device["xblock_qi_device_preconditioner_used"] is True
     assert qi_device["xblock_qi_device_preconditioner_rank"] == 12
     assert qi_device["xblock_qi_device_preconditioner_use_in_krylov"] is True
+    assert qi_device["xblock_qi_device_preconditioner_operator_krylov_enrichment"] is True
+    assert qi_device["xblock_qi_device_preconditioner_coarse_reuse"] is True
+    assert qi_device["xblock_qi_device_preconditioner_multilevel_residual_equation"] is True
+    assert qi_device["xblock_qi_device_preconditioner_multilevel_residual_equation_stage_rank"] == 16
+    assert qi_device["xblock_qi_device_preconditioner_multilevel_residual_equation_order"] == "coarse_to_fine"
+    assert qi_device["xblock_qi_device_preconditioner_multilevel_residual_equation_include_global"] is True
     assert qi_device["xblock_qi_device_preconditioner_residual_before"] == 2.814560e-05
     assert qi_device["xblock_qi_device_preconditioner_residual_after"] == 2.533104e-05
     assert qi_device["xblock_qi_device_preconditioner_improvement_ratio"] == 9.0e-01
@@ -431,6 +440,10 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
                             "accepted_converged": False,
                             "iterations": 12,
                             "solver_kind": "dense",
+                            "xblock_qi_device_preconditioner_used": True,
+                            "xblock_qi_device_preconditioner_use_in_krylov": True,
+                            "xblock_qi_device_preconditioner_coarse_reuse": True,
+                            "xblock_qi_device_preconditioner_coarse_operator_shape": [4, 4],
                             "xblock_device_host_fallback_used": True,
                             "xblock_device_host_fallback_reason": "large-qi-full-fp-3d",
                             "xblock_device_host_fallback_requested_method": "gmres_jax",
@@ -488,6 +501,9 @@ def test_qi_seed_runner_records_solver_trace_summary(tmp_path: Path, monkeypatch
     assert summary["xblock_device_host_fallback_requested_method"] == "gmres_jax"
     assert summary["xblock_device_host_fallback_effective_krylov_env_value"] == "auto"
     assert summary["xblock_device_host_fallback_non_autodiff"] is True
+    assert summary["xblock_qi_device_preconditioner_used"] is True
+    assert summary["xblock_qi_device_preconditioner_use_in_krylov"] is True
+    assert summary["xblock_qi_device_preconditioner_coarse_operator_shape"] == [4, 4]
     assert summary["xblock_qi_two_level_preconditioner_built"] is True
     assert summary["xblock_qi_two_level_preconditioner_smoothed_load_basis"] is True
     assert summary["xblock_qi_two_level_preconditioner_improvement_ratio"] == 0.99
@@ -648,6 +664,516 @@ def test_qi_seed_runner_keeps_explicit_diagnostic_solve_method(tmp_path: Path) -
     assert case["command"][-2:] == ["--solve-method", "dense"]
 
 
+def test_qi_seed_runner_operator_krylov_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "operator-krylov-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "operator-krylov-device-qi"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV"] == "fgmres-jax"
+    assert env["SFINCS_JAX_GMRES_PRECONDITION_SIDE"] == "right"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH"] == "64"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK"] == "64"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER"]
+        == "matrix_free_block_minres_hybrid"
+    )
+
+    case = manifest["cases"][0]
+    assert case["probe_preset"] == "operator-krylov-device-qi"
+    assert case["env"] == env
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert manifest["requested_solve_method"] == "auto"
+    assert case["solve_method"] == "xblock_sparse_pc_gmres"
+    assert case["command"][0] == "env"
+    assert "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64" in case[
+        "command"
+    ]
+    assert "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1" in case[
+        "command"
+    ]
+    assert case["command"][-2:] == ["--solve-method", "xblock_sparse_pc_gmres"]
+
+
+def test_qi_seed_runner_current_constraint_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "current-constraint-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "current-constraint-device-qi"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE"]
+        == "1"
+    )
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert manifest["cases"][0]["probe_preset"] == "current-constraint-device-qi"
+
+
+def test_qi_seed_runner_residual_snapshot_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "residual-snapshot-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "residual-snapshot-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT"]
+        == "1"
+    )
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_MAX_RANK"] == "48"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_USE_ADJOINT"] == "1"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
+def test_qi_seed_runner_residual_snapshot_equation_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "residual-snapshot-equation-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "residual-snapshot-equation-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION"]
+        == "1"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_MAX_RANK"
+        ]
+        == "48"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER"
+        ]
+        == "action_lstsq"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL"
+        ]
+        == "1"
+    )
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_USE_ADJOINT"] == "1"
+    assert manifest["cases"][0]["probe_preset"] == "residual-snapshot-equation-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
+def test_qi_seed_runner_global_moment_closure_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "global-moment-closure-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "global-moment-closure-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION"]
+        == "1"
+    )
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_SOLVER"]
+        == "galerkin"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_CURRENT"
+        ]
+        == "1"
+    )
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE"]
+        == "2"
+    )
+    assert manifest["cases"][0]["probe_preset"] == "global-moment-closure-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
+def test_qi_seed_runner_residual_galerkin_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "residual-galerkin-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "residual-galerkin-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGE_RANK"]
+        == "8"
+    )
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_SOLVER"]
+        == "action_lstsq"
+    )
+    assert manifest["cases"][0]["probe_preset"] == "residual-galerkin-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
+def test_qi_seed_runner_block_schur_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "block-schur-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "block-schur-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION"]
+        == "1"
+    )
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK"]
+        == "64"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL"
+        ]
+        == "1"
+    )
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER"]
+        == "galerkin"
+    )
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION=1"
+        in manifest["cases"][0]["command"]
+    )
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER=galerkin"
+        in manifest["cases"][0]["command"]
+    )
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
+def test_qi_seed_runner_adjoint_krylov_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "adjoint-krylov-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "adjoint-krylov-device-qi"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV"] == "fgmres-jax"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH"] == "2"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_TRANSPOSE"] == "autodiff"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert manifest["cases"][0]["probe_preset"] == "adjoint-krylov-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
+def test_qi_seed_runner_augmented_krylov_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "augmented-krylov-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "augmented-krylov-device-qi"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV"] == "fgmres-jax"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE"] == "cycle"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K"] == "0"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE"] == "combined"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert manifest["cases"][0]["probe_preset"] == "augmented-krylov-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1"
+        in manifest["cases"][0]["command"]
+    )
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined"
+        in manifest["cases"][0]["command"]
+    )
+
+
+def test_qi_seed_runner_coarse_residual_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "coarse-residual-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "coarse-residual-device-qi"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV"] == "fgmres-jax"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE"] == "1"
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK"
+        ]
+        == "16"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER"
+        ]
+        == "coarse_to_fine"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_INCLUDE_GLOBAL"
+        ]
+        == "1"
+    )
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert manifest["cases"][0]["probe_preset"] == "coarse-residual-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
 def test_qi_seed_runner_records_timeout_without_crashing(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
@@ -745,6 +1271,347 @@ def test_qi_seed_runner_keeps_compact_failure_progress(tmp_path: Path, monkeypat
     seed = summary["seeds"][0]
     assert seed["progress_events"] == result["progress_events"]
     assert seed["stderr_tail"] == result["stderr_tail"]
+    assert seed["run_outcome"] == "process_failed"
+    assert seed["failed_before_summary_json"] is True
+    assert "failed_before_solver_trace_summary" in seed["evidence_tags"]
+    assert summary["evidence_classification"]["has_failed_before_summary_json"] is True
+
+
+def test_qi_seed_runner_classifies_installed_krylov_and_coarse_reuse_from_trace(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+    summary_path = tmp_path / "summary.json"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        trace_path = Path(command[command.index("--solver-trace") + 1])
+        output_path = Path(command[command.index("--out") + 1])
+        output_path.write_bytes(b"h5")
+        trace_path.write_text(
+            json.dumps(
+                {
+                    "backend": "gpu",
+                    "converged": True,
+                    "residual_norm": 1.0e-12,
+                    "residual_target": 1.0e-11,
+                    "metadata": {
+                        "solver_metadata": {
+                            "accepted_converged": True,
+                            "xblock_qi_device_preconditioner_used": True,
+                            "xblock_qi_device_preconditioner_use_in_krylov": True,
+                            "xblock_qi_device_preconditioner_coarse_reuse": True,
+                            "xblock_qi_device_preconditioner_operator_krylov_enrichment": True,
+                            "xblock_qi_device_preconditioner_coarse_operator_shape": [8, 8],
+                            "xblock_qi_device_preconditioner_operator_on_basis_shape": [8, 8],
+                        }
+                    },
+                    "selected_path": "rhsmode1_solution",
+                    "solve_method": "xblock_sparse_pc_gmres",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--execute",
+                "--probe-preset",
+                "operator-krylov-device-qi",
+                "--summary-output",
+                str(summary_path),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    seed = summary["seeds"][0]
+    assert seed["evidence_class"] == "device_qi_installed_krylov_coarse_reuse"
+    assert seed["promotion_eligible"] is True
+    assert seed["requested_qi_device_installed_krylov"] is True
+    assert seed["requested_qi_device_operator_krylov"] is True
+    assert seed["observed_qi_device_installed_krylov"] is True
+    assert seed["observed_qi_device_operator_krylov"] is True
+    assert seed["observed_qi_device_coarse_reuse"] is True
+    assert "observed_installed_krylov" in seed["evidence_tags"]
+    assert summary["evidence_classification"]["classes"] == ["device_qi_installed_krylov_coarse_reuse"]
+    assert summary["public_cli_default_path"] is False
+
+
+def test_qi_seed_runner_keeps_block_schur_probe_fail_closed_until_converged(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+    summary_path = tmp_path / "summary.json"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        trace_path = Path(command[command.index("--solver-trace") + 1])
+        output_path = Path(command[command.index("--out") + 1])
+        output_path.write_bytes(b"h5")
+        trace_path.write_text(
+            json.dumps(
+                {
+                    "backend": "gpu",
+                    "converged": False,
+                    "residual_norm": 2.0e-5,
+                    "residual_target": 1.0e-11,
+                    "metadata": {
+                        "solver_metadata": {
+                            "accepted_converged": False,
+                            "xblock_qi_device_preconditioner_used": True,
+                            "xblock_qi_device_preconditioner_use_in_krylov": True,
+                                "xblock_qi_device_preconditioner_coarse_reuse": True,
+                                "xblock_qi_device_preconditioner_operator_krylov_enrichment": True,
+                                "xblock_qi_device_preconditioner_block_schur_residual_equation": True,
+                                "xblock_qi_device_preconditioner_metadata": {
+                                    "block_schur_residual_equation_enabled": True,
+                                    "block_schur_residual_equation_candidate_count": 12,
+                                    "block_schur_residual_equation_rank": 8,
+                                    "block_schur_residual_equation_group_count": 4,
+                                },
+                        }
+                    },
+                    "selected_path": "rhsmode1_solution",
+                    "solve_method": "xblock_sparse_pc_gmres",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--execute",
+                "--probe-preset",
+                "block-schur-device-qi",
+                "--summary-output",
+                str(summary_path),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    seed = summary["seeds"][0]
+    assert seed["evidence_class"] == "device_qi_block_schur_residual_coarse_reuse"
+    assert seed["run_outcome"] == "not_converged"
+    assert seed["promotion_eligible"] is False
+    assert seed["requested_qi_device_block_schur_residual"] is True
+    assert seed["observed_qi_device_block_schur_residual"] is True
+    assert seed["xblock_qi_device_preconditioner_block_schur_residual_equation_candidate_count"] == 12
+    assert seed["xblock_qi_device_preconditioner_block_schur_residual_equation_rank"] == 8
+    assert "not_converged" in seed["evidence_tags"]
+    assert "not_accepted_converged" in seed["evidence_tags"]
+    assert summary["evidence_classification"]["classes"] == [
+        "device_qi_block_schur_residual_coarse_reuse"
+    ]
+    assert summary["evidence_classification"]["outcomes"] == ["not_converged"]
+    assert summary["evidence_classification"]["has_observed_block_schur_residual"] is True
+    assert summary["evidence_classification"]["promotion_eligible_seed_count"] == 0
+
+
+def test_qi_seed_runner_keeps_global_moment_probe_fail_closed_until_converged(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+    summary_path = tmp_path / "summary.json"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        trace_path = Path(command[command.index("--solver-trace") + 1])
+        output_path = Path(command[command.index("--out") + 1])
+        output_path.write_bytes(b"h5")
+        trace_path.write_text(
+            json.dumps(
+                {
+                    "backend": "gpu",
+                    "converged": False,
+                    "residual_norm": 2.0e-5,
+                    "residual_target": 1.0e-11,
+                    "metadata": {
+                        "solver_metadata": {
+                            "accepted_converged": False,
+                            "xblock_qi_device_preconditioner_used": True,
+                            "xblock_qi_device_preconditioner_use_in_krylov": True,
+                            "xblock_qi_device_preconditioner_coarse_reuse": True,
+                            "xblock_qi_device_preconditioner_operator_krylov_enrichment": True,
+                            "xblock_qi_device_preconditioner_global_moment_residual_equation": True,
+                            "xblock_qi_device_preconditioner_metadata": {
+                                "global_moment_residual_equation_enabled": True,
+                                "global_moment_residual_equation_candidate_count": 9,
+                                "global_moment_residual_equation_rank": 5,
+                                "global_moment_residual_equation_solver": "galerkin",
+                                "global_moment_residual_equation_condition_estimate": 12.0,
+                            },
+                        }
+                    },
+                    "selected_path": "rhsmode1_solution",
+                    "solve_method": "xblock_sparse_pc_gmres",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--execute",
+                "--probe-preset",
+                "global-moment-closure-device-qi",
+                "--summary-output",
+                str(summary_path),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    seed = summary["seeds"][0]
+    assert seed["evidence_class"] == "device_qi_global_moment_residual_equation_coarse_reuse"
+    assert seed["run_outcome"] == "not_converged"
+    assert seed["promotion_eligible"] is False
+    assert seed["requested_qi_device_global_moment_residual_equation"] is True
+    assert seed["observed_qi_device_global_moment_residual_equation"] is True
+    assert seed["xblock_qi_device_preconditioner_global_moment_residual_equation_candidate_count"] == 9
+    assert seed["xblock_qi_device_preconditioner_global_moment_residual_equation_rank"] == 5
+    assert seed["xblock_qi_device_preconditioner_global_moment_residual_equation_solver"] == "galerkin"
+    assert "observed_global_moment_residual_equation" in seed["evidence_tags"]
+    assert "not_converged" in seed["evidence_tags"]
+    assert summary["evidence_classification"]["classes"] == [
+        "device_qi_global_moment_residual_equation_coarse_reuse"
+    ]
+    assert summary["evidence_classification"]["has_observed_global_moment_residual_equation"] is True
+    assert summary["evidence_classification"]["promotion_eligible_seed_count"] == 0
+
+
+def test_qi_seed_runner_keeps_residual_galerkin_probe_fail_closed_until_converged(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+    summary_path = tmp_path / "summary.json"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        trace_path = Path(command[command.index("--solver-trace") + 1])
+        output_path = Path(command[command.index("--out") + 1])
+        output_path.write_bytes(b"h5")
+        trace_path.write_text(
+            json.dumps(
+                {
+                    "backend": "gpu",
+                    "converged": False,
+                    "residual_norm": 2.0e-5,
+                    "residual_target": 1.0e-11,
+                    "metadata": {
+                        "solver_metadata": {
+                            "accepted_converged": False,
+                            "xblock_qi_device_preconditioner_used": True,
+                            "xblock_qi_device_preconditioner_use_in_krylov": True,
+                            "xblock_qi_device_preconditioner_coarse_reuse": True,
+                            "xblock_qi_device_preconditioner_operator_krylov_enrichment": True,
+                            "xblock_qi_device_preconditioner_residual_galerkin_equation": True,
+                            "xblock_qi_device_preconditioner_metadata": {
+                                "residual_galerkin_equation_enabled": True,
+                                "residual_galerkin_equation_candidate_count": 12,
+                                "residual_galerkin_equation_rank": 6,
+                                "residual_galerkin_equation_stage_count": 2,
+                                "residual_galerkin_equation_solver": "action_lstsq",
+                                "residual_galerkin_equation_condition_estimate": 3.0,
+                            },
+                        }
+                    },
+                    "selected_path": "rhsmode1_solution",
+                    "solve_method": "xblock_sparse_pc_gmres",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--execute",
+                "--probe-preset",
+                "residual-galerkin-device-qi",
+                "--summary-output",
+                str(summary_path),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    seed = summary["seeds"][0]
+    assert seed["evidence_class"] == "device_qi_residual_galerkin_equation_coarse_reuse"
+    assert seed["run_outcome"] == "not_converged"
+    assert seed["promotion_eligible"] is False
+    assert seed["requested_qi_device_residual_galerkin_equation"] is True
+    assert seed["observed_qi_device_residual_galerkin_equation"] is True
+    assert seed["xblock_qi_device_preconditioner_residual_galerkin_equation_candidate_count"] == 12
+    assert seed["xblock_qi_device_preconditioner_residual_galerkin_equation_rank"] == 6
+    assert seed["xblock_qi_device_preconditioner_residual_galerkin_equation_stage_count"] == 2
+    assert "observed_residual_galerkin_equation" in seed["evidence_tags"]
+    assert "not_converged" in seed["evidence_tags"]
+    assert summary["evidence_classification"]["classes"] == [
+        "device_qi_residual_galerkin_equation_coarse_reuse"
+    ]
+    assert summary["evidence_classification"]["has_observed_residual_galerkin_equation"] is True
+    assert summary["evidence_classification"]["promotion_eligible_seed_count"] == 0
 
 
 def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Path) -> None:
@@ -791,6 +1658,20 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
                     "timed_out": 1,
                 },
                 "gates": {"passed": False, "failures": [{"reason": "process_failed"}]},
+                "evidence_classification": {
+                    "classes": ["requested_operator_krylov_device_qi"],
+                    "outcomes": ["process_failed"],
+                    "tags": [
+                        "failed_before_solver_trace_summary",
+                        "requested_device_qi",
+                        "requested_installed_krylov",
+                        "requested_operator_krylov",
+                    ],
+                    "has_failed_before_summary_json": True,
+                    "has_observed_installed_krylov": False,
+                    "has_observed_coarse_reuse": False,
+                    "promotion_eligible_seed_count": 0,
+                },
             }
         )
         + "\n",
@@ -814,4 +1695,173 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     assert current["max_checked_per_axis_resolution_fraction"] == 0.35
     assert current["bounded_lane_completion_estimate_percent"] == 35.0
     assert current["completion_estimate_basis"] == "largest passing measured artifact only"
+    assert current["failed_before_summary_json_count"] == 1
+    assert current["evidence_class_counts"]["requested_operator_krylov_device_qi"] == 1
+    assert current["evidence_tag_counts"]["failed_before_solver_trace_summary"] == 1
     assert manifest["release_gate"] == "bounded_proxy"
+    failed_artifact = next(
+        artifact for artifact in manifest["source_artifacts"] if artifact["path"].endswith("failed.json")
+    )
+    assert failed_artifact["evidence_classes"] == ["requested_operator_krylov_device_qi"]
+    assert "requested_installed_krylov" in failed_artifact["evidence_tags"]
+    assert failed_artifact["run_outcomes"] == ["process_failed"]
+    preset = manifest["probe_presets"]["operator-krylov-device-qi"]
+    assert (
+        preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT"]
+        == "1"
+    )
+    assert preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV"] == "fgmres-jax"
+    assert preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE"] == "1"
+    assert preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK"] == "64"
+    assert (
+        preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE"]
+        == "1"
+    )
+    assert "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS" not in preset["env"]
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64"
+        in preset["recommended_command"]
+    )
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1"
+        in preset["recommended_command"]
+    )
+    assert "--probe-preset operator-krylov-device-qi" in preset["recommended_command"]
+    assert "--solve-method xblock_sparse_pc_gmres" in preset["recommended_command"]
+    assert "--timeout-s 900" in preset["recommended_command"]
+    current_preset = manifest["probe_presets"]["current-constraint-device-qi"]
+    assert (
+        current_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS"]
+        == "1"
+    )
+    assert (
+        current_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE"
+        ]
+        == "1"
+    )
+    assert "--probe-preset current-constraint-device-qi" in current_preset["recommended_command"]
+    adjoint_preset = manifest["probe_presets"]["adjoint-krylov-device-qi"]
+    assert (
+        adjoint_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT"]
+        == "1"
+    )
+    assert (
+        adjoint_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH"]
+        == "2"
+    )
+    assert "--probe-preset adjoint-krylov-device-qi" in adjoint_preset["recommended_command"]
+    augmented_preset = manifest["probe_presets"]["augmented-krylov-device-qi"]
+    assert augmented_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT"] == "1"
+    assert augmented_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE"] == "cycle"
+    assert (
+        augmented_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV"]
+        == "1"
+    )
+    assert "--probe-preset augmented-krylov-device-qi" in augmented_preset["recommended_command"]
+    residual_snapshot_equation_preset = manifest["probe_presets"]["residual-snapshot-equation-device-qi"]
+    assert (
+        residual_snapshot_equation_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        residual_snapshot_equation_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER"
+        ]
+        == "action_lstsq"
+    )
+    assert (
+        residual_snapshot_equation_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL"
+        ]
+        == "1"
+    )
+    assert "--probe-preset residual-snapshot-equation-device-qi" in residual_snapshot_equation_preset[
+        "recommended_command"
+    ]
+    assert "fail-closed" in residual_snapshot_equation_preset["description"]
+    global_moment_preset = manifest["probe_presets"]["global-moment-closure-device-qi"]
+    assert (
+        global_moment_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        global_moment_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_SOLVER"
+        ]
+        == "galerkin"
+    )
+    assert (
+        global_moment_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_MAX_RANK"
+        ]
+        == "64"
+    )
+    assert "--probe-preset global-moment-closure-device-qi" in global_moment_preset["recommended_command"]
+    assert "fail-closed" in global_moment_preset["description"]
+    residual_galerkin_preset = manifest["probe_presets"]["residual-galerkin-device-qi"]
+    assert (
+        residual_galerkin_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        residual_galerkin_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGE_RANK"
+        ]
+        == "8"
+    )
+    assert (
+        residual_galerkin_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_SOLVER"
+        ]
+        == "action_lstsq"
+    )
+    assert "--probe-preset residual-galerkin-device-qi" in residual_galerkin_preset["recommended_command"]
+    assert "fail-closed" in residual_galerkin_preset["description"]
+    block_schur_preset = manifest["probe_presets"]["block-schur-device-qi"]
+    assert (
+        block_schur_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        block_schur_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK"
+        ]
+        == "64"
+    )
+    assert (
+        block_schur_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL"
+        ]
+        == "1"
+    )
+    assert (
+        block_schur_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER"
+        ]
+        == "galerkin"
+    )
+    assert "--probe-preset block-schur-device-qi" in block_schur_preset["recommended_command"]
+    assert "fail-closed" in block_schur_preset["description"]
+    recommended = json.dumps(
+        {
+            "regeneration_commands": manifest["regeneration_commands"],
+            "open_blockers": manifest["open_blockers"],
+            "true_device_qi": manifest["release_claims"]["true_device_qi"],
+        },
+        sort_keys=True,
+    ).lower()
+    assert "operator-krylov" in recommended
+    assert "global-moment" in recommended
+    assert "residual-galerkin" in recommended
+    assert "block-schur" in recommended
+    assert "projected smoother" not in recommended
+    assert "projected-smoother" not in recommended

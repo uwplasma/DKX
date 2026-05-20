@@ -9,8 +9,12 @@ metadata:
 ``S_local`` is a CSR-backed device Jacobi/stationary smoother when a device CSR
 operator is available.  For larger QI seeds the module can also run a coarse-only
 matrix-free path: it builds only ``A Q`` by applying a JAX matvec to rank-gated
-coarse vectors, avoiding full CSR materialization.  Both variants keep the timed
-apply path free of SciPy, Python callbacks, and host factors.
+coarse vectors, avoiding full CSR materialization.  The opt-in operator-Krylov
+and operator-action coarse architectures expand the correction space with
+rank-gated ``orth([Q, r, A r, ...])`` or ``{Q, A Q, A^2 Q, ...}`` columns and
+then reuse the final ``A Q_aug`` action for all subsequent coarse solves.  Both
+variants keep the timed apply path free of SciPy, Python callbacks, and host
+factors.
 """
 
 from __future__ import annotations
@@ -20,13 +24,29 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 import jax.numpy as jnp
+import jax
 import numpy as np
 
 from .rhs1_device_operator import DeviceCSR
-from .rhs1_qi_coarse import RHS1QICoarseBasis, orthonormalize_rhs1_qi_coarse_basis
+from .rhs1_qi_coarse import (
+    RHS1QICoarseBasis,
+    RHS1QICoarseBasisMetadata,
+    RHS1QICoarseBlockLayout,
+    orthonormalize_rhs1_qi_coarse_basis,
+)
 from .rhs1_qi_device_smoother import (
     RHS1QIDeviceJacobiSmoother,
     build_rhs1_qi_device_jacobi_smoother,
+)
+from .rhs1_qi_multilevel_coarse import (
+    RHS1QIMultilevelCoarseConfig,
+    build_rhs1_qi_multilevel_coarse_basis,
+    build_rhs1_qi_multilevel_coarse_candidates,
+    build_rhs1_qi_multilevel_residual_level_bases,
+)
+from .rhs1_qi_residual_galerkin import (
+    RHS1QIResidualGalerkinConfig,
+    setup_rhs1_qi_residual_galerkin,
 )
 
 ArrayLike = Any
@@ -63,6 +83,65 @@ class RHS1QIDevicePreconditionerConfig:
     residual_enrichment_include_residual: bool = True
     recycle_enrichment: bool = False
     recycle_enrichment_cycles: int = 0
+    operator_krylov_enrichment: bool = False
+    operator_krylov_depth: int = 0
+    adjoint_krylov_enrichment: bool = False
+    adjoint_krylov_depth: int = 0
+    adjoint_krylov_transpose_source: str = "autodiff"
+    operator_action_enrichment: bool = False
+    operator_action_enrichment_depth: int = 0
+    multilevel_coarse: bool = False
+    multilevel_max_levels: int = 3
+    multilevel_aggregate_factor: int = 2
+    multilevel_max_rank: int | None = None
+    multilevel_max_angular_mode: int = 1
+    multilevel_max_radial_degree: int = 2
+    multilevel_max_pitch_degree: int = 0
+    multilevel_current_moments: bool = False
+    multilevel_species_current_moments: bool = True
+    multilevel_radial_current_moments: bool = True
+    multilevel_tail_constraint_moments: bool = True
+    multilevel_current_max_pitch_degree: int = 1
+    multilevel_residual_equation: bool = False
+    multilevel_residual_equation_max_level_rank: int = 16
+    multilevel_residual_equation_order: str = "coarse_to_fine"
+    multilevel_residual_equation_solver: str = "action_lstsq"
+    multilevel_residual_equation_include_global: bool = True
+    global_moment_residual_equation: bool = False
+    global_moment_residual_equation_max_rank: int = 16
+    global_moment_residual_equation_solver: str = "galerkin"
+    global_moment_residual_equation_include_profile: bool = True
+    global_moment_residual_equation_include_current: bool = True
+    global_moment_residual_equation_include_tail: bool = True
+    residual_galerkin_equation: bool = False
+    residual_galerkin_equation_max_stages: int = 3
+    residual_galerkin_equation_max_stage_rank: int = 4
+    residual_galerkin_equation_max_rank: int = 24
+    residual_galerkin_equation_solver: str = "action_lstsq"
+    residual_galerkin_equation_include_global_residual: bool = True
+    residual_galerkin_equation_include_block_residuals: bool = True
+    residual_galerkin_equation_include_operator_images: bool = False
+    block_schur_residual_equation: bool = False
+    block_schur_residual_equation_max_rank: int = 24
+    block_schur_residual_equation_include_global: bool = False
+    block_schur_residual_equation_include_blocks: bool = True
+    block_schur_residual_equation_include_aggregates: bool = True
+    residual_snapshot_enrichment: bool = False
+    residual_snapshot_max_rank: int = 24
+    residual_snapshot_include_primal: bool = True
+    residual_snapshot_use_adjoint: bool = False
+    residual_snapshot_include_global: bool = False
+    residual_snapshot_include_blocks: bool = True
+    residual_snapshot_include_aggregates: bool = True
+    residual_snapshot_residual_equation: bool = False
+    residual_snapshot_residual_equation_max_rank: int = 24
+    residual_snapshot_residual_equation_solver: str = "action_lstsq"
+    residual_snapshot_residual_equation_include_global: bool = False
+    block_schur_residual_enrichment: bool = False
+    block_schur_residual_max_rank: int = 24
+    block_schur_residual_include_global: bool = False
+    block_schur_residual_include_blocks: bool = True
+    block_schur_residual_include_aggregates: bool = True
 
 
 @dataclass(frozen=True)
@@ -95,6 +174,70 @@ class RHS1QIDevicePreconditionerMetadata:
     recycle_enrichment_enabled: bool
     recycle_enrichment_cycles: int
     recycle_enrichment_candidate_count: int
+    operator_krylov_enrichment_enabled: bool
+    operator_krylov_depth: int
+    operator_krylov_candidate_count: int
+    adjoint_krylov_enrichment_enabled: bool
+    adjoint_krylov_depth: int
+    adjoint_krylov_candidate_count: int
+    adjoint_krylov_transpose_source: str
+    operator_action_enrichment_enabled: bool
+    operator_action_enrichment_depth: int
+    operator_action_enrichment_candidate_count: int
+    multilevel_coarse_enabled: bool
+    multilevel_coarse_level_count: int
+    multilevel_coarse_candidate_count: int
+    multilevel_coarse_rank: int
+    multilevel_residual_equation_enabled: bool
+    multilevel_residual_equation_stage_count: int
+    multilevel_residual_equation_rank: int
+    multilevel_residual_equation_stage_ranks: tuple[int, ...]
+    multilevel_residual_equation_order: str
+    multilevel_residual_equation_solver: str
+    multilevel_residual_equation_include_global: bool
+    global_moment_residual_equation_enabled: bool
+    global_moment_residual_equation_candidate_count: int
+    global_moment_residual_equation_rank: int
+    global_moment_residual_equation_stage_ranks: tuple[int, ...]
+    global_moment_residual_equation_solver: str
+    global_moment_residual_equation_include_profile: bool
+    global_moment_residual_equation_include_current: bool
+    global_moment_residual_equation_include_tail: bool
+    global_moment_residual_equation_condition_estimate: float
+    residual_galerkin_equation_enabled: bool
+    residual_galerkin_equation_candidate_count: int
+    residual_galerkin_equation_rank: int
+    residual_galerkin_equation_stage_count: int
+    residual_galerkin_equation_stage_ranks: tuple[int, ...]
+    residual_galerkin_equation_solver: str
+    residual_galerkin_equation_condition_estimate: float
+    residual_galerkin_equation_residual_before: float
+    residual_galerkin_equation_residual_after: float
+    block_schur_residual_equation_enabled: bool
+    block_schur_residual_equation_group_count: int
+    block_schur_residual_equation_candidate_count: int
+    block_schur_residual_equation_rank: int
+    block_schur_residual_equation_stage_ranks: tuple[int, ...]
+    block_schur_residual_equation_include_global: bool
+    block_schur_residual_equation_include_blocks: bool
+    block_schur_residual_equation_include_aggregates: bool
+    residual_snapshot_enrichment_enabled: bool
+    residual_snapshot_candidate_count: int
+    residual_snapshot_rank: int
+    residual_snapshot_group_count: int
+    residual_snapshot_include_primal: bool
+    residual_snapshot_use_adjoint: bool
+    residual_snapshot_residual_equation_enabled: bool
+    residual_snapshot_residual_equation_group_count: int
+    residual_snapshot_residual_equation_candidate_count: int
+    residual_snapshot_residual_equation_rank: int
+    residual_snapshot_residual_equation_stage_ranks: tuple[int, ...]
+    residual_snapshot_residual_equation_solver: str
+    residual_snapshot_residual_equation_include_global: bool
+    block_schur_residual_enrichment_enabled: bool
+    block_schur_residual_candidate_count: int
+    block_schur_residual_rank: int
+    block_schur_residual_group_count: int
     reason: str
 
     def to_dict(self) -> dict[str, object]:
@@ -124,6 +267,10 @@ class RHS1QIDevicePreconditionerState:
     basis: RHS1QICoarseBasis
     operator_on_basis: ArrayLike
     coarse_operator: ArrayLike
+    residual_equation_bases: tuple[RHS1QICoarseBasis, ...]
+    residual_equation_operator_on_bases: tuple[ArrayLike, ...]
+    residual_equation_coarse_operators: tuple[ArrayLike, ...]
+    residual_equation_stage_solvers: tuple[str, ...]
     metadata: RHS1QIDevicePreconditionerMetadata
 
     def solve_coarse(self, residual: ArrayLike) -> ArrayLike:
@@ -158,16 +305,107 @@ class RHS1QIDevicePreconditionerState:
             local = jnp.zeros_like(residual_vec)
         else:
             local = jnp.asarray(self.local_smoother.apply(residual_vec), dtype=residual_vec.dtype).reshape((-1,))
-        if int(self.metadata.rank) <= 0:
+        residual_equation_rank = (
+            int(self.metadata.multilevel_residual_equation_rank)
+            + int(self.metadata.global_moment_residual_equation_rank)
+            + int(self.metadata.residual_galerkin_equation_rank)
+            + int(self.metadata.block_schur_residual_equation_rank)
+            + int(self.metadata.residual_snapshot_residual_equation_rank)
+        )
+        if int(self.metadata.rank) <= 0 and residual_equation_rank <= 0:
             return float(self.metadata.damping) * local
 
         if self.metadata.composition == "multiplicative" and self.local_smoother is not None:
             coarse_input = residual_vec - jnp.asarray(self.operator_matvec(local), dtype=residual_vec.dtype).reshape((-1,))
         else:
             coarse_input = residual_vec
-        coefficients = self.solve_coarse(coarse_input)
-        coarse = jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype) @ coefficients
+        if (
+            bool(self.metadata.multilevel_residual_equation_enabled)
+            or bool(self.metadata.global_moment_residual_equation_enabled)
+            or bool(self.metadata.residual_galerkin_equation_enabled)
+            or bool(self.metadata.block_schur_residual_equation_enabled)
+            or bool(self.metadata.residual_snapshot_residual_equation_enabled)
+        ):
+            coarse = self.solve_coarse_residual_equation(coarse_input)
+        else:
+            coefficients = self.solve_coarse(coarse_input)
+            coarse = jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype) @ coefficients
         return float(self.metadata.damping) * (local + coarse)
+
+    def solve_coarse_residual_equation(self, residual: ArrayLike) -> ArrayLike:
+        """Apply a bounded multilevel residual-equation cascade.
+
+        Each stage solves the configured residual equation for the residual
+        left by previous stages.  The Galerkin variant uses cached
+        ``Q_l^T A Q_l`` built from setup-time ``A Q_l`` and keeps apply-time
+        work as pure JAX array operations.
+        """
+
+        residual_vec = jnp.asarray(residual, dtype=self.dtype).reshape((-1,))
+        correction = jnp.zeros_like(residual_vec)
+        remaining = residual_vec
+        for basis, action, coarse_operator, solver in zip(
+            self.residual_equation_bases,
+            self.residual_equation_operator_on_bases,
+            self.residual_equation_coarse_operators,
+            self.residual_equation_stage_solvers,
+            strict=True,
+        ):
+            if int(basis.metadata.rank) <= 0:
+                continue
+            if solver == "galerkin":
+                coefficients = _regularized_projected_solve(
+                    coarse_operator,
+                    jnp.conjugate(jnp.asarray(basis.vectors, dtype=residual_vec.dtype)).T @ remaining,
+                    rcond=float(self.metadata.regularization_rcond),
+                )
+            else:
+                coefficients = _regularized_least_squares(
+                    action,
+                    remaining,
+                    rcond=float(self.metadata.regularization_rcond),
+                )
+            stage_update = jnp.asarray(basis.vectors, dtype=residual_vec.dtype) @ coefficients
+            correction = correction + stage_update
+            remaining = remaining - jnp.asarray(action, dtype=residual_vec.dtype) @ coefficients
+        include_flat_coarse = (
+            bool(self.metadata.multilevel_residual_equation_enabled)
+            and bool(self.metadata.multilevel_residual_equation_include_global)
+        ) or (
+            bool(self.metadata.global_moment_residual_equation_enabled)
+        ) or (
+            bool(self.metadata.residual_galerkin_equation_enabled)
+        ) or (
+            bool(self.metadata.block_schur_residual_equation_enabled)
+            and bool(self.metadata.block_schur_residual_equation_include_global)
+        ) or (
+            bool(self.metadata.residual_snapshot_residual_equation_enabled)
+            and bool(self.metadata.residual_snapshot_residual_equation_include_global)
+        )
+        if include_flat_coarse and int(self.metadata.rank) > 0:
+            if (
+                (
+                    bool(self.metadata.multilevel_residual_equation_enabled)
+                    and self.metadata.multilevel_residual_equation_solver == "galerkin"
+                )
+                or (
+                    bool(self.metadata.global_moment_residual_equation_enabled)
+                    and self.metadata.global_moment_residual_equation_solver == "galerkin"
+                )
+                or (
+                    bool(self.metadata.residual_snapshot_residual_equation_enabled)
+                    and self.metadata.residual_snapshot_residual_equation_solver == "galerkin"
+                )
+            ):
+                coefficients = _regularized_projected_solve(
+                    self.coarse_operator,
+                    jnp.conjugate(jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype)).T @ remaining,
+                    rcond=float(self.metadata.regularization_rcond),
+                )
+            else:
+                coefficients = self.solve_coarse(remaining)
+            correction = correction + jnp.asarray(self.basis.vectors, dtype=residual_vec.dtype) @ coefficients
+        return correction
 
     def as_preconditioner(self):
         """Return a callable for Krylov hooks."""
@@ -357,10 +595,11 @@ class RHS1QIMatrixFreeProjectedResidualSmoother:
         partition: Sequence[tuple[int, int]],
     ) -> ArrayLike:
         residual_vec = jnp.asarray(residual, dtype=self.dtype).reshape((-1,))
-        direction = jnp.zeros_like(residual_vec)
+        indices = jnp.arange(int(residual_vec.shape[0]))
+        mask = jnp.zeros_like(residual_vec, dtype=bool)
         for start, stop in partition:
-            direction = direction.at[int(start) : int(stop)].set(residual_vec[int(start) : int(stop)])
-        return direction
+            mask = mask | ((indices >= int(start)) & (indices < int(stop)))
+        return jnp.where(mask, residual_vec, jnp.zeros_like(residual_vec))
 
     def apply(self, residual: ArrayLike) -> ArrayLike:
         """Apply fixed-count projected residual smoothing to ``residual``."""
@@ -472,6 +711,23 @@ def _normalize_matrix_free_block_smoother_grouping(value: str) -> str:
     return aliases[normalized]
 
 
+def _normalize_adjoint_krylov_transpose_source(value: str) -> str:
+    normalized = str(value).strip().lower().replace("-", "_")
+    aliases = {
+        "auto": "autodiff",
+        "autodiff": "autodiff",
+        "jax": "autodiff",
+        "vjp": "autodiff",
+        "linear_transpose": "autodiff",
+        "off": "off",
+        "none": "off",
+        "disabled": "off",
+    }
+    if normalized not in aliases:
+        raise ValueError("adjoint_krylov_transpose_source must be 'autodiff' or 'off'")
+    return aliases[normalized]
+
+
 def _metadata_int_tuple(metadata: Mapping[str, object] | None, key: str) -> tuple[int, ...]:
     if metadata is None or key not in metadata:
         return ()
@@ -489,6 +745,777 @@ def _metadata_int_tuple(metadata: Mapping[str, object] | None, key: str) -> tupl
         except (TypeError, ValueError):
             return ()
     return tuple(result)
+
+
+def _metadata_int_value(metadata: Mapping[str, object] | None, key: str, default: int) -> int:
+    if metadata is None or key not in metadata:
+        return int(default)
+    value = metadata[key]
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _multilevel_layout_from_metadata(
+    *,
+    geometry_metadata: Mapping[str, object] | None,
+    total_size: int,
+) -> RHS1QICoarseBlockLayout:
+    block_sizes = list(_metadata_int_tuple(geometry_metadata, "qi_block_sizes"))
+    if not block_sizes:
+        raise ValueError("multilevel_coarse requires geometry_metadata['qi_block_sizes']")
+    block_x = list(_metadata_int_tuple(geometry_metadata, "qi_block_x"))
+    block_species = list(_metadata_int_tuple(geometry_metadata, "qi_block_species"))
+    covered_size = int(sum(block_sizes))
+    tail_size = _metadata_int_value(
+        geometry_metadata,
+        "qi_block_tail_size",
+        max(0, int(total_size) - int(covered_size)),
+    )
+    if covered_size < int(total_size) and int(tail_size) == int(total_size) - covered_size:
+        block_sizes.append(int(tail_size))
+        if block_x:
+            block_x.append(-1)
+        if block_species:
+            block_species.append(-1)
+        covered_size = int(sum(block_sizes))
+    if covered_size != int(total_size):
+        raise ValueError(
+            "multilevel_coarse requires qi_block_sizes to cover the full operator size "
+            f"({covered_size} != {int(total_size)})"
+        )
+    return RHS1QICoarseBlockLayout(
+        block_sizes=tuple(block_sizes),
+        n_theta=_metadata_int_value(geometry_metadata, "n_theta", 1),
+        n_zeta=_metadata_int_value(geometry_metadata, "n_zeta", 1),
+        block_x=tuple(block_x) if block_x else None,
+        block_species=tuple(block_species) if block_species else None,
+    )
+
+
+def _build_multilevel_coarse_basis_from_metadata(
+    *,
+    geometry_metadata: Mapping[str, object] | None,
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[RHS1QICoarseBasis, int, int]:
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    max_rank = config.multilevel_max_rank
+    if max_rank is None:
+        max_rank = config.max_rank if config.max_rank is not None else 48
+    multilevel_config = RHS1QIMultilevelCoarseConfig(
+        max_levels=max(1, int(config.multilevel_max_levels)),
+        aggregate_factor=max(2, int(config.multilevel_aggregate_factor)),
+        max_rank=max(0, int(max_rank)),
+        max_angular_mode=max(0, int(config.multilevel_max_angular_mode)),
+        max_radial_degree=max(0, int(config.multilevel_max_radial_degree)),
+        max_pitch_degree=max(0, int(config.multilevel_max_pitch_degree)),
+        include_current_moments=bool(config.multilevel_current_moments),
+        include_species_current_moments=bool(config.multilevel_species_current_moments),
+        include_radial_current_moments=bool(config.multilevel_radial_current_moments),
+        include_tail_constraint_moments=bool(config.multilevel_tail_constraint_moments),
+        max_current_pitch_degree=max(0, int(config.multilevel_current_max_pitch_degree)),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        regularization_rcond=float(config.regularization_rcond),
+        damping=float(config.damping),
+        dtype=dtype,
+    )
+    basis, levels = build_rhs1_qi_multilevel_coarse_basis(layout, config=multilevel_config)
+    return basis, len(levels), int(basis.metadata.candidate_count)
+
+
+def _normalize_multilevel_residual_equation_order(value: str) -> str:
+    order = str(value).strip().lower().replace("-", "_")
+    if order in {"coarse_to_fine", "coarse", "coarse_first"}:
+        return "coarse_to_fine"
+    if order in {"fine_to_coarse", "fine", "fine_first"}:
+        return "fine_to_coarse"
+    raise ValueError("multilevel_residual_equation_order must be 'coarse_to_fine' or 'fine_to_coarse'")
+
+
+def _normalize_multilevel_residual_equation_solver(value: str) -> str:
+    solver = str(value).strip().lower().replace("-", "_")
+    aliases = {
+        "action": "action_lstsq",
+        "action_ls": "action_lstsq",
+        "action_lstsq": "action_lstsq",
+        "least_squares": "action_lstsq",
+        "lstsq": "action_lstsq",
+        "staged": "action_lstsq",
+        "galerkin": "galerkin",
+        "projected": "galerkin",
+        "qtaq": "galerkin",
+        "coarse_grid": "galerkin",
+    }
+    if solver not in aliases:
+        raise ValueError("multilevel_residual_equation_solver must be 'action_lstsq' or 'galerkin'")
+    return aliases[solver]
+
+
+def _build_multilevel_residual_equation_bases_from_metadata(
+    *,
+    geometry_metadata: Mapping[str, object] | None,
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[RHS1QICoarseBasis, ...], int, int, tuple[int, ...]]:
+    """Build separate coarse-grid bases for the nested residual equation."""
+
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    max_rank = max(1, int(config.multilevel_residual_equation_max_level_rank))
+    multilevel_config = RHS1QIMultilevelCoarseConfig(
+        max_levels=max(1, int(config.multilevel_max_levels)),
+        aggregate_factor=max(2, int(config.multilevel_aggregate_factor)),
+        max_rank=max_rank,
+        max_angular_mode=max(0, int(config.multilevel_max_angular_mode)),
+        max_radial_degree=max(0, int(config.multilevel_max_radial_degree)),
+        max_pitch_degree=max(0, int(config.multilevel_max_pitch_degree)),
+        include_current_moments=bool(config.multilevel_current_moments),
+        include_species_current_moments=bool(config.multilevel_species_current_moments),
+        include_radial_current_moments=bool(config.multilevel_radial_current_moments),
+        include_tail_constraint_moments=bool(config.multilevel_tail_constraint_moments),
+        max_current_pitch_degree=max(0, int(config.multilevel_current_max_pitch_degree)),
+        nested_residual_correction=True,
+        nested_level_max_rank=max_rank,
+        nested_order=_normalize_multilevel_residual_equation_order(
+            config.multilevel_residual_equation_order
+        ),
+        nested_include_global=bool(config.multilevel_residual_equation_include_global),
+        dtype=dtype,
+    )
+    bases, _levels = build_rhs1_qi_multilevel_residual_level_bases(layout, config=multilevel_config)
+    stage_ranks = tuple(int(basis.metadata.rank) for basis in bases)
+    return bases, len(bases), sum(stage_ranks), stage_ranks
+
+
+def _build_global_moment_residual_equation_bases_from_metadata(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    geometry_metadata: Mapping[str, object] | None,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float]:
+    """Build a fail-closed global moment Schur/Galerkin residual equation.
+
+    This path differs from static multilevel moments: setup first constructs a
+    compact space of current, tail-constraint, and radial-profile moments, then
+    accepts it only if the reduced residual equation lowers the actual hard-seed
+    operator residual.  Apply-time still uses the existing cached ``A Q`` JAX
+    cascade, so the installed preconditioner remains device-compatible.
+    """
+
+    if int(shape[0]) != int(shape[1]):
+        raise ValueError("global moment residual equation requires a square operator")
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(total_size):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+
+    solver = _normalize_multilevel_residual_equation_solver(
+        config.global_moment_residual_equation_solver
+    )
+    max_rank = max(1, int(config.global_moment_residual_equation_max_rank))
+    moment_config = RHS1QIMultilevelCoarseConfig(
+        max_levels=max(1, int(config.multilevel_max_levels)),
+        aggregate_factor=max(2, int(config.multilevel_aggregate_factor)),
+        max_rank=max_rank,
+        max_angular_mode=0,
+        max_radial_degree=max(0, int(config.multilevel_max_radial_degree)),
+        max_pitch_degree=0,
+        include_level_aggregates=bool(config.global_moment_residual_equation_include_profile),
+        include_angular=False,
+        include_radial=bool(config.global_moment_residual_equation_include_profile),
+        include_radial_angular=False,
+        include_pitch=False,
+        include_radial_pitch=False,
+        include_current_moments=bool(config.global_moment_residual_equation_include_current),
+        include_species_current_moments=bool(config.multilevel_species_current_moments),
+        include_radial_current_moments=bool(config.multilevel_radial_current_moments),
+        include_tail_constraint_moments=bool(config.global_moment_residual_equation_include_tail),
+        include_finest_blocks=False,
+        max_current_pitch_degree=max(1, int(config.multilevel_current_max_pitch_degree)),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        regularization_rcond=float(config.regularization_rcond),
+        damping=float(config.damping),
+        dtype=dtype,
+    )
+    candidates, labels, _levels = build_rhs1_qi_multilevel_coarse_candidates(
+        layout,
+        config=moment_config,
+    )
+    selected_columns: list[ArrayLike] = []
+    selected_labels: list[str] = []
+    for index, label in enumerate(labels):
+        label_text = str(label)
+        include = (
+            (bool(config.global_moment_residual_equation_include_current) and label_text.startswith("current:"))
+            or (
+                bool(config.global_moment_residual_equation_include_tail)
+                and label_text.startswith("constraint_tail:")
+            )
+            or (
+                bool(config.global_moment_residual_equation_include_profile)
+                and label_text.startswith("level:")
+            )
+        )
+        if include:
+            selected_columns.append(jnp.asarray(candidates[:, int(index)], dtype=dtype).reshape((-1,)))
+            selected_labels.append(f"global_moment:{label_text}")
+    if not selected_columns:
+        return (), 0, (), 0, float("inf")
+
+    basis = orthonormalize_rhs1_qi_coarse_basis(
+        jnp.stack(tuple(selected_columns), axis=1),
+        labels=tuple(selected_labels),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        max_rank=max_rank,
+    )
+    rank = int(basis.metadata.rank)
+    if rank <= 0:
+        return (), int(basis.metadata.candidate_count), (), 0, float("inf")
+
+    q = jnp.asarray(basis.vectors, dtype=dtype)
+    action = _operator_on_basis(operator_matvec, q, shape=shape, dtype=dtype)
+    coarse_operator = jnp.conjugate(q).T @ action
+    if solver == "galerkin":
+        coefficients = _regularized_projected_solve(
+            coarse_operator,
+            jnp.conjugate(q).T @ residual,
+            rcond=float(config.regularization_rcond),
+        )
+        condition_matrix = coarse_operator
+    else:
+        coefficients = _regularized_least_squares(
+            action,
+            residual,
+            rcond=float(config.regularization_rcond),
+        )
+        condition_matrix = action
+    next_residual = residual - action @ coefficients
+    residual_norm = float(jnp.linalg.norm(residual))
+    next_norm = float(jnp.linalg.norm(next_residual))
+    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+    singular_values = np.asarray(jnp.linalg.svd(condition_matrix, compute_uv=False), dtype=np.float64)
+    positive = singular_values[singular_values > threshold]
+    if positive.size == 0:
+        condition_estimate = float("inf")
+    else:
+        condition_estimate = float(np.max(singular_values) / np.min(positive))
+    if (not np.isfinite(next_norm)) or next_norm >= residual_norm - threshold:
+        return (), int(basis.metadata.candidate_count), (), 0, condition_estimate
+    return (basis,), int(basis.metadata.candidate_count), (rank,), rank, condition_estimate
+
+
+def _basis_from_residual_galerkin_state(
+    vectors: ArrayLike,
+    *,
+    labels: Sequence[str],
+    candidate_count: int,
+    candidate_labels: Sequence[str],
+    dtype: Any,
+) -> RHS1QICoarseBasis:
+    q = jnp.asarray(vectors, dtype=dtype)
+    if q.ndim != 2:
+        raise ValueError("residual Galerkin basis must be two-dimensional")
+    accepted_labels = tuple(f"residual_galerkin:{label}" for label in labels)
+    norms = tuple(float(jnp.linalg.norm(q[:, index])) for index in range(int(q.shape[1])))
+    return RHS1QICoarseBasis(
+        vectors=q,
+        metadata=RHS1QICoarseBasisMetadata(
+            total_size=int(q.shape[0]),
+            candidate_count=int(candidate_count),
+            rank=int(q.shape[1]),
+            discarded_count=max(0, int(candidate_count) - int(q.shape[1])),
+            candidate_labels=tuple(f"residual_galerkin:{label}" for label in candidate_labels),
+            accepted_labels=accepted_labels,
+            candidate_norms=norms,
+            accepted_norms=norms,
+            rank_rtol=0.0,
+            rank_atol=0.0,
+        ),
+    )
+
+
+def _build_residual_galerkin_equation_basis_from_metadata(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    geometry_metadata: Mapping[str, object] | None,
+    residual_seed: ArrayLike,
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[RHS1QICoarseBasis, ...], int, int, tuple[int, ...], int, float, float, float]:
+    """Build a residual-derived Galerkin stage from actual block residuals."""
+
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(total_size):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+    solver = _normalize_multilevel_residual_equation_solver(
+        config.residual_galerkin_equation_solver
+    )
+    galerkin_state = setup_rhs1_qi_residual_galerkin(
+        operator=operator_matvec,
+        residual=residual,
+        block_sizes=tuple(int(value) for value in layout.block_sizes),
+        config=RHS1QIResidualGalerkinConfig(
+            max_stages=max(1, int(config.residual_galerkin_equation_max_stages)),
+            max_stage_rank=max(1, int(config.residual_galerkin_equation_max_stage_rank)),
+            max_rank=max(1, int(config.residual_galerkin_equation_max_rank)),
+            rank_rtol=float(config.basis_rtol),
+            rank_atol=float(config.basis_atol),
+            regularization_rcond=float(config.regularization_rcond),
+            damping=float(config.damping),
+            solver=solver,
+            min_relative_improvement=0.0,
+            include_global_residual=bool(
+                config.residual_galerkin_equation_include_global_residual
+            ),
+            include_block_residuals=bool(
+                config.residual_galerkin_equation_include_block_residuals
+            ),
+            include_operator_images=bool(
+                config.residual_galerkin_equation_include_operator_images
+            ),
+            include_operator_preimages=False,
+            sort_blocks_by_residual_norm=True,
+        ),
+    )
+    metadata = galerkin_state.metadata
+    rank = int(metadata.rank)
+    if not bool(metadata.accepted) or rank <= 0:
+        return (
+            (),
+            int(metadata.candidate_count),
+            int(metadata.stage_count),
+            tuple(int(value) for value in metadata.stage_ranks),
+            0,
+            float(metadata.condition_estimate),
+            float(metadata.residual_before),
+            float(metadata.residual_after),
+        )
+    basis = _basis_from_residual_galerkin_state(
+        galerkin_state.basis,
+        labels=metadata.labels,
+        candidate_count=int(metadata.candidate_count),
+        candidate_labels=metadata.candidate_labels,
+        dtype=dtype,
+    )
+    return (
+        (basis,),
+        int(metadata.candidate_count),
+        int(metadata.stage_count),
+        tuple(int(value) for value in metadata.stage_ranks),
+        rank,
+        float(metadata.condition_estimate),
+        float(metadata.residual_before),
+        float(metadata.residual_after),
+    )
+
+
+def _unique_snapshot_groups(groups: Sequence[Sequence[int]]) -> tuple[tuple[int, ...], ...]:
+    unique: list[tuple[int, ...]] = []
+    seen: set[tuple[int, ...]] = set()
+    for group in groups:
+        item = tuple(int(index) for index in group)
+        if not item or item in seen:
+            continue
+        unique.append(item)
+        seen.add(item)
+    return tuple(unique)
+
+
+def _residual_snapshot_groups(
+    layout: RHS1QICoarseBlockLayout,
+    *,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[int, ...], ...]:
+    """Return deterministic block groups used to sample the current residual."""
+
+    block_count = len(tuple(layout.block_sizes))
+    groups: list[tuple[int, ...]] = []
+    if bool(config.residual_snapshot_include_global):
+        groups.append(tuple(range(block_count)))
+    if bool(config.residual_snapshot_include_blocks):
+        groups.extend((index,) for index in range(block_count))
+    if bool(config.residual_snapshot_include_aggregates):
+        factor = max(2, int(config.multilevel_aggregate_factor))
+        for level in range(1, max(1, int(config.multilevel_max_levels))):
+            width = factor**level
+            for start in range(0, block_count, width):
+                groups.append(tuple(range(start, min(block_count, start + width))))
+    return _unique_snapshot_groups(groups)
+
+
+def _block_schur_residual_groups(
+    layout: RHS1QICoarseBlockLayout,
+    *,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[int, ...], ...]:
+    """Return block groups used for off-block Schur residual candidates."""
+
+    snapshot_config = RHS1QIDevicePreconditionerConfig(
+        multilevel_max_levels=int(config.multilevel_max_levels),
+        multilevel_aggregate_factor=int(config.multilevel_aggregate_factor),
+        residual_snapshot_include_global=bool(config.block_schur_residual_include_global),
+        residual_snapshot_include_blocks=bool(config.block_schur_residual_include_blocks),
+        residual_snapshot_include_aggregates=bool(config.block_schur_residual_include_aggregates),
+    )
+    return _residual_snapshot_groups(layout, config=snapshot_config)
+
+
+def _restrict_to_block_group(
+    values: ArrayLike,
+    *,
+    group: Sequence[int],
+    offsets: Sequence[int],
+    total_size: int,
+    dtype: Any,
+) -> ArrayLike:
+    vector = jnp.asarray(values, dtype=dtype).reshape((-1,))
+    restricted = jnp.zeros((int(total_size),), dtype=dtype)
+    for block_index in group:
+        start = int(offsets[int(block_index)])
+        stop = int(offsets[int(block_index) + 1])
+        restricted = restricted.at[start:stop].set(vector[start:stop])
+    return restricted
+
+
+def _remove_block_group(
+    values: ArrayLike,
+    *,
+    group: Sequence[int],
+    offsets: Sequence[int],
+    dtype: Any,
+) -> ArrayLike:
+    vector = jnp.asarray(values, dtype=dtype).reshape((-1,))
+    outside = vector
+    for block_index in group:
+        start = int(offsets[int(block_index)])
+        stop = int(offsets[int(block_index) + 1])
+        outside = outside.at[start:stop].set(jnp.zeros((stop - start,), dtype=dtype))
+    return outside
+
+
+def _build_residual_snapshot_basis_from_metadata(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    geometry_metadata: Mapping[str, object] | None,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[RHS1QICoarseBasis, int, int]:
+    """Build coarse directions by restricting the current residual to QI blocks.
+
+    The multilevel analytic basis can miss seed-specific residual modes on hard
+    QI cases.  This builder adds only rank-gated snapshots of the actual current
+    residual on block and aggregate supports, so the timed preconditioner still
+    applies a cached ``A Q`` coarse solve rather than doing additional smoothing.
+    """
+
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(total_size):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+
+    offsets = tuple(int(value) for value in layout.block_offsets)
+    columns: list[ArrayLike] = []
+    labels: list[str] = []
+    groups = _residual_snapshot_groups(layout, config=config)
+    rank_limit = max(1, int(config.residual_snapshot_max_rank))
+    for group in groups:
+        masked_residual = jnp.zeros((int(total_size),), dtype=dtype)
+        for block_index in group:
+            start = offsets[int(block_index)]
+            stop = offsets[int(block_index) + 1]
+            masked_residual = masked_residual.at[start:stop].set(residual[start:stop])
+        group_label = ",".join(str(index) for index in group)
+        if bool(config.residual_snapshot_include_primal):
+            _append_normalized_candidate(
+                columns,
+                labels,
+                masked_residual,
+                f"residual_snapshot_primal:{group_label}",
+                total_size=int(total_size),
+                dtype=dtype,
+            )
+        if len(columns) >= rank_limit:
+            break
+        if bool(config.residual_snapshot_use_adjoint):
+            adjoint_candidate = _autodiff_transpose_matvec(
+                operator_matvec,
+                masked_residual,
+                shape=shape,
+                dtype=dtype,
+            )
+            _append_normalized_candidate(
+                columns,
+                labels,
+                adjoint_candidate,
+                f"residual_snapshot_adjoint:{group_label}",
+                total_size=int(total_size),
+                dtype=dtype,
+            )
+        if len(columns) >= rank_limit:
+            break
+
+    if columns:
+        candidates = jnp.stack(tuple(columns), axis=1)
+    else:
+        candidates = jnp.zeros((int(total_size), 0), dtype=dtype)
+    snapshot_basis = orthonormalize_rhs1_qi_coarse_basis(
+        candidates,
+        labels=tuple(labels),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        max_rank=rank_limit,
+    )
+    return snapshot_basis, int(len(columns)), int(len(groups))
+
+
+def _build_residual_snapshot_residual_equation_bases_from_metadata(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    geometry_metadata: Mapping[str, object] | None,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[RHS1QICoarseBasis, ...], int, int, tuple[int, ...], int]:
+    """Build staged residual equations from residual snapshots.
+
+    The flat residual-snapshot enrichment uses all accepted snapshot columns in
+    one rank-gated coarse solve.  This staged variant instead gives each
+    block/aggregate snapshot group its own residual equation, accepts the stage
+    only if it reduces the remaining setup residual, and caches the resulting
+    ``A Q_l`` action for pure-JAX apply-time reuse.
+    """
+
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(total_size):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+
+    offsets = tuple(int(value) for value in layout.block_offsets)
+    groups = _residual_snapshot_groups(layout, config=config)
+    if not groups:
+        raise ValueError("residual-snapshot residual equation requires at least one QI block group")
+
+    max_rank = max(1, int(config.residual_snapshot_residual_equation_max_rank))
+    residual_norm = float(jnp.linalg.norm(residual))
+    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+    solver = _normalize_multilevel_residual_equation_solver(
+        config.residual_snapshot_residual_equation_solver
+    )
+    accepted_columns: list[ArrayLike] = []
+    stage_bases: list[RHS1QICoarseBasis] = []
+    remaining = residual
+    candidate_count = 0
+    used_rank = 0
+
+    for group in groups:
+        if used_rank >= max_rank:
+            break
+        masked_residual = _restrict_to_block_group(
+            residual,
+            group=group,
+            offsets=offsets,
+            total_size=int(total_size),
+            dtype=dtype,
+        )
+        group_columns: list[ArrayLike] = []
+        group_labels: list[str] = []
+        group_label = ",".join(str(index) for index in group)
+        if bool(config.residual_snapshot_include_primal):
+            primal = _orthogonalized_candidate(
+                masked_residual,
+                (*accepted_columns, *group_columns),
+                threshold=threshold,
+                total_size=int(total_size),
+                dtype=dtype,
+            )
+            if primal is not None:
+                group_columns.append(primal)
+                group_labels.append(f"residual_snapshot_equation_primal:{group_label}")
+        if bool(config.residual_snapshot_use_adjoint) and used_rank + len(group_columns) < max_rank:
+            adjoint_candidate = _autodiff_transpose_matvec(
+                operator_matvec,
+                masked_residual,
+                shape=shape,
+                dtype=dtype,
+            )
+            adjoint = _orthogonalized_candidate(
+                adjoint_candidate,
+                (*accepted_columns, *group_columns),
+                threshold=threshold,
+                total_size=int(total_size),
+                dtype=dtype,
+            )
+            if adjoint is not None:
+                group_columns.append(adjoint)
+                group_labels.append(f"residual_snapshot_equation_adjoint:{group_label}")
+        if not group_columns:
+            continue
+
+        stage_basis = orthonormalize_rhs1_qi_coarse_basis(
+            jnp.stack(tuple(group_columns), axis=1),
+            labels=tuple(group_labels),
+            rtol=float(config.basis_rtol),
+            atol=float(config.basis_atol),
+            max_rank=max(1, int(max_rank - used_rank)),
+        )
+        if int(stage_basis.metadata.rank) <= 0:
+            continue
+        stage_q = jnp.asarray(stage_basis.vectors, dtype=dtype)
+        stage_action = _operator_on_basis(operator_matvec, stage_q, shape=shape, dtype=dtype)
+        if solver == "galerkin":
+            coefficients = _regularized_projected_solve(
+                jnp.conjugate(stage_q).T @ stage_action,
+                jnp.conjugate(stage_q).T @ remaining,
+                rcond=float(config.regularization_rcond),
+            )
+        else:
+            coefficients = _regularized_least_squares(
+                stage_action,
+                remaining,
+                rcond=float(config.regularization_rcond),
+            )
+        next_remaining = remaining - stage_action @ coefficients
+        if float(jnp.linalg.norm(next_remaining)) >= float(jnp.linalg.norm(remaining)) - threshold:
+            continue
+
+        stage_bases.append(stage_basis)
+        for column_index in range(int(stage_q.shape[1])):
+            accepted_columns.append(stage_q[:, column_index])
+        candidate_count += int(stage_basis.metadata.candidate_count)
+        used_rank += int(stage_basis.metadata.rank)
+        remaining = next_remaining
+
+    stage_ranks = tuple(int(basis.metadata.rank) for basis in stage_bases)
+    return tuple(stage_bases), int(len(groups)), int(candidate_count), stage_ranks, int(sum(stage_ranks))
+
+
+def _build_block_schur_residual_basis_from_metadata(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    geometry_metadata: Mapping[str, object] | None,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[RHS1QICoarseBasis, int, int]:
+    """Build off-block Schur residual directions from the current residual.
+
+    For a block-supported trial correction ``d_g = P_g r``, the off-block
+    response ``P_not_g A d_g`` identifies coupling that the local block cannot
+    cancel by itself.  Pulling that response back with ``A.T`` and restricting
+    it to the source group gives a setup-time Schur-like candidate
+    ``P_g A.T P_not_g A P_g r``.  The reusable preconditioner still stores only
+    rank-gated ``Q`` and ``A Q`` columns, so apply-time remains device-only.
+    """
+
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(total_size):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+    if int(shape[0]) != int(shape[1]):
+        raise ValueError("block-Schur residual enrichment requires a square operator")
+
+    offsets = tuple(int(value) for value in layout.block_offsets)
+    columns: list[ArrayLike] = []
+    labels: list[str] = []
+    groups = _block_schur_residual_groups(layout, config=config)
+    rank_limit = max(1, int(config.block_schur_residual_max_rank))
+    for group in groups:
+        block_residual = _restrict_to_block_group(
+            residual,
+            group=group,
+            offsets=offsets,
+            total_size=int(total_size),
+            dtype=dtype,
+        )
+        action = jnp.asarray(operator_matvec(block_residual), dtype=dtype).reshape((-1,))
+        offblock_action = _remove_block_group(action, group=group, offsets=offsets, dtype=dtype)
+        pulled_back = _autodiff_transpose_matvec(
+            operator_matvec,
+            offblock_action,
+            shape=shape,
+            dtype=dtype,
+        )
+        schur_candidate = _restrict_to_block_group(
+            pulled_back,
+            group=group,
+            offsets=offsets,
+            total_size=int(total_size),
+            dtype=dtype,
+        )
+        group_label = ",".join(str(index) for index in group)
+        before = len(columns)
+        _append_normalized_candidate(
+            columns,
+            labels,
+            schur_candidate,
+            f"block_schur_residual:{group_label}",
+            total_size=int(total_size),
+            dtype=dtype,
+        )
+        if len(columns) - before >= 1 and len(columns) >= rank_limit:
+            break
+
+    if columns:
+        candidates = jnp.stack(tuple(columns), axis=1)
+    else:
+        candidates = jnp.zeros((int(total_size), 0), dtype=dtype)
+    schur_basis = orthonormalize_rhs1_qi_coarse_basis(
+        candidates,
+        labels=tuple(labels),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        max_rank=rank_limit,
+    )
+    return schur_basis, int(len(columns)), int(len(groups))
+
+
+def _combine_coarse_bases(
+    base: RHS1QICoarseBasis,
+    extra: RHS1QICoarseBasis,
+    *,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> RHS1QICoarseBasis:
+    columns: list[ArrayLike] = []
+    labels: list[str] = []
+    base_vectors = jnp.asarray(base.vectors, dtype=dtype)
+    for index, label in enumerate(base.metadata.accepted_labels):
+        columns.append(base_vectors[:, int(index)])
+        labels.append(str(label))
+    extra_vectors = jnp.asarray(extra.vectors, dtype=dtype)
+    for index, label in enumerate(extra.metadata.accepted_labels):
+        columns.append(extra_vectors[:, int(index)])
+        labels.append(f"multilevel:{label}")
+    if columns:
+        candidates = jnp.stack(tuple(columns), axis=1)
+    else:
+        candidates = jnp.zeros((int(base_vectors.shape[0]), 0), dtype=dtype)
+    return orthonormalize_rhs1_qi_coarse_basis(
+        candidates,
+        labels=tuple(labels),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        max_rank=config.max_rank,
+    )
 
 
 def _merge_group_slices(
@@ -690,6 +1717,26 @@ def _regularized_least_squares(matrix: ArrayLike, rhs: ArrayLike, *, rcond: floa
     return jnp.linalg.solve(gram + ridge * eye, normal_rhs)
 
 
+def _regularized_projected_solve(matrix: ArrayLike, rhs: ArrayLike, *, rcond: float) -> ArrayLike:
+    """Solve a square Galerkin residual equation with a scale-relative ridge."""
+
+    a = jnp.asarray(matrix)
+    b = jnp.asarray(rhs, dtype=a.dtype).reshape((-1,))
+    if a.ndim != 2:
+        raise ValueError("projected coarse matrix must be two-dimensional")
+    if int(a.shape[0]) != int(a.shape[1]):
+        raise ValueError("projected coarse matrix must be square")
+    if int(a.shape[0]) != int(b.shape[0]):
+        raise ValueError("rhs length must match projected coarse matrix rows")
+    if int(a.shape[1]) == 0:
+        return jnp.zeros((0,), dtype=b.dtype)
+    row_sums = jnp.sum(jnp.abs(a), axis=1)
+    scale = jnp.maximum(jnp.max(row_sums), jnp.asarray(1.0, dtype=a.dtype))
+    ridge = jnp.asarray(max(float(rcond), 0.0), dtype=a.dtype) * scale
+    eye = jnp.eye(int(a.shape[0]), dtype=a.dtype)
+    return jnp.linalg.solve(a + ridge * eye, b)
+
+
 def _operator_on_basis(
     operator_matvec: Callable[[ArrayLike], ArrayLike],
     basis_vectors: ArrayLike,
@@ -706,6 +1753,32 @@ def _operator_on_basis(
         return jnp.zeros((int(shape[0]), 0), dtype=dtype)
     columns = [jnp.asarray(operator_matvec(q[:, idx]), dtype=dtype).reshape((-1,)) for idx in range(int(q.shape[1]))]
     return jnp.stack(columns, axis=1)
+
+
+def _autodiff_transpose_matvec(
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    vector: ArrayLike,
+    *,
+    shape: tuple[int, int],
+    dtype: Any,
+) -> ArrayLike:
+    """Apply ``A.T`` to ``vector`` using JAX's linear VJP machinery.
+
+    This is setup-time only for the adjoint-normal coarse space; the timed
+    Krylov preconditioner still uses the cached ``A Q`` action and does not
+    call a transpose.
+    """
+
+    vector_arr = jnp.asarray(vector, dtype=dtype).reshape((-1,))
+    if int(vector_arr.shape[0]) != int(shape[0]):
+        raise ValueError(f"transpose vector length {vector_arr.shape[0]} does not match operator rows {shape[0]}")
+
+    def _mv(x):
+        return jnp.asarray(operator_matvec(jnp.asarray(x, dtype=dtype)), dtype=dtype).reshape((-1,))
+
+    x0 = jnp.zeros((int(shape[1]),), dtype=dtype)
+    _, pullback = jax.vjp(_mv, x0)
+    return jnp.asarray(pullback(vector_arr)[0], dtype=dtype).reshape((-1,))
 
 
 def _append_normalized_candidate(
@@ -883,6 +1956,486 @@ def _enrich_basis_with_recycle_residuals(
     return current_basis, candidate_count
 
 
+def _orthogonalized_candidate(
+    values: ArrayLike,
+    columns: Sequence[ArrayLike],
+    *,
+    threshold: float,
+    total_size: int,
+    dtype: Any,
+) -> ArrayLike | None:
+    vector = jnp.asarray(values, dtype=dtype).reshape((-1,))
+    if int(vector.shape[0]) != int(total_size):
+        raise ValueError(f"candidate has length {vector.shape[0]}, expected {total_size}")
+    residual = vector
+    for _ in range(2):
+        for column in columns:
+            q = jnp.asarray(column, dtype=dtype).reshape((-1,))
+            residual = residual - q * jnp.vdot(q, residual)
+    norm = float(jnp.linalg.norm(residual))
+    if (not np.isfinite(norm)) or norm <= float(threshold):
+        return None
+    return residual / norm
+
+
+def _block_schur_residual_equation_groups(
+    layout: RHS1QICoarseBlockLayout,
+    *,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[str, tuple[int, ...]], ...]:
+    """Return source QI block groups for setup-time Schur-like residual solves."""
+
+    block_count = len(tuple(layout.block_sizes))
+    specs: list[tuple[str, tuple[int, ...]]] = []
+    if bool(config.block_schur_residual_equation_include_global):
+        specs.append(("global", tuple(range(block_count))))
+    if bool(config.block_schur_residual_equation_include_blocks):
+        specs.extend(("block", (index,)) for index in range(block_count))
+    if bool(config.block_schur_residual_equation_include_aggregates):
+        factor = max(2, int(config.multilevel_aggregate_factor))
+        for level in range(1, max(1, int(config.multilevel_max_levels))):
+            width = factor**level
+            for start in range(0, block_count, width):
+                group = tuple(range(start, min(block_count, start + width)))
+                if len(group) > 1:
+                    specs.append(("aggregate", group))
+
+    unique: list[tuple[str, tuple[int, ...]]] = []
+    seen: set[tuple[int, ...]] = set()
+    for kind, group in specs:
+        if not group or group in seen:
+            continue
+        unique.append((kind, group))
+        seen.add(group)
+    return tuple(unique)
+
+
+def _block_indicator_vector(
+    layout: RHS1QICoarseBlockLayout,
+    block_index: int,
+    *,
+    total_size: int,
+    dtype: Any,
+) -> ArrayLike:
+    offsets = tuple(int(value) for value in layout.block_offsets)
+    start = offsets[int(block_index)]
+    stop = offsets[int(block_index) + 1]
+    size = max(1, int(stop) - int(start))
+    values = jnp.zeros((int(total_size),), dtype=dtype)
+    return values.at[start:stop].set(jnp.asarray(1.0 / np.sqrt(float(size)), dtype=dtype))
+
+
+def _masked_group_residual(
+    layout: RHS1QICoarseBlockLayout,
+    residual: ArrayLike,
+    group: Sequence[int],
+    *,
+    total_size: int,
+    dtype: Any,
+) -> ArrayLike:
+    offsets = tuple(int(value) for value in layout.block_offsets)
+    residual_vec = jnp.asarray(residual, dtype=dtype).reshape((-1,))
+    values = jnp.zeros((int(total_size),), dtype=dtype)
+    for block_index in group:
+        start = offsets[int(block_index)]
+        stop = offsets[int(block_index) + 1]
+        values = values.at[start:stop].set(residual_vec[start:stop])
+    return values
+
+
+def _block_schur_trial_vectors(
+    layout: RHS1QICoarseBlockLayout,
+    residual: ArrayLike,
+    group: Sequence[int],
+    *,
+    total_size: int,
+    dtype: Any,
+) -> ArrayLike:
+    """Build tiny source-space trial columns for one QI block aggregate."""
+
+    columns: list[ArrayLike] = []
+    labels: list[str] = []
+    for block_index in group:
+        _append_normalized_candidate(
+            columns,
+            labels,
+            _block_indicator_vector(layout, int(block_index), total_size=total_size, dtype=dtype),
+            f"block_indicator:{int(block_index)}",
+            total_size=total_size,
+            dtype=dtype,
+        )
+    _append_normalized_candidate(
+        columns,
+        labels,
+        _masked_group_residual(layout, residual, group, total_size=total_size, dtype=dtype),
+        "masked_group_residual",
+        total_size=total_size,
+        dtype=dtype,
+    )
+    if not columns:
+        return jnp.zeros((int(total_size), 0), dtype=dtype)
+    return jnp.stack(tuple(columns), axis=1)
+
+
+def _build_block_schur_residual_equation_bases_from_metadata(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    geometry_metadata: Mapping[str, object] | None,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[RHS1QICoarseBasis, ...], int, int, tuple[int, ...], int]:
+    """Build residual-equation stages from QI block/aggregate Schur probes.
+
+    Each setup stage solves a small source-space least-squares problem
+    ``min ||r_seed - A D_g c||`` over QI block indicator and masked-residual
+    columns for one block group ``g``.  The resulting correction direction is
+    cached as a basis column; apply-time only reuses the cached ``A Q`` action.
+    """
+
+    if int(shape[0]) != int(shape[1]):
+        raise ValueError("block-Schur residual equation requires a square operator")
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(total_size):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+
+    groups = _block_schur_residual_equation_groups(layout, config=config)
+    if not groups:
+        raise ValueError("block-Schur residual equation requires at least one QI block group")
+
+    max_rank = max(1, int(config.block_schur_residual_equation_max_rank))
+    residual_norm = float(jnp.linalg.norm(residual))
+    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+    accepted_columns: list[ArrayLike] = []
+    stage_bases: list[RHS1QICoarseBasis] = []
+    remaining = residual
+    candidate_count = 0
+
+    for kind, group in groups:
+        if len(stage_bases) >= max_rank:
+            break
+        trial_vectors = _block_schur_trial_vectors(
+            layout,
+            residual,
+            group,
+            total_size=int(total_size),
+            dtype=dtype,
+        )
+        if int(trial_vectors.shape[1]) <= 0:
+            continue
+        trial_action = _operator_on_basis(operator_matvec, trial_vectors, shape=shape, dtype=dtype)
+        coefficients = _regularized_least_squares(
+            trial_action,
+            remaining,
+            rcond=float(config.regularization_rcond),
+        )
+        candidate = _orthogonalized_candidate(
+            trial_vectors @ coefficients,
+            accepted_columns,
+            threshold=threshold,
+            total_size=int(total_size),
+            dtype=dtype,
+        )
+        if candidate is None:
+            continue
+        action = jnp.asarray(operator_matvec(candidate), dtype=dtype).reshape((-1,))
+        action_norm = float(jnp.linalg.norm(action))
+        if (not np.isfinite(action_norm)) or action_norm <= threshold:
+            continue
+        stage_coefficients = _regularized_least_squares(
+            action.reshape((-1, 1)),
+            remaining,
+            rcond=float(config.regularization_rcond),
+        )
+        next_remaining = remaining - action * stage_coefficients[0]
+        if float(jnp.linalg.norm(next_remaining)) >= float(jnp.linalg.norm(remaining)) - threshold:
+            continue
+
+        group_label = ",".join(str(index) for index in group)
+        stage_basis = orthonormalize_rhs1_qi_coarse_basis(
+            candidate.reshape((int(total_size), 1)),
+            labels=(f"block_schur_residual:{kind}:{group_label}",),
+            rtol=float(config.basis_rtol),
+            atol=float(config.basis_atol),
+            max_rank=1,
+        )
+        if int(stage_basis.metadata.rank) <= 0:
+            continue
+        stage_vector = jnp.asarray(stage_basis.vectors, dtype=dtype)[:, 0]
+        accepted_columns.append(stage_vector)
+        stage_bases.append(stage_basis)
+        remaining = next_remaining
+        candidate_count += 1
+
+    stage_ranks = tuple(int(basis.metadata.rank) for basis in stage_bases)
+    return tuple(stage_bases), int(len(groups)), int(candidate_count), stage_ranks, int(sum(stage_ranks))
+
+
+def _enrich_basis_with_operator_krylov(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    basis: RHS1QICoarseBasis,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[RHS1QICoarseBasis, int]:
+    """Append a bounded Arnoldi-like residual Krylov coarse space.
+
+    This is an operator-reuse coarse construction, not a smoother.  It adds
+    rank-gated directions generated from the actual current residual and then
+    stores the final ``A V`` action for all subsequent least-squares coarse
+    solves.  It is intended for hard QI seeds where physics moments plus block
+    smoothers reduce the residual but do not expose enough of the slow operator
+    subspace.
+    """
+
+    depth_count = max(0, int(config.operator_krylov_depth))
+
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    total_size = int(shape[1])
+    if int(residual.shape[0]) != total_size:
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+    if int(shape[0]) != total_size:
+        raise ValueError("operator-Krylov enrichment requires a square operator")
+
+    columns: list[ArrayLike] = []
+    labels: list[str] = []
+    base_vectors = jnp.asarray(basis.vectors, dtype=dtype)
+    for index, label in enumerate(basis.metadata.accepted_labels):
+        _append_normalized_candidate(
+            columns,
+            labels,
+            base_vectors[:, int(index)],
+            f"base:{label}",
+            total_size=total_size,
+            dtype=dtype,
+        )
+
+    residual_norm = float(jnp.linalg.norm(residual))
+    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+    rank_limit = config.max_rank if config.max_rank is not None else total_size
+    candidate_count = 0
+    current = _orthogonalized_candidate(
+        residual,
+        columns,
+        threshold=threshold,
+        total_size=total_size,
+        dtype=dtype,
+    )
+    if current is None:
+        return basis, 0
+    if len(columns) < int(rank_limit):
+        columns.append(current)
+        labels.append("operator_krylov:0")
+        candidate_count += 1
+    else:
+        return basis, 0
+
+    for depth in range(depth_count):
+        if len(columns) >= int(rank_limit):
+            break
+        action = jnp.asarray(operator_matvec(current), dtype=dtype).reshape((-1,))
+        current = _orthogonalized_candidate(
+            action,
+            columns,
+            threshold=threshold,
+            total_size=total_size,
+            dtype=dtype,
+        )
+        if current is None:
+            break
+        columns.append(current)
+        labels.append(f"operator_krylov:{depth + 1}")
+        candidate_count += 1
+
+    if columns:
+        candidates = jnp.stack(tuple(columns), axis=1)
+    else:
+        candidates = jnp.zeros((total_size, 0), dtype=dtype)
+    enriched = orthonormalize_rhs1_qi_coarse_basis(
+        candidates,
+        labels=tuple(labels),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        max_rank=config.max_rank,
+    )
+    return enriched, candidate_count
+
+
+def _enrich_basis_with_adjoint_krylov(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    basis: RHS1QICoarseBasis,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[RHS1QICoarseBasis, int]:
+    """Append a bounded adjoint-normal residual coarse space.
+
+    The existing residual/operator-Krylov path spans ``{r, A r, ...}``.  That
+    can miss non-normal left-error modes.  This enrichment instead starts from
+    ``A.T r`` and then builds ``(A.T A)^k A.T r`` directions.  Setup uses JAX
+    VJP once per bounded candidate; the reusable preconditioner still only
+    stores ``Q`` and ``A Q`` and remains a forward-operator apply.
+    """
+
+    transpose_source = _normalize_adjoint_krylov_transpose_source(config.adjoint_krylov_transpose_source)
+    if transpose_source == "off":
+        return basis, 0
+    depth_count = max(0, int(config.adjoint_krylov_depth))
+    total_size = int(shape[1])
+    if int(shape[0]) != total_size:
+        raise ValueError("adjoint-Krylov enrichment requires a square operator")
+
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(shape[0]):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator rows {shape[0]}")
+
+    columns: list[ArrayLike] = []
+    labels: list[str] = []
+    base_vectors = jnp.asarray(basis.vectors, dtype=dtype)
+    for index, label in enumerate(basis.metadata.accepted_labels):
+        _append_normalized_candidate(
+            columns,
+            labels,
+            base_vectors[:, int(index)],
+            f"base:{label}",
+            total_size=total_size,
+            dtype=dtype,
+        )
+
+    residual_norm = float(jnp.linalg.norm(residual))
+    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+    rank_limit = config.max_rank if config.max_rank is not None else total_size
+    candidate_count = 0
+    current = _autodiff_transpose_matvec(
+        operator_matvec,
+        residual,
+        shape=shape,
+        dtype=dtype,
+    )
+    for depth in range(depth_count + 1):
+        if len(columns) >= int(rank_limit):
+            break
+        candidate = _orthogonalized_candidate(
+            current,
+            columns,
+            threshold=threshold,
+            total_size=total_size,
+            dtype=dtype,
+        )
+        if candidate is None:
+            break
+        columns.append(candidate)
+        labels.append(f"adjoint_krylov:{depth}")
+        candidate_count += 1
+        if depth >= depth_count:
+            break
+        action = jnp.asarray(operator_matvec(candidate), dtype=dtype).reshape((-1,))
+        current = _autodiff_transpose_matvec(
+            operator_matvec,
+            action,
+            shape=shape,
+            dtype=dtype,
+        )
+
+    if columns:
+        candidates = jnp.stack(tuple(columns), axis=1)
+    else:
+        candidates = jnp.zeros((total_size, 0), dtype=dtype)
+    enriched = orthonormalize_rhs1_qi_coarse_basis(
+        candidates,
+        labels=tuple(labels),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        max_rank=config.max_rank,
+    )
+    return enriched, candidate_count
+
+
+def _enrich_basis_with_operator_actions(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    basis: RHS1QICoarseBasis,
+    shape: tuple[int, int],
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[RHS1QICoarseBasis, int]:
+    """Append rank-gated operator-image directions to the coarse space.
+
+    QI hard seeds have shown slow modes that are not well represented by
+    constants or block moments alone.  This enrichment builds a small
+    device-resident polynomial correction space ``{Q, A Q, A^2 Q, ...}``.  The
+    final state still stores only the rank-gated basis and its reusable
+    ``A Q_aug`` action, so apply-time cost stays independent of the enrichment
+    work done during setup.
+    """
+
+    depth_count = max(0, int(config.operator_action_enrichment_depth))
+    if depth_count <= 0 or int(basis.metadata.rank) <= 0:
+        return basis, 0
+
+    total_size = int(shape[1])
+    if int(shape[0]) != total_size:
+        raise ValueError("operator-action enrichment requires a square operator")
+
+    columns: list[ArrayLike] = []
+    labels: list[str] = []
+    base_vectors = jnp.asarray(basis.vectors, dtype=dtype)
+    base_labels = tuple(str(label) for label in basis.metadata.accepted_labels)
+    for index, label in enumerate(base_labels):
+        _append_normalized_candidate(
+            columns,
+            labels,
+            base_vectors[:, int(index)],
+            f"base:{label}",
+            total_size=total_size,
+            dtype=dtype,
+        )
+
+    frontier = base_vectors
+    candidate_count = 0
+    frontier_labels = base_labels
+    for depth in range(depth_count):
+        if int(frontier.shape[1]) <= 0:
+            break
+        action_vectors = _operator_on_basis(operator_matvec, frontier, shape=shape, dtype=dtype)
+        next_labels: list[str] = []
+        for index, label in enumerate(frontier_labels):
+            before = len(columns)
+            action_label = f"operator_action:{depth + 1}:{label}"
+            _append_normalized_candidate(
+                columns,
+                labels,
+                action_vectors[:, int(index)],
+                action_label,
+                total_size=total_size,
+                dtype=dtype,
+            )
+            candidate_count += len(columns) - before
+            next_labels.append(action_label)
+        frontier = action_vectors
+        frontier_labels = tuple(next_labels)
+
+    if columns:
+        candidates = jnp.stack(tuple(columns), axis=1)
+    else:
+        candidates = jnp.zeros((total_size, 0), dtype=dtype)
+    enriched = orthonormalize_rhs1_qi_coarse_basis(
+        candidates,
+        labels=tuple(labels),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        max_rank=config.max_rank,
+    )
+    return enriched, candidate_count
+
+
 def _basis_from_value(
     coarse_basis: RHS1QICoarseBasis | ArrayLike | None,
     *,
@@ -958,6 +2511,7 @@ def setup_rhs1_qi_device_preconditioner(
         "block_minres",
         "matrix_free_block",
         "matrix_free_block_minres",
+        "matrix_free_block_minres_hybrid",
         "block_angular_radial",
         "projected_block_minres",
     }
@@ -1048,6 +2602,73 @@ def setup_rhs1_qi_device_preconditioner(
         labels=coarse_labels,
         config=config_use,
     )
+    multilevel_coarse_level_count = 0
+    multilevel_coarse_candidate_count = 0
+    multilevel_coarse_rank = 0
+    if bool(config_use.multilevel_coarse):
+        multilevel_basis, multilevel_coarse_level_count, multilevel_coarse_candidate_count = (
+            _build_multilevel_coarse_basis_from_metadata(
+                geometry_metadata=geometry_metadata,
+                total_size=int(shape[1]),
+                dtype=dtype_use,
+                config=config_use,
+            )
+        )
+        multilevel_coarse_rank = int(multilevel_basis.metadata.rank)
+        basis = _combine_coarse_bases(
+            basis,
+            multilevel_basis,
+            dtype=dtype_use,
+            config=config_use,
+        )
+    residual_snapshot_candidate_count = 0
+    residual_snapshot_rank = 0
+    residual_snapshot_group_count = 0
+    if bool(config_use.residual_snapshot_enrichment):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when residual_snapshot_enrichment=True")
+        snapshot_basis, residual_snapshot_candidate_count, residual_snapshot_group_count = (
+            _build_residual_snapshot_basis_from_metadata(
+                operator_matvec=operator_matvec,
+                geometry_metadata=geometry_metadata,
+                residual_seed=residual_seed,
+                shape=shape,
+                total_size=int(shape[1]),
+                dtype=dtype_use,
+                config=config_use,
+            )
+        )
+        residual_snapshot_rank = int(snapshot_basis.metadata.rank)
+        basis = _combine_coarse_bases(
+            basis,
+            snapshot_basis,
+            dtype=dtype_use,
+            config=config_use,
+        )
+    block_schur_residual_candidate_count = 0
+    block_schur_residual_rank = 0
+    block_schur_residual_group_count = 0
+    if bool(config_use.block_schur_residual_enrichment):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when block_schur_residual_enrichment=True")
+        schur_basis, block_schur_residual_candidate_count, block_schur_residual_group_count = (
+            _build_block_schur_residual_basis_from_metadata(
+                operator_matvec=operator_matvec,
+                geometry_metadata=geometry_metadata,
+                residual_seed=residual_seed,
+                shape=shape,
+                total_size=int(shape[1]),
+                dtype=dtype_use,
+                config=config_use,
+            )
+        )
+        block_schur_residual_rank = int(schur_basis.metadata.rank)
+        basis = _combine_coarse_bases(
+            basis,
+            schur_basis,
+            dtype=dtype_use,
+            config=config_use,
+        )
     residual_enrichment_candidate_count = 0
     if bool(config_use.residual_enrichment):
         if residual_seed is None:
@@ -1072,6 +2693,196 @@ def setup_rhs1_qi_device_preconditioner(
             dtype=dtype_use,
             config=config_use,
         )
+    operator_krylov_candidate_count = 0
+    if bool(config_use.operator_krylov_enrichment):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when operator_krylov_enrichment=True")
+        basis, operator_krylov_candidate_count = _enrich_basis_with_operator_krylov(
+            operator_matvec=operator_matvec,
+            basis=basis,
+            residual_seed=residual_seed,
+            shape=shape,
+            dtype=dtype_use,
+            config=config_use,
+        )
+    adjoint_krylov_transpose_source = _normalize_adjoint_krylov_transpose_source(
+        config_use.adjoint_krylov_transpose_source
+    )
+    adjoint_krylov_candidate_count = 0
+    if bool(config_use.adjoint_krylov_enrichment):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when adjoint_krylov_enrichment=True")
+        basis, adjoint_krylov_candidate_count = _enrich_basis_with_adjoint_krylov(
+            operator_matvec=operator_matvec,
+            basis=basis,
+            residual_seed=residual_seed,
+            shape=shape,
+            dtype=dtype_use,
+            config=config_use,
+        )
+    operator_action_enrichment_candidate_count = 0
+    if bool(config_use.operator_action_enrichment):
+        basis, operator_action_enrichment_candidate_count = _enrich_basis_with_operator_actions(
+            operator_matvec=operator_matvec,
+            basis=basis,
+            shape=shape,
+            dtype=dtype_use,
+            config=config_use,
+        )
+    residual_equation_bases: tuple[RHS1QICoarseBasis, ...] = ()
+    residual_equation_actions: tuple[ArrayLike, ...] = ()
+    residual_equation_coarse_operators: tuple[ArrayLike, ...] = ()
+    residual_equation_stage_solvers: tuple[str, ...] = ()
+    residual_equation_stage_count = 0
+    residual_equation_rank = 0
+    residual_equation_stage_ranks: tuple[int, ...] = ()
+    residual_equation_order = _normalize_multilevel_residual_equation_order(
+        config_use.multilevel_residual_equation_order
+    )
+    residual_equation_solver = _normalize_multilevel_residual_equation_solver(
+        config_use.multilevel_residual_equation_solver
+    )
+    global_moment_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
+        config_use.global_moment_residual_equation_solver
+    )
+    global_moment_residual_equation_candidate_count = 0
+    global_moment_residual_equation_rank = 0
+    global_moment_residual_equation_stage_ranks: tuple[int, ...] = ()
+    global_moment_residual_equation_condition_estimate = float("inf")
+    if bool(config_use.global_moment_residual_equation):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when global_moment_residual_equation=True")
+        (
+            global_moment_bases,
+            global_moment_residual_equation_candidate_count,
+            global_moment_residual_equation_stage_ranks,
+            global_moment_residual_equation_rank,
+            global_moment_residual_equation_condition_estimate,
+        ) = _build_global_moment_residual_equation_bases_from_metadata(
+            operator_matvec=operator_matvec,
+            geometry_metadata=geometry_metadata,
+            residual_seed=residual_seed,
+            shape=shape,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
+        )
+        residual_equation_bases = residual_equation_bases + global_moment_bases
+        residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
+            global_moment_residual_equation_solver for _ in global_moment_bases
+        )
+    residual_galerkin_equation_solver = _normalize_multilevel_residual_equation_solver(
+        config_use.residual_galerkin_equation_solver
+    )
+    residual_galerkin_equation_candidate_count = 0
+    residual_galerkin_equation_rank = 0
+    residual_galerkin_equation_stage_count = 0
+    residual_galerkin_equation_stage_ranks: tuple[int, ...] = ()
+    residual_galerkin_equation_condition_estimate = float("inf")
+    residual_galerkin_equation_residual_before = float("inf")
+    residual_galerkin_equation_residual_after = float("inf")
+    if bool(config_use.residual_galerkin_equation):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when residual_galerkin_equation=True")
+        (
+            residual_galerkin_bases,
+            residual_galerkin_equation_candidate_count,
+            residual_galerkin_equation_stage_count,
+            residual_galerkin_equation_stage_ranks,
+            residual_galerkin_equation_rank,
+            residual_galerkin_equation_condition_estimate,
+            residual_galerkin_equation_residual_before,
+            residual_galerkin_equation_residual_after,
+        ) = _build_residual_galerkin_equation_basis_from_metadata(
+            operator_matvec=operator_matvec,
+            geometry_metadata=geometry_metadata,
+            residual_seed=residual_seed,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
+        )
+        residual_equation_bases = residual_equation_bases + residual_galerkin_bases
+        residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
+            residual_galerkin_equation_solver for _ in residual_galerkin_bases
+        )
+    residual_snapshot_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
+        config_use.residual_snapshot_residual_equation_solver
+    )
+    residual_snapshot_residual_equation_group_count = 0
+    residual_snapshot_residual_equation_candidate_count = 0
+    residual_snapshot_residual_equation_rank = 0
+    residual_snapshot_residual_equation_stage_ranks: tuple[int, ...] = ()
+    if bool(config_use.residual_snapshot_residual_equation):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when residual_snapshot_residual_equation=True")
+        (
+            residual_snapshot_bases,
+            residual_snapshot_residual_equation_group_count,
+            residual_snapshot_residual_equation_candidate_count,
+            residual_snapshot_residual_equation_stage_ranks,
+            residual_snapshot_residual_equation_rank,
+        ) = _build_residual_snapshot_residual_equation_bases_from_metadata(
+            operator_matvec=operator_matvec,
+            geometry_metadata=geometry_metadata,
+            residual_seed=residual_seed,
+            shape=shape,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
+        )
+        residual_equation_bases = residual_equation_bases + residual_snapshot_bases
+        residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
+            residual_snapshot_residual_equation_solver for _ in residual_snapshot_bases
+        )
+    block_schur_residual_equation_group_count = 0
+    block_schur_residual_equation_candidate_count = 0
+    block_schur_residual_equation_rank = 0
+    block_schur_residual_equation_stage_ranks: tuple[int, ...] = ()
+    if bool(config_use.block_schur_residual_equation):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when block_schur_residual_equation=True")
+        (
+            block_schur_bases,
+            block_schur_residual_equation_group_count,
+            block_schur_residual_equation_candidate_count,
+            block_schur_residual_equation_stage_ranks,
+            block_schur_residual_equation_rank,
+        ) = _build_block_schur_residual_equation_bases_from_metadata(
+            operator_matvec=operator_matvec,
+            geometry_metadata=geometry_metadata,
+            residual_seed=residual_seed,
+            shape=shape,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
+        )
+        residual_equation_bases = residual_equation_bases + block_schur_bases
+        residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
+            "action_lstsq" for _ in block_schur_bases
+        )
+    if bool(config_use.multilevel_residual_equation):
+        multilevel_residual_equation_bases: tuple[RHS1QICoarseBasis, ...]
+        multilevel_residual_equation_bases, residual_equation_stage_count, residual_equation_rank, residual_equation_stage_ranks = (
+            _build_multilevel_residual_equation_bases_from_metadata(
+                geometry_metadata=geometry_metadata,
+                total_size=int(shape[1]),
+                dtype=dtype_use,
+                config=config_use,
+            )
+        )
+        residual_equation_bases = residual_equation_bases + multilevel_residual_equation_bases
+        residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
+            residual_equation_solver for _ in multilevel_residual_equation_bases
+        )
+    residual_equation_action_list: list[ArrayLike] = []
+    residual_equation_coarse_operator_list: list[ArrayLike] = []
+    for level_basis in residual_equation_bases:
+        level_q = jnp.asarray(level_basis.vectors, dtype=dtype_use)
+        level_action = _operator_on_basis(operator_matvec, level_q, shape=shape, dtype=dtype_use)
+        residual_equation_action_list.append(level_action)
+        residual_equation_coarse_operator_list.append(jnp.conjugate(level_q).T @ level_action)
+    residual_equation_actions = tuple(residual_equation_action_list)
+    residual_equation_coarse_operators = tuple(residual_equation_coarse_operator_list)
     rank = int(basis.metadata.rank)
     if rank > 0:
         aq = _operator_on_basis(operator_matvec, basis.vectors, shape=shape, dtype=dtype_use)
@@ -1092,7 +2903,32 @@ def setup_rhs1_qi_device_preconditioner(
     else:
         local_smoother_kind = "matrix_free_residual"
         local_smoother_reason = str(smoother.metadata.reason)
-    if rank > 0 and smoother is None:
+    if (
+        bool(config_use.residual_snapshot_residual_equation)
+        and residual_snapshot_residual_equation_rank > 0
+    ):
+        reason = "built_with_residual_snapshot_residual_equation"
+    elif bool(config_use.global_moment_residual_equation) and global_moment_residual_equation_rank > 0:
+        reason = "built_with_global_moment_residual_equation"
+    elif bool(config_use.residual_galerkin_equation) and residual_galerkin_equation_rank > 0:
+        reason = "built_with_residual_galerkin_equation"
+    elif bool(config_use.block_schur_residual_equation) and block_schur_residual_equation_rank > 0:
+        reason = "built_with_block_schur_residual_equation"
+    elif (
+        bool(config_use.multilevel_residual_equation)
+        and residual_equation_rank > 0
+        and residual_equation_solver == "galerkin"
+    ):
+        reason = "built_with_multilevel_galerkin_residual_equation"
+    elif bool(config_use.multilevel_residual_equation) and residual_equation_rank > 0:
+        reason = "built_with_multilevel_residual_equation"
+    elif rank > 0 and block_schur_residual_rank > 0:
+        reason = "built_with_block_schur_residual"
+    elif rank > 0 and residual_snapshot_rank > 0:
+        reason = "built_with_residual_snapshot"
+    elif rank > 0 and multilevel_coarse_rank > 0:
+        reason = "built_with_multilevel_coarse"
+    elif rank > 0 and smoother is None:
         reason = "built_matrix_free_coarse_only"
     elif rank > 0:
         reason = "built_with_coarse"
@@ -1125,6 +2961,125 @@ def setup_rhs1_qi_device_preconditioner(
         recycle_enrichment_enabled=bool(config_use.recycle_enrichment),
         recycle_enrichment_cycles=max(0, int(config_use.recycle_enrichment_cycles)),
         recycle_enrichment_candidate_count=int(recycle_enrichment_candidate_count),
+        operator_krylov_enrichment_enabled=bool(config_use.operator_krylov_enrichment),
+        operator_krylov_depth=max(0, int(config_use.operator_krylov_depth)),
+        operator_krylov_candidate_count=int(operator_krylov_candidate_count),
+        adjoint_krylov_enrichment_enabled=bool(config_use.adjoint_krylov_enrichment),
+        adjoint_krylov_depth=max(0, int(config_use.adjoint_krylov_depth)),
+        adjoint_krylov_candidate_count=int(adjoint_krylov_candidate_count),
+        adjoint_krylov_transpose_source=adjoint_krylov_transpose_source,
+        operator_action_enrichment_enabled=bool(config_use.operator_action_enrichment),
+        operator_action_enrichment_depth=max(0, int(config_use.operator_action_enrichment_depth)),
+        operator_action_enrichment_candidate_count=int(operator_action_enrichment_candidate_count),
+        multilevel_coarse_enabled=bool(config_use.multilevel_coarse),
+        multilevel_coarse_level_count=int(multilevel_coarse_level_count),
+        multilevel_coarse_candidate_count=int(multilevel_coarse_candidate_count),
+        multilevel_coarse_rank=int(multilevel_coarse_rank),
+        multilevel_residual_equation_enabled=bool(
+            config_use.multilevel_residual_equation and residual_equation_rank > 0
+        ),
+        multilevel_residual_equation_stage_count=int(residual_equation_stage_count),
+        multilevel_residual_equation_rank=int(residual_equation_rank),
+        multilevel_residual_equation_stage_ranks=tuple(int(v) for v in residual_equation_stage_ranks),
+        multilevel_residual_equation_order=residual_equation_order,
+        multilevel_residual_equation_solver=residual_equation_solver,
+        multilevel_residual_equation_include_global=bool(
+            config_use.multilevel_residual_equation_include_global
+        ),
+        global_moment_residual_equation_enabled=bool(
+            config_use.global_moment_residual_equation and global_moment_residual_equation_rank > 0
+        ),
+        global_moment_residual_equation_candidate_count=int(
+            global_moment_residual_equation_candidate_count
+        ),
+        global_moment_residual_equation_rank=int(global_moment_residual_equation_rank),
+        global_moment_residual_equation_stage_ranks=tuple(
+            int(v) for v in global_moment_residual_equation_stage_ranks
+        ),
+        global_moment_residual_equation_solver=global_moment_residual_equation_solver,
+        global_moment_residual_equation_include_profile=bool(
+            config_use.global_moment_residual_equation_include_profile
+        ),
+        global_moment_residual_equation_include_current=bool(
+            config_use.global_moment_residual_equation_include_current
+        ),
+        global_moment_residual_equation_include_tail=bool(
+            config_use.global_moment_residual_equation_include_tail
+        ),
+        global_moment_residual_equation_condition_estimate=float(
+            global_moment_residual_equation_condition_estimate
+        ),
+        residual_galerkin_equation_enabled=bool(
+            config_use.residual_galerkin_equation and residual_galerkin_equation_rank > 0
+        ),
+        residual_galerkin_equation_candidate_count=int(
+            residual_galerkin_equation_candidate_count
+        ),
+        residual_galerkin_equation_rank=int(residual_galerkin_equation_rank),
+        residual_galerkin_equation_stage_count=int(residual_galerkin_equation_stage_count),
+        residual_galerkin_equation_stage_ranks=tuple(
+            int(v) for v in residual_galerkin_equation_stage_ranks
+        ),
+        residual_galerkin_equation_solver=residual_galerkin_equation_solver,
+        residual_galerkin_equation_condition_estimate=float(
+            residual_galerkin_equation_condition_estimate
+        ),
+        residual_galerkin_equation_residual_before=float(
+            residual_galerkin_equation_residual_before
+        ),
+        residual_galerkin_equation_residual_after=float(
+            residual_galerkin_equation_residual_after
+        ),
+        block_schur_residual_equation_enabled=bool(
+            config_use.block_schur_residual_equation and block_schur_residual_equation_rank > 0
+        ),
+        block_schur_residual_equation_group_count=int(block_schur_residual_equation_group_count),
+        block_schur_residual_equation_candidate_count=int(block_schur_residual_equation_candidate_count),
+        block_schur_residual_equation_rank=int(block_schur_residual_equation_rank),
+        block_schur_residual_equation_stage_ranks=tuple(
+            int(v) for v in block_schur_residual_equation_stage_ranks
+        ),
+        block_schur_residual_equation_include_global=bool(
+            config_use.block_schur_residual_equation_include_global
+        ),
+        block_schur_residual_equation_include_blocks=bool(
+            config_use.block_schur_residual_equation_include_blocks
+        ),
+        block_schur_residual_equation_include_aggregates=bool(
+            config_use.block_schur_residual_equation_include_aggregates
+        ),
+        residual_snapshot_enrichment_enabled=bool(
+            config_use.residual_snapshot_enrichment and residual_snapshot_rank > 0
+        ),
+        residual_snapshot_candidate_count=int(residual_snapshot_candidate_count),
+        residual_snapshot_rank=int(residual_snapshot_rank),
+        residual_snapshot_group_count=int(residual_snapshot_group_count),
+        residual_snapshot_include_primal=bool(config_use.residual_snapshot_include_primal),
+        residual_snapshot_use_adjoint=bool(config_use.residual_snapshot_use_adjoint),
+        residual_snapshot_residual_equation_enabled=bool(
+            config_use.residual_snapshot_residual_equation
+            and residual_snapshot_residual_equation_rank > 0
+        ),
+        residual_snapshot_residual_equation_group_count=int(
+            residual_snapshot_residual_equation_group_count
+        ),
+        residual_snapshot_residual_equation_candidate_count=int(
+            residual_snapshot_residual_equation_candidate_count
+        ),
+        residual_snapshot_residual_equation_rank=int(residual_snapshot_residual_equation_rank),
+        residual_snapshot_residual_equation_stage_ranks=tuple(
+            int(v) for v in residual_snapshot_residual_equation_stage_ranks
+        ),
+        residual_snapshot_residual_equation_solver=residual_snapshot_residual_equation_solver,
+        residual_snapshot_residual_equation_include_global=bool(
+            config_use.residual_snapshot_residual_equation_include_global
+        ),
+        block_schur_residual_enrichment_enabled=bool(
+            config_use.block_schur_residual_enrichment and block_schur_residual_rank > 0
+        ),
+        block_schur_residual_candidate_count=int(block_schur_residual_candidate_count),
+        block_schur_residual_rank=int(block_schur_residual_rank),
+        block_schur_residual_group_count=int(block_schur_residual_group_count),
         reason=reason,
     )
     return RHS1QIDevicePreconditionerState(
@@ -1136,6 +3091,10 @@ def setup_rhs1_qi_device_preconditioner(
         basis=basis,
         operator_on_basis=aq,
         coarse_operator=coarse_operator,
+        residual_equation_bases=residual_equation_bases,
+        residual_equation_operator_on_bases=residual_equation_actions,
+        residual_equation_coarse_operators=residual_equation_coarse_operators,
+        residual_equation_stage_solvers=residual_equation_stage_solvers,
         metadata=metadata,
     )
 

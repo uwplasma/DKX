@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-19 (Europe/Lisbon)
+Last updated: 2026-05-20 (Europe/Lisbon)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -14021,3 +14021,785 @@ Best next steps:
    `fgmres-jax` preconditioner. If it does not, add a second projected space
    using radial/species aggregate residual groups before trying production
    ladders.
+
+## 2026-05-20 QI operator-reuse/coarse architecture push
+
+Goal:
+
+- Move the true device-QI lane beyond projected smoother tuning by adding
+  stronger device-compatible coarse/operator-reuse constructions and testing
+  them on the scale-0.60 GPU hard seed.
+
+Implemented:
+
+- Added opt-in operator-action enrichment in
+  `sfincs_jax/rhs1_qi_device_preconditioner.py`:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_ENRICHMENT=1`
+  with depth controlled by
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_DEPTH`.
+  This expands the correction space with rank-gated `{Q, A Q, A^2 Q, ...}` and
+  reuses the final `A Q_aug` action for coarse least-squares solves.
+- Added opt-in residual Arnoldi/Krylov coarse enrichment:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1`
+  with depth controlled by
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH`.
+  This builds `orth([Q, r, A r, A^2 r, ...])` from the current true residual,
+  rank-gates the space, and reuses `A Q` in the same small device least-squares
+  coarse solve. This is a new coarse architecture, not another local smoother
+  tuning pass.
+- Wired both enrichments through the main x-block QI-device hook and the early
+  active-DOF matrix-free seed hook used by the hard-seed runs.
+- Added focused tests proving that operator-action enrichment solves a coupled
+  residual subspace that the base coarse vector cannot solve, and that
+  operator-Krylov enrichment solves a residual Krylov subspace from the true
+  residual. Added driver routing coverage for the new env controls.
+- Recorded the best new GPU artifact in the QI evidence manifest:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_operator_krylov_depth64_blockminres_hybrid_seed3_gpu0_2026_05_20.json`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py` passed.
+- `ruff check sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py` passed.
+- `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py` passed: `20` tests after operator-action, then `21` tests after operator-Krylov.
+- Focused driver route tests passed after relaxing the tiny-fixture candidate-count assertion:
+  `python -m pytest -q tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback tests/test_rhs1_qi_device_preconditioner.py` reported `21` passing.
+- Remote GPU unit checks on `office` passed for the operator-action and
+  operator-Krylov synthetic tests.
+
+GPU hard-seed evidence on `office` GPU0, scale-0.60 seed 3:
+
+- Previous best projected-block smoother artifact:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_blockminres_hybrid_groups48_sweeps4_cycles12_minres_seed3_gpu0_2026_05_20.json`,
+  residual `2.262156e-06 -> 4.689216e-07`, ratio `0.2072897`, elapsed `74.93 s`.
+- Operator-action enrichment artifact:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_operator_action_blockminres_hybrid_seed3_gpu0_2026_05_20.json`,
+  residual `2.262156e-06 -> 4.706940e-07`, ratio `0.2080732`, elapsed `75.77 s`.
+  This is CUDA-safe but not promoted because it is slightly worse than the
+  previous best.
+- Operator-Krylov with default residual/recycle enrichment still active:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_operator_krylov_blockminres_hybrid_seed3_gpu0_2026_05_20.json`,
+  residual `2.262156e-06 -> 4.999032e-07`, ratio `0.2209853`, elapsed `74.32 s`.
+  This showed that the default residual enrichment had already consumed the same
+  low-rank residual direction.
+- Clean operator-Krylov-only depth 16:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_operator_krylov_only_blockminres_hybrid_seed3_gpu0_2026_05_20.json`,
+  residual `2.262156e-06 -> 4.447570e-07`, ratio `0.1966076`, elapsed `75.22 s`.
+- Clean operator-Krylov-only depth 32:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_operator_krylov_depth32_blockminres_hybrid_seed3_gpu0_2026_05_20.json`,
+  residual `2.262156e-06 -> 4.199059e-07`, ratio `0.1856220`, elapsed `75.06 s`.
+- Clean operator-Krylov-only depth 64:
+  `docs/_static/qi_seed_robustness_scale060_qi_device_operator_krylov_depth64_blockminres_hybrid_seed3_gpu0_2026_05_20.json`,
+  residual `2.262156e-06 -> 3.626870e-07`, ratio `0.1603280`, elapsed `76.67 s`.
+  GPU memory stayed flat in the heartbeat checks and the run was CUDA-safe.
+
+Conclusion:
+
+- The stronger operator-Krylov coarse architecture is the current best checked
+  GPU hard-seed evidence, improving the previous best residual by about `22.7%`
+  without a seed-only runtime or GPU-memory penalty. Installed-Krylov runtime
+  effectiveness remains open until the FGMRES/JAX path writes output and solver
+  trace metadata.
+- It still misses the production write target `3.021487e-11` by about four
+  orders of magnitude, so true device-QI remains an explicit research lane and
+  must not be promoted as solved.
+- Further projected-block smoother sweeps are no longer the right next step and
+  should not be treated as the active closure path. The next real closure
+  attempt should either install the operator-Krylov coarse state into the actual
+  Krylov solve as a reusable preconditioner with bounded rank/restart controls,
+  or add a mathematically stronger multilevel/coarse-grid correction that
+  changes the low-frequency error model.
+
+Updated completion estimate:
+
+- True differentiable/device-QI: `94%` infrastructure/evidence, still open on
+  production-gate convergence.
+- Production-resolution QI ladders: `40%`.
+- Geometry-rich PAS runtime/RSS promotion: `70%`.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`.
+- Physics validation completion: `60%`.
+- Refactor/coverage/CI: `80%`.
+- Overall remaining-lane completion estimate: `78%`.
+
+Best next steps:
+
+1. Carry the depth-64 operator-Krylov coarse state forward as the preferred
+   explicit research probe for true device-QI, while keeping public defaults
+   unchanged and not claiming closure.
+2. Implement a bounded Krylov-installed variant that reuses the same Arnoldi
+   coarse state during FGMRES/JAX instead of applying it only as a seed-only
+   correction.
+3. If that still plateaus above the write gate, move to a genuine multilevel
+   angular/radial/x coarse-grid correction; do not spend more cycles on local
+   smoother parameter sweeps.
+
+## 2026-05-20 docs/plan closure for real device-QI direction
+
+Scope:
+
+- Owned docs only: `docs/research_lanes.rst`, `docs/validation_matrix.rst`,
+  `docs/source_map.rst`, and `plan.md`.
+- No runtime or test files are owned by this lane.
+
+Closure summary:
+
+- Documented the installed operator-Krylov path as the preferred next real
+  device-QI experiment, not just a future concept. The explicit gate is
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1`,
+  and bounded operator-Krylov depth/rank controls.
+- Kept the completed evidence separate from deferred production claims:
+  depth-64 operator-Krylov seed-only GPU evidence is the current best residual
+  reducer, but it still misses the HDF5/write target by about four orders of
+  magnitude and cannot close true device-QI by itself.
+- Documented transpose-safe matrix-free block projection as completed
+  differentiable infrastructure. It supports the local projected smoother path,
+  but it is not the active closure strategy because hard-seed evidence shows
+  projected smoothing alone is too weak.
+- Inspected the 2026-05-20 JSON set and kept failed/nonconverged hard-seed
+  artifacts out of validated status: the public-auto-after-transpose,
+  seed-only block/action/operator-Krylov, and installed operator-Krylov FGMRES
+  summaries all have `gates.passed=false`, `outputs_written=0`, and
+  `accepted_converged=0`. These close transpose/routing/CUDA-crash blockers
+  where applicable, but leave residual convergence, output/trace, and installed
+  performance blockers open.
+- Documented `sfincs_jax/rhs1_qi_multilevel_coarse.py` as a standalone
+  multilevel angular-radial coarse prototype. Its synthetic tests establish the
+  architecture surface: deterministic radial aggregate hierarchy, angular and
+  radial candidate spaces, fail-closed probes, and JIT/gradient compatibility.
+  It remains deferred until wired through an explicit driver hook and validated
+  on real scale-0.60 CPU/GPU hard-seed artifacts.
+
+Promotion gates now stated in docs:
+
+- Installed operator-Krylov must run inside the JAX Krylov/preconditioner loop,
+  with automatic host fallback disabled for the claim run, finite residual
+  history, bounded rank/depth metadata, HDF5 output, and solver trace output.
+- Multilevel/angular-radial coarse must first pass an explicit opt-in driver
+  hook, CPU scale-0.60 hard-seed acceptance, then matching one-GPU `office`
+  hard-seed output before it can replace the operator-Krylov installed path.
+- Further local projected-smoother parameter sweeps, Krylov-name toggles,
+  restart-only changes, and storage-only factor edits are recorded as
+  diagnostic work, not promotion paths.
+
+## 2026-05-20 non-smoother QI coarse-space push
+
+Scope:
+
+- Continue the true device-QI lane with architectural coarse-space changes only.
+- Do not tune smoother sweeps/restarts as the active closure strategy.
+
+Implemented:
+
+- Added pitch/xi moment directions to `sfincs_jax/rhs1_qi_multilevel_coarse.py`.
+  The multilevel hierarchy now includes aggregate pitch moments and radial-pitch
+  products when block sizes expose a consistent pitch count. This targets PAS/QI
+  slow modes that radial/angular spaces cannot represent.
+- Wired `multilevel_max_pitch_degree` through
+  `RHS1QIDevicePreconditionerConfig`, all three RHSMode=1 QI-device driver
+  hooks, metadata, and the `operator-krylov-device-qi` runner preset via
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE`.
+- Added an adjoint-normal Krylov coarse enrichment to
+  `sfincs_jax/rhs1_qi_device_preconditioner.py`:
+  `orth([A^T r, (A^T A) A^T r, ...])`. Setup uses JAX VJP only while building
+  candidate vectors; apply-time still reuses cached `A Q` and remains a forward
+  operator least-squares preconditioner.
+- Wired the adjoint-normal coarse family through the driver with explicit knobs:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH`,
+  and `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_TRANSPOSE`.
+  It is not enabled in public defaults and is not yet promoted as evidence.
+
+Validation so far:
+
+- `py_compile` passed for the touched QI source, driver, runner, and tests.
+- `ruff` passed for the touched QI source, driver, runner, and tests.
+- Focused tests passed for the new synthetic pitch and adjoint-normal coarse
+  gates:
+  `test_multilevel_coarse_pitch_moment_reduces_pitch_coupled_error`,
+  `test_device_preconditioner_adjoint_krylov_targets_nonnormal_left_error_mode`,
+  and the existing operator-Krylov/multilevel transpose-safety gate.
+- Runner/manifest smoke gates passed for the updated 85-artifact evidence set.
+
+Current status:
+
+- True differentiable/device-QI infrastructure: `95%`.
+- True differentiable/device-QI convergence evidence: `70%`; the new coarse
+  families are implemented and unit-tested, but still need the scale-0.60 CPU
+  then GPU hard-seed artifact.
+- Production-resolution QI ladders: `40%`; still blocked until the hard seed
+  writes HDF5 and solver traces.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`; no change in this step.
+- Refactor/coverage/CI: `82%`.
+- Overall remaining-lane completion estimate: `82%`.
+
+Best next steps:
+
+1. Finish focused local validation for the new pitch/adjoint path, including
+   `tests/test_v3_sparse_pattern.py` metadata routing and docs builds.
+2. Run the scale-0.60 seed-3 CPU probe with pitch moments enabled first; if it
+   passes the bounded hard-seed gates, run the matching one-GPU `office` probe.
+3. Only if pitch still plateaus, run the explicit adjoint-normal Krylov probe on
+   CPU then GPU with small depth first (`0` or `2`) because `A^T A` can worsen
+   conditioning and setup cost if depth/rank is too high.
+4. Keep production-resolution QI ladders deferred until one of those hard-seed
+   routes writes HDF5 output, solver trace metadata, finite residual history,
+   no host fallback, and a residual below the output gate.
+
+Hard-seed GPU pitch rerun result:
+
+- Ran the scale-0.60 seed-3 one-GPU `office` probe with the pitch-enabled
+  `operator-krylov-device-qi` preset. Artifact:
+  `docs/_static/qi_seed_robustness_scale060_operator_krylov_pitch_multilevel_device_qi_gpu0_2026_05_20.json`.
+- Result: nonpassing, no HDF5 or solver trace, residual `2.306911e-05` versus
+  target `3.021487e-11`, elapsed `278.57 s`. The QI preconditioner accepted the
+  same seed step `3.021487e-05 -> 2.840364e-05` with rank `13`; pitch moments
+  were available but did not materially change the accepted hard-seed subspace.
+- Conclusion: pitch moments are useful and tested architecture, but they do not
+  close the current QI hard seed. The next non-smoother hard-seed probe should
+  be the adjoint-normal Krylov path at low depth, because it targets a different
+  non-normal left-error mode.
+
+Hard-seed CPU adjoint-normal rerun result:
+
+- Added a named runner preset `adjoint-krylov-device-qi` so the adjoint-normal
+  coarse-space experiment is reproducible from the manifest and not an ad hoc
+  shell override. The preset inherits the installed operator-Krylov/multilevel
+  route and adds `ADJOINT_KRYLOV_ENRICHMENT=1`, depth `2`, and autodiff VJP
+  transpose setup.
+- Ran the scale-0.60 seed-3 CPU probe on `office`. Artifact:
+  `docs/_static/qi_seed_robustness_scale060_adjoint_krylov_device_qi_cpu_2026_05_20.json`.
+- Result: nonpassing, no HDF5 or solver trace, residual `2.486430e-05` versus
+  target `3.021487e-11`, elapsed `596.52 s`. The adjoint coarse setup was
+  active and accepted a slightly better seed step (`2.839971e-05` vs the
+  pitch/operator-Krylov `2.840364e-05`), but final FGMRES residual was worse
+  than the installed multilevel/pitch route (`2.306911e-05`).
+- Decision: do not launch the matching GPU probe for this preset. The CPU gate
+  is already negative and the setup is about 2x slower than the pitch-enabled
+  GPU evidence path.
+
+Updated next step:
+
+- No additional smoother, pitch, or adjoint-Krylov depth tuning should be treated
+  as a primary closure path for this hard seed. The remaining mathematically
+  meaningful path is a new constraint/current/nullspace coarse family, or closing
+  true device-QI as deferred for this release while keeping the non-autodiff host
+  fallback as the production large-QI route.
+
+## 2026-05-20 constraint/current/nullspace QI coarse-space push
+
+Implemented:
+
+- Added an opt-in current/constraint coarse family to
+  `sfincs_jax/rhs1_qi_multilevel_coarse.py`. It prepends global current moments,
+  species current moments, radial-current moments, and reduced-tail constraint
+  moments before generic multilevel angular/radial columns. The current moments
+  use per-block centered pitch polynomials, so they work with active-DOF layouts
+  where each x block has a different retained xi count.
+- Wired the feature through `RHS1QIDevicePreconditionerConfig`,
+  `v3_driver.py`, metadata, and the QI seed runner. The primary knobs are
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS`
+  and
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE`.
+- Added a separate runner preset `current-constraint-device-qi`. The main
+  `operator-krylov-device-qi` preset stays on the current best checked route
+  because the current/constraint artifact was negative.
+
+Validation:
+
+- Focused tests pass for the new synthetic current/tail coarse family and for
+  driver/runner metadata routing.
+- Broader targeted validation passed: `38 passed in 17.75 s`.
+- `ruff` and `py_compile` passed for the touched QI source, driver, runner, and
+  tests.
+- Ran the scale-0.60 seed-3 one-GPU `office` probe with current/constraint
+  moments enabled. Artifact:
+  `docs/_static/qi_seed_robustness_scale060_current_constraint_device_qi_gpu0_2026_05_20.json`.
+
+Result:
+
+- The current/constraint family is CUDA-safe and reaches the intended
+  device-QI path, but it is not a promotion candidate. It increases the
+  accepted device-QI rank from `13` to `15`, keeps the same seed step
+  `3.021487e-05 -> 2.840364e-05`, and finishes FGMRES at `2.339521e-05` in
+  `293.42 s`.
+- The current best checked GPU hard-seed residual remains the pitch/operator
+  Krylov route: `2.306911e-05` in `278.57 s`. Current/constraint moments are
+  therefore retained as opt-in tested infrastructure and negative evidence, not
+  as the recommended preset.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `96%`.
+- True differentiable/device-QI convergence evidence: `72%`; three independent
+  non-smoother coarse families are implemented and tested, but hard-seed
+  convergence remains above the HDF5/output gate.
+- Production-resolution QI ladders: `40%`; still blocked until hard seed writes
+  HDF5 and solver traces.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`; no change in this
+  step.
+- Refactor/coverage/CI: `83%`.
+- Overall remaining-lane completion estimate: `83%`.
+
+Best next steps:
+
+1. Regenerate the QI evidence manifest with the current/constraint artifact and
+   keep the release claim as deferred/nonblocking.
+2. Run the focused docs/research-lane checks and Sphinx build after the manifest
+   update.
+3. Stop adding more rank-limited moment variants for the scale-0.60 hard seed
+   unless a new derivation gives a materially different operator-space
+   correction. The next real closure path is either a proper coarse-grid
+   operator with its own residual equation or a documented production
+   non-autodiff host fallback for large QI solves.
+
+## 2026-05-20 augmented-Krylov operator-reuse path
+
+Implemented:
+
+- Added a true augmented-Krylov hook to `sfincs_jax/solver.py` for both the
+  standard JAX FGMRES path and the cycle-JIT FGMRES path. The hook accepts a
+  reusable coarse basis `U` and stored operator action `A U`, then projects the
+  restart residual with `min_c ||A U c - r||_2` before Arnoldi continues. This
+  is a solver-residual-equation change, not another smoother or moment-rank
+  tuning pass.
+- Wired the QI device preconditioner state through `v3_driver.py` behind
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1`.
+  The driver transforms `U` and `A U` through row/column equilibration when
+  those scalings are active and records
+  `xblock_device_fgmres_qi_augmented_krylov_*` metadata.
+- Added the runner preset `augmented-krylov-device-qi`, which combines the
+  installed operator-Krylov/multilevel route with cycle-JIT FGMRES and direct
+  `U, A U` augmentation.
+
+Validation so far:
+
+- Focused tests pass for synthetic restart-limited residual reduction, full-JIT
+  trace safety, driver metadata/argument routing, and runner preset recording:
+  `4 passed in 5.70 s`.
+- Bounded scale-0.60 seed-3 CPU artifact:
+  `docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_cpu_2026_05_20.json`.
+  It reaches the augmented path (`rank=13`) and ends at residual
+  `2.218300e-05` in `174.35 s`, then correctly refuses nonconverged HDF5 output.
+- Bounded scale-0.60 seed-3 one-GPU `office` artifact:
+  `docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_gpu0_2026_05_20.json`.
+  It reaches the same combined augmented path and ends at residual
+  `2.218202e-05` in `144.63 s`, then correctly refuses nonconverged HDF5 output.
+- This remains better than the prior GPU installed operator-Krylov/multilevel
+  route (`2.306911e-05` in `278.57 s`), but the refreshed combined CPU/GPU
+  artifacts are slightly worse in residual than the earlier projected-only
+  augmented artifacts. Treat the combined implementation as a stronger and
+  better-tested operator-reuse capability, not as convergence closure. It still
+  does not promote true device-QI because the residual is far above the output
+  gate and no HDF5/solver trace is written.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `97%`.
+- True differentiable/device-QI convergence evidence: `78%`; the direct
+  augmented-FGMRES route is implemented and has bounded CPU/GPU hard-seed
+  evidence with a material residual/runtime improvement, but it is still
+  nonconverged.
+- Production-resolution QI ladders: `40%`; still blocked until a hard-seed
+  route writes HDF5 and solver traces.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`; no change in this
+  step.
+- Refactor/coverage/CI: `84%`.
+- Overall remaining-lane completion estimate: `85%`.
+
+Best next steps:
+
+1. Run the focused broader test suite and docs checks after adding the
+   augmented CPU/GPU artifacts to the evidence manifest.
+2. Use the augmented path as the new baseline for the next algorithmic step:
+   either increase convergence through a real coarse-grid residual equation
+   coupled to the augmented FGMRES space, or explicitly defer true device-QI
+   while retaining this best evidence.
+
+## 2026-05-20 combined augmented-Krylov least-squares path
+
+Implemented:
+
+- Upgraded the cycle-JIT augmented FGMRES path from restart-boundary projection
+  only to a selectable combined least-squares mode. With
+  `augmentation_mode="combined"`, each restart minimizes
+  `||r - [A U, A Z] c||_2` and applies `[U, Z] c`, so the reusable QI coarse
+  space stays coupled to the Krylov candidate update inside the restart. The
+  previous projected mode remains available for regression and compatibility.
+- Wired
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE`
+  through `v3_driver.py`; the `augmented-krylov-device-qi` runner preset now
+  selects `combined` explicitly and the driver records the selected mode in
+  x-block/QI metadata.
+- Added a nonnormal synthetic solver regression where projected augmentation
+  leaves an order-unity residual after one restart, while the combined
+  coarse+Krylov least-squares solve recovers the exact solution in the same
+  restart budget.
+
+Validation so far:
+
+- Focused solver, driver, and runner tests pass:
+  `4 passed in 6.43 s`.
+- Bounded scale-0.60 seed-3 CPU rerun with the new combined mode completed in
+  `174.35 s`, reached `xblock_device_fgmres_qi_augmented_krylov_mode=combined`,
+  and failed closed at residual `2.218300e-05` against target `3.021487e-11`.
+  This is slightly faster than the previous CPU artifact but not a residual
+  improvement, so it does not change the promotion gate.
+- Bounded scale-0.60 seed-3 GPU0 rerun on `office` with the same combined mode
+  completed in `144.63 s`, reached
+  `xblock_device_fgmres_qi_augmented_krylov_mode=combined`, and failed closed at
+  residual `2.218202e-05`. This is also faster than the previous GPU artifact
+  but not a residual improvement.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `98%`.
+- True differentiable/device-QI convergence evidence: `79%`; the production
+  route now has a real combined operator-reuse implementation rather than only
+  restart-boundary projection, but the hard-seed CPU/GPU evidence must be
+  regenerated before any convergence claim changes.
+- Production-resolution QI ladders: `40%`; still blocked until the hard-seed
+  route writes HDF5 and solver traces.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`; no change in this
+  step.
+- Refactor/coverage/CI: `84%`.
+- Overall remaining-lane completion estimate: `86%`.
+
+Best next steps:
+
+1. Run the broader QI/solver/docs validation set to catch API and documentation
+   regressions.
+2. Regenerate the bounded scale-0.60 seed-3 CPU artifact with
+   `augmented-krylov-device-qi` now that the preset means combined
+   least-squares.
+3. If CPU improves materially, rerun the same preset on one `office` GPU and
+   update the evidence manifest; if it does not, keep the implementation but
+   document the true-device-QI lane as still needing a deeper coarse-grid
+   residual equation rather than more Krylov/smoother tuning.
+3. Do not return to local smoother/rank tuning unless a new diagnostic shows it
+   changes the augmented FGMRES residual plateau.
+
+## 2026-05-20 nested multilevel residual-equation coarse path
+
+Implemented:
+
+- Added an opt-in nested coarse-grid residual equation to
+  `sfincs_jax/rhs1_qi_multilevel_coarse.py`. Instead of putting every
+  angular/radial/pitch/current candidate through one flat rank gate, the new
+  path builds separate per-level bases, caches each `A Q_l`, solves
+  `min ||r_l - A Q_l c_l||_2` against the residual left by prior levels, and
+  optionally finishes with the global rank-gated coarse polish.
+- Wired the same staged residual-equation path into
+  `sfincs_jax/rhs1_qi_device_preconditioner.py` so the device-QI apply path can
+  use per-level coarse actions without SciPy, host callbacks, or extra smoother
+  sweeps. The apply path now correctly handles the case where the flat global
+  basis has rank zero but the residual-equation stages have nonzero rank.
+- Routed explicit controls through `sfincs_jax/v3_driver.py`:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER`,
+  and
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_INCLUDE_GLOBAL`.
+- Added the QI seed-runner preset `coarse-residual-device-qi`, which combines
+  the installed operator-Krylov/device-QI baseline with the new staged
+  multilevel residual equation. This keeps the next hard-seed attempt
+  reproducible and separate from smoother/restart/projection variants.
+
+Validation so far:
+
+- Focused multilevel/device/runner tests passed:
+  `36 passed in 13.18 s`.
+- Driver metadata/routing tests for multilevel coarse, augmented Krylov, and
+  the new multilevel residual equation passed:
+  `3 passed in 8.37 s`.
+- The new synthetic tests prove the intended algorithmic gap: a flat rank-1
+  coarse gate misses an angular-radial residual mode, while the nested
+  per-level residual equation recovers it to `O(1e-10)` and remains JIT-safe on
+  the device preconditioner path.
+- Bounded scale-0.60 seed-3 CPU hard-seed artifact:
+  `docs/_static/qi_seed_robustness_scale060_coarse_residual_device_qi_cpu_2026_05_20.json`.
+  It exercised the new staged residual-equation route, accepted the QI-device
+  seed correction `3.021487e-05 -> 2.840364e-05`, and finished
+  `fgmres_jax` at residual `2.306911e-05` in `269.23 s` before refusing
+  nonconverged HDF5 output. This is negative evidence versus the current
+  augmented-FGMRES CPU baseline (`2.218300e-05` in `174.35 s`), so no GPU rerun
+  is justified for this specific coarse-residual configuration.
+- Added the next non-smoother coarse-space attempt:
+  `residual-snapshot-device-qi`. It enriches the reusable device-QI coarse
+  operator with block/aggregate snapshots of the actual hard-seed residual and
+  optional adjoint-normal snapshots `A.T r_block`, then reuses the cached
+  `A Q` action inside the installed Krylov preconditioner. This is a setup-time
+  coarse residual-equation change, not another local smoother or restart tweak.
+- Bounded scale-0.60 seed-3 CPU hard-seed artifact:
+  `docs/_static/qi_seed_robustness_scale060_residual_snapshot_device_qi_cpu_2026_05_20.json`.
+  The primal-only snapshot preflight improved the accepted seed correction to
+  `3.021487e-05 -> 2.837286e-05` but finished at `2.447236e-05`. The
+  adjoint-normal snapshot rerun improved the accepted seed correction further
+  to `3.021487e-05 -> 2.769687e-05`, increased the reusable QI-device rank to
+  `22`, and finished `fgmres_jax` at `2.103015e-05` in `250.32 s`. This is the
+  best checked CPU residual for this true-device-QI route so far, but it still
+  refuses nonconverged HDF5 output and remains fail-closed evidence, not
+  promotion evidence.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `98%`; the remaining missing
+  infrastructure is not routing but hard-seed convergence evidence.
+- True differentiable/device-QI convergence evidence: `82%`; the residual
+  snapshot plus adjoint-normal coarse path now beats the previous CPU residual
+  baseline, but it is still orders of magnitude above the production output
+  gate and needs a deeper residual equation or coarse-grid hierarchy before GPU
+  promotion.
+- Production-resolution QI ladders: `40%`; still blocked until a hard-seed
+  route writes HDF5 and solver traces.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`; no change in this
+  step.
+- Refactor/coverage/CI: `84%`.
+- Overall remaining-lane completion estimate: `87%`.
+
+Best next steps:
+
+1. Regenerate the QI evidence manifest so both `coarse-residual-device-qi` and
+   `residual-snapshot-device-qi` appear in the reproducible commands.
+2. Keep the CPU residual-snapshot artifact as improvement evidence only; do not
+   launch the GPU rerun until the CPU residual is substantially closer to the
+   output gate or a new coarse hierarchy changes the residual trend.
+3. Continue with deeper residual-equation/coarse-grid architecture only:
+   block-Schur or multilevel Galerkin residual solves that directly reduce the
+   remaining global QI residual, not smoother/restart/projection tuning.
+
+## 2026-05-20 block-Schur residual-equation and Galerkin coarse push
+
+Implemented:
+
+- Added an opt-in staged block-Schur residual-equation path to
+  `sfincs_jax/rhs1_qi_device_preconditioner.py`. This is separate from the
+  older block-Schur enrichment: it builds QI block/aggregate source probes,
+  solves setup-time residual equations against the current hard-seed residual,
+  rank-gates each accepted correction, caches `A Q_l`, and applies the result
+  through the existing pure-JAX residual-equation cascade.
+- Added a Galerkin residual-equation solver mode for multilevel coarse stages.
+  The setup path now caches both `A Q_l` and `Q_l^T A Q_l`, so opt-in stages can
+  solve projected Galerkin residual equations instead of only action
+  least-squares.
+- Wired public driver controls through `sfincs_jax/v3_driver.py`:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_BLOCKS`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_AGGREGATES`,
+  and
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER`.
+- Updated `block-schur-device-qi` in `scripts/run_qi_seed_robustness.py` to
+  exercise the residual-equation path with Galerkin-capable metadata, not the
+  older coarse-enrichment-only path.
+
+Validation:
+
+- Adjacent QI/driver/runner suite:
+  `python -m pytest -q tests/test_v3_sparse_pattern.py tests/test_run_qi_seed_robustness.py tests/test_qi_seed_smoke_artifact.py tests/test_rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_multilevel_coarse.py`
+  passed with `163 passed in 91.58 s`.
+- Focused synthetic tests cover the intended math gap: block-Schur
+  residual-equation directions recover coupled modes missed by snapshot-only
+  bases, and Galerkin multilevel stages recover residual modes discarded by
+  flat coarse rank gates.
+- Bounded scale-0.60 seed-3 CPU hard-seed artifact:
+  `docs/_static/qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json`.
+  The path accepted the QI-device preconditioner
+  `3.021487e-05 -> 2.840342e-05` with rank `13`, then completed
+  `fgmres_jax` at residual `2.275188e-05` in `267.24 s` before refusing
+  nonconverged HDF5 output. This is fail-closed negative evidence relative to
+  the residual-snapshot CPU artifact (`2.103015e-05`), so it should not be
+  promoted to GPU or production-resolution ladders.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `99%`; public controls,
+  metadata, tests, and runner evidence now cover block-Schur residual equations
+  and Galerkin residual equations.
+- True differentiable/device-QI convergence evidence: `82%`; the new
+  block-Schur residual equation is tested but does not beat the current
+  residual-snapshot best residual.
+- Production-resolution QI ladders: `40%`; still blocked until a hard-seed
+  route writes HDF5 and solver trace at the output gate.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`; no change in this
+  step.
+- Refactor/coverage/CI: `85%`; adjacent tests are clean, but full suite and CI
+  still need a final pass after this dirty tree is consolidated.
+- Overall remaining-lane completion estimate: `88%`.
+
+Best next steps:
+
+1. Keep `block-schur-device-qi` as checked fail-closed evidence, not as the next
+   GPU candidate.
+2. Build the next real coarse-grid candidate around the residual-snapshot
+   winner: either promote snapshots into a multilevel residual-equation cascade
+   or add a physically targeted global constraint/current closure that changes
+   the final residual trend.
+3. Run the full suite and regenerate the evidence manifest after any next
+   residual-equation change; avoid more local-smoother/restart tuning for the
+   QI hard seed.
+
+## 2026-05-20 residual-snapshot residual-equation cascade
+
+Implemented:
+
+- Added the next non-smoother QI candidate:
+  `residual-snapshot-equation-device-qi`. This takes the best previous
+  residual-snapshot idea and promotes the block/aggregate residual snapshots
+  into a staged residual-equation cascade. Each stage solves a setup-time
+  `min ||r_l - A Q_l c||_2` problem against the residual left by earlier
+  stages, caches `A Q_l`, and applies through the existing pure-JAX
+  residual-equation cascade. This is a deeper coarse residual equation, not
+  another smoother/restart/projection variant.
+- Wired public controls through `sfincs_jax/v3_driver.py`:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_MAX_RANK`,
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER`,
+  and
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL`.
+- Added runner support, manifest commands, evidence classes/tags, and checked
+  documentation for the new preset so it is separated from the older
+  `residual-snapshot-device-qi` evidence.
+
+Validation:
+
+- Focused checks passed:
+  `python -m py_compile` for touched runtime/test files, `ruff check` for the
+  touched runtime/test files, and focused residual-snapshot-equation tests
+  (`3 passed in 5.37 s`).
+- Adjacent QI/preconditioner/runner/artifact suite passed:
+  `python -m pytest -q tests/test_rhs1_qi_device_preconditioner.py tests/test_v3_sparse_pattern.py tests/test_run_qi_seed_robustness.py tests/test_qi_seed_smoke_artifact.py`
+  with `157 passed in 82.09 s`.
+- Bounded scale-0.60 seed-3 CPU hard-seed artifact:
+  `docs/_static/qi_seed_robustness_scale060_residual_snapshot_equation_device_qi_cpu_2026_05_20.json`.
+  The path accepted the QI-device correction
+  `3.021487e-05 -> 2.819970e-05` with rank `13`, then completed
+  `fgmres_jax` at residual `2.320763e-05` in `248.91 s`
+  (`260.36 s` wrapper elapsed) before refusing nonconverged HDF5 output. This
+  is fail-closed negative evidence relative to the previous best
+  residual-snapshot CPU artifact (`2.103015e-05`), so it should not be promoted
+  to GPU or production-resolution ladders.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `99%`; public controls,
+  metadata, runner evidence, and tests now cover residual-snapshot residual
+  equations as a distinct coarse architecture.
+- True differentiable/device-QI convergence evidence: `82%`; the new staged
+  residual-snapshot residual equation is tested but does not beat the current
+  residual-snapshot best residual.
+- Production-resolution QI ladders: `40%`; still blocked until a hard-seed
+  route writes HDF5 and solver trace at the output gate.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`; no change in this
+  step.
+- Refactor/coverage/CI: `85%`; adjacent tests are clean, but full-suite/CI must
+  still be run after consolidation.
+- Overall remaining-lane completion estimate: `88%`.
+
+Best next steps:
+
+1. Keep `residual-snapshot-equation-device-qi` as checked fail-closed evidence,
+   not as a GPU candidate.
+2. The current tested non-smoother coarse spaces still miss the dominant
+   hard-seed error mode. The next real algorithmic attempt should introduce a
+   physically targeted global closure, e.g. a true block Schur complement over
+   current/constraint/profile moments or a multilevel Galerkin residual
+   equation with coarse variables chosen from the operator residual, not more
+   local smoother tuning.
+3. After the docs/tests settle, run the full suite and keep the evidence
+   manifest regenerated so the artifact inventory stays reproducible.
+
+## 2026-05-20 global moment closure and residual-Galerkin QI push
+
+Implemented:
+
+- Added a standalone global-moment closure primitive in
+  `sfincs_jax/rhs1_qi_global_moment_closure.py` with unit coverage in
+  `tests/test_rhs1_qi_global_moment_closure.py`. It builds profile/current/tail
+  moment candidates, caches `A Q` and `Q^T A Q`, and fails closed unless the
+  measured setup residual improves.
+- Added a standalone residual-derived Galerkin primitive in
+  `sfincs_jax/rhs1_qi_residual_galerkin.py` with unit coverage in
+  `tests/test_rhs1_qi_residual_galerkin.py`. It derives staged coarse variables
+  from the actual operator residual and block residuals, caches `A Q`, and
+  supports action least-squares or Galerkin small solves.
+- Wired both ideas into the production device-QI preconditioner and driver as
+  explicit opt-in paths:
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION`
+  and
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION`.
+  Both routes keep the installed apply path pure JAX and report rank,
+  candidate, conditioning, and fail-closed evidence metadata.
+- Added runner presets and evidence classification for
+  `global-moment-closure-device-qi` and `residual-galerkin-device-qi`, then
+  regenerated `docs/_static/qi_seed_robustness_evidence_manifest.json`.
+
+Validation:
+
+- Compile/lint passed for touched runtime, runner, and tests:
+  `python -m py_compile ...` and `ruff check ...`.
+- Focused tests passed:
+  `tests/test_rhs1_qi_device_preconditioner.py` global-moment and
+  residual-Galerkin tests, runner env/classification tests, and the QI artifact
+  smoke suite.
+- Bounded scale-0.60 seed-3 CPU artifact:
+  `docs/_static/qi_seed_robustness_scale060_global_moment_closure_device_qi_cpu_2026_05_20.json`.
+  The path accepted `3.021487e-05 -> 2.840364e-05`, then completed FGMRES at
+  `2.420524e-05` in `256.26 s` before refusing nonconverged HDF5 output.
+- Bounded scale-0.60 seed-3 CPU artifact:
+  `docs/_static/qi_seed_robustness_scale060_residual_galerkin_device_qi_cpu_2026_05_20.json`.
+  The path accepted `3.021487e-05 -> 2.766710e-05` with residual-Galerkin rank
+  `16` from `21` candidates, then completed FGMRES at `2.632208e-05` in
+  `243.78 s` before refusing nonconverged HDF5 output.
+- Bounded scale-0.60 seed-3 GPU0 artifact:
+  `docs/_static/qi_seed_robustness_scale060_global_moment_closure_device_qi_gpu0_2026_05_20.json`.
+  The path is CUDA-safe on the office RTX A4000 and numerically matches the CPU
+  residual, completing FGMRES at `2.420524e-05` in `301.82 s` before refusing
+  nonconverged HDF5 output.
+- Bounded scale-0.60 seed-3 GPU1 artifact:
+  `docs/_static/qi_seed_robustness_scale060_residual_galerkin_device_qi_gpu1_2026_05_20.json`.
+  The path is CUDA-safe on the office RTX A4000 and numerically matches the CPU
+  residual, completing FGMRES at `2.632208e-05` in `309.47 s` before refusing
+  nonconverged HDF5 output.
+- Both artifacts are fail-closed negative evidence relative to the current best
+  CPU residual-snapshot route (`2.103015e-05`). They prove the new coarse
+  architectures are wired, tested, and metadata-complete, but they do not close
+  true device-QI or justify GPU/production promotion.
+- Local validation after integration passed: full pytest
+  (`1667 passed, 132 skipped in 300.99 s`), docs build with warnings as errors,
+  release gates, research-lane consistency, CI smoke examples, and optional
+  ecosystem gate tests. Remote GitHub CI/docs are green for the last pushed
+  commit, but these local changes are not yet pushed.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `99%`; global moment closure,
+  residual-derived Galerkin equations, block-Schur residual equations, residual
+  snapshots, runner presets, and evidence manifests are all wired and tested.
+- True differentiable/device-QI convergence evidence: `84%`; the new residual
+  Galerkin path improves setup residual more than static moments, but the best
+  final hard-seed residual is still the residual-snapshot artifact and remains
+  nonconverged. CPU/GPU consistency for the new closures is now checked.
+- Production-resolution QI ladders: `40%`; still blocked until a route writes
+  HDF5 and solver trace at the output gate.
+- Single-case multi-GPU/multi-CPU strong scaling: `56%`; this step added
+  two-device GPU correctness/robustness evidence for separate hard-seed lanes,
+  but not strong scaling for one solve.
+- Refactor/coverage/CI: `88%`; full-suite, docs, release gates, smoke examples,
+  optional ecosystem tests, and touched-file lint are clean locally.
+- Overall remaining-lane completion estimate: `90%`.
+
+Best next steps:
+
+1. Do not tune smoothers for this QI lane; the new data confirms that setup
+   sparse-ILU construction plus missing global coarse error capture are the
+   blockers.
+2. If continuing true device-QI, try a composite residual-snapshot plus
+   residual-derived Galerkin coarse cascade or a lower-cost assembled
+   operator-reuse path that avoids repeated singular sparse-ILU retries.
+3. Keep these closures as documented fail-closed research paths for now. The
+   next promotion candidate should not be another basis add-on; it should be a
+   cheaper assembled/operator-reuse path that removes the dominant sparse-ILU
+   setup wall time and exposes a residual equation strong enough to reduce the
+   true residual below the write gate.

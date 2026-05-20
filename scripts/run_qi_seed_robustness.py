@@ -164,6 +164,83 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT
     / "docs"
     / "_static"
+    / "qi_seed_robustness_scale060_qi_device_operator_krylov_depth64_blockminres_hybrid_seed3_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_gpu0_public_auto_after_transpose_fixes_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0_fgmres_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_operator_krylov_multilevel_device_qi_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_operator_krylov_pitch_multilevel_device_qi_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_current_constraint_device_qi_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_augmented_krylov_device_qi_cpu_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_augmented_krylov_device_qi_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_coarse_residual_device_qi_cpu_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_residual_snapshot_device_qi_cpu_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_residual_snapshot_equation_device_qi_cpu_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_global_moment_closure_device_qi_cpu_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_global_moment_closure_device_qi_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_residual_galerkin_device_qi_cpu_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_residual_galerkin_device_qi_gpu1_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_adjoint_krylov_device_qi_cpu_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_operator_krylov_composite_device_qi_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_device_global_coupling_gpu0_2026_05_20.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_rankdef_schur_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
     / "qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json",
     REPO_ROOT
     / "docs"
@@ -249,6 +326,171 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
+OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET = "operator-krylov-device-qi"
+CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET = "current-constraint-device-qi"
+ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET = "adjoint-krylov-device-qi"
+AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET = "augmented-krylov-device-qi"
+COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET = "coarse-residual-device-qi"
+RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET = "residual-snapshot-device-qi"
+RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET = "residual-snapshot-equation-device-qi"
+GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET = "global-moment-closure-device-qi"
+RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET = "residual-galerkin-device-qi"
+BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET = "block-schur-device-qi"
+OPERATOR_KRYLOV_DEVICE_QI_SOLVE_METHOD = "xblock_sparse_pc_gmres"
+OPERATOR_KRYLOV_DEVICE_QI_ENV = {
+    "SFINCS_JAX_GMRES_PRECONDITION_SIDE": "right",
+    "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER": "160",
+    "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART": "40",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV": "fgmres-jax",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH": "64",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS": "3",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR": "2",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK": "64",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE": "2",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER": (
+        "matrix_free_block_minres_hybrid"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS": "4",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY": (
+        "residual_minimizing"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS": "48",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES": "12",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY": "minres",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "128",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG": "1",
+}
+CURRENT_CONSTRAINT_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE": "1",
+}
+ADJOINT_KRYLOV_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH": "2",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_TRANSPOSE": "autodiff",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "132",
+}
+AUGMENTED_KRYLOV_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE": "cycle",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K": "0",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE": "combined",
+}
+COARSE_RESIDUAL_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK": (
+        "16"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER": (
+        "coarse_to_fine"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_INCLUDE_GLOBAL": (
+        "1"
+    ),
+}
+RESIDUAL_SNAPSHOT_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_MAX_RANK": "48",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_PRIMAL": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_USE_ADJOINT": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_GLOBAL": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_BLOCKS": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_AGGREGATES": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "192",
+}
+RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_MAX_RANK": (
+        "48"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER": (
+        "action_lstsq"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_PRIMAL": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_USE_ADJOINT": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_GLOBAL": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_BLOCKS": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_AGGREGATES": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "192",
+}
+GLOBAL_MOMENT_CLOSURE_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_MAX_RANK": (
+        "64"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_SOLVER": (
+        "galerkin"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_PROFILE": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_CURRENT": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_TAIL": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE": "2",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "224",
+}
+RESIDUAL_GALERKIN_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGES": (
+        "3"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGE_RANK": (
+        "8"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_RANK": (
+        "48"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_SOLVER": (
+        "action_lstsq"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_GLOBAL_RESIDUAL": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_BLOCK_RESIDUALS": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_OPERATOR_IMAGES": (
+        "0"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "192",
+}
+BLOCK_SCHUR_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK": "64",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_BLOCKS": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_AGGREGATES": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER": (
+        "galerkin"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "192",
+}
 QI_TWO_LEVEL_TRACE_KEYS = (
     "xblock_qi_two_level_preconditioner_enabled",
     "xblock_qi_two_level_preconditioner_built",
@@ -306,6 +548,42 @@ QI_DEVICE_TRACE_KEYS = (
     "xblock_qi_device_preconditioner_min_improvement",
     "xblock_qi_device_preconditioner_use_in_krylov",
     "xblock_qi_device_preconditioner_applies",
+    "xblock_qi_device_preconditioner_seed_only",
+    "xblock_qi_device_preconditioner_operator_krylov_enrichment",
+    "xblock_qi_device_preconditioner_coarse_reuse",
+    "xblock_qi_device_preconditioner_residual_snapshot_enrichment",
+    "xblock_qi_device_preconditioner_residual_snapshot_residual_equation",
+    "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_candidate_count",
+    "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_rank",
+    "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_group_count",
+    "xblock_qi_device_preconditioner_block_schur_residual_enrichment",
+    "xblock_qi_device_preconditioner_block_schur_residual_candidate_count",
+    "xblock_qi_device_preconditioner_block_schur_residual_rank",
+    "xblock_qi_device_preconditioner_block_schur_residual_group_count",
+    "xblock_qi_device_preconditioner_multilevel_residual_equation",
+    "xblock_qi_device_preconditioner_multilevel_residual_equation_stage_rank",
+    "xblock_qi_device_preconditioner_multilevel_residual_equation_order",
+    "xblock_qi_device_preconditioner_multilevel_residual_equation_solver",
+    "xblock_qi_device_preconditioner_multilevel_residual_equation_include_global",
+    "xblock_qi_device_preconditioner_global_moment_residual_equation",
+    "xblock_qi_device_preconditioner_global_moment_residual_equation_max_rank",
+    "xblock_qi_device_preconditioner_global_moment_residual_equation_candidate_count",
+    "xblock_qi_device_preconditioner_global_moment_residual_equation_rank",
+    "xblock_qi_device_preconditioner_global_moment_residual_equation_solver",
+    "xblock_qi_device_preconditioner_global_moment_residual_equation_condition_estimate",
+    "xblock_qi_device_preconditioner_residual_galerkin_equation",
+    "xblock_qi_device_preconditioner_residual_galerkin_equation_max_stages",
+    "xblock_qi_device_preconditioner_residual_galerkin_equation_max_stage_rank",
+    "xblock_qi_device_preconditioner_residual_galerkin_equation_max_rank",
+    "xblock_qi_device_preconditioner_residual_galerkin_equation_candidate_count",
+    "xblock_qi_device_preconditioner_residual_galerkin_equation_rank",
+    "xblock_qi_device_preconditioner_residual_galerkin_equation_stage_count",
+    "xblock_qi_device_preconditioner_residual_galerkin_equation_solver",
+    "xblock_qi_device_preconditioner_residual_galerkin_equation_condition_estimate",
+    "xblock_qi_device_preconditioner_block_schur_residual_equation",
+    "xblock_qi_device_preconditioner_block_schur_residual_equation_candidate_count",
+    "xblock_qi_device_preconditioner_block_schur_residual_equation_rank",
+    "xblock_qi_device_preconditioner_block_schur_residual_equation_group_count",
 )
 MOMENT_SCHUR_TRACE_KEYS = (
     "xblock_moment_schur_enabled",
@@ -393,6 +671,8 @@ _QI_DEVICE_PROGRESS_RE = re.compile(
     rf"|residual=(?P<residual>{_FLOAT_PATTERN}))",
     re.IGNORECASE,
 )
+_TRUTHY_LOG_VALUES = {"1", "true", "yes", "on", "enabled"}
+_FALSY_LOG_VALUES = {"0", "false", "no", "off", "disabled"}
 
 
 def _read_resolution(text: str) -> dict[str, int]:
@@ -447,6 +727,66 @@ def _repo_relative(path: Path) -> str:
         return str(resolved.relative_to(REPO_ROOT))
     except ValueError:
         return str(resolved)
+
+
+def _probe_env_for_preset(preset: str) -> dict[str, str]:
+    normalized = str(preset or "").strip().lower().replace("_", "-")
+    if normalized in {"", "none", "default"}:
+        return {}
+    if normalized == OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET:
+        return dict(OPERATOR_KRYLOV_DEVICE_QI_ENV)
+    if normalized == CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET:
+        return dict(CURRENT_CONSTRAINT_DEVICE_QI_ENV)
+    if normalized == ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET:
+        return dict(ADJOINT_KRYLOV_DEVICE_QI_ENV)
+    if normalized == AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET:
+        return dict(AUGMENTED_KRYLOV_DEVICE_QI_ENV)
+    if normalized == COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET:
+        return dict(COARSE_RESIDUAL_DEVICE_QI_ENV)
+    if normalized == RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET:
+        return dict(RESIDUAL_SNAPSHOT_DEVICE_QI_ENV)
+    if normalized == RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET:
+        return dict(RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_ENV)
+    if normalized == GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET:
+        return dict(GLOBAL_MOMENT_CLOSURE_DEVICE_QI_ENV)
+    if normalized == RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET:
+        return dict(RESIDUAL_GALERKIN_DEVICE_QI_ENV)
+    if normalized == BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET:
+        return dict(BLOCK_SCHUR_DEVICE_QI_ENV)
+    raise ValueError(f"Unknown QI probe preset: {preset!r}")
+
+
+def _solve_method_for_probe_preset(*, solve_method: str, probe_preset: str) -> str:
+    """Resolve the concrete solver path required by an explicit probe preset."""
+
+    requested = str(solve_method or "").strip()
+    normalized_preset = str(probe_preset or "").strip().lower().replace("_", "-")
+    qi_device_presets = {
+        OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET,
+        CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET,
+        ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET,
+        AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET,
+        COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
+        RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET,
+        RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET,
+        GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET,
+        RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET,
+        BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,
+    }
+    if normalized_preset in qi_device_presets and requested.lower() in {"", "auto", "default"}:
+        return OPERATOR_KRYLOV_DEVICE_QI_SOLVE_METHOD
+    return requested or "auto"
+
+
+def _command_with_env(command: list[str], env: dict[str, str]) -> list[str]:
+    if not env:
+        return command
+    return ["env", *[f"{key}={value}" for key, value in sorted(env.items())], *command]
+
+
+def _shell_command(command: list[str], env: dict[str, str] | None = None) -> str:
+    env_parts = [f"{key}={value}" for key, value in sorted((env or {}).items())]
+    return " ".join([*env_parts, *command])
 
 
 def _total_size_from_resolution(resolution: dict[str, object]) -> int | None:
@@ -553,7 +893,7 @@ def _resolve_equilibrium(input_path: Path, text: str) -> Path | None:
     return None
 
 
-def _case_command(case_dir: Path, *, solve_method: str) -> list[str]:
+def _case_command(case_dir: Path, *, solve_method: str, env: dict[str, str] | None = None) -> list[str]:
     command = [
         sys.executable,
         "-m",
@@ -568,7 +908,7 @@ def _case_command(case_dir: Path, *, solve_method: str) -> list[str]:
     ]
     if str(solve_method).strip().lower() not in {"", "auto", "default"}:
         command.extend(["--solve-method", str(solve_method)])
-    return command
+    return _command_with_env(command, env or {})
 
 
 def _materialize_case(
@@ -587,6 +927,8 @@ def _materialize_case(
     nu_jitter: float,
     er_jitter: float,
     solve_method: str,
+    probe_preset: str,
+    probe_env: dict[str, str],
 ) -> dict[str, object]:
     case_name = f"qi_seed_{int(seed):04d}"
     case_dir = out_root / case_name
@@ -630,7 +972,7 @@ def _materialize_case(
     input_path = case_dir / "input.namelist"
     input_path.write_text(_normalize_text(text), encoding="utf-8")
     (case_dir / "input.source.namelist").write_text(_normalize_text(source_text), encoding="utf-8")
-    command = _case_command(case_dir, solve_method=solve_method)
+    command = _case_command(case_dir, solve_method=solve_method, env=probe_env)
     return {
         "case": case_name,
         "seed": int(seed),
@@ -641,6 +983,8 @@ def _materialize_case(
         "source_equilibrium": str(source_equilibrium) if source_equilibrium is not None else None,
         "copied_equilibrium": str(copied_equilibrium.relative_to(out_root)) if copied_equilibrium is not None else None,
         "solve_method": str(solve_method),
+        "probe_preset": str(probe_preset),
+        "env": dict(sorted(probe_env.items())),
         "resolution": resolution,
         "perturbations": {
             "nu_n": nu_value,
@@ -725,6 +1069,80 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
     summary.update({key: solver_metadata.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
     summary.update({key: solver_metadata.get(key) for key in QI_DEFLATED_TRACE_KEYS})
     summary.update({key: solver_metadata.get(key) for key in QI_DEVICE_TRACE_KEYS})
+    qi_device_metadata = solver_metadata.get("xblock_qi_device_preconditioner_metadata")
+    if isinstance(qi_device_metadata, dict):
+        nested_block_schur_keys = {
+            "xblock_qi_device_preconditioner_global_moment_residual_equation": (
+                "global_moment_residual_equation_enabled"
+            ),
+            "xblock_qi_device_preconditioner_global_moment_residual_equation_candidate_count": (
+                "global_moment_residual_equation_candidate_count"
+            ),
+            "xblock_qi_device_preconditioner_global_moment_residual_equation_rank": (
+                "global_moment_residual_equation_rank"
+            ),
+            "xblock_qi_device_preconditioner_global_moment_residual_equation_solver": (
+                "global_moment_residual_equation_solver"
+            ),
+            "xblock_qi_device_preconditioner_global_moment_residual_equation_condition_estimate": (
+                "global_moment_residual_equation_condition_estimate"
+            ),
+            "xblock_qi_device_preconditioner_residual_galerkin_equation": (
+                "residual_galerkin_equation_enabled"
+            ),
+            "xblock_qi_device_preconditioner_residual_galerkin_equation_candidate_count": (
+                "residual_galerkin_equation_candidate_count"
+            ),
+            "xblock_qi_device_preconditioner_residual_galerkin_equation_rank": (
+                "residual_galerkin_equation_rank"
+            ),
+            "xblock_qi_device_preconditioner_residual_galerkin_equation_stage_count": (
+                "residual_galerkin_equation_stage_count"
+            ),
+            "xblock_qi_device_preconditioner_residual_galerkin_equation_solver": (
+                "residual_galerkin_equation_solver"
+            ),
+            "xblock_qi_device_preconditioner_residual_galerkin_equation_condition_estimate": (
+                "residual_galerkin_equation_condition_estimate"
+            ),
+            "xblock_qi_device_preconditioner_residual_snapshot_residual_equation": (
+                "residual_snapshot_residual_equation_enabled"
+            ),
+            "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_candidate_count": (
+                "residual_snapshot_residual_equation_candidate_count"
+            ),
+            "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_rank": (
+                "residual_snapshot_residual_equation_rank"
+            ),
+            "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_group_count": (
+                "residual_snapshot_residual_equation_group_count"
+            ),
+            "xblock_qi_device_preconditioner_block_schur_residual_equation": (
+                "block_schur_residual_equation_enabled"
+            ),
+            "xblock_qi_device_preconditioner_block_schur_residual_equation_candidate_count": (
+                "block_schur_residual_equation_candidate_count"
+            ),
+            "xblock_qi_device_preconditioner_block_schur_residual_equation_rank": (
+                "block_schur_residual_equation_rank"
+            ),
+            "xblock_qi_device_preconditioner_block_schur_residual_equation_group_count": (
+                "block_schur_residual_equation_group_count"
+            ),
+            "xblock_qi_device_preconditioner_block_schur_residual_enrichment": (
+                "block_schur_residual_enrichment_enabled"
+            ),
+            "xblock_qi_device_preconditioner_block_schur_residual_candidate_count": (
+                "block_schur_residual_candidate_count"
+            ),
+            "xblock_qi_device_preconditioner_block_schur_residual_rank": "block_schur_residual_rank",
+            "xblock_qi_device_preconditioner_block_schur_residual_group_count": (
+                "block_schur_residual_group_count"
+            ),
+        }
+        for summary_key, metadata_key in nested_block_schur_keys.items():
+            if summary.get(summary_key) is None:
+                summary[summary_key] = qi_device_metadata.get(metadata_key)
     summary.update({key: solver_metadata.get(key) for key in MOMENT_SCHUR_TRACE_KEYS})
     return summary
 
@@ -776,6 +1194,17 @@ def _int_from_log_value(value: object) -> int | None:
     if parsed is None:
         return None
     return int(parsed)
+
+
+def _bool_from_log_value(value: object) -> bool | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower().rstrip(".,;")
+    if text in _TRUTHY_LOG_VALUES:
+        return True
+    if text in _FALSY_LOG_VALUES:
+        return False
+    return None
 
 
 def _arrow_before_after(value: object) -> tuple[float | None, float | None]:
@@ -883,6 +1312,147 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
     summary: dict[str, object] = {}
     for event in events:
         text = str(event)
+        if "QI device preconditioner residual-snapshot coarse enrichment" in text:
+            key_values = _log_key_values(text)
+            summary.update(
+                {
+                    "xblock_qi_device_preconditioner_residual_snapshot_enrichment": True,
+                    "xblock_qi_device_preconditioner_residual_snapshot_max_rank": (
+                        _int_from_log_value(key_values.get("max_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_include_primal": (
+                        _bool_from_log_value(key_values.get("include_primal"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_use_adjoint": (
+                        _bool_from_log_value(key_values.get("use_adjoint"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_include_global": (
+                        _bool_from_log_value(key_values.get("include_global"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_include_blocks": (
+                        _bool_from_log_value(key_values.get("include_blocks"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_include_aggregates": (
+                        _bool_from_log_value(key_values.get("include_aggregates"))
+                    ),
+                }
+            )
+        if "QI device preconditioner residual-snapshot residual equation" in text:
+            key_values = _log_key_values(text)
+            summary.update(
+                {
+                    "xblock_qi_device_preconditioner_residual_snapshot_residual_equation": True,
+                    "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_max_rank": (
+                        _int_from_log_value(key_values.get("max_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_solver": (
+                        key_values.get("solver")
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_include_global": (
+                        _bool_from_log_value(key_values.get("include_global"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_include_primal": (
+                        _bool_from_log_value(key_values.get("include_primal"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_use_adjoint": (
+                        _bool_from_log_value(key_values.get("use_adjoint"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_include_blocks": (
+                        _bool_from_log_value(key_values.get("include_blocks"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_snapshot_include_aggregates": (
+                        _bool_from_log_value(key_values.get("include_aggregates"))
+                    ),
+                }
+            )
+        if "QI device preconditioner global moment residual equation" in text:
+            key_values = _log_key_values(text)
+            summary.update(
+                {
+                    "xblock_qi_device_preconditioner_global_moment_residual_equation": True,
+                    "xblock_qi_device_preconditioner_global_moment_residual_equation_max_rank": (
+                        _int_from_log_value(key_values.get("max_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_global_moment_residual_equation_solver": (
+                        key_values.get("solver")
+                    ),
+                    "xblock_qi_device_preconditioner_global_moment_residual_equation_include_profile": (
+                        _bool_from_log_value(key_values.get("profile"))
+                    ),
+                    "xblock_qi_device_preconditioner_global_moment_residual_equation_include_current": (
+                        _bool_from_log_value(key_values.get("current"))
+                    ),
+                    "xblock_qi_device_preconditioner_global_moment_residual_equation_include_tail": (
+                        _bool_from_log_value(key_values.get("tail"))
+                    ),
+                }
+            )
+        if "QI device preconditioner residual Galerkin equation" in text:
+            key_values = _log_key_values(text)
+            summary.update(
+                {
+                    "xblock_qi_device_preconditioner_residual_galerkin_equation": True,
+                    "xblock_qi_device_preconditioner_residual_galerkin_equation_max_stages": (
+                        _int_from_log_value(key_values.get("max_stages"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_galerkin_equation_max_stage_rank": (
+                        _int_from_log_value(key_values.get("stage_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_galerkin_equation_max_rank": (
+                        _int_from_log_value(key_values.get("max_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_galerkin_equation_solver": (
+                        key_values.get("solver")
+                    ),
+                    "xblock_qi_device_preconditioner_residual_galerkin_equation_include_global_residual": (
+                        _bool_from_log_value(key_values.get("global"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_galerkin_equation_include_block_residuals": (
+                        _bool_from_log_value(key_values.get("blocks"))
+                    ),
+                    "xblock_qi_device_preconditioner_residual_galerkin_equation_include_operator_images": (
+                        _bool_from_log_value(key_values.get("images"))
+                    ),
+                }
+            )
+        if "QI device preconditioner block-Schur residual equation" in text:
+            key_values = _log_key_values(text)
+            summary.update(
+                {
+                    "xblock_qi_device_preconditioner_block_schur_residual_equation": True,
+                    "xblock_qi_device_preconditioner_block_schur_residual_equation_max_rank": (
+                        _int_from_log_value(key_values.get("max_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_block_schur_residual_equation_include_global": (
+                        _bool_from_log_value(key_values.get("include_global"))
+                    ),
+                    "xblock_qi_device_preconditioner_block_schur_residual_equation_include_blocks": (
+                        _bool_from_log_value(key_values.get("include_blocks"))
+                    ),
+                    "xblock_qi_device_preconditioner_block_schur_residual_equation_include_aggregates": (
+                        _bool_from_log_value(key_values.get("include_aggregates"))
+                    ),
+                }
+            )
+        if "QI device preconditioner multilevel residual equation" in text:
+            key_values = _log_key_values(text)
+            summary.update(
+                {
+                    "xblock_qi_device_preconditioner_multilevel_residual_equation": True,
+                    "xblock_qi_device_preconditioner_multilevel_residual_equation_stage_rank": (
+                        _int_from_log_value(key_values.get("stage_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_multilevel_residual_equation_order": key_values.get(
+                        "order"
+                    ),
+                    "xblock_qi_device_preconditioner_multilevel_residual_equation_solver": key_values.get(
+                        "solver"
+                    ),
+                    "xblock_qi_device_preconditioner_multilevel_residual_equation_include_global": (
+                        _bool_from_log_value(key_values.get("include_global"))
+                    ),
+                }
+            )
         match = _QI_DEVICE_PROGRESS_RE.search(text)
         if match is None:
             continue
@@ -894,7 +1464,12 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
         if ratio is None and residual_before is not None and residual_after is not None and residual_before > 0.0:
             ratio = residual_after / residual_before
         use_in_krylov_raw = key_values.get("use_in_krylov")
-        summary = {
+        seed_only = _bool_from_log_value(key_values.get("seed_only"))
+        if use_in_krylov_raw is None and seed_only is not None:
+            use_in_krylov = not seed_only
+        else:
+            use_in_krylov = _bool_from_log_value(use_in_krylov_raw)
+        summary.update({
             "xblock_qi_device_preconditioner_enabled": True,
             "xblock_qi_device_preconditioner_built": True,
             "xblock_qi_device_preconditioner_used": decision == "accepted",
@@ -905,10 +1480,50 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
             "xblock_qi_device_preconditioner_residual_before": residual_before,
             "xblock_qi_device_preconditioner_residual_after": residual_after,
             "xblock_qi_device_preconditioner_improvement_ratio": ratio,
-            "xblock_qi_device_preconditioner_use_in_krylov": (
-                None if use_in_krylov_raw is None else str(use_in_krylov_raw).strip().lower() not in {"0", "false"}
+            "xblock_qi_device_preconditioner_use_in_krylov": use_in_krylov,
+            "xblock_qi_device_preconditioner_seed_only": seed_only,
+            "xblock_qi_device_preconditioner_operator_krylov_enrichment": _bool_from_log_value(
+                key_values.get("operator_krylov")
+                or key_values.get("operator_krylov_enrichment")
+                or key_values.get("operator_enrichment")
             ),
-        }
+            "xblock_qi_device_preconditioner_coarse_reuse": _bool_from_log_value(
+                key_values.get("coarse_reuse") or key_values.get("reuse_coarse")
+            ),
+            "xblock_qi_device_preconditioner_residual_snapshot_enrichment": _bool_from_log_value(
+                key_values.get("residual_snapshot")
+            ),
+            "xblock_qi_device_preconditioner_residual_snapshot_residual_equation": _bool_from_log_value(
+                key_values.get("residual_snapshot_equation")
+            ),
+            "xblock_qi_device_preconditioner_global_moment_residual_equation": _bool_from_log_value(
+                key_values.get("global_moment_equation")
+            ),
+            "xblock_qi_device_preconditioner_global_moment_residual_equation_candidate_count": (
+                _int_from_log_value(key_values.get("global_moment_candidates"))
+            ),
+            "xblock_qi_device_preconditioner_global_moment_residual_equation_rank": (
+                _int_from_log_value(key_values.get("global_moment_rank"))
+            ),
+            "xblock_qi_device_preconditioner_global_moment_residual_equation_condition_estimate": (
+                _float_from_log_value(key_values.get("global_moment_cond"))
+            ),
+            "xblock_qi_device_preconditioner_residual_galerkin_equation": _bool_from_log_value(
+                key_values.get("residual_galerkin_equation")
+            ),
+            "xblock_qi_device_preconditioner_residual_galerkin_equation_candidate_count": (
+                _int_from_log_value(key_values.get("residual_galerkin_candidates"))
+            ),
+            "xblock_qi_device_preconditioner_residual_galerkin_equation_rank": (
+                _int_from_log_value(key_values.get("residual_galerkin_rank"))
+            ),
+            "xblock_qi_device_preconditioner_block_schur_residual_equation": _bool_from_log_value(
+                key_values.get("block_schur_equation")
+            ),
+            "xblock_qi_device_preconditioner_block_schur_residual_enrichment": _bool_from_log_value(
+                key_values.get("block_schur")
+            ),
+        })
     return summary
 
 
@@ -985,6 +1600,29 @@ def _infer_last_residual_progress(events: Iterable[object]) -> dict[str, object]
             "residual_ratio": ratio,
         }
     return latest
+
+
+def _infer_augmented_krylov_progress(events: Iterable[object]) -> dict[str, object]:
+    """Infer whether the augmented-FGMRES QI operator-reuse hook was reached."""
+
+    summary: dict[str, object] = {}
+    for event in events:
+        text = str(event)
+        if "QI augmented Krylov" not in text:
+            continue
+        lower = text.lower()
+        key_values = _log_key_values(text)
+        summary = {
+            "xblock_device_fgmres_qi_augmented_krylov_used": "enabled" in lower,
+            "xblock_device_fgmres_qi_augmented_krylov_reason": (
+                "enabled" if "enabled" in lower else "disabled"
+            ),
+            "xblock_device_fgmres_qi_augmented_krylov_rank": _int_from_log_value(
+                key_values.get("rank")
+            ),
+            "xblock_device_fgmres_qi_augmented_krylov_mode": key_values.get("mode"),
+        }
+    return summary
 
 
 def _infer_sizes_from_progress_events(events: Iterable[object]) -> tuple[int | None, int | None]:
@@ -1276,6 +1914,291 @@ def _evaluate_execution_gates(
     }
 
 
+def _env_flag(env: object, key: str) -> bool | None:
+    if not isinstance(env, dict):
+        return None
+    return _bool_from_log_value(env.get(key))
+
+
+def _seed_evidence_classification(seed: dict[str, object], probe_env: object) -> dict[str, object]:
+    """Classify one seed summary without treating failed attempts as promotion evidence."""
+    tags: set[str] = set()
+    returncode = int(seed.get("returncode", 1) or 0)
+    timed_out = bool(seed.get("timed_out"))
+    solver_trace_exists = bool(seed.get("solver_trace_exists"))
+    output_exists = bool(seed.get("output_exists"))
+    converged = seed.get("converged") is True
+    accepted_converged = seed.get("accepted_converged")
+    if returncode == 0:
+        if solver_trace_exists and not converged:
+            outcome = "not_converged"
+        elif solver_trace_exists and accepted_converged is False:
+            outcome = "not_accepted_converged"
+        else:
+            outcome = "process_passed"
+    elif timed_out:
+        outcome = "timed_out"
+    else:
+        outcome = "process_failed"
+    if not solver_trace_exists:
+        tags.add("failed_before_solver_trace_summary")
+    if not output_exists:
+        tags.add("no_hdf5_output")
+
+    requested_device_qi = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
+    )
+    requested_installed_krylov = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV",
+    )
+    requested_operator_krylov = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT",
+    )
+    requested_coarse_reuse = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR",
+    )
+    requested_augmented_krylov = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV",
+    )
+    requested_coarse_residual_equation = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION",
+    )
+    requested_residual_snapshot_enrichment = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT",
+    )
+    requested_residual_snapshot_equation = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION",
+    )
+    requested_residual_snapshot = requested_residual_snapshot_enrichment or requested_residual_snapshot_equation
+    requested_global_moment = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION",
+    )
+    requested_residual_galerkin = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION",
+    )
+    requested_block_schur = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_ENRICHMENT",
+    ) or _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION",
+    )
+
+    if requested_device_qi:
+        tags.add("requested_device_qi")
+    if requested_installed_krylov:
+        tags.add("requested_installed_krylov")
+    if requested_operator_krylov:
+        tags.add("requested_operator_krylov")
+    if requested_coarse_reuse:
+        tags.add("requested_coarse_reuse")
+    if requested_augmented_krylov:
+        tags.add("requested_augmented_krylov")
+    if requested_coarse_residual_equation:
+        tags.add("requested_multilevel_residual_equation")
+    if requested_residual_snapshot:
+        tags.add("requested_residual_snapshot")
+    if requested_residual_snapshot_equation:
+        tags.add("requested_residual_snapshot_residual_equation")
+    if requested_global_moment:
+        tags.add("requested_global_moment_residual_equation")
+    if requested_residual_galerkin:
+        tags.add("requested_residual_galerkin_equation")
+    if requested_block_schur:
+        tags.add("requested_block_schur_residual")
+    if returncode == 0 and solver_trace_exists and not converged:
+        tags.add("not_converged")
+    if returncode == 0 and solver_trace_exists and accepted_converged is False:
+        tags.add("not_accepted_converged")
+
+    observed_device_qi = seed.get("xblock_qi_device_preconditioner_used") is True
+    observed_installed_krylov = seed.get("xblock_qi_device_preconditioner_use_in_krylov") is True
+    observed_seed_only = seed.get("xblock_qi_device_preconditioner_seed_only") is True
+    observed_operator_krylov = seed.get("xblock_qi_device_preconditioner_operator_krylov_enrichment") is True
+    observed_coarse_reuse = seed.get("xblock_qi_device_preconditioner_coarse_reuse") is True
+    observed_augmented_krylov = seed.get("xblock_device_fgmres_qi_augmented_krylov_used") is True
+    observed_coarse_residual_equation = (
+        seed.get("xblock_qi_device_preconditioner_multilevel_residual_equation") is True
+    )
+    observed_residual_snapshot_enrichment = (
+        seed.get("xblock_qi_device_preconditioner_residual_snapshot_enrichment") is True
+    )
+    observed_residual_snapshot_equation = (
+        seed.get("xblock_qi_device_preconditioner_residual_snapshot_residual_equation") is True
+    )
+    observed_residual_snapshot = observed_residual_snapshot_enrichment or observed_residual_snapshot_equation
+    observed_global_moment = (
+        seed.get("xblock_qi_device_preconditioner_global_moment_residual_equation") is True
+    )
+    observed_residual_galerkin = (
+        seed.get("xblock_qi_device_preconditioner_residual_galerkin_equation") is True
+    )
+    observed_block_schur = (
+        seed.get("xblock_qi_device_preconditioner_block_schur_residual_enrichment") is True
+        or seed.get("xblock_qi_device_preconditioner_block_schur_residual_equation") is True
+    )
+    if seed.get("xblock_qi_device_preconditioner_operator_on_basis_shape") is not None:
+        observed_operator_krylov = True
+    if seed.get("xblock_qi_device_preconditioner_coarse_operator_shape") is not None:
+        observed_coarse_reuse = True
+
+    if observed_device_qi:
+        tags.add("observed_device_qi_residual_probe")
+    if observed_seed_only:
+        tags.add("observed_seed_only")
+    if observed_installed_krylov:
+        tags.add("observed_installed_krylov")
+    if observed_operator_krylov:
+        tags.add("observed_operator_krylov")
+    if observed_coarse_reuse:
+        tags.add("observed_coarse_reuse")
+    if observed_augmented_krylov:
+        tags.add("observed_augmented_krylov")
+    if observed_coarse_residual_equation:
+        tags.add("observed_multilevel_residual_equation")
+    if observed_residual_snapshot:
+        tags.add("observed_residual_snapshot")
+    if observed_residual_snapshot_equation:
+        tags.add("observed_residual_snapshot_residual_equation")
+    if observed_global_moment:
+        tags.add("observed_global_moment_residual_equation")
+    if observed_residual_galerkin:
+        tags.add("observed_residual_galerkin_equation")
+    if observed_block_schur:
+        tags.add("observed_block_schur_residual")
+
+    if observed_installed_krylov and observed_coarse_reuse and observed_residual_galerkin:
+        classification = "device_qi_residual_galerkin_equation_coarse_reuse"
+    elif observed_installed_krylov and observed_coarse_reuse and observed_global_moment:
+        classification = "device_qi_global_moment_residual_equation_coarse_reuse"
+    elif observed_installed_krylov and observed_coarse_reuse and observed_block_schur:
+        classification = "device_qi_block_schur_residual_coarse_reuse"
+    elif observed_installed_krylov and observed_coarse_reuse and observed_residual_snapshot_equation:
+        classification = "device_qi_residual_snapshot_residual_equation_coarse_reuse"
+    elif observed_installed_krylov and observed_coarse_reuse and observed_residual_snapshot:
+        classification = "device_qi_residual_snapshot_coarse_reuse"
+    elif observed_installed_krylov and observed_coarse_reuse and observed_coarse_residual_equation:
+        classification = "device_qi_multilevel_residual_equation"
+    elif observed_installed_krylov and observed_coarse_reuse and observed_augmented_krylov:
+        classification = "device_qi_augmented_krylov_coarse_reuse"
+    elif observed_installed_krylov and observed_coarse_reuse:
+        classification = "device_qi_installed_krylov_coarse_reuse"
+    elif observed_installed_krylov:
+        classification = "device_qi_installed_krylov"
+    elif observed_device_qi and observed_seed_only:
+        classification = "device_qi_seed_only_probe"
+    elif requested_residual_galerkin:
+        classification = "requested_residual_galerkin_equation_device_qi"
+    elif requested_global_moment:
+        classification = "requested_global_moment_residual_equation_device_qi"
+    elif requested_block_schur:
+        classification = "requested_block_schur_residual_device_qi"
+    elif requested_operator_krylov:
+        classification = "requested_operator_krylov_device_qi"
+    elif requested_device_qi:
+        classification = "requested_device_qi"
+    else:
+        classification = "public_auto_or_legacy"
+
+    return {
+        "classification": classification,
+        "outcome": outcome,
+        "promotion_eligible": (
+            returncode == 0
+            and solver_trace_exists
+            and output_exists
+            and converged
+            and accepted_converged is not False
+        ),
+        "failed_before_summary_json": not solver_trace_exists,
+        "requested_device_qi": requested_device_qi,
+        "requested_installed_krylov": requested_installed_krylov,
+        "requested_operator_krylov": requested_operator_krylov,
+        "requested_coarse_reuse": requested_coarse_reuse,
+        "requested_augmented_krylov": requested_augmented_krylov,
+        "requested_coarse_residual_equation": requested_coarse_residual_equation,
+        "requested_residual_snapshot": requested_residual_snapshot,
+        "requested_residual_snapshot_equation": requested_residual_snapshot_equation,
+        "requested_global_moment": requested_global_moment,
+        "requested_residual_galerkin": requested_residual_galerkin,
+        "requested_block_schur": requested_block_schur,
+        "observed_device_qi": observed_device_qi,
+        "observed_installed_krylov": observed_installed_krylov,
+        "observed_operator_krylov": observed_operator_krylov,
+        "observed_coarse_reuse": observed_coarse_reuse,
+        "observed_augmented_krylov": observed_augmented_krylov,
+        "observed_coarse_residual_equation": observed_coarse_residual_equation,
+        "observed_residual_snapshot": observed_residual_snapshot,
+        "observed_residual_snapshot_equation": observed_residual_snapshot_equation,
+        "observed_global_moment": observed_global_moment,
+        "observed_residual_galerkin": observed_residual_galerkin,
+        "observed_block_schur": observed_block_schur,
+        "observed_seed_only": observed_seed_only,
+        "tags": sorted(tags),
+    }
+
+
+def _aggregate_seed_classifications(seed_summaries: Iterable[dict[str, object]]) -> dict[str, object]:
+    seed_list = list(seed_summaries)
+    tags = sorted({tag for seed in seed_list for tag in seed.get("evidence_tags", []) if isinstance(tag, str)})
+    classes = sorted(
+        {
+            str(seed["evidence_class"])
+            for seed in seed_list
+            if isinstance(seed.get("evidence_class"), str) and seed.get("evidence_class")
+        }
+    )
+    outcomes = sorted(
+        {
+            str(seed["run_outcome"])
+            for seed in seed_list
+            if isinstance(seed.get("run_outcome"), str) and seed.get("run_outcome")
+        }
+    )
+    return {
+        "classes": classes,
+        "outcomes": outcomes,
+        "tags": tags,
+        "has_failed_before_summary_json": any(seed.get("failed_before_summary_json") is True for seed in seed_list),
+        "has_observed_installed_krylov": any(
+            seed.get("observed_qi_device_installed_krylov") is True for seed in seed_list
+        ),
+        "has_observed_coarse_reuse": any(seed.get("observed_qi_device_coarse_reuse") is True for seed in seed_list),
+        "has_observed_augmented_krylov": any(
+            seed.get("observed_qi_device_augmented_krylov") is True for seed in seed_list
+        ),
+        "has_observed_multilevel_residual_equation": any(
+            seed.get("observed_qi_device_coarse_residual_equation") is True for seed in seed_list
+        ),
+        "has_observed_residual_snapshot": any(
+            seed.get("observed_qi_device_residual_snapshot") is True for seed in seed_list
+        ),
+        "has_observed_residual_snapshot_residual_equation": any(
+            seed.get("observed_qi_device_residual_snapshot_equation") is True for seed in seed_list
+        ),
+        "has_observed_global_moment_residual_equation": any(
+            seed.get("observed_qi_device_global_moment_residual_equation") is True for seed in seed_list
+        ),
+        "has_observed_residual_galerkin_equation": any(
+            seed.get("observed_qi_device_residual_galerkin_equation") is True for seed in seed_list
+        ),
+        "has_observed_block_schur_residual": any(
+            seed.get("observed_qi_device_block_schur_residual") is True for seed in seed_list
+        ),
+        "promotion_eligible_seed_count": sum(1 for seed in seed_list if seed.get("promotion_eligible") is True),
+    }
+
+
 def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object]:
     """Return a docs-friendly execution summary from a generated manifest."""
     execution = manifest.get("execution")
@@ -1310,6 +2233,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         qi_device_progress = _infer_qi_device_progress(log_context)
         lgmres_rescue_status = _infer_lgmres_rescue_status(log_context, side_probe_progress)
         last_residual_progress = _infer_last_residual_progress(log_context) or {}
+        augmented_krylov_progress = _infer_augmented_krylov_progress(log_context)
         last_matvecs, last_matvec_elapsed_s = _infer_last_matvec_progress(log_context)
         inferred_active_size, inferred_total_size = _infer_sizes_from_progress_events(log_context)
         active_size = trace_summary.get("active_size")
@@ -1396,6 +2320,26 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
             "last_progress_residual_target": last_residual_progress.get("residual_target"),
             "last_progress_residual_ratio": last_residual_progress.get("residual_ratio"),
             "last_progress_residual_before": last_residual_progress.get("residual_before"),
+            "xblock_device_fgmres_qi_augmented_krylov_used": (
+                trace_summary.get("xblock_device_fgmres_qi_augmented_krylov_used")
+                if trace_summary.get("xblock_device_fgmres_qi_augmented_krylov_used") is not None
+                else augmented_krylov_progress.get("xblock_device_fgmres_qi_augmented_krylov_used")
+            ),
+            "xblock_device_fgmres_qi_augmented_krylov_rank": (
+                trace_summary.get("xblock_device_fgmres_qi_augmented_krylov_rank")
+                if trace_summary.get("xblock_device_fgmres_qi_augmented_krylov_rank") is not None
+                else augmented_krylov_progress.get("xblock_device_fgmres_qi_augmented_krylov_rank")
+            ),
+            "xblock_device_fgmres_qi_augmented_krylov_reason": (
+                trace_summary.get("xblock_device_fgmres_qi_augmented_krylov_reason")
+                if trace_summary.get("xblock_device_fgmres_qi_augmented_krylov_reason") is not None
+                else augmented_krylov_progress.get("xblock_device_fgmres_qi_augmented_krylov_reason")
+            ),
+            "xblock_device_fgmres_qi_augmented_krylov_mode": (
+                trace_summary.get("xblock_device_fgmres_qi_augmented_krylov_mode")
+                if trace_summary.get("xblock_device_fgmres_qi_augmented_krylov_mode") is not None
+                else augmented_krylov_progress.get("xblock_device_fgmres_qi_augmented_krylov_mode")
+            ),
             "last_matvecs": last_matvecs,
             "last_matvec_elapsed_s": last_matvec_elapsed_s,
             "heartbeat": result.get("heartbeat"),
@@ -1404,13 +2348,70 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         seed_summary.update({key: trace_summary.get(key) for key in QI_TWO_LEVEL_TRACE_KEYS})
         seed_summary.update({key: trace_or_qi_deflated_progress(key) for key in QI_DEFLATED_TRACE_KEYS})
         seed_summary.update({key: trace_or_qi_device_progress(key) for key in QI_DEVICE_TRACE_KEYS})
+        seed_summary["xblock_qi_device_preconditioner_seed_only"] = trace_or_qi_device_progress(
+            "xblock_qi_device_preconditioner_seed_only"
+        )
+        seed_summary["xblock_qi_device_preconditioner_operator_krylov_enrichment"] = (
+            trace_or_qi_device_progress("xblock_qi_device_preconditioner_operator_krylov_enrichment")
+        )
+        seed_summary["xblock_qi_device_preconditioner_coarse_reuse"] = trace_or_qi_device_progress(
+            "xblock_qi_device_preconditioner_coarse_reuse"
+        )
         seed_summary.update({key: trace_summary.get(key) for key in MOMENT_SCHUR_TRACE_KEYS})
+        classification = _seed_evidence_classification(seed_summary, manifest.get("probe_env"))
+        seed_summary.update(
+            {
+                "evidence_class": classification["classification"],
+                "evidence_tags": classification["tags"],
+                "run_outcome": classification["outcome"],
+                "promotion_eligible": classification["promotion_eligible"],
+                "failed_before_summary_json": classification["failed_before_summary_json"],
+                "requested_qi_device_installed_krylov": classification["requested_installed_krylov"],
+                "requested_qi_device_operator_krylov": classification["requested_operator_krylov"],
+                "requested_qi_device_coarse_reuse": classification["requested_coarse_reuse"],
+                "requested_qi_device_augmented_krylov": classification["requested_augmented_krylov"],
+                "requested_qi_device_coarse_residual_equation": classification[
+                    "requested_coarse_residual_equation"
+                ],
+                "requested_qi_device_residual_snapshot": classification["requested_residual_snapshot"],
+                "requested_qi_device_residual_snapshot_equation": classification[
+                    "requested_residual_snapshot_equation"
+                ],
+                "requested_qi_device_global_moment_residual_equation": classification[
+                    "requested_global_moment"
+                ],
+                "requested_qi_device_residual_galerkin_equation": classification[
+                    "requested_residual_galerkin"
+                ],
+                "requested_qi_device_block_schur_residual": classification["requested_block_schur"],
+                "observed_qi_device_installed_krylov": classification["observed_installed_krylov"],
+                "observed_qi_device_operator_krylov": classification["observed_operator_krylov"],
+                "observed_qi_device_coarse_reuse": classification["observed_coarse_reuse"],
+                "observed_qi_device_augmented_krylov": classification["observed_augmented_krylov"],
+                "observed_qi_device_coarse_residual_equation": classification[
+                    "observed_coarse_residual_equation"
+                ],
+                "observed_qi_device_residual_snapshot": classification["observed_residual_snapshot"],
+                "observed_qi_device_residual_snapshot_equation": classification[
+                    "observed_residual_snapshot_equation"
+                ],
+                "observed_qi_device_global_moment_residual_equation": classification[
+                    "observed_global_moment"
+                ],
+                "observed_qi_device_residual_galerkin_equation": classification[
+                    "observed_residual_galerkin"
+                ],
+                "observed_qi_device_block_schur_residual": classification["observed_block_schur"],
+            }
+        )
         seed_summaries.append(seed_summary)
 
     first_case = cases[0]
     resolution = first_case.get("resolution") if isinstance(first_case, dict) else None
     source_input = Path(str(manifest["source_input"]))
     solve_method = str(manifest.get("solve_method", ""))
+    probe_env = manifest.get("probe_env")
+    has_probe_env = isinstance(probe_env, dict) and bool(probe_env)
     active_sizes = [
         int(seed["active_size"])
         for seed in seed_summaries
@@ -1426,8 +2427,10 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
         "active_size": max(active_sizes) if active_sizes else None,
         "total_size_estimate": _total_size_from_resolution(resolution) if isinstance(resolution, dict) else None,
         "case_count": manifest.get("case_count"),
-        "public_cli_default_path": solve_method.strip().lower() in {"auto", "default", ""},
+        "public_cli_default_path": solve_method.strip().lower() in {"auto", "default", ""} and not has_probe_env,
         "solve_method_request": solve_method,
+        "probe_preset": manifest.get("probe_preset"),
+        "probe_env": manifest.get("probe_env"),
         "nu_jitter": manifest.get("nu_jitter"),
         "er_jitter": manifest.get("er_jitter"),
         "evidence_note": (
@@ -1436,6 +2439,7 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
             "resolution; failed or timed-out artifacts are blocker evidence and must not be "
             "used for production promotion."
         ),
+        "evidence_classification": _aggregate_seed_classifications(seed_summaries),
         "execution_summary": execution.get("summary"),
         "gates": execution.get("gates"),
         "seeds": seed_summaries,
@@ -1604,6 +2608,116 @@ def _artifact_case_count(payload: dict[str, object]) -> int:
     return 1 if isinstance(payload.get("runs"), dict) else 0
 
 
+def _artifact_evidence_classification(path: Path, payload: dict[str, object]) -> dict[str, object]:
+    embedded = payload.get("evidence_classification")
+    if isinstance(embedded, dict):
+        classes = [str(item) for item in embedded.get("classes", []) if item]
+        tags = [str(item) for item in embedded.get("tags", []) if item]
+        outcomes = [str(item) for item in embedded.get("outcomes", []) if item]
+        return {
+            "classes": sorted(set(classes)),
+            "tags": sorted(set(tags)),
+            "outcomes": sorted(set(outcomes)),
+            "has_failed_before_summary_json": bool(embedded.get("has_failed_before_summary_json")),
+            "has_observed_installed_krylov": bool(embedded.get("has_observed_installed_krylov")),
+            "has_observed_coarse_reuse": bool(embedded.get("has_observed_coarse_reuse")),
+            "has_observed_multilevel_residual_equation": bool(
+                embedded.get("has_observed_multilevel_residual_equation")
+            ),
+            "has_observed_residual_snapshot": bool(embedded.get("has_observed_residual_snapshot")),
+            "has_observed_global_moment_residual_equation": bool(
+                embedded.get("has_observed_global_moment_residual_equation")
+            ),
+            "has_observed_residual_galerkin_equation": bool(
+                embedded.get("has_observed_residual_galerkin_equation")
+            ),
+            "has_observed_block_schur_residual": bool(embedded.get("has_observed_block_schur_residual")),
+            "promotion_eligible_seed_count": embedded.get("promotion_eligible_seed_count"),
+        }
+
+    tags: set[str] = set()
+    classes: set[str] = set()
+    outcomes: set[str] = set()
+    text = f"{path.name} {json.dumps(payload, sort_keys=True, default=str)}".lower()
+    if _artifact_passed(payload):
+        outcomes.add("process_passed")
+    elif "timeout" in text:
+        outcomes.add("timed_out")
+    else:
+        outcomes.add("process_failed")
+
+    if "operator_krylov" in text or "operator-krylov" in text:
+        tags.add("requested_operator_krylov")
+    if "use_in_krylov" in text or "installed_krylov" in text or "installed-krylov" in text:
+        tags.add("requested_installed_krylov")
+    if "coarse_reuse" in text or "reuse_coarse" in text:
+        tags.add("requested_coarse_reuse")
+    if "multilevel_residual_equation" in text or "coarse-residual" in text:
+        tags.add("requested_multilevel_residual_equation")
+    if "residual_snapshot_residual_equation" in text or "residual-snapshot-equation" in text:
+        tags.add("requested_residual_snapshot_residual_equation")
+    if "residual_snapshot" in text or "residual-snapshot" in text:
+        tags.add("requested_residual_snapshot")
+    if "global_moment" in text or "global-moment" in text:
+        tags.add("requested_global_moment_residual_equation")
+    if "residual_galerkin" in text or "residual-galerkin" in text:
+        tags.add("requested_residual_galerkin_equation")
+    if "block_schur" in text or "block-schur" in text:
+        tags.add("requested_block_schur_residual")
+    if "solver_traces_written\": 0" in text or "solver_trace_exists\": false" in text:
+        tags.add("failed_before_solver_trace_summary")
+
+    if "observed_residual_galerkin_equation" in text or "observed_qi_device_residual_galerkin" in text:
+        classes.add("device_qi_residual_galerkin_equation_coarse_reuse")
+    elif "observed_global_moment_residual_equation" in text or "observed_qi_device_global_moment" in text:
+        classes.add("device_qi_global_moment_residual_equation_coarse_reuse")
+    elif "observed_block_schur_residual" in text or "observed_qi_device_block_schur_residual" in text:
+        classes.add("device_qi_block_schur_residual_coarse_reuse")
+    elif (
+        "observed_residual_snapshot_residual_equation" in text
+        or "observed_qi_device_residual_snapshot_equation" in text
+    ):
+        classes.add("device_qi_residual_snapshot_residual_equation_coarse_reuse")
+    elif "observed_residual_snapshot" in text or "observed_qi_device_residual_snapshot" in text:
+        classes.add("device_qi_residual_snapshot_coarse_reuse")
+    elif "observed_multilevel_residual_equation" in text or "observed_qi_device_coarse_residual_equation" in text:
+        classes.add("device_qi_multilevel_residual_equation")
+    elif "observed_installed_krylov" in text:
+        classes.add("device_qi_installed_krylov")
+    elif "seed_only=1" in text:
+        classes.add("device_qi_seed_only_probe")
+    elif "residual_galerkin" in text or "residual-galerkin" in text:
+        classes.add("requested_residual_galerkin_equation_device_qi")
+    elif "global_moment" in text or "global-moment" in text:
+        classes.add("requested_global_moment_residual_equation_device_qi")
+    elif "block_schur" in text or "block-schur" in text:
+        classes.add("requested_block_schur_residual_device_qi")
+    elif "operator_krylov" in text or "operator-krylov" in text:
+        classes.add("requested_operator_krylov_device_qi")
+    elif "qi_device" in text:
+        classes.add("requested_device_qi")
+    else:
+        classes.add("public_auto_or_legacy")
+
+    return {
+        "classes": sorted(classes),
+        "tags": sorted(tags),
+        "outcomes": sorted(outcomes),
+        "has_failed_before_summary_json": "failed_before_solver_trace_summary" in tags,
+        "has_observed_installed_krylov": (
+            "observed_installed_krylov" in text
+            or any(str(class_name).startswith("device_qi_") for class_name in classes)
+        ),
+        "has_observed_coarse_reuse": "observed_coarse_reuse" in text,
+        "has_observed_multilevel_residual_equation": "observed_multilevel_residual_equation" in text,
+        "has_observed_residual_snapshot": "observed_residual_snapshot" in text,
+        "has_observed_global_moment_residual_equation": "observed_global_moment_residual_equation" in text,
+        "has_observed_residual_galerkin_equation": "observed_residual_galerkin_equation" in text,
+        "has_observed_block_schur_residual": "observed_block_schur_residual" in text,
+        "promotion_eligible_seed_count": None,
+    }
+
+
 def _summarize_evidence_artifact(path: Path, payload: dict[str, object], production_resolution: dict[str, int]) -> dict[str, object]:
     resolution_dict = _canonical_resolution(payload.get("resolution"))
     total_size = _finite_float_or_none(payload.get("total_size"))
@@ -1615,6 +2729,7 @@ def _summarize_evidence_artifact(path: Path, payload: dict[str, object], product
     active_size = _finite_float_or_none(payload.get("active_size"))
     if active_size is None:
         active_size = _finite_float_or_none(payload.get("active_size_estimate"))
+    classification = _artifact_evidence_classification(path, payload)
     return {
         "path": _repo_relative(path),
         "schema_version": payload.get("schema_version"),
@@ -1630,6 +2745,10 @@ def _summarize_evidence_artifact(path: Path, payload: dict[str, object], product
         "max_residual_ratio": _artifact_max_residual_ratio(payload),
         "max_elapsed_s": _artifact_max_elapsed_s(payload),
         "last_reported_residual_norm": _artifact_last_reported_residual_norm(payload),
+        "evidence_classification": classification,
+        "evidence_classes": classification["classes"],
+        "evidence_tags": classification["tags"],
+        "run_outcomes": classification["outcomes"],
     }
 
 
@@ -1703,6 +2822,21 @@ def build_evidence_manifest(
             if backend
         }
     )
+    evidence_class_counts: dict[str, int] = {}
+    evidence_tag_counts: dict[str, int] = {}
+    failed_before_summary_json_count = 0
+    for artifact in artifacts:
+        classes = artifact.get("evidence_classes")
+        if isinstance(classes, list):
+            for class_name in classes:
+                evidence_class_counts[str(class_name)] = evidence_class_counts.get(str(class_name), 0) + 1
+        tags = artifact.get("evidence_tags")
+        if isinstance(tags, list):
+            for tag in tags:
+                evidence_tag_counts[str(tag)] = evidence_tag_counts.get(str(tag), 0) + 1
+        classification = artifact.get("evidence_classification")
+        if isinstance(classification, dict) and classification.get("has_failed_before_summary_json") is True:
+            failed_before_summary_json_count += 1
     non_autodiff_fallback_artifacts = [
         artifact
         for artifact in passed_artifacts
@@ -1751,8 +2885,6 @@ def build_evidence_manifest(
         "--clean",
     ]
     gpu_command = [
-        "CUDA_VISIBLE_DEVICES=0",
-        "JAX_PLATFORM_NAME=gpu",
         "python",
         "scripts/run_qi_seed_robustness.py",
         "--out-root",
@@ -1779,6 +2911,124 @@ def build_evidence_manifest(
         "docs/_static/qi_seed_robustness_prod_gpu0.json",
         "--clean",
     ]
+    operator_krylov_probe_command = [
+        "python",
+        "scripts/run_qi_seed_robustness.py",
+        "--out-root",
+        "tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0",
+        "--seeds",
+        "3",
+        "--resolution-scale",
+        "0.60",
+        "--probe-preset",
+        OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET,
+        "--solve-method",
+        OPERATOR_KRYLOV_DEVICE_QI_SOLVE_METHOD,
+        "--execute",
+        "--timeout-s",
+        "900",
+        "--heartbeat-s",
+        "15",
+        "--summary-output",
+        "docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json",
+        "--clean",
+    ]
+    gpu_env = {"CUDA_VISIBLE_DEVICES": "0", "JAX_PLATFORM_NAME": "gpu"}
+    operator_krylov_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    }
+    current_constraint_probe_command = [
+        *operator_krylov_probe_command[:9],
+        CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    current_constraint_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **CURRENT_CONSTRAINT_DEVICE_QI_ENV,
+    }
+    adjoint_krylov_probe_command = [
+        *operator_krylov_probe_command[:9],
+        ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    adjoint_krylov_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **ADJOINT_KRYLOV_DEVICE_QI_ENV,
+    }
+    augmented_krylov_probe_command = [
+        *operator_krylov_probe_command[:9],
+        AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    augmented_krylov_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **AUGMENTED_KRYLOV_DEVICE_QI_ENV,
+    }
+    coarse_residual_probe_command = [
+        *operator_krylov_probe_command[:9],
+        COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    coarse_residual_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **COARSE_RESIDUAL_DEVICE_QI_ENV,
+    }
+    residual_snapshot_probe_command = [
+        *operator_krylov_probe_command[:9],
+        RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    residual_snapshot_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **RESIDUAL_SNAPSHOT_DEVICE_QI_ENV,
+    }
+    residual_snapshot_equation_probe_command = [
+        *operator_krylov_probe_command[:9],
+        RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    residual_snapshot_equation_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_ENV,
+    }
+    global_moment_probe_command = [
+        *operator_krylov_probe_command[:9],
+        GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    global_moment_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **GLOBAL_MOMENT_CLOSURE_DEVICE_QI_ENV,
+    }
+    residual_galerkin_probe_command = [
+        *operator_krylov_probe_command[:9],
+        RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    residual_galerkin_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **RESIDUAL_GALERKIN_DEVICE_QI_ENV,
+    }
+    block_schur_probe_command = [
+        *operator_krylov_probe_command[:9],
+        BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    block_schur_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **BLOCK_SCHUR_DEVICE_QI_ENV,
+    }
 
     return {
         "schema_version": 1,
@@ -1816,7 +3066,8 @@ def build_evidence_manifest(
                 "blocks_current_release": False,
                 "closed_or_deferred_reason": (
                     "Closed post-release: scale-0.60 GPU hard-seed device/Galerkin/x-block "
-                    "routes time out or fail residual probes; production fallback is covered "
+                    "routes time out or fail residual probes. The next bounded evidence path "
+                    "is an operator-Krylov device-QI probe, while production fallback is covered "
                     "by the non-autodiff host path."
                 ),
                 "evidence": [str(artifact.get("path")) for artifact in true_device_qi_blockers],
@@ -1858,6 +3109,9 @@ def build_evidence_manifest(
                 round(100.0 * (1.0 - max_total_fraction), 2) if max_total_fraction is not None else None
             ),
             "completion_estimate_basis": "largest passing measured artifact only",
+            "evidence_class_counts": dict(sorted(evidence_class_counts.items())),
+            "evidence_tag_counts": dict(sorted(evidence_tag_counts.items())),
+            "failed_before_summary_json_count": failed_before_summary_json_count,
         },
         "production_target": {
             "resolution": production_resolution,
@@ -1887,12 +3141,183 @@ def build_evidence_manifest(
                 "--evidence-manifest-output docs/_static/qi_seed_robustness_evidence_manifest.json"
             ),
             "production_cpu_seed_ladder": " ".join(cpu_command),
-            "production_gpu0_seed_ladder": " ".join(gpu_command),
+            "production_gpu0_seed_ladder": _shell_command(gpu_command, gpu_env),
+            "operator_krylov_device_qi_gpu0_probe": _shell_command(
+                operator_krylov_probe_command,
+                operator_krylov_probe_env,
+            ),
+            "current_constraint_device_qi_gpu0_probe": _shell_command(
+                current_constraint_probe_command,
+                current_constraint_probe_env,
+            ),
+            "adjoint_krylov_device_qi_gpu0_probe": _shell_command(
+                adjoint_krylov_probe_command,
+                adjoint_krylov_probe_env,
+            ),
+            "augmented_krylov_device_qi_gpu0_probe": _shell_command(
+                augmented_krylov_probe_command,
+                augmented_krylov_probe_env,
+            ),
+            "coarse_residual_device_qi_gpu0_probe": _shell_command(
+                coarse_residual_probe_command,
+                coarse_residual_probe_env,
+            ),
+            "residual_snapshot_device_qi_gpu0_probe": _shell_command(
+                residual_snapshot_probe_command,
+                residual_snapshot_probe_env,
+            ),
+            "residual_snapshot_equation_device_qi_gpu0_probe": _shell_command(
+                residual_snapshot_equation_probe_command,
+                residual_snapshot_equation_probe_env,
+            ),
+            "global_moment_closure_device_qi_gpu0_probe": _shell_command(
+                global_moment_probe_command,
+                global_moment_probe_env,
+            ),
+            "residual_galerkin_device_qi_gpu0_probe": _shell_command(
+                residual_galerkin_probe_command,
+                residual_galerkin_probe_env,
+            ),
+            "block_schur_device_qi_gpu0_probe": _shell_command(
+                block_schur_probe_command,
+                block_schur_probe_env,
+            ),
+        },
+        "probe_presets": {
+            OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for true device-QI "
+                    "operator-Krylov enrichment. This records a fail-closed evidence path; "
+                    "it is not a public default-policy solve."
+                ),
+                "env": dict(sorted(OPERATOR_KRYLOV_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(operator_krylov_probe_command, operator_krylov_probe_env),
+            },
+            CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for true device-QI "
+                    "current/constraint multilevel coarse moments. The 2026-05-20 evidence "
+                    "did not beat the pitch/operator-Krylov baseline, so this remains an "
+                    "opt-in fail-closed research probe."
+                ),
+                "env": dict(sorted(CURRENT_CONSTRAINT_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    current_constraint_probe_command,
+                    current_constraint_probe_env,
+                ),
+            },
+            ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for true device-QI "
+                    "adjoint-normal Krylov enrichment. This targets non-normal left-error "
+                    "modes and remains a fail-closed research probe, not a public default."
+                ),
+                "env": dict(sorted(ADJOINT_KRYLOV_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(adjoint_krylov_probe_command, adjoint_krylov_probe_env),
+            },
+            AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the true "
+                    "operator-reuse path: a JAX FGMRES solve augmented by the reusable "
+                    "QI coarse basis and stored operator-on-basis action."
+                ),
+                "env": dict(sorted(AUGMENTED_KRYLOV_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    augmented_krylov_probe_command,
+                    augmented_krylov_probe_env,
+                ),
+            },
+            COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the "
+                    "multilevel residual-equation coarse path. This targets coarse "
+                    "error components stage-by-stage instead of changing smoother "
+                    "restart/projection parameters."
+                ),
+                "env": dict(sorted(COARSE_RESIDUAL_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    coarse_residual_probe_command,
+                    coarse_residual_probe_env,
+                ),
+            },
+            RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the "
+                    "residual-snapshot coarse path. This enriches the reusable "
+                    "device-QI coarse operator with block/aggregate snapshots of "
+                    "the actual current residual."
+                ),
+                "env": dict(sorted(RESIDUAL_SNAPSHOT_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    residual_snapshot_probe_command,
+                    residual_snapshot_probe_env,
+                ),
+            },
+            RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the "
+                    "staged residual-snapshot residual-equation path. This turns "
+                    "block/aggregate residual snapshots into per-stage cached A Q_l "
+                    "coarse solves and remains fail-closed unless output and solver "
+                    "trace convergence are observed."
+                ),
+                "env": dict(sorted(RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    residual_snapshot_equation_probe_command,
+                    residual_snapshot_equation_probe_env,
+                ),
+            },
+            GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the "
+                    "global moment closure residual-equation path. This builds a "
+                    "rank-gated Galerkin Schur closure over profile, current, and "
+                    "tail-constraint moments and remains fail-closed unless the "
+                    "solver trace reports observed global-moment metadata and convergence."
+                ),
+                "env": dict(sorted(GLOBAL_MOMENT_CLOSURE_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    global_moment_probe_command,
+                    global_moment_probe_env,
+                ),
+            },
+            RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the "
+                    "residual-derived Galerkin coarse path. This builds coarse "
+                    "variables from the actual remaining operator residual and "
+                    "block residuals, caches A Q, and remains fail-closed unless "
+                    "output, solver trace, and convergence are observed."
+                ),
+                "env": dict(sorted(RESIDUAL_GALERKIN_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    residual_galerkin_probe_command,
+                    residual_galerkin_probe_env,
+                ),
+            },
+            BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the "
+                    "block-Schur residual coarse path. This targets off-block "
+                    "coupling residuals using setup-time A.T P_off A P_block "
+                    "directions while keeping the apply path on cached A Q. "
+                    "This is fail-closed unless the solver trace reports "
+                    "observed block-Schur residual metadata and convergence."
+                ),
+                "env": dict(sorted(BLOCK_SCHUR_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    block_schur_probe_command,
+                    block_schur_probe_env,
+                ),
+            },
         },
         "open_blockers": [
             "Run and check in production-resolution CPU multi-seed summary artifact before promoting broad public-auto QI.",
             "Run and check in production-resolution GPU0 multi-seed summary artifact before promoting broad public-auto QI.",
-            "Keep true device-QI closed deferred until a scale-0.60 GPU hard-seed artifact writes output, trace, and accepted-converged residual metadata.",
+            "Keep true device-QI closed deferred until an operator-Krylov device-QI scale-0.60 GPU hard-seed artifact writes output, trace, and accepted-converged residual metadata.",
+            "Keep the global-moment closure device-QI probe fail-closed until a converged artifact reports observed global-moment residual-equation metadata.",
+            "Keep the residual-Galerkin device-QI probe fail-closed until a converged artifact reports observed residual-derived Galerkin metadata.",
+            "Keep the block-Schur residual device-QI probe fail-closed until a converged artifact reports observed block-Schur residual metadata.",
             "Do not use the non-autodiff host fallback as evidence for differentiable or true device-resident QI.",
         ],
     }
@@ -1936,6 +3361,28 @@ def _build_parser() -> argparse.ArgumentParser:
             "RHSMode=1 solve method passed to sfincs_jax write-output when --execute is set. "
             "The default is auto, which exercises the public CLI solver policy. Pass an explicit "
             "method such as dense or sparse_lsmr only for diagnostic probes."
+        ),
+    )
+    parser.add_argument(
+        "--probe-preset",
+        choices=(
+            "none",
+            OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET,
+            CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET,
+            ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET,
+            AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET,
+            COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
+            RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET,
+            RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET,
+            GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET,
+            RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET,
+            BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,
+        ),
+        default="none",
+        help=(
+            "Optional explicit QI evidence probe environment. "
+            f"{OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET!r} enables the bounded operator-Krylov "
+            "device-QI production probe controls and records them in generated manifests."
         ),
     )
     parser.add_argument("--execute", action="store_true", help="Run each generated seed through sfincs_jax write-output.")
@@ -2038,6 +3485,11 @@ def main(argv: list[str] | None = None) -> int:
     source_text = source_input.read_text(encoding="utf-8")
     source_resolution = _read_resolution(source_text)
     source_equilibrium = _resolve_equilibrium(source_input, source_text)
+    probe_env = _probe_env_for_preset(str(args.probe_preset))
+    solve_method = _solve_method_for_probe_preset(
+        solve_method=str(args.solve_method),
+        probe_preset=str(args.probe_preset),
+    )
     cases = [
         _materialize_case(
             seed=int(seed),
@@ -2053,7 +3505,9 @@ def main(argv: list[str] | None = None) -> int:
             min_nxi=int(args.min_nxi),
             nu_jitter=float(args.nu_jitter),
             er_jitter=float(args.er_jitter),
-            solve_method=str(args.solve_method),
+            solve_method=str(solve_method),
+            probe_preset=str(args.probe_preset),
+            probe_env=probe_env,
         )
         for seed in args.seeds
     ]
@@ -2065,7 +3519,10 @@ def main(argv: list[str] | None = None) -> int:
         "resolution_scale": float(args.resolution_scale),
         "nu_jitter": float(args.nu_jitter),
         "er_jitter": float(args.er_jitter),
-        "solve_method": str(args.solve_method),
+        "solve_method": str(solve_method),
+        "requested_solve_method": str(args.solve_method),
+        "probe_preset": str(args.probe_preset),
+        "probe_env": dict(sorted(probe_env.items())),
         "case_count": len(cases),
         "cases": cases,
     }

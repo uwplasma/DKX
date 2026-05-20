@@ -312,11 +312,93 @@ Current open lane board
   ``1300`` matvecs, and forced x-block LGMRES rescue timed out after ``950``
   matvecs.  The opt-in rank-32 Galerkin QI preconditioner was exercised in the
   forced x-block run and correctly rejected itself because its probe increased
-  the true residual. The next acceptable device promotion candidate must change
-  the preconditioner application cost or coarse operator itself and must reduce
-  the true residual before the full Krylov loop. Another Krylov-name toggle,
-  restart-only change, storage-only factor tweak, or side-threshold adjustment
-  is negative-diagnostic work, not a promotion lane.
+  the true residual. The 2026-05-20 operator-reuse update adds a bounded
+  residual Arnoldi/Krylov coarse space. The 2026-05-20 installed
+  operator-Krylov/multilevel run now exercises the intended GPU route without
+  the old transpose/CUDA-address failure and records
+  ``observed_installed_krylov=true`` plus ``observed_coarse_reuse=true``. It is
+  still nonpassing: public auto ends at ``3.949394e-5`` in ``342 s``, installed
+  operator-Krylov ends at ``2.453164e-5`` in ``294 s``, installed
+  operator-Krylov plus multilevel coarse ends at ``2.306911e-5`` in ``292 s``,
+  the pitch-enabled multilevel rerun also ends at ``2.306911e-5`` in
+  ``279 s`` and therefore does not close the gap,
+  current/constraint multilevel moments increase the device-QI rank to ``15``
+  but worsen to ``2.339521e-5`` in ``293 s``,
+  the CPU adjoint-normal Krylov depth-2 probe worsens to ``2.486430e-5`` in
+  ``597 s`` and is not promoted to GPU,
+  multiplicative base-plus-QI composition worsens to ``2.840338e-5`` in
+  ``358 s``, device global-coupling QR ends at ``3.021485e-5`` in ``259 s``,
+  and rank-deficient moment-Schur pseudo-inverse is rejected after a
+  ``2.35e102`` seed residual and ends at ``3.021487e-5``. These artifacts close
+  the infrastructure question but keep true device-QI open: the active blocker
+  is a missing mathematical coarse space, not smoother tuning, restart tuning,
+  storage format, or host/device routing. The next promotable candidate must
+  introduce genuinely new constraint/nullspace/error-mode information and must
+  write HDF5 plus solver-trace metadata before any production-resolution QI
+  ladder is launched.
+  The latest implementation push adds three such coarse-space families but does
+  not promote them yet: pitch/xi moments in the multilevel angular-radial
+  hierarchy, current/constraint tail moments, and an adjoint-normal Krylov space
+  built from ``A^T r`` and bounded ``(A^T A)^k A^T r`` vectors. Unit tests show
+  these families reduce synthetic errors that the previous coarse families
+  miss; scale-0.60 evidence shows they still do not close the production hard
+  seed. Promotion still requires HDF5 output and solver trace.
+  The solver now also has an opt-in augmented-FGMRES operator-reuse hook that
+  projects restart residuals over the stored QI ``(U, A U)`` basis. This is a
+  real residual-equation change and is tracked by the
+  ``augmented-krylov-device-qi`` preset. The first bounded CPU and GPU0
+  artifacts are nonpassing but improve the hard-seed residual to
+  ``2.218300e-5`` in ``174 s`` on CPU and ``2.218202e-5`` in ``145 s`` on GPU0,
+  compared with ``2.306911e-5`` in ``279 s`` for the previous best checked GPU
+  installed operator-Krylov/multilevel route. This is improvement evidence, not
+  promotion evidence, because output and solver traces are still absent.
+  The next implemented coarse-grid candidate is the
+  ``coarse-residual-device-qi`` path: separate multilevel coarse bases solve the
+  residual equation stage by stage instead of relying on one flat coarse rank
+  gate. Unit and driver tests show that this path recovers synthetic
+  angular-radial modes discarded by a flat coarse basis and records all opt-in
+  metadata. The first bounded CPU hard-seed artifact is negative evidence: it
+  accepts the seed correction ``3.021487e-5 -> 2.840364e-5`` but ends at
+  ``2.306911e-5`` in ``269 s``, worse than the augmented-FGMRES CPU baseline.
+  It is therefore not promoted to GPU or production-resolution QI ladders.
+  The newer ``residual-snapshot-device-qi`` path adds block/aggregate residual
+  snapshots and setup-time adjoint-normal snapshots to the same reusable
+  ``A Q`` coarse solve. Its bounded CPU artifact improves the hard-seed final
+  residual to ``2.103015e-5`` in ``250 s`` after accepting
+  ``3.021487e-5 -> 2.769687e-5``. This is the best checked CPU residual for the
+  true-device-QI path so far, but it still fails the output gate and is kept as
+  improvement evidence rather than validation evidence.
+  The follow-up ``residual-snapshot-equation-device-qi`` path is implemented
+  and checked as a deeper staged residual-equation cascade over the same
+  block/aggregate residual snapshots. Its bounded CPU artifact accepts
+  ``3.021487e-5 -> 2.819970e-5`` and finishes at ``2.320763e-5`` in
+  ``260 s`` before refusing nonconverged output. This is negative evidence
+  relative to the plain residual-snapshot artifact, so it is retained as an
+  audited research path and not promoted to GPU or production ladders.
+  The deeper ``block-schur-device-qi`` path is also implemented and checked.
+  It builds staged block/aggregate Schur residual-equation directions during
+  setup and reuses cached ``A Q_l`` actions during apply. The first bounded CPU
+  artifact accepts ``3.021487e-5 -> 2.840342e-5`` and finishes at
+  ``2.275188e-5`` in ``267 s`` before refusing nonconverged output. This is
+  negative evidence relative to the residual-snapshot CPU artifact, so it is
+  retained as a tested research path but not promoted to GPU or production
+  ladders.
+  The ``global-moment-closure-device-qi`` path is implemented and checked as a
+  Galerkin closure over profile/current/tail moments. Its bounded CPU artifact
+  accepts ``3.021487e-5 -> 2.840364e-5`` and finishes at ``2.420524e-5`` in
+  ``256 s`` before refusing nonconverged output, so it remains fail-closed
+  research evidence. The matched GPU0 rerun is CUDA-safe and numerically
+  consistent, finishing at the same residual in ``302 s`` before the same
+  nonconverged-output guard.
+  The ``residual-galerkin-device-qi`` path is implemented and checked as a
+  residual-derived Galerkin coarse equation over actual residual and block
+  residual variables. Its bounded CPU artifact accepts
+  ``3.021487e-5 -> 2.766710e-5`` with rank ``16`` from ``21`` candidates and
+  finishes at ``2.632208e-5`` in ``244 s`` before refusing nonconverged output.
+  It is stronger than static global moments at setup, but weaker than the
+  residual-snapshot CPU artifact after Krylov, so it is not promoted. The
+  matched GPU1 rerun is CUDA-safe and numerically consistent, finishing at the
+  same residual in ``309 s`` before the same nonconverged-output guard.
 - PAS memory/runtime: guarded ``tzfft`` and weak-PAS fail-fast routes are bounded
   diagnostics. The byte-budgeted geometry4 and HSX real-solve probes are
   residual-clean and solver-path stable, but they are not promoted because they
@@ -335,7 +417,9 @@ Current open lane board
 - Deferred validations: W7-X ambipolar validation, high-``nu`` analytic-limit
   extension, broader MONKES/KNOSOS overlap, production-resolution QI ladders, and
   large geometry-rich PAS claims remain deferred until checked-in numerically
-  gated artifacts and release-gate metadata exist.
+  gated artifacts and release-gate metadata exist. Production-resolution QI
+  ladders should not launch until the GPU hard-seed gate writes output through a
+  true device route.
 
 Mapped x-grid PAS transport evidence
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -455,6 +539,23 @@ Scope and status:
   residual ``2.35e102`` and correctly refused HDF5 output. This keeps the
   low-memory direction active while rejecting the current BiCGStab formulation
   for QI promotion.
+- The current positive device-QI evidence is bounded and incomplete: the
+  depth-64 operator-Krylov seed-only artifact is the best GPU residual reducer,
+  the ``operator-krylov-device-qi`` preset records the intended installed
+  Krylov controls, ``current-constraint-device-qi`` and
+  ``adjoint-krylov-device-qi`` record negative-evidence variants,
+  ``augmented-krylov-device-qi`` records the direct ``(U,A U)`` FGMRES
+  operator-reuse route, the
+  transpose-safe block-projection regression keeps the
+  local projected smoother differentiable, and the standalone multilevel
+  angular-radial coarse tests prove a stronger coarse architecture on synthetic
+  coupled modes. None of these items is a production-resolution QI claim until
+  the promotion gates below pass on real hard-seed artifacts.
+- The inspected 2026-05-20 public-auto-after-transpose and installed
+  operator-Krylov FGMRES hard-seed summaries remain nonpassing: they record no
+  accepted convergence, no HDF5 output, no solver trace, and
+  ``gates.passed=false``. They should stay classified as failed/nonconverged
+  blocker evidence even though they exercise the closed transpose/crash paths.
 
 Promotion gates:
 
@@ -464,6 +565,22 @@ Promotion gates:
 - require the next hard-seed candidate to be device-resident or active
   operator-reuse based and to reduce the measured true residual before the full
   Krylov loop,
+- prefer installing the depth-64 operator-Krylov coarse state into Krylov, or
+  moving to a true multilevel/coarse-grid correction, over any further local
+  smoother parameter sweeps,
+- for the installed operator-Krylov route, require metadata proving
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1``,
+  operator-Krylov enrichment enabled at bounded depth/rank, no automatic host
+  fallback, finite residual history through the Krylov solve, and HDF5 plus
+  solver-trace output,
+- for the augmented-FGMRES route, require metadata proving
+  ``xblock_device_fgmres_qi_augmented_krylov_used=true``, finite
+  projected-or-combined residual history, no automatic host fallback, and lower
+  final true residual than the non-augmented installed operator-Krylov artifact,
+- for the multilevel/angular-radial route, require an explicit opt-in driver
+  hook, fail-closed true-residual probe metadata, CPU scale-0.60 hard-seed
+  acceptance, and then matching one-GPU hard-seed output before it can replace
+  the operator-Krylov installed path,
 - for differentiable/device promotion, pass the bounded one-GPU ``office``
   scale-0.60 seed-3 gate with HDF5 output,
   solver trace, strict true-residual acceptance, and no CPU/GPU parity

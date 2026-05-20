@@ -21,11 +21,22 @@ The large-QI production escape hatch is closed for users who do not need
 end-to-end differentiation: explicit large RHSMode=1 QI requests can enter the
 non-autodiff host x-block fallback and record that choice in solver metadata.
 The true differentiable/device lane remains open because the scale-0.60 hard
-seed does not yet have a residual-reducing GPU-compatible preconditioner. The
-CPU hard seed now has a bounded orchestration path that writes HDF5 and solver
-trace output at ``15 x 31 x 60 x 5`` without entering the old strong-preconditioner
-or SciPy-rescue time sinks, but the QI-device correction itself still rejects
-that seed by the true-residual gate.
+seed does not yet pass the production output/write gate on GPU. The CPU hard
+seed now has a bounded orchestration path that writes HDF5 and solver trace
+output at ``15 x 31 x 60 x 5`` without entering the old strong-preconditioner or
+SciPy-rescue time sinks. The best checked GPU installed-solver
+residual-equation evidence is now the 2026-05-20 augmented-Krylov
+operator-reuse probe in combined mode, which keeps the run on the GPU, avoids
+the old transpose/CUDA crash, and reduces the true residual from the public-auto
+``3.949394e-5`` to ``2.218202e-5``. It still misses the production gate by about
+six orders of magnitude relative to the
+``3.021487e-11`` write tolerance, so it remains blocker evidence rather than a
+promotion artifact.
+Separate the closed infrastructure blockers from the open claim blockers:
+transpose/VJP safety for the projected block smoother and the prior CUDA
+illegal-address crash are closed for the tested paths, while residual
+convergence, HDF5/solver-trace output, and installed-Krylov runtime effectiveness
+remain open.
 
 Relevant implementation:
 
@@ -57,6 +68,12 @@ Relevant implementation:
   when full CSR materialization is too expensive. Both paths expose
   setup/apply/probe metadata and keep the timed apply path free of SciPy, host
   LU/ILU, and Python callbacks.
+- ``sfincs_jax/rhs1_qi_multilevel_coarse.py`` provides the standalone
+  multilevel angular-radial coarse prototype. It builds deterministic radial
+  aggregate levels, angular/radial candidates, rank-gated prolongation spaces,
+  and a pure-JAX local-plus-coarse action. It is evidence that the next coarse
+  architecture can be expressed without driver coupling, not evidence that the
+  production hard seed is closed.
 - ``sfincs_jax/rhs1_device_operator.py`` provides bounded device CSR matvec
   utilities.
 - ``sfincs_jax/rhs1_qi_galerkin_policy.py`` rejects Galerkin candidates unless
@@ -69,17 +86,33 @@ Relevant implementation:
 Audit conclusion
 ~~~~~~~~~~~~~~~~
 
-The checked negative artifacts rule out another storage-only or Krylov-label
-change. Compact CSR factors, diagonal/one-sided factor applies, simple
-Galerkin rank-32 corrections, and LGMRES/GMRES toggles either fail to reduce the
-true residual or run mostly on the host. The next candidate must change the
-mathematics of the preconditioner.
+The checked negative artifacts rule out another storage-only, side-threshold,
+projected-smoother, or Krylov-label change. Compact CSR factors,
+diagonal/one-sided factor applies, simple Galerkin rank-32 corrections,
+LGMRES/GMRES toggles, device global-coupling QR, rank-deficient moment-Schur
+pseudo-inverse, and a multiplicative base-plus-QI composition either fail to
+reduce the true residual or make the residual/runtime worse. The current best
+checked path changes the coarse architecture with installed depth-64
+operator-Krylov plus multilevel coarse reuse, but the small rank increase
+(``12`` to ``13``) shows that the remaining error is not captured by the
+current angular/radial/global-load basis. The source tree now includes the
+first true augmented-Krylov replacement path: the stored QI coarse basis and
+its operator action can be coupled directly to the restart least-squares
+problem, ``min ||r - [A U, A Z] c||_2``. The current source tree also includes
+three non-smoother candidate spaces for bounded evidence runs: pitch/xi moments
+in the multilevel coarse hierarchy, current/constraint tail moments for
+flow/bootstrap-current/nullspace error, and an adjoint-normal Krylov basis
+``orth([A^T r, (A^T A)A^T r, ...])`` for non-normal left-error modes.
+The first scale-0.60 evidence checks keep them honest: pitch-enabled
+multilevel did not change the GPU final residual, current/constraint moments
+worsened the GPU residual and runtime, and CPU adjoint-normal depth-2 worsened
+the final residual and runtime. None of these variants is promoted.
 
 Next implementation
 ~~~~~~~~~~~~~~~~~~~
 
-Use the new opt-in two-level RHSMode=1 QI primitive in the hard-seed solver
-path:
+Use the opt-in two-level RHSMode=1 QI primitive as the next research branch only
+if it adds genuinely new residual information beyond the checked bases:
 
 .. math::
 
@@ -88,7 +121,8 @@ path:
    + P_c A_c^{-1} R_c \left(r - A S_\mathrm{local}^{-1} r\right),
 
 where ``S_local`` is a device-resident x/species/angular block smoother,
-``R_c`` restricts to moment/constraint/global-coupling modes, ``P_c`` prolongs
+``R_c`` restricts to moment/constraint/global-coupling, pitch, and adjoint-error
+modes, ``P_c`` prolongs
 back to the active vector, and
 
 .. math::
@@ -227,8 +261,7 @@ be repeated as the next promotion attempt.
 CPU direction probes show that scalar minimization alone is not enough for this
 hard seed: rank 12 reduces only ``1.736775e-3`` to ``1.735797e-3``, while rank
 27 reduces to ``1.725418e-3``. Both are below the 1% material-improvement gate,
-so the next implementation should add a physically stronger local/global
-smoother or recycle space rather than tune only scalar damping.
+so scalar damping and storage-only changes are no longer promotion paths.
 The first block-projected local smoother CPU run at the same scale-0.60 seed
 reduces the QI-device seed residual from ``1.736775e-3`` to ``1.649351e-3``
 before the existing x-block sparse rescue writes accepted output in ``296.6 s``.
@@ -252,6 +285,159 @@ but it still misses the ``3.021e-11`` production write gate by about four orders
 of magnitude. The conclusion is now stronger: projected block smoothing is a
 safe device-resident component, but true device-QI closure needs a different
 operator-reuse/coarse architecture rather than more tuning of this smoother.
+The next operator-reuse pass added two opt-in coarse enrichments. Operator-image
+enrichment expands the correction space with ``{Q, A Q, A^2 Q, ...}``; it was
+CUDA-safe on the same ``office`` GPU hard seed but did not improve the best
+projected-block residual (``4.707e-7`` in ``75.8 s``). The stronger residual
+Arnoldi/Krylov enrichment builds ``orth([Q, r, A r, ...])`` from the current
+true residual and reuses the resulting ``A Q`` action in the coarse
+least-squares solve. With residual/recycle enrichment disabled so the new space
+is isolated, depth ``16`` gives ``4.448e-7`` in ``75.2 s``, depth ``32`` gives
+``4.199e-7`` in ``75.1 s``, and depth ``64`` gives ``3.627e-7`` in ``76.7 s``.
+This is the current best checked GPU hard-seed evidence and shows a real
+residual trend without memory growth, but it still misses the production gate
+and does not close true device-QI. The next true closure candidate must install
+this coarse-reuse state into the actual Krylov solve or add a mathematically
+stronger multilevel/coarse-grid correction; further projected-smoother
+parameter sweeps are not expected to close the lane.
+
+That installed path is now a named opt-in rather than only a future idea:
+
+.. code-block:: text
+
+   SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax
+   SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1
+   SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1
+   SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64
+
+The runner preset ``operator-krylov-device-qi`` records the same controls. The
+separate ``current-constraint-device-qi`` and ``adjoint-krylov-device-qi``
+presets record negative-evidence variants without changing the recommended
+operator-Krylov baseline. The operator-Krylov preset remains the correct route
+for the next real-push experiment because it keeps the
+operator-Krylov coarse state inside the JAX Krylov/preconditioner loop instead
+of using it only as a seed-only correction. Promotion still requires the gate
+below; merely reaching this path, improving the seed residual, or avoiding CUDA
+failures is not enough.
+The new ``augmented-krylov-device-qi`` preset is the stricter operator-reuse
+variant: it enables cycle-JIT FGMRES and passes the stored QI coarse basis
+``U`` and operator action ``A U`` directly to the solver. In its default
+``combined`` mode each restart solves the coupled least-squares problem
+
+.. math::
+
+   \min_c \left\|r - [A U, A Z] c\right\|_2,
+
+then applies the update through ``[U, Z] c``. This is stronger than only
+projecting the residual over ``A U`` before Arnoldi because the coarse QI
+directions remain active inside the Krylov residual equation. The first bounded
+CPU/GPU artifacts are still nonpassing because no HDF5 output or solver trace
+is written, but they are the best direct installed-solver residual-equation
+evidence for this hard seed so far: CPU reaches ``2.218300e-5`` in ``174 s`` and
+GPU0 reaches ``2.218202e-5`` in ``145 s``.
+That improves on the previous GPU installed operator-Krylov/multilevel
+residual ``2.306911e-5`` while keeping the promotion gate open.
+The next non-smoother implementation is now wired as
+``coarse-residual-device-qi``. It enables a nested multilevel residual equation:
+each angular/radial/pitch coarse level gets its own rank budget, solves
+``min_c ||r_l - A Q_l c||_2`` against the residual left by prior levels, applies
+``Q_l c``, and optionally finishes with the global rank-gated coarse basis. This
+is a deeper coarse-grid residual equation rather than another restart,
+projection, damping, or local-smoother variant. Focused tests show that it
+recovers synthetic angular-radial residual modes discarded by a flat rank-1
+coarse gate, remains JIT-compatible, and records driver metadata through the
+explicit QI-device hook. The first bounded scale-0.60 CPU hard-seed artifact
+exercised the path and accepted the seed correction
+``3.021487e-5 -> 2.840364e-5``, but the installed solve ended at
+``2.306911e-5`` in ``269 s``. That is worse than the augmented-FGMRES CPU
+baseline, so this configuration is negative evidence and is not promoted to a
+GPU rerun.
+The next checked non-smoother coarse-space path is
+``residual-snapshot-device-qi``. It enriches the reusable device-QI coarse
+operator with block/aggregate snapshots of the actual current residual and,
+when requested, adjoint-normal snapshots ``A^T r_block``. The apply path still
+uses the cached ``A Q`` action; the transpose work is setup-time only. The
+bounded scale-0.60 CPU hard-seed artifact
+``qi_seed_robustness_scale060_residual_snapshot_device_qi_cpu_2026_05_20.json``
+is improvement evidence but not promotion evidence: the primal-only snapshot
+finished at ``2.447236e-5``, while the adjoint-normal snapshot finished at
+``2.103015e-5`` in ``250 s`` after accepting
+``3.021487e-5 -> 2.769687e-5``. This is the best checked CPU residual in the
+true-device-QI route so far, but it still refuses nonconverged HDF5 output and
+keeps the CPU/GPU promotion gate open.
+The follow-up ``residual-snapshot-equation-device-qi`` preset converts those
+block/aggregate residual snapshots into a staged residual-equation cascade:
+each accepted stage solves a setup-time ``min ||r_l - A Q_l c||_2`` problem,
+caches ``A Q_l``, and applies through the existing pure-JAX coarse-action path.
+The first bounded scale-0.60 CPU artifact
+``qi_seed_robustness_scale060_residual_snapshot_equation_device_qi_cpu_2026_05_20.json``
+is negative evidence. It accepts the seed correction
+``3.021487e-5 -> 2.819970e-5`` and finishes at ``2.320763e-5`` in
+``260 s`` before refusing nonconverged output. This is worse than the plain
+residual-snapshot CPU artifact, so it is retained as a tested residual-equation
+primitive and not promoted to GPU.
+The deeper ``block-schur-device-qi`` preset now exercises a staged
+block-Schur residual equation. It builds block/aggregate source probes at
+setup, accepts only residual-reducing directions, caches their ``A Q_l``
+actions, and applies them through the existing pure-JAX residual-equation
+cascade. The first bounded scale-0.60 CPU artifact
+``qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json``
+is negative evidence: the seed correction improves only
+``3.021487e-5 -> 2.840342e-5`` and the installed solve ends at
+``2.275188e-5`` in ``267 s`` before refusing nonconverged output. This is worse
+than the residual-snapshot CPU path, so it is kept as a tested research
+primitive and not promoted to GPU.
+The ``global-moment-closure-device-qi`` preset exercises a true global closure
+over profile, current, and reduced-tail constraint moments. The first bounded
+scale-0.60 CPU artifact
+``qi_seed_robustness_scale060_global_moment_closure_device_qi_cpu_2026_05_20.json``
+accepts ``3.021487e-5 -> 2.840364e-5`` and ends at ``2.420524e-5`` in
+``256 s`` before refusing nonconverged output. It proves the moment-Schur
+closure is wired and device-compatible, but it is weaker than the
+residual-snapshot evidence and remains fail-closed.
+The matched GPU0 rerun
+``qi_seed_robustness_scale060_global_moment_closure_device_qi_gpu0_2026_05_20.json``
+is CUDA-safe and numerically consistent, ending at the same ``2.420524e-5`` in
+``302 s`` before the nonconverged-output guard refuses HDF5 output.
+The ``residual-galerkin-device-qi`` preset builds coarse variables from the
+actual remaining residual and block residuals. The first bounded scale-0.60 CPU
+artifact
+``qi_seed_robustness_scale060_residual_galerkin_device_qi_cpu_2026_05_20.json``
+accepts ``3.021487e-5 -> 2.766710e-5`` with rank ``16`` from ``21``
+candidates and ends at ``2.632208e-5`` in ``244 s`` before refusing
+nonconverged output. It is stronger than static global moments at setup, but
+weaker than residual snapshots after Krylov; it is retained as tested
+architecture rather than validation evidence.
+The matched GPU1 rerun
+``qi_seed_robustness_scale060_residual_galerkin_device_qi_gpu1_2026_05_20.json``
+is also CUDA-safe and numerically consistent, ending at the same
+``2.632208e-5`` in ``309 s`` before the nonconverged-output guard refuses HDF5
+output.
+The inspected 2026-05-20 public-auto-after-transpose and installed
+operator-Krylov FGMRES summaries are still nonpassing hard-seed artifacts:
+``gates.passed=false``, ``outputs_written=0``, and ``accepted_converged=0``.
+They are useful closure evidence for routing/transpose/crash regressions only,
+not validated device-QI evidence.
+
+The projected block smoother also has a narrower completed infrastructure item:
+its matrix-free block projection is transpose-safe in the tested JAX path. The
+block directions are fixed from residual pieces and the least-squares action is
+covered by a ``vjp`` regression, so it can remain in differentiable probes. This
+does not promote projected smoothing as the closure strategy; the GPU evidence
+above shows it is a useful local component but not sufficient by itself.
+
+The alternative coarse direction is now a standalone multilevel/angular-radial
+prototype in ``sfincs_jax/rhs1_qi_multilevel_coarse.py``. It constructs radial
+aggregate hierarchies, angular harmonics, radial polynomial modes, and
+radial-angular products, then applies a pure-JAX action least-squares coarse
+correction after a local smoother. Unit tests show deterministic hierarchy
+construction, reduction of a synthetic low-frequency angular-radial mode that a
+local block smoother misses, fail-closed rejection when the angular space is
+removed, and JIT/gradient compatibility. This is deliberately not wired as a
+production default or hard-seed claim yet. Its promotion sequence is: integrate
+behind an explicit QI-device hook, run the scale-0.60 CPU hard seed, then run
+the one-GPU ``office`` hard seed, and only then consider production-resolution
+QI ladders.
 
 Both paths fail closed when host fallback is active or when the true-residual
 probe does not improve. The pre-enrichment scale-0.60 seed-3 CPU artifact
@@ -264,7 +450,8 @@ post-enrichment bounded rerun showed that the remaining active blocker is path
 ordering in the large active-DOF RHSMode=1 FP branch: the expensive host x-block
 rescue can dominate before a bounded QI-device probe produces evidence.
 
-The next candidate is residual-deflated rather than threshold-driven:
+The earlier residual-deflated path remains useful context but is no longer the
+preferred next closure path after the operator-Krylov evidence:
 
 .. math::
 
@@ -281,9 +468,11 @@ followed by the coarse action
    c = \arg\min_c \left\|A Z c -
    \left(r - A S_\mathrm{local}^{-1}r\right)\right\|_2 .
 
-This is the first step toward a GCRO/deflated-GMRES style device path: the
+This was the first step toward a GCRO/deflated-GMRES style device path: the
 small basis targets the current hard residual instead of relying only on fixed
-geometry modes.
+geometry modes. The current preferred follow-up is to reuse the stronger
+operator-Krylov coarse state inside Krylov, or replace it with a genuine
+multilevel/coarse-grid correction if Krylov installation still plateaus.
 
 The current environment switch is::
 
@@ -429,6 +618,11 @@ Current evidence
   when no assembled device CSR operator is available. This advances the
   implementation surface, but it still needs hard-seed evidence before it can be
   used for public claims.
+- Depth-64 operator-Krylov coarse reuse is the current best checked one-GPU
+  hard-seed evidence. It improves the true residual without observed memory
+  growth, but it still misses the production output/write gate. Treat it as the
+  preferred research probe to install into Krylov, not as a closed true
+  device-QI claim.
 
 Promotion gate
 ~~~~~~~~~~~~~~
@@ -436,7 +630,17 @@ Promotion gate
 - The scale-0.60 hard seed must write HDF5 and solver trace on CPU and one GPU.
 - A one-application residual probe must reduce the current true residual by at
   least 5% and beat the existing fail-closed Galerkin probe.
+- The Krylov-installed operator-Krylov path must record no host fallback,
+  bounded rank/depth controls, and finite residual history through the full
+  JAX Krylov loop; a seed-only operator-Krylov artifact cannot satisfy this
+  gate by itself.
+- The multilevel/angular-radial coarse path must first pass as an explicitly
+  gated hard-seed artifact before it can replace the current preferred
+  operator-Krylov installation route.
 - CPU/GPU observables must remain within the existing parity tolerances.
+- Further projected-smoother parameter sweeps are not a preferred closure path;
+  install the operator-Krylov coarse state into Krylov or add a true
+  multilevel/coarse-grid correction.
 - Only after the hard seed passes should the five-seed and production-resolution
   QI ladders be launched.
 

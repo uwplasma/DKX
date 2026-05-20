@@ -1315,6 +1315,39 @@ def test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback(m
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT", "0")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH",
+        "0",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS", "1")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_MAX_RANK",
+        "4",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_SOLVER",
+        "galerkin",
+    )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
     monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
@@ -1324,6 +1357,18 @@ def test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback(m
     def _accepted_probe(**kwargs):
         state = kwargs["state"]
         x0 = jnp.asarray(kwargs["x0"], dtype=jnp.float64)
+        assert state.metadata.operator_krylov_enrichment_enabled is True
+        assert state.metadata.operator_krylov_depth == 1
+        assert state.metadata.operator_krylov_candidate_count > 0
+        assert state.metadata.adjoint_krylov_enrichment_enabled is True
+        assert state.metadata.adjoint_krylov_depth == 0
+        assert state.metadata.adjoint_krylov_transpose_source == "autodiff"
+        assert state.metadata.multilevel_coarse_enabled is True
+        assert state.metadata.multilevel_coarse_rank > 0
+        assert state.metadata.multilevel_coarse_candidate_count > 0
+        assert state.metadata.global_moment_residual_equation_solver == "galerkin"
+        assert state.metadata.global_moment_residual_equation_include_current is True
+        assert state.metadata.global_moment_residual_equation_include_tail is True
         return x0, SimpleNamespace(
             accepted=True,
             reason="residual_reduced",
@@ -1356,6 +1401,32 @@ def test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback(m
     assert result.metadata["xblock_qi_device_preconditioner_used_in_krylov"] is True
     assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_source"] == "matrix_free"
     assert result.metadata["xblock_qi_device_preconditioner_metadata"]["use_in_krylov"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["compose_with_base"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["compose_mode"] == "multiplicative"
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["residual_enrichment_enabled"] is False
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_krylov_enrichment_enabled"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_krylov_candidate_count"] > 0
+    assert (
+        result.metadata["xblock_qi_device_preconditioner_metadata"][
+            "global_moment_residual_equation_requested"
+        ]
+        is True
+    )
+    assert (
+        result.metadata["xblock_qi_device_preconditioner_metadata"][
+            "global_moment_residual_equation_solver_requested"
+        ]
+        == "galerkin"
+    )
+    assert "xblock_qi_device_preconditioner_global_moment_residual_equation" in result.metadata
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["adjoint_krylov_enrichment_enabled"] is True
+    assert (
+        result.metadata["xblock_qi_device_preconditioner_metadata"]["adjoint_krylov_transpose_source"]
+        == "autodiff"
+    )
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["multilevel_coarse_enabled"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_coarse_reuse"] is True
+    assert any("global moment residual equation" in msg for msg in messages)
     assert any("host fallback disabled by explicit matrix-free QI-device" in msg for msg in messages)
 
 
@@ -1570,6 +1641,22 @@ def test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback(monkeypa
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE", "1")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_ENRICHMENT",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_DEPTH",
+        "1",
+    )
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT", "0.05")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
@@ -1611,6 +1698,434 @@ def test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback(monkeypa
     assert result.metadata["xblock_qi_device_preconditioner_metadata"]["residual_enrichment_enabled"] is True
     assert result.metadata["xblock_qi_device_preconditioner_metadata"]["residual_enrichment_depth"] == 2
     assert result.metadata["xblock_qi_device_preconditioner_metadata"]["residual_enrichment_candidate_count"] > 0
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_krylov_enrichment_requested"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_krylov_enrichment_enabled"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_krylov_depth"] == 1
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_krylov_candidate_count"] >= 0
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_action_enrichment_requested"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_action_enrichment_enabled"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_action_enrichment_depth"] == 1
+    assert result.metadata["xblock_qi_device_preconditioner_metadata"]["operator_action_enrichment_candidate_count"] > 0
+
+
+def test_xblock_sparse_pc_qi_device_multilevel_coarse_env_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK", "8")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS", "1")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE",
+        "1",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+
+    def _accepted_probe(**kwargs):
+        state = kwargs["state"]
+        x0 = jnp.asarray(kwargs["x0"], dtype=jnp.float64)
+        assert state.metadata.multilevel_coarse_enabled is True
+        assert state.metadata.multilevel_coarse_level_count >= 1
+        assert state.metadata.multilevel_coarse_candidate_count > 0
+        assert state.metadata.multilevel_coarse_rank > 0
+        assert any("current:" in label for label in state.metadata.accepted_basis_labels)
+        assert "qi_block_sizes" in state.metadata.geometry_metadata_keys
+        assert "qi_block_tail_included" in state.metadata.geometry_metadata_keys
+        return x0, SimpleNamespace(
+            accepted=True,
+            reason="residual_reduced",
+            residual_before_norm=10.0,
+            residual_after_norm=8.0,
+            improvement_ratio=0.8,
+            metadata=state.metadata,
+        )
+
+    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+    )
+
+    metadata = result.metadata["xblock_qi_device_preconditioner_metadata"]
+    assert result.metadata["xblock_qi_device_preconditioner_built"] is True
+    assert metadata["multilevel_coarse_requested"] is True
+    assert metadata["multilevel_coarse_enabled"] is True
+    assert metadata["multilevel_coarse_level_count"] >= 1
+    assert metadata["multilevel_coarse_candidate_count"] > 0
+    assert metadata["multilevel_coarse_rank"] > 0
+    assert metadata["multilevel_max_levels_requested"] == 2
+    assert metadata["multilevel_max_rank_requested"] == 8
+    assert metadata["multilevel_max_pitch_degree_requested"] == 1
+    assert metadata["multilevel_current_moments_requested"] is True
+    assert metadata["multilevel_current_max_pitch_degree_requested"] == 1
+    assert "qi_block_sizes" in metadata["geometry_metadata_keys"]
+    assert "qi_block_tail_included" in metadata["geometry_metadata_keys"]
+
+
+def test_xblock_sparse_pc_qi_device_augmented_krylov_reuses_operator_basis(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres_jax")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT", "0.0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
+    captured: dict[str, object] = {}
+
+    def _capturing_device_krylov_result(**kwargs):
+        captured.update(kwargs)
+        return _fast_device_krylov_result(**kwargs)
+
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _capturing_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _capturing_device_krylov_result)
+
+    def _accepted_probe(**kwargs):
+        state = kwargs["state"]
+        x0 = jnp.asarray(kwargs["x0"], dtype=jnp.float64)
+        return x0, SimpleNamespace(
+            accepted=True,
+            reason="residual_reduced",
+            residual_before_norm=10.0,
+            residual_after_norm=8.0,
+            improvement_ratio=0.8,
+            metadata=state.metadata,
+        )
+
+    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+    )
+
+    augmentation_basis = captured["augmentation_basis"]
+    operator_on_augmentation = captured["operator_on_augmentation"]
+    assert augmentation_basis is not None
+    assert operator_on_augmentation is not None
+    assert tuple(augmentation_basis.shape) == tuple(operator_on_augmentation.shape)
+    assert result.metadata["xblock_device_fgmres_qi_augmented_krylov_requested"] is True
+    assert result.metadata["xblock_device_fgmres_qi_augmented_krylov_used"] is True
+    assert result.metadata["xblock_device_fgmres_qi_augmented_krylov_mode"] == "combined"
+    assert result.metadata["xblock_qi_device_preconditioner_augmented_krylov_used"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_augmented_krylov_rank"] == int(
+        augmentation_basis.shape[1]
+    )
+    assert result.metadata["xblock_qi_device_preconditioner_augmented_krylov_mode"] == "combined"
+
+
+def test_xblock_sparse_pc_qi_device_multilevel_residual_equation_env_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE", "1")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK",
+        "5",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER",
+        "fine-to-coarse",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER",
+        "galerkin",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
+        "0",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+
+    def _accepted_probe(**kwargs):
+        state = kwargs["state"]
+        x0 = jnp.asarray(kwargs["x0"], dtype=jnp.float64)
+        assert state.metadata.multilevel_residual_equation_enabled is True
+        assert state.metadata.multilevel_residual_equation_stage_count >= 1
+        assert state.metadata.multilevel_residual_equation_rank > 0
+        assert state.metadata.multilevel_residual_equation_order == "fine_to_coarse"
+        assert state.metadata.multilevel_residual_equation_solver == "galerkin"
+        assert state.metadata.multilevel_residual_equation_include_global is False
+        return x0, SimpleNamespace(
+            accepted=True,
+            reason="residual_reduced",
+            residual_before_norm=10.0,
+            residual_after_norm=8.0,
+            improvement_ratio=0.8,
+            metadata=state.metadata,
+        )
+
+    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+    )
+
+    metadata = result.metadata["xblock_qi_device_preconditioner_metadata"]
+    assert result.metadata["xblock_qi_device_preconditioner_built"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_used"] is True
+    assert metadata["multilevel_residual_equation_requested"] is True
+    assert metadata["multilevel_residual_equation_enabled"] is True
+    assert metadata["multilevel_residual_equation_max_level_rank_requested"] == 5
+    assert metadata["multilevel_residual_equation_order_requested"] == "fine_to_coarse"
+    assert metadata["multilevel_residual_equation_solver_requested"] == "galerkin"
+    assert metadata["multilevel_residual_equation_include_global_requested"] is False
+    assert metadata["multilevel_residual_equation_stage_count"] >= 1
+    assert metadata["multilevel_residual_equation_rank"] > 0
+
+
+def test_xblock_sparse_pc_qi_device_residual_snapshot_env_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT", "0")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_MAX_RANK",
+        "7",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_GLOBAL",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_AGGREGATES",
+        "0",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    messages: list[str] = []
+
+    def _accepted_probe(**kwargs):
+        state = kwargs["state"]
+        x0 = jnp.asarray(kwargs["x0"], dtype=jnp.float64)
+        assert state.metadata.residual_snapshot_enrichment_enabled is True
+        assert state.metadata.residual_snapshot_rank > 0
+        assert state.metadata.residual_snapshot_candidate_count > 0
+        return x0, SimpleNamespace(
+            accepted=True,
+            reason="residual_reduced",
+            residual_before_norm=10.0,
+            residual_after_norm=8.0,
+            improvement_ratio=0.8,
+            metadata=state.metadata,
+        )
+
+    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    metadata = result.metadata["xblock_qi_device_preconditioner_metadata"]
+    assert result.metadata["xblock_qi_device_preconditioner_built"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_used"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_residual_snapshot_enrichment"] is True
+    assert metadata["residual_snapshot_enrichment_requested"] is True
+    assert metadata["residual_snapshot_enrichment_enabled"] is True
+    assert metadata["residual_snapshot_max_rank_requested"] == 7
+    assert metadata["residual_snapshot_include_primal_requested"] is True
+    assert metadata["residual_snapshot_use_adjoint_requested"] is False
+    assert metadata["residual_snapshot_include_global_requested"] is True
+    assert metadata["residual_snapshot_include_aggregates_requested"] is False
+    assert metadata["residual_snapshot_rank"] > 0
+    assert any("residual-snapshot coarse enrichment" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_qi_device_block_schur_residual_equation_env_records_metadata(
+    monkeypatch,
+) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT", "0")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK",
+        "7",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_AGGREGATES",
+        "0",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    messages: list[str] = []
+
+    def _accepted_probe(**kwargs):
+        state = kwargs["state"]
+        x0 = jnp.asarray(kwargs["x0"], dtype=jnp.float64)
+        assert state.metadata.block_schur_residual_equation_enabled is True
+        assert state.metadata.block_schur_residual_equation_rank > 0
+        assert state.metadata.block_schur_residual_equation_candidate_count > 0
+        assert state.metadata.block_schur_residual_equation_include_global is True
+        assert state.metadata.block_schur_residual_equation_include_aggregates is False
+        return x0, SimpleNamespace(
+            accepted=True,
+            reason="residual_reduced",
+            residual_before_norm=10.0,
+            residual_after_norm=8.0,
+            improvement_ratio=0.8,
+            metadata=state.metadata,
+        )
+
+    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    metadata = result.metadata["xblock_qi_device_preconditioner_metadata"]
+    assert result.metadata["xblock_qi_device_preconditioner_built"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_used"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_block_schur_residual_equation"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_block_schur_residual_equation_rank"] > 0
+    assert metadata["block_schur_residual_equation_requested"] is True
+    assert metadata["block_schur_residual_equation_enabled"] is True
+    assert metadata["block_schur_residual_equation_max_rank_requested"] == 7
+    assert metadata["block_schur_residual_equation_include_global_requested"] is True
+    assert metadata["block_schur_residual_equation_include_aggregates_requested"] is False
+    assert metadata["block_schur_residual_equation_rank"] > 0
+    assert any("block-Schur residual equation" in msg for msg in messages)
+
+
+def test_xblock_sparse_pc_qi_device_residual_snapshot_equation_env_records_metadata(
+    monkeypatch,
+) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT", "0")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_MAX_RANK",
+        "6",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER",
+        "galerkin",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
+        "1",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_AGGREGATES",
+        "0",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    messages: list[str] = []
+
+    def _accepted_probe(**kwargs):
+        state = kwargs["state"]
+        x0 = jnp.asarray(kwargs["x0"], dtype=jnp.float64)
+        assert state.metadata.residual_snapshot_residual_equation_solver == "galerkin"
+        assert state.metadata.residual_snapshot_residual_equation_include_global is True
+        return x0, SimpleNamespace(
+            accepted=True,
+            reason="residual_reduced",
+            residual_before_norm=10.0,
+            residual_after_norm=8.0,
+            improvement_ratio=0.8,
+            metadata=state.metadata,
+        )
+
+    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    metadata = result.metadata["xblock_qi_device_preconditioner_metadata"]
+    assert result.metadata["xblock_qi_device_preconditioner_built"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_used"] is True
+    assert (
+        result.metadata["xblock_qi_device_preconditioner_residual_snapshot_residual_equation"]
+        is metadata["residual_snapshot_residual_equation_enabled"]
+    )
+    assert metadata["residual_snapshot_residual_equation_requested"] is True
+    assert metadata["residual_snapshot_residual_equation_max_rank_requested"] == 6
+    assert metadata["residual_snapshot_residual_equation_solver_requested"] == "galerkin"
+    assert metadata["residual_snapshot_residual_equation_include_global_requested"] is True
+    assert metadata["residual_snapshot_include_aggregates_requested"] is False
+    if metadata["residual_snapshot_residual_equation_enabled"]:
+        assert metadata["residual_snapshot_residual_equation_rank"] > 0
+    else:
+        assert metadata["residual_snapshot_residual_equation_rank"] == 0
+    assert any("residual-snapshot residual equation" in msg for msg in messages)
 
 
 def test_xblock_sparse_pc_qi_device_matrix_free_local_smoother_routing(monkeypatch) -> None:

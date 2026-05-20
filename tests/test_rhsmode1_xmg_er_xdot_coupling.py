@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
@@ -39,3 +41,53 @@ def test_rhsmode1_xmg_includes_er_xdot_x_coupling_for_pas(monkeypatch) -> None:
     cached = vd._RHSMODE1_XUPWIND_PRECOND_CACHE[cache_key]
     sub = np.asarray(cached.sub)[0, :, 0]  # (X,) for s=0, L=0
     assert float(np.max(np.abs(sub[1:]))) > 0.0
+
+
+def test_rhsmode1_xmg_preconditioner_is_transpose_safe(monkeypatch) -> None:
+    """JAX GMRES transposes right-preconditioned matvecs; xmg scatters must support that path."""
+
+    input_path = Path(__file__).parent / "reduced_inputs" / "tokamak_1species_FPCollisions_noEr.input.namelist"
+    nml = read_sfincs_input(input_path)
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+
+    import sfincs_jax.v3_driver as vd
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XMG_STRIDE", "2")
+    preconditioner = vd._build_rhsmode1_xmg_preconditioner(op=op)
+    rhs = jnp.linspace(0.1, 1.0, int(op.total_size), dtype=jnp.float64)
+    weights = jnp.linspace(1.0, 0.2, int(op.total_size), dtype=jnp.float64)
+
+    def objective(residual):
+        return jnp.vdot(weights, preconditioner(residual))
+
+    value, pullback = jax.vjp(objective, rhs)
+    (grad_rhs,) = pullback(jnp.asarray(1.0, dtype=jnp.float64))
+
+    assert np.isfinite(float(value))
+    assert np.isfinite(np.asarray(grad_rhs)).all()
+    assert float(jnp.linalg.norm(grad_rhs)) > 0.0
+
+
+def test_rhsmode1_xblock_tz_lmax_preconditioner_is_transpose_safe(monkeypatch) -> None:
+    """The strong fallback used by GPU GMRES must stay linear and transposable."""
+
+    input_path = Path(__file__).parent / "reduced_inputs" / "tokamak_1species_FPCollisions_noEr.input.namelist"
+    nml = read_sfincs_input(input_path)
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+
+    import sfincs_jax.v3_driver as vd
+
+    monkeypatch.setenv("SFINCS_JAX_PRECOND_PAS_MAX_COLS", "8")
+    preconditioner = vd._build_rhsmode1_xblock_tz_lmax_preconditioner(op=op, lmax=2)
+    rhs = jnp.linspace(0.2, 0.9, int(op.total_size), dtype=jnp.float64)
+    weights = jnp.linspace(0.7, -0.1, int(op.total_size), dtype=jnp.float64)
+
+    def objective(residual):
+        return jnp.vdot(weights, preconditioner(residual))
+
+    value, pullback = jax.vjp(objective, rhs)
+    (grad_rhs,) = pullback(jnp.asarray(1.0, dtype=jnp.float64))
+
+    assert np.isfinite(float(value))
+    assert np.isfinite(np.asarray(grad_rhs)).all()
+    assert float(jnp.linalg.norm(grad_rhs)) > 0.0

@@ -4,6 +4,7 @@ import os
 import numpy as np
 import subprocess
 import sys
+import jax
 import jax.numpy as jnp
 import pytest
 
@@ -289,6 +290,47 @@ def test_fgmres_solve_with_residual_matches_numpy_for_nonsymmetric_matrix() -> N
     assert float(np.asarray(result.residual_history)[-1]) == pytest.approx(float(result.residual_norm), rel=1.0e-10)
 
 
+def test_fgmres_right_preconditioner_is_transpose_safe() -> None:
+    """Guard the device-QI installed-Krylov path against scatter transpose failures."""
+
+    a = jnp.asarray(
+        [
+            [4.0, -1.0, 0.2],
+            [0.5, 3.0, -0.1],
+            [0.0, 0.25, 2.5],
+        ],
+        dtype=jnp.float64,
+    )
+    inv_diag = jnp.asarray(1.0 / np.diag(np.asarray(a)), dtype=jnp.float64)
+    weights = jnp.asarray([0.3, -0.2, 0.7], dtype=jnp.float64)
+
+    def mv(x):
+        return a @ x
+
+    def precond(x):
+        return inv_diag * x
+
+    def objective(rhs):
+        result, _residual = fgmres_solve_with_residual(
+            matvec=mv,
+            b=rhs,
+            preconditioner=precond,
+            tol=1.0e-12,
+            restart=3,
+            maxiter=6,
+            precondition_side="right",
+        )
+        return jnp.vdot(weights, result.x)
+
+    rhs = jnp.asarray([1.0, -2.0, 0.5], dtype=jnp.float64)
+    value, pullback = jax.vjp(objective, rhs)
+    (grad_rhs,) = pullback(jnp.asarray(1.0, dtype=jnp.float64))
+
+    assert np.isfinite(float(value))
+    assert np.isfinite(np.asarray(grad_rhs)).all()
+    assert np.linalg.norm(np.asarray(grad_rhs)) > 0.0
+
+
 def test_fgmres_cycle_synchronization_preserves_solution() -> None:
     rng = np.random.default_rng(102)
     n = 10
@@ -436,6 +478,112 @@ def test_fgmres_cycle_jit_matches_numpy_with_bounded_restart() -> None:
     assert bool(result.converged)
     assert int(result.n_iterations) <= 24
     assert np.asarray(result.residual_history).size <= 16
+
+
+def test_fgmres_cycle_jit_fixed_augmentation_removes_restart_slow_mode() -> None:
+    a = jnp.diag(jnp.asarray([1.0e-4, 2.0, 3.0, 4.0], dtype=jnp.float64))
+    b = jnp.asarray([1.0, 1.0, -0.5, 0.25], dtype=jnp.float64)
+    slow_mode = jnp.asarray([1.0, 0.0, 0.0, 0.0], dtype=jnp.float64).reshape((4, 1))
+    action = a @ slow_mode
+
+    def mv(x):
+        return a @ x
+
+    baseline, _baseline_residual = fgmres_cycle_jit_solve_with_residual(
+        matvec=mv,
+        b=b,
+        tol=1.0e-14,
+        restart=1,
+        maxiter=1,
+        precondition_side="none",
+    )
+    augmented, augmented_residual = fgmres_cycle_jit_solve_with_residual(
+        matvec=mv,
+        b=b,
+        augmentation_basis=slow_mode,
+        operator_on_augmentation=action,
+        tol=1.0e-14,
+        restart=1,
+        maxiter=1,
+        precondition_side="none",
+    )
+
+    assert float(augmented.residual_norm) < 0.75 * float(baseline.residual_norm)
+    np.testing.assert_allclose(float(augmented.x[0]), 1.0e4, rtol=1.0e-12, atol=1.0e-8)
+    np.testing.assert_allclose(np.asarray(augmented_residual), np.asarray(b - mv(augmented.x)), atol=1.0e-12)
+    history = np.asarray(augmented.residual_history)
+    assert history[1] < history[0]
+
+
+def test_fgmres_cycle_jit_combined_augmentation_couples_coarse_and_krylov_spaces() -> None:
+    a = jnp.asarray(
+        [
+            [1.0, 10.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 2.0],
+        ],
+        dtype=jnp.float64,
+    )
+    b = jnp.asarray([0.0, 1.0, 0.0], dtype=jnp.float64)
+    coarse = jnp.asarray([1.0, 0.0, 0.0], dtype=jnp.float64).reshape((3, 1))
+    coarse_action = a @ coarse
+
+    def mv(x):
+        return a @ x
+
+    projected, _projected_residual = fgmres_cycle_jit_solve_with_residual(
+        matvec=mv,
+        b=b,
+        augmentation_basis=coarse,
+        operator_on_augmentation=coarse_action,
+        augmentation_mode="projected",
+        tol=1.0e-14,
+        restart=1,
+        maxiter=1,
+        precondition_side="none",
+    )
+    combined, combined_residual = fgmres_cycle_jit_solve_with_residual(
+        matvec=mv,
+        b=b,
+        augmentation_basis=coarse,
+        operator_on_augmentation=coarse_action,
+        augmentation_mode="combined",
+        tol=1.0e-14,
+        restart=1,
+        maxiter=1,
+        precondition_side="none",
+    )
+
+    assert float(projected.residual_norm) > 0.9
+    assert float(combined.residual_norm) < 1.0e-11
+    np.testing.assert_allclose(np.asarray(combined.x), np.asarray([-10.0, 1.0, 0.0]), atol=1.0e-11)
+    np.testing.assert_allclose(np.asarray(combined_residual), np.asarray(b - mv(combined.x)), atol=1.0e-12)
+
+
+def test_fgmres_full_jit_fixed_augmentation_is_trace_safe() -> None:
+    a = jnp.diag(jnp.asarray([1.0e-5, 1.5, 2.0], dtype=jnp.float64))
+    slow_mode = jnp.asarray([1.0, 0.0, 0.0], dtype=jnp.float64).reshape((3, 1))
+    action = a @ slow_mode
+
+    def solve_objective(rhs):
+        result, _residual = fgmres_solve_with_residual_jit(
+            matvec=lambda x: a @ x,
+            b=rhs,
+            augmentation_basis=slow_mode,
+            operator_on_augmentation=action,
+            tol=1.0e-13,
+            restart=1,
+            maxiter=2,
+            precondition_side="none",
+        )
+        return result.residual_norm + 1.0e-8 * jnp.vdot(result.x, result.x)
+
+    rhs = jnp.asarray([1.0, -0.5, 0.25], dtype=jnp.float64)
+    value, grad = jax.value_and_grad(solve_objective)(rhs)
+
+    assert np.isfinite(float(value))
+    assert np.isfinite(np.asarray(grad)).all()
+    assert np.linalg.norm(np.asarray(grad)) > 0.0
 
 
 def test_fgmres_cycle_jit_reports_progress_at_restart_boundaries() -> None:

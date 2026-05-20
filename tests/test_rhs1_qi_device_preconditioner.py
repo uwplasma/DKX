@@ -7,13 +7,18 @@ import pytest
 import scipy.sparse as sp
 
 from sfincs_jax.rhs1_device_operator import device_csr_from_scipy_csr
-from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
+from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata, RHS1QICoarseBlockLayout
 from sfincs_jax.rhs1_qi_device_preconditioner import (
     RHS1QIDevicePreconditionerConfig,
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
 )
 from sfincs_jax.rhs1_qi_device_smoother import build_rhs1_qi_device_jacobi_smoother
+from sfincs_jax.rhs1_qi_multilevel_coarse import (
+    RHS1QIMultilevelCoarseConfig,
+    build_rhs1_qi_multilevel_coarse_basis,
+    build_rhs1_qi_multilevel_coarse_candidates,
+)
 
 
 def _basis(vectors: jnp.ndarray, label: str = "coarse") -> RHS1QICoarseBasis:
@@ -42,6 +47,15 @@ def _rank_one_coupled_operator(n: int = 6, strength: float = 3.0):
     mode = mode / jnp.linalg.norm(mode)
     dense = jnp.diag(diagonal) + float(strength) * jnp.outer(mode, mode)
     return dense, mode, device_csr_from_scipy_csr(sp.csr_matrix(np.asarray(dense)), max_csr_mb=1.0)
+
+
+def _angular_radial_layout() -> RHS1QICoarseBlockLayout:
+    return RHS1QICoarseBlockLayout(
+        block_sizes=(8, 8, 8, 8),
+        n_theta=4,
+        n_zeta=1,
+        block_x=(0, 1, 2, 3),
+    )
 
 
 def test_device_preconditioner_builds_field_split_state_and_metadata() -> None:
@@ -187,6 +201,384 @@ def test_device_preconditioner_matrix_free_coarse_only_path_avoids_csr() -> None
     np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
 
 
+def test_device_preconditioner_multilevel_coarse_candidate_reduces_low_mode_residual() -> None:
+    layout = _angular_radial_layout()
+    multilevel_config = RHS1QIMultilevelCoarseConfig(
+        max_levels=3,
+        aggregate_factor=2,
+        max_rank=20,
+        max_angular_mode=1,
+        max_radial_degree=1,
+        regularization_rcond=1.0e-14,
+    )
+    candidates, labels, _ = build_rhs1_qi_multilevel_coarse_candidates(layout, config=multilevel_config)
+    mode = candidates[:, labels.index("level:0:radial:p1:angular:theta_cos1")]
+    mode = mode / jnp.linalg.norm(mode)
+    dense = jnp.eye(layout.total_size, dtype=jnp.float64) + 4.0 * jnp.outer(mode, mode)
+    rhs = dense @ mode
+    x0 = jnp.zeros_like(rhs)
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=layout.total_size,
+        coarse_basis=None,
+        geometry_metadata={
+            "qi_block_sizes": layout.block_sizes,
+            "qi_block_x": layout.block_x,
+            "n_theta": layout.n_theta,
+            "n_zeta": layout.n_zeta,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            multilevel_coarse=True,
+            multilevel_max_levels=3,
+            multilevel_aggregate_factor=2,
+            multilevel_max_rank=20,
+            multilevel_max_angular_mode=1,
+            multilevel_max_radial_degree=1,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    x, probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=state,
+        min_relative_improvement=0.05,
+    )
+    apply_preconditioner = state.as_preconditioner()
+    compiled = jax.jit(apply_preconditioner)(rhs)
+    cotangent = jnp.linspace(0.25, 1.25, layout.total_size, dtype=jnp.float64)
+    transpose_action = jax.vjp(apply_preconditioner, rhs)[1](cotangent)[0]
+
+    assert probe.accepted is True
+    assert probe.residual_after_norm < 1.0e-10
+    assert state.metadata.reason == "built_with_multilevel_coarse"
+    assert state.metadata.multilevel_coarse_enabled is True
+    assert state.metadata.multilevel_coarse_level_count == 3
+    assert state.metadata.multilevel_coarse_candidate_count == len(labels)
+    assert state.metadata.multilevel_coarse_rank > 0
+    assert any(label.startswith("multilevel:") for label in state.metadata.accepted_basis_labels)
+    np.testing.assert_allclose(compiled, state.apply(rhs), rtol=1.0e-12, atol=1.0e-12)
+    np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
+    assert bool(jnp.all(jnp.isfinite(transpose_action)))
+
+
+def test_device_preconditioner_multilevel_residual_equation_recovers_flat_rank_discard() -> None:
+    layout = _angular_radial_layout()
+    selector_config = RHS1QIMultilevelCoarseConfig(
+        max_levels=3,
+        aggregate_factor=2,
+        max_rank=1,
+        max_angular_mode=1,
+        max_radial_degree=1,
+        regularization_rcond=1.0e-14,
+    )
+    candidates, labels, _ = build_rhs1_qi_multilevel_coarse_candidates(layout, config=selector_config)
+    flat_basis, _ = build_rhs1_qi_multilevel_coarse_basis(layout, config=selector_config)
+    target_label = next(
+        label
+        for label in labels
+        if ":angular:" in label and label not in flat_basis.metadata.accepted_labels
+    )
+    mode = candidates[:, labels.index(target_label)]
+    mode = mode / jnp.linalg.norm(mode)
+    dense = jnp.eye(layout.total_size, dtype=jnp.float64)
+    rhs = dense @ mode
+    x0 = jnp.zeros_like(rhs)
+    geometry_metadata = {
+        "qi_block_sizes": layout.block_sizes,
+        "qi_block_x": layout.block_x,
+        "n_theta": layout.n_theta,
+        "n_zeta": layout.n_zeta,
+    }
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    flat_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=layout.total_size,
+        coarse_basis=None,
+        geometry_metadata=geometry_metadata,
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            multilevel_coarse=True,
+            multilevel_max_levels=3,
+            multilevel_aggregate_factor=2,
+            multilevel_max_rank=1,
+            multilevel_max_angular_mode=1,
+            multilevel_max_radial_degree=1,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    residual_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=layout.total_size,
+        coarse_basis=None,
+        geometry_metadata=geometry_metadata,
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            multilevel_coarse=True,
+            multilevel_max_levels=3,
+            multilevel_aggregate_factor=2,
+            multilevel_max_rank=1,
+            multilevel_max_angular_mode=1,
+            multilevel_max_radial_degree=1,
+            multilevel_residual_equation=True,
+            multilevel_residual_equation_max_level_rank=64,
+            multilevel_residual_equation_order="coarse_to_fine",
+            regularization_rcond=1.0e-14,
+        ),
+    )
+
+    _, flat_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=flat_state,
+        min_relative_improvement=0.0,
+    )
+    x, residual_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=residual_state,
+        min_relative_improvement=0.05,
+    )
+    compiled = jax.jit(residual_state.as_preconditioner())(rhs)
+
+    assert flat_probe.residual_after_norm > 1.0e-2
+    assert residual_probe.accepted is True
+    assert residual_probe.residual_after_norm < 1.0e-10
+    assert residual_state.metadata.reason == "built_with_multilevel_residual_equation"
+    assert residual_state.metadata.multilevel_residual_equation_enabled is True
+    assert residual_state.metadata.multilevel_residual_equation_stage_count == 3
+    assert residual_state.metadata.multilevel_residual_equation_rank > residual_state.metadata.rank
+    assert residual_state.metadata.multilevel_residual_equation_stage_ranks == (3, 6, 12)
+    assert residual_state.metadata.multilevel_residual_equation_order == "coarse_to_fine"
+    np.testing.assert_allclose(compiled, residual_state.apply(rhs), rtol=1.0e-12, atol=1.0e-12)
+    np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_device_preconditioner_multilevel_current_moments_reach_device_state() -> None:
+    layout = RHS1QICoarseBlockLayout(
+        block_sizes=(8, 12, 8, 12, 2),
+        n_theta=2,
+        n_zeta=2,
+        block_x=(0, 1, 0, 1, -1),
+        block_species=(0, 0, 1, 1, -1),
+    )
+    multilevel_config = RHS1QIMultilevelCoarseConfig(
+        max_levels=2,
+        max_rank=16,
+        max_angular_mode=0,
+        max_radial_degree=0,
+        include_angular=False,
+        include_radial_angular=False,
+        include_current_moments=True,
+        max_current_pitch_degree=1,
+        regularization_rcond=1.0e-14,
+    )
+    candidates, labels, _ = build_rhs1_qi_multilevel_coarse_candidates(layout, config=multilevel_config)
+    mode = candidates[:, labels.index("current:global:p1")]
+    mode = mode / jnp.linalg.norm(mode)
+    dense = 1.1 * jnp.eye(layout.total_size, dtype=jnp.float64) + 2.5 * jnp.outer(mode, mode)
+    rhs = dense @ mode
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=layout.total_size,
+        coarse_basis=None,
+        geometry_metadata={
+            "qi_block_sizes": layout.block_sizes,
+            "qi_block_x": layout.block_x,
+            "qi_block_species": layout.block_species,
+            "qi_block_tail_size": 2,
+            "n_theta": layout.n_theta,
+            "n_zeta": layout.n_zeta,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            multilevel_coarse=True,
+            multilevel_max_levels=2,
+            multilevel_max_rank=16,
+            multilevel_max_angular_mode=0,
+            multilevel_max_radial_degree=0,
+            multilevel_current_moments=True,
+            multilevel_current_max_pitch_degree=1,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    x, probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        state=state,
+        min_relative_improvement=0.0,
+    )
+
+    assert probe.accepted is True
+    assert probe.residual_after_norm < 1.0e-10
+    assert "multilevel:current:global:p1" in state.metadata.accepted_basis_labels
+    assert "multilevel:constraint_tail:aggregate" in state.metadata.accepted_basis_labels
+    np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_device_preconditioner_global_moment_residual_equation_closes_current_tail_mode() -> None:
+    layout = RHS1QICoarseBlockLayout(
+        block_sizes=(8, 12, 8, 12, 2),
+        n_theta=2,
+        n_zeta=2,
+        block_x=(0, 1, 0, 1, -1),
+        block_species=(0, 0, 1, 1, -1),
+    )
+    moment_config = RHS1QIMultilevelCoarseConfig(
+        max_levels=2,
+        max_rank=16,
+        max_angular_mode=0,
+        max_radial_degree=0,
+        include_angular=False,
+        include_radial_angular=False,
+        include_current_moments=True,
+        include_tail_constraint_moments=True,
+        max_current_pitch_degree=1,
+        regularization_rcond=1.0e-14,
+    )
+    candidates, labels, _ = build_rhs1_qi_multilevel_coarse_candidates(layout, config=moment_config)
+    current_mode = candidates[:, labels.index("current:global:p1")]
+    tail_mode = candidates[:, labels.index("constraint_tail:aggregate")]
+    mode = current_mode + 0.35 * tail_mode
+    mode = mode / jnp.linalg.norm(mode)
+    dense = 1.2 * jnp.eye(layout.total_size, dtype=jnp.float64) + 2.0 * jnp.outer(mode, mode)
+    rhs = dense @ mode
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=layout.total_size,
+        coarse_basis=None,
+        residual_seed=rhs,
+        geometry_metadata={
+            "qi_block_sizes": layout.block_sizes,
+            "qi_block_x": layout.block_x,
+            "qi_block_species": layout.block_species,
+            "qi_block_tail_size": 2,
+            "n_theta": layout.n_theta,
+            "n_zeta": layout.n_zeta,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            global_moment_residual_equation=True,
+            global_moment_residual_equation_max_rank=8,
+            global_moment_residual_equation_solver="galerkin",
+            global_moment_residual_equation_include_profile=False,
+            global_moment_residual_equation_include_current=True,
+            global_moment_residual_equation_include_tail=True,
+            multilevel_current_moments=True,
+            multilevel_current_max_pitch_degree=1,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    x, probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        state=state,
+        min_relative_improvement=0.0,
+    )
+    compiled = jax.jit(state.as_preconditioner())(rhs)
+
+    assert probe.accepted is True
+    assert probe.residual_after_norm < 1.0e-10
+    assert state.metadata.reason == "built_with_global_moment_residual_equation"
+    assert state.metadata.global_moment_residual_equation_enabled is True
+    assert state.metadata.global_moment_residual_equation_rank >= 2
+    assert state.metadata.global_moment_residual_equation_candidate_count >= 2
+    assert state.metadata.global_moment_residual_equation_solver == "galerkin"
+    assert np.isfinite(state.metadata.global_moment_residual_equation_condition_estimate)
+    assert "global_moment:current:global:p1" in state.residual_equation_bases[0].metadata.accepted_labels
+    assert (
+        "global_moment:constraint_tail:aggregate"
+        in state.residual_equation_bases[0].metadata.accepted_labels
+    )
+    np.testing.assert_allclose(compiled, state.apply(rhs), rtol=1.0e-12, atol=1.0e-12)
+    np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_device_preconditioner_residual_galerkin_equation_solves_block_residual_modes() -> None:
+    block_sizes = (3, 3, 2)
+    scales = jnp.asarray([1.5, 1.5, 1.5, 2.0, 2.0, 2.0, 3.0, 3.0], dtype=jnp.float64)
+    dense = jnp.diag(scales)
+    expected = jnp.asarray([1.0, -0.5, 0.25, 0.6, -0.2, 0.4, 0.3, -0.1], dtype=jnp.float64)
+    rhs = dense @ expected
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=int(rhs.shape[0]),
+        coarse_basis=None,
+        residual_seed=rhs,
+        geometry_metadata={
+            "qi_block_sizes": block_sizes,
+            "n_theta": 1,
+            "n_zeta": 1,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            residual_galerkin_equation=True,
+            residual_galerkin_equation_max_stages=2,
+            residual_galerkin_equation_max_stage_rank=4,
+            residual_galerkin_equation_max_rank=8,
+            residual_galerkin_equation_solver="action_lstsq",
+            residual_galerkin_equation_include_global_residual=True,
+            residual_galerkin_equation_include_block_residuals=True,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    x, probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        state=state,
+        min_relative_improvement=0.0,
+    )
+
+    assert probe.accepted is True
+    assert probe.residual_after_norm < 1.0e-10
+    assert state.metadata.reason == "built_with_residual_galerkin_equation"
+    assert state.metadata.residual_galerkin_equation_enabled is True
+    assert state.metadata.residual_galerkin_equation_rank >= 3
+    assert state.metadata.residual_galerkin_equation_stage_count >= 1
+    assert state.metadata.residual_galerkin_equation_candidate_count >= 3
+    assert state.metadata.residual_galerkin_equation_solver == "action_lstsq"
+    assert np.isfinite(state.metadata.residual_galerkin_equation_condition_estimate)
+    assert "residual_galerkin:stage:0:block:0:residual" in (
+        state.residual_equation_bases[0].metadata.accepted_labels
+    )
+    np.testing.assert_allclose(x, expected, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_device_preconditioner_multilevel_coarse_requires_layout_metadata() -> None:
+    def mv(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    with pytest.raises(ValueError, match="qi_block_sizes"):
+        setup_rhs1_qi_device_preconditioner(
+            operator=mv,
+            total_size=4,
+            coarse_basis=None,
+            config=RHS1QIDevicePreconditionerConfig(
+                local_smoother_kind="none",
+                multilevel_coarse=True,
+            ),
+        )
+
+
 def test_device_preconditioner_matrix_free_residual_smoother_reduces_residual() -> None:
     dense = jnp.diag(jnp.asarray([2.0, 4.0], dtype=jnp.float64))
     rhs = jnp.asarray([1.0, 1.0], dtype=jnp.float64)
@@ -289,6 +681,29 @@ def test_device_preconditioner_matrix_free_block_smoother_solves_projected_group
     np.testing.assert_allclose(mv(x), rhs, rtol=1.0e-10, atol=1.0e-10)
 
 
+def test_device_preconditioner_accepts_block_minres_hybrid_alias() -> None:
+    rhs = jnp.asarray([1.0, -2.0, 0.5, 3.0], dtype=jnp.float64)
+
+    def mv(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=4,
+        coarse_basis=None,
+        geometry_metadata={"qi_block_sizes": (2, 2)},
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="matrix_free_block_minres_hybrid",
+            matrix_free_smoother_sweeps=1,
+            matrix_free_block_smoother_max_groups=4,
+            matrix_free_block_smoother_rcond=1.0e-14,
+        ),
+    )
+
+    assert state.metadata.local_smoother_kind == "matrix_free_block_minres"
+    np.testing.assert_allclose(state.apply(rhs), rhs, rtol=1.0e-11, atol=1.0e-11)
+
+
 def test_device_preconditioner_matrix_free_block_smoother_adds_x_species_aggregates() -> None:
     rhs = jnp.asarray([1.0, -2.0, 0.5, 3.0], dtype=jnp.float64)
 
@@ -338,6 +753,31 @@ def test_device_preconditioner_matrix_free_block_smoother_requires_block_metadat
             coarse_basis=None,
             config=RHS1QIDevicePreconditionerConfig(local_smoother_kind="matrix_free_block_minres"),
         )
+
+
+def test_device_preconditioner_matrix_free_block_smoother_is_transpose_safe() -> None:
+    rhs = jnp.asarray([1.0, -2.0, 0.5, 3.0], dtype=jnp.float64)
+
+    def mv(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=4,
+        coarse_basis=None,
+        geometry_metadata={"qi_block_sizes": (1, 1, 1, 1)},
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="matrix_free_block_minres",
+            matrix_free_block_smoother_max_groups=4,
+            matrix_free_block_smoother_rcond=1.0e-14,
+        ),
+    )
+    apply_preconditioner = state.as_preconditioner()
+    compiled = jax.jit(apply_preconditioner)(rhs)
+    pullback = jax.vjp(apply_preconditioner, rhs)[1](rhs)[0]
+
+    np.testing.assert_allclose(compiled, rhs, rtol=1.0e-10, atol=1.0e-10)
+    assert jnp.all(jnp.isfinite(pullback))
 
 
 def test_device_preconditioner_probe_runs_bounded_residual_reduction_cycles() -> None:
@@ -517,6 +957,528 @@ def test_device_preconditioner_residual_enrichment_adds_matrix_free_directions()
     assert "residual:0" in enriched_state.metadata.accepted_basis_labels
     assert enriched_probe.residual_after_norm < 1.0e-10
     np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_device_preconditioner_residual_snapshot_enrichment_solves_block_residual() -> None:
+    dense = jnp.diag(jnp.asarray([2.0, 3.0, 4.0, 5.0], dtype=jnp.float64))
+    rhs = jnp.asarray([0.0, 0.0, 4.0, 0.0], dtype=jnp.float64)
+    x0 = jnp.zeros_like(rhs)
+    irrelevant_basis = jnp.asarray([1.0, 0.0, 0.0, 0.0], dtype=jnp.float64).reshape((-1, 1))
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=4,
+        coarse_basis=irrelevant_basis,
+        coarse_labels=("irrelevant",),
+        residual_seed=rhs,
+        geometry_metadata={
+            "qi_block_sizes": (1, 1, 1, 1),
+            "qi_block_x": (0, 1, 2, 3),
+            "n_theta": 1,
+            "n_zeta": 1,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            residual_snapshot_enrichment=True,
+            residual_snapshot_max_rank=4,
+            residual_snapshot_include_blocks=True,
+            residual_snapshot_include_aggregates=False,
+            regularization_rcond=1.0e-14,
+            max_rank=5,
+        ),
+    )
+    x, probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=state,
+        min_relative_improvement=0.05,
+    )
+
+    assert probe.accepted is True
+    assert state.metadata.residual_snapshot_enrichment_enabled is True
+    assert state.metadata.residual_snapshot_candidate_count == 1
+    assert state.metadata.residual_snapshot_rank == 1
+    assert state.metadata.residual_snapshot_group_count == 4
+    assert any("residual_snapshot_primal:2" in label for label in state.metadata.accepted_basis_labels)
+    assert probe.residual_after_norm < 1.0e-10
+    np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_device_preconditioner_residual_snapshot_requires_seed() -> None:
+    with pytest.raises(ValueError, match="residual_seed is required"):
+        setup_rhs1_qi_device_preconditioner(
+            operator=lambda x: jnp.asarray(x, dtype=jnp.float64),
+            total_size=2,
+            geometry_metadata={"qi_block_sizes": (1, 1), "n_theta": 1, "n_zeta": 1},
+            config=RHS1QIDevicePreconditionerConfig(
+                local_smoother_kind="none",
+                residual_snapshot_enrichment=True,
+            ),
+        )
+
+
+def test_device_preconditioner_residual_snapshot_residual_equation_stages_blocks() -> None:
+    dense = jnp.eye(4, dtype=jnp.float64)
+    rhs = jnp.asarray([1.0, -2.0, 0.0, 0.0], dtype=jnp.float64)
+    x0 = jnp.zeros_like(rhs)
+    irrelevant_basis = jnp.asarray([0.0, 0.0, 1.0, 0.0], dtype=jnp.float64).reshape((-1, 1))
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    flat_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=4,
+        coarse_basis=irrelevant_basis,
+        residual_seed=rhs,
+        geometry_metadata={
+            "qi_block_sizes": (1, 1, 1, 1),
+            "qi_block_x": (0, 1, 2, 3),
+            "n_theta": 1,
+            "n_zeta": 1,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            residual_snapshot_enrichment=True,
+            residual_snapshot_max_rank=1,
+            residual_snapshot_include_blocks=True,
+            residual_snapshot_include_aggregates=False,
+            regularization_rcond=1.0e-14,
+            max_rank=1,
+        ),
+    )
+    staged_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=4,
+        coarse_basis=irrelevant_basis,
+        residual_seed=rhs,
+        geometry_metadata={
+            "qi_block_sizes": (1, 1, 1, 1),
+            "qi_block_x": (0, 1, 2, 3),
+            "n_theta": 1,
+            "n_zeta": 1,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            residual_snapshot_residual_equation=True,
+            residual_snapshot_residual_equation_max_rank=2,
+            residual_snapshot_residual_equation_include_global=False,
+            residual_snapshot_include_blocks=True,
+            residual_snapshot_include_aggregates=False,
+            regularization_rcond=1.0e-14,
+            max_rank=1,
+        ),
+    )
+    flat_x, flat_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=flat_state,
+        min_relative_improvement=0.0,
+    )
+    staged_x, staged_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=staged_state,
+        min_relative_improvement=0.0,
+    )
+
+    assert flat_probe.residual_after_norm > 1.0
+    assert staged_probe.accepted is True
+    assert staged_state.metadata.reason == "built_with_residual_snapshot_residual_equation"
+    assert staged_state.metadata.residual_snapshot_residual_equation_enabled is True
+    assert staged_state.metadata.residual_snapshot_residual_equation_group_count == 4
+    assert staged_state.metadata.residual_snapshot_residual_equation_candidate_count == 2
+    assert staged_state.metadata.residual_snapshot_residual_equation_rank == 2
+    assert staged_state.metadata.residual_snapshot_residual_equation_stage_ranks == (1, 1)
+    assert any(
+        "residual_snapshot_equation_primal:0" in label
+        for label in staged_state.residual_equation_bases[0].metadata.accepted_labels
+    )
+    assert any(
+        "residual_snapshot_equation_primal:1" in label
+        for label in staged_state.residual_equation_bases[1].metadata.accepted_labels
+    )
+    assert staged_probe.residual_after_norm < 1.0e-10
+    np.testing.assert_allclose(dense @ staged_x, rhs, rtol=1.0e-10, atol=1.0e-10)
+    assert jnp.linalg.norm(dense @ staged_x - rhs) < jnp.linalg.norm(dense @ flat_x - rhs)
+
+
+def test_device_preconditioner_residual_snapshot_can_add_adjoint_normal_directions() -> None:
+    dense = jnp.asarray([[1.0, 0.0], [3.0, 2.0]], dtype=jnp.float64)
+    rhs = jnp.asarray([0.0, 2.0], dtype=jnp.float64)
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=2,
+        residual_seed=rhs,
+        geometry_metadata={"qi_block_sizes": (2,), "n_theta": 1, "n_zeta": 1},
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            residual_snapshot_enrichment=True,
+            residual_snapshot_max_rank=2,
+            residual_snapshot_include_global=True,
+            residual_snapshot_include_blocks=False,
+            residual_snapshot_include_aggregates=False,
+            residual_snapshot_use_adjoint=True,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+
+    assert state.metadata.residual_snapshot_enrichment_enabled is True
+    assert state.metadata.residual_snapshot_candidate_count == 2
+    assert state.metadata.residual_snapshot_include_primal is True
+    assert state.metadata.residual_snapshot_use_adjoint is True
+    assert any("residual_snapshot_adjoint:0" in label for label in state.metadata.accepted_basis_labels)
+
+
+def test_device_preconditioner_block_schur_residual_equation_solves_coupled_mode_snapshots_miss() -> None:
+    dense = jnp.asarray(
+        [
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [1.0, -1.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=jnp.float64,
+    )
+    rhs = jnp.asarray([1.0, 0.0, 0.0, 0.0], dtype=jnp.float64)
+    x0 = jnp.zeros_like(rhs)
+    block0_residual = jnp.asarray([1.0, 0.0, 0.0, 0.0], dtype=jnp.float64).reshape((-1, 1))
+    geometry_metadata = {
+        "qi_block_sizes": (2, 2),
+        "qi_block_x": (0, 1),
+        "n_theta": 1,
+        "n_zeta": 1,
+    }
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    base_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=4,
+        coarse_basis=block0_residual,
+        coarse_labels=("block0_residual",),
+        residual_seed=rhs,
+        geometry_metadata=geometry_metadata,
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    _, base_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=base_state,
+        min_relative_improvement=0.0,
+    )
+    snapshot_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=4,
+        coarse_basis=block0_residual,
+        coarse_labels=("block0_residual",),
+        residual_seed=rhs,
+        geometry_metadata=geometry_metadata,
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            residual_snapshot_enrichment=True,
+            residual_snapshot_max_rank=4,
+            residual_snapshot_include_blocks=True,
+            residual_snapshot_include_aggregates=True,
+            regularization_rcond=1.0e-14,
+            max_rank=4,
+        ),
+    )
+    _, snapshot_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=snapshot_state,
+        min_relative_improvement=0.0,
+    )
+    schur_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=4,
+        coarse_basis=block0_residual,
+        coarse_labels=("block0_residual",),
+        residual_seed=rhs,
+        geometry_metadata=geometry_metadata,
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            block_schur_residual_equation=True,
+            block_schur_residual_equation_max_rank=2,
+            block_schur_residual_equation_include_blocks=True,
+            block_schur_residual_equation_include_aggregates=False,
+            regularization_rcond=1.0e-14,
+            max_rank=3,
+        ),
+    )
+    x, schur_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=schur_state,
+        min_relative_improvement=0.05,
+    )
+    compiled = jax.jit(schur_state.as_preconditioner())(rhs)
+    tangent = jax.vjp(schur_state.as_preconditioner(), rhs)[1](rhs)[0]
+
+    assert base_probe.residual_after_norm > 1.0e-1
+    assert snapshot_probe.accepted is False
+    assert snapshot_probe.residual_after_norm > 1.0e-1
+    assert schur_probe.accepted is True
+    assert schur_state.metadata.reason == "built_with_block_schur_residual_equation"
+    assert schur_state.metadata.block_schur_residual_equation_enabled is True
+    assert schur_state.metadata.block_schur_residual_equation_candidate_count == 1
+    assert schur_state.metadata.block_schur_residual_equation_rank == 1
+    assert schur_state.metadata.block_schur_residual_equation_group_count == 2
+    assert schur_state.metadata.block_schur_residual_equation_stage_ranks == (1,)
+    assert "block_schur_residual:block:0" in schur_state.residual_equation_bases[0].metadata.accepted_labels
+    assert schur_probe.residual_after_norm < 1.0e-10
+    np.testing.assert_allclose(compiled, schur_state.apply(rhs), rtol=1.0e-12, atol=1.0e-12)
+    np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
+    assert bool(jnp.all(jnp.isfinite(tangent)))
+
+
+def test_device_preconditioner_block_schur_residual_requires_seed() -> None:
+    with pytest.raises(ValueError, match="residual_seed is required"):
+        setup_rhs1_qi_device_preconditioner(
+            operator=lambda x: jnp.asarray(x, dtype=jnp.float64),
+            total_size=2,
+            geometry_metadata={"qi_block_sizes": (1, 1), "n_theta": 1, "n_zeta": 1},
+            config=RHS1QIDevicePreconditionerConfig(
+                local_smoother_kind="none",
+                block_schur_residual_equation=True,
+            ),
+        )
+
+
+def test_device_preconditioner_operator_action_enrichment_builds_reused_coarse_space() -> None:
+    dense = jnp.asarray(
+        [
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 0.0, 2.0],
+        ],
+        dtype=jnp.float64,
+    )
+    rhs = jnp.asarray([0.0, 1.0, 0.0], dtype=jnp.float64)
+    x0 = jnp.zeros_like(rhs)
+    first_component_only = jnp.asarray([1.0, 0.0, 0.0], dtype=jnp.float64).reshape((-1, 1))
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    base_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=3,
+        coarse_basis=first_component_only,
+        coarse_labels=("first",),
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    _, base_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=base_state,
+        min_relative_improvement=0.0,
+    )
+
+    action_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=3,
+        coarse_basis=first_component_only,
+        coarse_labels=("first",),
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            operator_action_enrichment=True,
+            operator_action_enrichment_depth=1,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    x, action_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=action_state,
+        min_relative_improvement=0.05,
+    )
+    compiled = jax.jit(action_state.as_preconditioner())(rhs)
+
+    assert base_probe.accepted is True
+    assert base_probe.residual_after_norm > 1.0e-2
+    assert action_probe.accepted is True
+    assert action_probe.residual_after_norm < 1.0e-10
+    assert action_state.metadata.operator_source == "matrix_free"
+    assert action_state.metadata.operator_action_enrichment_enabled is True
+    assert action_state.metadata.operator_action_enrichment_depth == 1
+    assert action_state.metadata.operator_action_enrichment_candidate_count == 1
+    assert action_state.metadata.rank == 2
+    assert "operator_action:1:first" in action_state.metadata.accepted_basis_labels
+    assert action_state.operator_on_basis.shape == (3, 2)
+    np.testing.assert_allclose(compiled, action_state.apply(rhs), rtol=1.0e-12, atol=1.0e-12)
+    np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_device_preconditioner_operator_krylov_enrichment_solves_residual_subspace() -> None:
+    dense = jnp.diag(jnp.asarray([2.0, 5.0, 11.0], dtype=jnp.float64))
+    rhs = jnp.asarray([1.0, 1.0, 0.0], dtype=jnp.float64)
+    x0 = jnp.zeros_like(rhs)
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    base_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=3,
+        coarse_basis=None,
+        config=RHS1QIDevicePreconditionerConfig(local_smoother_kind="none"),
+    )
+    _, base_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=base_state,
+        min_relative_improvement=0.0,
+    )
+
+    krylov_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=3,
+        coarse_basis=None,
+        residual_seed=rhs,
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            operator_krylov_enrichment=True,
+            operator_krylov_depth=1,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    x, krylov_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=krylov_state,
+        min_relative_improvement=0.05,
+    )
+
+    assert base_probe.accepted is False
+    assert krylov_probe.accepted is True
+    assert krylov_probe.residual_after_norm < 1.0e-10
+    assert krylov_state.metadata.operator_source == "matrix_free"
+    assert krylov_state.metadata.operator_krylov_enrichment_enabled is True
+    assert krylov_state.metadata.operator_krylov_depth == 1
+    assert krylov_state.metadata.operator_krylov_candidate_count == 2
+    assert krylov_state.metadata.rank == 2
+    assert "operator_krylov:0" in krylov_state.metadata.accepted_basis_labels
+    assert "operator_krylov:1" in krylov_state.metadata.accepted_basis_labels
+    np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_device_preconditioner_adjoint_krylov_targets_nonnormal_left_error_mode() -> None:
+    dense = jnp.asarray([[0.0, 1.0], [2.0, 0.0]], dtype=jnp.float64)
+    rhs = jnp.asarray([1.0, 0.0], dtype=jnp.float64)
+    x0 = jnp.zeros_like(rhs)
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    residual_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=2,
+        coarse_basis=None,
+        residual_seed=rhs,
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            operator_krylov_enrichment=True,
+            operator_krylov_depth=0,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    _, residual_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=residual_state,
+        min_relative_improvement=0.0,
+    )
+
+    adjoint_state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=2,
+        coarse_basis=None,
+        residual_seed=rhs,
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            adjoint_krylov_enrichment=True,
+            adjoint_krylov_depth=0,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    x, adjoint_probe = probe_rhs1_qi_device_preconditioner(
+        rhs=rhs,
+        x0=x0,
+        state=adjoint_state,
+        min_relative_improvement=0.0,
+    )
+    compiled = jax.jit(adjoint_state.as_preconditioner())(rhs)
+    tangent = jax.vjp(adjoint_state.as_preconditioner(), rhs)[1](rhs)[0]
+
+    assert residual_probe.accepted is False
+    assert residual_probe.residual_after_norm == pytest.approx(residual_probe.residual_before_norm)
+    assert adjoint_probe.accepted is True
+    assert adjoint_probe.residual_after_norm < 1.0e-10
+    assert adjoint_state.metadata.adjoint_krylov_enrichment_enabled is True
+    assert adjoint_state.metadata.adjoint_krylov_depth == 0
+    assert adjoint_state.metadata.adjoint_krylov_candidate_count == 1
+    assert adjoint_state.metadata.adjoint_krylov_transpose_source == "autodiff"
+    assert "adjoint_krylov:0" in adjoint_state.metadata.accepted_basis_labels
+    np.testing.assert_allclose(mv(x), rhs, rtol=1.0e-10, atol=1.0e-10)
+    np.testing.assert_allclose(compiled, adjoint_state.apply(rhs), rtol=1.0e-12, atol=1.0e-12)
+    assert bool(jnp.all(jnp.isfinite(tangent)))
+
+
+def test_device_preconditioner_operator_krylov_and_multilevel_apply_are_transpose_safe() -> None:
+    dense = jnp.diag(jnp.asarray([2.0, 3.0, 5.0, 7.0], dtype=jnp.float64))
+    rhs = jnp.asarray([1.0, -0.5, 0.25, 0.75], dtype=jnp.float64)
+
+    def mv(x):
+        return dense @ jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=4,
+        coarse_basis=None,
+        residual_seed=rhs,
+        geometry_metadata={
+            "qi_block_sizes": (2, 2),
+            "qi_block_x": (0, 1),
+            "qi_block_species": (0, 0),
+            "n_theta": 1,
+            "n_zeta": 2,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            operator_krylov_enrichment=True,
+            operator_krylov_depth=1,
+            multilevel_coarse=True,
+            multilevel_max_levels=2,
+            multilevel_max_rank=4,
+            multilevel_max_angular_mode=1,
+            multilevel_max_radial_degree=1,
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    vector = jnp.asarray([0.2, -0.1, 0.4, 0.3], dtype=jnp.float64)
+    _, pullback = jax.vjp(lambda x: state.apply(x), vector)
+    tangent = pullback(jnp.ones_like(vector))[0]
+
+    assert state.metadata.operator_krylov_enrichment_enabled is True
+    assert state.metadata.multilevel_coarse_enabled is True
+    assert state.metadata.multilevel_coarse_rank > 0
+    assert jnp.all(jnp.isfinite(tangent))
 
 
 def test_device_preconditioner_recycle_enrichment_targets_remaining_residual() -> None:

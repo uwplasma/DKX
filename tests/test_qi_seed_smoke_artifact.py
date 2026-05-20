@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 78
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 98
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 46
+    assert current["nonpassing_artifact_count"] == 66
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -993,6 +993,62 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         ),
         (
             "docs/_static/"
+            "qi_seed_robustness_scale060_qi_device_operator_krylov_depth64_blockminres_hybrid_seed3_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_gpu0_public_auto_after_transpose_fixes_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0_fgmres_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_operator_krylov_multilevel_device_qi_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_operator_krylov_pitch_multilevel_device_qi_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_current_constraint_device_qi_gpu0_2026_05_20.json"
+        ),
+        "docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_cpu_2026_05_20.json",
+        "docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_gpu0_2026_05_20.json",
+        "docs/_static/qi_seed_robustness_scale060_coarse_residual_device_qi_cpu_2026_05_20.json",
+        "docs/_static/qi_seed_robustness_scale060_residual_snapshot_device_qi_cpu_2026_05_20.json",
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_residual_snapshot_equation_device_qi_cpu_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_global_moment_closure_device_qi_cpu_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_global_moment_closure_device_qi_gpu0_2026_05_20.json"
+        ),
+        "docs/_static/qi_seed_robustness_scale060_residual_galerkin_device_qi_cpu_2026_05_20.json",
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_residual_galerkin_device_qi_gpu1_2026_05_20.json"
+        ),
+        "docs/_static/qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json",
+        "docs/_static/qi_seed_robustness_scale060_adjoint_krylov_device_qi_cpu_2026_05_20.json",
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_operator_krylov_composite_device_qi_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_device_global_coupling_gpu0_2026_05_20.json"
+        ),
+        "docs/_static/qi_seed_robustness_scale060_rankdef_schur_gpu0_2026_05_20.json",
+        (
+            "docs/_static/"
             "qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json"
         ),
         "docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
@@ -1106,6 +1162,205 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "last_reported_residual_norm"
     ]
     assert blockminres_hybrid_gpu_deeper["last_reported_residual_norm"] == pytest.approx(4.689216e-07)
+    operator_krylov_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_qi_device_operator_krylov_depth64_blockminres_hybrid_seed3_gpu0_2026_05_20.json"
+        )
+    )
+    assert operator_krylov_gpu["passed"] is False
+    assert operator_krylov_gpu["active_size"] == 81377
+    assert operator_krylov_gpu["total_size"] == 139502
+    assert operator_krylov_gpu["last_reported_residual_norm"] == pytest.approx(3.626870e-07)
+    assert operator_krylov_gpu["last_reported_residual_norm"] < blockminres_hybrid_gpu_deeper[
+        "last_reported_residual_norm"
+    ]
+    pitch_multilevel_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_operator_krylov_pitch_multilevel_device_qi_gpu0_2026_05_20.json"
+        )
+    )
+    assert pitch_multilevel_gpu["passed"] is False
+    assert pitch_multilevel_gpu["last_reported_residual_norm"] == pytest.approx(2.306911e-05)
+    assert pitch_multilevel_gpu["max_elapsed_s"] < 300.0
+    current_constraint_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_current_constraint_device_qi_gpu0_2026_05_20.json"
+        )
+    )
+    assert current_constraint_gpu["passed"] is False
+    assert current_constraint_gpu["last_reported_residual_norm"] == pytest.approx(2.339521e-05)
+    assert current_constraint_gpu["last_reported_residual_norm"] > pitch_multilevel_gpu[
+        "last_reported_residual_norm"
+    ]
+    assert current_constraint_gpu["max_elapsed_s"] < 320.0
+    augmented_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_cpu_2026_05_20.json"
+    )
+    augmented_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_gpu0_2026_05_20.json"
+    )
+    assert augmented_cpu["passed"] is False
+    assert augmented_gpu["passed"] is False
+    assert augmented_cpu["evidence_classes"] == ["device_qi_augmented_krylov_coarse_reuse"]
+    assert augmented_gpu["evidence_classes"] == ["device_qi_augmented_krylov_coarse_reuse"]
+    assert "observed_augmented_krylov" in augmented_cpu["evidence_tags"]
+    assert "observed_augmented_krylov" in augmented_gpu["evidence_tags"]
+    assert augmented_cpu["last_reported_residual_norm"] == pytest.approx(2.218300e-05)
+    assert augmented_gpu["last_reported_residual_norm"] == pytest.approx(2.218202e-05)
+    assert augmented_gpu["last_reported_residual_norm"] < pitch_multilevel_gpu[
+        "last_reported_residual_norm"
+    ]
+    assert augmented_gpu["max_elapsed_s"] < 170.0
+    coarse_residual_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_coarse_residual_device_qi_cpu_2026_05_20.json"
+    )
+    assert coarse_residual_cpu["passed"] is False
+    assert coarse_residual_cpu["evidence_classes"] == ["device_qi_multilevel_residual_equation"]
+    assert "observed_multilevel_residual_equation" in coarse_residual_cpu["evidence_tags"]
+    assert coarse_residual_cpu["last_reported_residual_norm"] == pytest.approx(2.306911e-05)
+    assert coarse_residual_cpu["last_reported_residual_norm"] > augmented_cpu["last_reported_residual_norm"]
+    assert coarse_residual_cpu["max_elapsed_s"] < 300.0
+    residual_snapshot_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_residual_snapshot_device_qi_cpu_2026_05_20.json"
+    )
+    assert residual_snapshot_cpu["passed"] is False
+    assert residual_snapshot_cpu["evidence_classes"] == ["device_qi_residual_snapshot_coarse_reuse"]
+    assert "observed_residual_snapshot" in residual_snapshot_cpu["evidence_tags"]
+    assert residual_snapshot_cpu["last_reported_residual_norm"] == pytest.approx(2.103015e-05)
+    assert residual_snapshot_cpu["last_reported_residual_norm"] < augmented_cpu[
+        "last_reported_residual_norm"
+    ]
+    assert residual_snapshot_cpu["max_elapsed_s"] < 300.0
+    residual_snapshot_equation_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_residual_snapshot_equation_device_qi_cpu_2026_05_20.json"
+        )
+    )
+    assert residual_snapshot_equation_cpu["passed"] is False
+    assert residual_snapshot_equation_cpu["evidence_classes"] == [
+        "device_qi_residual_snapshot_residual_equation_coarse_reuse"
+    ]
+    assert "observed_residual_snapshot_residual_equation" in residual_snapshot_equation_cpu["evidence_tags"]
+    assert residual_snapshot_equation_cpu["last_reported_residual_norm"] == pytest.approx(2.320763e-05)
+    assert residual_snapshot_equation_cpu["last_reported_residual_norm"] > residual_snapshot_cpu[
+        "last_reported_residual_norm"
+    ]
+    assert residual_snapshot_equation_cpu["max_elapsed_s"] < 300.0
+    global_moment_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_global_moment_closure_device_qi_cpu_2026_05_20.json"
+        )
+    )
+    assert global_moment_cpu["passed"] is False
+    assert global_moment_cpu["evidence_classes"] == [
+        "device_qi_global_moment_residual_equation_coarse_reuse"
+    ]
+    assert "observed_global_moment_residual_equation" in global_moment_cpu["evidence_tags"]
+    assert global_moment_cpu["last_reported_residual_norm"] == pytest.approx(2.420524e-05)
+    assert global_moment_cpu["last_reported_residual_norm"] > residual_snapshot_cpu[
+        "last_reported_residual_norm"
+    ]
+    assert global_moment_cpu["max_elapsed_s"] < 300.0
+    global_moment_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_global_moment_closure_device_qi_gpu0_2026_05_20.json"
+        )
+    )
+    assert global_moment_gpu["passed"] is False
+    assert global_moment_gpu["evidence_classes"] == global_moment_cpu["evidence_classes"]
+    assert "observed_global_moment_residual_equation" in global_moment_gpu["evidence_tags"]
+    assert global_moment_gpu["last_reported_residual_norm"] == pytest.approx(2.420524e-05)
+    assert global_moment_gpu["max_elapsed_s"] < 320.0
+    residual_galerkin_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_residual_galerkin_device_qi_cpu_2026_05_20.json"
+    )
+    assert residual_galerkin_cpu["passed"] is False
+    assert residual_galerkin_cpu["evidence_classes"] == [
+        "device_qi_residual_galerkin_equation_coarse_reuse"
+    ]
+    assert "observed_residual_galerkin_equation" in residual_galerkin_cpu["evidence_tags"]
+    assert residual_galerkin_cpu["last_reported_residual_norm"] == pytest.approx(2.632208e-05)
+    assert residual_galerkin_cpu["last_reported_residual_norm"] > residual_snapshot_cpu[
+        "last_reported_residual_norm"
+    ]
+    assert residual_galerkin_cpu["max_elapsed_s"] < 300.0
+    residual_galerkin_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_residual_galerkin_device_qi_gpu1_2026_05_20.json"
+        )
+    )
+    assert residual_galerkin_gpu["passed"] is False
+    assert residual_galerkin_gpu["evidence_classes"] == residual_galerkin_cpu["evidence_classes"]
+    assert "observed_residual_galerkin_equation" in residual_galerkin_gpu["evidence_tags"]
+    assert residual_galerkin_gpu["last_reported_residual_norm"] == pytest.approx(2.632208e-05)
+    assert residual_galerkin_gpu["max_elapsed_s"] < 330.0
+    block_schur_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json"
+    )
+    assert block_schur_cpu["passed"] is False
+    assert block_schur_cpu["evidence_classes"] == ["device_qi_block_schur_residual_coarse_reuse"]
+    assert "observed_block_schur_residual" in block_schur_cpu["evidence_tags"]
+    assert block_schur_cpu["last_reported_residual_norm"] == pytest.approx(2.275188e-05)
+    assert block_schur_cpu["last_reported_residual_norm"] > residual_snapshot_cpu[
+        "last_reported_residual_norm"
+    ]
+    assert block_schur_cpu["max_elapsed_s"] < 300.0
+    adjoint_cpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_adjoint_krylov_device_qi_cpu_2026_05_20.json"
+    )
+    assert adjoint_cpu["passed"] is False
+    assert adjoint_cpu["last_reported_residual_norm"] == pytest.approx(2.48643e-05)
+    assert adjoint_cpu["last_reported_residual_norm"] > pitch_multilevel_gpu["last_reported_residual_norm"]
+    assert adjoint_cpu["max_elapsed_s"] < 650.0
     early_payload = json.loads(
         Path("docs/_static/qi_seed_robustness_scale060_early_qi_skipstrong_skipglobal_seed3_cpu_2026_05_19.json")
         .read_text(encoding="utf-8")
@@ -1378,3 +1633,88 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert "JAX_PLATFORM_NAME=gpu" in commands["production_gpu0_seed_ladder"]
     assert "--resolution-scale 1.0" in commands["production_cpu_seed_ladder"]
     assert "--resolution-scale 1.0" in commands["production_gpu0_seed_ladder"]
+    assert "--probe-preset block-schur-device-qi" in commands["block_schur_device_qi_gpu0_probe"]
+    assert (
+        "--probe-preset global-moment-closure-device-qi"
+        in commands["global_moment_closure_device_qi_gpu0_probe"]
+    )
+    assert (
+        "--probe-preset residual-galerkin-device-qi"
+        in commands["residual_galerkin_device_qi_gpu0_probe"]
+    )
+    assert (
+        "--probe-preset residual-snapshot-equation-device-qi"
+        in commands["residual_snapshot_equation_device_qi_gpu0_probe"]
+    )
+
+    residual_snapshot_equation_preset = payload["probe_presets"]["residual-snapshot-equation-device-qi"]
+    assert (
+        residual_snapshot_equation_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        residual_snapshot_equation_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_MAX_RANK"
+        ]
+        == "48"
+    )
+    assert (
+        residual_snapshot_equation_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER"
+        ]
+        == "action_lstsq"
+    )
+    assert (
+        residual_snapshot_equation_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL"
+        ]
+        == "1"
+    )
+    assert "fail-closed" in residual_snapshot_equation_preset["description"]
+
+    global_moment_preset = payload["probe_presets"]["global-moment-closure-device-qi"]
+    assert (
+        global_moment_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert "fail-closed" in global_moment_preset["description"]
+
+    residual_galerkin_preset = payload["probe_presets"]["residual-galerkin-device-qi"]
+    assert (
+        residual_galerkin_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        residual_galerkin_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGE_RANK"
+        ]
+        == "8"
+    )
+    assert "fail-closed" in residual_galerkin_preset["description"]
+
+    block_schur_preset = payload["probe_presets"]["block-schur-device-qi"]
+    assert (
+        block_schur_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        block_schur_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK"
+        ]
+        == "64"
+    )
+    assert (
+        block_schur_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER"
+        ]
+        == "galerkin"
+    )
+    assert "fail-closed" in block_schur_preset["description"]
