@@ -237,7 +237,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   restart least-squares problem over ``[A U, A Z]`` and update through
   ``[U, Z]``. This is the current real operator-reuse hook for the device-QI
   lane: it avoids dense global assembly and differs from seed-only correction
-  because the basis is active inside the Krylov residual equation.
+  because the basis is active inside the Krylov residual equation. The runner
+  preset ``recycled-augmented-device-qi`` applies the same hook with a larger
+  fixed device-cycle budget and ``outer_k=32``. The checked GPU0 artifact
+  improves the hard-seed residual to ``7.336295e-6`` in ``158.6 s`` but remains
+  fail-closed because it does not satisfy the production write tolerance.
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION=1``
   enables the deeper multilevel coarse-residual path. Setup builds separate
   per-level bases from the same QI block layout, caches each ``A Q_l`` action,
@@ -284,7 +288,12 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   worse than the residual-snapshot path, so no production default or GPU claim
   is made from it.
   The GPU0 best-of artifact improves the final residual to ``1.992464e-5`` in
-  ``292 s`` but still fails the production write gate. The composite
+  ``292 s`` but still fails the production write gate. The adaptive local
+  smoother token ``adaptive_residual_equation`` maps to a multilevel
+  ``block_hierarchy`` grouping, preserving global, aggregate, and block residual
+  source spaces in the matrix-free projected residual smoother. Its first GPU0
+  artifact ends at ``2.307995e-5`` in ``288 s``, so it is retained as an
+  opt-in negative-evidence path rather than a default. The composite
   ``composite-closure-device-qi`` runner preset combines residual snapshots,
   residual-Galerkin/operator-image stages, and block-Schur residual equations;
   its GPU1 artifact accepts ``3.021487e-5 -> 2.575099e-5`` but ends worse at

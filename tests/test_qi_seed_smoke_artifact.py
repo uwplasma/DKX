@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 100
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 102
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 68
+    assert current["nonpassing_artifact_count"] == 70
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -1017,6 +1017,10 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         ),
         "docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_cpu_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_gpu0_2026_05_20.json",
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_recycled_augmented_deep_device_qi_gpu0_2026_05_20.json"
+        ),
         "docs/_static/qi_seed_robustness_scale060_coarse_residual_device_qi_cpu_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_residual_snapshot_device_qi_cpu_2026_05_20.json",
         (
@@ -1040,6 +1044,10 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         (
             "docs/_static/"
             "qi_seed_robustness_scale060_block_schur_bestof_device_qi_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_adaptive_residual_device_qi_gpu0_2026_05_20.json"
         ),
         (
             "docs/_static/"
@@ -1237,6 +1245,23 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "last_reported_residual_norm"
     ]
     assert augmented_gpu["max_elapsed_s"] < 170.0
+    recycled_augmented_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_recycled_augmented_deep_device_qi_gpu0_2026_05_20.json"
+        )
+    )
+    assert recycled_augmented_gpu["passed"] is False
+    assert recycled_augmented_gpu["evidence_classes"] == ["device_qi_augmented_krylov_coarse_reuse"]
+    assert "observed_augmented_krylov" in recycled_augmented_gpu["evidence_tags"]
+    assert recycled_augmented_gpu["last_reported_residual_norm"] == pytest.approx(7.336295e-06)
+    assert recycled_augmented_gpu["last_reported_residual_norm"] < augmented_gpu[
+        "last_reported_residual_norm"
+    ]
+    assert recycled_augmented_gpu["max_elapsed_s"] < 170.0
     coarse_residual_cpu = next(
         artifact
         for artifact in payload["source_artifacts"]
@@ -1376,6 +1401,23 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "last_reported_residual_norm"
     ]
     assert block_schur_bestof_gpu["max_elapsed_s"] < 320.0
+    adaptive_residual_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_adaptive_residual_device_qi_gpu0_2026_05_20.json"
+        )
+    )
+    assert adaptive_residual_gpu["passed"] is False
+    assert adaptive_residual_gpu["evidence_classes"] == ["device_qi_block_schur_residual_coarse_reuse"]
+    assert "observed_block_schur_residual" in adaptive_residual_gpu["evidence_tags"]
+    assert adaptive_residual_gpu["last_reported_residual_norm"] == pytest.approx(2.307995e-05)
+    assert adaptive_residual_gpu["last_reported_residual_norm"] > block_schur_bestof_gpu[
+        "last_reported_residual_norm"
+    ]
+    assert adaptive_residual_gpu["max_elapsed_s"] < 300.0
     composite_gpu = next(
         artifact
         for artifact in payload["source_artifacts"]
@@ -1690,6 +1732,11 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "--probe-preset residual-snapshot-equation-device-qi"
         in commands["residual_snapshot_equation_device_qi_gpu0_probe"]
     )
+    assert (
+        "--probe-preset recycled-augmented-device-qi"
+        in commands["recycled_augmented_device_qi_gpu0_probe"]
+    )
+    assert "--probe-preset adaptive-residual-device-qi" in commands["adaptive_residual_device_qi_gpu0_probe"]
 
     residual_snapshot_equation_preset = payload["probe_presets"]["residual-snapshot-equation-device-qi"]
     assert (
@@ -1783,3 +1830,15 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         == "galerkin"
     )
     assert "fail-closed" in block_schur_preset["description"]
+    recycled_preset = payload["probe_presets"]["recycled-augmented-device-qi"]
+    assert recycled_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K"] == "32"
+    assert recycled_preset["env"]["SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER"] == "960"
+    assert "best checked residual" in recycled_preset["description"]
+    adaptive_preset = payload["probe_presets"]["adaptive-residual-device-qi"]
+    assert (
+        adaptive_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER"
+        ]
+        == "adaptive_residual_equation"
+    )
+    assert "negative-evidence" in adaptive_preset["description"]

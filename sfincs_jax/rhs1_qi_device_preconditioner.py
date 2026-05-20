@@ -20,7 +20,7 @@ factors.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 import jax.numpy as jnp
@@ -696,6 +696,14 @@ def _normalize_matrix_free_block_smoother_grouping(value: str) -> str:
         "block": "contiguous",
         "blocks": "contiguous",
         "block_contiguous": "contiguous",
+        "hierarchy": "block_hierarchy",
+        "hierarchical": "block_hierarchy",
+        "multilevel": "block_hierarchy",
+        "block_hierarchy": "block_hierarchy",
+        "residual_hierarchy": "block_hierarchy",
+        "adaptive": "block_hierarchy",
+        "adaptive_residual": "block_hierarchy",
+        "adaptive_residual_equation": "block_hierarchy",
         "hybrid": "block_x_species",
         "aggregate": "block_x_species",
         "aggregates": "block_x_species",
@@ -707,7 +715,10 @@ def _normalize_matrix_free_block_smoother_grouping(value: str) -> str:
         "block_radial_species": "block_x_species",
     }
     if normalized not in aliases:
-        raise ValueError("matrix_free_block_smoother_grouping must be 'contiguous' or 'block_x_species'")
+        raise ValueError(
+            "matrix_free_block_smoother_grouping must be 'contiguous', "
+            "'block_x_species', or 'block_hierarchy'"
+        )
     return aliases[normalized]
 
 
@@ -1574,7 +1585,42 @@ def _matrix_free_block_group_partitions(
     tail_slice = (offsets[-1], n_rows) if offsets[-1] < n_rows else None
     grouping = _normalize_matrix_free_block_smoother_grouping(config.matrix_free_block_smoother_grouping)
     max_groups = max(1, int(config.matrix_free_block_smoother_max_groups))
-    if grouping == "contiguous":
+    if grouping == "block_hierarchy":
+        layout = _multilevel_layout_from_metadata(
+            geometry_metadata=geometry_metadata,
+            total_size=int(shape[0]),
+        )
+        layout_offsets = tuple(int(value) for value in layout.block_offsets)
+        layout_block_count = len(tuple(layout.block_sizes))
+        layout_slices = tuple(
+            (layout_offsets[index], layout_offsets[index + 1])
+            for index in range(layout_block_count)
+        )
+        factor = max(2, int(config.multilevel_aggregate_factor))
+        levels = max(1, int(config.multilevel_max_levels))
+        hierarchy_groups: list[tuple[int, ...]] = [tuple(range(layout_block_count))]
+        for level in range(levels - 1, 0, -1):
+            width = factor**level
+            for start in range(0, layout_block_count, width):
+                group = tuple(range(start, min(layout_block_count, start + width)))
+                if len(group) > 1:
+                    hierarchy_groups.append(group)
+        hierarchy_groups.extend((index,) for index in range(layout_block_count))
+        seen: set[tuple[int, ...]] = set()
+        group_partitions_list: list[tuple[tuple[int, int], ...]] = []
+        for group in hierarchy_groups:
+            if len(group_partitions_list) >= max_groups:
+                break
+            if not group or group in seen:
+                continue
+            seen.add(group)
+            partition = tuple(layout_slices[int(index)] for index in group)
+            if partition:
+                group_partitions_list.append(partition)
+        group_partitions = tuple(group_partitions_list)
+        group_slices = tuple(_partition_bounds(partition) for partition in group_partitions)
+        block_slices = layout_slices
+    elif grouping == "contiguous":
         slices = list(block_slices)
         if bool(config.matrix_free_block_smoother_include_tail) and tail_slice is not None:
             slices.append(tail_slice)
@@ -1617,7 +1663,7 @@ def _matrix_free_block_group_partitions(
         group_slices = tuple(_partition_bounds(partition) for partition in group_partitions)
     if not group_slices:
         raise ValueError("matrix_free_block_minres local smoother found no non-empty groups")
-    return group_partitions, group_slices, len(block_sizes), grouping
+    return group_partitions, group_slices, len(block_slices), grouping
 
 
 def _build_matrix_free_residual_smoother(
@@ -2660,6 +2706,8 @@ def setup_rhs1_qi_device_preconditioner(
         "residual_polynomial",
     }
     matrix_free_block_smoother_tokens = {
+        "adaptive_residual_equation",
+        "adaptive_residual_galerkin",
         "block_minres",
         "matrix_free_block",
         "matrix_free_block_minres",
@@ -2726,12 +2774,18 @@ def setup_rhs1_qi_device_preconditioner(
     ):
         raise ValueError("local_smoother operator shape must match operator shape")
     elif smoother is None and operator_csr is None and local_smoother_kind_requested in matrix_free_block_smoother_tokens:
+        projected_config = config_use
+        if local_smoother_kind_requested in {"adaptive_residual_equation", "adaptive_residual_galerkin"}:
+            projected_config = replace(
+                config_use,
+                matrix_free_block_smoother_grouping="block_hierarchy",
+            )
         smoother = _build_matrix_free_projected_residual_smoother(
             operator_matvec=operator_matvec,
             shape=shape,
             dtype=dtype_use,
             geometry_metadata=geometry_metadata,
-            config=config_use,
+            config=projected_config,
         )
     elif (
         smoother is None
@@ -3050,7 +3104,11 @@ def setup_rhs1_qi_device_preconditioner(
         local_smoother_kind = "device_jacobi"
         local_smoother_reason = str(smoother.metadata.reason)
     elif isinstance(smoother, RHS1QIMatrixFreeProjectedResidualSmoother):
-        local_smoother_kind = "matrix_free_block_minres"
+        local_smoother_kind = (
+            "adaptive_residual_equation"
+            if str(smoother.metadata.grouping) == "block_hierarchy"
+            else "matrix_free_block_minres"
+        )
         local_smoother_reason = str(smoother.metadata.reason)
     else:
         local_smoother_kind = "matrix_free_residual"

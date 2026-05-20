@@ -1108,6 +1108,52 @@ def test_qi_seed_runner_block_schur_device_qi_probe_records_env(tmp_path: Path) 
     )
 
 
+def test_qi_seed_runner_adaptive_residual_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "adaptive-residual-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "adaptive-residual-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER"] == (
+        "adaptive_residual_equation"
+    )
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING"]
+        == "block_hierarchy"
+    )
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION"]
+        == "1"
+    )
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=adaptive_residual_equation"
+        in manifest["cases"][0]["command"]
+    )
+
+
 def test_qi_seed_runner_adjoint_krylov_device_qi_probe_records_env(tmp_path: Path) -> None:
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
@@ -1192,6 +1238,46 @@ def test_qi_seed_runner_augmented_krylov_device_qi_probe_records_env(tmp_path: P
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined"
         in manifest["cases"][0]["command"]
     )
+
+
+def test_qi_seed_runner_recycled_augmented_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "recycled-augmented-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "recycled-augmented-device-qi"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV"] == "fgmres-jax"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE"] == "cycle"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K"] == "32"
+    assert env["SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER"] == "960"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE"] == "combined"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert manifest["cases"][0]["probe_preset"] == "recycled-augmented-device-qi"
+    assert "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32" in manifest["cases"][0]["command"]
+    assert "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960" in manifest["cases"][0]["command"]
 
 
 def test_qi_seed_runner_coarse_residual_device_qi_probe_records_env(tmp_path: Path) -> None:
@@ -1356,6 +1442,40 @@ def test_qi_seed_runner_keeps_compact_failure_progress(tmp_path: Path, monkeypat
     assert seed["failed_before_summary_json"] is True
     assert "failed_before_solver_trace_summary" in seed["evidence_tags"]
     assert summary["evidence_classification"]["has_failed_before_summary_json"] is True
+
+
+def test_extract_progress_events_preserves_qi_setup_when_device_cycles_are_long(tmp_path: Path) -> None:
+    stdout_path = tmp_path / "sfincs_jax.stdout.log"
+    stdout_path.write_text(
+        "\n".join(
+            [
+                "solve_v3_full_system_linear_gmres: active matrix size=81377 (total=139502)",
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner operator-Krylov coarse enrichment (depth=64 max_rank=128)",
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner accepted residual 3.0e-05 -> 2.8e-05 "
+                "(rank=13 operator_krylov=1 coarse_reuse=1)",
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI augmented Krylov enabled rank=13 mode=combined",
+                *[
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"device-cycle cycle={cycle} iterations={40 * cycle} residual={1.0 / cycle:.6e} "
+                    "target=3.0e-13"
+                    for cycle in range(1, 30)
+                ],
+                "sfincs_jax write-output failed: Refusing to write nonconverged RHSMode=1 diagnostics",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    events = qi_seed._extract_progress_events(stdout_path, max_events=8)
+
+    assert any("operator-Krylov coarse enrichment" in event for event in events)
+    assert any("coarse_reuse=1" in event for event in events)
+    assert any("QI augmented Krylov enabled" in event for event in events)
+    assert any("device-cycle cycle=29" in event for event in events)
+    assert any("Refusing to write nonconverged" in event for event in events)
 
 
 def test_qi_seed_runner_classifies_installed_krylov_and_coarse_reuse_from_trace(
@@ -1840,6 +1960,14 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
         == "1"
     )
     assert "--probe-preset augmented-krylov-device-qi" in augmented_preset["recommended_command"]
+    recycled_preset = manifest["probe_presets"]["recycled-augmented-device-qi"]
+    assert recycled_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K"] == "32"
+    assert recycled_preset["env"]["SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER"] == "960"
+    assert (
+        recycled_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV"]
+        == "1"
+    )
+    assert "--probe-preset recycled-augmented-device-qi" in recycled_preset["recommended_command"]
     residual_snapshot_equation_preset = manifest["probe_presets"]["residual-snapshot-equation-device-qi"]
     assert (
         residual_snapshot_equation_preset["env"][
@@ -1968,6 +2096,26 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     )
     assert "--probe-preset block-schur-device-qi" in block_schur_preset["recommended_command"]
     assert "fail-closed" in block_schur_preset["description"]
+    adaptive_residual_preset = manifest["probe_presets"]["adaptive-residual-device-qi"]
+    assert (
+        adaptive_residual_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER"
+        ]
+        == "adaptive_residual_equation"
+    )
+    assert (
+        adaptive_residual_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING"
+        ]
+        == "block_hierarchy"
+    )
+    assert (
+        adaptive_residual_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert "--probe-preset adaptive-residual-device-qi" in adaptive_residual_preset["recommended_command"]
     recommended = json.dumps(
         {
             "regeneration_commands": manifest["regeneration_commands"],
@@ -1980,5 +2128,7 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     assert "global-moment" in recommended
     assert "residual-galerkin" in recommended
     assert "block-schur" in recommended
+    assert "adaptive-residual" in recommended
+    assert "recycled-augmented" in recommended
     assert "projected smoother" not in recommended
     assert "projected-smoother" not in recommended

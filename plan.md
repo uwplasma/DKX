@@ -14885,3 +14885,91 @@ Best next steps:
 3. If pursuing the coarse equation, use the block-Schur best-of artifact as the
    baseline and require any new GPU hard-seed path to beat `1.992464e-05` and
    reduce wall time below `291.78 s` before it is added to public docs.
+
+## 2026-05-20 final QI literature-guided closure push
+
+Goal: close the remaining QI lanes as far as the evidence honestly allows,
+using the applied-math guidance from recycled/augmented Krylov methods,
+two-level/domain-decomposition coarse spaces, saddle-point/Schur
+preconditioning, JAX linear-solve constraints, and quasi-isodynamic physics.
+
+Literature-guided conclusion:
+
+- Krylov recycling/augmentation is the best bounded device-compatible lever for
+  this hard seed because the QI solve is a slowly changing sequence of
+  nonsymmetric linear systems; this matches the GCRO/DR-style use of a retained
+  subspace rather than another restart/damping variant.
+- Two-level Schwarz/domain-decomposition literature supports a coarse solve
+  coupled to local corrections. The checked residual-equation hierarchy is the
+  right architecture to keep, but the current global/aggregate/block source
+  spaces are still missing the error component that dominates the scale-0.60
+  hard seed.
+- Saddle-point/Schur literature supports explicit constraint/profile/current
+  moment closures. Those closures are now implemented and tested, but the
+  checked artifacts show they are not sufficient alone.
+- JAX/Lineax/JAXopt documentation supports matrix-free operators, reusable
+  solver state, and differentiable least-squares as useful interfaces, but the
+  current in-repo FGMRES path remains preferable for this lane because it already
+  exposes the required augmentation/coarse-action hooks and avoids adding a new
+  dependency without a measured win.
+
+Implemented:
+
+- Added `adaptive_residual_equation` as an opt-in device-QI local smoother token
+  in `sfincs_jax/rhs1_qi_device_preconditioner.py`. It maps to a multilevel
+  `block_hierarchy` grouping with global, aggregate, and single-block residual
+  source spaces and remains JIT-compatible.
+- Added a formal `recycled-augmented-device-qi` runner preset in
+  `scripts/run_qi_seed_robustness.py`. It uses the checked augmented FGMRES
+  operator-reuse path with `outer_k=32` and `maxiter=960`.
+- Fixed QI artifact compaction so long device-cycle runs preserve early setup
+  breadcrumbs such as QI device preconditioner acceptance, coarse reuse, and
+  augmented-Krylov activation. This prevents long nonconverged runs from being
+  misclassified as `public_auto_or_legacy`.
+- Added unit tests for the adaptive residual hierarchy, recycled augmented
+  preset, and long-run setup breadcrumb preservation.
+- Regenerated `docs/_static/qi_seed_robustness_evidence_manifest.json` with
+  two new GPU hard-seed artifacts:
+  `docs/_static/qi_seed_robustness_scale060_recycled_augmented_deep_device_qi_gpu0_2026_05_20.json`
+  and
+  `docs/_static/qi_seed_robustness_scale060_adaptive_residual_device_qi_gpu0_2026_05_20.json`.
+
+Results:
+
+- Recycled augmented-Krylov GPU0 hard seed: process correctly fails closed
+  without HDF5 output, but improves the best checked one-GPU residual from
+  `1.992464e-05` in `291.78 s` to `7.336295e-06` in `158.58 s`. This is a real
+  algorithmic improvement and the best checked QI GPU evidence so far.
+- Adaptive residual hierarchy GPU0 hard seed: process correctly fails closed at
+  `2.307995e-05` in `287.93 s`, worse than block-Schur best-of and recycled
+  augmented Krylov. It is retained as negative evidence and not promoted.
+- Current evidence manifest: `102` artifacts, `32` passing bounded artifacts,
+  `70` nonpassing fail-closed artifacts, largest attempted/checked total size
+  `139502`, bounded passing completion basis still `60%` of the production
+  per-axis target.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `99%`; the code now has
+  device-compatible coarse reuse, residual hierarchy, recycled augmentation,
+  evidence classification, and tests.
+- True differentiable/device-QI convergence evidence: `89%`; best residual and
+  runtime improved materially, but production convergence is not closed because
+  the residual remains `~2.4e5` above the write gate.
+- Production-resolution QI ladders: `40%`; still blocked until the scale-0.60
+  hard seed writes converged output and solver trace.
+- QI evidence/documentation: `94%`; artifacts, source map, validation matrix,
+  and research-lane docs now identify the best method and negative controls.
+- Overall remaining-lane completion estimate: `92%`.
+
+Best next steps:
+
+1. Do not claim true device-QI production closure from this state. The best
+   method is recycled augmented-Krylov/coarse reuse, but it is still fail-closed.
+2. Treat the remaining work as a new research problem: construct a stronger
+   physics-derived coarse space for the missing hard-seed error component, likely
+   using bounce/banana-region or trapped/passing invariants rather than more
+   local smoother or restart budget.
+3. Keep `recycled-augmented-device-qi` as the default future comparison target:
+   any new GPU hard-seed method must beat `7.336295e-06` and `158.58 s` and must
+   eventually satisfy the `3.021487e-11` output gate before promotion.

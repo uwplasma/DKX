@@ -742,6 +742,45 @@ def test_device_preconditioner_matrix_free_block_smoother_adds_x_species_aggrega
     np.testing.assert_allclose(mv(correction), rhs, rtol=1.0e-10, atol=1.0e-10)
 
 
+def test_device_preconditioner_adaptive_residual_equation_uses_multilevel_groups() -> None:
+    rhs = jnp.asarray([1.0, -2.0, 0.5, 3.0, -0.25, 0.75], dtype=jnp.float64)
+
+    def mv(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=6,
+        coarse_basis=None,
+        geometry_metadata={"qi_block_sizes": (1, 1, 1, 1, 1, 1), "n_theta": 1, "n_zeta": 1},
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="adaptive_residual_equation",
+            matrix_free_smoother_sweeps=1,
+            matrix_free_block_smoother_max_groups=6,
+            matrix_free_block_smoother_rcond=1.0e-14,
+            multilevel_max_levels=3,
+            multilevel_aggregate_factor=2,
+        ),
+    )
+    correction = state.apply(rhs)
+    compiled = jax.jit(state.as_preconditioner())(rhs)
+
+    assert state.local_smoother is not None
+    assert state.metadata.local_smoother_kind == "adaptive_residual_equation"
+    assert state.local_smoother.metadata.grouping == "block_hierarchy"
+    assert state.local_smoother.metadata.group_partitions[0] == (
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 4),
+        (4, 5),
+        (5, 6),
+    )
+    assert ((0, 1), (1, 2), (2, 3), (3, 4)) in state.local_smoother.metadata.group_partitions
+    np.testing.assert_allclose(compiled, correction, rtol=1.0e-12, atol=1.0e-12)
+    np.testing.assert_allclose(mv(correction), rhs, rtol=1.0e-10, atol=1.0e-10)
+
+
 def test_device_preconditioner_matrix_free_block_smoother_requires_block_metadata() -> None:
     def mv(x):
         return jnp.asarray(x, dtype=jnp.float64)
