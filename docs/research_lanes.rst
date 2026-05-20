@@ -380,13 +380,28 @@ The deeper ``block-schur-device-qi`` preset now exercises a staged
 block-Schur residual equation. It builds block/aggregate source probes at
 setup, accepts only residual-reducing directions, caches their ``A Q_l``
 actions, and applies them through the existing pure-JAX residual-equation
-cascade. The first bounded scale-0.60 CPU artifact
+cascade. The implementation now also tries a coupled block/aggregate source
+space and keeps it only when its measured setup residual is no worse than the
+sequential fail-closed construction. The first bounded scale-0.60 CPU artifact
 ``qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json``
 is negative evidence: the seed correction improves only
 ``3.021487e-5 -> 2.840342e-5`` and the installed solve ends at
 ``2.275188e-5`` in ``267 s`` before refusing nonconverged output. This is worse
 than the residual-snapshot CPU path, so it is kept as a tested research
 primitive and not promoted to GPU.
+The later GPU0 best-of artifact
+``qi_seed_robustness_scale060_block_schur_bestof_device_qi_gpu0_2026_05_20.json``
+improves the final hard-seed residual to ``1.992464e-5`` in ``292 s``. It is the
+best checked one-GPU residual in this evidence set, but it still misses the
+production write gate by about six orders of magnitude and remains
+fail-closed evidence.
+The composite coarse-closure GPU1 artifact
+``qi_seed_robustness_scale060_composite_closure_device_qi_gpu1_2026_05_20.json``
+combines residual snapshots, residual-Galerkin/operator-image stages, and
+block-Schur residual equations. It accepts a stronger setup correction
+``3.021487e-5 -> 2.575099e-5`` but ends at ``2.305955e-5`` in ``313 s``. Since
+that final Krylov residual is worse than the block-Schur best-of artifact, the
+composite preset is kept only as audited negative evidence.
 The ``global-moment-closure-device-qi`` preset exercises a true global closure
 over profile, current, and reduced-tail constraint moments. The first bounded
 scale-0.60 CPU artifact
