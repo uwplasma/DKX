@@ -275,12 +275,20 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   enables a deeper staged block-Schur residual equation. Setup builds
   QI-block and aggregate source probes, solves small setup-time
   ``min ||r_l - A D_g c||`` problems, rank-gates each accepted correction, and
-  then reuses cached ``A Q_l`` actions in the installed preconditioner. The
+  then reuses cached ``A Q_l`` actions in the installed preconditioner. It now
+  also tests a coupled block/aggregate source space and keeps the lower
+  measured setup residual between the coupled and sequential constructions. The
   runner preset ``block-schur-device-qi`` records this fail-closed path. Its
   first scale-0.60 CPU hard-seed artifact is negative evidence: it accepts
   ``3.021487e-5 -> 2.840342e-5`` and ends at ``2.275188e-5`` in ``267 s``,
   worse than the residual-snapshot path, so no production default or GPU claim
   is made from it.
+  The GPU0 best-of artifact improves the final residual to ``1.992464e-5`` in
+  ``292 s`` but still fails the production write gate. The composite
+  ``composite-closure-device-qi`` runner preset combines residual snapshots,
+  residual-Galerkin/operator-image stages, and block-Schur residual equations;
+  its GPU1 artifact accepts ``3.021487e-5 -> 2.575099e-5`` but ends worse at
+  ``2.305955e-5``, so it remains negative evidence.
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION=1``
   enables a global moment closure over profile, current, and reduced-tail
   constraint moments. Setup builds a rank-gated Galerkin Schur closure and
