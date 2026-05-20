@@ -863,6 +863,87 @@ def test_qi_seed_runner_residual_snapshot_equation_device_qi_probe_records_env(t
     )
 
 
+def test_qi_seed_runner_assembled_reuse_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "assembled-reuse-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "assembled-reuse-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS"] == "4096"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR"] == "1"
+    assert manifest["cases"][0]["probe_preset"] == "assembled-reuse-device-qi"
+    assert "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR=1" in manifest["cases"][0]["command"]
+
+
+def test_qi_seed_runner_composite_closure_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "composite-closure-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "composite-closure-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_OPERATOR_IMAGES"]
+        == "1"
+    )
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK"] == "256"
+    assert manifest["cases"][0]["probe_preset"] == "composite-closure-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
 def test_qi_seed_runner_global_moment_closure_device_qi_probe_records_env(tmp_path: Path) -> None:
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
@@ -1782,6 +1863,42 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
         "recommended_command"
     ]
     assert "fail-closed" in residual_snapshot_equation_preset["description"]
+    assembled_reuse_preset = manifest["probe_presets"]["assembled-reuse-device-qi"]
+    assert assembled_reuse_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR"] == "1"
+    assert assembled_reuse_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE"] == "1"
+    assert (
+        assembled_reuse_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED"]
+        == "1"
+    )
+    assert (
+        assembled_reuse_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT"
+        ]
+        == "1"
+    )
+    assert "--probe-preset assembled-reuse-device-qi" in assembled_reuse_preset["recommended_command"]
+    assert "assembled/operator-reuse" in assembled_reuse_preset["description"]
+    composite_closure_preset = manifest["probe_presets"]["composite-closure-device-qi"]
+    assert (
+        composite_closure_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT"
+        ]
+        == "1"
+    )
+    assert (
+        composite_closure_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        composite_closure_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert "--probe-preset composite-closure-device-qi" in composite_closure_preset["recommended_command"]
+    assert "composite residual-snapshot" in composite_closure_preset["description"]
     global_moment_preset = manifest["probe_presets"]["global-moment-closure-device-qi"]
     assert (
         global_moment_preset["env"][

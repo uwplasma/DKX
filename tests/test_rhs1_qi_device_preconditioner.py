@@ -1233,11 +1233,16 @@ def test_device_preconditioner_block_schur_residual_equation_solves_coupled_mode
     assert schur_probe.accepted is True
     assert schur_state.metadata.reason == "built_with_block_schur_residual_equation"
     assert schur_state.metadata.block_schur_residual_equation_enabled is True
-    assert schur_state.metadata.block_schur_residual_equation_candidate_count == 1
-    assert schur_state.metadata.block_schur_residual_equation_rank == 1
+    assert schur_state.metadata.block_schur_residual_equation_candidate_count >= 2
+    assert schur_state.metadata.block_schur_residual_equation_rank >= 1
     assert schur_state.metadata.block_schur_residual_equation_group_count == 2
-    assert schur_state.metadata.block_schur_residual_equation_stage_ranks == (1,)
-    assert "block_schur_residual:block:0" in schur_state.residual_equation_bases[0].metadata.accepted_labels
+    assert sum(schur_state.metadata.block_schur_residual_equation_stage_ranks) == (
+        schur_state.metadata.block_schur_residual_equation_rank
+    )
+    assert any(
+        "block_schur_coupled:block:0" in label
+        for label in schur_state.residual_equation_bases[0].metadata.accepted_labels
+    )
     assert schur_probe.residual_after_norm < 1.0e-10
     np.testing.assert_allclose(compiled, schur_state.apply(rhs), rtol=1.0e-12, atol=1.0e-12)
     np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)

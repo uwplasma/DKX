@@ -2077,6 +2077,137 @@ def _block_schur_trial_vectors(
     return jnp.stack(tuple(columns), axis=1)
 
 
+def _block_schur_trial_columns(
+    layout: RHS1QICoarseBlockLayout,
+    residual: ArrayLike,
+    group: Sequence[int],
+    *,
+    total_size: int,
+    dtype: Any,
+    include_indicators: bool,
+    label_prefix: str,
+) -> tuple[tuple[ArrayLike, str], ...]:
+    """Return labeled source-space columns for one block-Schur group.
+
+    The coupled residual equation uses these columns as a bounded source space
+    ``D`` and caches ``A D``.  Keeping labels here avoids relying on column
+    order when the coupled space is rank-gated.
+    """
+
+    columns: list[tuple[ArrayLike, str]] = []
+    labels: list[str] = []
+    raw_columns: list[ArrayLike] = []
+    if bool(include_indicators):
+        for block_index in group:
+            _append_normalized_candidate(
+                raw_columns,
+                labels,
+                _block_indicator_vector(layout, int(block_index), total_size=total_size, dtype=dtype),
+                f"{label_prefix}:block_indicator:{int(block_index)}",
+                total_size=total_size,
+                dtype=dtype,
+            )
+    _append_normalized_candidate(
+        raw_columns,
+        labels,
+        _masked_group_residual(layout, residual, group, total_size=total_size, dtype=dtype),
+        f"{label_prefix}:masked_group_residual",
+        total_size=total_size,
+        dtype=dtype,
+    )
+    columns.extend((column, label) for column, label in zip(raw_columns, labels, strict=True))
+    return tuple(columns)
+
+
+def _build_coupled_block_schur_residual_basis(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    layout: RHS1QICoarseBlockLayout,
+    residual: ArrayLike,
+    groups: Sequence[tuple[str, tuple[int, ...]]],
+    shape: tuple[int, int],
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+    max_rank: int,
+    threshold: float,
+) -> tuple[RHS1QICoarseBasis | None, int, float]:
+    """Build one coupled block/aggregate Schur residual-equation basis.
+
+    Earlier QI probes built one Schur-like direction per group in sequence. That
+    is robust but misses coupled block interactions and forces the Krylov solve
+    to rediscover them. This builder instead forms a bounded source space from
+    the largest residual-carrying block and aggregate groups, solves the coupled
+    reduced residual equation ``min ||r - A D c||``, and accepts the whole
+    rank-gated ``D`` space only when the true setup residual is reduced.
+    """
+
+    residual_vec = jnp.asarray(residual, dtype=dtype).reshape((-1,))
+    residual_norm = float(jnp.linalg.norm(residual_vec))
+    if residual_norm <= 0.0:
+        return None, 0, float("inf")
+
+    def group_norm(item: tuple[str, tuple[int, ...]]) -> tuple[int, float, int]:
+        kind, group = item
+        masked = _masked_group_residual(layout, residual_vec, group, total_size=total_size, dtype=dtype)
+        # Keep the global group first when requested, then prioritize blocks and
+        # aggregates that actually carry the remaining residual.
+        global_priority = 0 if kind == "global" else 1
+        return (global_priority, -float(jnp.linalg.norm(masked)), int(group[0]) if group else 0)
+
+    ordered_groups = tuple(sorted(groups, key=group_norm))
+    columns: list[ArrayLike] = []
+    labels: list[str] = []
+    max_columns = max(1, int(max_rank))
+    for kind, group in ordered_groups:
+        if len(columns) >= max_columns:
+            break
+        group_label = ",".join(str(index) for index in group)
+        # The all-block global group can create hundreds of nearly redundant
+        # indicator columns. For the coupled coarse solve, the masked global
+        # residual is the useful source direction; block indicators are kept for
+        # block/aggregate groups where they expose inter-block Schur coupling.
+        include_indicators = kind != "global"
+        for column, label in _block_schur_trial_columns(
+            layout,
+            residual_vec,
+            group,
+            total_size=int(total_size),
+            dtype=dtype,
+            include_indicators=include_indicators,
+            label_prefix=f"block_schur_coupled:{kind}:{group_label}",
+        ):
+            if len(columns) >= max_columns:
+                break
+            columns.append(column)
+            labels.append(label)
+
+    if not columns:
+        return None, 0, float("inf")
+    candidate_count = len(columns)
+    candidate_matrix = jnp.stack(tuple(columns), axis=1)
+    basis = orthonormalize_rhs1_qi_coarse_basis(
+        candidate_matrix,
+        labels=tuple(labels),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        max_rank=max_rank,
+    )
+    if int(basis.metadata.rank) <= 0:
+        return None, candidate_count, float("inf")
+    action = _operator_on_basis(operator_matvec, basis.vectors, shape=shape, dtype=dtype)
+    coefficients = _regularized_least_squares(
+        action,
+        residual_vec,
+        rcond=float(config.regularization_rcond),
+    )
+    next_residual = residual_vec - action @ coefficients
+    next_norm = float(jnp.linalg.norm(next_residual))
+    if next_norm >= residual_norm - float(threshold):
+        return None, candidate_count, next_norm
+    return basis, candidate_count, next_norm
+
+
 def _build_block_schur_residual_equation_bases_from_metadata(
     *,
     operator_matvec: Callable[[ArrayLike], ArrayLike],
@@ -2109,6 +2240,19 @@ def _build_block_schur_residual_equation_bases_from_metadata(
     max_rank = max(1, int(config.block_schur_residual_equation_max_rank))
     residual_norm = float(jnp.linalg.norm(residual))
     threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_norm))
+
+    coupled_basis, coupled_candidate_count, coupled_residual_norm = _build_coupled_block_schur_residual_basis(
+        operator_matvec=operator_matvec,
+        layout=layout,
+        residual=residual,
+        groups=groups,
+        shape=shape,
+        total_size=int(total_size),
+        dtype=dtype,
+        config=config,
+        max_rank=max_rank,
+        threshold=threshold,
+    )
     accepted_columns: list[ArrayLike] = []
     stage_bases: list[RHS1QICoarseBasis] = []
     remaining = residual
@@ -2171,7 +2315,15 @@ def _build_block_schur_residual_equation_bases_from_metadata(
         candidate_count += 1
 
     stage_ranks = tuple(int(basis.metadata.rank) for basis in stage_bases)
-    return tuple(stage_bases), int(len(groups)), int(candidate_count), stage_ranks, int(sum(stage_ranks))
+    sequential_rank = int(sum(stage_ranks))
+    sequential_residual_norm = float(jnp.linalg.norm(remaining)) if sequential_rank > 0 else float("inf")
+    if coupled_basis is not None and int(coupled_basis.metadata.rank) > 0:
+        # Keep the coupled Schur space only when it is at least as good as the
+        # sequential fail-closed construction on the measured setup residual.
+        if sequential_rank <= 0 or float(coupled_residual_norm) <= sequential_residual_norm + float(threshold):
+            rank = int(coupled_basis.metadata.rank)
+            return (coupled_basis,), int(len(groups)), int(coupled_candidate_count), (rank,), rank
+    return tuple(stage_bases), int(len(groups)), int(candidate_count), stage_ranks, sequential_rank
 
 
 def _enrich_basis_with_operator_krylov(

@@ -228,6 +228,14 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT
     / "docs"
     / "_static"
+    / "qi_seed_robustness_scale060_block_schur_bestof_device_qi_gpu0_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
+    / "qi_seed_robustness_scale060_composite_closure_device_qi_gpu1_2026_05_20.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
     / "qi_seed_robustness_scale060_adjoint_krylov_device_qi_cpu_2026_05_20.json",
     REPO_ROOT
     / "docs"
@@ -333,6 +341,8 @@ AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET = "augmented-krylov-device-qi"
 COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET = "coarse-residual-device-qi"
 RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET = "residual-snapshot-device-qi"
 RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET = "residual-snapshot-equation-device-qi"
+ASSEMBLED_REUSE_DEVICE_QI_PROBE_PRESET = "assembled-reuse-device-qi"
+COMPOSITE_CLOSURE_DEVICE_QI_PROBE_PRESET = "composite-closure-device-qi"
 GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET = "global-moment-closure-device-qi"
 RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET = "residual-galerkin-device-qi"
 BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET = "block-schur-device-qi"
@@ -430,6 +440,46 @@ RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_ENV = {
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_BLOCKS": "1",
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_AGGREGATES": "1",
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "192",
+}
+ASSEMBLED_REUSE_DEVICE_QI_ENV = {
+    **RESIDUAL_SNAPSHOT_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB": "6144",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS": "4096",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_VALIDATE": "1",
+}
+COMPOSITE_CLOSURE_DEVICE_QI_ENV = {
+    **RESIDUAL_SNAPSHOT_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGES": (
+        "3"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGE_RANK": (
+        "8"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_RANK": (
+        "48"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_SOLVER": (
+        "action_lstsq"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_GLOBAL_RESIDUAL": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_BLOCK_RESIDUALS": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_OPERATOR_IMAGES": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK": "64",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_BLOCKS": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_AGGREGATES": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "256",
 }
 GLOBAL_MOMENT_CLOSURE_DEVICE_QI_ENV = {
     **OPERATOR_KRYLOV_DEVICE_QI_ENV,
@@ -747,6 +797,10 @@ def _probe_env_for_preset(preset: str) -> dict[str, str]:
         return dict(RESIDUAL_SNAPSHOT_DEVICE_QI_ENV)
     if normalized == RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET:
         return dict(RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_ENV)
+    if normalized == ASSEMBLED_REUSE_DEVICE_QI_PROBE_PRESET:
+        return dict(ASSEMBLED_REUSE_DEVICE_QI_ENV)
+    if normalized == COMPOSITE_CLOSURE_DEVICE_QI_PROBE_PRESET:
+        return dict(COMPOSITE_CLOSURE_DEVICE_QI_ENV)
     if normalized == GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET:
         return dict(GLOBAL_MOMENT_CLOSURE_DEVICE_QI_ENV)
     if normalized == RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET:
@@ -769,6 +823,8 @@ def _solve_method_for_probe_preset(*, solve_method: str, probe_preset: str) -> s
         COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
         RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET,
         RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET,
+        ASSEMBLED_REUSE_DEVICE_QI_PROBE_PRESET,
+        COMPOSITE_CLOSURE_DEVICE_QI_PROBE_PRESET,
         GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET,
         RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET,
         BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,
@@ -2999,6 +3055,26 @@ def build_evidence_manifest(
         "JAX_PLATFORM_NAME": "gpu",
         **RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_ENV,
     }
+    assembled_reuse_probe_command = [
+        *operator_krylov_probe_command[:9],
+        ASSEMBLED_REUSE_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    assembled_reuse_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **ASSEMBLED_REUSE_DEVICE_QI_ENV,
+    }
+    composite_closure_probe_command = [
+        *operator_krylov_probe_command[:9],
+        COMPOSITE_CLOSURE_DEVICE_QI_PROBE_PRESET,
+        *operator_krylov_probe_command[10:],
+    ]
+    composite_closure_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **COMPOSITE_CLOSURE_DEVICE_QI_ENV,
+    }
     global_moment_probe_command = [
         *operator_krylov_probe_command[:9],
         GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET,
@@ -3170,6 +3246,14 @@ def build_evidence_manifest(
                 residual_snapshot_equation_probe_command,
                 residual_snapshot_equation_probe_env,
             ),
+            "assembled_reuse_device_qi_gpu0_probe": _shell_command(
+                assembled_reuse_probe_command,
+                assembled_reuse_probe_env,
+            ),
+            "composite_closure_device_qi_gpu0_probe": _shell_command(
+                composite_closure_probe_command,
+                composite_closure_probe_env,
+            ),
             "global_moment_closure_device_qi_gpu0_probe": _shell_command(
                 global_moment_probe_command,
                 global_moment_probe_env,
@@ -3265,6 +3349,34 @@ def build_evidence_manifest(
                 "recommended_command": _shell_command(
                     residual_snapshot_equation_probe_command,
                     residual_snapshot_equation_probe_env,
+                ),
+            },
+            ASSEMBLED_REUSE_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the "
+                    "assembled/operator-reuse QI path. This uses the residual-snapshot "
+                    "device-QI coarse route but requires a device-resident assembled CSR "
+                    "operator so Krylov matvecs, setup probes, and cached A Q actions "
+                    "reuse the same operator representation."
+                ),
+                "env": dict(sorted(ASSEMBLED_REUSE_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    assembled_reuse_probe_command,
+                    assembled_reuse_probe_env,
+                ),
+            },
+            COMPOSITE_CLOSURE_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the "
+                    "composite residual-snapshot plus residual-Galerkin and "
+                    "block-Schur coarse-closure path. This is the non-smoother "
+                    "follow-up after full assembled CSR reuse and individual "
+                    "coarse spaces failed to close the hard seed."
+                ),
+                "env": dict(sorted(COMPOSITE_CLOSURE_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    composite_closure_probe_command,
+                    composite_closure_probe_env,
                 ),
             },
             GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET: {
@@ -3374,6 +3486,8 @@ def _build_parser() -> argparse.ArgumentParser:
             COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
             RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET,
             RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET,
+            ASSEMBLED_REUSE_DEVICE_QI_PROBE_PRESET,
+            COMPOSITE_CLOSURE_DEVICE_QI_PROBE_PRESET,
             GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET,
             RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET,
             BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,

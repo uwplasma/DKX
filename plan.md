@@ -14803,3 +14803,85 @@ Best next steps:
    cheaper assembled/operator-reuse path that removes the dominant sparse-ILU
    setup wall time and exposes a residual equation strong enough to reduce the
    true residual below the write gate.
+
+## 2026-05-20 assembled reuse, coupled block-Schur, and composite QI closure push
+
+Implemented:
+
+- Kept the validated global-moment/residual-Galerkin state on `main` and pushed
+  commit `17df1b6`; GitHub CI and docs both passed.
+- Added a reproducible `assembled-reuse-device-qi` runner preset. It requires a
+  device-resident assembled CSR operator for the RHSMode=1 QI hard seed rather
+  than silently falling back to matrix-free Krylov when the assembled operator is
+  absent.
+- Added a coupled block/aggregate Schur residual-equation builder in
+  `sfincs_jax/rhs1_qi_device_preconditioner.py`. The builder forms a bounded
+  source space from high-residual QI block and aggregate groups, solves the
+  reduced equation `min ||r - A D c||_2`, caches `A Q`, and is accepted only if
+  the measured setup residual is reduced. The implementation also evaluates the
+  existing sequential block-Schur construction and keeps whichever true setup
+  residual is lower, so the new coupled path cannot regress the fail-closed
+  sequential route.
+- Added a reproducible `composite-closure-device-qi` preset that combines the
+  residual-snapshot coarse path, residual-Galerkin/operator-image stages, and
+  block-Schur residual equations. This is a non-smoother coarse-closure probe
+  for the hard seed after individual spaces failed to close it.
+- Regenerated the QI evidence manifest with the new bounded GPU artifacts:
+  `docs/_static/qi_seed_robustness_scale060_block_schur_bestof_device_qi_gpu0_2026_05_20.json`
+  and
+  `docs/_static/qi_seed_robustness_scale060_composite_closure_device_qi_gpu1_2026_05_20.json`.
+
+Validation:
+
+- Local focused checks passed:
+  `ruff check` on touched runtime/runner/tests,
+  `tests/test_rhs1_qi_device_preconditioner.py`,
+  the v3 block-Schur metadata gate, runner preset tests, and
+  `tests/test_qi_seed_smoke_artifact.py::test_qi_seed_evidence_manifest_tracks_production_gap_and_gates`.
+- The assembled-reuse GPU0 hard-seed probe on `office` is negative evidence for
+  full CSR materialization as the next QI path. With a `6144 MB` CSR cap it
+  still rejected pattern probing (`max_colors=4096`), fell back to matrix-free
+  Krylov, and timed out at `900 s` without output. Conclusion: do not spend more
+  effort raising assembled-CSR caps for this seed; the useful route must be
+  active-pattern/chunked operator reuse or a stronger residual equation.
+- The best-of block-Schur GPU0 hard-seed artifact accepted
+  `3.021487e-05 -> 2.838787e-05`, completed FGMRES in `291.78 s` with final
+  residual `1.992464e-05`, and correctly refused nonconverged HDF5 output.
+  This is the best checked one-GPU residual in the current evidence set but
+  still misses the `3.021487e-11` production write gate by about six orders of
+  magnitude.
+- The composite closure GPU1 hard-seed artifact accepted
+  `3.021487e-05 -> 2.575099e-05`, completed FGMRES in `313.42 s` with final
+  residual `2.305955e-05`, and correctly refused nonconverged HDF5 output. It
+  improves the setup residual relative to block-Schur alone but worsens the
+  final Krylov residual, so it is retained as fail-closed evidence and not
+  promoted.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `99%`; assembled-reuse,
+  coupled block-Schur, composite closure, runner presets, metadata, and evidence
+  gates are implemented and tested.
+- True differentiable/device-QI convergence evidence: `86%`; one-GPU hard-seed
+  residual improved to `1.992464e-05`, but no tested path writes converged
+  production output.
+- Production-resolution QI ladders: `40%`; still blocked until the seed-3
+  scale-0.60 solve reaches the write gate.
+- Single-case multi-GPU/multi-CPU strong scaling: `56%`; unchanged in this
+  push.
+- Refactor/coverage/CI: `89%`; focused local gates and CI are green, but a full
+  local suite/docs pass should run before the next tag.
+- Overall remaining-lane completion estimate: `91%`.
+
+Best next steps:
+
+1. Stop adding more residual-smoother variants for this lane. The new evidence
+   says the next meaningful step is a genuine active-pattern/chunked operator
+   reuse path or a mathematically stronger coarse equation, not another local
+   smoothing knob.
+2. If pursuing operator reuse, avoid full conservative CSR coloring. Assemble
+   only the active rows/columns needed by the accepted coarse space or use
+   chunked `A Q`/Galerkin actions with persistent device arrays.
+3. If pursuing the coarse equation, use the block-Schur best-of artifact as the
+   baseline and require any new GPU hard-seed path to beat `1.992464e-05` and
+   reduce wall time below `291.78 s` before it is added to public docs.

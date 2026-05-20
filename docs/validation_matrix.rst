@@ -377,12 +377,20 @@ Current open lane board
   audited research path and not promoted to GPU or production ladders.
   The deeper ``block-schur-device-qi`` path is also implemented and checked.
   It builds staged block/aggregate Schur residual-equation directions during
-  setup and reuses cached ``A Q_l`` actions during apply. The first bounded CPU
-  artifact accepts ``3.021487e-5 -> 2.840342e-5`` and finishes at
-  ``2.275188e-5`` in ``267 s`` before refusing nonconverged output. This is
-  negative evidence relative to the residual-snapshot CPU artifact, so it is
-  retained as a tested research path but not promoted to GPU or production
+  setup and reuses cached ``A Q_l`` actions during apply. The current
+  implementation also evaluates a coupled block/aggregate source space and
+  keeps whichever construction gives the lower measured setup residual. The
+  first bounded CPU artifact accepts ``3.021487e-5 -> 2.840342e-5`` and
+  finishes at ``2.275188e-5`` in ``267 s`` before refusing nonconverged output.
+  This is negative evidence relative to the residual-snapshot CPU artifact, so
+  it is retained as a tested research path but not promoted to GPU or production
   ladders.
+  The newer GPU0 best-of artifact improves the final residual to
+  ``1.992464e-5`` in ``292 s`` but still fails the production write gate. The
+  composite GPU1 artifact combines residual snapshots, residual-Galerkin
+  operator-image stages, and block-Schur residual equations; it improves setup
+  to ``2.575099e-5`` but finishes at ``2.305955e-5``, so it is retained as
+  audited negative evidence rather than promotion evidence.
   The ``global-moment-closure-device-qi`` path is implemented and checked as a
   Galerkin closure over profile/current/tail moments. Its bounded CPU artifact
   accepts ``3.021487e-5 -> 2.840364e-5`` and finishes at ``2.420524e-5`` in

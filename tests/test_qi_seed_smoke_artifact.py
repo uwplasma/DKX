@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 98
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 100
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 66
+    assert current["nonpassing_artifact_count"] == 68
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -1037,6 +1037,14 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
             "qi_seed_robustness_scale060_residual_galerkin_device_qi_gpu1_2026_05_20.json"
         ),
         "docs/_static/qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json",
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_block_schur_bestof_device_qi_gpu0_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_composite_closure_device_qi_gpu1_2026_05_20.json"
+        ),
         "docs/_static/qi_seed_robustness_scale060_adjoint_krylov_device_qi_cpu_2026_05_20.json",
         (
             "docs/_static/"
@@ -1351,6 +1359,42 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "last_reported_residual_norm"
     ]
     assert block_schur_cpu["max_elapsed_s"] < 300.0
+    block_schur_bestof_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_block_schur_bestof_device_qi_gpu0_2026_05_20.json"
+        )
+    )
+    assert block_schur_bestof_gpu["passed"] is False
+    assert block_schur_bestof_gpu["evidence_classes"] == ["device_qi_block_schur_residual_coarse_reuse"]
+    assert "observed_block_schur_residual" in block_schur_bestof_gpu["evidence_tags"]
+    assert block_schur_bestof_gpu["last_reported_residual_norm"] == pytest.approx(1.992464e-05)
+    assert block_schur_bestof_gpu["last_reported_residual_norm"] < residual_snapshot_cpu[
+        "last_reported_residual_norm"
+    ]
+    assert block_schur_bestof_gpu["max_elapsed_s"] < 320.0
+    composite_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_composite_closure_device_qi_gpu1_2026_05_20.json"
+        )
+    )
+    assert composite_gpu["passed"] is False
+    assert composite_gpu["evidence_classes"] == ["device_qi_residual_galerkin_equation_coarse_reuse"]
+    assert "observed_residual_snapshot" in composite_gpu["evidence_tags"]
+    assert "observed_residual_galerkin_equation" in composite_gpu["evidence_tags"]
+    assert "observed_block_schur_residual" in composite_gpu["evidence_tags"]
+    assert composite_gpu["last_reported_residual_norm"] == pytest.approx(2.305955e-05)
+    assert composite_gpu["last_reported_residual_norm"] > block_schur_bestof_gpu[
+        "last_reported_residual_norm"
+    ]
+    assert composite_gpu["max_elapsed_s"] < 330.0
     adjoint_cpu = next(
         artifact
         for artifact in payload["source_artifacts"]
@@ -1673,6 +1717,27 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         == "1"
     )
     assert "fail-closed" in residual_snapshot_equation_preset["description"]
+
+    composite_closure_preset = payload["probe_presets"]["composite-closure-device-qi"]
+    assert (
+        composite_closure_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT"
+        ]
+        == "1"
+    )
+    assert (
+        composite_closure_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        composite_closure_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert "composite residual-snapshot" in composite_closure_preset["description"]
 
     global_moment_preset = payload["probe_presets"]["global-moment-closure-device-qi"]
     assert (
