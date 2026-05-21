@@ -1109,6 +1109,66 @@ def test_qi_seed_runner_phase_space_coarse_reuse_device_qi_probe_records_env(tmp
     )
 
 
+def test_qi_seed_runner_residual_bounce_region_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "residual-bounce-region-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "residual-bounce-region-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE"]
+        == "1"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MAX_RANK"
+        ]
+        == "48"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_SOLVER"
+        ]
+        == "action_lstsq"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_REGION_BANDS"
+        ]
+        == "bounce,trapped,passing"
+    )
+    assert manifest["cases"][0]["probe_preset"] == "residual-bounce-region-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
 def test_qi_seed_runner_block_schur_device_qi_probe_records_env(tmp_path: Path) -> None:
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
@@ -1967,6 +2027,156 @@ def test_qi_seed_runner_keeps_phase_space_probe_fail_closed_until_converged(
     assert summary["evidence_classification"]["promotion_eligible_seed_count"] == 0
 
 
+def test_qi_seed_runner_keeps_residual_bounce_region_probe_fail_closed_until_converged(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+    summary_path = tmp_path / "summary.json"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        trace_path = Path(command[command.index("--solver-trace") + 1])
+        output_path = Path(command[command.index("--out") + 1])
+        output_path.write_bytes(b"h5")
+        trace_path.write_text(
+            json.dumps(
+                {
+                    "backend": "gpu",
+                    "converged": False,
+                    "residual_norm": 2.0e-5,
+                    "residual_target": 1.0e-11,
+                    "metadata": {
+                        "solver_metadata": {
+                            "accepted_converged": False,
+                            "xblock_qi_device_preconditioner_used": True,
+                            "xblock_qi_device_preconditioner_use_in_krylov": True,
+                            "xblock_qi_device_preconditioner_coarse_reuse": True,
+                            "xblock_qi_device_preconditioner_operator_krylov_enrichment": True,
+                            "xblock_qi_device_preconditioner_residual_region_bounce_coarse": True,
+                            "xblock_qi_device_preconditioner_metadata": {
+                                "residual_region_bounce_coarse_enabled": True,
+                                "residual_region_bounce_coarse_candidate_count": 13,
+                                "residual_region_bounce_coarse_rank": 6,
+                                "residual_region_bounce_coarse_stage_count": 2,
+                                "residual_region_bounce_coarse_solver": "action_lstsq",
+                                "residual_region_bounce_coarse_condition_estimate": 5.0,
+                                "residual_region_bounce_coarse_bounce_boundary": 0.35,
+                                "residual_region_bounce_coarse_region_bands": [
+                                    "bounce",
+                                    "trapped",
+                                    "passing",
+                                ],
+                            },
+                        }
+                    },
+                    "selected_path": "rhsmode1_solution",
+                    "solve_method": "xblock_sparse_pc_gmres",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--execute",
+                "--probe-preset",
+                "residual-bounce-region-device-qi",
+                "--summary-output",
+                str(summary_path),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    seed = summary["seeds"][0]
+    assert seed["evidence_class"] == "device_qi_residual_bounce_region_coarse_reuse"
+    assert seed["run_outcome"] == "not_converged"
+    assert seed["promotion_eligible"] is False
+    assert seed["requested_qi_device_residual_bounce_region_coarse"] is True
+    assert seed["observed_qi_device_residual_bounce_region_coarse"] is True
+    assert seed["xblock_qi_device_preconditioner_residual_region_bounce_coarse_candidate_count"] == 13
+    assert seed["xblock_qi_device_preconditioner_residual_region_bounce_coarse_rank"] == 6
+    assert seed["xblock_qi_device_preconditioner_residual_region_bounce_coarse_stage_count"] == 2
+    assert seed["xblock_qi_device_preconditioner_residual_region_bounce_coarse_solver"] == "action_lstsq"
+    assert "observed_residual_bounce_region_coarse" in seed["evidence_tags"]
+    assert "not_converged" in seed["evidence_tags"]
+    assert summary["evidence_classification"]["classes"] == [
+        "device_qi_residual_bounce_region_coarse_reuse"
+    ]
+    assert summary["evidence_classification"]["has_observed_residual_bounce_region_coarse"] is True
+    assert summary["evidence_classification"]["promotion_eligible_seed_count"] == 0
+
+
+def test_qi_seed_progress_parser_preserves_residual_bounce_region_bands() -> None:
+    progress = qi_seed._infer_qi_device_progress(
+        [
+            (
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner residual-region/bounce coarse "
+                "(max_rank=48 rank=7 candidates=12 stage_count=1 solver=action_lstsq "
+                "condition_estimate=4.0 residual_before=3.0e-5 residual_after=2.8e-5 "
+                "boundary=3.500e-01 include_global=1 radial=1 species=1 "
+                "bands=bounce,trapped,passing)"
+            ),
+            (
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner accepted residual 3.0e-05 -> 2.8e-05 "
+                "(rank=13 cycles=1 ratio=9.333333e-01 operator_krylov=1 coarse_reuse=1)"
+            ),
+        ]
+    )
+
+    assert progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse"] is True
+    assert progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse_max_rank"] == 48
+    assert progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse_rank"] == 7
+    assert progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse_candidate_count"] == 12
+    assert progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse_stage_count"] == 1
+    assert progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse_solver"] == "action_lstsq"
+    assert progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse_condition_estimate"] == 4.0
+    assert progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse_residual_before"] == 3.0e-5
+    assert progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse_residual_after"] == 2.8e-5
+    assert (
+        progress["xblock_qi_device_preconditioner_residual_region_bounce_coarse_region_bands"]
+        == "bounce,trapped,passing"
+    )
+
+
+def test_evidence_classification_does_not_treat_false_residual_bounce_as_observed(
+    tmp_path: Path,
+) -> None:
+    artifact = {
+        "schema_version": 2,
+        "artifact_kind": "qi_seed_execution_summary",
+        "seeds": [
+            {
+                "evidence_class": "requested_residual_bounce_region_coarse_device_qi",
+                "requested_qi_device_residual_bounce_region_coarse": True,
+                "observed_qi_device_residual_bounce_region_coarse": False,
+            }
+        ],
+    }
+
+    classification = qi_seed._artifact_evidence_classification(tmp_path / "artifact.json", artifact)
+
+    assert classification["classes"] == ["requested_residual_bounce_region_coarse_device_qi"]
+    assert classification["has_observed_residual_bounce_region_coarse"] is False
+
+
 def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Path) -> None:
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
@@ -2250,6 +2460,38 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
         "recommended_command"
     ]
     assert "fail-closed" in phase_space_preset["description"]
+    residual_bounce_preset = manifest["probe_presets"]["residual-bounce-region-device-qi"]
+    assert (
+        residual_bounce_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE"
+        ]
+        == "1"
+    )
+    assert (
+        residual_bounce_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MAX_RANK"
+        ]
+        == "48"
+    )
+    assert (
+        residual_bounce_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_REGION_BANDS"
+        ]
+        == "bounce,trapped,passing"
+    )
+    assert "--probe-preset residual-bounce-region-device-qi" in residual_bounce_preset[
+        "recommended_command"
+    ]
+    assert (
+        "tests/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0"
+        in residual_bounce_preset["recommended_command"]
+    )
+    assert (
+        "docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0.json"
+        in residual_bounce_preset["recommended_command"]
+    )
+    assert "runtime hook" in residual_bounce_preset["description"]
+    assert "fail-closed" in residual_bounce_preset["description"]
     block_schur_preset = manifest["probe_presets"]["block-schur-device-qi"]
     assert (
         block_schur_preset["env"][
@@ -2309,6 +2551,7 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     assert "global-moment" in recommended
     assert "residual-galerkin" in recommended
     assert "phase-space" in recommended
+    assert "residual-bounce-region" in recommended
     assert "block-schur" in recommended
     assert "adaptive-residual" in recommended
     assert "recycled-augmented" in recommended

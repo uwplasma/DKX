@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 103
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 105
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 71
+    assert current["nonpassing_artifact_count"] == 73
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -1044,6 +1044,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
             "docs/_static/"
             "qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0.json"
         ),
+        "docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_cpu.json",
+        "docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0.json",
         "docs/_static/qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json",
         (
             "docs/_static/"
@@ -1760,6 +1762,18 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "--probe-preset phase-space-coarse-reuse-device-qi"
         in commands["phase_space_coarse_reuse_device_qi_gpu0_probe"]
     )
+    assert (
+        "--probe-preset residual-bounce-region-device-qi"
+        in commands["residual_bounce_region_device_qi_gpu0_probe"]
+    )
+    assert (
+        "tests/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0"
+        in commands["residual_bounce_region_device_qi_gpu0_probe"]
+    )
+    assert (
+        "docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0.json"
+        in commands["residual_bounce_region_device_qi_gpu0_probe"]
+    )
     assert "--probe-preset adaptive-residual-device-qi" in commands["adaptive_residual_device_qi_gpu0_probe"]
 
     residual_snapshot_equation_preset = payload["probe_presets"]["residual-snapshot-equation-device-qi"]
@@ -1847,6 +1861,35 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         == "32"
     )
     assert "fail-closed" in phase_space_preset["description"]
+    residual_bounce_preset = payload["probe_presets"]["residual-bounce-region-device-qi"]
+    assert (
+        residual_bounce_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE"
+        ]
+        == "1"
+    )
+    assert (
+        residual_bounce_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MAX_RANK"
+        ]
+        == "48"
+    )
+    assert (
+        residual_bounce_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_REGION_BANDS"
+        ]
+        == "bounce,trapped,passing"
+    )
+    assert (
+        "tests/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0"
+        in residual_bounce_preset["recommended_command"]
+    )
+    assert (
+        "docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0.json"
+        in residual_bounce_preset["recommended_command"]
+    )
+    assert "runtime hook" in residual_bounce_preset["description"]
+    assert "fail-closed" in residual_bounce_preset["description"]
 
     block_schur_preset = payload["probe_presets"]["block-schur-device-qi"]
     assert (

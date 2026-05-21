@@ -15046,3 +15046,89 @@ Best next steps:
 3. The next real algorithmic step is a richer bounce/banana-region coarse
    equation or an active-pattern chunked operator reuse path, not another
    smoother/restart tuning pass.
+
+## 2026-05-21 residual-region/bounce-region QI evidence plumbing
+
+Goal: keep the documentation, manifest, and test side ready for the
+residual-region / bounce-region QI coarse preset. This started as fail-closed
+research plumbing and now records the implemented runtime hook and its CPU/GPU
+negative evidence without promoting it as a production default.
+
+Implemented:
+
+- Added the runner preset `residual-bounce-region-device-qi`. It emits explicit
+  opt-in `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE*`
+  controls, keeps the checked recycled augmented-Krylov/coarse-reuse context,
+  and records the env/config in generated manifests.
+- Extended compact artifact classification so synthetic trace metadata or real
+  trace/progress metadata can be labeled as
+  `device_qi_residual_bounce_region_coarse_reuse`, but promotion remains false
+  unless output, solver trace, convergence, and accepted-converged evidence are
+  present.
+- Added tests for env/config emission, synthetic nonconverged classification,
+  and production evidence-manifest plumbing.
+- Documented the source-map contract: this preset is an opt-in runtime hook and
+  evidence path, not a production hook or default-policy claim.
+
+Status:
+
+- Runtime hook: implemented in the follow-up residual-region/bounce-region
+  device-QI push below.
+- Promotion status: fail-closed / promotion-ineligible until a converged
+  scale-0.60 hard-seed artifact writes HDF5 output and solver trace metadata.
+
+## 2026-05-21 residual-region/bounce-region QI runtime hook
+
+Goal: move beyond phase-space negative evidence with a residual-adaptive
+coarse equation. The new path uses the actual hard-seed residual to identify
+energetic block, trapped/boundary/passing, radial, and species regions, then
+caches `Q`, `A Q`, and the small residual equation exactly like the existing
+device-QI infrastructure. This is a real algorithmic push, not smoother tuning.
+
+Implemented:
+
+- Added `sfincs_jax/rhs1_qi_residual_region_coarse.py` with deterministic,
+  rank-gated residual-region/bounce-region candidate construction from
+  `RHS1QICoarseBlockLayout` and the setup residual. Unsupported layouts and
+  nonphysical tail blocks fail closed.
+- Wired `residual_region_bounce_coarse` through
+  `RHS1QIDevicePreconditionerConfig`, metadata, setup-time residual-equation
+  basis construction, cached `A Q` application, driver environment parsing,
+  progress lines, seed-only metadata, and solver-trace summary keys.
+- Kept the route opt-in through
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE*`
+  and the runner preset `residual-bounce-region-device-qi`.
+- Added focused tests for residual-region candidate construction, projection,
+  unsupported layouts, tail-block handling, JIT compatibility, device
+  preconditioner integration, runner env/config emission, and fail-closed
+  evidence classification.
+
+Local gates:
+
+- `python -m compileall -q sfincs_jax/rhs1_qi_residual_region_coarse.py sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py scripts/run_qi_seed_robustness.py tests/test_rhs1_qi_residual_region_coarse.py tests/test_rhs1_qi_device_preconditioner.py tests/test_run_qi_seed_robustness.py tests/test_qi_seed_smoke_artifact.py`
+- `python -m ruff check sfincs_jax/rhs1_qi_residual_region_coarse.py sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py tests/test_rhs1_qi_residual_region_coarse.py tests/test_rhs1_qi_device_preconditioner.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_qi_residual_region_coarse.py tests/test_rhs1_qi_device_preconditioner.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_run_qi_seed_robustness.py tests/test_qi_seed_smoke_artifact.py`
+
+Current status:
+
+- Runtime infrastructure: implemented and locally tested.
+- Bounded scale-0.60 CPU hard-seed execution completed in `215.65 s` and
+  correctly refused nonconverged output. The setup residual improved from
+  `3.021487e-05` to `2.838883e-05`, but the final true residual remained
+  `7.833826e-06` against a write gate of `3.021487e-11`.
+- Bounded scale-0.60 GPU0 hard-seed execution completed on `office` in
+  `274.99 s` and correctly refused nonconverged output. The setup residual
+  matched the CPU improvement, but the final true residual remained
+  `8.077991e-06` against the same write gate.
+- The compact artifacts
+  `docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_cpu.json`
+  and
+  `docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0.json`
+  now classify as `device_qi_residual_bounce_region_coarse_reuse` and record
+  observed residual-bounce metadata. The evidence manifest includes them,
+  moving the QI evidence corpus to `105` artifacts (`32` passing, `73`
+  nonpassing).
+- Promotion status: still fail-closed. This hook is useful auditable negative
+  evidence, but it is slower and no more convergent than the best recycled
+  augmented-Krylov/phase-space hard-seed evidence, so it remains opt-in only.

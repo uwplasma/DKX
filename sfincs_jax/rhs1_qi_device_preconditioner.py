@@ -52,6 +52,10 @@ from .rhs1_qi_residual_galerkin import (
     RHS1QIResidualGalerkinConfig,
     setup_rhs1_qi_residual_galerkin,
 )
+from .rhs1_qi_residual_region_coarse import (
+    RHS1QIResidualRegionCoarseConfig,
+    build_rhs1_qi_residual_region_coarse_basis,
+)
 
 ArrayLike = Any
 
@@ -137,6 +141,16 @@ class RHS1QIDevicePreconditionerConfig:
     phase_space_residual_equation_include_odd: bool = True
     phase_space_residual_equation_include_radial: bool = True
     phase_space_residual_equation_include_species: bool = True
+    residual_region_bounce_coarse: bool = False
+    residual_region_bounce_coarse_max_rank: int = 32
+    residual_region_bounce_coarse_max_candidates: int = 48
+    residual_region_bounce_coarse_solver: str = "action_lstsq"
+    residual_region_bounce_coarse_include_global: bool = True
+    residual_region_bounce_coarse_include_radial: bool = True
+    residual_region_bounce_coarse_include_species: bool = True
+    residual_region_bounce_coarse_trapped_boundary_fraction: float = 0.35
+    residual_region_bounce_coarse_min_region_energy_fraction: float = 1.0e-2
+    residual_region_bounce_coarse_region_bands: str = "bounce,trapped,passing"
     block_schur_residual_equation: bool = False
     block_schur_residual_equation_max_rank: int = 24
     block_schur_residual_equation_include_global: bool = False
@@ -248,6 +262,22 @@ class RHS1QIDevicePreconditionerMetadata:
     phase_space_residual_equation_condition_estimate: float
     phase_space_residual_equation_residual_before: float
     phase_space_residual_equation_residual_after: float
+    residual_region_bounce_coarse_enabled: bool
+    residual_region_bounce_coarse_candidate_count: int
+    residual_region_bounce_coarse_rank: int
+    residual_region_bounce_coarse_stage_count: int
+    residual_region_bounce_coarse_stage_ranks: tuple[int, ...]
+    residual_region_bounce_coarse_max_rank_requested: int
+    residual_region_bounce_coarse_solver: str
+    residual_region_bounce_coarse_condition_estimate: float
+    residual_region_bounce_coarse_residual_before: float
+    residual_region_bounce_coarse_residual_after: float
+    residual_region_bounce_coarse_include_global: bool
+    residual_region_bounce_coarse_include_radial: bool
+    residual_region_bounce_coarse_include_species: bool
+    residual_region_bounce_coarse_bounce_boundary: float
+    residual_region_bounce_coarse_min_region_energy_fraction: float
+    residual_region_bounce_coarse_region_bands: str
     block_schur_residual_equation_enabled: bool
     block_schur_residual_equation_group_count: int
     block_schur_residual_equation_candidate_count: int
@@ -345,6 +375,7 @@ class RHS1QIDevicePreconditionerState:
             + int(self.metadata.global_moment_residual_equation_rank)
             + int(self.metadata.residual_galerkin_equation_rank)
             + int(self.metadata.phase_space_residual_equation_rank)
+            + int(self.metadata.residual_region_bounce_coarse_rank)
             + int(self.metadata.block_schur_residual_equation_rank)
             + int(self.metadata.residual_snapshot_residual_equation_rank)
         )
@@ -360,6 +391,7 @@ class RHS1QIDevicePreconditionerState:
             or bool(self.metadata.global_moment_residual_equation_enabled)
             or bool(self.metadata.residual_galerkin_equation_enabled)
             or bool(self.metadata.phase_space_residual_equation_enabled)
+            or bool(self.metadata.residual_region_bounce_coarse_enabled)
             or bool(self.metadata.block_schur_residual_equation_enabled)
             or bool(self.metadata.residual_snapshot_residual_equation_enabled)
         ):
@@ -416,6 +448,9 @@ class RHS1QIDevicePreconditionerState:
             bool(self.metadata.phase_space_residual_equation_enabled)
             and bool(self.metadata.phase_space_residual_equation_include_global)
         ) or (
+            bool(self.metadata.residual_region_bounce_coarse_enabled)
+            and bool(self.metadata.residual_region_bounce_coarse_include_global)
+        ) or (
             bool(self.metadata.block_schur_residual_equation_enabled)
             and bool(self.metadata.block_schur_residual_equation_include_global)
         ) or (
@@ -439,6 +474,10 @@ class RHS1QIDevicePreconditionerState:
                 or (
                     bool(self.metadata.phase_space_residual_equation_enabled)
                     and self.metadata.phase_space_residual_equation_solver == "galerkin"
+                )
+                or (
+                    bool(self.metadata.residual_region_bounce_coarse_enabled)
+                    and self.metadata.residual_region_bounce_coarse_solver == "galerkin"
                 )
             ):
                 coefficients = _regularized_projected_solve(
@@ -1221,6 +1260,83 @@ def _build_phase_space_residual_equation_bases_from_metadata(
         dtype=dtype,
     )
     basis = build_rhs1_qi_phase_space_coarse_basis(layout, config=phase_config)
+    rank = int(basis.metadata.rank)
+    candidate_count = int(basis.metadata.candidate_count)
+    residual_before = float(jnp.linalg.norm(residual))
+    if rank <= 0:
+        return (), candidate_count, (), 0, float("inf"), residual_before, float("inf")
+
+    q = jnp.asarray(basis.vectors, dtype=dtype)
+    action = _operator_on_basis(operator_matvec, q, shape=shape, dtype=dtype)
+    coarse_operator = jnp.conjugate(q).T @ action
+    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_before))
+    if solver == "galerkin":
+        coefficients = _regularized_projected_solve(
+            coarse_operator,
+            jnp.conjugate(q).T @ residual,
+            rcond=float(config.regularization_rcond),
+        )
+        condition_matrix = coarse_operator
+    else:
+        coefficients = _regularized_least_squares(
+            action,
+            residual,
+            rcond=float(config.regularization_rcond),
+        )
+        condition_matrix = action
+    next_residual = residual - action @ coefficients
+    residual_after = float(jnp.linalg.norm(next_residual))
+    condition_estimate = _condition_estimate(condition_matrix, threshold=threshold)
+    if (not np.isfinite(residual_after)) or residual_after >= residual_before - threshold:
+        return (), candidate_count, (), 0, condition_estimate, residual_before, residual_after
+    return (basis,), candidate_count, (rank,), rank, condition_estimate, residual_before, residual_after
+
+
+def _build_residual_region_bounce_coarse_bases_from_metadata(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    geometry_metadata: Mapping[str, object] | None,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float, float, float]:
+    """Build a fail-closed residual-localized bounce-region coarse equation."""
+
+    if int(shape[0]) != int(shape[1]):
+        raise ValueError("residual-region bounce coarse requires a square operator")
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(total_size):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+
+    solver = _normalize_multilevel_residual_equation_solver(
+        config.residual_region_bounce_coarse_solver
+    )
+    region_config = RHS1QIResidualRegionCoarseConfig(
+        max_rank=max(1, int(config.residual_region_bounce_coarse_max_rank)),
+        max_candidates=max(1, int(config.residual_region_bounce_coarse_max_candidates)),
+        trapped_boundary_fraction=float(config.residual_region_bounce_coarse_trapped_boundary_fraction),
+        min_region_energy_fraction=float(config.residual_region_bounce_coarse_min_region_energy_fraction),
+        include_global_active_region=bool(config.residual_region_bounce_coarse_include_global),
+        include_block_regions=True,
+        include_block_bounce_regions=True,
+        include_pitch_regions=True,
+        include_radial_regions=bool(config.residual_region_bounce_coarse_include_radial),
+        include_radial_bounce_regions=bool(config.residual_region_bounce_coarse_include_radial),
+        include_species_regions=bool(config.residual_region_bounce_coarse_include_species),
+        include_species_bounce_regions=bool(config.residual_region_bounce_coarse_include_species),
+        region_bands=str(config.residual_region_bounce_coarse_region_bands),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        dtype=dtype,
+    )
+    basis = build_rhs1_qi_residual_region_coarse_basis(
+        layout,
+        residual,
+        config=region_config,
+    )
     rank = int(basis.metadata.rank)
     candidate_count = int(basis.metadata.candidate_count)
     residual_before = float(jnp.linalg.norm(residual))
@@ -3132,6 +3248,39 @@ def setup_rhs1_qi_device_preconditioner(
         residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
             residual_galerkin_equation_solver for _ in residual_galerkin_bases
         )
+    residual_region_bounce_coarse_solver = _normalize_multilevel_residual_equation_solver(
+        config_use.residual_region_bounce_coarse_solver
+    )
+    residual_region_bounce_coarse_candidate_count = 0
+    residual_region_bounce_coarse_rank = 0
+    residual_region_bounce_coarse_stage_ranks: tuple[int, ...] = ()
+    residual_region_bounce_coarse_condition_estimate = float("inf")
+    residual_region_bounce_coarse_residual_before = float("inf")
+    residual_region_bounce_coarse_residual_after = float("inf")
+    if bool(config_use.residual_region_bounce_coarse):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when residual_region_bounce_coarse=True")
+        (
+            residual_region_bounce_bases,
+            residual_region_bounce_coarse_candidate_count,
+            residual_region_bounce_coarse_stage_ranks,
+            residual_region_bounce_coarse_rank,
+            residual_region_bounce_coarse_condition_estimate,
+            residual_region_bounce_coarse_residual_before,
+            residual_region_bounce_coarse_residual_after,
+        ) = _build_residual_region_bounce_coarse_bases_from_metadata(
+            operator_matvec=operator_matvec,
+            geometry_metadata=geometry_metadata,
+            residual_seed=residual_seed,
+            shape=shape,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
+        )
+        residual_equation_bases = residual_equation_bases + residual_region_bounce_bases
+        residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
+            residual_region_bounce_coarse_solver for _ in residual_region_bounce_bases
+        )
     phase_space_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
         config_use.phase_space_residual_equation_solver
     )
@@ -3276,6 +3425,8 @@ def setup_rhs1_qi_device_preconditioner(
         reason = "built_with_global_moment_residual_equation"
     elif bool(config_use.residual_galerkin_equation) and residual_galerkin_equation_rank > 0:
         reason = "built_with_residual_galerkin_equation"
+    elif bool(config_use.residual_region_bounce_coarse) and residual_region_bounce_coarse_rank > 0:
+        reason = "built_with_residual_region_bounce_coarse"
     elif bool(config_use.phase_space_residual_equation) and phase_space_residual_equation_rank > 0:
         reason = "built_with_phase_space_residual_equation"
     elif bool(config_use.block_schur_residual_equation) and block_schur_residual_equation_rank > 0:
@@ -3446,6 +3597,48 @@ def setup_rhs1_qi_device_preconditioner(
         ),
         phase_space_residual_equation_residual_after=float(
             phase_space_residual_equation_residual_after
+        ),
+        residual_region_bounce_coarse_enabled=bool(
+            config_use.residual_region_bounce_coarse and residual_region_bounce_coarse_rank > 0
+        ),
+        residual_region_bounce_coarse_candidate_count=int(
+            residual_region_bounce_coarse_candidate_count
+        ),
+        residual_region_bounce_coarse_rank=int(residual_region_bounce_coarse_rank),
+        residual_region_bounce_coarse_stage_count=len(residual_region_bounce_coarse_stage_ranks),
+        residual_region_bounce_coarse_stage_ranks=tuple(
+            int(v) for v in residual_region_bounce_coarse_stage_ranks
+        ),
+        residual_region_bounce_coarse_max_rank_requested=int(
+            config_use.residual_region_bounce_coarse_max_rank
+        ),
+        residual_region_bounce_coarse_solver=residual_region_bounce_coarse_solver,
+        residual_region_bounce_coarse_condition_estimate=float(
+            residual_region_bounce_coarse_condition_estimate
+        ),
+        residual_region_bounce_coarse_residual_before=float(
+            residual_region_bounce_coarse_residual_before
+        ),
+        residual_region_bounce_coarse_residual_after=float(
+            residual_region_bounce_coarse_residual_after
+        ),
+        residual_region_bounce_coarse_include_global=bool(
+            config_use.residual_region_bounce_coarse_include_global
+        ),
+        residual_region_bounce_coarse_include_radial=bool(
+            config_use.residual_region_bounce_coarse_include_radial
+        ),
+        residual_region_bounce_coarse_include_species=bool(
+            config_use.residual_region_bounce_coarse_include_species
+        ),
+        residual_region_bounce_coarse_bounce_boundary=float(
+            config_use.residual_region_bounce_coarse_trapped_boundary_fraction
+        ),
+        residual_region_bounce_coarse_min_region_energy_fraction=float(
+            config_use.residual_region_bounce_coarse_min_region_energy_fraction
+        ),
+        residual_region_bounce_coarse_region_bands=str(
+            config_use.residual_region_bounce_coarse_region_bands
         ),
         block_schur_residual_equation_enabled=bool(
             config_use.block_schur_residual_equation and block_schur_residual_equation_rank > 0

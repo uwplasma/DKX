@@ -23,6 +23,10 @@ from sfincs_jax.rhs1_qi_phase_space_coarse import (
     RHS1QIPhaseSpaceCoarseConfig,
     build_rhs1_qi_phase_space_coarse_basis,
 )
+from sfincs_jax.rhs1_qi_residual_region_coarse import (
+    RHS1QIResidualRegionCoarseConfig,
+    build_rhs1_qi_residual_region_coarse_basis,
+)
 
 
 def _basis(vectors: jnp.ndarray, label: str = "coarse") -> RHS1QICoarseBasis:
@@ -634,6 +638,74 @@ def test_device_preconditioner_phase_space_residual_equation_solves_pitch_mode()
     assert phase_state.metadata.phase_space_residual_equation_include_global is True
     assert np.isfinite(phase_state.metadata.phase_space_residual_equation_condition_estimate)
     assert all(label.startswith("phase_space:") for label in phase_state.metadata.accepted_basis_labels)
+    np.testing.assert_allclose(jitted, corrected, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_device_preconditioner_residual_region_bounce_coarse_solves_local_mode() -> None:
+    layout = RHS1QICoarseBlockLayout(
+        block_sizes=(12, 12, 12, 12, 3),
+        n_theta=2,
+        n_zeta=1,
+        block_x=(0, 1, 0, 1, -1),
+        block_species=(0, 0, 1, 1, -1),
+    )
+    seed = jnp.zeros((layout.total_size,), dtype=jnp.float64)
+    seed = seed.at[layout.block_offsets[2] + 4 : layout.block_offsets[2] + 8].set(
+        jnp.asarray([2.0, -1.0, 1.5, -0.5], dtype=jnp.float64)
+    )
+    region_basis = build_rhs1_qi_residual_region_coarse_basis(
+        layout,
+        seed,
+        config=RHS1QIResidualRegionCoarseConfig(
+            max_rank=8,
+            min_region_energy_fraction=0.0,
+            include_global_active_region=True,
+        ),
+    )
+    mode = jnp.asarray(region_basis.vectors[:, 0], dtype=jnp.float64)
+    dense = jnp.eye(layout.total_size, dtype=jnp.float64) + 2.0 * jnp.outer(mode, mode)
+    rhs = dense @ mode
+    operator = device_csr_from_scipy_csr(sp.csr_matrix(np.asarray(dense)), max_csr_mb=1.0)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=operator,
+        coarse_basis=None,
+        residual_seed=rhs,
+        geometry_metadata={
+            "qi_block_sizes": layout.block_sizes,
+            "qi_block_x": layout.block_x,
+            "qi_block_species": layout.block_species,
+            "n_theta": layout.n_theta,
+            "n_zeta": layout.n_zeta,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            regularization_rcond=1.0e-14,
+            local_smoother_kind="none",
+            residual_region_bounce_coarse=True,
+            residual_region_bounce_coarse_max_rank=8,
+            residual_region_bounce_coarse_min_region_energy_fraction=0.0,
+            residual_region_bounce_coarse_include_global=True,
+        ),
+    )
+
+    corrected = state.apply(rhs)
+    residual_after = rhs - dense @ corrected
+    jitted = jax.jit(state.apply)(rhs)
+
+    assert float(jnp.linalg.norm(residual_after)) < 1.0e-10
+    assert state.metadata.residual_region_bounce_coarse_enabled is True
+    assert state.metadata.residual_region_bounce_coarse_rank > 0
+    assert state.metadata.residual_region_bounce_coarse_stage_count == 1
+    assert state.metadata.residual_region_bounce_coarse_candidate_count >= (
+        state.metadata.residual_region_bounce_coarse_rank
+    )
+    assert state.metadata.residual_region_bounce_coarse_include_global is True
+    assert state.metadata.residual_region_bounce_coarse_bounce_boundary == pytest.approx(0.35)
+    assert np.isfinite(state.metadata.residual_region_bounce_coarse_condition_estimate)
+    assert all(
+        label.startswith("residual_region:")
+        for label in state.residual_equation_bases[0].metadata.accepted_labels
+    )
     np.testing.assert_allclose(jitted, corrected, rtol=1.0e-12, atol=1.0e-12)
 
 
