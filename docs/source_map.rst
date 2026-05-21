@@ -395,6 +395,18 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   such as ``phase-space-coarse-reuse-device-qi`` until scale-0.60 GPU hard-seed
   artifacts write HDF5 output, solver traces, and accepted-converged residual
   metadata.
+- ``sfincs_jax/rhs1_qi_residual_region_coarse.py``:
+  standalone residual-region / bounce-region coarse-space builder for hard
+  RHSMode=1 QI seeds. It uses the setup residual to select energetic block,
+  trapped/boundary/passing, radial, and species regions from
+  ``RHS1QICoarseBlockLayout`` metadata, rank-gates residual-restricted columns,
+  and plugs into the existing cached ``Q`` / ``A Q`` residual-equation path.
+  The runner preset ``residual-bounce-region-device-qi`` emits explicit
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE*``
+  controls, records them in manifests, and classifies solver-trace or
+  failure-progress metadata. It remains opt-in and fail-closed, not a
+  production claim, until scale-0.60 CPU/GPU hard-seed artifacts write
+  converged HDF5 output and solver traces under the same promotion gates.
 - ``sfincs_jax/rhs1_qi_promotion.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace
