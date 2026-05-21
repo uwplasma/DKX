@@ -527,6 +527,33 @@ class RHS1QIDevicePreconditionerProbe:
 
 
 @dataclass(frozen=True)
+class RHS1QIDeviceAugmentedSeedProbe:
+    """Accepted device-QI seed correction space for augmented Krylov solves."""
+
+    solution: ArrayLike
+    probe: RHS1QIDevicePreconditionerProbe
+    augmentation_basis: ArrayLike
+    operator_on_augmentation: ArrayLike
+    rank: int
+    reason: str
+    accepted_labels: tuple[str, ...]
+    projection_residual_norm: float | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        """Return JSON-friendly augmentation diagnostics without array payloads."""
+
+        return {
+            "rank": int(self.rank),
+            "reason": self.reason,
+            "accepted_labels": tuple(str(label) for label in self.accepted_labels),
+            "projection_residual_norm": (
+                None if self.projection_residual_norm is None else float(self.projection_residual_norm)
+            ),
+            "probe": self.probe.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
 class RHS1QIMatrixFreeResidualSmootherMetadata:
     """Diagnostics for a bounded matrix-free local smoother."""
 
@@ -3828,15 +3855,221 @@ def probe_rhs1_qi_device_preconditioner(
     return x_best if accepted else x_initial, probe
 
 
+def probe_rhs1_qi_device_augmented_seed(
+    *,
+    rhs: ArrayLike,
+    x0: ArrayLike,
+    state: RHS1QIDevicePreconditionerState,
+    operator: Callable[[ArrayLike], ArrayLike] | None = None,
+    min_relative_improvement: float = 0.0,
+    acceptance_atol: float = 0.0,
+    max_cycles: int = 1,
+    residual_minimizing_step: bool = False,
+    alpha_clip: float = 10.0,
+    max_rank: int | None = None,
+    basis_rtol: float | None = None,
+    basis_atol: float | None = None,
+) -> RHS1QIDeviceAugmentedSeedProbe:
+    """Probe device-QI corrections and retain accepted directions for Krylov.
+
+    The regular probe accepts or rejects a bounded sequence of device-QI
+    corrections, then discards the actual correction subspace.  This helper
+    keeps the accepted update directions, rank-gates them, recomputes ``A Q``
+    after orthonormalization, and returns a paired ``(Q, A Q)`` augmentation
+    that can be passed to the FGMRES/GMRES augmented Krylov hooks.  If no true
+    residual improvement is accepted, the augmentation is empty.
+    """
+
+    matvec = state.operator_matvec if operator is None else operator
+    rhs_vec = jnp.asarray(rhs, dtype=state.dtype).reshape((-1,))
+    x_initial = jnp.asarray(x0, dtype=rhs_vec.dtype).reshape((-1,))
+    if rhs_vec.shape != x_initial.shape:
+        raise ValueError("rhs and x0 must have the same shape")
+
+    empty_basis = jnp.zeros((int(state.shape[1]), 0), dtype=rhs_vec.dtype)
+    empty_action = jnp.zeros((int(state.shape[0]), 0), dtype=rhs_vec.dtype)
+    residual_before = rhs_vec - jnp.asarray(matvec(x_initial), dtype=rhs_vec.dtype).reshape((-1,))
+    residual_before_norm = float(jnp.linalg.norm(residual_before))
+    if residual_before_norm == 0.0:
+        probe = RHS1QIDevicePreconditionerProbe(
+            accepted=False,
+            reason="zero_residual",
+            residual_before_norm=0.0,
+            residual_after_norm=0.0,
+            improvement_ratio=None,
+            metadata=state.metadata,
+            cycles=0,
+            residual_history=(0.0,),
+            step_history=(),
+        )
+        return RHS1QIDeviceAugmentedSeedProbe(
+            solution=x_initial,
+            probe=probe,
+            augmentation_basis=empty_basis,
+            operator_on_augmentation=empty_action,
+            rank=0,
+            reason="zero_residual",
+            accepted_labels=(),
+            projection_residual_norm=None,
+        )
+
+    x_best = x_initial
+    residual_current = residual_before
+    residual_current_norm = residual_before_norm
+    history: list[float] = [float(residual_before_norm)]
+    step_history: list[float] = []
+    accepted_directions: list[ArrayLike] = []
+    accepted_cycles = 0
+    last_finite = True
+    last_candidate_norm = residual_before_norm
+    max_cycles_use = max(1, int(max_cycles))
+    alpha_clip_use = max(0.0, float(alpha_clip))
+
+    for _ in range(max_cycles_use):
+        dx = jnp.asarray(state.apply(residual_current), dtype=rhs_vec.dtype).reshape((-1,))
+        a_dx = jnp.asarray(matvec(dx), dtype=rhs_vec.dtype).reshape((-1,))
+        alpha = 1.0
+        if bool(residual_minimizing_step):
+            denom = float(jnp.real(jnp.vdot(a_dx, a_dx)))
+            if (not np.isfinite(denom)) or denom <= 1.0e-300:
+                last_finite = False
+                break
+            numer = float(jnp.real(jnp.vdot(a_dx, residual_current)))
+            alpha = numer / denom
+            if alpha_clip_use > 0.0:
+                alpha = max(-alpha_clip_use, min(alpha_clip_use, float(alpha)))
+            if (not np.isfinite(alpha)) or alpha == 0.0:
+                last_finite = False
+                break
+        direction = float(alpha) * dx
+        action = float(alpha) * a_dx
+        x_candidate = x_best + direction
+        residual_after = residual_current - action
+        residual_after_norm_measured = float(jnp.linalg.norm(residual_after))
+        finite = bool(np.isfinite(residual_after_norm_measured))
+        last_finite = finite
+        if finite:
+            last_candidate_norm = residual_after_norm_measured
+        required_drop = max(
+            float(acceptance_atol),
+            residual_current_norm * max(0.0, float(min_relative_improvement)),
+        )
+        if not (finite and residual_after_norm_measured < residual_current_norm - required_drop):
+            break
+        accepted_directions.append(direction)
+        x_best = x_candidate
+        residual_current = residual_after
+        residual_current_norm = residual_after_norm_measured
+        history.append(float(residual_current_norm))
+        step_history.append(float(alpha))
+        accepted_cycles += 1
+
+    projection_residual_norm: float | None = None
+    augmentation_basis = empty_basis
+    operator_on_augmentation = empty_action
+    accepted_labels: tuple[str, ...] = ()
+    rank = 0
+    invalid_augmentation = False
+    if accepted_directions:
+        raw_basis = jnp.stack(tuple(accepted_directions), axis=1)
+        labels = tuple(f"augmented_seed:{idx}" for idx in range(int(raw_basis.shape[1])))
+        max_rank_use = int(raw_basis.shape[1]) if max_rank is None else max(0, int(max_rank))
+        basis = orthonormalize_rhs1_qi_coarse_basis(
+            raw_basis,
+            labels=labels,
+            rtol=float(state.metadata.regularization_rcond if basis_rtol is None else basis_rtol),
+            atol=0.0 if basis_atol is None else float(basis_atol),
+            max_rank=max_rank_use,
+        )
+        rank = int(basis.metadata.rank)
+        if rank > 0:
+            candidate_basis = jnp.asarray(basis.vectors, dtype=rhs_vec.dtype)
+            candidate_action = _operator_on_basis(
+                matvec,
+                candidate_basis,
+                shape=state.shape,
+                dtype=rhs_vec.dtype,
+            )
+            valid_shape = (
+                int(candidate_basis.ndim) == 2
+                and int(candidate_action.ndim) == 2
+                and int(candidate_basis.shape[0]) == int(state.shape[1])
+                and int(candidate_action.shape[0]) == int(state.shape[0])
+                and int(candidate_basis.shape[1]) == int(candidate_action.shape[1])
+                and int(candidate_basis.shape[1]) == int(rank)
+            )
+            valid_values = bool(jnp.all(jnp.isfinite(candidate_basis))) and bool(
+                jnp.all(jnp.isfinite(candidate_action))
+            )
+            if valid_shape and valid_values:
+                augmentation_basis = candidate_basis
+                operator_on_augmentation = candidate_action
+                accepted_labels = tuple(str(label) for label in basis.metadata.accepted_labels)
+                coefficients = _regularized_least_squares(
+                    operator_on_augmentation,
+                    residual_before,
+                    rcond=float(state.metadata.regularization_rcond),
+                )
+                projected_update = augmentation_basis @ coefficients
+                projected_residual = residual_before - operator_on_augmentation @ coefficients
+                projected_norm = float(jnp.linalg.norm(projected_residual))
+                projection_residual_norm = projected_norm
+                if np.isfinite(projected_norm) and projected_norm < residual_current_norm:
+                    x_best = x_initial + projected_update
+                    residual_current_norm = projected_norm
+                    history.append(float(projected_norm))
+            else:
+                invalid_augmentation = True
+                rank = 0
+
+    accepted = accepted_cycles > 0
+    if accepted:
+        if invalid_augmentation:
+            reason = "residual_reduced_invalid_augmentation"
+        else:
+            reason = "augmented_residual_reduced" if rank > 0 else "residual_reduced"
+        residual_after_norm = residual_current_norm
+    elif not last_finite:
+        reason = "nonfinite_candidate"
+        residual_after_norm = residual_before_norm
+    else:
+        reason = "residual_not_reduced"
+        residual_after_norm = last_candidate_norm
+    improvement_ratio = residual_after_norm / residual_before_norm if last_finite else None
+    probe = RHS1QIDevicePreconditionerProbe(
+        accepted=bool(accepted),
+        reason=reason,
+        residual_before_norm=residual_before_norm,
+        residual_after_norm=residual_after_norm,
+        improvement_ratio=improvement_ratio,
+        metadata=state.metadata,
+        cycles=int(accepted_cycles),
+        residual_history=tuple(float(value) for value in history),
+        step_history=tuple(float(value) for value in step_history),
+    )
+    return RHS1QIDeviceAugmentedSeedProbe(
+        solution=x_best if accepted else x_initial,
+        probe=probe,
+        augmentation_basis=augmentation_basis,
+        operator_on_augmentation=operator_on_augmentation,
+        rank=int(rank),
+        reason=reason,
+        accepted_labels=accepted_labels,
+        projection_residual_norm=projection_residual_norm,
+    )
+
+
 __all__ = [
     "RHS1QIMatrixFreeResidualSmoother",
     "RHS1QIMatrixFreeResidualSmootherMetadata",
     "RHS1QIMatrixFreeProjectedResidualSmoother",
     "RHS1QIMatrixFreeProjectedResidualSmootherMetadata",
+    "RHS1QIDeviceAugmentedSeedProbe",
     "RHS1QIDevicePreconditionerConfig",
     "RHS1QIDevicePreconditionerMetadata",
     "RHS1QIDevicePreconditionerProbe",
     "RHS1QIDevicePreconditionerState",
+    "probe_rhs1_qi_device_augmented_seed",
     "probe_rhs1_qi_device_preconditioner",
     "setup_rhs1_qi_device_preconditioner",
 ]

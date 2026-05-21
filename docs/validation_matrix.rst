@@ -530,8 +530,8 @@ Scope and status:
   public method ``auto``, all seeds ``converged=true``, and maximum residual
   ratio below ``1e-6``. Treat it as runner and default-solver-policy evidence
   only, not a production-resolution robustness claim.
-- The current production-readiness manifest rolls in 48 checked source artifacts:
-  21 passing bounded artifacts and 27 non-passing blocker artifacts. The largest
+- The current production-readiness manifest rolls in 105 checked source artifacts:
+  32 passing bounded artifacts and 73 non-passing blocker artifacts. The largest
   passing and attempted bounded grid is ``15 x 31 x 60 x 5`` with active size
   ``81377`` and total size ``139502``. A bounded CPU scale-0.60 seed-3
   probe-coarse artifact, the QI coarse-seed CPU artifact, and the

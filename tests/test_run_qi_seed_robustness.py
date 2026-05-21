@@ -723,6 +723,45 @@ def test_qi_seed_runner_operator_krylov_device_qi_probe_records_env(tmp_path: Pa
     assert case["command"][-2:] == ["--solve-method", "xblock_sparse_pc_gmres"]
 
 
+def test_qi_seed_runner_operator_krylov_composite_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "operator-krylov-composite-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "operator-krylov-composite-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_MODE"] == "multiplicative"
+    assert manifest["cases"][0]["probe_preset"] == "operator-krylov-composite-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
 def test_qi_seed_runner_current_constraint_device_qi_probe_records_env(tmp_path: Path) -> None:
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
@@ -1360,6 +1399,46 @@ def test_qi_seed_runner_augmented_krylov_device_qi_probe_records_env(tmp_path: P
     )
     assert (
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined"
+        in manifest["cases"][0]["command"]
+    )
+
+
+def test_qi_seed_runner_operator_krylov_augmented_seed_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "operator-krylov-augmented-seed-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "operator-krylov-augmented-seed-device-qi"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV"] == "fgmres-jax"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED_MAX_RANK"] == "8"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert manifest["cases"][0]["probe_preset"] == "operator-krylov-augmented-seed-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED=1"
         in manifest["cases"][0]["command"]
     )
 
@@ -2177,6 +2256,49 @@ def test_evidence_classification_does_not_treat_false_residual_bounce_as_observe
     assert classification["has_observed_residual_bounce_region_coarse"] is False
 
 
+def test_evidence_classification_downgrades_fail_closed_embedded_device_qi(
+    tmp_path: Path,
+) -> None:
+    artifact = {
+        "schema_version": 2,
+        "artifact_kind": "qi_seed_execution_summary",
+        "execution_summary": {"process_failed": 1, "timed_out": 0},
+        "gates": {"passed": False, "failures": [{"reason": "process_failed"}]},
+        "evidence_classification": {
+            "classes": ["device_qi_installed_krylov_coarse_reuse"],
+            "outcomes": ["process_failed"],
+            "tags": [
+                "failed_before_solver_trace_summary",
+                "no_hdf5_output",
+                "observed_coarse_reuse",
+                "observed_installed_krylov",
+                "observed_operator_krylov",
+                "requested_coarse_reuse",
+                "requested_device_qi",
+                "requested_installed_krylov",
+                "requested_operator_krylov",
+            ],
+            "has_failed_before_summary_json": True,
+            "has_observed_installed_krylov": True,
+            "has_observed_coarse_reuse": True,
+            "promotion_eligible_seed_count": 0,
+        },
+    }
+
+    classification = qi_seed._artifact_evidence_classification(tmp_path / "artifact.json", artifact)
+
+    assert qi_seed._artifact_passed(artifact) is False
+    assert classification["classes"] == ["requested_operator_krylov_device_qi"]
+    assert classification["fail_closed"] is True
+    assert classification["fail_closed_observed_classes"] == ["device_qi_installed_krylov_coarse_reuse"]
+    assert "observed_installed_krylov" in classification["fail_closed_observed_tags"]
+    assert classification["has_observed_installed_krylov"] is False
+    assert classification["has_observed_coarse_reuse"] is False
+    assert classification["promotion_eligible_seed_count"] == 0
+    assert "observed_installed_krylov" not in classification["tags"]
+    assert "requested_installed_krylov" in classification["tags"]
+
+
 def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Path) -> None:
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
@@ -2222,17 +2344,20 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
                 },
                 "gates": {"passed": False, "failures": [{"reason": "process_failed"}]},
                 "evidence_classification": {
-                    "classes": ["requested_operator_krylov_device_qi"],
+                    "classes": ["device_qi_installed_krylov_coarse_reuse"],
                     "outcomes": ["process_failed"],
                     "tags": [
                         "failed_before_solver_trace_summary",
+                        "observed_coarse_reuse",
+                        "observed_installed_krylov",
+                        "observed_operator_krylov",
                         "requested_device_qi",
                         "requested_installed_krylov",
                         "requested_operator_krylov",
                     ],
                     "has_failed_before_summary_json": True,
-                    "has_observed_installed_krylov": False,
-                    "has_observed_coarse_reuse": False,
+                    "has_observed_installed_krylov": True,
+                    "has_observed_coarse_reuse": True,
                     "promotion_eligible_seed_count": 0,
                 },
             }
@@ -2266,7 +2391,15 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
         artifact for artifact in manifest["source_artifacts"] if artifact["path"].endswith("failed.json")
     )
     assert failed_artifact["evidence_classes"] == ["requested_operator_krylov_device_qi"]
+    assert failed_artifact["fail_closed_observed_classes"] == [
+        "device_qi_installed_krylov_coarse_reuse"
+    ]
     assert "requested_installed_krylov" in failed_artifact["evidence_tags"]
+    assert "observed_installed_krylov" in failed_artifact["fail_closed_observed_tags"]
+    assert "observed_installed_krylov" not in failed_artifact["evidence_tags"]
+    assert failed_artifact["evidence_classification"]["has_observed_installed_krylov"] is False
+    assert failed_artifact["evidence_classification"]["has_observed_coarse_reuse"] is False
+    assert failed_artifact["evidence_classification"]["promotion_eligible_seed_count"] == 0
     assert failed_artifact["run_outcomes"] == ["process_failed"]
     preset = manifest["probe_presets"]["operator-krylov-device-qi"]
     assert (
@@ -2292,6 +2425,22 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     assert "--probe-preset operator-krylov-device-qi" in preset["recommended_command"]
     assert "--solve-method xblock_sparse_pc_gmres" in preset["recommended_command"]
     assert "--timeout-s 900" in preset["recommended_command"]
+    operator_composite_preset = manifest["probe_presets"]["operator-krylov-composite-device-qi"]
+    assert (
+        operator_composite_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE"
+        ]
+        == "1"
+    )
+    assert (
+        operator_composite_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_MODE"
+        ]
+        == "multiplicative"
+    )
+    assert "--probe-preset operator-krylov-composite-device-qi" in operator_composite_preset[
+        "recommended_command"
+    ]
     current_preset = manifest["probe_presets"]["current-constraint-device-qi"]
     assert (
         current_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS"]
@@ -2322,6 +2471,20 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
         == "1"
     )
     assert "--probe-preset augmented-krylov-device-qi" in augmented_preset["recommended_command"]
+    augmented_seed_preset = manifest["probe_presets"]["operator-krylov-augmented-seed-device-qi"]
+    assert augmented_seed_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT"] == "1"
+    assert (
+        augmented_seed_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV"]
+        == "1"
+    )
+    assert (
+        augmented_seed_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED"]
+        == "1"
+    )
+    assert "--probe-preset operator-krylov-augmented-seed-device-qi" in augmented_seed_preset[
+        "recommended_command"
+    ]
+    assert "operator_krylov_augmented_seed_device_qi" in augmented_seed_preset["recommended_command"]
     recycled_preset = manifest["probe_presets"]["recycled-augmented-device-qi"]
     assert recycled_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K"] == "32"
     assert recycled_preset["env"]["SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER"] == "960"
@@ -2557,3 +2720,27 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     assert "recycled-augmented" in recommended
     assert "projected smoother" not in recommended
     assert "projected-smoother" not in recommended
+
+
+def test_evidence_manifest_probe_recommendations_use_preset_specific_paths(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+
+    manifest = qi_seed.build_evidence_manifest(
+        artifact_paths=[],
+        source_input=input_path,
+        production_seed_count=5,
+        production_timeout_s=3600.0,
+    )
+
+    for preset_name, preset in manifest["probe_presets"].items():
+        preset_slug = str(preset_name).replace("-", "_")
+        command = preset["recommended_command"]
+        assert f"--probe-preset {preset_name}" in command
+        assert f"--out-root tests/qi_seed_robustness_scale060_{preset_slug}_gpu0" in command
+        assert (
+            f"--summary-output docs/_static/qi_seed_robustness_scale060_{preset_slug}_gpu0.json"
+            in command
+        )
+        if preset_name != "operator-krylov-device-qi":
+            assert "qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json" not in command

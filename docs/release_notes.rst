@@ -4,7 +4,15 @@ Release notes
 Unreleased
 ----------
 
-No unreleased changes yet.
+- Added residual-region/bounce-region QI coarse-reuse evidence plumbing and
+  runtime documentation while keeping true differentiable device-QI
+  production-resolution closure fail-closed.
+- Added opt-in augmented-seed Krylov recycling and active-pattern coarse
+  infrastructure with finite/shape guards and fail-closed evidence
+  classification.
+- Updated QI evidence counts, multi-GPU wording, and source-map closure text so
+  release-facing docs distinguish production host fallback from research
+  device-QI probes.
 
 v1.1.4
 ------

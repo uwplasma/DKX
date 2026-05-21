@@ -355,9 +355,11 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 LOG_TAIL_LINES = 16
 OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET = "operator-krylov-device-qi"
+OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_PROBE_PRESET = "operator-krylov-composite-device-qi"
 CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET = "current-constraint-device-qi"
 ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET = "adjoint-krylov-device-qi"
 AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET = "augmented-krylov-device-qi"
+OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_PROBE_PRESET = "operator-krylov-augmented-seed-device-qi"
 RECYCLED_AUGMENTED_DEVICE_QI_PROBE_PRESET = "recycled-augmented-device-qi"
 COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET = "coarse-residual-device-qi"
 RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET = "residual-snapshot-device-qi"
@@ -402,6 +404,11 @@ OPERATOR_KRYLOV_DEVICE_QI_ENV = {
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "128",
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG": "1",
 }
+OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_ENV = {
+    **OPERATOR_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_MODE": "multiplicative",
+}
 CURRENT_CONSTRAINT_DEVICE_QI_ENV = {
     **OPERATOR_KRYLOV_DEVICE_QI_ENV,
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS": "1",
@@ -421,6 +428,11 @@ AUGMENTED_KRYLOV_DEVICE_QI_ENV = {
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K": "0",
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV": "1",
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE": "combined",
+}
+OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_ENV = {
+    **AUGMENTED_KRYLOV_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED_MAX_RANK": "8",
 }
 RECYCLED_AUGMENTED_DEVICE_QI_ENV = {
     **AUGMENTED_KRYLOV_DEVICE_QI_ENV,
@@ -745,6 +757,14 @@ QI_DEVICE_TRACE_KEYS = (
     "xblock_qi_device_preconditioner_residual_region_bounce_coarse_bounce_boundary",
     "xblock_qi_device_preconditioner_residual_region_bounce_coarse_min_region_energy_fraction",
     "xblock_qi_device_preconditioner_residual_region_bounce_coarse_region_bands",
+    "xblock_qi_device_preconditioner_augmented_seed_requested",
+    "xblock_qi_device_preconditioner_augmented_seed_available",
+    "xblock_qi_device_preconditioner_augmented_seed_used",
+    "xblock_qi_device_preconditioner_augmented_seed_rank",
+    "xblock_qi_device_preconditioner_augmented_seed_max_rank",
+    "xblock_qi_device_preconditioner_augmented_seed_reason",
+    "xblock_qi_device_preconditioner_augmented_seed_projection_residual_norm",
+    "xblock_qi_device_preconditioner_augmented_seed_labels",
     "xblock_qi_device_preconditioner_block_schur_residual_equation",
     "xblock_qi_device_preconditioner_block_schur_residual_equation_candidate_count",
     "xblock_qi_device_preconditioner_block_schur_residual_equation_rank",
@@ -915,12 +935,16 @@ def _probe_env_for_preset(preset: str) -> dict[str, str]:
         return {}
     if normalized == OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET:
         return dict(OPERATOR_KRYLOV_DEVICE_QI_ENV)
+    if normalized == OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_PROBE_PRESET:
+        return dict(OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_ENV)
     if normalized == CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET:
         return dict(CURRENT_CONSTRAINT_DEVICE_QI_ENV)
     if normalized == ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET:
         return dict(ADJOINT_KRYLOV_DEVICE_QI_ENV)
     if normalized == AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET:
         return dict(AUGMENTED_KRYLOV_DEVICE_QI_ENV)
+    if normalized == OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_PROBE_PRESET:
+        return dict(OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_ENV)
     if normalized == RECYCLED_AUGMENTED_DEVICE_QI_PROBE_PRESET:
         return dict(RECYCLED_AUGMENTED_DEVICE_QI_ENV)
     if normalized == COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET:
@@ -955,9 +979,11 @@ def _solve_method_for_probe_preset(*, solve_method: str, probe_preset: str) -> s
     normalized_preset = str(probe_preset or "").strip().lower().replace("_", "-")
     qi_device_presets = {
         OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET,
+        OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_PROBE_PRESET,
         CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET,
         ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET,
         AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET,
+        OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_PROBE_PRESET,
         RECYCLED_AUGMENTED_DEVICE_QI_PROBE_PRESET,
         COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
         RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET,
@@ -2423,6 +2449,10 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         probe_env,
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV",
     )
+    requested_augmented_seed = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED",
+    )
     requested_coarse_residual_equation = _env_flag(
         probe_env,
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION",
@@ -2470,6 +2500,8 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         tags.add("requested_coarse_reuse")
     if requested_augmented_krylov:
         tags.add("requested_augmented_krylov")
+    if requested_augmented_seed:
+        tags.add("requested_augmented_seed")
     if requested_coarse_residual_equation:
         tags.add("requested_multilevel_residual_equation")
     if requested_residual_snapshot:
@@ -2497,6 +2529,7 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
     observed_operator_krylov = seed.get("xblock_qi_device_preconditioner_operator_krylov_enrichment") is True
     observed_coarse_reuse = seed.get("xblock_qi_device_preconditioner_coarse_reuse") is True
     observed_augmented_krylov = seed.get("xblock_device_fgmres_qi_augmented_krylov_used") is True
+    observed_augmented_seed = seed.get("xblock_qi_device_preconditioner_augmented_seed_used") is True
     observed_coarse_residual_equation = (
         seed.get("xblock_qi_device_preconditioner_multilevel_residual_equation") is True
     )
@@ -2540,6 +2573,8 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         tags.add("observed_coarse_reuse")
     if observed_augmented_krylov:
         tags.add("observed_augmented_krylov")
+    if observed_augmented_seed:
+        tags.add("observed_augmented_seed")
     if observed_coarse_residual_equation:
         tags.add("observed_multilevel_residual_equation")
     if observed_residual_snapshot:
@@ -2557,7 +2592,9 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
     if observed_block_schur:
         tags.add("observed_block_schur_residual")
 
-    if observed_installed_krylov and observed_coarse_reuse and observed_residual_bounce_region:
+    if observed_installed_krylov and observed_coarse_reuse and observed_augmented_seed:
+        classification = "device_qi_augmented_seed_krylov_coarse_reuse"
+    elif observed_installed_krylov and observed_coarse_reuse and observed_residual_bounce_region:
         classification = "device_qi_residual_bounce_region_coarse_reuse"
     elif observed_installed_krylov and observed_coarse_reuse and observed_phase_space:
         classification = "device_qi_phase_space_residual_equation_coarse_reuse"
@@ -2591,6 +2628,8 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         classification = "requested_global_moment_residual_equation_device_qi"
     elif requested_block_schur:
         classification = "requested_block_schur_residual_device_qi"
+    elif requested_augmented_seed:
+        classification = "requested_augmented_seed_device_qi"
     elif requested_operator_krylov:
         classification = "requested_operator_krylov_device_qi"
     elif requested_device_qi:
@@ -2614,6 +2653,7 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         "requested_operator_krylov": requested_operator_krylov,
         "requested_coarse_reuse": requested_coarse_reuse,
         "requested_augmented_krylov": requested_augmented_krylov,
+        "requested_augmented_seed": requested_augmented_seed,
         "requested_coarse_residual_equation": requested_coarse_residual_equation,
         "requested_residual_snapshot": requested_residual_snapshot,
         "requested_residual_snapshot_equation": requested_residual_snapshot_equation,
@@ -2627,6 +2667,7 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         "observed_operator_krylov": observed_operator_krylov,
         "observed_coarse_reuse": observed_coarse_reuse,
         "observed_augmented_krylov": observed_augmented_krylov,
+        "observed_augmented_seed": observed_augmented_seed,
         "observed_coarse_residual_equation": observed_coarse_residual_equation,
         "observed_residual_snapshot": observed_residual_snapshot,
         "observed_residual_snapshot_equation": observed_residual_snapshot_equation,
@@ -2966,7 +3007,89 @@ def _write_compact_execution_artifact(path: Path, manifest: dict[str, object]) -
     return payload
 
 
+def _artifact_fail_closed(payload: dict[str, object]) -> bool:
+    """Return true when an artifact records blocker evidence rather than promotion evidence."""
+    gates = payload.get("gates")
+    if isinstance(gates, dict) and gates.get("passed") is False:
+        return True
+
+    summary = payload.get("execution_summary")
+    if isinstance(summary, dict):
+        for key in ("process_failed", "timed_out"):
+            try:
+                if int(summary.get(key, 0) or 0) > 0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+
+    embedded = payload.get("evidence_classification")
+    if not isinstance(embedded, dict):
+        return False
+
+    outcomes = {str(item) for item in embedded.get("outcomes", []) if item}
+    if any(outcome != "process_passed" for outcome in outcomes):
+        return True
+
+    tags = {str(item) for item in embedded.get("tags", []) if item}
+    if tags.intersection(
+        {
+            "failed_before_solver_trace_summary",
+            "no_hdf5_output",
+            "not_converged",
+            "not_accepted_converged",
+        }
+    ):
+        return True
+
+    promotion_count = _finite_float_or_none(embedded.get("promotion_eligible_seed_count"))
+    classes = {str(item) for item in embedded.get("classes", []) if item}
+    return promotion_count == 0 and any(class_name.startswith("device_qi_") for class_name in classes)
+
+
+def _fail_closed_evidence_classes(classes: Iterable[str], tags: Iterable[str]) -> list[str]:
+    """Downgrade observed device-QI classes to requested-only classes for fail-closed artifacts."""
+    class_set = {str(class_name) for class_name in classes if class_name}
+    tag_set = {str(tag) for tag in tags if tag}
+    promoted_classes = {class_name for class_name in class_set if class_name.startswith("device_qi_")}
+    if not promoted_classes:
+        return sorted(class_set)
+
+    text = " ".join(sorted(class_set | tag_set))
+    downgraded = {class_name for class_name in class_set if not class_name.startswith("device_qi_")}
+    if "residual_bounce" in text or "residual-bounce" in text:
+        downgraded.add("requested_residual_bounce_region_coarse_device_qi")
+    elif "phase_space" in text or "phase-space" in text:
+        downgraded.add("requested_phase_space_residual_equation_device_qi")
+    elif "residual_galerkin" in text or "residual-galerkin" in text:
+        downgraded.add("requested_residual_galerkin_equation_device_qi")
+    elif "global_moment" in text or "global-moment" in text:
+        downgraded.add("requested_global_moment_residual_equation_device_qi")
+    elif "block_schur" in text or "block-schur" in text:
+        downgraded.add("requested_block_schur_residual_device_qi")
+    elif "residual_snapshot_residual_equation" in text or "residual-snapshot-equation" in text:
+        downgraded.add("requested_residual_snapshot_residual_equation_device_qi")
+    elif "residual_snapshot" in text or "residual-snapshot" in text:
+        downgraded.add("requested_residual_snapshot_device_qi")
+    elif "multilevel_residual_equation" in text or "coarse-residual" in text:
+        downgraded.add("requested_multilevel_residual_equation_device_qi")
+    elif "augmented_seed" in text or "augmented-seed" in text:
+        downgraded.add("requested_augmented_seed_device_qi")
+    elif "augmented_krylov" in text or "augmented-krylov" in text:
+        downgraded.add("requested_augmented_krylov_device_qi")
+    elif "operator_krylov" in text or "operator-krylov" in text or "installed_krylov" in text:
+        downgraded.add("requested_operator_krylov_device_qi")
+    else:
+        downgraded.add("requested_device_qi")
+    return sorted(downgraded)
+
+
+def _fail_closed_evidence_tags(tags: Iterable[str]) -> list[str]:
+    return sorted({str(tag) for tag in tags if tag and not str(tag).startswith("observed_")})
+
+
 def _artifact_passed(payload: dict[str, object]) -> bool:
+    if _artifact_fail_closed(payload):
+        return False
     gates = payload.get("gates")
     if isinstance(gates, dict) and isinstance(gates.get("passed"), bool):
         return bool(gates["passed"])
@@ -3121,34 +3244,59 @@ def _artifact_case_count(payload: dict[str, object]) -> int:
 def _artifact_evidence_classification(path: Path, payload: dict[str, object]) -> dict[str, object]:
     embedded = payload.get("evidence_classification")
     if isinstance(embedded, dict):
-        classes = [str(item) for item in embedded.get("classes", []) if item]
-        tags = [str(item) for item in embedded.get("tags", []) if item]
+        raw_classes = [str(item) for item in embedded.get("classes", []) if item]
+        raw_tags = [str(item) for item in embedded.get("tags", []) if item]
+        classes = list(raw_classes)
+        tags = list(raw_tags)
         outcomes = [str(item) for item in embedded.get("outcomes", []) if item]
+        fail_closed = _artifact_fail_closed(payload)
+        if fail_closed:
+            classes = _fail_closed_evidence_classes(classes, tags)
+            tags = _fail_closed_evidence_tags(tags)
+            if not outcomes:
+                outcomes = ["process_failed"]
+        fail_closed_observed_classes = (
+            sorted({class_name for class_name in raw_classes if class_name.startswith("device_qi_")})
+            if fail_closed
+            else []
+        )
+        fail_closed_observed_tags = (
+            sorted({tag for tag in raw_tags if tag.startswith("observed_")}) if fail_closed else []
+        )
         return {
             "classes": sorted(set(classes)),
             "tags": sorted(set(tags)),
             "outcomes": sorted(set(outcomes)),
+            "fail_closed": bool(fail_closed),
+            "fail_closed_observed_classes": fail_closed_observed_classes,
+            "fail_closed_observed_tags": fail_closed_observed_tags,
             "has_failed_before_summary_json": bool(embedded.get("has_failed_before_summary_json")),
-            "has_observed_installed_krylov": bool(embedded.get("has_observed_installed_krylov")),
-            "has_observed_coarse_reuse": bool(embedded.get("has_observed_coarse_reuse")),
-            "has_observed_multilevel_residual_equation": bool(
-                embedded.get("has_observed_multilevel_residual_equation")
-            ),
-            "has_observed_residual_snapshot": bool(embedded.get("has_observed_residual_snapshot")),
-            "has_observed_global_moment_residual_equation": bool(
-                embedded.get("has_observed_global_moment_residual_equation")
-            ),
-            "has_observed_residual_galerkin_equation": bool(
-                embedded.get("has_observed_residual_galerkin_equation")
-            ),
-            "has_observed_phase_space_residual_equation": bool(
-                embedded.get("has_observed_phase_space_residual_equation")
-            ),
-            "has_observed_residual_bounce_region_coarse": bool(
-                embedded.get("has_observed_residual_bounce_region_coarse")
-            ),
-            "has_observed_block_schur_residual": bool(embedded.get("has_observed_block_schur_residual")),
-            "promotion_eligible_seed_count": embedded.get("promotion_eligible_seed_count"),
+            "has_observed_installed_krylov": False
+            if fail_closed
+            else bool(embedded.get("has_observed_installed_krylov")),
+            "has_observed_coarse_reuse": False if fail_closed else bool(embedded.get("has_observed_coarse_reuse")),
+            "has_observed_multilevel_residual_equation": False
+            if fail_closed
+            else bool(embedded.get("has_observed_multilevel_residual_equation")),
+            "has_observed_residual_snapshot": False
+            if fail_closed
+            else bool(embedded.get("has_observed_residual_snapshot")),
+            "has_observed_global_moment_residual_equation": False
+            if fail_closed
+            else bool(embedded.get("has_observed_global_moment_residual_equation")),
+            "has_observed_residual_galerkin_equation": False
+            if fail_closed
+            else bool(embedded.get("has_observed_residual_galerkin_equation")),
+            "has_observed_phase_space_residual_equation": False
+            if fail_closed
+            else bool(embedded.get("has_observed_phase_space_residual_equation")),
+            "has_observed_residual_bounce_region_coarse": False
+            if fail_closed
+            else bool(embedded.get("has_observed_residual_bounce_region_coarse")),
+            "has_observed_block_schur_residual": False
+            if fail_closed
+            else bool(embedded.get("has_observed_block_schur_residual")),
+            "promotion_eligible_seed_count": 0 if fail_closed else embedded.get("promotion_eligible_seed_count"),
         }
 
     tags: set[str] = set()
@@ -3267,6 +3415,9 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
         "classes": sorted(classes),
         "tags": sorted(tags),
         "outcomes": sorted(outcomes),
+        "fail_closed": False,
+        "fail_closed_observed_classes": [],
+        "fail_closed_observed_tags": [],
         "has_failed_before_summary_json": "failed_before_solver_trace_summary" in tags,
         "has_observed_installed_krylov": (
             "observed_installed_krylov" in text
@@ -3318,6 +3469,8 @@ def _summarize_evidence_artifact(path: Path, payload: dict[str, object], product
         "evidence_classification": classification,
         "evidence_classes": classification["classes"],
         "evidence_tags": classification["tags"],
+        "fail_closed_observed_classes": classification.get("fail_closed_observed_classes", []),
+        "fail_closed_observed_tags": classification.get("fail_closed_observed_tags", []),
         "run_outcomes": classification["outcomes"],
     }
 
@@ -3481,189 +3634,150 @@ def build_evidence_manifest(
         "docs/_static/qi_seed_robustness_prod_gpu0.json",
         "--clean",
     ]
-    operator_krylov_probe_command = [
-        "python",
-        "scripts/run_qi_seed_robustness.py",
-        "--out-root",
-        "tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0",
-        "--seeds",
-        "3",
-        "--resolution-scale",
-        "0.60",
-        "--probe-preset",
-        OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET,
-        "--solve-method",
-        OPERATOR_KRYLOV_DEVICE_QI_SOLVE_METHOD,
-        "--execute",
-        "--timeout-s",
-        "900",
-        "--heartbeat-s",
-        "15",
-        "--summary-output",
-        "docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json",
-        "--clean",
-    ]
+
+    def _gpu0_probe_command_for_preset(preset: str) -> list[str]:
+        preset_slug = str(preset).replace("-", "_")
+        return [
+            "python",
+            "scripts/run_qi_seed_robustness.py",
+            "--out-root",
+            f"tests/qi_seed_robustness_scale060_{preset_slug}_gpu0",
+            "--seeds",
+            "3",
+            "--resolution-scale",
+            "0.60",
+            "--probe-preset",
+            str(preset),
+            "--solve-method",
+            OPERATOR_KRYLOV_DEVICE_QI_SOLVE_METHOD,
+            "--execute",
+            "--timeout-s",
+            "900",
+            "--heartbeat-s",
+            "15",
+            "--summary-output",
+            f"docs/_static/qi_seed_robustness_scale060_{preset_slug}_gpu0.json",
+            "--clean",
+        ]
+
+    operator_krylov_probe_command = _gpu0_probe_command_for_preset(OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET)
     gpu_env = {"CUDA_VISIBLE_DEVICES": "0", "JAX_PLATFORM_NAME": "gpu"}
     operator_krylov_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **OPERATOR_KRYLOV_DEVICE_QI_ENV,
     }
-    current_constraint_probe_command = [
-        *operator_krylov_probe_command[:9],
-        CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    operator_krylov_composite_probe_command = _gpu0_probe_command_for_preset(
+        OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_PROBE_PRESET
+    )
+    operator_krylov_composite_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_ENV,
+    }
+    current_constraint_probe_command = _gpu0_probe_command_for_preset(CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET)
     current_constraint_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **CURRENT_CONSTRAINT_DEVICE_QI_ENV,
     }
-    adjoint_krylov_probe_command = [
-        *operator_krylov_probe_command[:9],
-        ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    adjoint_krylov_probe_command = _gpu0_probe_command_for_preset(ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET)
     adjoint_krylov_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **ADJOINT_KRYLOV_DEVICE_QI_ENV,
     }
-    augmented_krylov_probe_command = [
-        *operator_krylov_probe_command[:9],
-        AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    augmented_krylov_probe_command = _gpu0_probe_command_for_preset(AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET)
     augmented_krylov_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **AUGMENTED_KRYLOV_DEVICE_QI_ENV,
     }
-    recycled_augmented_probe_command = [
-        *operator_krylov_probe_command[:9],
-        RECYCLED_AUGMENTED_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    operator_krylov_augmented_seed_probe_command = _gpu0_probe_command_for_preset(
+        OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_PROBE_PRESET
+    )
+    operator_krylov_augmented_seed_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_ENV,
+    }
+    recycled_augmented_probe_command = _gpu0_probe_command_for_preset(
+        RECYCLED_AUGMENTED_DEVICE_QI_PROBE_PRESET
+    )
     recycled_augmented_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **RECYCLED_AUGMENTED_DEVICE_QI_ENV,
     }
-    coarse_residual_probe_command = [
-        *operator_krylov_probe_command[:9],
-        COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    coarse_residual_probe_command = _gpu0_probe_command_for_preset(COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET)
     coarse_residual_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **COARSE_RESIDUAL_DEVICE_QI_ENV,
     }
-    residual_snapshot_probe_command = [
-        *operator_krylov_probe_command[:9],
-        RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    residual_snapshot_probe_command = _gpu0_probe_command_for_preset(RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET)
     residual_snapshot_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **RESIDUAL_SNAPSHOT_DEVICE_QI_ENV,
     }
-    residual_snapshot_equation_probe_command = [
-        *operator_krylov_probe_command[:9],
-        RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    residual_snapshot_equation_probe_command = _gpu0_probe_command_for_preset(
+        RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_PROBE_PRESET
+    )
     residual_snapshot_equation_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **RESIDUAL_SNAPSHOT_EQUATION_DEVICE_QI_ENV,
     }
-    assembled_reuse_probe_command = [
-        *operator_krylov_probe_command[:9],
-        ASSEMBLED_REUSE_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    assembled_reuse_probe_command = _gpu0_probe_command_for_preset(ASSEMBLED_REUSE_DEVICE_QI_PROBE_PRESET)
     assembled_reuse_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **ASSEMBLED_REUSE_DEVICE_QI_ENV,
     }
-    composite_closure_probe_command = [
-        *operator_krylov_probe_command[:9],
-        COMPOSITE_CLOSURE_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    composite_closure_probe_command = _gpu0_probe_command_for_preset(COMPOSITE_CLOSURE_DEVICE_QI_PROBE_PRESET)
     composite_closure_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **COMPOSITE_CLOSURE_DEVICE_QI_ENV,
     }
-    global_moment_probe_command = [
-        *operator_krylov_probe_command[:9],
-        GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    global_moment_probe_command = _gpu0_probe_command_for_preset(GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET)
     global_moment_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **GLOBAL_MOMENT_CLOSURE_DEVICE_QI_ENV,
     }
-    residual_galerkin_probe_command = [
-        *operator_krylov_probe_command[:9],
-        RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    residual_galerkin_probe_command = _gpu0_probe_command_for_preset(
+        RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET
+    )
     residual_galerkin_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **RESIDUAL_GALERKIN_DEVICE_QI_ENV,
     }
-    phase_space_coarse_reuse_probe_command = [
-        *operator_krylov_probe_command[:9],
-        PHASE_SPACE_COARSE_REUSE_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    phase_space_coarse_reuse_probe_command = _gpu0_probe_command_for_preset(
+        PHASE_SPACE_COARSE_REUSE_DEVICE_QI_PROBE_PRESET
+    )
     phase_space_coarse_reuse_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **PHASE_SPACE_COARSE_REUSE_DEVICE_QI_ENV,
     }
-    residual_bounce_region_probe_command = [
-        *operator_krylov_probe_command[:9],
-        RESIDUAL_BOUNCE_REGION_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
-    residual_bounce_region_probe_command = _command_with_option(
-        residual_bounce_region_probe_command,
-        "--out-root",
-        "tests/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0",
-    )
-    residual_bounce_region_probe_command = _command_with_option(
-        residual_bounce_region_probe_command,
-        "--summary-output",
-        "docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0.json",
+    residual_bounce_region_probe_command = _gpu0_probe_command_for_preset(
+        RESIDUAL_BOUNCE_REGION_DEVICE_QI_PROBE_PRESET
     )
     residual_bounce_region_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **RESIDUAL_BOUNCE_REGION_DEVICE_QI_ENV,
     }
-    block_schur_probe_command = [
-        *operator_krylov_probe_command[:9],
-        BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    block_schur_probe_command = _gpu0_probe_command_for_preset(BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET)
     block_schur_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
         **BLOCK_SCHUR_DEVICE_QI_ENV,
     }
-    adaptive_residual_probe_command = [
-        *operator_krylov_probe_command[:9],
-        ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
-        *operator_krylov_probe_command[10:],
-    ]
+    adaptive_residual_probe_command = _gpu0_probe_command_for_preset(ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET)
     adaptive_residual_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
         "JAX_PLATFORM_NAME": "gpu",
@@ -3786,6 +3900,10 @@ def build_evidence_manifest(
                 operator_krylov_probe_command,
                 operator_krylov_probe_env,
             ),
+            "operator_krylov_composite_device_qi_gpu0_probe": _shell_command(
+                operator_krylov_composite_probe_command,
+                operator_krylov_composite_probe_env,
+            ),
             "current_constraint_device_qi_gpu0_probe": _shell_command(
                 current_constraint_probe_command,
                 current_constraint_probe_env,
@@ -3797,6 +3915,10 @@ def build_evidence_manifest(
             "augmented_krylov_device_qi_gpu0_probe": _shell_command(
                 augmented_krylov_probe_command,
                 augmented_krylov_probe_env,
+            ),
+            "operator_krylov_augmented_seed_device_qi_gpu0_probe": _shell_command(
+                operator_krylov_augmented_seed_probe_command,
+                operator_krylov_augmented_seed_probe_env,
             ),
             "recycled_augmented_device_qi_gpu0_probe": _shell_command(
                 recycled_augmented_probe_command,
@@ -3857,6 +3979,19 @@ def build_evidence_manifest(
                 "env": dict(sorted(OPERATOR_KRYLOV_DEVICE_QI_ENV.items())),
                 "recommended_command": _shell_command(operator_krylov_probe_command, operator_krylov_probe_env),
             },
+            OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for true device-QI "
+                    "operator-Krylov enrichment composed with the base x-block path. This is "
+                    "an explicit fail-closed research probe for the next algorithmic lane, "
+                    "not a public default-policy solve."
+                ),
+                "env": dict(sorted(OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    operator_krylov_composite_probe_command,
+                    operator_krylov_composite_probe_env,
+                ),
+            },
             CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET: {
                 "description": (
                     "Bounded scale-0.60 hard-seed GPU0 production probe for true device-QI "
@@ -3889,6 +4024,19 @@ def build_evidence_manifest(
                 "recommended_command": _shell_command(
                     augmented_krylov_probe_command,
                     augmented_krylov_probe_env,
+                ),
+            },
+            OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe that recycles "
+                    "accepted device-QI seed correction directions into the augmented "
+                    "FGMRES coarse space. This is the next non-smoother closure attempt "
+                    "and remains fail-closed until it writes converged output."
+                ),
+                "env": dict(sorted(OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    operator_krylov_augmented_seed_probe_command,
+                    operator_krylov_augmented_seed_probe_env,
                 ),
             },
             RECYCLED_AUGMENTED_DEVICE_QI_PROBE_PRESET: {
@@ -4068,6 +4216,7 @@ def build_evidence_manifest(
             "Run and check in production-resolution CPU multi-seed summary artifact before promoting broad public-auto QI.",
             "Run and check in production-resolution GPU0 multi-seed summary artifact before promoting broad public-auto QI.",
             "Keep true device-QI closed deferred until an operator-Krylov device-QI scale-0.60 GPU hard-seed artifact writes output, trace, and accepted-converged residual metadata.",
+            "Keep the augmented-seed operator-Krylov device-QI probe fail-closed until a converged artifact reports observed augmented-seed metadata.",
             "Keep the global-moment closure device-QI probe fail-closed until a converged artifact reports observed global-moment residual-equation metadata.",
             "Keep the residual-Galerkin device-QI probe fail-closed until a converged artifact reports observed residual-derived Galerkin metadata.",
             "Keep the phase-space coarse-reuse device-QI probe fail-closed until a converged artifact reports observed phase-space residual-equation metadata.",
@@ -4123,9 +4272,11 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=(
             "none",
             OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET,
+            OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_PROBE_PRESET,
             CURRENT_CONSTRAINT_DEVICE_QI_PROBE_PRESET,
             ADJOINT_KRYLOV_DEVICE_QI_PROBE_PRESET,
             AUGMENTED_KRYLOV_DEVICE_QI_PROBE_PRESET,
+            OPERATOR_KRYLOV_AUGMENTED_SEED_DEVICE_QI_PROBE_PRESET,
             RECYCLED_AUGMENTED_DEVICE_QI_PROBE_PRESET,
             COARSE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
             RESIDUAL_SNAPSHOT_DEVICE_QI_PROBE_PRESET,

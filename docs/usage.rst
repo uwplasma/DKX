@@ -240,13 +240,20 @@ one-node and multi-host runs.
      --transport-parallel-backend gpu \
      --scan-only
 
-   # One-node multi-GPU sharded solve
+   # Experimental one-node single-case multi-GPU sharded solve
    CUDA_VISIBLE_DEVICES=0,1 \
    sfincs_jax write-output \
      --input /path/to/input.namelist \
      --shard-axis theta \
      --distributed-gmres auto \
      --distributed-krylov auto
+
+   # Production multi-GPU throughput path: one transport worker per GPU
+   CUDA_VISIBLE_DEVICES=0,1 \
+   sfincs_jax transport-matrix-v3 \
+     --input /path/to/input.namelist \
+     --transport-workers 2 \
+     --transport-parallel-backend gpu
 
    # Multi-host JAX bootstrap for sharded solves
    sfincs_jax write-output \

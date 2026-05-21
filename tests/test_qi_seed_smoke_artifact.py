@@ -1241,10 +1241,16 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     )
     assert augmented_cpu["passed"] is False
     assert augmented_gpu["passed"] is False
-    assert augmented_cpu["evidence_classes"] == ["device_qi_augmented_krylov_coarse_reuse"]
-    assert augmented_gpu["evidence_classes"] == ["device_qi_augmented_krylov_coarse_reuse"]
-    assert "observed_augmented_krylov" in augmented_cpu["evidence_tags"]
-    assert "observed_augmented_krylov" in augmented_gpu["evidence_tags"]
+    assert augmented_cpu["evidence_classes"] == ["requested_augmented_krylov_device_qi"]
+    assert augmented_gpu["evidence_classes"] == ["requested_augmented_krylov_device_qi"]
+    assert augmented_cpu["fail_closed_observed_classes"] == ["device_qi_augmented_krylov_coarse_reuse"]
+    assert augmented_gpu["fail_closed_observed_classes"] == ["device_qi_augmented_krylov_coarse_reuse"]
+    assert "requested_augmented_krylov" in augmented_cpu["evidence_tags"]
+    assert "requested_augmented_krylov" in augmented_gpu["evidence_tags"]
+    assert "observed_augmented_krylov" not in augmented_cpu["evidence_tags"]
+    assert "observed_augmented_krylov" not in augmented_gpu["evidence_tags"]
+    assert "observed_augmented_krylov" in augmented_cpu["fail_closed_observed_tags"]
+    assert "observed_augmented_krylov" in augmented_gpu["fail_closed_observed_tags"]
     assert augmented_cpu["last_reported_residual_norm"] == pytest.approx(2.218300e-05)
     assert augmented_gpu["last_reported_residual_norm"] == pytest.approx(2.218202e-05)
     assert augmented_gpu["last_reported_residual_norm"] < pitch_multilevel_gpu[
@@ -1261,8 +1267,13 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         )
     )
     assert recycled_augmented_gpu["passed"] is False
-    assert recycled_augmented_gpu["evidence_classes"] == ["device_qi_augmented_krylov_coarse_reuse"]
-    assert "observed_augmented_krylov" in recycled_augmented_gpu["evidence_tags"]
+    assert recycled_augmented_gpu["evidence_classes"] == ["requested_augmented_krylov_device_qi"]
+    assert recycled_augmented_gpu["fail_closed_observed_classes"] == [
+        "device_qi_augmented_krylov_coarse_reuse"
+    ]
+    assert "requested_augmented_krylov" in recycled_augmented_gpu["evidence_tags"]
+    assert "observed_augmented_krylov" not in recycled_augmented_gpu["evidence_tags"]
+    assert "observed_augmented_krylov" in recycled_augmented_gpu["fail_closed_observed_tags"]
     assert recycled_augmented_gpu["last_reported_residual_norm"] == pytest.approx(7.336295e-06)
     assert recycled_augmented_gpu["last_reported_residual_norm"] < augmented_gpu[
         "last_reported_residual_norm"
@@ -1276,9 +1287,14 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     )
     assert phase_space_gpu["passed"] is False
     assert phase_space_gpu["evidence_classes"] == [
+        "requested_phase_space_residual_equation_device_qi"
+    ]
+    assert phase_space_gpu["fail_closed_observed_classes"] == [
         "device_qi_phase_space_residual_equation_coarse_reuse"
     ]
-    assert "observed_phase_space_residual_equation" in phase_space_gpu["evidence_tags"]
+    assert "requested_phase_space_residual_equation" in phase_space_gpu["evidence_tags"]
+    assert "observed_phase_space_residual_equation" not in phase_space_gpu["evidence_tags"]
+    assert "observed_phase_space_residual_equation" in phase_space_gpu["fail_closed_observed_tags"]
     assert phase_space_gpu["last_reported_residual_norm"] == pytest.approx(
         recycled_augmented_gpu["last_reported_residual_norm"]
     )
@@ -1291,8 +1307,11 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         == "docs/_static/qi_seed_robustness_scale060_coarse_residual_device_qi_cpu_2026_05_20.json"
     )
     assert coarse_residual_cpu["passed"] is False
-    assert coarse_residual_cpu["evidence_classes"] == ["device_qi_multilevel_residual_equation"]
-    assert "observed_multilevel_residual_equation" in coarse_residual_cpu["evidence_tags"]
+    assert coarse_residual_cpu["evidence_classes"] == [
+        "requested_multilevel_residual_equation_device_qi"
+    ]
+    assert "requested_multilevel_residual_equation" in coarse_residual_cpu["evidence_tags"]
+    assert "observed_multilevel_residual_equation" not in coarse_residual_cpu["evidence_tags"]
     assert coarse_residual_cpu["last_reported_residual_norm"] == pytest.approx(2.306911e-05)
     assert coarse_residual_cpu["last_reported_residual_norm"] > augmented_cpu["last_reported_residual_norm"]
     assert coarse_residual_cpu["max_elapsed_s"] < 300.0
@@ -1303,8 +1322,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         == "docs/_static/qi_seed_robustness_scale060_residual_snapshot_device_qi_cpu_2026_05_20.json"
     )
     assert residual_snapshot_cpu["passed"] is False
-    assert residual_snapshot_cpu["evidence_classes"] == ["device_qi_residual_snapshot_coarse_reuse"]
-    assert "observed_residual_snapshot" in residual_snapshot_cpu["evidence_tags"]
+    assert residual_snapshot_cpu["evidence_classes"] == ["requested_residual_snapshot_device_qi"]
+    assert "requested_residual_snapshot" in residual_snapshot_cpu["evidence_tags"]
+    assert "observed_residual_snapshot" not in residual_snapshot_cpu["evidence_tags"]
     assert residual_snapshot_cpu["last_reported_residual_norm"] == pytest.approx(2.103015e-05)
     assert residual_snapshot_cpu["last_reported_residual_norm"] < augmented_cpu[
         "last_reported_residual_norm"
@@ -1321,9 +1341,12 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     )
     assert residual_snapshot_equation_cpu["passed"] is False
     assert residual_snapshot_equation_cpu["evidence_classes"] == [
-        "device_qi_residual_snapshot_residual_equation_coarse_reuse"
+        "requested_residual_snapshot_residual_equation_device_qi"
     ]
-    assert "observed_residual_snapshot_residual_equation" in residual_snapshot_equation_cpu["evidence_tags"]
+    assert "requested_residual_snapshot_residual_equation" in residual_snapshot_equation_cpu["evidence_tags"]
+    assert "observed_residual_snapshot_residual_equation" not in residual_snapshot_equation_cpu[
+        "evidence_tags"
+    ]
     assert residual_snapshot_equation_cpu["last_reported_residual_norm"] == pytest.approx(2.320763e-05)
     assert residual_snapshot_equation_cpu["last_reported_residual_norm"] > residual_snapshot_cpu[
         "last_reported_residual_norm"
@@ -1340,9 +1363,10 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     )
     assert global_moment_cpu["passed"] is False
     assert global_moment_cpu["evidence_classes"] == [
-        "device_qi_global_moment_residual_equation_coarse_reuse"
+        "requested_global_moment_residual_equation_device_qi"
     ]
-    assert "observed_global_moment_residual_equation" in global_moment_cpu["evidence_tags"]
+    assert "requested_global_moment_residual_equation" in global_moment_cpu["evidence_tags"]
+    assert "observed_global_moment_residual_equation" not in global_moment_cpu["evidence_tags"]
     assert global_moment_cpu["last_reported_residual_norm"] == pytest.approx(2.420524e-05)
     assert global_moment_cpu["last_reported_residual_norm"] > residual_snapshot_cpu[
         "last_reported_residual_norm"
@@ -1359,7 +1383,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     )
     assert global_moment_gpu["passed"] is False
     assert global_moment_gpu["evidence_classes"] == global_moment_cpu["evidence_classes"]
-    assert "observed_global_moment_residual_equation" in global_moment_gpu["evidence_tags"]
+    assert "requested_global_moment_residual_equation" in global_moment_gpu["evidence_tags"]
+    assert "observed_global_moment_residual_equation" not in global_moment_gpu["evidence_tags"]
     assert global_moment_gpu["last_reported_residual_norm"] == pytest.approx(2.420524e-05)
     assert global_moment_gpu["max_elapsed_s"] < 320.0
     residual_galerkin_cpu = next(
@@ -1370,9 +1395,10 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     )
     assert residual_galerkin_cpu["passed"] is False
     assert residual_galerkin_cpu["evidence_classes"] == [
-        "device_qi_residual_galerkin_equation_coarse_reuse"
+        "requested_residual_galerkin_equation_device_qi"
     ]
-    assert "observed_residual_galerkin_equation" in residual_galerkin_cpu["evidence_tags"]
+    assert "requested_residual_galerkin_equation" in residual_galerkin_cpu["evidence_tags"]
+    assert "observed_residual_galerkin_equation" not in residual_galerkin_cpu["evidence_tags"]
     assert residual_galerkin_cpu["last_reported_residual_norm"] == pytest.approx(2.632208e-05)
     assert residual_galerkin_cpu["last_reported_residual_norm"] > residual_snapshot_cpu[
         "last_reported_residual_norm"
@@ -1389,7 +1415,8 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     )
     assert residual_galerkin_gpu["passed"] is False
     assert residual_galerkin_gpu["evidence_classes"] == residual_galerkin_cpu["evidence_classes"]
-    assert "observed_residual_galerkin_equation" in residual_galerkin_gpu["evidence_tags"]
+    assert "requested_residual_galerkin_equation" in residual_galerkin_gpu["evidence_tags"]
+    assert "observed_residual_galerkin_equation" not in residual_galerkin_gpu["evidence_tags"]
     assert residual_galerkin_gpu["last_reported_residual_norm"] == pytest.approx(2.632208e-05)
     assert residual_galerkin_gpu["max_elapsed_s"] < 330.0
     block_schur_cpu = next(
@@ -1399,8 +1426,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         == "docs/_static/qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json"
     )
     assert block_schur_cpu["passed"] is False
-    assert block_schur_cpu["evidence_classes"] == ["device_qi_block_schur_residual_coarse_reuse"]
-    assert "observed_block_schur_residual" in block_schur_cpu["evidence_tags"]
+    assert block_schur_cpu["evidence_classes"] == ["requested_block_schur_residual_device_qi"]
+    assert "requested_block_schur_residual" in block_schur_cpu["evidence_tags"]
+    assert "observed_block_schur_residual" not in block_schur_cpu["evidence_tags"]
     assert block_schur_cpu["last_reported_residual_norm"] == pytest.approx(2.275188e-05)
     assert block_schur_cpu["last_reported_residual_norm"] > residual_snapshot_cpu[
         "last_reported_residual_norm"
@@ -1416,8 +1444,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         )
     )
     assert block_schur_bestof_gpu["passed"] is False
-    assert block_schur_bestof_gpu["evidence_classes"] == ["device_qi_block_schur_residual_coarse_reuse"]
-    assert "observed_block_schur_residual" in block_schur_bestof_gpu["evidence_tags"]
+    assert block_schur_bestof_gpu["evidence_classes"] == ["requested_block_schur_residual_device_qi"]
+    assert "requested_block_schur_residual" in block_schur_bestof_gpu["evidence_tags"]
+    assert "observed_block_schur_residual" not in block_schur_bestof_gpu["evidence_tags"]
     assert block_schur_bestof_gpu["last_reported_residual_norm"] == pytest.approx(1.992464e-05)
     assert block_schur_bestof_gpu["last_reported_residual_norm"] < residual_snapshot_cpu[
         "last_reported_residual_norm"
@@ -1433,8 +1462,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         )
     )
     assert adaptive_residual_gpu["passed"] is False
-    assert adaptive_residual_gpu["evidence_classes"] == ["device_qi_block_schur_residual_coarse_reuse"]
-    assert "observed_block_schur_residual" in adaptive_residual_gpu["evidence_tags"]
+    assert adaptive_residual_gpu["evidence_classes"] == ["requested_block_schur_residual_device_qi"]
+    assert "requested_block_schur_residual" in adaptive_residual_gpu["evidence_tags"]
+    assert "observed_block_schur_residual" not in adaptive_residual_gpu["evidence_tags"]
     assert adaptive_residual_gpu["last_reported_residual_norm"] == pytest.approx(2.307995e-05)
     assert adaptive_residual_gpu["last_reported_residual_norm"] > block_schur_bestof_gpu[
         "last_reported_residual_norm"
@@ -1450,10 +1480,13 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         )
     )
     assert composite_gpu["passed"] is False
-    assert composite_gpu["evidence_classes"] == ["device_qi_residual_galerkin_equation_coarse_reuse"]
-    assert "observed_residual_snapshot" in composite_gpu["evidence_tags"]
-    assert "observed_residual_galerkin_equation" in composite_gpu["evidence_tags"]
-    assert "observed_block_schur_residual" in composite_gpu["evidence_tags"]
+    assert composite_gpu["evidence_classes"] == ["requested_residual_galerkin_equation_device_qi"]
+    assert "requested_residual_snapshot" in composite_gpu["evidence_tags"]
+    assert "requested_residual_galerkin_equation" in composite_gpu["evidence_tags"]
+    assert "requested_block_schur_residual" in composite_gpu["evidence_tags"]
+    assert "observed_residual_snapshot" not in composite_gpu["evidence_tags"]
+    assert "observed_residual_galerkin_equation" not in composite_gpu["evidence_tags"]
+    assert "observed_block_schur_residual" not in composite_gpu["evidence_tags"]
     assert composite_gpu["last_reported_residual_norm"] == pytest.approx(2.305955e-05)
     assert composite_gpu["last_reported_residual_norm"] > block_schur_bestof_gpu[
         "last_reported_residual_norm"

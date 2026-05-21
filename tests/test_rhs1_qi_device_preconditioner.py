@@ -10,6 +10,7 @@ from sfincs_jax.rhs1_device_operator import device_csr_from_scipy_csr
 from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata, RHS1QICoarseBlockLayout
 from sfincs_jax.rhs1_qi_device_preconditioner import (
     RHS1QIDevicePreconditionerConfig,
+    probe_rhs1_qi_device_augmented_seed,
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
 )
@@ -1777,6 +1778,115 @@ def test_device_preconditioner_local_only_path_has_empty_coarse_state() -> None:
         rtol=1.0e-12,
         atol=1.0e-12,
     )
+
+
+def test_device_augmented_seed_probe_returns_rank_gated_correction_space() -> None:
+    diagonal = jnp.asarray([2.0, 3.0, 5.0], dtype=jnp.float64)
+
+    def mv(x):
+        return diagonal * jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=3,
+        coarse_basis=jnp.eye(3, dtype=jnp.float64),
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    rhs = jnp.asarray([2.0, 0.0, 0.0], dtype=jnp.float64)
+    x0 = jnp.zeros_like(rhs)
+
+    result = probe_rhs1_qi_device_augmented_seed(
+        rhs=rhs,
+        x0=x0,
+        state=state,
+        operator=mv,
+        max_cycles=2,
+        max_rank=1,
+        min_relative_improvement=0.0,
+        residual_minimizing_step=True,
+    )
+
+    assert result.probe.accepted is True
+    assert result.probe.reason == "augmented_residual_reduced"
+    assert result.rank == 1
+    assert result.augmentation_basis.shape == (3, 1)
+    assert result.operator_on_augmentation.shape == (3, 1)
+    assert result.accepted_labels == ("augmented_seed:0",)
+    assert result.projection_residual_norm is not None
+    assert result.projection_residual_norm < 1.0e-12
+    np.testing.assert_allclose(mv(result.solution), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_device_augmented_seed_probe_fails_closed_without_residual_reduction() -> None:
+    def mv(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=3,
+        coarse_basis=None,
+        config=RHS1QIDevicePreconditionerConfig(local_smoother_kind="none"),
+    )
+    rhs = jnp.asarray([1.0, -1.0, 0.5], dtype=jnp.float64)
+    result = probe_rhs1_qi_device_augmented_seed(
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        state=state,
+        operator=mv,
+        max_cycles=2,
+        max_rank=2,
+    )
+
+    assert result.probe.accepted is False
+    assert result.reason == "residual_not_reduced"
+    assert result.rank == 0
+    assert result.augmentation_basis.shape == (3, 0)
+    assert result.operator_on_augmentation.shape == (3, 0)
+
+
+def test_device_augmented_seed_probe_rejects_nonfinite_augmentation_action() -> None:
+    def setup_mv(x):
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=setup_mv,
+        total_size=3,
+        coarse_basis=jnp.eye(3, dtype=jnp.float64),
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            regularization_rcond=1.0e-14,
+        ),
+    )
+    call_count = 0
+
+    def probe_mv(x):
+        nonlocal call_count
+        call_count += 1
+        vector = jnp.asarray(x, dtype=jnp.float64)
+        if call_count >= 3:
+            return jnp.full_like(vector, jnp.nan)
+        return vector
+
+    rhs = jnp.asarray([1.0, 0.0, 0.0], dtype=jnp.float64)
+    result = probe_rhs1_qi_device_augmented_seed(
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        state=state,
+        operator=probe_mv,
+        max_cycles=1,
+        max_rank=1,
+    )
+
+    assert result.probe.accepted is True
+    assert result.reason == "residual_reduced_invalid_augmentation"
+    assert result.rank == 0
+    assert result.accepted_labels == ()
+    assert result.augmentation_basis.shape == (3, 0)
+    assert result.operator_on_augmentation.shape == (3, 0)
+    assert result.projection_residual_norm is None
 
 
 def test_device_preconditioner_rejects_mismatched_basis_shape() -> None:

@@ -1831,6 +1831,80 @@ def test_xblock_sparse_pc_qi_device_augmented_krylov_reuses_operator_basis(monke
     assert result.metadata["xblock_qi_device_preconditioner_augmented_krylov_mode"] == "combined"
 
 
+def test_xblock_sparse_pc_qi_device_augmented_krylov_can_reuse_probe_seed_space(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres_jax")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT", "0.0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
+    captured: dict[str, object] = {}
+
+    def _capturing_device_krylov_result(**kwargs):
+        captured.update(kwargs)
+        return _fast_device_krylov_result(**kwargs)
+
+    def _accepted_augmented_seed(**kwargs):
+        state = kwargs["state"]
+        x0 = jnp.asarray(kwargs["x0"], dtype=jnp.float64)
+        basis = jnp.zeros((int(x0.shape[0]), 1), dtype=jnp.float64).at[0, 0].set(1.0)
+        action = 2.0 * basis
+        probe = SimpleNamespace(
+            accepted=True,
+            reason="augmented_residual_reduced",
+            residual_before_norm=10.0,
+            residual_after_norm=1.0,
+            improvement_ratio=0.1,
+            metadata=state.metadata,
+            cycles=1,
+            residual_history=(10.0, 1.0),
+            step_history=(1.0,),
+        )
+        return SimpleNamespace(
+            solution=x0,
+            probe=probe,
+            augmentation_basis=basis,
+            operator_on_augmentation=action,
+            rank=1,
+            reason="augmented_residual_reduced",
+            accepted_labels=("augmented_seed:0",),
+            projection_residual_norm=1.0,
+        )
+
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _capturing_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _capturing_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_augmented_seed", _accepted_augmented_seed)
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-2,
+        maxiter=2,
+    )
+
+    augmentation_basis = captured["augmentation_basis"]
+    operator_on_augmentation = captured["operator_on_augmentation"]
+    assert augmentation_basis is not None
+    assert operator_on_augmentation is not None
+    assert tuple(augmentation_basis.shape) == tuple(operator_on_augmentation.shape)
+    assert augmentation_basis.shape[1] == 1
+    assert result.metadata["xblock_device_fgmres_qi_augmented_seed_requested"] is True
+    assert result.metadata["xblock_device_fgmres_qi_augmented_seed_used"] is True
+    assert result.metadata["xblock_device_fgmres_qi_augmented_seed_rank"] == 1
+    assert result.metadata["xblock_device_fgmres_qi_augmented_krylov_reason"] == "enabled_from_augmented_seed"
+    assert result.metadata["xblock_qi_device_preconditioner_augmented_seed_used"] is True
+    assert result.metadata["xblock_qi_device_preconditioner_augmented_seed_rank"] == 1
+    assert (
+        result.metadata["xblock_qi_device_preconditioner_metadata"]["augmented_seed_labels"]
+        == ("augmented_seed:0",)
+    )
+
+
 def test_xblock_sparse_pc_qi_device_multilevel_residual_equation_env_records_metadata(monkeypatch) -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
