@@ -875,7 +875,7 @@ because it writes no output or solver trace.
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
 passing bounded grid ``139502``, the largest attempted bounded grid ``139502``,
-21 passing artifacts and 27 non-passing blocker artifacts, a ``60%``
+32 passing artifacts and 73 non-passing blocker artifacts, a ``60%``
 per-axis lane-completion estimate based only on passing artifacts, and
 ``86.32%`` of production total size still uncovered. The production acceptance
 gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,

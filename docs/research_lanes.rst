@@ -653,6 +653,16 @@ Current evidence
   reverting to host fallback, but it still misses the production output/write
   gate. Treat it as the comparison target for the next physics/error-space
   coarse equation, not as a closed true device-QI claim.
+- Residual-region/bounce-region coarse reuse is now recorded as CPU/GPU
+  negative evidence rather than a promoted route. The bounded scale-0.60 CPU
+  hard seed ended at ``7.833826e-6`` and the matched GPU0 hard seed ended at
+  ``8.077991e-6``, both far above the ``3.021487e-11`` write gate and slower
+  than the recycled augmented-Krylov incumbent. Keep these artifacts in the
+  evidence corpus, but do not use them for release-facing true-device QI
+  claims. The aggregate manifest therefore reports these failed/nonconverged
+  entries with requested-only classes and separate fail-closed observed
+  metadata, preventing installed probe machinery from being counted as
+  promotion evidence.
 
 Promotion gate
 ~~~~~~~~~~~~~~
