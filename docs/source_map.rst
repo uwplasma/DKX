@@ -384,6 +384,17 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   variables from the current operator residual and block residuals, caches
   ``A Q``, supports action least-squares or Galerkin solves, and fails closed on
   non-improving setup residuals.
+- ``sfincs_jax/rhs1_qi_phase_space_coarse.py``:
+  standalone deterministic phase-space coarse-space builder for the true
+  device-QI research lane. It derives trapped/passing-like pitch bands,
+  boundary bands, even/odd pitch-parity directions, and optional radial/species
+  aggregates from ``RHS1QICoarseBlockLayout`` metadata, rank-gates them, and
+  plugs into the existing setup-time residual-equation path. The controls
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION*``
+  are opt-in and fail-closed; they are used only by explicit research probes
+  such as ``phase-space-coarse-reuse-device-qi`` until scale-0.60 GPU hard-seed
+  artifacts write HDF5 output, solver traces, and accepted-converged residual
+  metadata.
 - ``sfincs_jax/rhs1_qi_promotion.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace

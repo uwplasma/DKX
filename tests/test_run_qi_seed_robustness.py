@@ -1045,6 +1045,70 @@ def test_qi_seed_runner_residual_galerkin_device_qi_probe_records_env(tmp_path: 
     )
 
 
+def test_qi_seed_runner_phase_space_coarse_reuse_device_qi_probe_records_env(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--resolution-scale",
+                "0.60",
+                "--probe-preset",
+                "phase-space-coarse-reuse-device-qi",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    env = manifest["probe_env"]
+    assert manifest["probe_preset"] == "phase-space-coarse-reuse-device-qi"
+    assert manifest["solve_method"] == "xblock_sparse_pc_gmres"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV"] == "1"
+    assert env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR"] == "1"
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION"]
+        == "1"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK"
+        ]
+        == "32"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER"
+        ]
+        == "action_lstsq"
+    )
+    assert (
+        env[
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL"
+        ]
+        == "1"
+    )
+    assert (
+        env["SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY"]
+        == "0.35"
+    )
+    assert manifest["cases"][0]["probe_preset"] == "phase-space-coarse-reuse-device-qi"
+    assert (
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION=1"
+        in manifest["cases"][0]["command"]
+    )
+
+
 def test_qi_seed_runner_block_schur_device_qi_probe_records_env(tmp_path: Path) -> None:
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
@@ -1815,6 +1879,94 @@ def test_qi_seed_runner_keeps_residual_galerkin_probe_fail_closed_until_converge
     assert summary["evidence_classification"]["promotion_eligible_seed_count"] == 0
 
 
+def test_qi_seed_runner_keeps_phase_space_probe_fail_closed_until_converged(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+    summary_path = tmp_path / "summary.json"
+
+    def fake_run(command, *, cwd, stdout, stderr, timeout, check):  # noqa: ANN001
+        trace_path = Path(command[command.index("--solver-trace") + 1])
+        output_path = Path(command[command.index("--out") + 1])
+        output_path.write_bytes(b"h5")
+        trace_path.write_text(
+            json.dumps(
+                {
+                    "backend": "gpu",
+                    "converged": False,
+                    "residual_norm": 2.0e-5,
+                    "residual_target": 1.0e-11,
+                    "metadata": {
+                        "solver_metadata": {
+                            "accepted_converged": False,
+                            "xblock_qi_device_preconditioner_used": True,
+                            "xblock_qi_device_preconditioner_use_in_krylov": True,
+                            "xblock_qi_device_preconditioner_coarse_reuse": True,
+                            "xblock_qi_device_preconditioner_operator_krylov_enrichment": True,
+                            "xblock_qi_device_preconditioner_phase_space_residual_equation": True,
+                            "xblock_qi_device_preconditioner_metadata": {
+                                "phase_space_residual_equation_enabled": True,
+                                "phase_space_residual_equation_candidate_count": 11,
+                                "phase_space_residual_equation_rank": 7,
+                                "phase_space_residual_equation_stage_count": 1,
+                                "phase_space_residual_equation_solver": "action_lstsq",
+                                "phase_space_residual_equation_condition_estimate": 4.0,
+                            },
+                        }
+                    },
+                    "selected_path": "rhsmode1_solution",
+                    "solve_method": "xblock_sparse_pc_gmres",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(qi_seed.subprocess, "run", fake_run)
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "3",
+                "--execute",
+                "--probe-preset",
+                "phase-space-coarse-reuse-device-qi",
+                "--summary-output",
+                str(summary_path),
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    seed = summary["seeds"][0]
+    assert seed["evidence_class"] == "device_qi_phase_space_residual_equation_coarse_reuse"
+    assert seed["run_outcome"] == "not_converged"
+    assert seed["promotion_eligible"] is False
+    assert seed["requested_qi_device_phase_space_residual_equation"] is True
+    assert seed["observed_qi_device_phase_space_residual_equation"] is True
+    assert seed["xblock_qi_device_preconditioner_phase_space_residual_equation_candidate_count"] == 11
+    assert seed["xblock_qi_device_preconditioner_phase_space_residual_equation_rank"] == 7
+    assert seed["xblock_qi_device_preconditioner_phase_space_residual_equation_stage_count"] == 1
+    assert "observed_phase_space_residual_equation" in seed["evidence_tags"]
+    assert "not_converged" in seed["evidence_tags"]
+    assert summary["evidence_classification"]["classes"] == [
+        "device_qi_phase_space_residual_equation_coarse_reuse"
+    ]
+    assert summary["evidence_classification"]["has_observed_phase_space_residual_equation"] is True
+    assert summary["evidence_classification"]["promotion_eligible_seed_count"] == 0
+
+
 def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Path) -> None:
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)
@@ -2069,6 +2221,35 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     )
     assert "--probe-preset residual-galerkin-device-qi" in residual_galerkin_preset["recommended_command"]
     assert "fail-closed" in residual_galerkin_preset["description"]
+    phase_space_preset = manifest["probe_presets"]["phase-space-coarse-reuse-device-qi"]
+    assert (
+        phase_space_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        phase_space_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK"
+        ]
+        == "32"
+    )
+    assert (
+        phase_space_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER"
+        ]
+        == "action_lstsq"
+    )
+    assert (
+        phase_space_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL"
+        ]
+        == "1"
+    )
+    assert "--probe-preset phase-space-coarse-reuse-device-qi" in phase_space_preset[
+        "recommended_command"
+    ]
+    assert "fail-closed" in phase_space_preset["description"]
     block_schur_preset = manifest["probe_presets"]["block-schur-device-qi"]
     assert (
         block_schur_preset["env"][
@@ -2127,6 +2308,7 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     assert "operator-krylov" in recommended
     assert "global-moment" in recommended
     assert "residual-galerkin" in recommended
+    assert "phase-space" in recommended
     assert "block-schur" in recommended
     assert "adaptive-residual" in recommended
     assert "recycled-augmented" in recommended

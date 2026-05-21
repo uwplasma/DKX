@@ -19,6 +19,10 @@ from sfincs_jax.rhs1_qi_multilevel_coarse import (
     build_rhs1_qi_multilevel_coarse_basis,
     build_rhs1_qi_multilevel_coarse_candidates,
 )
+from sfincs_jax.rhs1_qi_phase_space_coarse import (
+    RHS1QIPhaseSpaceCoarseConfig,
+    build_rhs1_qi_phase_space_coarse_basis,
+)
 
 
 def _basis(vectors: jnp.ndarray, label: str = "coarse") -> RHS1QICoarseBasis:
@@ -561,6 +565,76 @@ def test_device_preconditioner_residual_galerkin_equation_solves_block_residual_
         state.residual_equation_bases[0].metadata.accepted_labels
     )
     np.testing.assert_allclose(x, expected, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_device_preconditioner_phase_space_residual_equation_solves_pitch_mode() -> None:
+    layout = RHS1QICoarseBlockLayout(
+        block_sizes=(10, 10, 10, 10, 3),
+        n_theta=2,
+        n_zeta=1,
+        block_x=(0, 1, 0, 1, -1),
+        block_species=(0, 0, 1, 1, -1),
+    )
+    phase_basis = build_rhs1_qi_phase_space_coarse_basis(
+        layout,
+        config=RHS1QIPhaseSpaceCoarseConfig(
+            include_radial=False,
+            include_species=False,
+            max_rank=8,
+        ),
+    )
+    mode = jnp.asarray(phase_basis.vectors[:, 0], dtype=jnp.float64)
+    dense = jnp.eye(layout.total_size, dtype=jnp.float64) + 2.0 * jnp.outer(mode, mode)
+    rhs = dense @ mode
+    operator = device_csr_from_scipy_csr(sp.csr_matrix(np.asarray(dense)), max_csr_mb=1.0)
+
+    base_state = setup_rhs1_qi_device_preconditioner(
+        operator=operator,
+        coarse_basis=None,
+        config=RHS1QIDevicePreconditionerConfig(
+            regularization_rcond=1.0e-14,
+            local_smoother_kind="none",
+        ),
+    )
+    base_residual = rhs - dense @ base_state.apply(rhs)
+    phase_state = setup_rhs1_qi_device_preconditioner(
+        operator=operator,
+        coarse_basis=None,
+        residual_seed=rhs,
+        geometry_metadata={
+            "qi_block_sizes": layout.block_sizes,
+            "qi_block_x": layout.block_x,
+            "qi_block_species": layout.block_species,
+            "n_theta": layout.n_theta,
+            "n_zeta": layout.n_zeta,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            regularization_rcond=1.0e-14,
+            local_smoother_kind="none",
+            phase_space_residual_equation=True,
+            phase_space_residual_equation_max_rank=8,
+            phase_space_residual_equation_include_global=True,
+            phase_space_residual_equation_include_radial=False,
+            phase_space_residual_equation_include_species=False,
+        ),
+    )
+
+    corrected = phase_state.apply(rhs)
+    residual_after = rhs - dense @ corrected
+    jitted = jax.jit(phase_state.apply)(rhs)
+
+    assert float(jnp.linalg.norm(base_residual)) > 1.0e-2
+    assert float(jnp.linalg.norm(residual_after)) < 1.0e-10
+    assert phase_state.metadata.phase_space_residual_equation_enabled is True
+    assert phase_state.metadata.phase_space_residual_equation_rank > 0
+    assert phase_state.metadata.phase_space_residual_equation_stage_count == 1
+    assert phase_state.metadata.phase_space_residual_equation_candidate_count >= (
+        phase_state.metadata.phase_space_residual_equation_rank
+    )
+    assert phase_state.metadata.phase_space_residual_equation_include_global is True
+    assert np.isfinite(phase_state.metadata.phase_space_residual_equation_condition_estimate)
+    assert all(label.startswith("phase_space:") for label in phase_state.metadata.accepted_basis_labels)
+    np.testing.assert_allclose(jitted, corrected, rtol=1.0e-12, atol=1.0e-12)
 
 
 def test_device_preconditioner_multilevel_coarse_requires_layout_metadata() -> None:

@@ -14973,3 +14973,76 @@ Best next steps:
 3. Keep `recycled-augmented-device-qi` as the default future comparison target:
    any new GPU hard-seed method must beat `7.336295e-06` and `158.58 s` and must
    eventually satisfy the `3.021487e-11` output gate before promotion.
+
+## 2026-05-21 phase-space coarse-reuse QI push
+
+Goal: replace additional smoother tuning with a setup-time, device-compatible
+physics coarse space for the remaining QI hard-seed residual. The new route is
+explicitly opt-in and must beat the recycled augmented-Krylov GPU0 hard-seed
+baseline before it can change any public QI claim.
+
+Implemented:
+
+- Added `sfincs_jax/rhs1_qi_phase_space_coarse.py`, a standalone
+  trapped/passing-like pitch-band, boundary-band, even/odd pitch-parity,
+  radial, and species coarse-space builder from `RHS1QICoarseBlockLayout`
+  metadata.
+- Wired `phase_space_residual_equation` through
+  `RHS1QIDevicePreconditionerConfig`, setup-time residual-equation basis
+  construction, cached `A Q` application, solver metadata, driver progress
+  lines, and solver-trace summary keys.
+- Added `phase-space-coarse-reuse-device-qi` to
+  `scripts/run_qi_seed_robustness.py` as a named fail-closed hard-seed probe.
+  The preset keeps the same device-QI/coarse-reuse lane and adds the
+  phase-space residual equation with `action_lstsq`, `include_global=1`, and
+  max rank `32`.
+- Added focused unit coverage for deterministic phase-space candidate
+  construction, nonphysical tail-block rejection, phase-space residual-equation
+  setup, runner env recording, and fail-closed evidence classification.
+- Refreshed `docs/_static/qi_seed_robustness_evidence_manifest.json` so the
+  new preset is documented as an available research probe, not as passing
+  production evidence.
+- Ran the bounded office GPU0 hard-seed probe:
+  `docs/_static/qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0.json`.
+
+Local gates:
+
+- `python -m compileall -q sfincs_jax/rhs1_qi_phase_space_coarse.py sfincs_jax/rhs1_qi_device_preconditioner.py sfincs_jax/v3_driver.py scripts/run_qi_seed_robustness.py tests/test_rhs1_qi_phase_space_coarse.py tests/test_rhs1_qi_device_preconditioner.py tests/test_run_qi_seed_robustness.py`
+- `python -m ruff check sfincs_jax/rhs1_qi_phase_space_coarse.py tests/test_rhs1_qi_phase_space_coarse.py sfincs_jax/rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_device_preconditioner.py scripts/run_qi_seed_robustness.py tests/test_run_qi_seed_robustness.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_qi_phase_space_coarse.py tests/test_rhs1_qi_device_preconditioner.py tests/test_run_qi_seed_robustness.py tests/test_qi_seed_smoke_artifact.py`
+
+GPU result:
+
+- `phase-space-coarse-reuse-device-qi` correctly failed closed: process failed
+  before HDF5 output and solver trace promotion, with no timeout.
+- The setup saw `14` phase-space candidates but accepted phase-space rank `0`,
+  so the new coarse family did not reduce the setup residual beyond the
+  existing recycled augmented-Krylov/coarse-reuse basis.
+- Final residual was `7.336295e-06`, matching the recycled augmented-Krylov
+  best residual, but wall time increased to `242.07 s` from the existing
+  `158.58 s` baseline. This is retained as negative evidence, not a promoted
+  route.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `99%`; the new phase-space
+  residual-equation route is wired, documented in the source map, and tested.
+- True differentiable/device-QI convergence evidence: `89%`; unchanged because
+  the phase-space GPU probe matched the best residual but was slower and did not
+  write accepted output/trace evidence.
+- Production-resolution QI ladders: `40%`; unchanged until the hard seed
+  satisfies the write gate.
+- QI evidence/documentation: `95%`; the manifest now exposes the new probe and
+  keeps it fail-closed.
+- Overall remaining-lane completion estimate: `92%`.
+
+Best next steps:
+
+1. Do not promote the phase-space coarse-reuse route. It is useful negative
+   evidence and should remain available as an opt-in probe only.
+2. Promote any future true-device QI route only if the artifact writes HDF5 and solver trace with
+   accepted-converged metadata. If it only reduces the residual, record it as
+   incremental fail-closed evidence and keep true device-QI deferred.
+3. The next real algorithmic step is a richer bounce/banana-region coarse
+   equation or an active-pattern chunked operator reuse path, not another
+   smoother/restart tuning pass.

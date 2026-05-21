@@ -16198,6 +16198,58 @@ def solve_v3_full_system_linear_gmres(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_OPERATOR_IMAGES",
                     default=False,
                 )
+                qi_device_phase_space_residual_equation = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION",
+                    default=False,
+                )
+                qi_device_phase_space_residual_equation_max_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK",
+                    default=24,
+                    minimum=1,
+                )
+                qi_device_phase_space_residual_equation_solver = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER",
+                        "action_lstsq",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                if qi_device_phase_space_residual_equation_solver in {
+                    "action",
+                    "action_ls",
+                    "least_squares",
+                    "lstsq",
+                    "staged",
+                }:
+                    qi_device_phase_space_residual_equation_solver = "action_lstsq"
+                elif qi_device_phase_space_residual_equation_solver in {
+                    "galerkin",
+                    "projected",
+                    "qtaq",
+                    "coarse_grid",
+                }:
+                    qi_device_phase_space_residual_equation_solver = "galerkin"
+                else:
+                    qi_device_phase_space_residual_equation_solver = "action_lstsq"
+                qi_device_phase_space_residual_equation_include_global = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
+                    default=False,
+                )
+                qi_device_phase_space_residual_equation_boundary = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY",
+                    default=0.35,
+                    minimum=1.0e-6,
+                )
+                qi_device_phase_space_residual_equation_include_radial = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_RADIAL",
+                    default=True,
+                )
+                qi_device_phase_space_residual_equation_include_species = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_SPECIES",
+                    default=True,
+                )
                 qi_device_block_schur_residual_equation = _rhs1_bool_env(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION",
                     default=False,
@@ -16318,6 +16370,164 @@ def solve_v3_full_system_linear_gmres(
                         qi_device_multilevel_max_rank = max(1, int(qi_device_multilevel_max_rank_env))
                     except ValueError:
                         qi_device_multilevel_max_rank = None
+                qi_device_global_moment_residual_equation = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION",
+                    default=False,
+                )
+                qi_device_global_moment_residual_equation_max_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_MAX_RANK",
+                    default=16,
+                    minimum=1,
+                )
+                qi_device_global_moment_residual_equation_solver = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_SOLVER",
+                        "galerkin",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                if qi_device_global_moment_residual_equation_solver in {
+                    "action",
+                    "action_ls",
+                    "least_squares",
+                    "lstsq",
+                    "staged",
+                }:
+                    qi_device_global_moment_residual_equation_solver = "action_lstsq"
+                elif qi_device_global_moment_residual_equation_solver in {
+                    "galerkin",
+                    "projected",
+                    "qtaq",
+                    "coarse_grid",
+                    "schur",
+                }:
+                    qi_device_global_moment_residual_equation_solver = "galerkin"
+                else:
+                    qi_device_global_moment_residual_equation_solver = "galerkin"
+                qi_device_global_moment_residual_equation_include_profile = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_PROFILE",
+                    default=True,
+                )
+                qi_device_global_moment_residual_equation_include_current = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_CURRENT",
+                    default=True,
+                )
+                qi_device_global_moment_residual_equation_include_tail = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_TAIL",
+                    default=True,
+                )
+                qi_device_residual_galerkin_equation = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION",
+                    default=False,
+                )
+                qi_device_residual_galerkin_equation_max_stages = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGES",
+                    default=3,
+                    minimum=1,
+                )
+                qi_device_residual_galerkin_equation_max_stage_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGE_RANK",
+                    default=4,
+                    minimum=1,
+                )
+                qi_device_residual_galerkin_equation_max_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_RANK",
+                    default=24,
+                    minimum=1,
+                )
+                qi_device_residual_galerkin_equation_solver = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_SOLVER",
+                        "action_lstsq",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                if qi_device_residual_galerkin_equation_solver in {
+                    "action",
+                    "action_ls",
+                    "least_squares",
+                    "lstsq",
+                    "staged",
+                }:
+                    qi_device_residual_galerkin_equation_solver = "action_lstsq"
+                elif qi_device_residual_galerkin_equation_solver in {
+                    "galerkin",
+                    "projected",
+                    "qtaq",
+                    "coarse_grid",
+                    "schur",
+                }:
+                    qi_device_residual_galerkin_equation_solver = "galerkin"
+                else:
+                    qi_device_residual_galerkin_equation_solver = "action_lstsq"
+                qi_device_residual_galerkin_equation_include_global_residual = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_GLOBAL_RESIDUAL",
+                    default=True,
+                )
+                qi_device_residual_galerkin_equation_include_block_residuals = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_BLOCK_RESIDUALS",
+                    default=True,
+                )
+                qi_device_residual_galerkin_equation_include_operator_images = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_OPERATOR_IMAGES",
+                    default=False,
+                )
+                qi_device_phase_space_residual_equation = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION",
+                    default=False,
+                )
+                qi_device_phase_space_residual_equation_max_rank = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK",
+                    default=24,
+                    minimum=1,
+                )
+                qi_device_phase_space_residual_equation_solver = (
+                    os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER",
+                        "action_lstsq",
+                    )
+                    .strip()
+                    .lower()
+                    .replace("-", "_")
+                )
+                if qi_device_phase_space_residual_equation_solver in {
+                    "action",
+                    "action_ls",
+                    "least_squares",
+                    "lstsq",
+                    "staged",
+                }:
+                    qi_device_phase_space_residual_equation_solver = "action_lstsq"
+                elif qi_device_phase_space_residual_equation_solver in {
+                    "galerkin",
+                    "projected",
+                    "qtaq",
+                    "coarse_grid",
+                }:
+                    qi_device_phase_space_residual_equation_solver = "galerkin"
+                else:
+                    qi_device_phase_space_residual_equation_solver = "action_lstsq"
+                qi_device_phase_space_residual_equation_include_global = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
+                    default=False,
+                )
+                qi_device_phase_space_residual_equation_boundary = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY",
+                    default=0.35,
+                    minimum=1.0e-6,
+                )
+                qi_device_phase_space_residual_equation_include_radial = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_RADIAL",
+                    default=True,
+                )
+                qi_device_phase_space_residual_equation_include_species = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_SPECIES",
+                    default=True,
+                )
                 qi_device_max_rank_env = os.environ.get(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK",
                     "",
@@ -16350,6 +16560,8 @@ def solve_v3_full_system_linear_gmres(
                     qi_device_rank_budget += int(qi_device_global_moment_residual_equation_max_rank)
                 if bool(qi_device_residual_galerkin_equation):
                     qi_device_rank_budget += int(qi_device_residual_galerkin_equation_max_rank)
+                if bool(qi_device_phase_space_residual_equation):
+                    qi_device_rank_budget += int(qi_device_phase_space_residual_equation_max_rank)
                 if bool(qi_device_block_schur_residual_equation):
                     qi_device_rank_budget += int(qi_device_block_schur_residual_equation_max_rank)
                 if bool(qi_device_residual_snapshot_enrichment):
@@ -16372,6 +16584,7 @@ def solve_v3_full_system_linear_gmres(
                     or bool(qi_device_multilevel_residual_equation)
                     or bool(qi_device_global_moment_residual_equation)
                     or bool(qi_device_residual_galerkin_equation)
+                    or bool(qi_device_phase_space_residual_equation)
                     or bool(qi_device_block_schur_residual_equation)
                     or bool(qi_device_residual_snapshot_enrichment)
                     or bool(qi_device_residual_snapshot_residual_equation)
@@ -16414,6 +16627,7 @@ def solve_v3_full_system_linear_gmres(
                         or bool(qi_device_multilevel_residual_equation)
                         or bool(qi_device_global_moment_residual_equation)
                         or bool(qi_device_residual_galerkin_equation)
+                        or bool(qi_device_phase_space_residual_equation)
                         or bool(qi_device_block_schur_residual_equation)
                         or bool(qi_device_residual_snapshot_enrichment)
                         or bool(qi_device_residual_snapshot_residual_equation)
@@ -16507,6 +16721,18 @@ def solve_v3_full_system_linear_gmres(
                             f"global={int(bool(qi_device_residual_galerkin_equation_include_global_residual))} "
                             f"blocks={int(bool(qi_device_residual_galerkin_equation_include_block_residuals))} "
                             f"images={int(bool(qi_device_residual_galerkin_equation_include_operator_images))})",
+                        )
+                    if bool(qi_device_phase_space_residual_equation) and emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            "QI device preconditioner phase-space residual equation "
+                            f"(max_rank={int(qi_device_phase_space_residual_equation_max_rank)} "
+                            f"solver={qi_device_phase_space_residual_equation_solver} "
+                            f"boundary={float(qi_device_phase_space_residual_equation_boundary):.3e} "
+                            f"include_global={int(bool(qi_device_phase_space_residual_equation_include_global))} "
+                            f"radial={int(bool(qi_device_phase_space_residual_equation_include_radial))} "
+                            f"species={int(bool(qi_device_phase_space_residual_equation_include_species))})",
                         )
                     if bool(qi_device_block_schur_residual_equation) and emit is not None:
                         emit(
@@ -16689,6 +16915,27 @@ def solve_v3_full_system_linear_gmres(
                             ),
                             residual_galerkin_equation_include_operator_images=bool(
                                 qi_device_residual_galerkin_equation_include_operator_images
+                            ),
+                            phase_space_residual_equation=bool(
+                                qi_device_phase_space_residual_equation
+                            ),
+                            phase_space_residual_equation_max_rank=int(
+                                qi_device_phase_space_residual_equation_max_rank
+                            ),
+                            phase_space_residual_equation_solver=(
+                                qi_device_phase_space_residual_equation_solver
+                            ),
+                            phase_space_residual_equation_include_global=bool(
+                                qi_device_phase_space_residual_equation_include_global
+                            ),
+                            phase_space_residual_equation_trapped_boundary_fraction=float(
+                                qi_device_phase_space_residual_equation_boundary
+                            ),
+                            phase_space_residual_equation_include_radial=bool(
+                                qi_device_phase_space_residual_equation_include_radial
+                            ),
+                            phase_space_residual_equation_include_species=bool(
+                                qi_device_phase_space_residual_equation_include_species
                             ),
                             block_schur_residual_equation=bool(
                                 qi_device_block_schur_residual_equation
@@ -16921,6 +17168,27 @@ def solve_v3_full_system_linear_gmres(
                         "residual_galerkin_equation_include_operator_images_requested": bool(
                             qi_device_residual_galerkin_equation_include_operator_images
                         ),
+                        "phase_space_residual_equation_requested": bool(
+                            qi_device_phase_space_residual_equation
+                        ),
+                        "phase_space_residual_equation_max_rank_requested": int(
+                            qi_device_phase_space_residual_equation_max_rank
+                        ),
+                        "phase_space_residual_equation_solver_requested": (
+                            qi_device_phase_space_residual_equation_solver
+                        ),
+                        "phase_space_residual_equation_include_global_requested": bool(
+                            qi_device_phase_space_residual_equation_include_global
+                        ),
+                        "phase_space_residual_equation_boundary_requested": float(
+                            qi_device_phase_space_residual_equation_boundary
+                        ),
+                        "phase_space_residual_equation_include_radial_requested": bool(
+                            qi_device_phase_space_residual_equation_include_radial
+                        ),
+                        "phase_space_residual_equation_include_species_requested": bool(
+                            qi_device_phase_space_residual_equation_include_species
+                        ),
                         "block_schur_residual_equation_requested": bool(
                             qi_device_block_schur_residual_equation
                         ),
@@ -17033,6 +17301,9 @@ def solve_v3_full_system_linear_gmres(
                                 f"residual_galerkin_equation={int(bool(qi_device_residual_galerkin_equation))} "
                                 f"residual_galerkin_rank={int(qi_device_preconditioner_metadata.get('residual_galerkin_equation_rank', 0))} "
                                 f"residual_galerkin_candidates={int(qi_device_preconditioner_metadata.get('residual_galerkin_equation_candidate_count', 0))} "
+                                f"phase_space_equation={int(bool(qi_device_phase_space_residual_equation))} "
+                                f"phase_space_rank={int(qi_device_preconditioner_metadata.get('phase_space_residual_equation_rank', 0))} "
+                                f"phase_space_candidates={int(qi_device_preconditioner_metadata.get('phase_space_residual_equation_candidate_count', 0))} "
                                 f"block_schur_equation={int(bool(qi_device_block_schur_residual_equation))} "
                                 f"residual_snapshot={int(bool(qi_device_residual_snapshot_enrichment))} "
                                 f"residual_snapshot_equation={int(bool(qi_device_residual_snapshot_residual_equation))} "
@@ -17061,6 +17332,9 @@ def solve_v3_full_system_linear_gmres(
                             f"residual_galerkin_equation={int(bool(qi_device_residual_galerkin_equation))} "
                             f"residual_galerkin_rank={int(qi_device_preconditioner_metadata.get('residual_galerkin_equation_rank', 0))} "
                             f"residual_galerkin_candidates={int(qi_device_preconditioner_metadata.get('residual_galerkin_equation_candidate_count', 0))} "
+                            f"phase_space_equation={int(bool(qi_device_phase_space_residual_equation))} "
+                            f"phase_space_rank={int(qi_device_preconditioner_metadata.get('phase_space_residual_equation_rank', 0))} "
+                            f"phase_space_candidates={int(qi_device_preconditioner_metadata.get('phase_space_residual_equation_candidate_count', 0))} "
                             f"block_schur_equation={int(bool(qi_device_block_schur_residual_equation))} "
                             f"residual_snapshot={int(bool(qi_device_residual_snapshot_enrichment))} "
                             f"residual_snapshot_equation={int(bool(qi_device_residual_snapshot_residual_equation))} "
@@ -19054,6 +19328,71 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_qi_device_preconditioner_residual_galerkin_equation_condition_estimate": float(
                         qi_device_preconditioner_metadata.get(
                             "residual_galerkin_equation_condition_estimate", float("inf")
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation": bool(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_enabled", False
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_max_rank": int(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_max_rank_requested",
+                            qi_device_preconditioner_metadata.get(
+                                "phase_space_residual_equation_max_rank", 0
+                            ),
+                        )
+                        or 0
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_solver": (
+                        qi_device_preconditioner_metadata.get("phase_space_residual_equation_solver")
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_rank": int(
+                        qi_device_preconditioner_metadata.get("phase_space_residual_equation_rank", 0)
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_candidate_count": int(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_candidate_count", 0
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_stage_count": int(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_stage_count", 0
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_condition_estimate": float(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_condition_estimate", float("inf")
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_residual_before": float(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_residual_before", float("inf")
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_residual_after": float(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_residual_after", float("inf")
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_include_global": bool(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_include_global", False
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_trapped_boundary_fraction": float(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_trapped_boundary_fraction", float("nan")
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_include_radial": bool(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_include_radial", False
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_include_species": bool(
+                        qi_device_preconditioner_metadata.get(
+                            "phase_space_residual_equation_include_species", False
                         )
                     ),
                     "xblock_qi_device_preconditioner_block_schur_residual_equation": bool(
@@ -23329,6 +23668,12 @@ def solve_v3_full_system_linear_gmres(
                     qi_device_rank_budget *= max(1, 1 + int(qi_device_operator_action_depth))
                 if bool(qi_device_multilevel_coarse):
                     qi_device_rank_budget += int(qi_device_multilevel_max_rank or 48)
+                if bool(qi_device_global_moment_residual_equation):
+                    qi_device_rank_budget += int(qi_device_global_moment_residual_equation_max_rank)
+                if bool(qi_device_residual_galerkin_equation):
+                    qi_device_rank_budget += int(qi_device_residual_galerkin_equation_max_rank)
+                if bool(qi_device_phase_space_residual_equation):
+                    qi_device_rank_budget += int(qi_device_phase_space_residual_equation_max_rank)
                 if qi_device_max_rank_env:
                     try:
                         qi_device_max_rank = max(1, int(qi_device_max_rank_env))
@@ -23464,6 +23809,27 @@ def solve_v3_full_system_linear_gmres(
                         residual_galerkin_equation_include_operator_images=bool(
                             qi_device_residual_galerkin_equation_include_operator_images
                         ),
+                        phase_space_residual_equation=bool(
+                            qi_device_phase_space_residual_equation
+                        ),
+                        phase_space_residual_equation_max_rank=int(
+                            qi_device_phase_space_residual_equation_max_rank
+                        ),
+                        phase_space_residual_equation_solver=(
+                            qi_device_phase_space_residual_equation_solver
+                        ),
+                        phase_space_residual_equation_include_global=bool(
+                            qi_device_phase_space_residual_equation_include_global
+                        ),
+                        phase_space_residual_equation_trapped_boundary_fraction=float(
+                            qi_device_phase_space_residual_equation_boundary
+                        ),
+                        phase_space_residual_equation_include_radial=bool(
+                            qi_device_phase_space_residual_equation_include_radial
+                        ),
+                        phase_space_residual_equation_include_species=bool(
+                            qi_device_phase_space_residual_equation_include_species
+                        ),
                     ),
                 )
                 x_qi_device, qi_device_probe = probe_rhs1_qi_device_preconditioner(
@@ -23536,6 +23902,27 @@ def solve_v3_full_system_linear_gmres(
                     "multilevel_max_angular_mode_requested": int(qi_device_multilevel_max_angular_mode),
                     "multilevel_max_radial_degree_requested": int(qi_device_multilevel_max_radial_degree),
                     "multilevel_max_pitch_degree_requested": int(qi_device_multilevel_max_pitch_degree),
+                    "phase_space_residual_equation_requested": bool(
+                        qi_device_phase_space_residual_equation
+                    ),
+                    "phase_space_residual_equation_max_rank_requested": int(
+                        qi_device_phase_space_residual_equation_max_rank
+                    ),
+                    "phase_space_residual_equation_solver_requested": (
+                        qi_device_phase_space_residual_equation_solver
+                    ),
+                    "phase_space_residual_equation_include_global_requested": bool(
+                        qi_device_phase_space_residual_equation_include_global
+                    ),
+                    "phase_space_residual_equation_boundary_requested": float(
+                        qi_device_phase_space_residual_equation_boundary
+                    ),
+                    "phase_space_residual_equation_include_radial_requested": bool(
+                        qi_device_phase_space_residual_equation_include_radial
+                    ),
+                    "phase_space_residual_equation_include_species_requested": bool(
+                        qi_device_phase_space_residual_equation_include_species
+                    ),
                     "max_rank_requested": int(qi_device_max_rank),
                     "residual_before_norm": float(qi_device_probe.residual_before_norm),
                     "residual_after_norm": float(qi_device_probe.residual_after_norm),
@@ -23562,7 +23949,11 @@ def solve_v3_full_system_linear_gmres(
                             f"cycles={int(qi_device_probe_cycles)} "
                             f"ratio={float(qi_device_probe.improvement_ratio):.6e} "
                             f"operator_krylov={int(bool(qi_device_operator_krylov_enrichment))} "
-                            f"coarse_reuse={int(bool(qi_device_multilevel_coarse))} seed_only=1)",
+                            f"coarse_reuse={int(bool(qi_device_multilevel_coarse))} "
+                            f"phase_space_equation={int(bool(qi_device_phase_space_residual_equation))} "
+                            f"phase_space_rank={int(qi_device_metadata.get('phase_space_residual_equation_rank', 0))} "
+                            f"phase_space_candidates={int(qi_device_metadata.get('phase_space_residual_equation_candidate_count', 0))} "
+                            "seed_only=1)",
                         )
                 elif emit is not None:
                     emit(
@@ -23577,7 +23968,11 @@ def solve_v3_full_system_linear_gmres(
                         f"ratio={float(qi_device_probe.improvement_ratio) if qi_device_probe.improvement_ratio is not None else float('nan'):.6e} "
                         f"step_policy={qi_device_metadata.get('step_policy', 'fixed')} "
                         f"operator_krylov={int(bool(qi_device_operator_krylov_enrichment))} "
-                        f"coarse_reuse={int(bool(qi_device_multilevel_coarse))} seed_only=1)",
+                        f"coarse_reuse={int(bool(qi_device_multilevel_coarse))} "
+                        f"phase_space_equation={int(bool(qi_device_phase_space_residual_equation))} "
+                        f"phase_space_rank={int(qi_device_metadata.get('phase_space_residual_equation_rank', 0))} "
+                        f"phase_space_candidates={int(qi_device_metadata.get('phase_space_residual_equation_candidate_count', 0))} "
+                        "seed_only=1)",
                     )
             except Exception as exc:  # noqa: BLE001
                 qi_device_reason = f"{type(exc).__name__}: {exc}"
@@ -23622,6 +24017,35 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     "xblock_qi_device_preconditioner_coarse_reuse": bool(
                         qi_device_metadata.get("multilevel_coarse_enabled", False)
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation": bool(
+                        qi_device_metadata.get("phase_space_residual_equation_enabled", False)
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_max_rank": int(
+                        qi_device_metadata.get(
+                            "phase_space_residual_equation_max_rank_requested",
+                            qi_device_metadata.get("phase_space_residual_equation_max_rank", 0),
+                        )
+                        or 0
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_solver": (
+                        qi_device_metadata.get("phase_space_residual_equation_solver")
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_candidate_count": int(
+                        qi_device_metadata.get("phase_space_residual_equation_candidate_count", 0)
+                        or 0
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_rank": int(
+                        qi_device_metadata.get("phase_space_residual_equation_rank", 0) or 0
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_stage_count": int(
+                        qi_device_metadata.get("phase_space_residual_equation_stage_count", 0)
+                        or 0
+                    ),
+                    "xblock_qi_device_preconditioner_phase_space_residual_equation_condition_estimate": float(
+                        qi_device_metadata.get(
+                            "phase_space_residual_equation_condition_estimate", float("inf")
+                        )
                     ),
                 }
             )
@@ -24701,6 +25125,27 @@ def solve_v3_full_system_linear_gmres(
                         ),
                         residual_galerkin_equation_include_operator_images=bool(
                             qi_device_residual_galerkin_equation_include_operator_images
+                        ),
+                        phase_space_residual_equation=bool(
+                            qi_device_phase_space_residual_equation
+                        ),
+                        phase_space_residual_equation_max_rank=int(
+                            qi_device_phase_space_residual_equation_max_rank
+                        ),
+                        phase_space_residual_equation_solver=(
+                            qi_device_phase_space_residual_equation_solver
+                        ),
+                        phase_space_residual_equation_include_global=bool(
+                            qi_device_phase_space_residual_equation_include_global
+                        ),
+                        phase_space_residual_equation_trapped_boundary_fraction=float(
+                            qi_device_phase_space_residual_equation_boundary
+                        ),
+                        phase_space_residual_equation_include_radial=bool(
+                            qi_device_phase_space_residual_equation_include_radial
+                        ),
+                        phase_space_residual_equation_include_species=bool(
+                            qi_device_phase_space_residual_equation_include_species
                         ),
                     ),
                 )

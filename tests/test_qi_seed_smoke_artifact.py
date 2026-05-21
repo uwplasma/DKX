@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 102
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 103
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 70
+    assert current["nonpassing_artifact_count"] == 71
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -1039,6 +1039,10 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         (
             "docs/_static/"
             "qi_seed_robustness_scale060_residual_galerkin_device_qi_gpu1_2026_05_20.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0.json"
         ),
         "docs/_static/qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json",
         (
@@ -1262,6 +1266,22 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "last_reported_residual_norm"
     ]
     assert recycled_augmented_gpu["max_elapsed_s"] < 170.0
+    phase_space_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0.json"
+    )
+    assert phase_space_gpu["passed"] is False
+    assert phase_space_gpu["evidence_classes"] == [
+        "device_qi_phase_space_residual_equation_coarse_reuse"
+    ]
+    assert "observed_phase_space_residual_equation" in phase_space_gpu["evidence_tags"]
+    assert phase_space_gpu["last_reported_residual_norm"] == pytest.approx(
+        recycled_augmented_gpu["last_reported_residual_norm"]
+    )
+    assert phase_space_gpu["max_elapsed_s"] > recycled_augmented_gpu["max_elapsed_s"]
+    assert phase_space_gpu["max_elapsed_s"] < 260.0
     coarse_residual_cpu = next(
         artifact
         for artifact in payload["source_artifacts"]
@@ -1736,6 +1756,10 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "--probe-preset recycled-augmented-device-qi"
         in commands["recycled_augmented_device_qi_gpu0_probe"]
     )
+    assert (
+        "--probe-preset phase-space-coarse-reuse-device-qi"
+        in commands["phase_space_coarse_reuse_device_qi_gpu0_probe"]
+    )
     assert "--probe-preset adaptive-residual-device-qi" in commands["adaptive_residual_device_qi_gpu0_probe"]
 
     residual_snapshot_equation_preset = payload["probe_presets"]["residual-snapshot-equation-device-qi"]
@@ -1809,6 +1833,20 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         == "8"
     )
     assert "fail-closed" in residual_galerkin_preset["description"]
+    phase_space_preset = payload["probe_presets"]["phase-space-coarse-reuse-device-qi"]
+    assert (
+        phase_space_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        phase_space_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK"
+        ]
+        == "32"
+    )
+    assert "fail-closed" in phase_space_preset["description"]
 
     block_schur_preset = payload["probe_presets"]["block-schur-device-qi"]
     assert (

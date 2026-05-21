@@ -44,6 +44,10 @@ from .rhs1_qi_multilevel_coarse import (
     build_rhs1_qi_multilevel_coarse_candidates,
     build_rhs1_qi_multilevel_residual_level_bases,
 )
+from .rhs1_qi_phase_space_coarse import (
+    RHS1QIPhaseSpaceCoarseConfig,
+    build_rhs1_qi_phase_space_coarse_basis,
+)
 from .rhs1_qi_residual_galerkin import (
     RHS1QIResidualGalerkinConfig,
     setup_rhs1_qi_residual_galerkin,
@@ -121,6 +125,18 @@ class RHS1QIDevicePreconditionerConfig:
     residual_galerkin_equation_include_global_residual: bool = True
     residual_galerkin_equation_include_block_residuals: bool = True
     residual_galerkin_equation_include_operator_images: bool = False
+    phase_space_residual_equation: bool = False
+    phase_space_residual_equation_max_rank: int = 24
+    phase_space_residual_equation_solver: str = "action_lstsq"
+    phase_space_residual_equation_include_global: bool = False
+    phase_space_residual_equation_trapped_boundary_fraction: float = 0.35
+    phase_space_residual_equation_include_trapped: bool = True
+    phase_space_residual_equation_include_passing: bool = True
+    phase_space_residual_equation_include_boundary: bool = True
+    phase_space_residual_equation_include_even: bool = True
+    phase_space_residual_equation_include_odd: bool = True
+    phase_space_residual_equation_include_radial: bool = True
+    phase_space_residual_equation_include_species: bool = True
     block_schur_residual_equation: bool = False
     block_schur_residual_equation_max_rank: int = 24
     block_schur_residual_equation_include_global: bool = False
@@ -213,6 +229,25 @@ class RHS1QIDevicePreconditionerMetadata:
     residual_galerkin_equation_condition_estimate: float
     residual_galerkin_equation_residual_before: float
     residual_galerkin_equation_residual_after: float
+    phase_space_residual_equation_enabled: bool
+    phase_space_residual_equation_candidate_count: int
+    phase_space_residual_equation_rank: int
+    phase_space_residual_equation_stage_count: int
+    phase_space_residual_equation_stage_ranks: tuple[int, ...]
+    phase_space_residual_equation_max_rank: int
+    phase_space_residual_equation_solver: str
+    phase_space_residual_equation_include_global: bool
+    phase_space_residual_equation_trapped_boundary_fraction: float
+    phase_space_residual_equation_include_trapped: bool
+    phase_space_residual_equation_include_passing: bool
+    phase_space_residual_equation_include_boundary: bool
+    phase_space_residual_equation_include_even: bool
+    phase_space_residual_equation_include_odd: bool
+    phase_space_residual_equation_include_radial: bool
+    phase_space_residual_equation_include_species: bool
+    phase_space_residual_equation_condition_estimate: float
+    phase_space_residual_equation_residual_before: float
+    phase_space_residual_equation_residual_after: float
     block_schur_residual_equation_enabled: bool
     block_schur_residual_equation_group_count: int
     block_schur_residual_equation_candidate_count: int
@@ -309,6 +344,7 @@ class RHS1QIDevicePreconditionerState:
             int(self.metadata.multilevel_residual_equation_rank)
             + int(self.metadata.global_moment_residual_equation_rank)
             + int(self.metadata.residual_galerkin_equation_rank)
+            + int(self.metadata.phase_space_residual_equation_rank)
             + int(self.metadata.block_schur_residual_equation_rank)
             + int(self.metadata.residual_snapshot_residual_equation_rank)
         )
@@ -323,6 +359,7 @@ class RHS1QIDevicePreconditionerState:
             bool(self.metadata.multilevel_residual_equation_enabled)
             or bool(self.metadata.global_moment_residual_equation_enabled)
             or bool(self.metadata.residual_galerkin_equation_enabled)
+            or bool(self.metadata.phase_space_residual_equation_enabled)
             or bool(self.metadata.block_schur_residual_equation_enabled)
             or bool(self.metadata.residual_snapshot_residual_equation_enabled)
         ):
@@ -376,6 +413,9 @@ class RHS1QIDevicePreconditionerState:
         ) or (
             bool(self.metadata.residual_galerkin_equation_enabled)
         ) or (
+            bool(self.metadata.phase_space_residual_equation_enabled)
+            and bool(self.metadata.phase_space_residual_equation_include_global)
+        ) or (
             bool(self.metadata.block_schur_residual_equation_enabled)
             and bool(self.metadata.block_schur_residual_equation_include_global)
         ) or (
@@ -395,6 +435,10 @@ class RHS1QIDevicePreconditionerState:
                 or (
                     bool(self.metadata.residual_snapshot_residual_equation_enabled)
                     and self.metadata.residual_snapshot_residual_equation_solver == "galerkin"
+                )
+                or (
+                    bool(self.metadata.phase_space_residual_equation_enabled)
+                    and self.metadata.phase_space_residual_equation_solver == "galerkin"
                 )
             ):
                 coefficients = _regularized_projected_solve(
@@ -1130,6 +1174,83 @@ def _build_residual_galerkin_equation_basis_from_metadata(
         float(metadata.residual_before),
         float(metadata.residual_after),
     )
+
+
+def _condition_estimate(matrix: ArrayLike, *, threshold: float) -> float:
+    singular_values = np.asarray(jnp.linalg.svd(matrix, compute_uv=False), dtype=np.float64)
+    positive = singular_values[singular_values > float(threshold)]
+    if positive.size == 0:
+        return float("inf")
+    return float(np.max(singular_values) / np.min(positive))
+
+
+def _build_phase_space_residual_equation_bases_from_metadata(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    geometry_metadata: Mapping[str, object] | None,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float, float, float]:
+    """Build a fail-closed trapped/passing phase-space residual equation."""
+
+    if int(shape[0]) != int(shape[1]):
+        raise ValueError("phase-space residual equation requires a square operator")
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(total_size):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+
+    solver = _normalize_multilevel_residual_equation_solver(
+        config.phase_space_residual_equation_solver
+    )
+    phase_config = RHS1QIPhaseSpaceCoarseConfig(
+        max_rank=max(1, int(config.phase_space_residual_equation_max_rank)),
+        trapped_boundary_fraction=float(config.phase_space_residual_equation_trapped_boundary_fraction),
+        include_trapped=bool(config.phase_space_residual_equation_include_trapped),
+        include_passing=bool(config.phase_space_residual_equation_include_passing),
+        include_boundary=bool(config.phase_space_residual_equation_include_boundary),
+        include_even=bool(config.phase_space_residual_equation_include_even),
+        include_odd=bool(config.phase_space_residual_equation_include_odd),
+        include_radial=bool(config.phase_space_residual_equation_include_radial),
+        include_species=bool(config.phase_space_residual_equation_include_species),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        dtype=dtype,
+    )
+    basis = build_rhs1_qi_phase_space_coarse_basis(layout, config=phase_config)
+    rank = int(basis.metadata.rank)
+    candidate_count = int(basis.metadata.candidate_count)
+    residual_before = float(jnp.linalg.norm(residual))
+    if rank <= 0:
+        return (), candidate_count, (), 0, float("inf"), residual_before, float("inf")
+
+    q = jnp.asarray(basis.vectors, dtype=dtype)
+    action = _operator_on_basis(operator_matvec, q, shape=shape, dtype=dtype)
+    coarse_operator = jnp.conjugate(q).T @ action
+    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_before))
+    if solver == "galerkin":
+        coefficients = _regularized_projected_solve(
+            coarse_operator,
+            jnp.conjugate(q).T @ residual,
+            rcond=float(config.regularization_rcond),
+        )
+        condition_matrix = coarse_operator
+    else:
+        coefficients = _regularized_least_squares(
+            action,
+            residual,
+            rcond=float(config.regularization_rcond),
+        )
+        condition_matrix = action
+    next_residual = residual - action @ coefficients
+    residual_after = float(jnp.linalg.norm(next_residual))
+    condition_estimate = _condition_estimate(condition_matrix, threshold=threshold)
+    if (not np.isfinite(residual_after)) or residual_after >= residual_before - threshold:
+        return (), candidate_count, (), 0, condition_estimate, residual_before, residual_after
+    return (basis,), candidate_count, (rank,), rank, condition_estimate, residual_before, residual_after
 
 
 def _unique_snapshot_groups(groups: Sequence[Sequence[int]]) -> tuple[tuple[int, ...], ...]:
@@ -3011,6 +3132,39 @@ def setup_rhs1_qi_device_preconditioner(
         residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
             residual_galerkin_equation_solver for _ in residual_galerkin_bases
         )
+    phase_space_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
+        config_use.phase_space_residual_equation_solver
+    )
+    phase_space_residual_equation_candidate_count = 0
+    phase_space_residual_equation_rank = 0
+    phase_space_residual_equation_stage_ranks: tuple[int, ...] = ()
+    phase_space_residual_equation_condition_estimate = float("inf")
+    phase_space_residual_equation_residual_before = float("inf")
+    phase_space_residual_equation_residual_after = float("inf")
+    if bool(config_use.phase_space_residual_equation):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when phase_space_residual_equation=True")
+        (
+            phase_space_bases,
+            phase_space_residual_equation_candidate_count,
+            phase_space_residual_equation_stage_ranks,
+            phase_space_residual_equation_rank,
+            phase_space_residual_equation_condition_estimate,
+            phase_space_residual_equation_residual_before,
+            phase_space_residual_equation_residual_after,
+        ) = _build_phase_space_residual_equation_bases_from_metadata(
+            operator_matvec=operator_matvec,
+            geometry_metadata=geometry_metadata,
+            residual_seed=residual_seed,
+            shape=shape,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
+        )
+        residual_equation_bases = residual_equation_bases + phase_space_bases
+        residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
+            phase_space_residual_equation_solver for _ in phase_space_bases
+        )
     residual_snapshot_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
         config_use.residual_snapshot_residual_equation_solver
     )
@@ -3122,6 +3276,8 @@ def setup_rhs1_qi_device_preconditioner(
         reason = "built_with_global_moment_residual_equation"
     elif bool(config_use.residual_galerkin_equation) and residual_galerkin_equation_rank > 0:
         reason = "built_with_residual_galerkin_equation"
+    elif bool(config_use.phase_space_residual_equation) and phase_space_residual_equation_rank > 0:
+        reason = "built_with_phase_space_residual_equation"
     elif bool(config_use.block_schur_residual_equation) and block_schur_residual_equation_rank > 0:
         reason = "built_with_block_schur_residual_equation"
     elif (
@@ -3239,6 +3395,57 @@ def setup_rhs1_qi_device_preconditioner(
         ),
         residual_galerkin_equation_residual_after=float(
             residual_galerkin_equation_residual_after
+        ),
+        phase_space_residual_equation_enabled=bool(
+            config_use.phase_space_residual_equation and phase_space_residual_equation_rank > 0
+        ),
+        phase_space_residual_equation_candidate_count=int(
+            phase_space_residual_equation_candidate_count
+        ),
+        phase_space_residual_equation_rank=int(phase_space_residual_equation_rank),
+        phase_space_residual_equation_stage_count=len(phase_space_residual_equation_stage_ranks),
+        phase_space_residual_equation_stage_ranks=tuple(
+            int(v) for v in phase_space_residual_equation_stage_ranks
+        ),
+        phase_space_residual_equation_max_rank=int(
+            config_use.phase_space_residual_equation_max_rank
+        ),
+        phase_space_residual_equation_solver=phase_space_residual_equation_solver,
+        phase_space_residual_equation_include_global=bool(
+            config_use.phase_space_residual_equation_include_global
+        ),
+        phase_space_residual_equation_trapped_boundary_fraction=float(
+            config_use.phase_space_residual_equation_trapped_boundary_fraction
+        ),
+        phase_space_residual_equation_include_trapped=bool(
+            config_use.phase_space_residual_equation_include_trapped
+        ),
+        phase_space_residual_equation_include_passing=bool(
+            config_use.phase_space_residual_equation_include_passing
+        ),
+        phase_space_residual_equation_include_boundary=bool(
+            config_use.phase_space_residual_equation_include_boundary
+        ),
+        phase_space_residual_equation_include_even=bool(
+            config_use.phase_space_residual_equation_include_even
+        ),
+        phase_space_residual_equation_include_odd=bool(
+            config_use.phase_space_residual_equation_include_odd
+        ),
+        phase_space_residual_equation_include_radial=bool(
+            config_use.phase_space_residual_equation_include_radial
+        ),
+        phase_space_residual_equation_include_species=bool(
+            config_use.phase_space_residual_equation_include_species
+        ),
+        phase_space_residual_equation_condition_estimate=float(
+            phase_space_residual_equation_condition_estimate
+        ),
+        phase_space_residual_equation_residual_before=float(
+            phase_space_residual_equation_residual_before
+        ),
+        phase_space_residual_equation_residual_after=float(
+            phase_space_residual_equation_residual_after
         ),
         block_schur_residual_equation_enabled=bool(
             config_use.block_schur_residual_equation and block_schur_residual_equation_rank > 0

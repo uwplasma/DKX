@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 102,
+    "artifact_count": 103,
     "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
@@ -32,6 +32,7 @@
       "device_qi_global_moment_residual_equation_coarse_reuse": 2,
       "device_qi_installed_krylov_coarse_reuse": 5,
       "device_qi_multilevel_residual_equation": 1,
+      "device_qi_phase_space_residual_equation_coarse_reuse": 1,
       "device_qi_residual_galerkin_equation_coarse_reuse": 3,
       "device_qi_residual_snapshot_coarse_reuse": 1,
       "device_qi_residual_snapshot_residual_equation_coarse_reuse": 1,
@@ -42,39 +43,41 @@
       "requested_operator_krylov_device_qi": 1
     },
     "evidence_tag_counts": {
-      "failed_before_solver_trace_summary": 66,
-      "no_hdf5_output": 23,
-      "observed_augmented_krylov": 3,
+      "failed_before_solver_trace_summary": 67,
+      "no_hdf5_output": 24,
+      "observed_augmented_krylov": 4,
       "observed_block_schur_residual": 4,
-      "observed_coarse_reuse": 19,
-      "observed_device_qi_residual_probe": 20,
+      "observed_coarse_reuse": 20,
+      "observed_device_qi_residual_probe": 21,
       "observed_global_moment_residual_equation": 2,
-      "observed_installed_krylov": 19,
+      "observed_installed_krylov": 20,
       "observed_multilevel_residual_equation": 1,
-      "observed_operator_krylov": 19,
+      "observed_operator_krylov": 20,
+      "observed_phase_space_residual_equation": 1,
       "observed_residual_galerkin_equation": 3,
       "observed_residual_snapshot": 3,
       "observed_residual_snapshot_residual_equation": 1,
-      "requested_augmented_krylov": 3,
+      "requested_augmented_krylov": 4,
       "requested_block_schur_residual": 6,
-      "requested_coarse_reuse": 19,
-      "requested_device_qi": 20,
+      "requested_coarse_reuse": 20,
+      "requested_device_qi": 21,
       "requested_global_moment_residual_equation": 2,
-      "requested_installed_krylov": 45,
+      "requested_installed_krylov": 46,
       "requested_multilevel_residual_equation": 1,
-      "requested_operator_krylov": 21,
+      "requested_operator_krylov": 22,
+      "requested_phase_space_residual_equation": 1,
       "requested_residual_galerkin_equation": 3,
       "requested_residual_snapshot": 3,
       "requested_residual_snapshot_residual_equation": 1
     },
-    "failed_before_summary_json_count": 66,
+    "failed_before_summary_json_count": 67,
     "largest_attempted_total_size": 139502,
     "largest_nonpassing_total_size": 139502,
     "max_checked_active_size": 81377,
     "max_checked_per_axis_resolution_fraction": 0.6,
     "max_checked_total_size": 139502,
     "max_checked_total_size_fraction": 0.13676639849725786,
-    "nonpassing_artifact_count": 70,
+    "nonpassing_artifact_count": 71,
     "passing_artifact_count": 32,
     "production_total_size_uncovered_percent": 86.32
   },
@@ -85,6 +88,7 @@
     "Keep true device-QI closed deferred until an operator-Krylov device-QI scale-0.60 GPU hard-seed artifact writes output, trace, and accepted-converged residual metadata.",
     "Keep the global-moment closure device-QI probe fail-closed until a converged artifact reports observed global-moment residual-equation metadata.",
     "Keep the residual-Galerkin device-QI probe fail-closed until a converged artifact reports observed residual-derived Galerkin metadata.",
+    "Keep the phase-space coarse-reuse device-QI probe fail-closed until a converged artifact reports observed phase-space residual-equation metadata.",
     "Keep the block-Schur residual device-QI probe fail-closed until a converged artifact reports observed block-Schur residual metadata.",
     "Do not use the non-autodiff host fallback as evidence for differentiable or true device-resident QI."
   ],
@@ -467,6 +471,49 @@
       },
       "recommended_command": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=160 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=128 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset operator-krylov-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json --clean"
     },
+    "phase-space-coarse-reuse-device-qi": {
+      "description": "Bounded scale-0.60 hard-seed GPU0 production probe for the phase-space residual-equation coarse-reuse path. This adds trapped/passing, boundary, parity, radial, and species coarse directions to the reusable device-QI operator action and remains fail-closed unless output, solver trace, and convergence are observed.",
+      "env": {
+        "SFINCS_JAX_GMRES_PRECONDITION_SIDE": "right",
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER": "960",
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART": "40",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE": "cycle",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K": "32",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV": "fgmres-jax",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE": "combined",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES": "12",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER": "matrix_free_block_minres_hybrid",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS": "48",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY": "residual_minimizing",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS": "4",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "192",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR": "2",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS": "3",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE": "2",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK": "64",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH": "64",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY": "0.35",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_RADIAL": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_SPECIES": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK": "32",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER": "action_lstsq",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY": "minres",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV": "1"
+      },
+      "recommended_command": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=192 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY=0.35 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_RADIAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_SPECIES=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER=action_lstsq SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset phase-space-coarse-reuse-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json --clean"
+    },
     "recycled-augmented-device-qi": {
       "description": "Bounded scale-0.60 hard-seed GPU0 production probe for the recycled augmented-Krylov path. This keeps the solve on device, uses the reusable QI coarse/operator action in the FGMRES least-squares problem, and gives the best checked residual reduction so far, but remains fail-closed until it satisfies the production write gate.",
       "env": {
@@ -646,6 +693,7 @@
     "current_constraint_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=160 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=128 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset current-constraint-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json --clean",
     "global_moment_closure_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=160 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_CURRENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_PROFILE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_TAIL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_SOLVER=galerkin SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=224 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset global-moment-closure-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json --clean",
     "operator_krylov_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=160 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=128 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset operator-krylov-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json --clean",
+    "phase_space_coarse_reuse_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=192 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY=0.35 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_RADIAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_SPECIES=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER=action_lstsq SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset phase-space-coarse-reuse-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json --clean",
     "production_cpu_seed_ladder": "JAX_PLATFORM_NAME=cpu python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_prod_cpu --seeds 0 1 2 3 4 --resolution-scale 1.0 --min-ntheta 25 --min-nzeta 51 --min-nx 8 --min-nxi 100 --execute --timeout-s 3600.0 --max-residual-ratio 1 --require-converged --summary-output docs/_static/qi_seed_robustness_prod_cpu.json --clean",
     "production_gpu0_seed_ladder": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_prod_gpu0 --seeds 0 1 2 3 4 --resolution-scale 1.0 --min-ntheta 25 --min-nzeta 51 --min-nx 8 --min-nxi 100 --execute --timeout-s 3600.0 --max-residual-ratio 1 --require-converged --summary-output docs/_static/qi_seed_robustness_prod_gpu0.json --clean",
     "recycled_augmented_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=128 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset recycled-augmented-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json --clean",
@@ -705,6 +753,7 @@
         "docs/_static/qi_seed_robustness_scale060_global_moment_closure_device_qi_gpu0_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_residual_galerkin_device_qi_cpu_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_residual_galerkin_device_qi_gpu1_2026_05_20.json",
+        "docs/_static/qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0.json",
         "docs/_static/qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_block_schur_bestof_device_qi_gpu0_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_adaptive_residual_device_qi_gpu0_2026_05_20.json",
@@ -765,6 +814,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -818,6 +868,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -871,6 +922,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -925,6 +977,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -978,6 +1031,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1031,6 +1085,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1082,6 +1137,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1137,6 +1193,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1194,6 +1251,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1247,6 +1305,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1300,6 +1359,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1353,6 +1413,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1404,6 +1465,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1461,6 +1523,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1514,6 +1577,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1567,6 +1631,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1620,6 +1685,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1673,6 +1739,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1726,6 +1793,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1779,6 +1847,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1832,6 +1901,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1885,6 +1955,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1938,6 +2009,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -1991,6 +2063,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2044,6 +2117,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2097,6 +2171,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2150,6 +2225,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2203,6 +2279,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2260,6 +2337,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2315,6 +2393,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2372,6 +2451,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2431,6 +2511,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2488,6 +2569,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2545,6 +2627,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2600,6 +2683,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2657,6 +2741,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2714,6 +2799,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2771,6 +2857,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2828,6 +2915,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2885,6 +2973,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2942,6 +3031,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -2999,6 +3089,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3056,6 +3147,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3115,6 +3207,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3172,6 +3265,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3229,6 +3323,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3284,6 +3379,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3341,6 +3437,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3398,6 +3495,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3455,6 +3553,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3512,6 +3611,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3571,6 +3671,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3628,6 +3729,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3693,6 +3795,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3766,6 +3869,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3839,6 +3943,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3912,6 +4017,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -3989,6 +4095,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4066,6 +4173,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4143,6 +4251,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": true,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4220,6 +4329,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": true,
         "outcomes": [
@@ -4297,6 +4407,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": true,
         "outcomes": [
@@ -4378,6 +4489,7 @@
         "has_observed_global_moment_residual_equation": true,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4455,6 +4567,7 @@
         "has_observed_global_moment_residual_equation": true,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4532,6 +4645,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": true,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4609,6 +4723,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": true,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4674,6 +4789,88 @@
       "backends": [],
       "case_count": 1,
       "evidence_classes": [
+        "device_qi_phase_space_residual_equation_coarse_reuse"
+      ],
+      "evidence_classification": {
+        "classes": [
+          "device_qi_phase_space_residual_equation_coarse_reuse"
+        ],
+        "has_failed_before_summary_json": true,
+        "has_observed_block_schur_residual": false,
+        "has_observed_coarse_reuse": true,
+        "has_observed_global_moment_residual_equation": false,
+        "has_observed_installed_krylov": true,
+        "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": true,
+        "has_observed_residual_galerkin_equation": false,
+        "has_observed_residual_snapshot": false,
+        "outcomes": [
+          "process_failed"
+        ],
+        "promotion_eligible_seed_count": 0,
+        "tags": [
+          "failed_before_solver_trace_summary",
+          "no_hdf5_output",
+          "observed_augmented_krylov",
+          "observed_coarse_reuse",
+          "observed_device_qi_residual_probe",
+          "observed_installed_krylov",
+          "observed_operator_krylov",
+          "observed_phase_space_residual_equation",
+          "requested_augmented_krylov",
+          "requested_coarse_reuse",
+          "requested_device_qi",
+          "requested_installed_krylov",
+          "requested_operator_krylov",
+          "requested_phase_space_residual_equation"
+        ]
+      },
+      "evidence_tags": [
+        "failed_before_solver_trace_summary",
+        "no_hdf5_output",
+        "observed_augmented_krylov",
+        "observed_coarse_reuse",
+        "observed_device_qi_residual_probe",
+        "observed_installed_krylov",
+        "observed_operator_krylov",
+        "observed_phase_space_residual_equation",
+        "requested_augmented_krylov",
+        "requested_coarse_reuse",
+        "requested_device_qi",
+        "requested_installed_krylov",
+        "requested_operator_krylov",
+        "requested_phase_space_residual_equation"
+      ],
+      "last_reported_residual_norm": 7.336295e-06,
+      "max_elapsed_s": 242.06686679180712,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "run_outcomes": [
+        "process_failed"
+      ],
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "evidence_classes": [
         "device_qi_block_schur_residual_coarse_reuse"
       ],
       "evidence_classification": {
@@ -4686,6 +4883,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4763,6 +4961,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4840,6 +5039,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -4917,6 +5117,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": true,
         "has_observed_residual_snapshot": true,
         "outcomes": [
@@ -5002,6 +5203,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5075,6 +5277,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": true,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5148,6 +5351,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5205,6 +5409,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5262,6 +5467,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5321,6 +5527,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5376,6 +5583,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5431,6 +5639,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5486,6 +5695,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5541,6 +5751,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5596,6 +5807,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5651,6 +5863,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5706,6 +5919,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5761,6 +5975,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5816,6 +6031,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5871,6 +6087,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5926,6 +6143,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -5981,6 +6199,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6036,6 +6255,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6091,6 +6311,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6146,6 +6367,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6201,6 +6423,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6256,6 +6479,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6311,6 +6535,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6366,6 +6591,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6421,6 +6647,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6476,6 +6703,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6531,6 +6759,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6589,6 +6818,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6643,6 +6873,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6696,6 +6927,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
@@ -6749,6 +6981,7 @@
         "has_observed_global_moment_residual_equation": false,
         "has_observed_installed_krylov": false,
         "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
         "has_observed_residual_galerkin_equation": false,
         "has_observed_residual_snapshot": false,
         "outcomes": [
