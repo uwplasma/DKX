@@ -49,6 +49,10 @@ land in small, gated slices.
    The third landed slice is ``sfincs_jax/rhs1_active_dof.py``, which owns
    active-DOF routing and index-map construction for RHSMode=1 truncated pitch
    grids and PAS constraint-projection solves.
+   The fourth landed slice is ``sfincs_jax/rhs1_active_projection.py``, which
+   owns reusable JAX full/reduced vector gathers, one-based scatter expansion,
+   and PAS constraint projection primitives used by sparse-PC and x-block
+   active-DOF residual paths.
 
 3. Preconditioner registry
    Keep x-block, PAS-lite, Schur, QI, and post-residual-equation preconditioners
