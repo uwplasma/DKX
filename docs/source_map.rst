@@ -466,7 +466,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   block-Schur or active-pattern variant. The optional
   ``*_INSTALL_IN_KRYLOV_ON_REJECT`` control installs a validated coupled stage
   as a Krylov preconditioner without changing ``x0`` when the one-shot seed
-  probe is rejected, matching field-split preconditioner semantics.
+  probe is rejected, matching field-split preconditioner semantics. The runner
+  also keeps coupled residual-equation and install-in-Krylov progress lines as
+  sticky compact-log events, so failed GPU artifacts still preserve the actual
+  preconditioner path while remaining fail-closed.
 - ``sfincs_jax/rhs1_qi_promotion.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace
