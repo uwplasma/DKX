@@ -38,6 +38,9 @@ land in small, gated slices.
    Move auto-selection heuristics, environment parsing, fallback policy, and
    promotion gates into a dedicated policy module. The policy layer should
    return a typed decision object rather than mutating driver-local flags.
+   The first landed slice is ``sfincs_jax/rhs1_solver_policy.py``, which owns
+   typed parsing for x-block probe-coarse, post-minres, post-coarse, and
+   post-residual-equation controls.
 
 3. Preconditioner registry
    Keep x-block, PAS-lite, Schur, QI, and post-residual-equation preconditioners

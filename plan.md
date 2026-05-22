@@ -15541,3 +15541,44 @@ Next steps:
 4. Keep QI hard-seed work as a documented research lane until a new coarse
    residual equation beats the current fail-closed evidence and writes
    converged HDF5/solver trace artifacts.
+
+### 35.60 RHSMode=1 solver-policy extraction slice
+
+Scope:
+
+- Implemented the first behavior-preserving roadmap extraction after the
+  QI/documentation checkpoint. Added `sfincs_jax/rhs1_solver_policy.py` with
+  typed policy records for RHSMode=1 x-block probe-coarse, post-minres,
+  post-coarse, and post-residual-equation controls.
+- Replaced inline environment parsing in `sfincs_jax/v3_driver.py` for those
+  correction paths with calls to the new policy module. Solver behavior is
+  intended to be unchanged: invalid values still fall back to defaults, opt-in
+  hooks still request zero steps unless enabled, and fail-closed defaults remain
+  off.
+- Added `tests/test_rhs1_solver_policy.py` to cover boolean/int/float parsing,
+  disabled defaults, post-residual-equation opt-in controls, invalid post-minres
+  values, and grouped post-solve policy behavior.
+- Updated `docs/source_map.rst` and `docs/development_roadmap.rst` so the
+  extracted module is part of the documented code structure.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/rhs1_solver_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_solver_policy.py`
+- `python -m compileall -q sfincs_jax/rhs1_solver_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_solver_policy.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_solver_policy.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_post_residual_equation_records_metadata tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible`
+  (`7 passed`)
+
+Progress:
+
+- Refactor/coverage/CI: `89%`; the roadmap is no longer just documentation:
+  the first reusable policy module is landed with focused coverage.
+- Overall remaining-lane completion estimate: `90%`.
+
+Best next steps:
+
+1. Run the broader QI/driver policy test group and strict docs to confirm this
+   extraction has no collateral effects.
+2. Commit and push this extraction checkpoint.
+3. Continue with the next behavior-preserving extraction: solver diagnostics
+   metadata assembly for x-block post-correction fields, then active-DOF
+   residual/projection helpers.

@@ -150,6 +150,13 @@ from .rhs1_sparse_polish_policy import (
     rhs1_parse_polish_gmres_config,
     rhs1_polish_enabled,
 )
+from .rhs1_solver_policy import (
+    read_bool_env as _rhs1_bool_env,
+    read_float_env as _rhs1_float_env,
+    read_int_env as _rhs1_int_env,
+    read_post_solve_correction_policy as _read_rhs1_post_solve_correction_policy,
+    read_probe_coarse_policy as _read_rhs1_probe_coarse_policy,
+)
 from .rhs1_constraint0_policy import (
     rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
@@ -8624,38 +8631,6 @@ def _apply_preconditioned_minres_correction(
         alphas.append(float(alpha))
 
     return x, residual, tuple(history), tuple(alphas)
-
-
-def _rhs1_bool_env(name: str, *, default: bool = False) -> bool:
-    """Parse a boolean environment variable used by RHSMode=1 diagnostic hooks."""
-    raw = os.environ.get(name, "").strip().lower()
-    if not raw:
-        return bool(default)
-    if raw in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
-        return True
-    if raw in {"0", "false", "f", "no", "off", ".false.", ".f."}:
-        return False
-    return bool(default)
-
-
-def _rhs1_int_env(name: str, *, default: int, minimum: int = 0) -> int:
-    """Parse an integer environment variable with a lower bound."""
-    raw = os.environ.get(name, "").strip()
-    try:
-        value = int(raw) if raw else int(default)
-    except ValueError:
-        value = int(default)
-    return max(int(minimum), int(value))
-
-
-def _rhs1_float_env(name: str, *, default: float, minimum: float = 0.0) -> float:
-    """Parse a float environment variable with a lower bound."""
-    raw = os.environ.get(name, "").strip()
-    try:
-        value = float(raw) if raw else float(default)
-    except ValueError:
-        value = float(default)
-    return max(float(minimum), float(value))
 
 
 def _rhs1_qi_device_extra_coarse_controls() -> dict[str, object]:
@@ -18903,58 +18878,19 @@ def solve_v3_full_system_linear_gmres(
                     include_angular_residual=bool(include_angular_residual),
                 )
 
-            probe_coarse_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE",
-                default=False,
+            probe_coarse_policy = _read_rhs1_probe_coarse_policy()
+            probe_coarse_steps_requested = int(probe_coarse_policy.steps_requested)
+            probe_coarse_max_directions = int(probe_coarse_policy.max_directions)
+            probe_coarse_max_extra_units = int(probe_coarse_policy.max_extra_units)
+            probe_coarse_fsavg_lmax = int(probe_coarse_policy.fsavg_lmax)
+            probe_coarse_angular_lmax = int(probe_coarse_policy.angular_lmax)
+            probe_coarse_include_angular_residual = bool(
+                probe_coarse_policy.include_angular_residual
             )
-            probe_coarse_steps_requested = (
-                _rhs1_int_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_STEPS", default=1, minimum=1)
-                if probe_coarse_enabled
-                else 0
-            )
-            probe_coarse_max_directions = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_DIRECTIONS",
-                default=16,
-                minimum=1,
-            )
-            probe_coarse_max_extra_units = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MAX_EXTRA_UNITS",
-                default=8,
-                minimum=0,
-            )
-            probe_coarse_fsavg_lmax = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_FSAVG_LMAX",
-                default=2,
-                minimum=0,
-            )
-            probe_coarse_angular_lmax = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_LMAX",
-                default=-1,
-                minimum=-1,
-            )
-            probe_coarse_include_angular_residual = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ANGULAR_RESIDUAL",
-                default=False,
-            )
-            probe_coarse_include_raw = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_INCLUDE_RAW",
-                default=True,
-            )
-            probe_coarse_alpha_clip = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_ALPHA_CLIP",
-                default=0.0,
-                minimum=0.0,
-            )
-            probe_coarse_rcond = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_RCOND",
-                default=1.0e-12,
-                minimum=0.0,
-            )
-            probe_coarse_min_improvement = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE_MIN_IMPROVEMENT",
-                default=0.0,
-                minimum=0.0,
-            )
+            probe_coarse_include_raw = bool(probe_coarse_policy.include_raw)
+            probe_coarse_alpha_clip = float(probe_coarse_policy.alpha_clip)
+            probe_coarse_rcond = float(probe_coarse_policy.rcond)
+            probe_coarse_min_improvement = float(probe_coarse_policy.min_improvement)
             probe_coarse_s = 0.0
             probe_coarse_history: tuple[float, ...] = ()
             probe_coarse_direction_counts: tuple[int, ...] = ()
@@ -19573,147 +19509,56 @@ def solve_v3_full_system_linear_gmres(
                 except Exception:
                     residual_norm_xblock_pc = float(residual_norm_xblock_pc)
             x_np = x_physical_np
-            post_minres_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS",
-                "",
-            ).strip()
-            try:
-                post_minres_steps_requested = int(post_minres_env) if post_minres_env else 0
-            except ValueError:
-                post_minres_steps_requested = 0
-            post_minres_steps_requested = max(0, int(post_minres_steps_requested))
-            post_minres_alpha_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_ALPHA_CLIP",
-                "",
-            ).strip()
-            try:
-                post_minres_alpha_clip = float(post_minres_alpha_env) if post_minres_alpha_env else 10.0
-            except ValueError:
-                post_minres_alpha_clip = 10.0
-            post_minres_improve_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_MIN_IMPROVEMENT",
-                "",
-            ).strip()
-            try:
-                post_minres_min_improvement = float(post_minres_improve_env) if post_minres_improve_env else 0.0
-            except ValueError:
-                post_minres_min_improvement = 0.0
+            post_solve_policy = _read_rhs1_post_solve_correction_policy()
+            post_minres_policy = post_solve_policy.post_minres
+            post_minres_steps_requested = int(post_minres_policy.steps_requested)
+            post_minres_alpha_clip = float(post_minres_policy.alpha_clip)
+            post_minres_min_improvement = float(post_minres_policy.min_improvement)
             post_minres_history: tuple[float, ...] = ()
             post_minres_alphas: tuple[float, ...] = ()
             post_minres_residual_before: float | None = None
             post_minres_residual_after: float | None = None
-            post_coarse_enabled = _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE", default=False)
-            post_coarse_steps_requested = (
-                _rhs1_int_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_STEPS", default=1, minimum=1)
-                if post_coarse_enabled
-                else 0
+            post_coarse_policy = post_solve_policy.post_coarse
+            post_coarse_steps_requested = int(post_coarse_policy.steps_requested)
+            post_coarse_max_directions = int(post_coarse_policy.max_directions)
+            post_coarse_max_extra_units = int(post_coarse_policy.max_extra_units)
+            post_coarse_fsavg_lmax = int(post_coarse_policy.fsavg_lmax)
+            post_coarse_angular_lmax = int(post_coarse_policy.angular_lmax)
+            post_coarse_include_angular_residual = bool(
+                post_coarse_policy.include_angular_residual
             )
-            post_coarse_max_directions = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_DIRECTIONS",
-                default=16,
-                minimum=1,
+            post_coarse_include_raw = bool(post_coarse_policy.include_raw)
+            post_coarse_alpha_clip = float(post_coarse_policy.alpha_clip)
+            post_coarse_rcond = float(post_coarse_policy.rcond)
+            post_coarse_min_improvement = float(post_coarse_policy.min_improvement)
+            post_residual_equation_policy = post_solve_policy.post_residual_equation
+            post_residual_equation_steps_requested = int(
+                post_residual_equation_policy.steps_requested
             )
-            post_coarse_max_extra_units = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_EXTRA_UNITS",
-                default=8,
-                minimum=0,
+            post_residual_equation_max_directions = int(
+                post_residual_equation_policy.max_directions
             )
-            post_coarse_fsavg_lmax = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_FSAVG_LMAX",
-                default=2,
-                minimum=0,
+            post_residual_equation_max_extra_units = int(
+                post_residual_equation_policy.max_extra_units
             )
-            post_coarse_angular_lmax = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_ANGULAR_LMAX",
-                default=-1,
-                minimum=-1,
+            post_residual_equation_fsavg_lmax = int(post_residual_equation_policy.fsavg_lmax)
+            post_residual_equation_angular_lmax = int(
+                post_residual_equation_policy.angular_lmax
             )
-            post_coarse_include_angular_residual = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_ANGULAR_RESIDUAL",
-                default=False,
+            post_residual_equation_include_angular_residual = bool(
+                post_residual_equation_policy.include_angular_residual
             )
-            post_coarse_include_raw = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_INCLUDE_RAW",
-                default=True,
+            post_residual_equation_include_raw = bool(post_residual_equation_policy.include_raw)
+            post_residual_equation_include_post_coarse = bool(
+                post_residual_equation_policy.include_post_coarse
             )
-            post_coarse_alpha_clip = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_ALPHA_CLIP",
-                default=0.0,
-                minimum=0.0,
+            post_residual_equation_include_qi_basis = bool(
+                post_residual_equation_policy.include_qi_basis
             )
-            post_coarse_rcond = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_RCOND",
-                default=1.0e-12,
-                minimum=0.0,
-            )
-            post_coarse_min_improvement = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MIN_IMPROVEMENT",
-                default=0.0,
-                minimum=0.0,
-            )
-            post_residual_equation_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION",
-                default=False,
-            )
-            post_residual_equation_steps_requested = (
-                _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_STEPS",
-                    default=1,
-                    minimum=1,
-                )
-                if post_residual_equation_enabled
-                else 0
-            )
-            post_residual_equation_max_directions = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_DIRECTIONS",
-                default=64,
-                minimum=1,
-            )
-            post_residual_equation_max_extra_units = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_EXTRA_UNITS",
-                default=8,
-                minimum=0,
-            )
-            post_residual_equation_fsavg_lmax = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_FSAVG_LMAX",
-                default=4,
-                minimum=0,
-            )
-            post_residual_equation_angular_lmax = _rhs1_int_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_LMAX",
-                default=1,
-                minimum=-1,
-            )
-            post_residual_equation_include_angular_residual = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_RESIDUAL",
-                default=True,
-            )
-            post_residual_equation_include_raw = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_RAW",
-                default=True,
-            )
-            post_residual_equation_include_post_coarse = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_POST_COARSE",
-                default=True,
-            )
-            post_residual_equation_include_qi_basis = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS",
-                default=True,
-            )
-            post_residual_equation_alpha_clip = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ALPHA_CLIP",
-                default=0.0,
-                minimum=0.0,
-            )
-            post_residual_equation_rcond = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_RCOND",
-                default=1.0e-12,
-                minimum=0.0,
-            )
-            post_residual_equation_min_improvement = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MIN_IMPROVEMENT",
-                default=0.0,
-                minimum=0.0,
+            post_residual_equation_alpha_clip = float(post_residual_equation_policy.alpha_clip)
+            post_residual_equation_rcond = float(post_residual_equation_policy.rcond)
+            post_residual_equation_min_improvement = float(
+                post_residual_equation_policy.min_improvement
             )
             post_coarse_history: tuple[float, ...] = ()
             post_coarse_direction_counts: tuple[int, ...] = ()
