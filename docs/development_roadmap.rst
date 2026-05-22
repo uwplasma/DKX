@@ -53,6 +53,9 @@ land in small, gated slices.
    owns reusable JAX full/reduced vector gathers, one-based scatter expansion,
    and PAS constraint projection primitives used by sparse-PC and x-block
    active-DOF residual paths.
+   The fifth landed slice is ``sfincs_jax/rhs1_residual.py``, which owns small
+   residual norm/target/ratio helpers used by sparse-PC and x-block solver
+   metadata.
 
 3. Preconditioner registry
    Keep x-block, PAS-lite, Schur, QI, and post-residual-equation preconditioners
