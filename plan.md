@@ -15523,13 +15523,15 @@ Updated completion estimates:
 - True differentiable/device-QI infrastructure: `99%`.
 - True differentiable/device-QI convergence evidence: `82%`; scoped below
   `3e-5` for the checked hard seed, but still open to production tolerance.
-- Refactor/coverage/CI: `93%`; the roadmap is now explicit, and the first
+- Refactor/coverage/CI: `94%`; the roadmap is now explicit, and the first
   solver-policy, diagnostic-schema, active-DOF routing, active-projection, and
-  residual-gate slices have landed with focused tests.
+  residual-gate slices have landed with focused tests and output-visible
+  residual metadata now uses the shared gate helpers in the main RHSMode=1
+  branches.
 - Validation/benchmark infrastructure: `92%`; the README/docs benchmark
   summary now has a fail-closed schema validator in the central validation
   artifact module.
-- Overall remaining-lane completion estimate: `95%`.
+- Overall remaining-lane completion estimate: `96%`.
 
 Next steps:
 
@@ -15770,3 +15772,40 @@ Best next steps:
 2. Recheck GitHub CI after the latest pushed refactor checkpoints finish.
 3. Finalize the documentation/refactor sweep and keep the true production-QI
    tolerance closure as the explicitly documented research lane.
+
+### 35.66 RHSMode=1 residual metadata consistency pass
+
+Scope:
+
+- Extended the shared `sfincs_jax/rhs1_residual.py` helpers into output-visible
+  RHSMode=1 metadata paths in `sfincs_jax/v3_driver.py`.
+- Replaced duplicate residual-ratio logic in the x-block QI-Galerkin probe and
+  x-block preflight metadata with `rhs1_safe_ratio(...)` and
+  `rhs1_l2_norm_float(...)`.
+- Replaced representative `accepted_converged` / `true_residual_converged`
+  checks in x-block sparse-PC, sparse-PC, sparse-LSMR, sparse-host, and
+  post-xblock floor metadata with `rhs1_residual_converged(...)` and
+  `rhs1_residual_target(...)`.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/v3_driver.py tests/test_rhs1_residual.py`
+- `python -m compileall -q sfincs_jax/v3_driver.py tests/test_rhs1_residual.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_residual.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_post_residual_equation_records_metadata tests/test_v3_sparse_pattern.py::test_sparse_pc_gmres_active_dof_reduces_truncated_pas_system tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_rhs1_sparse_first_heuristic.py tests/test_rhs1_xblock_policy.py`
+  (`137 passed`)
+
+Progress:
+
+- Refactor/coverage/CI: `94%`; residual gate semantics now cover the main
+  output-visible RHSMode=1 metadata paths rather than only isolated helper
+  tests.
+- Overall remaining-lane completion estimate: `96%`.
+
+Best next steps:
+
+1. Run strict docs plus release/research gates, then commit and push this
+   checkpoint.
+2. Do one final source-map/API-doc sweep for the new RHSMode=1 modules.
+3. Recheck GitHub CI after the push; if green, stop refactoring and leave the
+   only remaining algorithmic work as the documented production-QI research
+   lane.

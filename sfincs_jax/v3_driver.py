@@ -15704,10 +15704,8 @@ def solve_v3_full_system_linear_gmres(
                                     _mv_true_no_count(probe_solution),
                                     dtype=jnp.float64,
                                 )
-                                residual_after = float(jnp.linalg.norm(probe_residual))
-                                ratio_after = (
-                                    residual_after / float(xblock_rhs_norm) if float(xblock_rhs_norm) > 0.0 else None
-                                )
+                                residual_after = rhs1_l2_norm_float(probe_residual)
+                                ratio_after = rhs1_safe_ratio(residual_after, xblock_rhs_norm)
                                 probe_candidates.append(
                                     RHS1QIGalerkinProbeCandidate(
                                         mode=str(candidate_mode),
@@ -19007,14 +19005,11 @@ def solve_v3_full_system_linear_gmres(
                         _mv_true_no_count(jnp.asarray(x0_full, dtype=jnp.float64)),
                         dtype=jnp.float64,
                     )
-                    preflight_residual_norm = float(jnp.linalg.norm(preflight_residual))
-                    preflight_improvement = (
-                        1.0 - float(preflight_residual_norm) / float(xblock_rhs_norm)
-                        if float(xblock_rhs_norm) > 0.0
-                        else 1.0
-                    )
+                    preflight_residual_norm = rhs1_l2_norm_float(preflight_residual)
+                    preflight_ratio = rhs1_safe_ratio(preflight_residual_norm, xblock_rhs_norm)
+                    preflight_improvement = 1.0 - float(preflight_ratio) if preflight_ratio is not None else 1.0
                     preflight_passed = bool(
-                        float(preflight_residual_norm) <= float(target_xblock)
+                        rhs1_residual_converged(preflight_residual_norm, target_xblock)
                         or float(preflight_improvement) >= float(preflight_min_improvement)
                     )
                     if emit is not None:
@@ -19849,8 +19844,9 @@ def solve_v3_full_system_linear_gmres(
                 metadata={
                     "solver_kind": xblock_solver_kind,
                     "residual_kind": "true_residual",
-                    "accepted_converged": bool(
-                        float(residual_norm_xblock_pc) <= float(target_xblock)
+                    "accepted_converged": rhs1_residual_converged(
+                        residual_norm_xblock_pc,
+                        target_xblock,
                     ),
                     "acceptance_criterion": "true_residual",
                     "iterations": int(len(history or [])),
@@ -21399,8 +21395,15 @@ def solve_v3_full_system_linear_gmres(
             solver_reported_residual = float(ls_result[3])
         residual_true = rhs_np - np.asarray(matrix @ x_np, dtype=np.float64)
         residual_norm_sparse_lsmr = float(np.linalg.norm(residual_true))
-        target = max(float(atol), float(tol) * float(rhs_norm))
-        true_residual_converged = bool(float(residual_norm_sparse_lsmr) <= float(target))
+        target = rhs1_residual_target(
+            atol=float(atol),
+            tol=float(tol),
+            rhs_norm=float(rhs_norm),
+        )
+        true_residual_converged = rhs1_residual_converged(
+            residual_norm_sparse_lsmr,
+            target,
+        )
         compatibility_converged = bool(int(istop) in {1, 2})
         petsc_compat_requested = solve_method_kind_explicit in _SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS
         accepted_converged = bool(true_residual_converged or (petsc_compat_requested and compatibility_converged))
@@ -21507,7 +21510,14 @@ def solve_v3_full_system_linear_gmres(
             metadata={
                 "solver_kind": "sparse_host",
                 "residual_kind": "true_residual",
-                "accepted_converged": bool(float(residual_norm_sparse) <= max(float(atol), float(tol) * float(rhs_norm))),
+                "accepted_converged": rhs1_residual_converged(
+                    residual_norm_sparse,
+                    rhs1_residual_target(
+                        atol=float(atol),
+                        tol=float(tol),
+                        rhs_norm=float(rhs_norm),
+                    ),
+                ),
                 "acceptance_criterion": "true_residual",
             },
         )
@@ -30732,12 +30742,19 @@ def solve_v3_full_system_linear_gmres(
             and np.isfinite(float(result.residual_norm))
             and float(result.residual_norm) <= float(post_xblock_accept_floor)
         ):
-            true_residual_target = max(float(atol), float(tol) * float(jnp.linalg.norm(rhs)))
+            true_residual_target = rhs1_residual_target(
+                atol=float(atol),
+                tol=float(tol),
+                rhs_norm=rhs1_l2_norm_float(rhs),
+            )
             metadata_out.update(
                 {
                     "accepted_converged": True,
                     "acceptance_criterion": "post_xblock_abs_floor",
-                    "true_residual_converged": bool(float(result.residual_norm) <= float(true_residual_target)),
+                    "true_residual_converged": rhs1_residual_converged(
+                        float(result.residual_norm),
+                        true_residual_target,
+                    ),
                     "accepted_residual_floor": float(post_xblock_accept_floor),
                 }
             )
