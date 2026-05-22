@@ -457,6 +457,13 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   is wired into ``RHS1QIDevicePreconditionerConfig`` as
   ``coupled_residual_equation`` and is fail-closed unless setup residual
   decreases.
+- ``sfincs_jax/v3_driver.py`` and ``scripts/run_qi_seed_robustness.py``:
+  expose the coupled residual equation through
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION*``
+  controls, progress logs, solver-trace keys, and the
+  ``coupled-residual-device-qi`` hard-seed probe preset. The runner classifies
+  this as a joint coupled-equation route rather than as another staged
+  block-Schur or active-pattern variant.
 - ``sfincs_jax/rhs1_qi_promotion.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace
