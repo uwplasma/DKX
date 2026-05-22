@@ -161,6 +161,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   byte-budget preflights, and ``PasRuntimeChunkPlan`` metadata for keeping
   PAS-heavy residual/correction reductions inside configured memory budgets
   before a matvec is launched.
+- ``sfincs_jax/rhs1_solver_policy.py``:
+  typed RHSMode=1 solver-policy parsing for x-block probe-coarse, post-minres,
+  post-coarse, and post-residual-equation controls. This keeps environment
+  parsing and correction-policy defaults out of ``v3_driver.py`` while
+  preserving the existing opt-in behavior and fail-closed defaults.
 - ``sfincs_jax/rhs1_qi_block_schur.py``:
   standalone JAX-compatible QI block-Schur/angular/radial coarse-preconditioner
   primitive. It builds deterministic global, radial, angular, and block-Schur
