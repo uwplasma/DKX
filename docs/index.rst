@@ -92,6 +92,7 @@ This manual is organized around the actual user and developer workflows:
    research_lanes
    performance
    performance_techniques
+   development_roadmap
    adaptive_speed_grid
    testing
    validation_matrix
