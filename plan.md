@@ -15523,12 +15523,12 @@ Updated completion estimates:
 - True differentiable/device-QI infrastructure: `99%`.
 - True differentiable/device-QI convergence evidence: `82%`; scoped below
   `3e-5` for the checked hard seed, but still open to production tolerance.
-- Refactor/coverage/CI: `91%`; the roadmap is now explicit, and the first
-  solver-policy, diagnostic-schema, and active-DOF routing slices have landed
-  with focused tests.
+- Refactor/coverage/CI: `92%`; the roadmap is now explicit, and the first
+  solver-policy, diagnostic-schema, active-DOF routing, and active-projection
+  slices have landed with focused tests.
 - Validation/benchmark infrastructure: `90%`; schemas and figures exist, but
   the next phase should consolidate them and reduce duplication.
-- Overall remaining-lane completion estimate: `92%`.
+- Overall remaining-lane completion estimate: `93%`.
 
 Next steps:
 
@@ -15658,3 +15658,41 @@ Best next steps:
    tests as guardrails.
 3. Continue benchmark/evidence schema consolidation after the residual helper
    seam lands.
+
+### 35.63 RHSMode=1 active projection primitive extraction slice
+
+Scope:
+
+- Added `sfincs_jax/rhs1_active_projection.py` with reusable JAX helpers for
+  full-vector gathers, one-based reduced-to-full expansion, and PAS `l=0`
+  constraint projection.
+- Replaced duplicate in-driver scatter/gather logic in the x-block active-DOF
+  path, sparse-PC active-DOF path, and PAS-projected reduced residual path with
+  these primitives.
+- Added `tests/test_rhs1_active_projection.py` covering full/reduced round-trip
+  behavior, dtype preservation, inactive-row zeroing, and removal of the PAS
+  `l=0` flux-surface average while leaving higher pitch moments unchanged.
+- Updated `docs/source_map.rst` and `docs/development_roadmap.rst` to record
+  the new projection primitive seam.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/rhs1_active_projection.py sfincs_jax/v3_driver.py tests/test_rhs1_active_projection.py`
+- `python -m compileall -q sfincs_jax/rhs1_active_projection.py sfincs_jax/v3_driver.py tests/test_rhs1_active_projection.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_active_projection.py tests/test_rhs1_active_dof.py tests/test_v3_sparse_pattern.py::test_sparse_pc_gmres_active_dof_reduces_truncated_pas_system tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size`
+  (`7 passed`)
+
+Progress:
+
+- Refactor/coverage/CI: `92%`; active-DOF projection math is now shared and
+  independently tested instead of duplicated across solver branches.
+- Overall remaining-lane completion estimate: `93%`.
+
+Best next steps:
+
+1. Run the broader sparse/driver group plus strict docs/release gates, then
+   commit and push if clean.
+2. Extract residual norm/evaluation metadata helpers next; that will separate
+   "what residual is being measured" from "which solver path produced it".
+3. After residual helpers land, consolidate benchmark/evidence schemas and do
+   one final documentation sweep of the refactored solver architecture.

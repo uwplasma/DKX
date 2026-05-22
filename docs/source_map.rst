@@ -175,6 +175,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   construction for truncated pitch grids, x-block active-DOF opt-ins, and PAS
   constraint-projection solves. This makes the active/full-system selection
   policy independently testable before deeper residual/operator extraction.
+- ``sfincs_jax/rhs1_active_projection.py``:
+  reusable JAX primitives for full-to-reduced gathers, reduced-to-full
+  one-based scatters, and PAS ``l=0`` flux-surface-average projection. These
+  primitives are shared by RHSMode=1 sparse-PC, x-block active-DOF, and
+  PAS-projected reduced residual paths.
 - ``sfincs_jax/rhs1_qi_block_schur.py``:
   standalone JAX-compatible QI block-Schur/angular/radial coarse-preconditioner
   primitive. It builds deterministic global, radial, angular, and block-Schur

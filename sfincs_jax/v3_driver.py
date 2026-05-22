@@ -167,6 +167,11 @@ from .rhs1_active_dof import (
     build_rhs1_active_dof_state,
     resolve_rhs1_active_dof_mode,
 )
+from .rhs1_active_projection import (
+    expand_reduced_with_map,
+    project_pas_constraint_f,
+    reduce_full_with_indices,
+)
 from .rhs1_constraint0_policy import (
     rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
@@ -14422,15 +14427,13 @@ def solve_v3_full_system_linear_gmres(
                 if not xblock_use_active_dof:
                     return v_full
                 assert active_idx_jnp is not None
-                return v_full[active_idx_jnp]
+                return reduce_full_with_indices(v_full, active_idx_jnp)
 
             def _xblock_expand_reduced(v_vec: jnp.ndarray) -> jnp.ndarray:
                 if not xblock_use_active_dof:
                     return v_vec
                 assert full_to_active_jnp is not None
-                z0 = jnp.zeros((1,), dtype=v_vec.dtype)
-                padded = jnp.concatenate([z0, v_vec], axis=0)
-                return padded[full_to_active_jnp]
+                return expand_reduced_with_map(v_vec, full_to_active_jnp)
 
             def _mv_true_no_count(v: jnp.ndarray) -> jnp.ndarray:
                 x_full = _xblock_expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
@@ -20912,15 +20915,13 @@ def solve_v3_full_system_linear_gmres(
             if not sparse_pc_use_active_dof:
                 return v_full
             assert sparse_pc_active_idx_jnp is not None
-            return v_full[sparse_pc_active_idx_jnp]
+            return reduce_full_with_indices(v_full, sparse_pc_active_idx_jnp)
 
         def _sparse_pc_expand_reduced(v_vec: jnp.ndarray) -> jnp.ndarray:
             if not sparse_pc_use_active_dof:
                 return v_vec
             assert sparse_pc_full_to_active_jnp is not None
-            z0 = jnp.zeros((1,), dtype=v_vec.dtype)
-            padded = jnp.concatenate([z0, v_vec], axis=0)
-            return padded[sparse_pc_full_to_active_jnp]
+            return expand_reduced_with_map(v_vec, sparse_pc_full_to_active_jnp)
 
         pattern_start_s = sparse_timer.elapsed_s()
         if emit is not None:
@@ -23158,7 +23159,7 @@ def solve_v3_full_system_linear_gmres(
         assert full_to_active_jnp is not None
 
         def reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
-            return v_full[active_idx_jnp]
+            return reduce_full_with_indices(v_full, active_idx_jnp)
 
         if use_pas_projection:
             fs_factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)
@@ -23168,17 +23169,16 @@ def solve_v3_full_system_linear_gmres(
             mask_x = (jnp.arange(int(op.n_x)) >= ix0).astype(jnp.float64)
 
             def _project_pas_f(f_flat: jnp.ndarray) -> jnp.ndarray:
-                f = f_flat.reshape(op.fblock.f_shape)
-                avg = jnp.einsum("tz,sxtz->sx", fs_factor, f[:, :, 0, :, :])
-                avg = avg * mask_x[None, :]
-                avg = avg / fs_sum_safe
-                f = f.at[:, :, 0, :, :].add(-avg[:, :, None, None])
-                return f.reshape((-1,))
+                return project_pas_constraint_f(
+                    f_flat,
+                    f_shape=op.fblock.f_shape,
+                    fs_factor=fs_factor,
+                    fs_sum_safe=fs_sum_safe,
+                    mask_x=mask_x,
+                )
 
             def _expand_active_f(v_reduced: jnp.ndarray) -> jnp.ndarray:
-                z0 = jnp.zeros((1,), dtype=v_reduced.dtype)
-                padded = jnp.concatenate([z0, v_reduced], axis=0)
-                return padded[full_to_active_jnp]
+                return expand_reduced_with_map(v_reduced, full_to_active_jnp)
 
             def _project_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
                 f_full = _expand_active_f(v_reduced)
@@ -23243,9 +23243,7 @@ def solve_v3_full_system_linear_gmres(
                                 x0_reduced = x0_recycled
         else:
             def expand_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
-                z0 = jnp.zeros((1,), dtype=v_reduced.dtype)
-                padded = jnp.concatenate([z0, v_reduced], axis=0)
-                return padded[full_to_active_jnp]
+                return expand_reduced_with_map(v_reduced, full_to_active_jnp)
 
             def mv_reduced(x_reduced: jnp.ndarray) -> jnp.ndarray:
                 return reduce_full(mv(expand_reduced(x_reduced)))
@@ -23259,7 +23257,7 @@ def solve_v3_full_system_linear_gmres(
                 elif x0_arr.shape == (op.total_size,):
                     x0_reduced = reduce_full(x0_arr)
                 elif use_pas_projection and x0_arr.shape == (op.f_size,):
-                    x0_reduced = x0_arr[active_idx_jnp]
+                    x0_reduced = reduce_full(x0_arr)
             if recycle_basis_use:
                 basis_reduced = []
                 for vec in recycle_basis_use:
