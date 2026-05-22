@@ -432,6 +432,16 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   failure-progress metadata. It remains opt-in and fail-closed, not a
   production claim, until scale-0.60 CPU/GPU hard-seed artifacts write
   converged HDF5 output and solver traces under the same promotion gates.
+- ``sfincs_jax/rhs1_qi_active_pattern_coarse.py``:
+  standalone residual active-pattern coarse-space builder for hard RHSMode=1
+  QI seeds. It selects high-energy pitch, angular, radial, and species residual
+  chunks from ``RHS1QICoarseBlockLayout`` metadata, rank-gates them, and now
+  plugs into the same device-compatible cached ``Q`` / ``A Q``
+  residual-equation path as the other true device-QI research probes. The
+  runner preset ``active-pattern-device-qi`` emits
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE*``
+  controls and keeps the lane fail-closed until bounded CPU/GPU hard-seed
+  artifacts write converged output and solver traces.
 - ``sfincs_jax/rhs1_qi_promotion.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace
