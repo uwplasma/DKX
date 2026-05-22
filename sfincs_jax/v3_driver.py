@@ -172,6 +172,12 @@ from .rhs1_active_projection import (
     project_pas_constraint_f,
     reduce_full_with_indices,
 )
+from .rhs1_residual import (
+    l2_norm_float as rhs1_l2_norm_float,
+    residual_converged as rhs1_residual_converged,
+    residual_target as rhs1_residual_target,
+    safe_ratio as rhs1_safe_ratio,
+)
 from .rhs1_constraint0_policy import (
     rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
@@ -15236,11 +15242,12 @@ def solve_v3_full_system_linear_gmres(
                     seed_vec = jnp.asarray(precond_xblock_krylov(xblock_rhs), dtype=jnp.float64)
                     if seed_vec.shape == xblock_rhs.shape and bool(jnp.all(jnp.isfinite(seed_vec))):
                         seed_residual = xblock_rhs - _mv_true(seed_vec)
-                        seed_residual_norm = float(jnp.linalg.norm(seed_residual))
-                        rhs_norm_float = float(jnp.linalg.norm(xblock_rhs))
+                        seed_residual_norm = rhs1_l2_norm_float(seed_residual)
+                        rhs_norm_float = rhs1_l2_norm_float(xblock_rhs)
                         xblock_initial_seed_residual_norm = float(seed_residual_norm)
-                        xblock_initial_seed_residual_ratio = (
-                            float(seed_residual_norm) / rhs_norm_float if rhs_norm_float > 0.0 else None
+                        xblock_initial_seed_residual_ratio = rhs1_safe_ratio(
+                            seed_residual_norm,
+                            rhs_norm_float,
                         )
                         if np.isfinite(seed_residual_norm) and seed_residual_norm < rhs_norm_float:
                             x0_full = seed_vec
@@ -15267,8 +15274,12 @@ def solve_v3_full_system_linear_gmres(
                             f"initial x-block seed failed ({type(exc).__name__}: {exc})",
                         )
 
-            xblock_rhs_norm = float(jnp.linalg.norm(xblock_rhs))
-            target_xblock = max(float(atol), float(tol) * float(xblock_rhs_norm))
+            xblock_rhs_norm = rhs1_l2_norm_float(xblock_rhs)
+            target_xblock = rhs1_residual_target(
+                atol=float(atol),
+                tol=float(tol),
+                rhs_norm=float(xblock_rhs_norm),
+            )
             moment_schur_seed_enabled = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_SEED",
                 default=bool(moment_schur_used),
@@ -15281,12 +15292,11 @@ def solve_v3_full_system_linear_gmres(
                     seed_vec = jnp.asarray(precond_xblock_krylov(xblock_rhs), dtype=jnp.float64)
                     if seed_vec.shape == xblock_rhs.shape and bool(jnp.all(jnp.isfinite(seed_vec))):
                         seed_residual = xblock_rhs - jnp.asarray(_mv_true_no_count(seed_vec), dtype=jnp.float64)
-                        seed_residual_norm = float(jnp.linalg.norm(seed_residual))
+                        seed_residual_norm = rhs1_l2_norm_float(seed_residual)
                         moment_schur_seed_residual_norm = float(seed_residual_norm)
-                        moment_schur_seed_residual_ratio = (
-                            float(seed_residual_norm) / float(target_xblock)
-                            if float(target_xblock) > 0.0
-                            else None
+                        moment_schur_seed_residual_ratio = rhs1_safe_ratio(
+                            seed_residual_norm,
+                            target_xblock,
                         )
                         incumbent_norm = float(xblock_rhs_norm)
                         if x0_full is not None:
@@ -15294,7 +15304,7 @@ def solve_v3_full_system_linear_gmres(
                                 _mv_true_no_count(jnp.asarray(x0_full, dtype=jnp.float64)),
                                 dtype=jnp.float64,
                             )
-                            incumbent_norm = float(jnp.linalg.norm(incumbent_residual))
+                            incumbent_norm = rhs1_l2_norm_float(incumbent_residual)
                         if np.isfinite(seed_residual_norm) and float(seed_residual_norm) < float(incumbent_norm):
                             x0_full = seed_vec
                             moment_schur_seed_used = True
@@ -18707,8 +18717,9 @@ def solve_v3_full_system_linear_gmres(
                     xblock_side_probe_matvecs = int(mv_count) - int(probe_start_mv)
                     xblock_side_probe_iterations = int(len(history_probe or []))
                     xblock_side_probe_residual_norm = float(residual_probe)
-                    xblock_side_probe_residual_ratio = (
-                        float(residual_probe) / float(target_xblock) if float(target_xblock) > 0.0 else None
+                    xblock_side_probe_residual_ratio = rhs1_safe_ratio(
+                        residual_probe,
+                        target_xblock,
                     )
                     incumbent_seed_norm = float(xblock_rhs_norm)
                     if x0_full is not None:
@@ -18717,7 +18728,7 @@ def solve_v3_full_system_linear_gmres(
                                 _mv_true_no_count(jnp.asarray(x0_full, dtype=jnp.float64)),
                                 dtype=jnp.float64,
                             )
-                            incumbent_seed_norm = float(jnp.linalg.norm(incumbent_residual))
+                            incumbent_seed_norm = rhs1_l2_norm_float(incumbent_residual)
                         except Exception:
                             incumbent_seed_norm = float(xblock_rhs_norm)
                     if str(precondition_side) == "left" and np.isfinite(float(residual_probe)):
@@ -21102,8 +21113,12 @@ def solve_v3_full_system_linear_gmres(
                     f"shape={tuple(x0_arr.shape)} expected={tuple(sparse_pc_rhs.shape)} or {tuple(rhs.shape)}",
                 )
 
-        sparse_pc_rhs_norm = jnp.linalg.norm(sparse_pc_rhs)
-        target = max(float(atol), float(tol) * float(sparse_pc_rhs_norm))
+        sparse_pc_rhs_norm = rhs1_l2_norm_float(sparse_pc_rhs)
+        target = rhs1_residual_target(
+            atol=float(atol),
+            tol=float(tol),
+            rhs_norm=float(sparse_pc_rhs_norm),
+        )
 
         def _run_sparse_pc_gmres_once(x0_arg, *, maxiter_arg: int):
             if emit is not None:
@@ -21207,7 +21222,14 @@ def solve_v3_full_system_linear_gmres(
             metadata={
                 "solver_kind": "sparse_pc_gmres",
                 "residual_kind": "true_residual",
-                "accepted_converged": bool(float(residual_norm_sparse_pc) <= max(float(atol), float(tol) * float(rhs_norm))),
+                "accepted_converged": rhs1_residual_converged(
+                    float(residual_norm_sparse_pc),
+                    rhs1_residual_target(
+                        atol=float(atol),
+                        tol=float(tol),
+                        rhs_norm=float(rhs_norm),
+                    ),
+                ),
                 "acceptance_criterion": "true_residual",
                 "iterations": int(len(history or [])),
                 "matvecs": int(mv_count),

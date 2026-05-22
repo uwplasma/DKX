@@ -15523,12 +15523,12 @@ Updated completion estimates:
 - True differentiable/device-QI infrastructure: `99%`.
 - True differentiable/device-QI convergence evidence: `82%`; scoped below
   `3e-5` for the checked hard seed, but still open to production tolerance.
-- Refactor/coverage/CI: `92%`; the roadmap is now explicit, and the first
-  solver-policy, diagnostic-schema, active-DOF routing, and active-projection
-  slices have landed with focused tests.
+- Refactor/coverage/CI: `93%`; the roadmap is now explicit, and the first
+  solver-policy, diagnostic-schema, active-DOF routing, active-projection, and
+  residual-gate slices have landed with focused tests.
 - Validation/benchmark infrastructure: `90%`; schemas and figures exist, but
   the next phase should consolidate them and reduce duplication.
-- Overall remaining-lane completion estimate: `93%`.
+- Overall remaining-lane completion estimate: `94%`.
 
 Next steps:
 
@@ -15696,3 +15696,41 @@ Best next steps:
    "what residual is being measured" from "which solver path produced it".
 3. After residual helpers land, consolidate benchmark/evidence schemas and do
    one final documentation sweep of the refactored solver architecture.
+
+### 35.64 RHSMode=1 residual gate helper extraction slice
+
+Scope:
+
+- Added `sfincs_jax/rhs1_residual.py` with host-scalar L2 norm, PETSc-style
+  residual target, safe-ratio, and finite convergence helpers.
+- Replaced representative x-block and sparse-PC residual target/ratio logic in
+  `sfincs_jax/v3_driver.py` with the shared helper. This starts separating the
+  residual gate definition from individual solver branches.
+- Added `tests/test_rhs1_residual.py` covering target precedence, host-scalar
+  norm conversion, safe-ratio nonfinite/zero-denominator handling, and finite
+  convergence checks.
+- Updated `docs/source_map.rst` and `docs/development_roadmap.rst` so residual
+  gate helpers are part of the documented refactor path.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/rhs1_residual.py sfincs_jax/v3_driver.py tests/test_rhs1_residual.py`
+- `python -m compileall -q sfincs_jax/rhs1_residual.py sfincs_jax/v3_driver.py tests/test_rhs1_residual.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_residual.py tests/test_rhs1_active_projection.py tests/test_v3_sparse_pattern.py::test_sparse_pc_gmres_active_dof_reduces_truncated_pas_system tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_post_residual_equation_records_metadata`
+  (`8 passed`)
+
+Progress:
+
+- Refactor/coverage/CI: `93%`; residual target/ratio semantics are now covered
+  as pure functions and reused by representative RHSMode=1 solve branches.
+- Overall remaining-lane completion estimate: `94%`.
+
+Best next steps:
+
+1. Run the broader sparse/driver group plus strict docs/release gates, then
+   commit and push if clean.
+2. Extend the residual helper usage to final-output metadata and benchmark
+   schema consolidation, keeping each replacement guarded by existing parity
+   and output-visible diagnostics tests.
+3. Do a final refactor-documentation sweep once the residual metadata seam is
+   stable.
