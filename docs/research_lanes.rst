@@ -33,6 +33,15 @@ augmented-Krylov ``2.218202e-5`` artifacts to ``7.336295e-6`` in ``158.6 s``.
 It still misses the production write gate by roughly five orders of magnitude
 relative to the ``3.021487e-11`` write tolerance, so it remains fail-closed
 blocker evidence rather than a promotion artifact.
+The 2026-05-22 coupled residual-equation GPU probe tested the next
+Schur/coarse-space architecture in the right mathematical context: a
+validated coupled stage was installed as the Krylov preconditioner after the
+one-step seed probe rejected it. This reduced the coupled-probe wall time from
+``8:07.61`` to ``3:08.10`` and peak host RSS from ``5.58 GB`` to ``3.90 GB``,
+but the final residual was still ``2.450895e-5`` against the
+``3.021487e-13`` Krylov target, so it is also fail-closed evidence. Its compact
+artifact is
+``docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json``.
 Separate the closed infrastructure blockers from the open claim blockers:
 transpose/VJP safety for the projected block smoother and the prior CUDA
 illegal-address crash are closed for the tested paths, while residual
@@ -569,6 +578,14 @@ Current evidence
   ``0.9783`` and the run took 242.6 s / 2942 matvecs. This confirms that
   residual-vector enrichment is safe diagnostic infrastructure, not the
   production device-QI closure.
+- The coupled residual-equation probe adds one more negative but useful result:
+  jointly solving the already accepted multilevel, residual-snapshot, and
+  block-Schur spaces avoids the staged-freezing failure mode and is faster when
+  installed inside Krylov, but it still leaves the scale-0.60 hard-seed residual
+  orders of magnitude above the write gate. The next true-device-QI attempt
+  must therefore derive a new coarse equation from the remaining Krylov
+  residual/error space itself, or the lane should stay deferred behind the
+  documented non-autodiff host fallback for production large-QI use.
 - A smoothed-load field-split A/B is now wired into the same fail-closed
   two-level hook with
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS=1``.
