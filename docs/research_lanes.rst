@@ -663,6 +663,13 @@ Current evidence
   entries with requested-only classes and separate fail-closed observed
   metadata, preventing installed probe machinery from being counted as
   promotion evidence.
+- Coupled residual-equation infrastructure is now the next non-smoother
+  promotion attempt. It is wired through the driver, runner, and manifest as
+  ``coupled-residual-device-qi`` and solves accepted multilevel/block-Schur/
+  residual-snapshot coarse spaces together instead of freezing staged
+  coefficients. This is still research evidence, not a release claim, until a
+  bounded CPU/GPU hard-seed artifact writes converged output and records
+  observed coupled-equation metadata.
 
 Promotion gate
 ~~~~~~~~~~~~~~
