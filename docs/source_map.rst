@@ -185,6 +185,26 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   by RHSMode=1 sparse-PC and x-block diagnostics. This is the first step toward
   making residual gates and solver metadata independent of the driver branch
   that produced the candidate state.
+- ``sfincs_jax/rhs1_device_operator.py``:
+  bounded JAX-device CSR materialization, active-index slicing, sparse matvec
+  closures, and host-vs-device validation utilities for opt-in RHSMode=1
+  device-QI and operator-reuse experiments.
+- ``sfincs_jax/rhs1_qi_coarse.py``:
+  deterministic QI coarse-basis construction, rank/conditioning diagnostics,
+  Galerkin/action coarse solves, and synthetic residual-reduction probes used
+  by the true device-QI research lane.
+- ``sfincs_jax/rhs1_qi_galerkin_policy.py``:
+  fail-closed Galerkin candidate parsing and true-residual selection. The
+  production driver only keeps an experimental QI coarse candidate when this
+  policy records a finite material residual reduction.
+- ``sfincs_jax/rhs1_qi_two_level.py``:
+  reusable local-smoother plus coarse-correction primitive,
+  ``S_local^{-1} r + Q A_c^{-1} Q^T (r - A S_local^{-1} r)``, used as a
+  directly tested architecture prototype before any hard-seed promotion.
+- ``sfincs_jax/rhs1_qi_device_smoother.py``:
+  device-local QI smoother primitives, including CSR-backed Jacobi,
+  matrix-free residual-minimizing steps, and fail-closed seed probes for the
+  differentiable/device QI lane.
 - ``sfincs_jax/rhs1_qi_block_schur.py``:
   standalone JAX-compatible QI block-Schur/angular/radial coarse-preconditioner
   primitive. It builds deterministic global, radial, angular, and block-Schur
@@ -517,6 +537,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   ``sfincs_jax/rhs1_strong_auto_kind.py``:
   strong-preconditioner request mapping, enable/disable control, and automatic
   strong-kind selection.
+- ``sfincs_jax/rhs1_strong_fallback.py``:
+  bounded strong-preconditioner retry/fallback metadata and stage decision
+  helpers used to keep residual rescue paths observable without embedding the
+  branch logic directly in ``v3_driver.py``.
 - ``sfincs_jax/rhs1_sparse_rescue_policy.py`` and
   ``sfincs_jax/rhs1_sparse_polish_policy.py``:
   sparse-rescue ordering, skip logic, and sparse-polish env parsing.
@@ -545,6 +569,13 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   post-x-block polish, targeted FP polish, skip-global-sparse-after-xblock, and
   bounded SciPy-rescue absolute-floor policy for large explicit full-FP CPU
   systems.
+- ``sfincs_jax/rhs1_xblock_policy.py``:
+  pure x-block sparse-PC routing, Krylov-side selection, local factorization
+  tuning, lower-fill acceptance gates, and non-autodiff device-host fallback
+  metadata for large RHSMode=1 QI/full-FP solves.
+- ``sfincs_jax/rhs1_xblock_sparse_host_policy.py``:
+  host sparse x-block rescue policy and metadata normalization for the
+  non-autodiff large-system fallback path.
 - ``sfincs_jax/solve_mode_policy.py``:
   shared implicit/differentiable solve-mode environment resolution.
 - ``sfincs_jax/solver_path_policy.py``:
