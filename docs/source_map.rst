@@ -166,6 +166,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   post-coarse, and post-residual-equation controls. This keeps environment
   parsing and correction-policy defaults out of ``v3_driver.py`` while
   preserving the existing opt-in behavior and fail-closed defaults.
+- ``sfincs_jax/rhs1_solver_diagnostics.py``:
+  typed RHSMode=1 x-block correction diagnostic records and historical solver
+  metadata key assembly. This keeps output-visible trace fields independently
+  testable while ``v3_driver.py`` continues to own the solve orchestration.
 - ``sfincs_jax/rhs1_qi_block_schur.py``:
   standalone JAX-compatible QI block-Schur/angular/radial coarse-preconditioner
   primitive. It builds deterministic global, radial, angular, and block-Schur

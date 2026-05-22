@@ -157,6 +157,12 @@ from .rhs1_solver_policy import (
     read_post_solve_correction_policy as _read_rhs1_post_solve_correction_policy,
     read_probe_coarse_policy as _read_rhs1_probe_coarse_policy,
 )
+from .rhs1_solver_diagnostics import (
+    RHS1PostMinresDiagnostics,
+    RHS1PreflightDiagnostics,
+    RHS1SubspaceCorrectionDiagnostics,
+    build_rhs1_xblock_correction_metadata,
+)
 from .rhs1_constraint0_policy import (
     rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
@@ -20835,74 +20841,59 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_side_probe_iterations": int(xblock_side_probe_iterations),
                     "xblock_side_probe_matvecs": int(xblock_side_probe_matvecs),
                     "xblock_side_probe_s": float(xblock_side_probe_s),
-                    "xblock_probe_coarse_steps_requested": int(probe_coarse_steps_requested),
-                    "xblock_probe_coarse_steps_accepted": int(len(probe_coarse_direction_counts)),
-                    "xblock_probe_coarse_direction_count": int(sum(probe_coarse_direction_counts)),
-                    "xblock_probe_coarse_residual_before": probe_coarse_residual_before,
-                    "xblock_probe_coarse_residual_after": probe_coarse_residual_after,
-                    "xblock_probe_coarse_seed_initialized": bool(probe_coarse_seed_initialized),
-                    "xblock_probe_coarse_s": float(probe_coarse_s),
-                    "xblock_probe_coarse_history": probe_coarse_history,
-                    "xblock_probe_coarse_direction_counts": probe_coarse_direction_counts,
-                    "xblock_probe_coarse_direction_names": probe_coarse_direction_names,
-                    "xblock_probe_coarse_fsavg_lmax": int(probe_coarse_fsavg_lmax),
-                    "xblock_probe_coarse_angular_lmax": int(probe_coarse_angular_lmax),
-                    "xblock_probe_coarse_angular_residual": bool(probe_coarse_include_angular_residual),
-                    "xblock_preflight_min_improvement": float(preflight_min_improvement),
-                    "xblock_preflight_required": bool(preflight_required),
-                    "xblock_preflight_residual_norm": preflight_residual_norm,
-                    "xblock_preflight_improvement": preflight_improvement,
-                    "xblock_preflight_passed": preflight_passed,
-                    "xblock_post_minres_steps_requested": int(post_minres_steps_requested),
-                    "xblock_post_minres_steps_accepted": int(len(post_minres_alphas)),
-                    "xblock_post_minres_residual_before": post_minres_residual_before,
-                    "xblock_post_minres_residual_after": post_minres_residual_after,
-                    "xblock_post_minres_alphas": post_minres_alphas,
-                    "xblock_post_minres_history": post_minres_history,
-                    "xblock_post_coarse_steps_requested": int(post_coarse_steps_requested),
-                    "xblock_post_coarse_steps_accepted": int(len(post_coarse_direction_counts)),
-                    "xblock_post_coarse_direction_count": int(sum(post_coarse_direction_counts)),
-                    "xblock_post_coarse_residual_before": post_coarse_residual_before,
-                    "xblock_post_coarse_residual_after": post_coarse_residual_after,
-                    "xblock_post_coarse_history": post_coarse_history,
-                    "xblock_post_coarse_direction_counts": post_coarse_direction_counts,
-                    "xblock_post_coarse_direction_names": post_coarse_direction_names,
-                    "xblock_post_coarse_fsavg_lmax": int(post_coarse_fsavg_lmax),
-                    "xblock_post_coarse_angular_lmax": int(post_coarse_angular_lmax),
-                    "xblock_post_coarse_angular_residual": bool(post_coarse_include_angular_residual),
-                    "xblock_post_residual_equation_steps_requested": int(
-                        post_residual_equation_steps_requested
-                    ),
-                    "xblock_post_residual_equation_steps_accepted": int(
-                        len(post_residual_equation_direction_counts)
-                    ),
-                    "xblock_post_residual_equation_direction_count": int(
-                        sum(post_residual_equation_direction_counts)
-                    ),
-                    "xblock_post_residual_equation_residual_before": (
-                        post_residual_equation_residual_before
-                    ),
-                    "xblock_post_residual_equation_residual_after": (
-                        post_residual_equation_residual_after
-                    ),
-                    "xblock_post_residual_equation_history": post_residual_equation_history,
-                    "xblock_post_residual_equation_direction_counts": (
-                        post_residual_equation_direction_counts
-                    ),
-                    "xblock_post_residual_equation_direction_names": (
-                        post_residual_equation_direction_names
-                    ),
-                    "xblock_post_residual_equation_fsavg_lmax": int(
-                        post_residual_equation_fsavg_lmax
-                    ),
-                    "xblock_post_residual_equation_angular_lmax": int(
-                        post_residual_equation_angular_lmax
-                    ),
-                    "xblock_post_residual_equation_angular_residual": bool(
-                        post_residual_equation_include_angular_residual
-                    ),
-                    "xblock_post_residual_equation_include_qi_basis": bool(
-                        post_residual_equation_include_qi_basis
+                    **build_rhs1_xblock_correction_metadata(
+                        probe_coarse=RHS1SubspaceCorrectionDiagnostics(
+                            steps_requested=int(probe_coarse_steps_requested),
+                            direction_counts=probe_coarse_direction_counts,
+                            direction_names=probe_coarse_direction_names,
+                            residual_before=probe_coarse_residual_before,
+                            residual_after=probe_coarse_residual_after,
+                            history=probe_coarse_history,
+                            fsavg_lmax=int(probe_coarse_fsavg_lmax),
+                            angular_lmax=int(probe_coarse_angular_lmax),
+                            angular_residual=bool(probe_coarse_include_angular_residual),
+                            seed_initialized=bool(probe_coarse_seed_initialized),
+                            setup_s=float(probe_coarse_s),
+                        ),
+                        preflight=RHS1PreflightDiagnostics(
+                            min_improvement=float(preflight_min_improvement),
+                            required=bool(preflight_required),
+                            residual_norm=preflight_residual_norm,
+                            improvement=preflight_improvement,
+                            passed=preflight_passed,
+                        ),
+                        post_minres=RHS1PostMinresDiagnostics(
+                            steps_requested=int(post_minres_steps_requested),
+                            alphas=post_minres_alphas,
+                            history=post_minres_history,
+                            residual_before=post_minres_residual_before,
+                            residual_after=post_minres_residual_after,
+                        ),
+                        post_coarse=RHS1SubspaceCorrectionDiagnostics(
+                            steps_requested=int(post_coarse_steps_requested),
+                            direction_counts=post_coarse_direction_counts,
+                            direction_names=post_coarse_direction_names,
+                            residual_before=post_coarse_residual_before,
+                            residual_after=post_coarse_residual_after,
+                            history=post_coarse_history,
+                            fsavg_lmax=int(post_coarse_fsavg_lmax),
+                            angular_lmax=int(post_coarse_angular_lmax),
+                            angular_residual=bool(post_coarse_include_angular_residual),
+                        ),
+                        post_residual_equation=RHS1SubspaceCorrectionDiagnostics(
+                            steps_requested=int(post_residual_equation_steps_requested),
+                            direction_counts=post_residual_equation_direction_counts,
+                            direction_names=post_residual_equation_direction_names,
+                            residual_before=post_residual_equation_residual_before,
+                            residual_after=post_residual_equation_residual_after,
+                            history=post_residual_equation_history,
+                            fsavg_lmax=int(post_residual_equation_fsavg_lmax),
+                            angular_lmax=int(post_residual_equation_angular_lmax),
+                            angular_residual=bool(
+                                post_residual_equation_include_angular_residual
+                            ),
+                            include_qi_basis=bool(post_residual_equation_include_qi_basis),
+                        ),
                     ),
                 },
             )

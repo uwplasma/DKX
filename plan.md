@@ -15523,22 +15523,19 @@ Updated completion estimates:
 - True differentiable/device-QI infrastructure: `99%`.
 - True differentiable/device-QI convergence evidence: `82%`; scoped below
   `3e-5` for the checked hard seed, but still open to production tolerance.
-- Refactor/coverage/CI: `88%`; the roadmap is now explicit, but the actual
-  driver/module split is the next implementation phase.
+- Refactor/coverage/CI: `90%`; the roadmap is now explicit, and the first
+  solver-policy plus diagnostic-schema slices have landed with focused tests.
 - Validation/benchmark infrastructure: `90%`; schemas and figures exist, but
   the next phase should consolidate them and reduce duplication.
-- Overall remaining-lane completion estimate: `89%`.
+- Overall remaining-lane completion estimate: `91%`.
 
 Next steps:
 
-1. Land behavior-preserving extraction of solver policy and diagnostics from
-   `v3_driver.py`, with tests that prove current auto-selection behavior is
-   unchanged.
-2. Extract RHSMode=1 operator/residual state helpers and add synthetic
+1. Extract RHSMode=1 operator/residual state helpers and add synthetic
    operator tests for active-DOF projection, residual norms, and metadata.
-3. Consolidate benchmark artifact schema and regenerate only the lightweight
+2. Consolidate benchmark artifact schema and regenerate only the lightweight
    manifest/plot checks locally; leave heavy CPU/GPU suites manual/scheduled.
-4. Keep QI hard-seed work as a documented research lane until a new coarse
+3. Keep QI hard-seed work as a documented research lane until a new coarse
    residual equation beats the current fail-closed evidence and writes
    converged HDF5/solver trace artifacts.
 
@@ -15576,9 +15573,47 @@ Progress:
 
 Best next steps:
 
-1. Run the broader QI/driver policy test group and strict docs to confirm this
-   extraction has no collateral effects.
-2. Commit and push this extraction checkpoint.
-3. Continue with the next behavior-preserving extraction: solver diagnostics
+1. Continue with the next behavior-preserving extraction: solver diagnostics
    metadata assembly for x-block post-correction fields, then active-DOF
    residual/projection helpers.
+
+### 35.61 RHSMode=1 solver-diagnostics extraction slice
+
+Scope:
+
+- Added `sfincs_jax/rhs1_solver_diagnostics.py` with typed diagnostic records
+  for RHSMode=1 x-block probe-coarse, preflight, post-minres, post-coarse, and
+  post-residual-equation hooks.
+- Replaced the inline x-block correction metadata dictionary in
+  `sfincs_jax/v3_driver.py` with `build_rhs1_xblock_correction_metadata(...)`.
+  The extraction preserves the historical `xblock_*` solver-trace keys while
+  making that output-visible schema testable without running a full solve.
+- Added `tests/test_rhs1_solver_diagnostics.py` to cover representative
+  populated metadata, default/disabled metadata, accepted-step counting,
+  direction-count aggregation, and QI-basis flag visibility.
+- Updated `docs/source_map.rst` and `docs/development_roadmap.rst` so the new
+  diagnostic boundary is documented as part of the larger driver split.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/rhs1_solver_diagnostics.py sfincs_jax/v3_driver.py tests/test_rhs1_solver_diagnostics.py`
+- `python -m compileall -q sfincs_jax/rhs1_solver_diagnostics.py sfincs_jax/v3_driver.py tests/test_rhs1_solver_diagnostics.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_solver_diagnostics.py tests/test_rhs1_solver_policy.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_post_residual_equation_records_metadata tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible`
+  (`9 passed`)
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_solver_diagnostics.py tests/test_rhs1_solver_policy.py tests/test_rhs1_qi_coupled_residual.py tests/test_rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_multilevel_coarse.py tests/test_rhs1_qi_block_schur.py tests/test_qi_wave3_coverage.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_post_residual_equation_records_metadata tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_run_qi_seed_robustness.py::test_qi_seed_runner_infers_side_probe_and_residual_progress tests/test_run_qi_seed_robustness.py::test_qi_seed_runner_records_timeout_attempt_from_synthetic_tails tests/test_run_qi_seed_robustness.py::test_evidence_manifest_probe_recommendations_use_preset_specific_paths tests/test_qi_seed_smoke_artifact.py::test_qi_seed_evidence_manifest_tracks_production_gap_and_gates`
+  (`74 passed`)
+
+Progress:
+
+- Refactor/coverage/CI: `90%`; a second driver-split seam is now landed and
+  tested, reducing solver metadata risk before deeper operator extraction.
+- Overall remaining-lane completion estimate: `91%`.
+
+Best next steps:
+
+1. Run strict docs plus release/research gates, then commit and push this
+   extraction checkpoint.
+2. Extract RHSMode=1 active-DOF projection/residual helpers from
+   `v3_driver.py` behind pure-function tests.
+3. Consolidate benchmark/evidence schemas after the driver split so README
+   figures, docs, and research-lane manifests stay synchronized.

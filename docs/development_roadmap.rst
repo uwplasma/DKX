@@ -41,6 +41,9 @@ land in small, gated slices.
    The first landed slice is ``sfincs_jax/rhs1_solver_policy.py``, which owns
    typed parsing for x-block probe-coarse, post-minres, post-coarse, and
    post-residual-equation controls.
+   The second landed slice is ``sfincs_jax/rhs1_solver_diagnostics.py``, which
+   owns x-block correction diagnostic records and output-visible metadata key
+   assembly.
 
 3. Preconditioner registry
    Keep x-block, PAS-lite, Schur, QI, and post-residual-equation preconditioners
@@ -51,7 +54,9 @@ land in small, gated slices.
 4. Output and diagnostics boundary
    Keep HDF5/NPZ/NetCDF writes outside solver internals. Solver code should
    return structured diagnostics; output modules should serialize those
-   diagnostics without reinterpreting convergence.
+   diagnostics without reinterpreting convergence. The first concrete step is
+   the RHSMode=1 x-block correction metadata extraction, which preserves the
+   historical field names while making schema regressions unit-testable.
 
 5. Benchmark and evidence schema
    Consolidate benchmark JSON schemas so README plots, documentation figures,
