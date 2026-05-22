@@ -15289,6 +15289,12 @@ Implementation:
   and block-Schur residual equations, then asks the new coupled stage to solve
   the resulting coarse residual equation jointly. This is an algorithmic
   Schur/coarse-residual test, not smoother/restart/active-pattern tuning.
+- Added an opt-in Krylov-install mode for coupled stages that pass their
+  internal setup gate but fail the global one-step seed-improvement gate. This
+  keeps the initial seed unchanged and tests the coupled residual equation as a
+  real right preconditioner inside Krylov, matching field-split practice where
+  preconditioner quality is judged by Krylov convergence rather than by a
+  single seed correction.
 - Updated runner classification so observed coupled residual-equation metadata
   is reported as `device_qi_coupled_residual_equation_reuse` and failed
   artifacts downgrade to `requested_coupled_residual_equation_device_qi`
@@ -15310,8 +15316,14 @@ Validation:
 
 Next gates:
 
-- Run the bounded scale-0.60 GPU hard seed with
-  `--probe-preset coupled-residual-device-qi` on `office`.
+- The first bounded scale-0.60 GPU hard-seed run on `office` used the
+  seed-gated coupled setup and failed as negative evidence: wall time
+  `8:07.61`, final residual `2.838270e-05`, target `3.021487e-13`, and
+  peak host RSS `5.58 GB`. It built the coupled stage (`rank=17`,
+  `candidates=40`) but rejected the QI preconditioner because the one-shot
+  seed residual only changed from `3.021487e-05` to `3.018785e-05`.
+- Rerun the bounded scale-0.60 GPU hard seed with the Krylov-install coupled
+  mode enabled by `--probe-preset coupled-residual-device-qi` on `office`.
 - Accept the route only if it writes HDF5 and solver trace, satisfies the
   residual/write gate, reports observed coupled residual-equation metadata,
   avoids host fallback, and beats the current best true-device residual

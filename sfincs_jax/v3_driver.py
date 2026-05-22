@@ -16709,6 +16709,10 @@ def solve_v3_full_system_linear_gmres(
                     default=0.0,
                     minimum=0.0,
                 )
+                qi_device_coupled_residual_equation_install_on_reject = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INSTALL_IN_KRYLOV_ON_REJECT",
+                    default=False,
+                )
                 qi_device_residual_snapshot_enrichment = _rhs1_bool_env(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT",
                     default=False,
@@ -17370,6 +17374,7 @@ def solve_v3_full_system_linear_gmres(
                             f"(max_rank={int(qi_device_coupled_residual_equation_max_rank)} "
                             f"solver={qi_device_coupled_residual_equation_solver} "
                             f"include_flat={int(bool(qi_device_coupled_residual_equation_include_flat))} "
+                            f"install_on_reject={int(bool(qi_device_coupled_residual_equation_install_on_reject))} "
                             f"min_improvement={float(qi_device_coupled_residual_equation_min_improvement):.3e})",
                         )
                     if bool(qi_device_residual_snapshot_enrichment) and emit is not None:
@@ -18039,6 +18044,9 @@ def solve_v3_full_system_linear_gmres(
                         "coupled_residual_equation_min_relative_improvement_requested": float(
                             qi_device_coupled_residual_equation_min_improvement
                         ),
+                        "coupled_residual_equation_install_in_krylov_on_reject_requested": bool(
+                            qi_device_coupled_residual_equation_install_on_reject
+                        ),
                         "residual_snapshot_enrichment_requested": bool(
                             qi_device_residual_snapshot_enrichment
                         ),
@@ -18110,6 +18118,32 @@ def solve_v3_full_system_linear_gmres(
                             dtype=jnp.float64,
                         )
 
+                    coupled_stage_accepted_for_krylov = (
+                        bool(
+                            qi_device_preconditioner_metadata.get(
+                                "coupled_residual_equation_accepted", False
+                            )
+                        )
+                        and int(
+                            qi_device_preconditioner_metadata.get(
+                                "coupled_residual_equation_rank", 0
+                            )
+                            or 0
+                        )
+                        > 0
+                    )
+                    qi_device_install_after_seed_reject = bool(
+                        qi_device_coupled_residual_equation_install_on_reject
+                        and qi_device_preconditioner_use_in_krylov
+                        and coupled_stage_accepted_for_krylov
+                        and not bool(qi_device_probe.accepted)
+                    )
+                    qi_device_preconditioner_metadata[
+                        "seed_probe_accepted"
+                    ] = bool(qi_device_probe.accepted)
+                    qi_device_preconditioner_metadata[
+                        "installed_in_krylov_after_seed_reject"
+                    ] = bool(qi_device_install_after_seed_reject)
                     if bool(qi_device_probe.accepted):
                         x0_full = jnp.asarray(x_device_candidate, dtype=jnp.float64)
                         qi_device_preconditioner_used = True
@@ -18160,6 +18194,24 @@ def solve_v3_full_system_linear_gmres(
                                 f"residual_snapshot_equation={int(bool(qi_device_residual_snapshot_residual_equation))} "
                                 f"block_schur={int(bool(qi_device_block_schur_residual_enrichment))} "
                                 f"compose_base={int(bool(qi_device_compose_with_base))})",
+                            )
+                    elif bool(qi_device_install_after_seed_reject):
+                        precond_xblock_krylov = _precond_xblock_qi_device
+                        qi_device_preconditioner_used = True
+                        qi_device_preconditioner_used_in_krylov = True
+                        qi_device_preconditioner_reason = (
+                            "krylov_installed_after_seed_probe_reject"
+                        )
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                "QI device preconditioner installed in Krylov after seed "
+                                f"probe reject (rank={int(qi_device_preconditioner_rank)} "
+                                f"coupled_rank={int(qi_device_preconditioner_metadata.get('coupled_residual_equation_rank', 0))} "
+                                f"coupled_candidates={int(qi_device_preconditioner_metadata.get('coupled_residual_equation_candidate_count', 0))} "
+                                f"residual {float(qi_device_preconditioner_residual_before):.6e} "
+                                f"-> {float(qi_device_preconditioner_residual_after):.6e})",
                             )
                     elif emit is not None:
                         emit(
@@ -20516,6 +20568,20 @@ def solve_v3_full_system_linear_gmres(
                         qi_device_preconditioner_metadata.get(
                             "coupled_residual_equation_min_relative_improvement_requested",
                             float("nan"),
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_coupled_residual_equation_install_in_krylov_on_reject": bool(
+                        qi_device_preconditioner_metadata.get(
+                            "coupled_residual_equation_install_in_krylov_on_reject_requested",
+                            False,
+                        )
+                    ),
+                    "xblock_qi_device_preconditioner_seed_probe_accepted": bool(
+                        qi_device_preconditioner_metadata.get("seed_probe_accepted", False)
+                    ),
+                    "xblock_qi_device_preconditioner_installed_in_krylov_after_seed_reject": bool(
+                        qi_device_preconditioner_metadata.get(
+                            "installed_in_krylov_after_seed_reject", False
                         )
                     ),
                     "xblock_qi_device_preconditioner_coupled_residual_equation_condition_estimate": float(

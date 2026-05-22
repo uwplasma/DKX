@@ -693,6 +693,9 @@ COUPLED_RESIDUAL_DEVICE_QI_ENV = {
         "action_lstsq"
     ),
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INCLUDE_FLAT": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INSTALL_IN_KRYLOV_ON_REJECT": (
+        "1"
+    ),
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MIN_RELATIVE_IMPROVEMENT": (
         "0.0"
     ),
@@ -861,6 +864,9 @@ QI_DEVICE_TRACE_KEYS = (
     "xblock_qi_device_preconditioner_coupled_residual_equation_solver",
     "xblock_qi_device_preconditioner_coupled_residual_equation_include_flat",
     "xblock_qi_device_preconditioner_coupled_residual_equation_min_relative_improvement",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_install_in_krylov_on_reject",
+    "xblock_qi_device_preconditioner_seed_probe_accepted",
+    "xblock_qi_device_preconditioner_installed_in_krylov_after_seed_reject",
     "xblock_qi_device_preconditioner_coupled_residual_equation_condition_estimate",
     "xblock_qi_device_preconditioner_coupled_residual_equation_residual_before",
     "xblock_qi_device_preconditioner_coupled_residual_equation_residual_after",
@@ -1611,6 +1617,13 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
             "xblock_qi_device_preconditioner_coupled_residual_equation_include_flat": (
                 "coupled_residual_equation_include_flat"
             ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_install_in_krylov_on_reject": (
+                "coupled_residual_equation_install_in_krylov_on_reject_requested"
+            ),
+            "xblock_qi_device_preconditioner_seed_probe_accepted": "seed_probe_accepted",
+            "xblock_qi_device_preconditioner_installed_in_krylov_after_seed_reject": (
+                "installed_in_krylov_after_seed_reject"
+            ),
             "xblock_qi_device_preconditioner_coupled_residual_equation_condition_estimate": (
                 "coupled_residual_equation_condition_estimate"
             ),
@@ -2088,6 +2101,12 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
                     "xblock_qi_device_preconditioner_coupled_residual_equation_include_flat": (
                         _bool_from_log_value(key_values.get("include_flat"))
                     ),
+                    "xblock_qi_device_preconditioner_coupled_residual_equation_install_in_krylov_on_reject": (
+                        _bool_from_log_value(
+                            key_values.get("install_on_reject")
+                            or key_values.get("install_in_krylov_on_reject")
+                        )
+                    ),
                     "xblock_qi_device_preconditioner_coupled_residual_equation_min_relative_improvement": (
                         _float_from_log_value(
                             key_values.get("min_improvement")
@@ -2113,6 +2132,29 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
                     "xblock_qi_device_preconditioner_multilevel_residual_equation_include_global": (
                         _bool_from_log_value(key_values.get("include_global"))
                     ),
+                }
+            )
+        if "installed in Krylov after seed probe reject" in text:
+            key_values = _log_key_values(text)
+            summary.update(
+                {
+                    "xblock_qi_device_preconditioner_enabled": True,
+                    "xblock_qi_device_preconditioner_built": True,
+                    "xblock_qi_device_preconditioner_used": True,
+                    "xblock_qi_device_preconditioner_use_in_krylov": True,
+                    "xblock_qi_device_preconditioner_used_in_krylov": True,
+                    "xblock_qi_device_preconditioner_rank": _int_from_log_value(
+                        key_values.get("rank")
+                    ),
+                    "xblock_qi_device_preconditioner_coupled_residual_equation": True,
+                    "xblock_qi_device_preconditioner_coupled_residual_equation_rank": (
+                        _int_from_log_value(key_values.get("coupled_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_coupled_residual_equation_candidate_count": (
+                        _int_from_log_value(key_values.get("coupled_candidates"))
+                    ),
+                    "xblock_qi_device_preconditioner_installed_in_krylov_after_seed_reject": True,
+                    "xblock_qi_device_preconditioner_seed_probe_accepted": False,
                 }
             )
         match = _QI_DEVICE_PROGRESS_RE.search(text)
@@ -2301,6 +2343,11 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
                 key_values.get("block_schur")
             ),
         })
+        if "installed in Krylov after seed probe reject" in text:
+            summary["xblock_qi_device_preconditioner_used"] = True
+            summary["xblock_qi_device_preconditioner_used_in_krylov"] = True
+            summary["xblock_qi_device_preconditioner_installed_in_krylov_after_seed_reject"] = True
+            summary["xblock_qi_device_preconditioner_seed_probe_accepted"] = False
     return summary
 
 

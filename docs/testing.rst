@@ -896,9 +896,11 @@ negative result is reproducible and not promoted accidentally.
 
 The next non-smoother probe is ``coupled-residual-device-qi``. It asks the
 driver to build multilevel, residual-snapshot, block-Schur, and flat coarse
-sources, then solve one joint cached ``A Q`` residual equation. This is the
-current reviewer-facing test of the Schur/coarse-residual hypothesis: a passing
-artifact must report
+sources, then solve one joint cached ``A Q`` residual equation. If the coupled
+stage is internally accepted but the seed probe is too weak, the opt-in preset
+can install the stage as the Krylov preconditioner without changing ``x0``.
+This is the current reviewer-facing test of the Schur/coarse-residual
+hypothesis: a passing artifact must report
 ``xblock_qi_device_preconditioner_coupled_residual_equation=True``, write HDF5
 and solver trace, satisfy the residual gate, and remain on the device-QI path
 without host fallback. Until such an artifact exists, the evidence manifest
