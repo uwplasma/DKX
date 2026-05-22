@@ -14,6 +14,10 @@ Unreleased
   architecture. It solves accepted coarse variables together instead of as a
   staged cascade, so Schur/multilevel cross-couplings can update earlier coarse
   coefficients without using smoother or restart tuning.
+- Wired the coupled residual-equation path into RHSMode=1 driver progress,
+  solver-trace metadata, and the ``coupled-residual-device-qi`` evidence
+  preset. The path remains opt-in and fail-closed until a bounded CPU/GPU
+  hard-seed artifact writes converged output and trace metadata.
 - Updated QI evidence counts, multi-GPU wording, and source-map closure text so
   release-facing docs distinguish production host fallback from research
   device-QI probes.

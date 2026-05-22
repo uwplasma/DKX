@@ -2284,6 +2284,35 @@ def test_qi_seed_progress_parser_records_active_pattern_coarse() -> None:
     assert progress["xblock_qi_device_preconditioner_active_pattern_coarse_candidate_count"] == 18
 
 
+def test_qi_seed_progress_parser_records_coupled_residual_equation() -> None:
+    progress = qi_seed._infer_qi_device_progress(
+        [
+            (
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner coupled residual equation "
+                "(max_rank=128 solver=action_lstsq include_flat=1 min_improvement=0.000e+00)"
+            ),
+            (
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner accepted residual 3.0e-05 -> 2.4e-05 "
+                "(rank=144 cycles=1 ratio=8.000000e-01 operator_krylov=1 coarse_reuse=1 "
+                "block_schur_equation=1 coupled_equation=1 coupled_rank=37 coupled_candidates=92)"
+            ),
+        ]
+    )
+
+    assert progress["xblock_qi_device_preconditioner_coupled_residual_equation"] is True
+    assert progress["xblock_qi_device_preconditioner_coupled_residual_equation_max_rank"] == 128
+    assert progress["xblock_qi_device_preconditioner_coupled_residual_equation_solver"] == "action_lstsq"
+    assert progress["xblock_qi_device_preconditioner_coupled_residual_equation_include_flat"] is True
+    assert (
+        progress["xblock_qi_device_preconditioner_coupled_residual_equation_min_relative_improvement"]
+        == 0.0
+    )
+    assert progress["xblock_qi_device_preconditioner_coupled_residual_equation_rank"] == 37
+    assert progress["xblock_qi_device_preconditioner_coupled_residual_equation_candidate_count"] == 92
+
+
 def test_evidence_classification_does_not_treat_false_residual_bounce_as_observed(
     tmp_path: Path,
 ) -> None:
@@ -2303,6 +2332,35 @@ def test_evidence_classification_does_not_treat_false_residual_bounce_as_observe
 
     assert classification["classes"] == ["requested_residual_bounce_region_coarse_device_qi"]
     assert classification["has_observed_residual_bounce_region_coarse"] is False
+
+
+def test_seed_evidence_classification_prioritizes_coupled_residual_equation() -> None:
+    probe_env = {
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION": "1",
+    }
+    seed = {
+        "returncode": 0,
+        "solver_trace_exists": True,
+        "output_exists": True,
+        "converged": True,
+        "accepted_converged": True,
+        "xblock_qi_device_preconditioner_used": True,
+        "xblock_qi_device_preconditioner_use_in_krylov": True,
+        "xblock_qi_device_preconditioner_coarse_reuse": True,
+        "xblock_qi_device_preconditioner_block_schur_residual_equation": True,
+        "xblock_qi_device_preconditioner_coupled_residual_equation": True,
+    }
+
+    classification = qi_seed._seed_evidence_classification(seed, probe_env)
+
+    assert classification["classification"] == "device_qi_coupled_residual_equation_reuse"
+    assert classification["requested_coupled_residual_equation"] is True
+    assert classification["observed_coupled_residual_equation"] is True
+    assert "observed_coupled_residual_equation" in classification["tags"]
 
 
 def test_evidence_classification_downgrades_fail_closed_embedded_device_qi(
@@ -2755,6 +2813,34 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     )
     assert "--probe-preset block-schur-device-qi" in block_schur_preset["recommended_command"]
     assert "fail-closed" in block_schur_preset["description"]
+    coupled_preset = manifest["probe_presets"]["coupled-residual-device-qi"]
+    assert (
+        coupled_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert (
+        coupled_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MAX_RANK"
+        ]
+        == "128"
+    )
+    assert (
+        coupled_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_SOLVER"
+        ]
+        == "action_lstsq"
+    )
+    assert (
+        coupled_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert "--probe-preset coupled-residual-device-qi" in coupled_preset["recommended_command"]
+    assert "joint action least-squares" in coupled_preset["description"]
+    assert "fail-closed" in coupled_preset["description"]
     adaptive_residual_preset = manifest["probe_presets"]["adaptive-residual-device-qi"]
     assert (
         adaptive_residual_preset["env"][

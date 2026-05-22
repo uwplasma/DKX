@@ -15271,3 +15271,49 @@ Next gates:
 - Run the same scale-0.60 hard seed on office GPU and keep the result as
   promotion evidence only if it beats `7.336295e-06`, writes converged output
   and solver trace metadata, and enters the manifest as promotion eligible.
+
+### 35.57 Coupled residual-equation runner/driver wiring
+
+Implementation:
+
+- Added RHSMode=1 x-block sparse-PC environment controls for
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION*`.
+  The driver now includes the requested coupled rank, solver, flat-basis
+  inclusion flag, and minimum-improvement gate in QI preconditioner metadata.
+- Added progress and solver-trace fields for coupled residual-equation rank,
+  candidate count, source-stage count/ranks, solver, condition estimate,
+  residual before/after, acceptance, and reason. This makes CPU/GPU artifacts
+  auditable without relying on the Python object graph.
+- Added the `coupled-residual-device-qi` seed-robustness preset. The preset
+  combines multilevel residual equations, residual-snapshot residual equations,
+  and block-Schur residual equations, then asks the new coupled stage to solve
+  the resulting coarse residual equation jointly. This is an algorithmic
+  Schur/coarse-residual test, not smoother/restart/active-pattern tuning.
+- Updated runner classification so observed coupled residual-equation metadata
+  is reported as `device_qi_coupled_residual_equation_reuse` and failed
+  artifacts downgrade to `requested_coupled_residual_equation_device_qi`
+  instead of being promoted through block-Schur metadata.
+- Regenerated `docs/_static/qi_seed_robustness_evidence_manifest.json`; it now
+  includes the coupled residual-equation probe command and keeps it in the
+  fail-closed blocker list until converged CPU/GPU evidence exists.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/v3_driver.py scripts/run_qi_seed_robustness.py tests/test_run_qi_seed_robustness.py`
+- `python -m compileall -q sfincs_jax/v3_driver.py scripts/run_qi_seed_robustness.py tests/test_run_qi_seed_robustness.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_run_qi_seed_robustness.py tests/test_rhs1_qi_coupled_residual.py tests/test_rhs1_qi_device_preconditioner.py`
+  (`92 passed`)
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_qi_multilevel_coarse.py tests/test_rhs1_qi_block_schur.py tests/test_qi_seed_smoke_artifact.py tests/test_qi_wave3_coverage.py`
+  (`44 passed`)
+- `python scripts/check_release_gates.py`
+- `python scripts/check_research_lanes.py`
+
+Next gates:
+
+- Run the bounded scale-0.60 GPU hard seed with
+  `--probe-preset coupled-residual-device-qi` on `office`.
+- Accept the route only if it writes HDF5 and solver trace, satisfies the
+  residual/write gate, reports observed coupled residual-equation metadata,
+  avoids host fallback, and beats the current best true-device residual
+  (`7.336295e-06`). Otherwise record it as fail-closed negative evidence and
+  keep production QI on the non-autodiff host fallback.

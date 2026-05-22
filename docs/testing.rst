@@ -894,6 +894,16 @@ pitch/angular/radial/species coarse path, but the solve still refuses output at
 residual ``1.622338e-5`` against the hard-seed write gate. It is tracked so the
 negative result is reproducible and not promoted accidentally.
 
+The next non-smoother probe is ``coupled-residual-device-qi``. It asks the
+driver to build multilevel, residual-snapshot, block-Schur, and flat coarse
+sources, then solve one joint cached ``A Q`` residual equation. This is the
+current reviewer-facing test of the Schur/coarse-residual hypothesis: a passing
+artifact must report
+``xblock_qi_device_preconditioner_coupled_residual_equation=True``, write HDF5
+and solver trace, satisfy the residual gate, and remain on the device-QI path
+without host fallback. Until such an artifact exists, the evidence manifest
+keeps the lane fail-closed.
+
 The latest residual-weighted angular probe-coarse artifact
 ``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``
 is the accepted CPU hard-seed reference for this bounded scale: it passes in

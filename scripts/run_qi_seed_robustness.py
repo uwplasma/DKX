@@ -380,6 +380,7 @@ PHASE_SPACE_COARSE_REUSE_DEVICE_QI_PROBE_PRESET = "phase-space-coarse-reuse-devi
 RESIDUAL_BOUNCE_REGION_DEVICE_QI_PROBE_PRESET = "residual-bounce-region-device-qi"
 ACTIVE_PATTERN_DEVICE_QI_PROBE_PRESET = "active-pattern-device-qi"
 BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET = "block-schur-device-qi"
+COUPLED_RESIDUAL_DEVICE_QI_PROBE_PRESET = "coupled-residual-device-qi"
 ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET = "adaptive-residual-device-qi"
 OPERATOR_KRYLOV_DEVICE_QI_SOLVE_METHOD = "xblock_sparse_pc_gmres"
 OPERATOR_KRYLOV_DEVICE_QI_ENV = {
@@ -654,6 +655,49 @@ BLOCK_SCHUR_DEVICE_QI_ENV = {
     ),
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "192",
 }
+COUPLED_RESIDUAL_DEVICE_QI_ENV = {
+    **RECYCLED_AUGMENTED_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_MAX_RANK": (
+        "32"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER": (
+        "action_lstsq"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_PRIMAL": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_GLOBAL": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_BLOCKS": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK": "64",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_BLOCKS": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_AGGREGATES": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK": (
+        "24"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER": (
+        "coarse_to_fine"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER": (
+        "galerkin"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MAX_RANK": (
+        "128"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_SOLVER": (
+        "action_lstsq"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INCLUDE_FLAT": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MIN_RELATIVE_IMPROVEMENT": (
+        "0.0"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "320",
+}
 ADAPTIVE_RESIDUAL_DEVICE_QI_ENV = {
     **BLOCK_SCHUR_DEVICE_QI_ENV,
     "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER": "240",
@@ -808,6 +852,20 @@ QI_DEVICE_TRACE_KEYS = (
     "xblock_qi_device_preconditioner_block_schur_residual_equation_candidate_count",
     "xblock_qi_device_preconditioner_block_schur_residual_equation_rank",
     "xblock_qi_device_preconditioner_block_schur_residual_equation_group_count",
+    "xblock_qi_device_preconditioner_coupled_residual_equation",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_max_rank",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_candidate_count",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_rank",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_source_stage_count",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_source_stage_ranks",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_solver",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_include_flat",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_min_relative_improvement",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_condition_estimate",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_residual_before",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_residual_after",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_accepted",
+    "xblock_qi_device_preconditioner_coupled_residual_equation_reason",
 )
 MOMENT_SCHUR_TRACE_KEYS = (
     "xblock_moment_schur_enabled",
@@ -1008,6 +1066,8 @@ def _probe_env_for_preset(preset: str) -> dict[str, str]:
         return dict(ACTIVE_PATTERN_DEVICE_QI_ENV)
     if normalized == BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET:
         return dict(BLOCK_SCHUR_DEVICE_QI_ENV)
+    if normalized == COUPLED_RESIDUAL_DEVICE_QI_PROBE_PRESET:
+        return dict(COUPLED_RESIDUAL_DEVICE_QI_ENV)
     if normalized == ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET:
         return dict(ADAPTIVE_RESIDUAL_DEVICE_QI_ENV)
     raise ValueError(f"Unknown QI probe preset: {preset!r}")
@@ -1037,6 +1097,7 @@ def _solve_method_for_probe_preset(*, solve_method: str, probe_preset: str) -> s
         RESIDUAL_BOUNCE_REGION_DEVICE_QI_PROBE_PRESET,
         ACTIVE_PATTERN_DEVICE_QI_PROBE_PRESET,
         BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,
+        COUPLED_RESIDUAL_DEVICE_QI_PROBE_PRESET,
         ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
     }
     if normalized_preset in qi_device_presets and requested.lower() in {"", "auto", "default"}:
@@ -1529,6 +1590,42 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
             "xblock_qi_device_preconditioner_block_schur_residual_equation_group_count": (
                 "block_schur_residual_equation_group_count"
             ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation": (
+                "coupled_residual_equation_enabled"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_candidate_count": (
+                "coupled_residual_equation_candidate_count"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_rank": (
+                "coupled_residual_equation_rank"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_source_stage_count": (
+                "coupled_residual_equation_source_stage_count"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_source_stage_ranks": (
+                "coupled_residual_equation_source_stage_ranks"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_solver": (
+                "coupled_residual_equation_solver"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_include_flat": (
+                "coupled_residual_equation_include_flat"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_condition_estimate": (
+                "coupled_residual_equation_condition_estimate"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_residual_before": (
+                "coupled_residual_equation_residual_before"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_residual_after": (
+                "coupled_residual_equation_residual_after"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_accepted": (
+                "coupled_residual_equation_accepted"
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_reason": (
+                "coupled_residual_equation_reason"
+            ),
             "xblock_qi_device_preconditioner_block_schur_residual_enrichment": (
                 "block_schur_residual_enrichment_enabled"
             ),
@@ -1977,6 +2074,28 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
                     ),
                 }
             )
+        if "QI device preconditioner coupled residual equation" in text:
+            key_values = _log_key_values(text)
+            summary.update(
+                {
+                    "xblock_qi_device_preconditioner_coupled_residual_equation": True,
+                    "xblock_qi_device_preconditioner_coupled_residual_equation_max_rank": (
+                        _int_from_log_value(key_values.get("max_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_coupled_residual_equation_solver": (
+                        key_values.get("solver")
+                    ),
+                    "xblock_qi_device_preconditioner_coupled_residual_equation_include_flat": (
+                        _bool_from_log_value(key_values.get("include_flat"))
+                    ),
+                    "xblock_qi_device_preconditioner_coupled_residual_equation_min_relative_improvement": (
+                        _float_from_log_value(
+                            key_values.get("min_improvement")
+                            or key_values.get("min_relative_improvement")
+                        )
+                    ),
+                }
+            )
         if "QI device preconditioner multilevel residual equation" in text:
             key_values = _log_key_values(text)
             summary.update(
@@ -2036,6 +2155,17 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
         )
         active_pattern_rank = _int_from_log_value(
             key_values.get("active_pattern_rank") or key_values.get("active_pattern_coarse_rank")
+        )
+        coupled_flag = _bool_from_log_value(
+            key_values.get("coupled_equation") or key_values.get("coupled_residual_equation")
+        )
+        coupled_candidates = _int_from_log_value(
+            key_values.get("coupled_candidates")
+            or key_values.get("coupled_residual_equation_candidates")
+        )
+        coupled_rank = _int_from_log_value(
+            key_values.get("coupled_rank")
+            or key_values.get("coupled_residual_equation_rank")
         )
         summary.update({
             "xblock_qi_device_preconditioner_enabled": True,
@@ -2149,6 +2279,23 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
             ),
             "xblock_qi_device_preconditioner_block_schur_residual_equation": _bool_from_log_value(
                 key_values.get("block_schur_equation")
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation": (
+                coupled_flag
+                if coupled_flag is not None
+                else summary.get("xblock_qi_device_preconditioner_coupled_residual_equation")
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_candidate_count": (
+                coupled_candidates
+                if coupled_candidates is not None
+                else summary.get(
+                    "xblock_qi_device_preconditioner_coupled_residual_equation_candidate_count"
+                )
+            ),
+            "xblock_qi_device_preconditioner_coupled_residual_equation_rank": (
+                coupled_rank
+                if coupled_rank is not None
+                else summary.get("xblock_qi_device_preconditioner_coupled_residual_equation_rank")
             ),
             "xblock_qi_device_preconditioner_block_schur_residual_enrichment": _bool_from_log_value(
                 key_values.get("block_schur")
@@ -2639,6 +2786,10 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         probe_env,
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION",
     )
+    requested_coupled_residual_equation = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION",
+    )
 
     if requested_device_qi:
         tags.add("requested_device_qi")
@@ -2670,6 +2821,8 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         tags.add("requested_active_pattern_coarse")
     if requested_block_schur:
         tags.add("requested_block_schur_residual")
+    if requested_coupled_residual_equation:
+        tags.add("requested_coupled_residual_equation")
     if returncode == 0 and solver_trace_exists and not converged:
         tags.add("not_converged")
     if returncode == 0 and solver_trace_exists and accepted_converged is False:
@@ -2711,6 +2864,9 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         seed.get("xblock_qi_device_preconditioner_block_schur_residual_enrichment") is True
         or seed.get("xblock_qi_device_preconditioner_block_schur_residual_equation") is True
     )
+    observed_coupled_residual_equation = (
+        seed.get("xblock_qi_device_preconditioner_coupled_residual_equation") is True
+    )
     if seed.get("xblock_qi_device_preconditioner_operator_on_basis_shape") is not None:
         observed_operator_krylov = True
     if seed.get("xblock_qi_device_preconditioner_coarse_operator_shape") is not None:
@@ -2748,6 +2904,8 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         tags.add("observed_active_pattern_coarse")
     if observed_block_schur:
         tags.add("observed_block_schur_residual")
+    if observed_coupled_residual_equation:
+        tags.add("observed_coupled_residual_equation")
 
     if observed_installed_krylov and observed_coarse_reuse and observed_augmented_seed:
         classification = "device_qi_augmented_seed_krylov_coarse_reuse"
@@ -2761,6 +2919,8 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         classification = "device_qi_residual_galerkin_equation_coarse_reuse"
     elif observed_installed_krylov and observed_coarse_reuse and observed_global_moment:
         classification = "device_qi_global_moment_residual_equation_coarse_reuse"
+    elif observed_installed_krylov and observed_coarse_reuse and observed_coupled_residual_equation:
+        classification = "device_qi_coupled_residual_equation_reuse"
     elif observed_installed_krylov and observed_coarse_reuse and observed_block_schur:
         classification = "device_qi_block_schur_residual_coarse_reuse"
     elif observed_installed_krylov and observed_coarse_reuse and observed_residual_snapshot_equation:
@@ -2787,6 +2947,8 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         classification = "requested_residual_galerkin_equation_device_qi"
     elif requested_global_moment:
         classification = "requested_global_moment_residual_equation_device_qi"
+    elif requested_coupled_residual_equation:
+        classification = "requested_coupled_residual_equation_device_qi"
     elif requested_block_schur:
         classification = "requested_block_schur_residual_device_qi"
     elif requested_augmented_seed:
@@ -2824,6 +2986,7 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         "requested_residual_bounce_region": requested_residual_bounce_region,
         "requested_active_pattern": requested_active_pattern,
         "requested_block_schur": requested_block_schur,
+        "requested_coupled_residual_equation": requested_coupled_residual_equation,
         "observed_device_qi": observed_device_qi,
         "observed_installed_krylov": observed_installed_krylov,
         "observed_operator_krylov": observed_operator_krylov,
@@ -2839,6 +3002,7 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         "observed_residual_bounce_region": observed_residual_bounce_region,
         "observed_active_pattern": observed_active_pattern,
         "observed_block_schur": observed_block_schur,
+        "observed_coupled_residual_equation": observed_coupled_residual_equation,
         "observed_seed_only": observed_seed_only,
         "tags": sorted(tags),
     }
@@ -2899,6 +3063,9 @@ def _aggregate_seed_classifications(seed_summaries: Iterable[dict[str, object]])
         ),
         "has_observed_block_schur_residual": any(
             seed.get("observed_qi_device_block_schur_residual") is True for seed in seed_list
+        ),
+        "has_observed_coupled_residual_equation": any(
+            seed.get("observed_qi_device_coupled_residual_equation") is True for seed in seed_list
         ),
         "promotion_eligible_seed_count": sum(1 for seed in seed_list if seed.get("promotion_eligible") is True),
     }
@@ -3098,6 +3265,9 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                     "requested_active_pattern"
                 ],
                 "requested_qi_device_block_schur_residual": classification["requested_block_schur"],
+                "requested_qi_device_coupled_residual_equation": classification[
+                    "requested_coupled_residual_equation"
+                ],
                 "observed_qi_device_installed_krylov": classification["observed_installed_krylov"],
                 "observed_qi_device_operator_krylov": classification["observed_operator_krylov"],
                 "observed_qi_device_coarse_reuse": classification["observed_coarse_reuse"],
@@ -3125,6 +3295,9 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                     "observed_active_pattern"
                 ],
                 "observed_qi_device_block_schur_residual": classification["observed_block_schur"],
+                "observed_qi_device_coupled_residual_equation": classification[
+                    "observed_coupled_residual_equation"
+                ],
             }
         )
         seed_summaries.append(seed_summary)
@@ -3238,6 +3411,8 @@ def _fail_closed_evidence_classes(classes: Iterable[str], tags: Iterable[str]) -
         downgraded.add("requested_residual_galerkin_equation_device_qi")
     elif "global_moment" in text or "global-moment" in text:
         downgraded.add("requested_global_moment_residual_equation_device_qi")
+    elif "coupled_residual_equation" in text or "coupled-residual" in text:
+        downgraded.add("requested_coupled_residual_equation_device_qi")
     elif "block_schur" in text or "block-schur" in text:
         downgraded.add("requested_block_schur_residual_device_qi")
     elif "residual_snapshot_residual_equation" in text or "residual-snapshot-equation" in text:
@@ -3473,6 +3648,9 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
             "has_observed_block_schur_residual": False
             if fail_closed
             else bool(embedded.get("has_observed_block_schur_residual")),
+            "has_observed_coupled_residual_equation": False
+            if fail_closed
+            else bool(embedded.get("has_observed_coupled_residual_equation")),
             "promotion_eligible_seed_count": 0 if fail_closed else embedded.get("promotion_eligible_seed_count"),
         }
 
@@ -3548,6 +3726,8 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
         tags.add("requested_active_pattern_coarse")
     if "block_schur" in text or "block-schur" in text:
         tags.add("requested_block_schur_residual")
+    if "coupled_residual_equation" in text or "coupled-residual" in text:
+        tags.add("requested_coupled_residual_equation")
     if "solver_traces_written\": 0" in text or "solver_trace_exists\": false" in text:
         tags.add("failed_before_solver_trace_summary")
 
@@ -3573,6 +3753,11 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
         classes.add("device_qi_residual_galerkin_equation_coarse_reuse")
     elif "observed_global_moment_residual_equation" in text or "observed_qi_device_global_moment" in text:
         classes.add("device_qi_global_moment_residual_equation_coarse_reuse")
+    elif (
+        "observed_coupled_residual_equation" in text
+        or "observed_qi_device_coupled_residual_equation" in text
+    ):
+        classes.add("device_qi_coupled_residual_equation_reuse")
     elif "observed_block_schur_residual" in text or "observed_qi_device_block_schur_residual" in text:
         classes.add("device_qi_block_schur_residual_coarse_reuse")
     elif (
@@ -3604,6 +3789,8 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
         classes.add("requested_residual_galerkin_equation_device_qi")
     elif "global_moment" in text or "global-moment" in text:
         classes.add("requested_global_moment_residual_equation_device_qi")
+    elif "coupled_residual_equation" in text or "coupled-residual" in text:
+        classes.add("requested_coupled_residual_equation_device_qi")
     elif "block_schur" in text or "block-schur" in text:
         classes.add("requested_block_schur_residual_device_qi")
     elif "operator_krylov" in text or "operator-krylov" in text:
@@ -3642,6 +3829,7 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
             and "observed_active_pattern_coarse" in text
         ),
         "has_observed_block_schur_residual": "observed_block_schur_residual" in text,
+        "has_observed_coupled_residual_equation": "observed_coupled_residual_equation" in text,
         "promotion_eligible_seed_count": None,
     }
 
@@ -3990,6 +4178,14 @@ def build_evidence_manifest(
         "JAX_PLATFORM_NAME": "gpu",
         **BLOCK_SCHUR_DEVICE_QI_ENV,
     }
+    coupled_residual_probe_command = _gpu0_probe_command_for_preset(
+        COUPLED_RESIDUAL_DEVICE_QI_PROBE_PRESET
+    )
+    coupled_residual_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **COUPLED_RESIDUAL_DEVICE_QI_ENV,
+    }
     adaptive_residual_probe_command = _gpu0_probe_command_for_preset(ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET)
     adaptive_residual_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
@@ -4180,6 +4376,10 @@ def build_evidence_manifest(
             "block_schur_device_qi_gpu0_probe": _shell_command(
                 block_schur_probe_command,
                 block_schur_probe_env,
+            ),
+            "coupled_residual_device_qi_gpu0_probe": _shell_command(
+                coupled_residual_probe_command,
+                coupled_residual_probe_env,
             ),
             "adaptive_residual_device_qi_gpu0_probe": _shell_command(
                 adaptive_residual_probe_command,
@@ -4425,6 +4625,22 @@ def build_evidence_manifest(
                     block_schur_probe_env,
                 ),
             },
+            COUPLED_RESIDUAL_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for the "
+                    "coupled residual-equation path. This replaces the staged "
+                    "coarse corrections with one joint action least-squares "
+                    "residual equation over multilevel, block-Schur, residual-"
+                    "snapshot, and flat coarse spaces. It remains fail-closed "
+                    "unless output, solver trace, convergence, and observed "
+                    "coupled residual-equation metadata are present."
+                ),
+                "env": dict(sorted(COUPLED_RESIDUAL_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    coupled_residual_probe_command,
+                    coupled_residual_probe_env,
+                ),
+            },
             ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET: {
                 "description": (
                     "Bounded scale-0.60 hard-seed GPU0 production probe for the "
@@ -4453,6 +4669,7 @@ def build_evidence_manifest(
             "Keep the phase-space coarse-reuse device-QI probe fail-closed until a converged artifact reports observed phase-space residual-equation metadata.",
             "Keep the residual-region/bounce-region device-QI probe fail-closed until a converged artifact reports observed residual-bounce coarse metadata.",
             "Keep the block-Schur residual device-QI probe fail-closed until a converged artifact reports observed block-Schur residual metadata.",
+            "Keep the coupled residual-equation device-QI probe fail-closed until a converged artifact reports observed coupled-equation metadata.",
             "Do not use the non-autodiff host fallback as evidence for differentiable or true device-resident QI.",
         ],
     }
@@ -4520,6 +4737,7 @@ def _build_parser() -> argparse.ArgumentParser:
             RESIDUAL_BOUNCE_REGION_DEVICE_QI_PROBE_PRESET,
             ACTIVE_PATTERN_DEVICE_QI_PROBE_PRESET,
             BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,
+            COUPLED_RESIDUAL_DEVICE_QI_PROBE_PRESET,
             ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
         ),
         default="none",
