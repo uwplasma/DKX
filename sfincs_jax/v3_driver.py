@@ -163,6 +163,10 @@ from .rhs1_solver_diagnostics import (
     RHS1SubspaceCorrectionDiagnostics,
     build_rhs1_xblock_correction_metadata,
 )
+from .rhs1_active_dof import (
+    build_rhs1_active_dof_state,
+    resolve_rhs1_active_dof_mode,
+)
 from .rhs1_constraint0_policy import (
     rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
@@ -13715,29 +13719,19 @@ def solve_v3_full_system_linear_gmres(
                 "solve_v3_full_system_linear_gmres: PAS DKES default GMRES budget "
                 f"restart={int(restart)} maxiter={maxiter}",
             )
-    use_active_dof_mode = False
-    if active_env in {"1", "true", "yes", "on"}:
-        use_active_dof_mode = True
-    elif active_env in {"0", "false", "no", "off"}:
-        use_active_dof_mode = False
-    else:
-        # Auto mode:
-        # - Always use active-DOF reduction for RHSMode=2/3 with truncated pitch grid.
-        # - Also use it for RHSMode=1 when includePhi1 is off and pitch truncation is
-        #   present. This reduces solve size and JIT cost in upstream-like reduced runs.
-        # - Keep includePhi1 RHSMode=1 on the full system to preserve sensitive parity
-        #   branches in tiny includePhi1 fixtures.
-        use_active_dof_mode = has_reduced_modes and (
-            int(op.rhs_mode) in {2, 3} or (int(op.rhs_mode) == 1 and (not bool(op.include_phi1)))
-        )
-        if sparse_host_like_requested and not xblock_active_dof_requested:
-            use_active_dof_mode = False
-        # Upstream v3 always drops inactive (x,L) modes when `Nxi_for_x` truncation is
-        # active. Keep this reduction on for DKES trajectories as well to match v3's
-        # linear-system size/conditioning and avoid singular inactive rows.
-        dkes_active_env = os.environ.get("SFINCS_JAX_ACTIVE_DOF_DKES", "").strip().lower()
-        if dkes_active_env in {"0", "false", "no", "off"} and use_active_dof_mode and int(op.rhs_mode) == 1 and op.fblock.pas is not None and use_dkes:
-            use_active_dof_mode = False
+    dkes_active_env = os.environ.get("SFINCS_JAX_ACTIVE_DOF_DKES", "").strip().lower()
+    active_dof_decision = resolve_rhs1_active_dof_mode(
+        active_dof_env=active_env,
+        dkes_active_env=dkes_active_env,
+        rhs_mode=int(op.rhs_mode),
+        include_phi1=bool(op.include_phi1),
+        has_reduced_modes=bool(has_reduced_modes),
+        sparse_host_like_requested=bool(sparse_host_like_requested),
+        xblock_active_dof_requested=bool(xblock_active_dof_requested),
+        has_pas=op.fblock.pas is not None,
+        use_dkes=bool(use_dkes),
+    )
+    use_active_dof_mode = bool(active_dof_decision.use_active_dof_mode)
 
     precond_opts = nml.group("preconditionerOptions")
     pas_project_env = os.environ.get("SFINCS_JAX_PAS_PROJECT_CONSTRAINTS", "").strip().lower()
@@ -13802,34 +13796,28 @@ def solve_v3_full_system_linear_gmres(
     rhsmode1_general_metadata: dict[str, object] = {}
     cpu_large_xblock_shortcut = False
     explicit_fp_xblock_seed_used = False
-    if use_active_dof_mode:
+    active_dof_state = build_rhs1_active_dof_state(
+        op=op,
+        use_active_dof_mode=bool(use_active_dof_mode),
+        use_pas_projection=bool(use_pas_projection),
+        active_dof_indices=_transport_active_dof_indices,
+    )
+    active_idx_jnp = active_dof_state.active_idx_jnp
+    full_to_active_jnp = active_dof_state.full_to_active_jnp
+    active_size = int(active_dof_state.active_size)
+    if use_active_dof_mode and emit is not None:
         if use_pas_projection:
-            active_idx_np = _transport_active_dof_indices(op)
-            active_idx_np = active_idx_np[active_idx_np < int(op.f_size)]
-            active_idx_jnp = jnp.asarray(active_idx_np, dtype=jnp.int32)
-            full_to_active_np = np.zeros((int(op.f_size),), dtype=np.int32)
-            full_to_active_np[np.asarray(active_idx_np, dtype=np.int32)] = np.arange(
-                1, int(active_idx_np.shape[0]) + 1, dtype=np.int32
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: PAS constraint projection enabled "
+                f"(size={active_size}/{int(op.total_size)})",
             )
-            full_to_active_jnp = jnp.asarray(full_to_active_np, dtype=jnp.int32)
-            active_size = int(active_idx_np.shape[0])
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: PAS constraint projection enabled "
-                    f"(size={active_size}/{int(op.total_size)})",
-                )
         else:
-            active_idx_np = _transport_active_dof_indices(op)
-            active_idx_jnp = jnp.asarray(active_idx_np, dtype=jnp.int32)
-            full_to_active_np = np.zeros((int(op.total_size),), dtype=np.int32)
-            full_to_active_np[np.asarray(active_idx_np, dtype=np.int32)] = np.arange(
-                1, int(active_idx_np.shape[0]) + 1, dtype=np.int32
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: active-DOF mode enabled "
+                f"(size={active_size}/{int(op.total_size)})",
             )
-            full_to_active_jnp = jnp.asarray(full_to_active_np, dtype=jnp.int32)
-            active_size = int(active_idx_np.shape[0])
-            if emit is not None:
-                emit(1, f"solve_v3_full_system_linear_gmres: active-DOF mode enabled (size={active_size}/{int(op.total_size)})")
 
     # Tiny PAS systems can be ill-conditioned; allow full-restart GMRES to reach
     # the tight PETSc-style tolerances used in parity fixtures.

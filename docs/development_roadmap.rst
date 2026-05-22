@@ -32,7 +32,9 @@ land in small, gated slices.
 1. Operator and state extraction
    Move RHSMode=1 operator construction, active-DOF projection, residual
    evaluation, and solver-state metadata into focused modules. Target modules:
-   ``rhs1_operator.py``, ``rhs1_state.py``, and ``rhs1_metadata.py``.
+   ``rhs1_operator.py``, ``rhs1_state.py``, and ``rhs1_metadata.py``. The
+   active-DOF routing/index-map portion has started in
+   ``rhs1_active_dof.py``.
 
 2. Solver-policy extraction
    Move auto-selection heuristics, environment parsing, fallback policy, and
@@ -44,6 +46,9 @@ land in small, gated slices.
    The second landed slice is ``sfincs_jax/rhs1_solver_diagnostics.py``, which
    owns x-block correction diagnostic records and output-visible metadata key
    assembly.
+   The third landed slice is ``sfincs_jax/rhs1_active_dof.py``, which owns
+   active-DOF routing and index-map construction for RHSMode=1 truncated pitch
+   grids and PAS constraint-projection solves.
 
 3. Preconditioner registry
    Keep x-block, PAS-lite, Schur, QI, and post-residual-equation preconditioners

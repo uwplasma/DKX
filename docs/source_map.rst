@@ -170,6 +170,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   typed RHSMode=1 x-block correction diagnostic records and historical solver
   metadata key assembly. This keeps output-visible trace fields independently
   testable while ``v3_driver.py`` continues to own the solve orchestration.
+- ``sfincs_jax/rhs1_active_dof.py``:
+  RHSMode=1 active-degree-of-freedom routing and reduced-index-map
+  construction for truncated pitch grids, x-block active-DOF opt-ins, and PAS
+  constraint-projection solves. This makes the active/full-system selection
+  policy independently testable before deeper residual/operator extraction.
 - ``sfincs_jax/rhs1_qi_block_schur.py``:
   standalone JAX-compatible QI block-Schur/angular/radial coarse-preconditioner
   primitive. It builds deterministic global, radial, angular, and block-Schur

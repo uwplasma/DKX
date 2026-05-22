@@ -15523,16 +15523,17 @@ Updated completion estimates:
 - True differentiable/device-QI infrastructure: `99%`.
 - True differentiable/device-QI convergence evidence: `82%`; scoped below
   `3e-5` for the checked hard seed, but still open to production tolerance.
-- Refactor/coverage/CI: `90%`; the roadmap is now explicit, and the first
-  solver-policy plus diagnostic-schema slices have landed with focused tests.
+- Refactor/coverage/CI: `91%`; the roadmap is now explicit, and the first
+  solver-policy, diagnostic-schema, and active-DOF routing slices have landed
+  with focused tests.
 - Validation/benchmark infrastructure: `90%`; schemas and figures exist, but
   the next phase should consolidate them and reduce duplication.
-- Overall remaining-lane completion estimate: `91%`.
+- Overall remaining-lane completion estimate: `92%`.
 
 Next steps:
 
-1. Extract RHSMode=1 operator/residual state helpers and add synthetic
-   operator tests for active-DOF projection, residual norms, and metadata.
+1. Extract RHSMode=1 residual/state helpers and add synthetic operator tests
+   for residual norms, full/reduced projection consistency, and metadata.
 2. Consolidate benchmark artifact schema and regenerate only the lightweight
    manifest/plot checks locally; leave heavy CPU/GPU suites manual/scheduled.
 3. Keep QI hard-seed work as a documented research lane until a new coarse
@@ -15611,9 +15612,49 @@ Progress:
 
 Best next steps:
 
-1. Run strict docs plus release/research gates, then commit and push this
-   extraction checkpoint.
-2. Extract RHSMode=1 active-DOF projection/residual helpers from
-   `v3_driver.py` behind pure-function tests.
-3. Consolidate benchmark/evidence schemas after the driver split so README
+1. Extract RHSMode=1 active-DOF projection/residual helpers from `v3_driver.py`
+   behind pure-function tests.
+2. Consolidate benchmark/evidence schemas after the driver split so README
    figures, docs, and research-lane manifests stay synchronized.
+
+### 35.62 RHSMode=1 active-DOF routing extraction slice
+
+Scope:
+
+- Added `sfincs_jax/rhs1_active_dof.py` with typed decision/state records for
+  RHSMode=1 active-DOF routing and index-map construction.
+- Replaced the in-driver `SFINCS_JAX_ACTIVE_DOF`/DKES/sparse-host active-DOF
+  decision block and full-to-active map assembly with calls to the new helper.
+  The helper preserves the prior behavior: explicit env overrides win, reduced
+  pitch grids compact automatically when safe, sparse-host-like paths stay full
+  unless x-block active-DOF is explicitly enabled, and PAS constraint projection
+  maps only the `f` block.
+- Added `tests/test_rhs1_active_dof.py` covering env override precedence,
+  sparse-host and DKES auto guards, full-system active maps, PAS-projected
+  active maps, and disabled/no-op state.
+- Updated `docs/source_map.rst` and `docs/development_roadmap.rst` so this
+  operator/state extraction seam is documented.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/rhs1_active_dof.py sfincs_jax/v3_driver.py tests/test_rhs1_active_dof.py`
+- `python -m compileall -q sfincs_jax/rhs1_active_dof.py sfincs_jax/v3_driver.py tests/test_rhs1_active_dof.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_active_dof.py tests/test_v3_sparse_pattern.py::test_sparse_pc_gmres_active_dof_reduces_truncated_pas_system tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_active_dof_opt_in_records_reduced_size`
+  (`5 passed`)
+
+Progress:
+
+- Refactor/coverage/CI: `91%`; active-DOF routing/index maps are no longer
+  embedded in the monolithic driver, and the extracted helper is covered by
+  both pure unit tests and real reduced-system solve tests.
+- Overall remaining-lane completion estimate: `92%`.
+
+Best next steps:
+
+1. Run the broader RHSMode=1 sparse/driver group plus strict docs and release
+   gates, then commit and push this checkpoint if clean.
+2. Extract full/reduced residual-evaluation helpers next, using synthetic
+   matvec tests plus the existing sparse-PC/x-block active-DOF integration
+   tests as guardrails.
+3. Continue benchmark/evidence schema consolidation after the residual helper
+   seam lands.
