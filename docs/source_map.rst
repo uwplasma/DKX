@@ -368,8 +368,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   checked smoother/restart variants, assembled CSR reuse, phase-space and
   residual-bounce coarse probes, composite closure, global moment,
   residual-Galerkin, block-Schur, current/nullspace moment enrichments, and
-  current augmented-seed hard-seed probe plumbing; each either failed to improve
-  the best hard-seed result or remained far above the write gate. The aggregate
+  current augmented-seed and active-pattern hard-seed probe plumbing; each
+  either failed to improve the best hard-seed result or remained far above the
+  write gate. The aggregate
   manifest records failed/nonconverged artifacts as requested-only classes for
   promotion gating and preserves observed fail-closed machinery in separate
   metadata fields. Promotion still requires a hard-seed artifact with converged
@@ -377,10 +378,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   residual/write-gate satisfaction, no host fallback, CPU/GPU consistency,
   promotion-eligible manifest classification, and then wider
   production-resolution seed/backend coverage. The active-pattern chunked
-  coarse primitive is now implemented and tested as standalone infrastructure,
-  while the next promotion attempt must couple it to a region-aware coarse
-  operator or true Schur/residual equation over accepted bounce/residual regions
-  rather than another local smoother, restart, or basis-only knob.
+  coarse primitive is now wired through the device preconditioner, driver,
+  runner, manifest, and tests, but the office GPU hard-seed artifact is
+  promotion-negative. The next promotion attempt therefore needs a deeper
+  coupled Schur/residual equation over accepted bounce/residual regions rather
+  than another local smoother, restart, or basis-only knob.
 - ``sfincs_jax/rhs1_qi_multilevel_coarse.py``:
   standalone multilevel angular-radial-pitch-current coarse prototype for the next true
   device-QI architecture. It constructs deterministic radial aggregate levels,

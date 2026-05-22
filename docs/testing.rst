@@ -875,7 +875,7 @@ because it writes no output or solver trace.
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
 passing bounded grid ``139502``, the largest attempted bounded grid ``139502``,
-32 passing artifacts and 74 non-passing blocker artifacts, a ``60%``
+32 passing artifacts and 75 non-passing blocker artifacts, a ``60%``
 per-axis lane-completion estimate based only on passing artifacts, and
 ``86.32%`` of production total size still uncovered. The production acceptance
 gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
@@ -886,6 +886,13 @@ evidence, not as a production-resolution QI robustness claim. Promote QI
 robustness only after the next bounded scale and production-resolution CPU/GPU
 seed ladders are checked with solver traces and the evidence manifest is
 regenerated.
+
+The active-pattern GPU probe
+``docs/_static/qi_seed_robustness_scale060_active_pattern_device_qi_gpu0.json``
+is also included as fail-closed evidence. It observes the residual-selected
+pitch/angular/radial/species coarse path, but the solve still refuses output at
+residual ``1.622338e-5`` against the hard-seed write gate. It is tracked so the
+negative result is reproducible and not promoted accidentally.
 
 The latest residual-weighted angular probe-coarse artifact
 ``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``

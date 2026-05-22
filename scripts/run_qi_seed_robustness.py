@@ -244,6 +244,10 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT
     / "docs"
     / "_static"
+    / "qi_seed_robustness_scale060_active_pattern_device_qi_gpu0.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
     / "qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json",
     REPO_ROOT
     / "docs"

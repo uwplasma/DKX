@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 106
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 107
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 74
+    assert current["nonpassing_artifact_count"] == 75
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -1047,6 +1047,7 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         ),
         "docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_cpu.json",
         "docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0.json",
+        "docs/_static/qi_seed_robustness_scale060_active_pattern_device_qi_gpu0.json",
         "docs/_static/qi_seed_robustness_scale060_block_schur_device_qi_cpu_2026_05_20.json",
         (
             "docs/_static/"
@@ -1079,6 +1080,18 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json",
         "docs/_static/qi_seed_robustness_scale060_device_operator_rejected_2026_05_13.json",
     } == source_paths
+
+    active_pattern = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"] == "docs/_static/qi_seed_robustness_scale060_active_pattern_device_qi_gpu0.json"
+    )
+    assert active_pattern["passed"] is False
+    assert active_pattern["active_size"] == 81377
+    assert active_pattern["total_size"] == 139502
+    assert active_pattern["last_reported_residual_norm"] == pytest.approx(1.622338e-05)
+    assert "requested_active_pattern_coarse_device_qi" in active_pattern["evidence_classes"]
+    assert "device_qi_active_pattern_coarse_reuse" in active_pattern["fail_closed_observed_classes"]
 
     recycle = next(
         artifact

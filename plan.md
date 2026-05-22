@@ -15136,6 +15136,16 @@ Current status:
   `106` artifacts (`32` passing, `74` nonpassing) and is negative promotion
   evidence: it is worse than the recycled augmented-Krylov incumbent
   (`7.336295e-06`) despite acceptable memory.
+- The active-pattern office GPU hard-seed run
+  `docs/_static/qi_seed_robustness_scale060_active_pattern_device_qi_gpu0.json`
+  exercised residual-selected pitch/angular/radial/species chunk coarse reuse
+  at active size `81377`. It completed bounded execution in `231.67 s`
+  (`3:51.77` wrapper wall, `4.22 GB` peak host RSS), observed active-pattern,
+  operator-Krylov, augmented-Krylov, and coarse-reuse metadata, but correctly
+  refused nonconverged output with final residual `1.622338e-05` against the
+  `3.021487e-11` write gate. The manifest now tracks `107` artifacts
+  (`32` passing, `75` nonpassing). This is negative promotion evidence: memory
+  is acceptable, but the residual is worse than the best true-device artifact.
 - Promotion status: still fail-closed. This hook is useful auditable negative
   evidence, but it is slower and no more convergent than the best recycled
   augmented-Krylov/phase-space hard-seed evidence, so it remains opt-in only.
@@ -15147,25 +15157,27 @@ Closure-state clarification for the QI lane:
   seed correction, true device-QI coarse reuse, augmented FGMRES operator reuse,
   augmented-seed Krylov coarse-space recycling,
   multilevel residual equations, block-Schur residual equations, global moment
-  closure, residual-Galerkin closure, phase-space coarse reuse, and
-  residual-region/bounce-region coarse reuse. These lanes are runtime-wired,
-  manifest-classified, and locally tested where recorded above, but they are
-  not public defaults for true device-QI. The manifest uses requested-only
-  classes for failed/nonconverged artifacts while preserving observed
-  fail-closed metadata separately, so downstream gates do not confuse
-  installed probe machinery with promotion evidence.
+  closure, residual-Galerkin closure, phase-space coarse reuse,
+  residual-region/bounce-region coarse reuse, and active-pattern chunked
+  coarse reuse. These lanes are runtime-wired, manifest-classified, and locally
+  tested where recorded above, but they are not public defaults for true
+  device-QI. The manifest uses requested-only classes for failed/nonconverged
+  artifacts while preserving observed fail-closed metadata separately, so
+  downstream gates do not confuse installed probe machinery with promotion
+  evidence.
 - Implemented production fallback with a different claim: the non-autodiff
   host/x-block route remains the practical large-QI fallback. It must not be
   described as closing the differentiable or true device-QI lane.
 - Negative evidence: adaptive smoother/restart variants, full CSR assembled
   reuse under the tested cap, phase-space coarse reuse, residual-bounce coarse
-  reuse, composite closure, global moment closure, residual-Galerkin closure,
-  block-Schur staged residual equations, and current/nullspace moment
-  enrichment all failed the production write gate in the recorded hard-seed
-  probes. The best checked one-GPU true-device result remains the recycled
-  augmented-Krylov/coarse-reuse artifact at `7.336295e-06` in `158.58 s`; the
-  residual-bounce CPU/GPU artifacts ended at `7.833826e-06` and `8.077991e-06`,
-  respectively, against the `3.021487e-11` write gate.
+  reuse, active-pattern chunked coarse reuse, composite closure, global moment
+  closure, residual-Galerkin closure, block-Schur staged residual equations,
+  and current/nullspace moment enrichment all failed the production write gate
+  in the recorded hard-seed probes. The best checked one-GPU true-device result
+  remains the recycled augmented-Krylov/coarse-reuse artifact at
+  `7.336295e-06` in `158.58 s`; residual-bounce CPU/GPU artifacts ended at
+  `7.833826e-06` and `8.077991e-06`, respectively, and the active-pattern GPU
+  artifact ended at `1.622338e-05`, all against the `3.021487e-11` write gate.
 - Promotion gates still open: a true device-QI artifact must write HDF5 output
   and solver trace metadata, record accepted-converged status, satisfy the
   hard-seed residual/write gate, avoid host fallback, pass CPU/GPU consistency
@@ -15188,11 +15200,8 @@ Closure-state clarification for the QI lane:
   with `13 passed, 81 deselected`; broader preconditioner/runner tests passed
   with `88 passed`; QI smoke/wave-3 tests passed with `31 passed`; release
   gates, research-lane gates, strict Sphinx docs, and `git diff --check` passed.
-- Next promotion attempt: run the office GPU preset
-  `active-pattern-device-qi` on the same scale-0.60 hard seed, inspect the
-  compact JSON for observed active-pattern metadata, and keep it only as
-  promotion evidence if it beats the best existing true-device residual
-  `7.336295e-06` and writes accepted-converged output. If it again stalls
-  above the `3.021487e-11` write gate, classify it as negative evidence and
-  move the remaining true-QI work to a deeper coupled Schur/multilevel
-  residual-equation design rather than further smoother or restart tuning.
+- Next promotion attempt: do not keep tuning the active-pattern or smoother
+  knobs. The remaining true-QI work needs a deeper coupled Schur/multilevel
+  residual-equation design, because all currently implemented device-compatible
+  coarse/recycling probes are now auditable but promotion-negative at the
+  scale-0.60 hard seed.
