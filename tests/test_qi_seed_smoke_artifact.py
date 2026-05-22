@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 105
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 106
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 73
+    assert current["nonpassing_artifact_count"] == 74
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -1021,6 +1021,7 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
             "docs/_static/"
             "qi_seed_robustness_scale060_recycled_augmented_deep_device_qi_gpu0_2026_05_20.json"
         ),
+        "docs/_static/qi_seed_robustness_scale060_operator_krylov_augmented_seed_device_qi_gpu0.json",
         "docs/_static/qi_seed_robustness_scale060_coarse_residual_device_qi_cpu_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_residual_snapshot_device_qi_cpu_2026_05_20.json",
         (
@@ -1279,6 +1280,31 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "last_reported_residual_norm"
     ]
     assert recycled_augmented_gpu["max_elapsed_s"] < 170.0
+    augmented_seed_gpu = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_operator_krylov_augmented_seed_device_qi_gpu0.json"
+    )
+    assert augmented_seed_gpu["passed"] is False
+    assert augmented_seed_gpu["evidence_classes"] == ["requested_augmented_seed_device_qi"]
+    assert augmented_seed_gpu["fail_closed_observed_classes"] == [
+        "device_qi_augmented_krylov_coarse_reuse"
+    ]
+    assert "requested_augmented_seed" in augmented_seed_gpu["evidence_tags"]
+    assert "requested_augmented_krylov" in augmented_seed_gpu["evidence_tags"]
+    assert "observed_augmented_krylov" not in augmented_seed_gpu["evidence_tags"]
+    assert "observed_augmented_krylov" in augmented_seed_gpu["fail_closed_observed_tags"]
+    assert augmented_seed_gpu["active_size"] == 81377
+    assert augmented_seed_gpu["total_size"] == 139502
+    assert augmented_seed_gpu["last_reported_residual_norm"] == pytest.approx(2.432038e-05)
+    assert augmented_seed_gpu["last_reported_residual_norm"] > augmented_gpu[
+        "last_reported_residual_norm"
+    ]
+    assert augmented_seed_gpu["last_reported_residual_norm"] > recycled_augmented_gpu[
+        "last_reported_residual_norm"
+    ]
+    assert augmented_seed_gpu["max_elapsed_s"] < 180.0
     phase_space_gpu = next(
         artifact
         for artifact in payload["source_artifacts"]

@@ -257,7 +257,11 @@ def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
         "(levels=3 stage_rank=16 order=coarse_to_fine include_global=1)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres QI device "
         "preconditioner accepted residual 2.814560e-05 -> 2.533104e-05 "
-        "(rank=12 use_in_krylov=1 operator_krylov=1 coarse_reuse=1 ratio=9.000000e-01)",
+        "(rank=12 use_in_krylov=1 augmented_seed_requested=1 "
+        "augmented_seed_available=1 augmented_seed_used=0 augmented_seed_rank=1 "
+        "augmented_seed_max_rank=8 augmented_seed_reason=augmented_residual_reduced "
+        "augmented_seed_projection_residual=2.700000e-05 operator_krylov=1 "
+        "coarse_reuse=1 ratio=9.000000e-01)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe method_rescue "
         "side=left->left method=gmres->lgmres iters=20 matvecs=23 residual=4.565805e-06 "
         "ratio=1.511112e+07 seed_used=1",
@@ -292,6 +296,19 @@ def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
     assert qi_device["xblock_qi_device_preconditioner_use_in_krylov"] is True
     assert qi_device["xblock_qi_device_preconditioner_operator_krylov_enrichment"] is True
     assert qi_device["xblock_qi_device_preconditioner_coarse_reuse"] is True
+    assert qi_device["xblock_qi_device_preconditioner_augmented_seed_requested"] is True
+    assert qi_device["xblock_qi_device_preconditioner_augmented_seed_available"] is True
+    assert qi_device["xblock_qi_device_preconditioner_augmented_seed_used"] is False
+    assert qi_device["xblock_qi_device_preconditioner_augmented_seed_rank"] == 1
+    assert qi_device["xblock_qi_device_preconditioner_augmented_seed_max_rank"] == 8
+    assert (
+        qi_device["xblock_qi_device_preconditioner_augmented_seed_reason"]
+        == "augmented_residual_reduced"
+    )
+    assert (
+        qi_device["xblock_qi_device_preconditioner_augmented_seed_projection_residual_norm"]
+        == 2.7e-05
+    )
     assert qi_device["xblock_qi_device_preconditioner_multilevel_residual_equation"] is True
     assert qi_device["xblock_qi_device_preconditioner_multilevel_residual_equation_stage_rank"] == 16
     assert qi_device["xblock_qi_device_preconditioner_multilevel_residual_equation_order"] == "coarse_to_fine"

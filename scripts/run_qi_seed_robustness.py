@@ -196,6 +196,10 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT
     / "docs"
     / "_static"
+    / "qi_seed_robustness_scale060_operator_krylov_augmented_seed_device_qi_gpu0.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
     / "qi_seed_robustness_scale060_recycled_augmented_deep_device_qi_gpu0_2026_05_20.json",
     REPO_ROOT
     / "docs"
@@ -1940,6 +1944,27 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
             "xblock_qi_device_preconditioner_improvement_ratio": ratio,
             "xblock_qi_device_preconditioner_use_in_krylov": use_in_krylov,
             "xblock_qi_device_preconditioner_seed_only": seed_only,
+            "xblock_qi_device_preconditioner_augmented_seed_requested": _bool_from_log_value(
+                key_values.get("augmented_seed_requested")
+            ),
+            "xblock_qi_device_preconditioner_augmented_seed_available": _bool_from_log_value(
+                key_values.get("augmented_seed_available")
+            ),
+            "xblock_qi_device_preconditioner_augmented_seed_used": _bool_from_log_value(
+                key_values.get("augmented_seed_used")
+            ),
+            "xblock_qi_device_preconditioner_augmented_seed_rank": _int_from_log_value(
+                key_values.get("augmented_seed_rank")
+            ),
+            "xblock_qi_device_preconditioner_augmented_seed_max_rank": _int_from_log_value(
+                key_values.get("augmented_seed_max_rank")
+            ),
+            "xblock_qi_device_preconditioner_augmented_seed_reason": key_values.get(
+                "augmented_seed_reason"
+            ),
+            "xblock_qi_device_preconditioner_augmented_seed_projection_residual_norm": (
+                _float_from_log_value(key_values.get("augmented_seed_projection_residual"))
+            ),
             "xblock_qi_device_preconditioner_operator_krylov_enrichment": _bool_from_log_value(
                 key_values.get("operator_krylov")
                 or key_values.get("operator_krylov_enrichment")

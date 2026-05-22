@@ -15126,9 +15126,16 @@ Current status:
   and
   `docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0.json`
   now classify as `device_qi_residual_bounce_region_coarse_reuse` and record
-  observed residual-bounce metadata. The evidence manifest includes them,
-  moving the QI evidence corpus to `105` artifacts (`32` passing, `73`
-  nonpassing).
+  observed residual-bounce metadata. The evidence manifest includes them.
+- The follow-up office GPU hard-seed run
+  `docs/_static/qi_seed_robustness_scale060_operator_krylov_augmented_seed_device_qi_gpu0.json`
+  exercised the operator-Krylov augmented-seed path at active size `81377`.
+  It completed bounded execution in `128.57 s` with observed augmented Krylov
+  and coarse reuse, but correctly refused output with residual `2.432038e-05`
+  against the `3.021487e-11` write gate. This moves the QI evidence corpus to
+  `106` artifacts (`32` passing, `74` nonpassing) and is negative promotion
+  evidence: it is worse than the recycled augmented-Krylov incumbent
+  (`7.336295e-06`) despite acceptable memory.
 - Promotion status: still fail-closed. This hook is useful auditable negative
   evidence, but it is slower and no more convergent than the best recycled
   augmented-Krylov/phase-space hard-seed evidence, so it remains opt-in only.

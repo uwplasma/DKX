@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 105,
+    "artifact_count": 106,
     "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
@@ -30,6 +30,7 @@
       "device_qi_seed_only_probe": 14,
       "public_auto_or_legacy": 58,
       "requested_augmented_krylov_device_qi": 3,
+      "requested_augmented_seed_device_qi": 1,
       "requested_block_schur_residual_device_qi": 5,
       "requested_device_qi": 8,
       "requested_global_moment_residual_equation_device_qi": 2,
@@ -42,30 +43,31 @@
       "requested_residual_snapshot_residual_equation_device_qi": 1
     },
     "evidence_tag_counts": {
-      "failed_before_solver_trace_summary": 69,
-      "no_hdf5_output": 26,
-      "requested_augmented_krylov": 6,
+      "failed_before_solver_trace_summary": 70,
+      "no_hdf5_output": 27,
+      "requested_augmented_krylov": 7,
+      "requested_augmented_seed": 1,
       "requested_block_schur_residual": 6,
-      "requested_coarse_reuse": 22,
-      "requested_device_qi": 23,
+      "requested_coarse_reuse": 23,
+      "requested_device_qi": 24,
       "requested_global_moment_residual_equation": 2,
-      "requested_installed_krylov": 48,
+      "requested_installed_krylov": 49,
       "requested_multilevel_residual_equation": 1,
-      "requested_operator_krylov": 24,
+      "requested_operator_krylov": 25,
       "requested_phase_space_residual_equation": 1,
       "requested_residual_bounce_region_coarse": 2,
       "requested_residual_galerkin_equation": 3,
       "requested_residual_snapshot": 3,
       "requested_residual_snapshot_residual_equation": 1
     },
-    "failed_before_summary_json_count": 69,
+    "failed_before_summary_json_count": 70,
     "largest_attempted_total_size": 139502,
     "largest_nonpassing_total_size": 139502,
     "max_checked_active_size": 81377,
     "max_checked_per_axis_resolution_fraction": 0.6,
     "max_checked_total_size": 139502,
     "max_checked_total_size_fraction": 0.13676639849725786,
-    "nonpassing_artifact_count": 73,
+    "nonpassing_artifact_count": 74,
     "passing_artifact_count": 32,
     "production_total_size_uncovered_percent": 86.32
   },
@@ -853,6 +855,7 @@
         "docs/_static/qi_seed_robustness_scale060_current_constraint_device_qi_gpu0_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_cpu_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_gpu0_2026_05_20.json",
+        "docs/_static/qi_seed_robustness_scale060_operator_krylov_augmented_seed_device_qi_gpu0.json",
         "docs/_static/qi_seed_robustness_scale060_recycled_augmented_deep_device_qi_gpu0_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_coarse_residual_device_qi_cpu_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_residual_snapshot_device_qi_cpu_2026_05_20.json",
@@ -4626,6 +4629,98 @@
       "max_residual_ratio": null,
       "passed": false,
       "path": "docs/_static/qi_seed_robustness_scale060_augmented_krylov_device_qi_gpu0_2026_05_20.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "run_outcomes": [
+        "process_failed"
+      ],
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "evidence_classes": [
+        "requested_augmented_seed_device_qi"
+      ],
+      "evidence_classification": {
+        "classes": [
+          "requested_augmented_seed_device_qi"
+        ],
+        "fail_closed": true,
+        "fail_closed_observed_classes": [
+          "device_qi_augmented_krylov_coarse_reuse"
+        ],
+        "fail_closed_observed_tags": [
+          "observed_augmented_krylov",
+          "observed_coarse_reuse",
+          "observed_device_qi_residual_probe",
+          "observed_installed_krylov",
+          "observed_operator_krylov"
+        ],
+        "has_failed_before_summary_json": true,
+        "has_observed_block_schur_residual": false,
+        "has_observed_coarse_reuse": false,
+        "has_observed_global_moment_residual_equation": false,
+        "has_observed_installed_krylov": false,
+        "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
+        "has_observed_residual_bounce_region_coarse": false,
+        "has_observed_residual_galerkin_equation": false,
+        "has_observed_residual_snapshot": false,
+        "outcomes": [
+          "process_failed"
+        ],
+        "promotion_eligible_seed_count": 0,
+        "tags": [
+          "failed_before_solver_trace_summary",
+          "no_hdf5_output",
+          "requested_augmented_krylov",
+          "requested_augmented_seed",
+          "requested_coarse_reuse",
+          "requested_device_qi",
+          "requested_installed_krylov",
+          "requested_operator_krylov"
+        ]
+      },
+      "evidence_tags": [
+        "failed_before_solver_trace_summary",
+        "no_hdf5_output",
+        "requested_augmented_krylov",
+        "requested_augmented_seed",
+        "requested_coarse_reuse",
+        "requested_device_qi",
+        "requested_installed_krylov",
+        "requested_operator_krylov"
+      ],
+      "fail_closed_observed_classes": [
+        "device_qi_augmented_krylov_coarse_reuse"
+      ],
+      "fail_closed_observed_tags": [
+        "observed_augmented_krylov",
+        "observed_coarse_reuse",
+        "observed_device_qi_residual_probe",
+        "observed_installed_krylov",
+        "observed_operator_krylov"
+      ],
+      "last_reported_residual_norm": 2.432038e-05,
+      "max_elapsed_s": 128.57102732732892,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_operator_krylov_augmented_seed_device_qi_gpu0.json",
       "public_cli_default_path": false,
       "resolution": {
         "NTHETA": 15,
