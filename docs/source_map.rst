@@ -463,7 +463,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   controls, progress logs, solver-trace keys, and the
   ``coupled-residual-device-qi`` hard-seed probe preset. The runner classifies
   this as a joint coupled-equation route rather than as another staged
-  block-Schur or active-pattern variant.
+  block-Schur or active-pattern variant. The optional
+  ``*_INSTALL_IN_KRYLOV_ON_REJECT`` control installs a validated coupled stage
+  as a Krylov preconditioner without changing ``x0`` when the one-shot seed
+  probe is rejected, matching field-split preconditioner semantics.
 - ``sfincs_jax/rhs1_qi_promotion.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace

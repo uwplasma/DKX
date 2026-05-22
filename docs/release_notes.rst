@@ -18,6 +18,10 @@ Unreleased
   solver-trace metadata, and the ``coupled-residual-device-qi`` evidence
   preset. The path remains opt-in and fail-closed until a bounded CPU/GPU
   hard-seed artifact writes converged output and trace metadata.
+- Added an opt-in Krylov-install mode for validated coupled residual-equation
+  stages whose seed probe is rejected. This tests the preconditioner in the
+  mathematically relevant Krylov context without relaxing convergence gates or
+  changing the initial seed.
 - Updated QI evidence counts, multi-GPU wording, and source-map closure text so
   release-facing docs distinguish production host fallback from research
   device-QI probes.

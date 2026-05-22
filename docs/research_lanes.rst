@@ -667,9 +667,12 @@ Current evidence
   promotion attempt. It is wired through the driver, runner, and manifest as
   ``coupled-residual-device-qi`` and solves accepted multilevel/block-Schur/
   residual-snapshot coarse spaces together instead of freezing staged
-  coefficients. This is still research evidence, not a release claim, until a
-  bounded CPU/GPU hard-seed artifact writes converged output and records
-  observed coupled-equation metadata.
+  coefficients. The preset can also install the validated coupled stage inside
+  Krylov after a rejected one-shot seed probe, which tests the route as a true
+  preconditioner rather than as a seed-correction heuristic. This is still
+  research evidence, not a release claim, until a bounded CPU/GPU hard-seed
+  artifact writes converged output and records observed coupled-equation
+  metadata.
 
 Promotion gate
 ~~~~~~~~~~~~~~
