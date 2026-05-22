@@ -30,6 +30,19 @@ SFINCS_ADJOINT_APS_URL = "https://meetings-archive.aps.org/dpp/2018/bp11/36/"
 
 PUBLIC_3D_BENCHMARK_FLOOR = {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100}
 PUBLIC_TOKAMAK_BENCHMARK_FLOOR = {"NTHETA": 25, "NZETA": 1, "NX": 4, "NXI": 100}
+FORTRAN_SUITE_BENCHMARK_SCHEMA_VERSION = 1
+FORTRAN_SUITE_BENCHMARK_KIND = "fortran_v3_suite_benchmark_summary"
+FORTRAN_SUITE_BENCHMARK_REPORT_KEYS = (
+    "total_cases",
+    "parity_ok_cases",
+    "jax_error_cases",
+    "max_attempts_cases",
+    "strict_mismatch_total",
+    "runtime_ratio_summary",
+    "warm_or_logged_runtime_ratio_summary",
+    "memory_ratio_summary",
+    "active_memory_ratio_summary",
+)
 
 SUITE_MISMATCH_FIELDS = (
     "n_mismatch_common",
@@ -620,6 +633,32 @@ def suite_report_summary(
     }
 
 
+def fortran_suite_benchmark_schema_errors(payload: Mapping[str, object]) -> list[str]:
+    """Return schema-contract errors for README/docs benchmark summaries."""
+
+    errors: list[str] = []
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return ["missing metadata mapping"]
+    if metadata.get("kind") != FORTRAN_SUITE_BENCHMARK_KIND:
+        errors.append("metadata.kind must be fortran_v3_suite_benchmark_summary")
+    if metadata.get("schema_version") != FORTRAN_SUITE_BENCHMARK_SCHEMA_VERSION:
+        errors.append(f"metadata.schema_version must be {FORTRAN_SUITE_BENCHMARK_SCHEMA_VERSION}")
+    reports = payload.get("reports")
+    if not isinstance(reports, Mapping):
+        errors.append("missing reports mapping")
+        return errors
+    for backend in ("cpu", "gpu"):
+        report = reports.get(backend)
+        if not isinstance(report, Mapping):
+            errors.append(f"reports.{backend} must be a mapping")
+            continue
+        for key in FORTRAN_SUITE_BENCHMARK_REPORT_KEYS:
+            if key not in report:
+                errors.append(f"reports.{backend}.{key} missing")
+    return errors
+
+
 def er_zero_field_spread(
     records: Sequence[ErSweepRecord],
     *,
@@ -1071,10 +1110,10 @@ def build_fortran_suite_benchmark_summary(
             "Public benchmark summary includes below-floor or untagged rows: "
             + json.dumps(resolution_floor_violations, sort_keys=True)
         )
-    return {
+    payload = {
         "metadata": {
-            "schema_version": 1,
-            "kind": "fortran_v3_suite_benchmark_summary",
+            "schema_version": FORTRAN_SUITE_BENCHMARK_SCHEMA_VERSION,
+            "kind": FORTRAN_SUITE_BENCHMARK_KIND,
             "literature": [
                 LANDREMAN_2014_URL,
                 LANDREMAN_2014_OPEN_PDF,
@@ -1111,6 +1150,10 @@ def build_fortran_suite_benchmark_summary(
             "gpu": suite_report_summary(gpu_rows, label="GPU"),
         },
     }
+    schema_errors = fortran_suite_benchmark_schema_errors(payload)
+    if schema_errors:
+        raise ValueError("Invalid Fortran-suite benchmark summary schema: " + "; ".join(schema_errors))
+    return payload
 
 
 def build_high_collisionality_trend_proxy_summary(

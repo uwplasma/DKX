@@ -21,6 +21,7 @@ from sfincs_jax.validation_artifacts import (
     collisionality_labels,
     er_nonzero_model_spread,
     er_zero_field_spread,
+    fortran_suite_benchmark_schema_errors,
     fp_pas_l11_separation,
     high_collisionality_trend_summary,
     load_collisionality_records,
@@ -245,6 +246,7 @@ def test_fortran_suite_benchmark_summary_can_filter_short_reference_runs(tmp_pat
         {"case": "case_00", "fortran_runtime_s": 0.2}
     ]
     assert payload["metadata"]["resolution_floor_violations"] == {"cpu": [], "gpu": []}
+    assert fortran_suite_benchmark_schema_errors(payload) == []
     assert payload["reports"]["cpu"]["total_cases"] == 2
 
 
@@ -268,10 +270,25 @@ def test_fortran_suite_benchmark_summary_rejects_below_floor_public_rows(tmp_pat
         )
 
 
+def test_fortran_suite_benchmark_schema_validator_fails_closed() -> None:
+    payload = {
+        "metadata": {"schema_version": 99, "kind": "wrong"},
+        "reports": {"cpu": {}, "gpu": {"total_cases": 0}},
+    }
+
+    errors = fortran_suite_benchmark_schema_errors(payload)
+
+    assert "metadata.kind must be fortran_v3_suite_benchmark_summary" in errors
+    assert "metadata.schema_version must be 1" in errors
+    assert "reports.cpu.total_cases missing" in errors
+    assert "reports.gpu.parity_ok_cases missing" in errors
+
+
 def test_fortran_suite_benchmark_summary_records_source_reports_and_gates() -> None:
     payload = json.loads((_artifact_dir() / "sfincs_jax_fortran_suite_benchmark_summary.json").read_text())
 
     assert payload["metadata"]["kind"] == "fortran_v3_suite_benchmark_summary"
+    assert fortran_suite_benchmark_schema_errors(payload) == []
     assert "https://github.com/landreman/sfincs" in payload["metadata"]["literature"]
     assert payload["metadata"]["source_case_counts"] == {"cpu": 39, "gpu": 39}
     assert payload["metadata"]["source_reports"] == {

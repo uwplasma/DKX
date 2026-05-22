@@ -603,7 +603,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   module is independent of the heavy solver path, so documentation and CI can verify
   collisionality, high-collisionality trend, trajectory-sweep, and dashboard artifacts
   plus frozen CPU/GPU Fortran-suite benchmark summaries without rerunning large scans
-  or example-suite audits.
+  or example-suite audits. It also owns the fail-closed schema validator for the
+  Fortran-v3 vs SFINCS-JAX runtime/memory benchmark summary consumed by README/docs
+  plots.
 - ``sfincs_jax/phi1_newton_policy.py``:
   bounded nonlinear/Newton policy for Phi1 solves, including active-DOF mode
   selection, restart sizing, frozen-Jacobian cache policy, and line-search policy.

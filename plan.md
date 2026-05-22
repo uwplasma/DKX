@@ -15526,17 +15526,16 @@ Updated completion estimates:
 - Refactor/coverage/CI: `93%`; the roadmap is now explicit, and the first
   solver-policy, diagnostic-schema, active-DOF routing, active-projection, and
   residual-gate slices have landed with focused tests.
-- Validation/benchmark infrastructure: `90%`; schemas and figures exist, but
-  the next phase should consolidate them and reduce duplication.
-- Overall remaining-lane completion estimate: `94%`.
+- Validation/benchmark infrastructure: `92%`; the README/docs benchmark
+  summary now has a fail-closed schema validator in the central validation
+  artifact module.
+- Overall remaining-lane completion estimate: `95%`.
 
 Next steps:
 
 1. Extract RHSMode=1 residual/state helpers and add synthetic operator tests
    for residual norms, full/reduced projection consistency, and metadata.
-2. Consolidate benchmark artifact schema and regenerate only the lightweight
-   manifest/plot checks locally; leave heavy CPU/GPU suites manual/scheduled.
-3. Keep QI hard-seed work as a documented research lane until a new coarse
+2. Keep QI hard-seed work as a documented research lane until a new coarse
    residual equation beats the current fail-closed evidence and writes
    converged HDF5/solver trace artifacts.
 
@@ -15734,3 +15733,40 @@ Best next steps:
    and output-visible diagnostics tests.
 3. Do a final refactor-documentation sweep once the residual metadata seam is
    stable.
+
+### 35.65 Fortran-suite benchmark schema gate
+
+Scope:
+
+- Added `FORTRAN_SUITE_BENCHMARK_SCHEMA_VERSION`,
+  `FORTRAN_SUITE_BENCHMARK_KIND`, required report-key constants, and
+  `fortran_suite_benchmark_schema_errors(...)` to
+  `sfincs_jax/validation_artifacts.py`.
+- Wired `build_fortran_suite_benchmark_summary(...)` through the validator so
+  README/docs runtime-memory summaries fail closed if required metadata or
+  CPU/GPU report fields drift.
+- Extended `tests/test_validation_artifacts.py` to assert that generated
+  summaries and the checked-in benchmark artifact satisfy the schema, and that
+  malformed payloads report actionable missing-field/schema-version errors.
+- Updated `docs/source_map.rst` to document that benchmark schema ownership
+  lives in the validation artifact layer, not in plotting scripts.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/validation_artifacts.py tests/test_validation_artifacts.py`
+- `python -m compileall -q sfincs_jax/validation_artifacts.py tests/test_validation_artifacts.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_validation_artifacts.py tests/test_validation_policy_coverage.py`
+  (`20 passed`)
+
+Progress:
+
+- Validation/benchmark infrastructure: `92%`; public benchmark plots now have a
+  central schema gate that can run in fast CI without rerunning heavy suites.
+- Overall remaining-lane completion estimate: `95%`.
+
+Best next steps:
+
+1. Run strict docs/release gates and commit/push if clean.
+2. Recheck GitHub CI after the latest pushed refactor checkpoints finish.
+3. Finalize the documentation/refactor sweep and keep the true production-QI
+   tolerance closure as the explicitly documented research lane.
