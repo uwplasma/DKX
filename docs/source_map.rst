@@ -140,6 +140,8 @@ Top-level solve orchestration. This file controls:
 - solver selection,
 - preconditioner selection,
 - bounded rescue paths,
+- post-Krylov residual-equation corrections that reuse cached QI ``(U, A U)``
+  columns,
 - transport-worker parallelism,
 - sharded experimental paths,
 - output-field collection.

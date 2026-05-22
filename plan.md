@@ -15348,3 +15348,196 @@ Next gates:
   deeper residual equation with coarse variables derived from the final Krylov
   residual/error modes, or else keep true device-QI explicitly deferred and use
   the documented non-autodiff host fallback for production large-QI runs.
+
+### 35.58 Post-Krylov residual-equation correction
+
+Implementation:
+
+- Added the opt-in RHSMode=1 x-block sparse-PC control
+  `SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION=1`. This is the next
+  non-smoother QI closure attempt: after Krylov exposes the true remaining
+  residual, the driver forms a bounded residual equation over cached QI
+  `(U, A U)` columns and fresh residual-derived physics directions.
+- Added `_apply_device_subspace_residual_equation_correction` in
+  `sfincs_jax/v3_driver.py`. It keeps candidate directions, stored operator
+  actions, and the least-squares solve in JAX arrays, accepts only measured
+  true-residual reductions, and fails closed when no valid improving correction
+  exists.
+- Exported requested/accepted residual-equation steps, accepted direction count,
+  direction names, and before/after residuals through solver metadata and HDF5
+  diagnostics. The QI evidence runner now treats `post-residual-equation`
+  progress lines as preserved evidence for compact failed-run artifacts.
+- Added the `post-residual-equation-device-qi` runner preset so CPU/GPU hard
+  seeds can exercise coupled-QI Krylov-install plus final-residual equation
+  reuse from one reproducible command.
+- Documented the new hook in usage, performance, testing, source-map, research
+  lane, and release-note pages. It is explicitly not a production claim until a
+  hard-seed CPU/GPU artifact converges and writes solver trace/HDF5 output.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/v3_driver.py sfincs_jax/io.py tests/test_v3_sparse_pattern.py tests/test_io_export_and_h5_coverage.py scripts/run_qi_seed_robustness.py`
+- `python -m compileall -q sfincs_jax/v3_driver.py sfincs_jax/io.py scripts/run_qi_seed_robustness.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_v3_sparse_pattern.py::test_device_subspace_residual_equation_reuses_cached_operator_basis tests/test_v3_sparse_pattern.py::test_device_subspace_residual_equation_fails_closed_without_improvement tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_post_residual_equation_records_metadata tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible`
+  (`4 passed`)
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_run_qi_seed_robustness.py::test_qi_seed_runner_infers_side_probe_and_residual_progress tests/test_run_qi_seed_robustness.py::test_qi_seed_runner_records_timeout_attempt_from_synthetic_tails tests/test_run_qi_seed_robustness.py::test_evidence_manifest_probe_recommendations_use_preset_specific_paths`
+  (`3 passed`)
+
+Bounded hard-seed evidence:
+
+- Regenerated
+  `docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_cpu_2026_05_22.json`
+  from the preserved scale-0.60 seed-3 CPU execution manifest. The run used
+  coupled QI Krylov-install plus the post-Krylov residual equation, completed
+  in `212.736 s`, and stayed fail-closed because HDF5 output was refused for a
+  nonconverged production-sized solve.
+- The new post-Krylov residual equation was reached and accepted one measured
+  correction: it reduced the final true residual from `2.362283e-05` to
+  `2.105918e-05` using `89` directions with cached QI `(U, A U)` columns. The
+  write target remains `3.021487e-11`, so this is useful algorithmic evidence
+  but not a promotion artifact.
+- Ran the matching scale-0.60 hard-seed GPU1 probe on `office` from a synced
+  current-tree copy. The run completed in `168.120 s` without timeout and wrote
+  `docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_gpu1_2026_05_22.json`.
+  It accepted the same one-step residual equation and reduced the final
+  residual from `2.450895e-05` to `2.142936e-05` using `89` directions, then
+  correctly refused nonconverged output against the `3.021487e-11` write gate.
+- The refreshed evidence manifest now includes this artifact as
+  `device_qi_coupled_post_residual_equation` fail-closed CPU/GPU evidence. The
+  manifest remains intentionally nonpromoting: the current residual is still
+  above the hard-seed gate and does not beat the best checked one-GPU residual
+  (`7.336295e-06`).
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `99%`.
+- True differentiable/device-QI convergence evidence: `82%`; the code now has
+  measured scale-0.60 hard-seed CPU and GPU evidence that the final-residual
+  equation reduces the true residual, but no converged hard-seed artifact exists
+  yet.
+- Production-resolution QI ladders: `40%`; still blocked until hard-seed output
+  and trace artifacts converge.
+- Single-case multi-GPU/multi-CPU strong scaling: `55%`; no change in this
+  step.
+- Refactor/coverage/CI: `85%`.
+- Overall remaining-lane completion estimate: `88%`.
+
+Best next steps:
+
+1. Do not tune smoothers/restarts. The CPU/GPU post-residual-equation probes
+   both reduce residuals but remain far above the write gate. Build the next
+   residual-equation space from additional final-cycle Krylov residual/error
+   snapshots and block-Schur current/constraint/profile moments, then reuse the
+   cached `A Q` action in the same JAX least-squares path.
+2. Keep the non-autodiff host fallback documented as the production route for
+   large RHSMode=1 QI solves until true device-QI writes converged HDF5/solver
+   trace artifacts on CPU and GPU.
+
+### 35.59 Refactoring, testing, validation, and benchmarking roadmap
+
+Scope:
+
+- The codebase is now large enough that the next phase should prioritize
+  maintainability and evidence quality in parallel with algorithmic work. The
+  goal is behavior-preserving structure: keep validated physics and solver
+  behavior unchanged while extracting modules that can be tested, documented,
+  benchmarked, and reviewed independently.
+- Added `docs/development_roadmap.rst` and linked it from `docs/index.rst`.
+  The page records the next-phase plan for code structure, testing, validation,
+  benchmarks, CI cost control, and acceptance gates.
+- Clarified the current QI scope boundary in the docs: the scale-0.60 QI hard
+  seed now gets below `3e-5` residual on CPU and GPU with the
+  post-residual-equation research path, but it is not converged to production
+  tolerance. More research is needed to improve this path, specifically a
+  stronger residual-equation/coarse space built from final Krylov error modes
+  and current/constraint/profile moments.
+
+Refactoring plan:
+
+1. Split `sfincs_jax/v3_driver.py` by responsibility without changing public
+   behavior. First targets are RHSMode=1 operator construction, active-DOF
+   projection, residual evaluation, solver metadata, solver-policy decisions,
+   and output/diagnostic boundaries.
+2. Add typed decision/data objects for solver policy and solver diagnostics so
+   CLI, Python API, output writers, and benchmark scripts consume the same
+   fields.
+3. Convert preconditioners into a registry with explicit capability metadata:
+   CPU/GPU safe, differentiable/non-differentiable, setup memory estimate,
+   operator shape assumptions, and promotion gate status.
+4. Consolidate benchmark/evidence schemas so README plots, docs figures,
+   release manifests, and research-lane artifacts share runtime, memory,
+   residual, backend, solver-path, and comparison fields.
+
+Testing plan:
+
+1. Keep normal CI fast. Unit tests should target pure functions, geometry/grid
+   transforms, output schemas, parser behavior, solver-policy decisions, and
+   synthetic linear-operator primitives.
+2. Add numerical tests for linearity, adjoint consistency where applicable,
+   true-residual gates, fail-closed preconditioner rejection, active-DOF
+   projection, and JAX `jit`/`vmap`/`grad` compatibility.
+3. Maintain physics tests as literature-anchored gates: collisionality trends,
+   ambipolar roots, monoenergetic coefficients, bootstrap-current signs/scales,
+   and symmetry limits.
+4. Keep full production solves out of ordinary unit coverage. Use them as
+   regression/benchmark gates with explicit timeouts and compact artifacts.
+
+Validation plan:
+
+1. Preserve release parity against SFINCS Fortran v3 for documented examples
+   where model overlap is exact. Compare every shared output quantity, not just
+   a short summary table.
+2. Maintain publication-ready validation figures with input provenance and
+   model assumptions for high-collisionality limits, electric-field scans,
+   monoenergetic coefficients, and bootstrap-current trends.
+3. Keep cross-code comparisons scoped by normalization/model contract. Do not
+   claim agreement when equilibria, profiles, or collision models differ.
+4. Validate autodiff with finite-difference or equivalent reduced-fixture
+   checks before using gradients in design or optimization examples.
+
+Benchmarking plan:
+
+1. CI smoke tier: seconds; catches broken CLI/API/output/schema/policy paths.
+2. Release tier: minutes locally or scheduled; regenerates README/docs runtime
+   and memory plots for SFINCS Fortran v3, cold/warm CPU, and cold/warm GPU.
+3. Research tier: bounded by explicit timeouts; covers QI hard seeds,
+   production-resolution PAS/geometry-rich offenders, high-nu campaigns, and
+   scaling tests.
+4. Profiling tier: manual; one selected offender at a time with compact checked
+   summaries and raw Perfetto/XLA/device traces kept off-repo.
+
+Acceptance gates:
+
+- Correctness: no regression in shared Fortran v3 outputs or checked physics
+  gates.
+- Convergence: accepted solver paths satisfy true-residual gates.
+- Performance: runtime and memory stay within documented windows on
+  representative CPU/GPU fixtures.
+- Diagnostics: CLI/Python progress reports phase timing, residual history, and
+  enough information to estimate remaining runtime.
+- Documentation: every promoted method has equations, controls, failure modes,
+  and reproducible benchmark commands.
+
+Updated completion estimates:
+
+- True differentiable/device-QI infrastructure: `99%`.
+- True differentiable/device-QI convergence evidence: `82%`; scoped below
+  `3e-5` for the checked hard seed, but still open to production tolerance.
+- Refactor/coverage/CI: `88%`; the roadmap is now explicit, but the actual
+  driver/module split is the next implementation phase.
+- Validation/benchmark infrastructure: `90%`; schemas and figures exist, but
+  the next phase should consolidate them and reduce duplication.
+- Overall remaining-lane completion estimate: `89%`.
+
+Next steps:
+
+1. Land behavior-preserving extraction of solver policy and diagnostics from
+   `v3_driver.py`, with tests that prove current auto-selection behavior is
+   unchanged.
+2. Extract RHSMode=1 operator/residual state helpers and add synthetic
+   operator tests for active-DOF projection, residual norms, and metadata.
+3. Consolidate benchmark artifact schema and regenerate only the lightweight
+   manifest/plot checks locally; leave heavy CPU/GPU suites manual/scheduled.
+4. Keep QI hard-seed work as a documented research lane until a new coarse
+   residual equation beats the current fail-closed evidence and writes
+   converged HDF5/solver trace artifacts.

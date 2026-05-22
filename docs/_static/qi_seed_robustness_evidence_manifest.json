@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 108,
+    "artifact_count": 110,
     "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
@@ -33,7 +33,7 @@
       "requested_augmented_krylov_device_qi": 3,
       "requested_augmented_seed_device_qi": 1,
       "requested_block_schur_residual_device_qi": 5,
-      "requested_coupled_residual_equation_device_qi": 1,
+      "requested_coupled_residual_equation_device_qi": 3,
       "requested_device_qi": 8,
       "requested_global_moment_residual_equation_device_qi": 2,
       "requested_multilevel_residual_equation_device_qi": 1,
@@ -45,33 +45,34 @@
       "requested_residual_snapshot_residual_equation_device_qi": 1
     },
     "evidence_tag_counts": {
-      "failed_before_solver_trace_summary": 72,
-      "no_hdf5_output": 29,
+      "failed_before_solver_trace_summary": 74,
+      "no_hdf5_output": 31,
       "requested_active_pattern_coarse": 1,
-      "requested_augmented_krylov": 9,
+      "requested_augmented_krylov": 11,
       "requested_augmented_seed": 1,
-      "requested_block_schur_residual": 7,
-      "requested_coarse_reuse": 25,
-      "requested_coupled_residual_equation": 1,
-      "requested_device_qi": 26,
+      "requested_block_schur_residual": 9,
+      "requested_coarse_reuse": 27,
+      "requested_coupled_residual_equation": 3,
+      "requested_device_qi": 28,
       "requested_global_moment_residual_equation": 2,
-      "requested_installed_krylov": 51,
-      "requested_multilevel_residual_equation": 2,
-      "requested_operator_krylov": 27,
+      "requested_installed_krylov": 53,
+      "requested_multilevel_residual_equation": 4,
+      "requested_operator_krylov": 29,
       "requested_phase_space_residual_equation": 1,
+      "requested_post_residual_equation": 2,
       "requested_residual_bounce_region_coarse": 2,
       "requested_residual_galerkin_equation": 3,
-      "requested_residual_snapshot": 4,
-      "requested_residual_snapshot_residual_equation": 2
+      "requested_residual_snapshot": 6,
+      "requested_residual_snapshot_residual_equation": 4
     },
-    "failed_before_summary_json_count": 72,
+    "failed_before_summary_json_count": 74,
     "largest_attempted_total_size": 139502,
     "largest_nonpassing_total_size": 139502,
     "max_checked_active_size": 81377,
     "max_checked_per_axis_resolution_fraction": 0.6,
     "max_checked_total_size": 139502,
     "max_checked_total_size_fraction": 0.13676639849725786,
-    "nonpassing_artifact_count": 76,
+    "nonpassing_artifact_count": 78,
     "passing_artifact_count": 32,
     "production_total_size_uncovered_percent": 86.32
   },
@@ -682,6 +683,74 @@
       },
       "recommended_command": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=192 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY=0.35 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_RADIAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_SPECIES=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER=action_lstsq SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset phase-space-coarse-reuse-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0.json --clean"
     },
+    "post-residual-equation-device-qi": {
+      "description": "Bounded scale-0.60 hard-seed GPU0 production probe for the post-Krylov residual-equation path. This starts from the coupled residual-equation device-QI setup, then learns from the final true Krylov residual by solving a bounded JAX least-squares correction over cached QI (U, A U) columns and residual-derived physics directions. It remains fail-closed unless output, solver trace, convergence, and post-residual-equation metadata are present.",
+      "env": {
+        "SFINCS_JAX_GMRES_PRECONDITION_SIDE": "right",
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER": "960",
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART": "40",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE": "cycle",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K": "32",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV": "fgmres-jax",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_LMAX": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_RESIDUAL": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_FSAVG_LMAX": "4",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_POST_COARSE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_DIRECTIONS": "96",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_EXTRA_UNITS": "8",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_RCOND": "1e-12",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_STEPS": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE": "combined",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_AGGREGATES": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_BLOCKS": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK": "64",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INCLUDE_FLAT": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INSTALL_IN_KRYLOV_ON_REJECT": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MAX_RANK": "128",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MIN_RELATIVE_IMPROVEMENT": "0.0",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_SOLVER": "action_lstsq",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES": "12",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER": "matrix_free_block_minres_hybrid",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS": "48",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY": "residual_minimizing",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS": "4",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "320",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR": "2",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS": "3",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE": "2",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK": "64",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK": "24",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER": "coarse_to_fine",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER": "galerkin",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH": "64",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_BLOCKS": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_GLOBAL": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_PRIMAL": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_MAX_RANK": "32",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER": "action_lstsq",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG": "1",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY": "minres",
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV": "1"
+      },
+      "recommended_command": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_LMAX=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_RESIDUAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_FSAVG_LMAX=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_POST_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_DIRECTIONS=96 SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_EXTRA_UNITS=8 SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_RCOND=1e-12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_STEPS=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_AGGREGATES=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_BLOCKS=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INCLUDE_FLAT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INSTALL_IN_KRYLOV_ON_REJECT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MAX_RANK=128 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MIN_RELATIVE_IMPROVEMENT=0.0 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_SOLVER=action_lstsq SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=320 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK=24 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER=coarse_to_fine SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER=galerkin SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_BLOCKS=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_GLOBAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_PRIMAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_MAX_RANK=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER=action_lstsq SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_post_residual_equation_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset post-residual-equation-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_gpu0.json --clean"
+    },
     "recycled-augmented-device-qi": {
       "description": "Bounded scale-0.60 hard-seed GPU0 production probe for the recycled augmented-Krylov path. This keeps the solve on device, uses the reusable QI coarse/operator action in the FGMRES least-squares problem, and gives the best checked residual reduction so far, but remains fail-closed until it satisfies the production write gate.",
       "env": {
@@ -984,6 +1053,8 @@
         "docs/_static/qi_seed_robustness_scale060_device_global_coupling_gpu0_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_rankdef_schur_gpu0_2026_05_20.json",
         "docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json",
+        "docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_cpu_2026_05_22.json",
+        "docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_gpu1_2026_05_22.json",
         "docs/_static/qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json",
         "docs/_static/qi_seed_robustness_scale060_probe_coarse_seed3_gpu0_timeout.json",
         "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu_timeout.json",
@@ -6860,6 +6931,222 @@
       "max_residual_ratio": null,
       "passed": false,
       "path": "docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "run_outcomes": [
+        "process_failed"
+      ],
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "evidence_classes": [
+        "requested_coupled_residual_equation_device_qi"
+      ],
+      "evidence_classification": {
+        "classes": [
+          "requested_coupled_residual_equation_device_qi"
+        ],
+        "fail_closed": true,
+        "fail_closed_observed_classes": [
+          "device_qi_coupled_post_residual_equation"
+        ],
+        "fail_closed_observed_tags": [
+          "observed_augmented_krylov",
+          "observed_block_schur_residual",
+          "observed_coupled_residual_equation",
+          "observed_device_qi_residual_probe",
+          "observed_installed_krylov",
+          "observed_multilevel_residual_equation",
+          "observed_post_residual_equation"
+        ],
+        "has_failed_before_summary_json": true,
+        "has_observed_active_pattern_coarse": false,
+        "has_observed_block_schur_residual": false,
+        "has_observed_coarse_reuse": false,
+        "has_observed_coupled_residual_equation": false,
+        "has_observed_global_moment_residual_equation": false,
+        "has_observed_installed_krylov": false,
+        "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
+        "has_observed_residual_bounce_region_coarse": false,
+        "has_observed_residual_galerkin_equation": false,
+        "has_observed_residual_snapshot": false,
+        "outcomes": [
+          "process_failed"
+        ],
+        "promotion_eligible_seed_count": 0,
+        "tags": [
+          "failed_before_solver_trace_summary",
+          "no_hdf5_output",
+          "requested_augmented_krylov",
+          "requested_block_schur_residual",
+          "requested_coarse_reuse",
+          "requested_coupled_residual_equation",
+          "requested_device_qi",
+          "requested_installed_krylov",
+          "requested_multilevel_residual_equation",
+          "requested_operator_krylov",
+          "requested_post_residual_equation",
+          "requested_residual_snapshot",
+          "requested_residual_snapshot_residual_equation"
+        ]
+      },
+      "evidence_tags": [
+        "failed_before_solver_trace_summary",
+        "no_hdf5_output",
+        "requested_augmented_krylov",
+        "requested_block_schur_residual",
+        "requested_coarse_reuse",
+        "requested_coupled_residual_equation",
+        "requested_device_qi",
+        "requested_installed_krylov",
+        "requested_multilevel_residual_equation",
+        "requested_operator_krylov",
+        "requested_post_residual_equation",
+        "requested_residual_snapshot",
+        "requested_residual_snapshot_residual_equation"
+      ],
+      "fail_closed_observed_classes": [
+        "device_qi_coupled_post_residual_equation"
+      ],
+      "fail_closed_observed_tags": [
+        "observed_augmented_krylov",
+        "observed_block_schur_residual",
+        "observed_coupled_residual_equation",
+        "observed_device_qi_residual_probe",
+        "observed_installed_krylov",
+        "observed_multilevel_residual_equation",
+        "observed_post_residual_equation"
+      ],
+      "last_reported_residual_norm": 2.105918e-05,
+      "max_elapsed_s": 212.73625920794439,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_cpu_2026_05_22.json",
+      "public_cli_default_path": false,
+      "resolution": {
+        "NTHETA": 15,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 31
+      },
+      "resolution_fractions": {
+        "NTHETA": 0.6,
+        "NX": 0.625,
+        "NXI": 0.6,
+        "NZETA": 0.6078431372549019
+      },
+      "run_outcomes": [
+        "process_failed"
+      ],
+      "schema_version": 2,
+      "total_size": 139502
+    },
+    {
+      "active_size": 81377,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "evidence_classes": [
+        "requested_coupled_residual_equation_device_qi"
+      ],
+      "evidence_classification": {
+        "classes": [
+          "requested_coupled_residual_equation_device_qi"
+        ],
+        "fail_closed": true,
+        "fail_closed_observed_classes": [
+          "device_qi_coupled_post_residual_equation"
+        ],
+        "fail_closed_observed_tags": [
+          "observed_augmented_krylov",
+          "observed_block_schur_residual",
+          "observed_coupled_residual_equation",
+          "observed_device_qi_residual_probe",
+          "observed_installed_krylov",
+          "observed_multilevel_residual_equation",
+          "observed_post_residual_equation"
+        ],
+        "has_failed_before_summary_json": true,
+        "has_observed_active_pattern_coarse": false,
+        "has_observed_block_schur_residual": false,
+        "has_observed_coarse_reuse": false,
+        "has_observed_coupled_residual_equation": false,
+        "has_observed_global_moment_residual_equation": false,
+        "has_observed_installed_krylov": false,
+        "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
+        "has_observed_residual_bounce_region_coarse": false,
+        "has_observed_residual_galerkin_equation": false,
+        "has_observed_residual_snapshot": false,
+        "outcomes": [
+          "process_failed"
+        ],
+        "promotion_eligible_seed_count": 0,
+        "tags": [
+          "failed_before_solver_trace_summary",
+          "no_hdf5_output",
+          "requested_augmented_krylov",
+          "requested_block_schur_residual",
+          "requested_coarse_reuse",
+          "requested_coupled_residual_equation",
+          "requested_device_qi",
+          "requested_installed_krylov",
+          "requested_multilevel_residual_equation",
+          "requested_operator_krylov",
+          "requested_post_residual_equation",
+          "requested_residual_snapshot",
+          "requested_residual_snapshot_residual_equation"
+        ]
+      },
+      "evidence_tags": [
+        "failed_before_solver_trace_summary",
+        "no_hdf5_output",
+        "requested_augmented_krylov",
+        "requested_block_schur_residual",
+        "requested_coarse_reuse",
+        "requested_coupled_residual_equation",
+        "requested_device_qi",
+        "requested_installed_krylov",
+        "requested_multilevel_residual_equation",
+        "requested_operator_krylov",
+        "requested_post_residual_equation",
+        "requested_residual_snapshot",
+        "requested_residual_snapshot_residual_equation"
+      ],
+      "fail_closed_observed_classes": [
+        "device_qi_coupled_post_residual_equation"
+      ],
+      "fail_closed_observed_tags": [
+        "observed_augmented_krylov",
+        "observed_block_schur_residual",
+        "observed_coupled_residual_equation",
+        "observed_device_qi_residual_probe",
+        "observed_installed_krylov",
+        "observed_multilevel_residual_equation",
+        "observed_post_residual_equation"
+      ],
+      "last_reported_residual_norm": 2.142936e-05,
+      "max_elapsed_s": 168.1198076386936,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_gpu1_2026_05_22.json",
       "public_cli_default_path": false,
       "resolution": {
         "NTHETA": 15,

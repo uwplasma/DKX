@@ -365,6 +365,15 @@ def _add_rhsmode1_solver_diagnostics(
         "xblock_post_coarse_steps_requested": "linearSolverXBlockPostCoarseStepsRequested",
         "xblock_post_coarse_steps_accepted": "linearSolverXBlockPostCoarseStepsAccepted",
         "xblock_post_coarse_direction_count": "linearSolverXBlockPostCoarseDirectionCount",
+        "xblock_post_residual_equation_steps_requested": (
+            "linearSolverXBlockPostResidualEquationStepsRequested"
+        ),
+        "xblock_post_residual_equation_steps_accepted": (
+            "linearSolverXBlockPostResidualEquationStepsAccepted"
+        ),
+        "xblock_post_residual_equation_direction_count": (
+            "linearSolverXBlockPostResidualEquationDirectionCount"
+        ),
     }
     for metadata_key, output_key in int_fields.items():
         if metadata_key in solver_metadata:
@@ -406,6 +415,20 @@ def _add_rhsmode1_solver_diagnostics(
         value = solver_metadata["xblock_post_coarse_residual_after"]
         if value is not None:
             data["linearSolverXBlockPostCoarseResidualAfter"] = np.asarray(float(value), dtype=np.float64)
+    if "xblock_post_residual_equation_residual_before" in solver_metadata:
+        value = solver_metadata["xblock_post_residual_equation_residual_before"]
+        if value is not None:
+            data["linearSolverXBlockPostResidualEquationResidualBefore"] = np.asarray(
+                float(value),
+                dtype=np.float64,
+            )
+    if "xblock_post_residual_equation_residual_after" in solver_metadata:
+        value = solver_metadata["xblock_post_residual_equation_residual_after"]
+        if value is not None:
+            data["linearSolverXBlockPostResidualEquationResidualAfter"] = np.asarray(
+                float(value),
+                dtype=np.float64,
+            )
     if float(residual_target) > 0.0:
         data["linearSolverResidualTargetRatio"] = np.asarray(
             float(residual_norm) / float(residual_target),

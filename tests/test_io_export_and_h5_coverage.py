@@ -130,6 +130,11 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
             "xblock_post_coarse_direction_count": 6,
             "xblock_post_coarse_residual_before": 2.5e-8,
             "xblock_post_coarse_residual_after": 1.5e-8,
+            "xblock_post_residual_equation_steps_requested": 1,
+            "xblock_post_residual_equation_steps_accepted": 1,
+            "xblock_post_residual_equation_direction_count": 9,
+            "xblock_post_residual_equation_residual_before": 1.5e-8,
+            "xblock_post_residual_equation_residual_after": 9.0e-9,
         },
     )
 
@@ -165,6 +170,11 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverXBlockPostCoarseDirectionCount"])) == 6
     assert float(np.asarray(data["linearSolverXBlockPostCoarseResidualBefore"])) == pytest.approx(2.5e-8)
     assert float(np.asarray(data["linearSolverXBlockPostCoarseResidualAfter"])) == pytest.approx(1.5e-8)
+    assert int(np.asarray(data["linearSolverXBlockPostResidualEquationStepsRequested"])) == 1
+    assert int(np.asarray(data["linearSolverXBlockPostResidualEquationStepsAccepted"])) == 1
+    assert int(np.asarray(data["linearSolverXBlockPostResidualEquationDirectionCount"])) == 9
+    assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualBefore"])) == pytest.approx(1.5e-8)
+    assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualAfter"])) == pytest.approx(9.0e-9)
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(0.2)
 
 

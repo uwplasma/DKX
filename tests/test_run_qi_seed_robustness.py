@@ -265,6 +265,8 @@ def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe method_rescue "
         "side=left->left method=gmres->lgmres iters=20 matvecs=23 residual=4.565805e-06 "
         "ratio=1.511112e+07 seed_used=1",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres post-residual-equation "
+        "improved residual 2.362283e-05 -> 2.105918e-05 (steps=1 directions=89 cached_qi=1)",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete method=lgmres "
         "elapsed_s=247.000 iters=48 matvecs=2978 residual=4.122852e-14 "
         "target=3.021487e-13 ksp_residual=4.122852e-14",
@@ -316,6 +318,14 @@ def test_qi_seed_runner_infers_side_probe_and_residual_progress() -> None:
     assert qi_device["xblock_qi_device_preconditioner_residual_before"] == 2.814560e-05
     assert qi_device["xblock_qi_device_preconditioner_residual_after"] == 2.533104e-05
     assert qi_device["xblock_qi_device_preconditioner_improvement_ratio"] == 9.0e-01
+    post_residual = qi_seed._infer_post_residual_equation_progress(events)
+    assert post_residual["xblock_post_residual_equation_observed"] is True
+    assert post_residual["xblock_post_residual_equation_reason"] == "residual_reduced"
+    assert post_residual["xblock_post_residual_equation_steps_accepted"] == 1
+    assert post_residual["xblock_post_residual_equation_direction_count"] == 89
+    assert post_residual["xblock_post_residual_equation_residual_before"] == 2.362283e-05
+    assert post_residual["xblock_post_residual_equation_residual_after"] == 2.105918e-05
+    assert post_residual["xblock_post_residual_equation_include_qi_basis"] is True
 
     residual = qi_seed._infer_last_residual_progress(events)
     assert residual is not None
@@ -342,6 +352,8 @@ def test_qi_seed_runner_records_timeout_attempt_from_synthetic_tails(tmp_path: P
         "ratio=1.511112e+07 seed_used=1 preserved_physical_seed=1",
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
         "probe-coarse improved seed residual 4.565805e-06 -> 2.830374e-06 (steps=1 directions=40)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres post-residual-equation "
+        "improved residual 2.362283e-05 -> 2.105918e-05 (steps=1 directions=89 cached_qi=1)",
         "QI seed execution timed out after 420.000 s.",
     ]
     stdout_tail = [
@@ -413,9 +425,16 @@ def test_qi_seed_runner_records_timeout_attempt_from_synthetic_tails(tmp_path: P
     assert seed["xblock_qi_device_preconditioner_residual_after"] == 2.533104e-05
     assert seed["xblock_qi_device_preconditioner_improvement_ratio"] == 9.0e-01
     assert seed["xblock_qi_device_preconditioner_use_in_krylov"] is True
-    assert seed["last_progress_residual_event"] == progress_events[5]
-    assert seed["last_progress_residual_before"] == 4.565805e-06
-    assert seed["last_progress_residual_norm"] == 2.830374e-06
+    assert seed["xblock_post_residual_equation_observed"] is True
+    assert seed["xblock_post_residual_equation_reason"] == "residual_reduced"
+    assert seed["xblock_post_residual_equation_steps_accepted"] == 1
+    assert seed["xblock_post_residual_equation_direction_count"] == 89
+    assert seed["xblock_post_residual_equation_residual_before"] == 2.362283e-05
+    assert seed["xblock_post_residual_equation_residual_after"] == 2.105918e-05
+    assert seed["xblock_post_residual_equation_include_qi_basis"] is True
+    assert seed["last_progress_residual_event"] == progress_events[6]
+    assert seed["last_progress_residual_before"] == 2.362283e-05
+    assert seed["last_progress_residual_norm"] == 2.105918e-05
     assert seed["last_matvecs"] == 900
     assert seed["last_matvec_elapsed_s"] == 412.719
 
@@ -2944,6 +2963,23 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     assert "--probe-preset coupled-residual-device-qi" in coupled_preset["recommended_command"]
     assert "joint action least-squares" in coupled_preset["description"]
     assert "fail-closed" in coupled_preset["description"]
+    post_residual_preset = manifest["probe_presets"]["post-residual-equation-device-qi"]
+    assert post_residual_preset["env"]["SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION"] == "1"
+    assert (
+        post_residual_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS"
+        ]
+        == "1"
+    )
+    assert (
+        post_residual_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION"
+        ]
+        == "1"
+    )
+    assert "--probe-preset post-residual-equation-device-qi" in post_residual_preset["recommended_command"]
+    assert "final true Krylov residual" in post_residual_preset["description"]
+    assert "fail-closed" in post_residual_preset["description"]
     adaptive_residual_preset = manifest["probe_presets"]["adaptive-residual-device-qi"]
     assert (
         adaptive_residual_preset["env"][

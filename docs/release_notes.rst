@@ -30,6 +30,15 @@ Unreleased
   residual-equation and install-in-Krylov progress lines remain visible in
   compact artifacts and fail-closed manifests even when no HDF5 output or
   solver trace is written.
+- Added an opt-in post-Krylov residual-equation correction for RHSMode=1
+  x-block solves. It reuses cached QI ``(U, A U)`` columns and final-residual
+  physics directions in a bounded JAX least-squares solve, records metadata and
+  output diagnostics, ships with a ``post-residual-equation-device-qi`` evidence
+  preset, and remains fail-closed until hard-seed CPU/GPU evidence converges.
+- Recorded the first post-residual-equation scale-0.60 CPU and GPU artifacts.
+  They accept true-residual corrections but still refuse production output, so
+  they are blocker evidence for the next coarse-space design rather than release
+  promotion evidence.
 - Updated QI evidence counts, multi-GPU wording, and source-map closure text so
   release-facing docs distinguish production host fallback from research
   device-QI probes.

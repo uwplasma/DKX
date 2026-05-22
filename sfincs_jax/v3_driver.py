@@ -10227,6 +10227,151 @@ def _apply_subspace_minres_correction(
     return x, residual, tuple(history), tuple(accepted_counts), tuple(accepted_names)
 
 
+def _apply_device_subspace_residual_equation_correction(
+    *,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs: jnp.ndarray,
+    x0: jnp.ndarray,
+    direction_builder: Callable[[jnp.ndarray], Sequence[tuple[str, jnp.ndarray]]] | None,
+    steps: int,
+    max_directions: int,
+    cached_basis: jnp.ndarray | None = None,
+    cached_operator_on_basis: jnp.ndarray | None = None,
+    cached_labels: Sequence[str] = (),
+    alpha_clip: float = 0.0,
+    rcond: float = 1.0e-12,
+    min_improvement: float = 0.0,
+) -> tuple[jnp.ndarray, jnp.ndarray, tuple[float, ...], tuple[int, ...], tuple[str, ...]]:
+    """Apply a device-resident residual-equation correction over a small basis.
+
+    Unlike the legacy post-coarse cleanup, this routine keeps candidate
+    directions, cached operator actions, and the least-squares solve as JAX
+    arrays. It is intended for fail-closed RHSMode=1/QI rescue attempts after a
+    Krylov solve exposes the true remaining residual mode. Cached ``(U, A U)``
+    columns from a previously built QI coarse space can be mixed with fresh
+    residual-derived directions without reapplying the operator to those cached
+    columns.
+    """
+    rhs = jnp.asarray(rhs, dtype=jnp.float64).reshape((-1,))
+    x = jnp.asarray(x0, dtype=jnp.float64).reshape((-1,))
+    residual = rhs - jnp.asarray(matvec(x), dtype=jnp.float64).reshape((-1,))
+    residual_norm = float(jax.device_get(jnp.linalg.norm(residual)))
+    history: list[float] = [residual_norm]
+    accepted_counts: list[int] = []
+    accepted_names: list[str] = []
+    steps_use = max(0, int(steps))
+    max_dirs_use = max(1, int(max_directions))
+    alpha_clip_use = max(0.0, float(alpha_clip))
+    rcond_use = max(0.0, float(rcond))
+    min_improvement_use = max(0.0, float(min_improvement))
+    n = int(rhs.size)
+
+    cached_basis_jnp: jnp.ndarray | None = None
+    cached_action_jnp: jnp.ndarray | None = None
+    if cached_basis is not None and cached_operator_on_basis is not None:
+        cached_basis_jnp = jnp.asarray(cached_basis, dtype=jnp.float64)
+        cached_action_jnp = jnp.asarray(cached_operator_on_basis, dtype=jnp.float64)
+        if (
+            cached_basis_jnp.ndim != 2
+            or cached_action_jnp.ndim != 2
+            or int(cached_basis_jnp.shape[0]) != n
+            or tuple(cached_basis_jnp.shape) != tuple(cached_action_jnp.shape)
+        ):
+            cached_basis_jnp = None
+            cached_action_jnp = None
+    cached_labels_use = tuple(str(label) for label in cached_labels)
+
+    for _ in range(steps_use):
+        names: list[str] = []
+        basis_cols: list[jnp.ndarray] = []
+        action_cols: list[jnp.ndarray] = []
+
+        def _append_candidate(name: str, direction: jnp.ndarray, action: jnp.ndarray | None) -> None:
+            if len(names) >= max_dirs_use:
+                return
+            vec = jnp.asarray(direction, dtype=jnp.float64).reshape((-1,))
+            if int(vec.size) != n:
+                return
+            if action is None:
+                act = jnp.asarray(matvec(vec), dtype=jnp.float64).reshape((-1,))
+            else:
+                act = jnp.asarray(action, dtype=jnp.float64).reshape((-1,))
+            if int(act.size) != n:
+                return
+            norm = jnp.linalg.norm(vec)
+            valid = jnp.logical_and(jnp.isfinite(norm), norm > 0.0)
+            safe_norm = jnp.where(valid, norm, jnp.asarray(1.0, dtype=jnp.float64))
+            q = jnp.where(valid, vec / safe_norm, jnp.zeros_like(vec))
+            aq = jnp.where(valid, act / safe_norm, jnp.zeros_like(act))
+            action_norm = jnp.linalg.norm(aq)
+            valid = jnp.logical_and(valid, jnp.isfinite(action_norm))
+            valid = jnp.logical_and(valid, action_norm > 0.0)
+            valid = jnp.logical_and(valid, jnp.all(jnp.isfinite(q)))
+            valid = jnp.logical_and(valid, jnp.all(jnp.isfinite(aq)))
+            q = jnp.where(valid, q, jnp.zeros_like(q))
+            aq = jnp.where(valid, aq, jnp.zeros_like(aq))
+            names.append(str(name))
+            basis_cols.append(q)
+            action_cols.append(aq)
+
+        if cached_basis_jnp is not None and cached_action_jnp is not None:
+            cached_rank = min(int(cached_basis_jnp.shape[1]), max_dirs_use)
+            for idx in range(cached_rank):
+                label = cached_labels_use[idx] if idx < len(cached_labels_use) else f"cached_qi_{idx}"
+                _append_candidate(
+                    f"cached_qi:{label}",
+                    cached_basis_jnp[:, idx],
+                    cached_action_jnp[:, idx],
+                )
+
+        if direction_builder is not None and len(names) < max_dirs_use:
+            for name, direction in tuple(direction_builder(residual)):
+                if len(names) >= max_dirs_use:
+                    break
+                _append_candidate(str(name), direction, None)
+
+        if not basis_cols:
+            break
+        basis = jnp.stack(basis_cols, axis=1)
+        action_basis = jnp.stack(action_cols, axis=1)
+        action_norms = jnp.linalg.norm(action_basis, axis=0)
+        valid_cols = jnp.logical_and(jnp.isfinite(action_norms), action_norms > 0.0)
+        valid_count = int(jax.device_get(jnp.sum(valid_cols.astype(jnp.int32))))
+        if valid_count <= 0:
+            break
+        basis = jnp.where(valid_cols[None, :], basis, jnp.zeros_like(basis))
+        action_basis = jnp.where(valid_cols[None, :], action_basis, jnp.zeros_like(action_basis))
+        coeff = jnp.linalg.lstsq(
+            action_basis,
+            residual,
+            rcond=rcond_use if rcond_use > 0.0 else None,
+        )[0]
+        coeff = jnp.where(valid_cols, coeff, jnp.zeros_like(coeff))
+        coeff = jnp.nan_to_num(coeff, nan=0.0, posinf=0.0, neginf=0.0)
+        if alpha_clip_use > 0.0:
+            coeff = jnp.clip(coeff, -alpha_clip_use, alpha_clip_use)
+        update = basis @ coeff
+        residual_update = action_basis @ coeff
+        trial_residual = residual - residual_update
+        trial_norm_arr = jnp.linalg.norm(trial_residual)
+        trial_norm = float(jax.device_get(trial_norm_arr))
+        accept = bool(
+            np.isfinite(float(trial_norm))
+            and float(trial_norm) < float(residual_norm) * (1.0 - min_improvement_use)
+        )
+        if not accept:
+            break
+        x = x + update
+        residual = trial_residual
+        residual_norm = trial_norm
+        history.append(float(residual_norm))
+        valid_mask_np = np.asarray(jax.device_get(valid_cols), dtype=bool)
+        accepted_counts.append(valid_count)
+        accepted_names.extend(name for name, valid in zip(names, valid_mask_np, strict=True) if bool(valid))
+
+    return x, residual, tuple(history), tuple(accepted_counts), tuple(accepted_names)
+
+
 def _build_rhsmode1_pas_lite_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -19506,11 +19651,182 @@ def solve_v3_full_system_linear_gmres(
                 default=0.0,
                 minimum=0.0,
             )
+            post_residual_equation_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION",
+                default=False,
+            )
+            post_residual_equation_steps_requested = (
+                _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_STEPS",
+                    default=1,
+                    minimum=1,
+                )
+                if post_residual_equation_enabled
+                else 0
+            )
+            post_residual_equation_max_directions = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_DIRECTIONS",
+                default=64,
+                minimum=1,
+            )
+            post_residual_equation_max_extra_units = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_EXTRA_UNITS",
+                default=8,
+                minimum=0,
+            )
+            post_residual_equation_fsavg_lmax = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_FSAVG_LMAX",
+                default=4,
+                minimum=0,
+            )
+            post_residual_equation_angular_lmax = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_LMAX",
+                default=1,
+                minimum=-1,
+            )
+            post_residual_equation_include_angular_residual = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_RESIDUAL",
+                default=True,
+            )
+            post_residual_equation_include_raw = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_RAW",
+                default=True,
+            )
+            post_residual_equation_include_post_coarse = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_POST_COARSE",
+                default=True,
+            )
+            post_residual_equation_include_qi_basis = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS",
+                default=True,
+            )
+            post_residual_equation_alpha_clip = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ALPHA_CLIP",
+                default=0.0,
+                minimum=0.0,
+            )
+            post_residual_equation_rcond = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_RCOND",
+                default=1.0e-12,
+                minimum=0.0,
+            )
+            post_residual_equation_min_improvement = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MIN_IMPROVEMENT",
+                default=0.0,
+                minimum=0.0,
+            )
             post_coarse_history: tuple[float, ...] = ()
             post_coarse_direction_counts: tuple[int, ...] = ()
             post_coarse_direction_names: tuple[str, ...] = ()
             post_coarse_residual_before: float | None = None
             post_coarse_residual_after: float | None = None
+            post_residual_equation_history: tuple[float, ...] = ()
+            post_residual_equation_direction_counts: tuple[int, ...] = ()
+            post_residual_equation_direction_names: tuple[str, ...] = ()
+            post_residual_equation_residual_before: float | None = None
+            post_residual_equation_residual_after: float | None = None
+            if (
+                post_residual_equation_steps_requested > 0
+                and np.isfinite(float(residual_norm_xblock_pc))
+                and float(residual_norm_xblock_pc) > float(target_xblock)
+            ):
+                post_residual_equation_residual_before = float(residual_norm_xblock_pc)
+                post_residual_equation_start_s = sparse_timer.elapsed_s()
+
+                def _post_residual_equation_direction_builder(
+                    residual_vec: jnp.ndarray,
+                ) -> tuple[tuple[str, jnp.ndarray], ...]:
+                    if not bool(post_residual_equation_include_post_coarse):
+                        return ()
+                    return _xblock_coarse_direction_builder(
+                        residual_vec,
+                        include_raw=bool(post_residual_equation_include_raw),
+                        fsavg_lmax=int(post_residual_equation_fsavg_lmax),
+                        angular_lmax=int(post_residual_equation_angular_lmax),
+                        max_extra_units=int(post_residual_equation_max_extra_units),
+                        max_directions=int(post_residual_equation_max_directions),
+                        include_angular_residual=bool(post_residual_equation_include_angular_residual),
+                    )
+
+                post_residual_equation_cached_basis = None
+                post_residual_equation_cached_action = None
+                post_residual_equation_cached_labels: tuple[str, ...] = ()
+                if (
+                    bool(post_residual_equation_include_qi_basis)
+                    and qi_device_state_for_augmented_krylov is not None
+                    and int(getattr(qi_device_state_for_augmented_krylov.metadata, "rank", 0)) > 0
+                ):
+                    post_residual_equation_cached_basis = jnp.asarray(
+                        qi_device_state_for_augmented_krylov.basis.vectors,
+                        dtype=jnp.float64,
+                    )
+                    post_residual_equation_cached_action = jnp.asarray(
+                        qi_device_state_for_augmented_krylov.operator_on_basis,
+                        dtype=jnp.float64,
+                    )
+                    post_residual_equation_cached_labels = tuple(
+                        str(label)
+                        for label in qi_device_state_for_augmented_krylov.basis.metadata.accepted_labels
+                    )
+                try:
+                    (
+                        x_residual_equation,
+                        residual_equation_vec,
+                        post_residual_equation_history,
+                        post_residual_equation_direction_counts,
+                        post_residual_equation_direction_names,
+                    ) = _apply_device_subspace_residual_equation_correction(
+                        matvec=_mv_true,
+                        rhs=xblock_rhs,
+                        x0=jnp.asarray(x_np, dtype=jnp.float64),
+                        direction_builder=_post_residual_equation_direction_builder,
+                        steps=post_residual_equation_steps_requested,
+                        max_directions=post_residual_equation_max_directions,
+                        cached_basis=post_residual_equation_cached_basis,
+                        cached_operator_on_basis=post_residual_equation_cached_action,
+                        cached_labels=post_residual_equation_cached_labels,
+                        alpha_clip=post_residual_equation_alpha_clip,
+                        rcond=post_residual_equation_rcond,
+                        min_improvement=post_residual_equation_min_improvement,
+                    )
+                    post_residual_equation_residual_after = float(jnp.linalg.norm(residual_equation_vec))
+                    if (
+                        np.isfinite(float(post_residual_equation_residual_after))
+                        and float(post_residual_equation_residual_after) < float(residual_norm_xblock_pc)
+                    ):
+                        x_np = np.asarray(x_residual_equation, dtype=np.float64)
+                        residual_norm_xblock_pc = float(post_residual_equation_residual_after)
+                        if emit is not None:
+                            emit(
+                                0,
+                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                                f"post-residual-equation improved residual "
+                                f"{post_residual_equation_residual_before:.6e} "
+                                f"-> {post_residual_equation_residual_after:.6e} "
+                                f"(steps={len(post_residual_equation_direction_counts)} "
+                                f"directions={sum(post_residual_equation_direction_counts)} "
+                                f"cached_qi={int(post_residual_equation_cached_basis is not None)})",
+                            )
+                    elif emit is not None:
+                        after = (
+                            float(post_residual_equation_residual_after)
+                            if post_residual_equation_residual_after is not None
+                            else float("nan")
+                        )
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"post-residual-equation rejected residual "
+                            f"{post_residual_equation_residual_before:.6e} -> {after:.6e}",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"post-residual-equation failed ({type(exc).__name__}: {exc})",
+                        )
+                solve_s += sparse_timer.elapsed_s() - post_residual_equation_start_s
             if (
                 post_minres_steps_requested > 0
                 and np.isfinite(float(residual_norm_xblock_pc))
@@ -20709,6 +21025,40 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_post_coarse_fsavg_lmax": int(post_coarse_fsavg_lmax),
                     "xblock_post_coarse_angular_lmax": int(post_coarse_angular_lmax),
                     "xblock_post_coarse_angular_residual": bool(post_coarse_include_angular_residual),
+                    "xblock_post_residual_equation_steps_requested": int(
+                        post_residual_equation_steps_requested
+                    ),
+                    "xblock_post_residual_equation_steps_accepted": int(
+                        len(post_residual_equation_direction_counts)
+                    ),
+                    "xblock_post_residual_equation_direction_count": int(
+                        sum(post_residual_equation_direction_counts)
+                    ),
+                    "xblock_post_residual_equation_residual_before": (
+                        post_residual_equation_residual_before
+                    ),
+                    "xblock_post_residual_equation_residual_after": (
+                        post_residual_equation_residual_after
+                    ),
+                    "xblock_post_residual_equation_history": post_residual_equation_history,
+                    "xblock_post_residual_equation_direction_counts": (
+                        post_residual_equation_direction_counts
+                    ),
+                    "xblock_post_residual_equation_direction_names": (
+                        post_residual_equation_direction_names
+                    ),
+                    "xblock_post_residual_equation_fsavg_lmax": int(
+                        post_residual_equation_fsavg_lmax
+                    ),
+                    "xblock_post_residual_equation_angular_lmax": int(
+                        post_residual_equation_angular_lmax
+                    ),
+                    "xblock_post_residual_equation_angular_residual": bool(
+                        post_residual_equation_include_angular_residual
+                    ),
+                    "xblock_post_residual_equation_include_qi_basis": bool(
+                        post_residual_equation_include_qi_basis
+                    ),
                 },
             )
 

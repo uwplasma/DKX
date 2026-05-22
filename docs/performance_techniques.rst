@@ -1850,6 +1850,24 @@ Controls:
   residual decreases. This is stronger than the scalar post-minres cleanup, but
   it also did not close the QI floor; the exact-xblock-LU policy above is the
   promoted route.
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION`` (default: off):
+  opt-in device-oriented residual-equation correction after a stalled
+  x-block Krylov solve. The correction reuses cached QI coarse columns and
+  their stored operator actions when available, appends bounded residual-derived
+  physics directions, and solves ``min_c ||r - A Q c||_2`` in JAX arrays. The
+  candidate is accepted only if the measured true residual decreases, and its
+  requested steps, accepted direction count, direction labels, and before/after
+  residuals are recorded in solver metadata and output diagnostics. This is the
+  preferred place for future QI hard-seed experiments that need the final Krylov
+  residual mode without returning to smoother, restart, or active-pattern
+  tuning. The first checked scale-0.60 CPU/GPU artifacts accepted one such
+  correction with ``89`` directions, reducing ``2.362283e-05 -> 2.105918e-05``
+  on CPU and ``2.450895e-05 -> 2.142936e-05`` on GPU1, but both remain
+  fail-closed because the production write tolerance is much tighter.
+  The scoped claim for this specific hard-seed case is therefore only that the
+  research path now gets below ``3e-5`` on both CPU and GPU. Closing the
+  remaining gap requires new coarse residual variables, not more smoother,
+  restart, or active-pattern tuning.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE`` (default: off): opt-in
   pre-Krylov seed correction for explicit ``xblock_sparse_pc_gmres``. This uses
   the same bounded least-squares correction basis as post-coarse, but applies it

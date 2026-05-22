@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 108
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 110
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 76
+    assert current["nonpassing_artifact_count"] == 78
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -863,6 +863,14 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert 85.0 < current["production_total_size_uncovered_percent"] < 90.0
 
     source_paths = {artifact["path"] for artifact in payload["source_artifacts"]}
+    assert (
+        "docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_cpu_2026_05_22.json"
+        in source_paths
+    )
+    assert (
+        "docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_gpu1_2026_05_22.json"
+        in source_paths
+    )
     assert {
         "docs/_static/qi_seed_robustness_smoke.json",
         "docs/_static/qi_seed_robustness_multiseed.json",
@@ -1074,6 +1082,14 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         (
             "docs/_static/"
             "qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_post_residual_equation_device_qi_cpu_2026_05_22.json"
+        ),
+        (
+            "docs/_static/"
+            "qi_seed_robustness_scale060_post_residual_equation_device_qi_gpu1_2026_05_22.json"
         ),
         (
             "docs/_static/"

@@ -375,6 +375,17 @@ performance without changing the input file:
   controls include ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_STEPS`` and
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE_MAX_DIRECTIONS``.
 
+- ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION``: opt-in
+  post-Krylov residual-equation correction for explicit
+  ``xblock_sparse_pc_gmres``. This is the device-oriented replacement for
+  whole-vector host post-processing: it solves a bounded JAX least-squares
+  problem over the final true residual, optional cached QI ``(U, A U)`` coarse
+  columns, and fresh residual-derived physics directions. Related diagnostic
+  controls include
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_DIRECTIONS``,
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_INCLUDE_QI_BASIS``,
+  and ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_RCOND``.
+
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE``: opt-in pre-Krylov seed
   correction for explicit ``xblock_sparse_pc_gmres``. Set to ``1`` to apply the
   same bounded coarse correction basis to a side-probe or supplied initial state

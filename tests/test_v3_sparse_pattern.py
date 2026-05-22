@@ -24,6 +24,7 @@ from sfincs_jax.v3_sparse_pattern import (
     v3_full_system_conservative_sparsity_pattern_for_indices,
 )
 from sfincs_jax.v3_driver import (
+    _apply_device_subspace_residual_equation_correction,
     _rhs1_xblock_gmres_restart,
     _rhs1_xblock_precondition_side,
     _rhs1_xblock_post_coarse_directions,
@@ -425,6 +426,40 @@ def test_xblock_sparse_pc_gmres_initial_seed_can_be_disabled(monkeypatch) -> Non
     assert result.metadata["xblock_post_coarse_steps_requested"] == 1
     assert result.metadata["xblock_post_coarse_steps_accepted"] == 0
     assert result.metadata["xblock_post_coarse_direction_count"] == 0
+
+
+def test_xblock_sparse_pc_post_residual_equation_records_metadata(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres_jax")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_MAX_DIRECTIONS", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_FSAVG_LMAX", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION_ANGULAR_LMAX", "-1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
+    monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-12,
+        maxiter=2,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert result.metadata["xblock_post_residual_equation_steps_requested"] == 1
+    assert result.metadata["xblock_post_residual_equation_residual_before"] is not None
+    assert result.metadata["xblock_post_residual_equation_residual_after"] is not None
+    assert (
+        result.metadata["xblock_post_residual_equation_residual_after"]
+        < result.metadata["xblock_post_residual_equation_residual_before"]
+    )
+    assert result.metadata["xblock_post_residual_equation_direction_count"] > 0
+    assert any("post-residual-equation improved residual" in msg for msg in messages)
 
 
 def test_xblock_sparse_pc_two_level_preconditioner_records_metadata(monkeypatch) -> None:
@@ -839,6 +874,65 @@ def test_xblock_post_coarse_directions_can_include_residual_weighted_angular_mod
     names = tuple(name for name, _direction in directions)
     assert any(name.startswith("angular_residual_") for name in names)
     assert len(directions) <= 16
+
+
+def test_device_subspace_residual_equation_reuses_cached_operator_basis() -> None:
+    operator_matrix = jnp.asarray([[1.0, 1.0], [0.0, 1.0]], dtype=jnp.float64)
+    rhs = jnp.asarray([0.0, 1.0], dtype=jnp.float64)
+    cached_basis = jnp.asarray([[1.0], [0.0]], dtype=jnp.float64)
+    cached_action = operator_matrix @ cached_basis
+
+    def matvec(x):
+        return operator_matrix @ jnp.asarray(x, dtype=jnp.float64)
+
+    def direction_builder(_residual):
+        return (("missing_mode", jnp.asarray([0.0, 1.0], dtype=jnp.float64)),)
+
+    x, residual, history, counts, names = _apply_device_subspace_residual_equation_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        direction_builder=direction_builder,
+        steps=1,
+        max_directions=2,
+        cached_basis=cached_basis,
+        cached_operator_on_basis=cached_action,
+        cached_labels=("flat_x0",),
+        rcond=0.0,
+    )
+
+    np.testing.assert_allclose(matvec(x), rhs, rtol=1.0e-12, atol=1.0e-12)
+    assert float(jnp.linalg.norm(residual)) < 1.0e-12
+    assert history[-1] < 1.0e-12
+    assert counts == (2,)
+    assert names == ("cached_qi:flat_x0", "missing_mode")
+
+
+def test_device_subspace_residual_equation_fails_closed_without_improvement() -> None:
+    operator_matrix = jnp.asarray([[2.0, 0.0], [0.0, 3.0]], dtype=jnp.float64)
+    rhs = jnp.asarray([1.0, -1.0], dtype=jnp.float64)
+
+    def matvec(x):
+        return operator_matrix @ jnp.asarray(x, dtype=jnp.float64)
+
+    def direction_builder(_residual):
+        return (("zero_mode", jnp.zeros_like(rhs)),)
+
+    x, residual, history, counts, names = _apply_device_subspace_residual_equation_correction(
+        matvec=matvec,
+        rhs=rhs,
+        x0=jnp.zeros_like(rhs),
+        direction_builder=direction_builder,
+        steps=1,
+        max_directions=4,
+    )
+
+    np.testing.assert_allclose(x, jnp.zeros_like(rhs), rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(residual, rhs, rtol=1.0e-12, atol=1.0e-12)
+    assert len(history) == 1
+    assert history[0] == pytest.approx(float(jnp.linalg.norm(rhs)))
+    assert counts == ()
+    assert names == ()
 
 
 def test_xblock_sparse_pc_probe_coarse_records_angular_mode_usage(monkeypatch) -> None:
