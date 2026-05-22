@@ -78,13 +78,25 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_acceptance_policy
    :members:
 
+.. automodule:: sfincs_jax.rhs1_active_dof
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_active_projection
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_constraint0_policy
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_device_operator
    :members:
 
 .. automodule:: sfincs_jax.rhs1_host_policy
    :members:
 
 .. automodule:: sfincs_jax.rhs1_large_cpu_policy
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_pas_matrixfree
    :members:
 
 .. automodule:: sfincs_jax.rhs1_pas_policy
@@ -99,7 +111,61 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_preconditioner_dispatch
    :members:
 
+.. automodule:: sfincs_jax.rhs1_qi_active_pattern_coarse
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_block_schur
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_coarse
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_coupled_residual
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_deflation
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_device_preconditioner
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_device_smoother
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_galerkin_policy
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_global_moment_closure
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_multilevel_coarse
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_phase_space_coarse
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_promotion
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_residual_galerkin
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_residual_region_coarse
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_qi_two_level
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_residual
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_schur_policy
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_solver_diagnostics
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_solver_policy
    :members:
 
 .. automodule:: sfincs_jax.rhs1_sparse_polish_policy
@@ -124,6 +190,12 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.rhs1_strong_policy
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_xblock_policy
+   :members:
+
+.. automodule:: sfincs_jax.rhs1_xblock_sparse_host_policy
    :members:
 
 .. automodule:: sfincs_jax.solve_mode_policy

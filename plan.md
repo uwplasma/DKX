@@ -15809,3 +15809,45 @@ Best next steps:
 3. Recheck GitHub CI after the push; if green, stop refactoring and leave the
    only remaining algorithmic work as the documented production-QI research
    lane.
+
+### 35.67 RHSMode=1 source-map/API documentation closure
+
+Scope:
+
+- Expanded `docs/api.rst` so every `sfincs_jax/rhs1_*.py` helper module is
+  included in the generated API reference. This covers the active-DOF,
+  active-projection, residual, solver-policy, solver-diagnostic, PAS
+  matrix-free, x-block, device-operator, and QI research primitives that have
+  been split out of `v3_driver.py`.
+- Filled the remaining `docs/source_map.rst` gaps for
+  `rhs1_device_operator.py`, `rhs1_qi_coarse.py`,
+  `rhs1_qi_device_smoother.py`, `rhs1_qi_galerkin_policy.py`,
+  `rhs1_qi_two_level.py`, `rhs1_strong_fallback.py`,
+  `rhs1_xblock_policy.py`, and `rhs1_xblock_sparse_host_policy.py`.
+- Added a local documentation inventory check confirming that all `42`
+  RHSMode=1 helper modules have both API and source-map coverage.
+
+Validation:
+
+- `python - <<'PY' ...` inventory check: all `42` RHSMode=1 helper modules are
+  API/source-map documented.
+- `python -m compileall -q sfincs_jax/rhs1_residual.py sfincs_jax/rhs1_active_dof.py sfincs_jax/rhs1_active_projection.py sfincs_jax/rhs1_solver_policy.py sfincs_jax/rhs1_solver_diagnostics.py sfincs_jax/rhs1_xblock_policy.py sfincs_jax/rhs1_xblock_sparse_host_policy.py`
+- `git diff --check`
+- `python -m sphinx -W -b html docs /tmp/sfincs_jax_docs_strict`
+- `python scripts/check_release_gates.py && python scripts/check_research_lanes.py`
+
+Progress:
+
+- Refactor/coverage/CI: `95%`; the extracted RHSMode=1 module surface is now
+  source-mapped and API-documented, so future refactors can be reviewed without
+  reading the driver monolith first.
+- Overall remaining-lane completion estimate: `96%`.
+
+Best next steps:
+
+1. Commit and push the documentation closure.
+2. Recheck GitHub CI and Docs for the pushed commit.
+3. If CI remains green, stop broad refactoring for this release state. The
+   production true-device-QI tolerance closure remains the explicitly
+   documented research lane, with current CPU/GPU hard-seed residuals below
+   `3e-5` but not yet at the production write gate.
