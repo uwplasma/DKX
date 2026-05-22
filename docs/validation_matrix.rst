@@ -530,17 +530,20 @@ Scope and status:
   public method ``auto``, all seeds ``converged=true``, and maximum residual
   ratio below ``1e-6``. Treat it as runner and default-solver-policy evidence
   only, not a production-resolution robustness claim.
-- The current production-readiness manifest rolls in 106 checked source artifacts:
-  32 passing bounded artifacts and 74 non-passing blocker artifacts. The largest
+- The current production-readiness manifest rolls in 107 checked source artifacts:
+  32 passing bounded artifacts and 75 non-passing blocker artifacts. The largest
   passing and attempted bounded grid is ``15 x 31 x 60 x 5`` with active size
   ``81377`` and total size ``139502``. A bounded CPU scale-0.60 seed-3
   probe-coarse artifact, the QI coarse-seed CPU artifact, and the
   residual-weighted angular probe-coarse CPU artifact now pass. The matching
   one-GPU probe-coarse and QI coarse-seed artifacts still time out. The latest
   no-LGMRES GPU-compatible follow-up reaches ``925`` matvecs by ``409.9 s`` but
-  still writes no HDF5/trace, so the remaining hard blocker is the scale-0.60
-  one-GPU seed-3 solve for the deferred differentiable device-Krylov lane, not
-  for the documented non-autodiff host production fallback.
+  still writes no HDF5/trace. The active-pattern GPU follow-up observes the new
+  residual-selected chunked coarse path and finishes in ``231.7 s`` but stalls
+  at residual ``1.622338e-5``. The remaining hard blocker is therefore still
+  the scale-0.60 one-GPU seed-3 solve for the deferred differentiable
+  device-Krylov lane, not for the documented non-autodiff host production
+  fallback.
 - Solver-toggle, fixed two-level, host global-coupling, active assembled
   color-preflight, probe-coarse GPU, and device-Krylov probes are documented as
   bounded rejected evidence. They should not be rerun as promotion candidates
