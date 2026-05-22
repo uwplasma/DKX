@@ -34,6 +34,10 @@ from .rhs1_qi_coarse import (
     RHS1QICoarseBlockLayout,
     orthonormalize_rhs1_qi_coarse_basis,
 )
+from .rhs1_qi_coupled_residual import (
+    RHS1QICoupledResidualEquationConfig,
+    setup_rhs1_qi_coupled_residual_equation,
+)
 from .rhs1_qi_device_smoother import (
     RHS1QIDeviceJacobiSmoother,
     build_rhs1_qi_device_jacobi_smoother,
@@ -119,6 +123,11 @@ class RHS1QIDevicePreconditionerConfig:
     multilevel_residual_equation_order: str = "coarse_to_fine"
     multilevel_residual_equation_solver: str = "action_lstsq"
     multilevel_residual_equation_include_global: bool = True
+    coupled_residual_equation: bool = False
+    coupled_residual_equation_max_rank: int = 96
+    coupled_residual_equation_solver: str = "action_lstsq"
+    coupled_residual_equation_include_flat: bool = True
+    coupled_residual_equation_min_relative_improvement: float = 0.0
     global_moment_residual_equation: bool = False
     global_moment_residual_equation_max_rank: int = 16
     global_moment_residual_equation_solver: str = "galerkin"
@@ -242,6 +251,18 @@ class RHS1QIDevicePreconditionerMetadata:
     multilevel_residual_equation_order: str
     multilevel_residual_equation_solver: str
     multilevel_residual_equation_include_global: bool
+    coupled_residual_equation_enabled: bool
+    coupled_residual_equation_candidate_count: int
+    coupled_residual_equation_rank: int
+    coupled_residual_equation_source_stage_count: int
+    coupled_residual_equation_source_stage_ranks: tuple[int, ...]
+    coupled_residual_equation_solver: str
+    coupled_residual_equation_include_flat: bool
+    coupled_residual_equation_condition_estimate: float
+    coupled_residual_equation_residual_before: float
+    coupled_residual_equation_residual_after: float
+    coupled_residual_equation_accepted: bool
+    coupled_residual_equation_reason: str
     global_moment_residual_equation_enabled: bool
     global_moment_residual_equation_candidate_count: int
     global_moment_residual_equation_rank: int
@@ -416,6 +437,7 @@ class RHS1QIDevicePreconditionerState:
             + int(self.metadata.active_pattern_coarse_rank)
             + int(self.metadata.block_schur_residual_equation_rank)
             + int(self.metadata.residual_snapshot_residual_equation_rank)
+            + int(self.metadata.coupled_residual_equation_rank)
         )
         if int(self.metadata.rank) <= 0 and residual_equation_rank <= 0:
             return float(self.metadata.damping) * local
@@ -433,6 +455,7 @@ class RHS1QIDevicePreconditionerState:
             or bool(self.metadata.active_pattern_coarse_enabled)
             or bool(self.metadata.block_schur_residual_equation_enabled)
             or bool(self.metadata.residual_snapshot_residual_equation_enabled)
+            or bool(self.metadata.coupled_residual_equation_enabled)
         ):
             coarse = self.solve_coarse_residual_equation(coarse_input)
         else:
@@ -3568,6 +3591,54 @@ def setup_rhs1_qi_device_preconditioner(
         residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
             residual_equation_solver for _ in multilevel_residual_equation_bases
         )
+    coupled_residual_equation_candidate_count = 0
+    coupled_residual_equation_rank = 0
+    coupled_residual_equation_source_stage_count = 0
+    coupled_residual_equation_source_stage_ranks: tuple[int, ...] = ()
+    coupled_residual_equation_condition_estimate = float("inf")
+    coupled_residual_equation_residual_before = float("inf")
+    coupled_residual_equation_residual_after = float("inf")
+    coupled_residual_equation_accepted = False
+    coupled_residual_equation_reason = "disabled"
+    coupled_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
+        config_use.coupled_residual_equation_solver
+    )
+    if bool(config_use.coupled_residual_equation):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when coupled_residual_equation=True")
+        coupled_sources = tuple(residual_equation_bases)
+        if bool(config_use.coupled_residual_equation_include_flat) and int(basis.metadata.rank) > 0:
+            coupled_sources = (basis,) + coupled_sources
+        coupled_state = setup_rhs1_qi_coupled_residual_equation(
+            operator=operator_matvec,
+            residual=jnp.asarray(residual_seed, dtype=dtype_use).reshape((-1,)),
+            bases=coupled_sources,
+            config=RHS1QICoupledResidualEquationConfig(
+                max_rank=int(config_use.coupled_residual_equation_max_rank),
+                solver=coupled_residual_equation_solver,
+                regularization_rcond=float(config_use.regularization_rcond),
+                rank_rtol=float(config_use.basis_rtol),
+                rank_atol=float(config_use.basis_atol),
+                min_relative_improvement=float(
+                    config_use.coupled_residual_equation_min_relative_improvement
+                ),
+            ),
+        )
+        coupled_metadata = coupled_state.metadata
+        coupled_residual_equation_candidate_count = int(coupled_metadata.candidate_count)
+        coupled_residual_equation_rank = int(coupled_metadata.rank)
+        coupled_residual_equation_source_stage_count = int(coupled_metadata.source_stage_count)
+        coupled_residual_equation_source_stage_ranks = tuple(
+            int(value) for value in coupled_metadata.source_stage_ranks
+        )
+        coupled_residual_equation_condition_estimate = float(coupled_metadata.condition_estimate)
+        coupled_residual_equation_residual_before = float(coupled_metadata.residual_before)
+        coupled_residual_equation_residual_after = float(coupled_metadata.residual_after)
+        coupled_residual_equation_accepted = bool(coupled_metadata.accepted)
+        coupled_residual_equation_reason = str(coupled_metadata.reason)
+        if coupled_residual_equation_accepted and coupled_residual_equation_rank > 0:
+            residual_equation_bases = (coupled_state.basis,)
+            residual_equation_stage_solvers = (coupled_residual_equation_solver,)
     residual_equation_action_list: list[ArrayLike] = []
     residual_equation_coarse_operator_list: list[ArrayLike] = []
     for level_basis in residual_equation_bases:
@@ -3601,7 +3672,9 @@ def setup_rhs1_qi_device_preconditioner(
     else:
         local_smoother_kind = "matrix_free_residual"
         local_smoother_reason = str(smoother.metadata.reason)
-    if (
+    if bool(config_use.coupled_residual_equation) and coupled_residual_equation_rank > 0:
+        reason = "built_with_coupled_residual_equation"
+    elif (
         bool(config_use.residual_snapshot_residual_equation)
         and residual_snapshot_residual_equation_rank > 0
     ):
@@ -3690,6 +3763,28 @@ def setup_rhs1_qi_device_preconditioner(
         multilevel_residual_equation_include_global=bool(
             config_use.multilevel_residual_equation_include_global
         ),
+        coupled_residual_equation_enabled=bool(
+            config_use.coupled_residual_equation and coupled_residual_equation_rank > 0
+        ),
+        coupled_residual_equation_candidate_count=int(coupled_residual_equation_candidate_count),
+        coupled_residual_equation_rank=int(coupled_residual_equation_rank),
+        coupled_residual_equation_source_stage_count=int(
+            coupled_residual_equation_source_stage_count
+        ),
+        coupled_residual_equation_source_stage_ranks=tuple(
+            int(v) for v in coupled_residual_equation_source_stage_ranks
+        ),
+        coupled_residual_equation_solver=coupled_residual_equation_solver,
+        coupled_residual_equation_include_flat=bool(
+            config_use.coupled_residual_equation_include_flat
+        ),
+        coupled_residual_equation_condition_estimate=float(
+            coupled_residual_equation_condition_estimate
+        ),
+        coupled_residual_equation_residual_before=float(coupled_residual_equation_residual_before),
+        coupled_residual_equation_residual_after=float(coupled_residual_equation_residual_after),
+        coupled_residual_equation_accepted=bool(coupled_residual_equation_accepted),
+        coupled_residual_equation_reason=str(coupled_residual_equation_reason),
         global_moment_residual_equation_enabled=bool(
             config_use.global_moment_residual_equation and global_moment_residual_equation_rank > 0
         ),

@@ -444,6 +444,19 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE*``
   controls and keeps the lane fail-closed until bounded CPU/GPU hard-seed
   artifacts write converged output and solver traces.
+- ``sfincs_jax/rhs1_qi_coupled_residual.py``:
+  standalone coupled residual-equation primitive for the next true device-QI
+  architecture. It takes accepted coarse bases from the existing
+  block-Schur/multilevel/moment/residual families, re-orthonormalizes them into
+  one joint coarse space, probes ``A Q`` once, and solves one action
+  least-squares or Galerkin residual equation. This is intentionally different
+  from smoother/restart tuning and from the previous staged residual cascade:
+  the joint solve can update earlier coarse coefficients after later Schur or
+  multilevel variables are included, matching the field-split/Schur and
+  Petrov-Galerkin ideas used in PETSc-style block preconditioners. The primitive
+  is wired into ``RHS1QIDevicePreconditionerConfig`` as
+  ``coupled_residual_equation`` and is fail-closed unless setup residual
+  decreases.
 - ``sfincs_jax/rhs1_qi_promotion.py``:
   pure promotion gates for QI hard-seed and production-ladder evidence. It
   requires complete seed/backend coverage, convergence, output and trace

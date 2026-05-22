@@ -15205,3 +15205,69 @@ Closure-state clarification for the QI lane:
   residual-equation design, because all currently implemented device-compatible
   coarse/recycling probes are now auditable but promotion-negative at the
   scale-0.60 hard seed.
+
+### 35.56 Coupled residual-equation architecture pass
+
+Literature/code review:
+
+- PETSc's field-split documentation frames robust block preconditioners as
+  coupled split solves, including Schur factorizations whose complement action
+  is not normally formed explicitly. That maps directly to the QI blocker:
+  independent residual stages are too weak when the unresolved residual lives
+  in off-diagonal couplings between current/profile moments, pitch-angle
+  structure, and angular/radial blocks.
+- PETSc's KSP manual and Saad's projection-method treatment reinforce the same
+  practical point: Krylov and Petrov-Galerkin methods need the right coarse
+  search/constraint space, not only more local smoothing. The JAX path must
+  keep the coarse solve as cached arrays and small dense JAX operations so it
+  remains device-compatible and differentiable.
+- Forward-peaked transport literature on angular multigrid for
+  Fokker-Planck-like scattering shows why angular/radial multilevel structure
+  is a better model for the hard seed than restart or smoother tuning. The
+  relevant lesson for SFINCS-JAX is to solve the low-dimensional angular and
+  moment error components together, not to serially freeze them.
+- Fortran v3's local solver architecture is robust because it assembles sparse
+  matrix/preconditioner operators, reuses PETSc preconditioners, and relies on
+  GMRES/LU/Schur-like sparse algebra instead of repeated Python-level solver
+  path selection. The JAX equivalent should therefore move toward reusable
+  assembled/coarse actions and joint residual equations, while preserving an
+  explicit host fallback for non-autodiff production runs.
+
+Implementation:
+
+- Added `sfincs_jax/rhs1_qi_coupled_residual.py`, a standalone fail-closed
+  coupled residual-equation primitive. Setup concatenates accepted bases from
+  existing block-Schur, multilevel, moment, residual-region, active-pattern, or
+  residual-snapshot families, re-orthonormalizes them into a single joint
+  coarse basis, probes `A Q` once, and solves either a joint action
+  least-squares problem or a Galerkin projected problem. The stage is accepted
+  only if the true setup residual decreases.
+- Wired the primitive into `RHS1QIDevicePreconditionerConfig` with
+  `coupled_residual_equation`, `coupled_residual_equation_max_rank`,
+  `coupled_residual_equation_solver`,
+  `coupled_residual_equation_include_flat`, and
+  `coupled_residual_equation_min_relative_improvement`. When accepted, it
+  replaces the previous staged residual-equation cascade with one joint cached
+  stage and records rank, source-stage ranks, condition estimate, residual
+  before/after, acceptance, and reason in preconditioner metadata.
+- Added focused tests showing the exact failure mode this architecture targets:
+  a staged residual equation freezes an early coefficient and leaves an
+  O(1) residual, while the coupled residual equation updates the early
+  coefficient and solves to roundoff. The device-preconditioner integration
+  test also verifies that the coupled stage can include the flat coarse basis
+  plus residual-snapshot stages, remains JIT-compatible, and preserves finite
+  autodiff tangents.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/rhs1_qi_coupled_residual.py sfincs_jax/rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_coupled_residual.py`
+- `python -m compileall -q sfincs_jax/rhs1_qi_coupled_residual.py sfincs_jax/rhs1_qi_device_preconditioner.py tests/test_rhs1_qi_coupled_residual.py`
+- `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests/test_rhs1_qi_coupled_residual.py tests/test_rhs1_qi_device_preconditioner.py` (`45 passed`)
+
+Next gates:
+
+- Add runner/driver environment plumbing and a bounded `coupled-residual-device-qi`
+  probe only after the local QI test battery and docs gates pass.
+- Run the same scale-0.60 hard seed on office GPU and keep the result as
+  promotion evidence only if it beats `7.336295e-06`, writes converged output
+  and solver trace metadata, and enters the manifest as promotion eligible.

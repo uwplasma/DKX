@@ -10,6 +10,10 @@ Unreleased
 - Added opt-in augmented-seed Krylov recycling and active-pattern coarse
   infrastructure with finite/shape guards and fail-closed evidence
   classification.
+- Added a coupled residual-equation primitive for the next true device-QI
+  architecture. It solves accepted coarse variables together instead of as a
+  staged cascade, so Schur/multilevel cross-couplings can update earlier coarse
+  coefficients without using smoother or restart tuning.
 - Updated QI evidence counts, multi-GPU wording, and source-map closure text so
   release-facing docs distinguish production host fallback from research
   device-QI probes.
