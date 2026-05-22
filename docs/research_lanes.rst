@@ -42,6 +42,29 @@ but the final residual was still ``2.450895e-5`` against the
 ``3.021487e-13`` Krylov target, so it is also fail-closed evidence. Its compact
 artifact is
 ``docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json``.
+The current source tree also includes the next fail-closed residual-learning
+hook:
+``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION``. It builds a bounded
+JAX least-squares equation from the final true Krylov residual, optional cached
+QI ``(U, A U)`` columns, and fresh physics residual directions. This is
+infrastructure for learning from the error mode that Krylov actually leaves
+behind; the matching runner preset is ``post-residual-equation-device-qi``. It
+now has one checked scale-0.60 CPU artifact:
+``docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_cpu_2026_05_22.json``.
+That artifact reaches the hook and accepts one correction, reducing the final
+true residual from ``2.362283e-05`` to ``2.105918e-05`` using ``89`` directions
+with cached QI columns. The matching GPU1 artifact,
+``docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_gpu1_2026_05_22.json``,
+also reaches the hook and reduces ``2.450895e-05 -> 2.142936e-05`` in
+``168.120 s``. Both remain fail-closed because the production-sized write gate
+is ``3.021487e-11`` and no HDF5/solver trace is written.
+Scoped conclusion for this specific hard seed: the current device-QI research
+path now gets the residual below ``3e-5`` on CPU and GPU, reproducibly and
+without the old CUDA failure, but it does not yet solve the case to production
+tolerance. Further research is needed to make this path better: specifically,
+the remaining error must be attacked with a stronger residual-equation/coarse
+space built from final Krylov error modes and current/constraint/profile
+moments, not by further smoother or restart tuning.
 Separate the closed infrastructure blockers from the open claim blockers:
 transpose/VJP safety for the projected block smoother and the prior CUDA
 illegal-address crash are closed for the tested paths, while residual
@@ -94,8 +117,8 @@ Relevant implementation:
   a true residual probe improves.
 - ``sfincs_jax/v3_driver.py`` wires the x-block sparse-PC, device-Krylov,
   two-level-QI opt-in, residual-deflated QI opt-in, device-QI field-split opt-in,
-  early matrix-free QI probe, bounded post-xblock acceptance, and non-autodiff
-  host fallback paths.
+  early matrix-free QI probe, bounded post-xblock acceptance, post-Krylov
+  residual-equation correction, and non-autodiff host fallback paths.
 
 Audit conclusion
 ~~~~~~~~~~~~~~~~
@@ -125,7 +148,10 @@ multilevel did not change the GPU final residual, current/constraint moments
 worsened the GPU residual and runtime, and CPU adjoint-normal depth-2 worsened
 the final residual and runtime. None of these variants is promoted. The next
 promotable algorithm must change the physics/error space captured by the coarse
-solve, not simply add more restart cycles or smoother sweeps.
+solve, not simply add more restart cycles or smoother sweeps. The new
+post-residual-equation hook is the intended bounded probe for that idea: it
+reuses final residual modes and stored operator actions, then fails closed if
+the true residual does not decrease.
 
 Next implementation
 ~~~~~~~~~~~~~~~~~~~

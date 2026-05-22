@@ -703,6 +703,12 @@ makes the next required algorithmic step a different global coupling strategy,
 not a larger timeout, full sparse materialization, default initial-seed probe,
 scalar post-minres cleanup, the current small residual subspace, or a Krylov
 method toggle alone.
+The next implementation step now lives behind
+``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION``: it reuses the final
+Krylov residual and cached QI ``(U, A U)`` columns in a bounded JAX
+least-squares residual equation. Its unit and driver tests currently validate
+fail-closed residual reduction and metadata/output visibility; promotion still
+requires a converged hard-seed CPU/GPU artifact.
 
 The successor
 ``docs/_static/qi_seed_robustness_scale050_xblock_lu_right_cpu.json`` artifact
@@ -913,6 +919,20 @@ It still refuses output because the residual remains above the write gate, so
 the manifest records it as fail-closed blocker evidence. The runner tests also
 assert that these coupled setup/install progress lines survive compacting even
 when a long GPU run fails before writing HDF5 or solver trace metadata.
+The follow-on post-Krylov residual-equation CPU artifact,
+``docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_cpu_2026_05_22.json``,
+is likewise fail-closed but machine-readable: the compact runner summary records
+the accepted residual-equation correction, ``89`` directions, and the measured
+true-residual reduction ``2.362283e-05 -> 2.105918e-05``. The matching GPU1
+artifact,
+``docs/_static/qi_seed_robustness_scale060_post_residual_equation_device_qi_gpu1_2026_05_22.json``,
+records the same hook and reduces ``2.450895e-05 -> 2.142936e-05``. The gate
+remains open until a CPU and GPU artifact write converged HDF5 plus solver trace
+metadata.
+For the current release documentation this is a scoped research result, not a
+production claim: this hard seed is now below ``3e-5`` on CPU and GPU, while
+additional algorithmic work is still required to reach the production write
+tolerance.
 
 The latest residual-weighted angular probe-coarse artifact
 ``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``
