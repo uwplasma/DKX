@@ -15,6 +15,10 @@ from sfincs_jax.rhs1_qi_device_preconditioner import (
     setup_rhs1_qi_device_preconditioner,
 )
 from sfincs_jax.rhs1_qi_device_smoother import build_rhs1_qi_device_jacobi_smoother
+from sfincs_jax.rhs1_qi_active_pattern_coarse import (
+    RHS1QIActivePatternCoarseConfig,
+    build_rhs1_qi_active_pattern_coarse_basis,
+)
 from sfincs_jax.rhs1_qi_multilevel_coarse import (
     RHS1QIMultilevelCoarseConfig,
     build_rhs1_qi_multilevel_coarse_basis,
@@ -705,6 +709,75 @@ def test_device_preconditioner_residual_region_bounce_coarse_solves_local_mode()
     assert np.isfinite(state.metadata.residual_region_bounce_coarse_condition_estimate)
     assert all(
         label.startswith("residual_region:")
+        for label in state.residual_equation_bases[0].metadata.accepted_labels
+    )
+    np.testing.assert_allclose(jitted, corrected, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_device_preconditioner_active_pattern_coarse_solves_chunk_mode() -> None:
+    layout = RHS1QICoarseBlockLayout(
+        block_sizes=(12, 12, 12, 12, 3),
+        n_theta=2,
+        n_zeta=1,
+        block_x=(0, 1, 0, 1, -1),
+        block_species=(0, 0, 1, 1, -1),
+    )
+    seed = jnp.zeros((layout.total_size,), dtype=jnp.float64)
+    seed = seed.at[layout.block_offsets[1] + 2 : layout.block_offsets[1] + 8].set(
+        jnp.asarray([1.0, -2.0, 0.75, -1.25, 1.5, -0.5], dtype=jnp.float64)
+    )
+    active_basis = build_rhs1_qi_active_pattern_coarse_basis(
+        layout,
+        seed,
+        config=RHS1QIActivePatternCoarseConfig(
+            max_rank=8,
+            max_candidates=16,
+            min_chunk_energy_fraction=0.0,
+        ),
+    )
+    mode = jnp.asarray(active_basis.vectors[:, 0], dtype=jnp.float64)
+    dense = jnp.eye(layout.total_size, dtype=jnp.float64) + 1.75 * jnp.outer(mode, mode)
+    rhs = dense @ mode
+    operator = device_csr_from_scipy_csr(sp.csr_matrix(np.asarray(dense)), max_csr_mb=1.0)
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=operator,
+        coarse_basis=None,
+        residual_seed=rhs,
+        geometry_metadata={
+            "qi_block_sizes": layout.block_sizes,
+            "qi_block_x": layout.block_x,
+            "qi_block_species": layout.block_species,
+            "n_theta": layout.n_theta,
+            "n_zeta": layout.n_zeta,
+        },
+        config=RHS1QIDevicePreconditionerConfig(
+            regularization_rcond=1.0e-14,
+            local_smoother_kind="none",
+            active_pattern_coarse=True,
+            active_pattern_coarse_max_rank=8,
+            active_pattern_coarse_max_candidates=16,
+            active_pattern_coarse_min_chunk_energy_fraction=0.0,
+            active_pattern_coarse_include_global=True,
+        ),
+    )
+
+    corrected = state.apply(rhs)
+    residual_after = rhs - dense @ corrected
+    jitted = jax.jit(state.apply)(rhs)
+
+    assert float(jnp.linalg.norm(residual_after)) < 1.0e-10
+    assert state.metadata.active_pattern_coarse_enabled is True
+    assert state.metadata.active_pattern_coarse_rank > 0
+    assert state.metadata.active_pattern_coarse_stage_count == 1
+    assert state.metadata.active_pattern_coarse_candidate_count >= (
+        state.metadata.active_pattern_coarse_rank
+    )
+    assert state.metadata.active_pattern_coarse_include_global is True
+    assert state.metadata.active_pattern_coarse_max_candidates_requested == 16
+    assert np.isfinite(state.metadata.active_pattern_coarse_condition_estimate)
+    assert all(
+        label.startswith("active_pattern:")
         for label in state.residual_equation_bases[0].metadata.accepted_labels
     )
     np.testing.assert_allclose(jitted, corrected, rtol=1.0e-12, atol=1.0e-12)

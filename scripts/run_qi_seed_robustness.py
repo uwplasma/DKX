@@ -374,6 +374,7 @@ GLOBAL_MOMENT_CLOSURE_DEVICE_QI_PROBE_PRESET = "global-moment-closure-device-qi"
 RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET = "residual-galerkin-device-qi"
 PHASE_SPACE_COARSE_REUSE_DEVICE_QI_PROBE_PRESET = "phase-space-coarse-reuse-device-qi"
 RESIDUAL_BOUNCE_REGION_DEVICE_QI_PROBE_PRESET = "residual-bounce-region-device-qi"
+ACTIVE_PATTERN_DEVICE_QI_PROBE_PRESET = "active-pattern-device-qi"
 BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET = "block-schur-device-qi"
 ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET = "adaptive-residual-device-qi"
 OPERATOR_KRYLOV_DEVICE_QI_SOLVE_METHOD = "xblock_sparse_pc_gmres"
@@ -619,6 +620,24 @@ RESIDUAL_BOUNCE_REGION_DEVICE_QI_ENV = {
     ),
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "224",
 }
+ACTIVE_PATTERN_DEVICE_QI_ENV = {
+    **RECYCLED_AUGMENTED_DEVICE_QI_ENV,
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE": "1",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_RANK": "64",
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_CANDIDATES": (
+        "96"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_SOLVER": (
+        "action_lstsq"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_GLOBAL": (
+        "1"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MIN_CHUNK_ENERGY_FRACTION": (
+        "0.002"
+    ),
+    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK": "256",
+}
 BLOCK_SCHUR_DEVICE_QI_ENV = {
     **OPERATOR_KRYLOV_DEVICE_QI_ENV,
     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION": "1",
@@ -761,6 +780,18 @@ QI_DEVICE_TRACE_KEYS = (
     "xblock_qi_device_preconditioner_residual_region_bounce_coarse_bounce_boundary",
     "xblock_qi_device_preconditioner_residual_region_bounce_coarse_min_region_energy_fraction",
     "xblock_qi_device_preconditioner_residual_region_bounce_coarse_region_bands",
+    "xblock_qi_device_preconditioner_active_pattern_coarse",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_max_rank",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_max_candidates",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_candidate_count",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_rank",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_stage_count",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_solver",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_condition_estimate",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_residual_before",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_residual_after",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_include_global",
+    "xblock_qi_device_preconditioner_active_pattern_coarse_min_chunk_energy_fraction",
     "xblock_qi_device_preconditioner_augmented_seed_requested",
     "xblock_qi_device_preconditioner_augmented_seed_available",
     "xblock_qi_device_preconditioner_augmented_seed_used",
@@ -969,6 +1000,8 @@ def _probe_env_for_preset(preset: str) -> dict[str, str]:
         return dict(PHASE_SPACE_COARSE_REUSE_DEVICE_QI_ENV)
     if normalized == RESIDUAL_BOUNCE_REGION_DEVICE_QI_PROBE_PRESET:
         return dict(RESIDUAL_BOUNCE_REGION_DEVICE_QI_ENV)
+    if normalized == ACTIVE_PATTERN_DEVICE_QI_PROBE_PRESET:
+        return dict(ACTIVE_PATTERN_DEVICE_QI_ENV)
     if normalized == BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET:
         return dict(BLOCK_SCHUR_DEVICE_QI_ENV)
     if normalized == ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET:
@@ -998,6 +1031,7 @@ def _solve_method_for_probe_preset(*, solve_method: str, probe_preset: str) -> s
         RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET,
         PHASE_SPACE_COARSE_REUSE_DEVICE_QI_PROBE_PRESET,
         RESIDUAL_BOUNCE_REGION_DEVICE_QI_PROBE_PRESET,
+        ACTIVE_PATTERN_DEVICE_QI_PROBE_PRESET,
         BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,
         ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
     }
@@ -1431,6 +1465,42 @@ def _solver_trace_summary(trace_path: Path) -> dict[str, object] | None:
             "xblock_qi_device_preconditioner_residual_region_bounce_coarse_region_bands": (
                 "residual_region_bounce_coarse_region_bands"
             ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse": (
+                "active_pattern_coarse_enabled"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_max_rank": (
+                "active_pattern_coarse_max_rank_requested"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_max_candidates": (
+                "active_pattern_coarse_max_candidates_requested"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_candidate_count": (
+                "active_pattern_coarse_candidate_count"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_rank": (
+                "active_pattern_coarse_rank"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_stage_count": (
+                "active_pattern_coarse_stage_count"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_solver": (
+                "active_pattern_coarse_solver"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_condition_estimate": (
+                "active_pattern_coarse_condition_estimate"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_residual_before": (
+                "active_pattern_coarse_residual_before"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_residual_after": (
+                "active_pattern_coarse_residual_after"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_include_global": (
+                "active_pattern_coarse_include_global"
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_min_chunk_energy_fraction": (
+                "active_pattern_coarse_min_chunk_energy_fraction"
+            ),
             "xblock_qi_device_preconditioner_residual_snapshot_residual_equation": (
                 "residual_snapshot_residual_equation_enabled"
             ),
@@ -1862,6 +1932,28 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
                     ),
                 }
             )
+        if "QI device preconditioner active-pattern coarse" in text:
+            key_values = _log_key_values(text)
+            summary.update(
+                {
+                    "xblock_qi_device_preconditioner_active_pattern_coarse": True,
+                    "xblock_qi_device_preconditioner_active_pattern_coarse_max_rank": (
+                        _int_from_log_value(key_values.get("max_rank"))
+                    ),
+                    "xblock_qi_device_preconditioner_active_pattern_coarse_max_candidates": (
+                        _int_from_log_value(key_values.get("max_candidates"))
+                    ),
+                    "xblock_qi_device_preconditioner_active_pattern_coarse_solver": (
+                        key_values.get("solver")
+                    ),
+                    "xblock_qi_device_preconditioner_active_pattern_coarse_include_global": (
+                        _bool_from_log_value(key_values.get("include_global"))
+                    ),
+                    "xblock_qi_device_preconditioner_active_pattern_coarse_min_chunk_energy_fraction": (
+                        _float_from_log_value(key_values.get("min_energy"))
+                    ),
+                }
+            )
         if "QI device preconditioner block-Schur residual equation" in text:
             key_values = _log_key_values(text)
             summary.update(
@@ -1930,6 +2022,16 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
             key_values.get("residual_bounce_rank")
             or key_values.get("residual_region_bounce_rank")
             or key_values.get("bounce_region_rank")
+        )
+        active_pattern_flag = _bool_from_log_value(
+            key_values.get("active_pattern_coarse") or key_values.get("active_pattern")
+        )
+        active_pattern_candidates = _int_from_log_value(
+            key_values.get("active_pattern_candidates")
+            or key_values.get("active_pattern_coarse_candidates")
+        )
+        active_pattern_rank = _int_from_log_value(
+            key_values.get("active_pattern_rank") or key_values.get("active_pattern_coarse_rank")
         )
         summary.update({
             "xblock_qi_device_preconditioner_enabled": True,
@@ -2025,6 +2127,21 @@ def _infer_qi_device_progress(events: Iterable[object]) -> dict[str, object]:
                 residual_region_bounce_rank
                 if residual_region_bounce_rank is not None
                 else summary.get("xblock_qi_device_preconditioner_residual_region_bounce_coarse_rank")
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse": (
+                active_pattern_flag
+                if active_pattern_flag is not None
+                else summary.get("xblock_qi_device_preconditioner_active_pattern_coarse")
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_candidate_count": (
+                active_pattern_candidates
+                if active_pattern_candidates is not None
+                else summary.get("xblock_qi_device_preconditioner_active_pattern_coarse_candidate_count")
+            ),
+            "xblock_qi_device_preconditioner_active_pattern_coarse_rank": (
+                active_pattern_rank
+                if active_pattern_rank is not None
+                else summary.get("xblock_qi_device_preconditioner_active_pattern_coarse_rank")
             ),
             "xblock_qi_device_preconditioner_block_schur_residual_equation": _bool_from_log_value(
                 key_values.get("block_schur_equation")
@@ -2507,6 +2624,10 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         probe_env,
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE",
     )
+    requested_active_pattern = _env_flag(
+        probe_env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE",
+    )
     requested_block_schur = _env_flag(
         probe_env,
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_ENRICHMENT",
@@ -2541,6 +2662,8 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         tags.add("requested_phase_space_residual_equation")
     if requested_residual_bounce_region:
         tags.add("requested_residual_bounce_region_coarse")
+    if requested_active_pattern:
+        tags.add("requested_active_pattern_coarse")
     if requested_block_schur:
         tags.add("requested_block_schur_residual")
     if returncode == 0 and solver_trace_exists and not converged:
@@ -2576,6 +2699,9 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
     )
     observed_residual_bounce_region = (
         seed.get("xblock_qi_device_preconditioner_residual_region_bounce_coarse") is True
+    )
+    observed_active_pattern = (
+        seed.get("xblock_qi_device_preconditioner_active_pattern_coarse") is True
     )
     observed_block_schur = (
         seed.get("xblock_qi_device_preconditioner_block_schur_residual_enrichment") is True
@@ -2614,11 +2740,15 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         tags.add("observed_phase_space_residual_equation")
     if observed_residual_bounce_region:
         tags.add("observed_residual_bounce_region_coarse")
+    if observed_active_pattern:
+        tags.add("observed_active_pattern_coarse")
     if observed_block_schur:
         tags.add("observed_block_schur_residual")
 
     if observed_installed_krylov and observed_coarse_reuse and observed_augmented_seed:
         classification = "device_qi_augmented_seed_krylov_coarse_reuse"
+    elif observed_installed_krylov and observed_coarse_reuse and observed_active_pattern:
+        classification = "device_qi_active_pattern_coarse_reuse"
     elif observed_installed_krylov and observed_coarse_reuse and observed_residual_bounce_region:
         classification = "device_qi_residual_bounce_region_coarse_reuse"
     elif observed_installed_krylov and observed_coarse_reuse and observed_phase_space:
@@ -2645,6 +2775,8 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         classification = "device_qi_seed_only_probe"
     elif requested_phase_space:
         classification = "requested_phase_space_residual_equation_device_qi"
+    elif requested_active_pattern:
+        classification = "requested_active_pattern_coarse_device_qi"
     elif requested_residual_bounce_region:
         classification = "requested_residual_bounce_region_coarse_device_qi"
     elif requested_residual_galerkin:
@@ -2686,6 +2818,7 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         "requested_residual_galerkin": requested_residual_galerkin,
         "requested_phase_space": requested_phase_space,
         "requested_residual_bounce_region": requested_residual_bounce_region,
+        "requested_active_pattern": requested_active_pattern,
         "requested_block_schur": requested_block_schur,
         "observed_device_qi": observed_device_qi,
         "observed_installed_krylov": observed_installed_krylov,
@@ -2700,6 +2833,7 @@ def _seed_evidence_classification(seed: dict[str, object], probe_env: object) ->
         "observed_residual_galerkin": observed_residual_galerkin,
         "observed_phase_space": observed_phase_space,
         "observed_residual_bounce_region": observed_residual_bounce_region,
+        "observed_active_pattern": observed_active_pattern,
         "observed_block_schur": observed_block_schur,
         "observed_seed_only": observed_seed_only,
         "tags": sorted(tags),
@@ -2755,6 +2889,9 @@ def _aggregate_seed_classifications(seed_summaries: Iterable[dict[str, object]])
         ),
         "has_observed_residual_bounce_region_coarse": any(
             seed.get("observed_qi_device_residual_bounce_region_coarse") is True for seed in seed_list
+        ),
+        "has_observed_active_pattern_coarse": any(
+            seed.get("observed_qi_device_active_pattern_coarse") is True for seed in seed_list
         ),
         "has_observed_block_schur_residual": any(
             seed.get("observed_qi_device_block_schur_residual") is True for seed in seed_list
@@ -2953,6 +3090,9 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                 "requested_qi_device_residual_bounce_region_coarse": classification[
                     "requested_residual_bounce_region"
                 ],
+                "requested_qi_device_active_pattern_coarse": classification[
+                    "requested_active_pattern"
+                ],
                 "requested_qi_device_block_schur_residual": classification["requested_block_schur"],
                 "observed_qi_device_installed_krylov": classification["observed_installed_krylov"],
                 "observed_qi_device_operator_krylov": classification["observed_operator_krylov"],
@@ -2976,6 +3116,9 @@ def _compact_execution_artifact(manifest: dict[str, object]) -> dict[str, object
                 ],
                 "observed_qi_device_residual_bounce_region_coarse": classification[
                     "observed_residual_bounce_region"
+                ],
+                "observed_qi_device_active_pattern_coarse": classification[
+                    "observed_active_pattern"
                 ],
                 "observed_qi_device_block_schur_residual": classification["observed_block_schur"],
             }
@@ -3081,7 +3224,9 @@ def _fail_closed_evidence_classes(classes: Iterable[str], tags: Iterable[str]) -
 
     text = " ".join(sorted(class_set | tag_set))
     downgraded = {class_name for class_name in class_set if not class_name.startswith("device_qi_")}
-    if "residual_bounce" in text or "residual-bounce" in text:
+    if "active_pattern" in text or "active-pattern" in text:
+        downgraded.add("requested_active_pattern_coarse_device_qi")
+    elif "residual_bounce" in text or "residual-bounce" in text:
         downgraded.add("requested_residual_bounce_region_coarse_device_qi")
     elif "phase_space" in text or "phase-space" in text:
         downgraded.add("requested_phase_space_residual_equation_device_qi")
@@ -3318,6 +3463,9 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
             "has_observed_residual_bounce_region_coarse": False
             if fail_closed
             else bool(embedded.get("has_observed_residual_bounce_region_coarse")),
+            "has_observed_active_pattern_coarse": False
+            if fail_closed
+            else bool(embedded.get("has_observed_active_pattern_coarse")),
             "has_observed_block_schur_residual": False
             if fail_closed
             else bool(embedded.get("has_observed_block_schur_residual")),
@@ -3343,6 +3491,14 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
     residual_bounce_observed_key_present = _any_seed_has(
         "observed_qi_device_residual_bounce_region_coarse",
         "observed_residual_bounce_region_coarse",
+    )
+    active_pattern_observed_in_seed = _any_seed_true(
+        "observed_qi_device_active_pattern_coarse",
+        "observed_active_pattern_coarse",
+    )
+    active_pattern_observed_key_present = _any_seed_has(
+        "observed_qi_device_active_pattern_coarse",
+        "observed_active_pattern_coarse",
     )
     text = f"{path.name} {json.dumps(payload, sort_keys=True, default=str)}".lower()
     if _artifact_passed(payload):
@@ -3379,6 +3535,13 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
         or "bounce-region" in text
     ):
         tags.add("requested_residual_bounce_region_coarse")
+    if (
+        "active_pattern_coarse" in text
+        or "active-pattern" in text
+        or "requested_qi_device_active_pattern" in text
+        or "observed_qi_device_active_pattern" in text
+    ):
+        tags.add("requested_active_pattern_coarse")
     if "block_schur" in text or "block-schur" in text:
         tags.add("requested_block_schur_residual")
     if "solver_traces_written\": 0" in text or "solver_trace_exists\": false" in text:
@@ -3392,6 +3555,14 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
         )
     ):
         classes.add("device_qi_residual_bounce_region_coarse_reuse")
+    elif active_pattern_observed_in_seed or (
+        not active_pattern_observed_key_present
+        and (
+            "observed_active_pattern_coarse" in text
+            or "observed_qi_device_active_pattern" in text
+        )
+    ):
+        classes.add("device_qi_active_pattern_coarse_reuse")
     elif "observed_phase_space_residual_equation" in text or "observed_qi_device_phase_space" in text:
         classes.add("device_qi_phase_space_residual_equation_coarse_reuse")
     elif "observed_residual_galerkin_equation" in text or "observed_qi_device_residual_galerkin" in text:
@@ -3423,6 +3594,8 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
         or "bounce-region" in text
     ):
         classes.add("requested_residual_bounce_region_coarse_device_qi")
+    elif "active_pattern_coarse" in text or "active-pattern" in text:
+        classes.add("requested_active_pattern_coarse_device_qi")
     elif "residual_galerkin" in text or "residual-galerkin" in text:
         classes.add("requested_residual_galerkin_equation_device_qi")
     elif "global_moment" in text or "global-moment" in text:
@@ -3458,6 +3631,11 @@ def _artifact_evidence_classification(path: Path, payload: dict[str, object]) ->
         or (
             not residual_bounce_observed_key_present
             and "observed_residual_bounce_region_coarse" in text
+        ),
+        "has_observed_active_pattern_coarse": active_pattern_observed_in_seed
+        or (
+            not active_pattern_observed_key_present
+            and "observed_active_pattern_coarse" in text
         ),
         "has_observed_block_schur_residual": "observed_block_schur_residual" in text,
         "promotion_eligible_seed_count": None,
@@ -3796,6 +3974,12 @@ def build_evidence_manifest(
         "JAX_PLATFORM_NAME": "gpu",
         **RESIDUAL_BOUNCE_REGION_DEVICE_QI_ENV,
     }
+    active_pattern_probe_command = _gpu0_probe_command_for_preset(ACTIVE_PATTERN_DEVICE_QI_PROBE_PRESET)
+    active_pattern_probe_env = {
+        "CUDA_VISIBLE_DEVICES": "0",
+        "JAX_PLATFORM_NAME": "gpu",
+        **ACTIVE_PATTERN_DEVICE_QI_ENV,
+    }
     block_schur_probe_command = _gpu0_probe_command_for_preset(BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET)
     block_schur_probe_env = {
         "CUDA_VISIBLE_DEVICES": "0",
@@ -3984,6 +4168,10 @@ def build_evidence_manifest(
             "residual_bounce_region_device_qi_gpu0_probe": _shell_command(
                 residual_bounce_region_probe_command,
                 residual_bounce_region_probe_env,
+            ),
+            "active_pattern_device_qi_gpu0_probe": _shell_command(
+                active_pattern_probe_command,
+                active_pattern_probe_env,
             ),
             "block_schur_device_qi_gpu0_probe": _shell_command(
                 block_schur_probe_command,
@@ -4204,6 +4392,20 @@ def build_evidence_manifest(
                     residual_bounce_region_probe_env,
                 ),
             },
+            ACTIVE_PATTERN_DEVICE_QI_PROBE_PRESET: {
+                "description": (
+                    "Bounded scale-0.60 hard-seed GPU0 production probe for a "
+                    "residual active-pattern coarse path. The setup hook selects "
+                    "high-energy pitch/angular/radial/species residual chunks, "
+                    "caches their A Q action, and remains fail-closed unless "
+                    "output, solver trace, and convergence are observed."
+                ),
+                "env": dict(sorted(ACTIVE_PATTERN_DEVICE_QI_ENV.items())),
+                "recommended_command": _shell_command(
+                    active_pattern_probe_command,
+                    active_pattern_probe_env,
+                ),
+            },
             BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET: {
                 "description": (
                     "Bounded scale-0.60 hard-seed GPU0 production probe for the "
@@ -4312,6 +4514,7 @@ def _build_parser() -> argparse.ArgumentParser:
             RESIDUAL_GALERKIN_DEVICE_QI_PROBE_PRESET,
             PHASE_SPACE_COARSE_REUSE_DEVICE_QI_PROBE_PRESET,
             RESIDUAL_BOUNCE_REGION_DEVICE_QI_PROBE_PRESET,
+            ACTIVE_PATTERN_DEVICE_QI_PROBE_PRESET,
             BLOCK_SCHUR_DEVICE_QI_PROBE_PRESET,
             ADAPTIVE_RESIDUAL_DEVICE_QI_PROBE_PRESET,
         ),

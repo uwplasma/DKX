@@ -44,6 +44,10 @@ from .rhs1_qi_multilevel_coarse import (
     build_rhs1_qi_multilevel_coarse_candidates,
     build_rhs1_qi_multilevel_residual_level_bases,
 )
+from .rhs1_qi_active_pattern_coarse import (
+    RHS1QIActivePatternCoarseConfig,
+    build_rhs1_qi_active_pattern_coarse_basis,
+)
 from .rhs1_qi_phase_space_coarse import (
     RHS1QIPhaseSpaceCoarseConfig,
     build_rhs1_qi_phase_space_coarse_basis,
@@ -151,6 +155,19 @@ class RHS1QIDevicePreconditionerConfig:
     residual_region_bounce_coarse_trapped_boundary_fraction: float = 0.35
     residual_region_bounce_coarse_min_region_energy_fraction: float = 1.0e-2
     residual_region_bounce_coarse_region_bands: str = "bounce,trapped,passing"
+    active_pattern_coarse: bool = False
+    active_pattern_coarse_max_rank: int = 32
+    active_pattern_coarse_max_candidates: int = 64
+    active_pattern_coarse_solver: str = "action_lstsq"
+    active_pattern_coarse_min_chunk_energy_fraction: float = 1.0e-2
+    active_pattern_coarse_include_global: bool = True
+    active_pattern_coarse_include_block_pitch: bool = True
+    active_pattern_coarse_include_block_angular: bool = True
+    active_pattern_coarse_include_radial_pitch: bool = True
+    active_pattern_coarse_include_radial_angular: bool = True
+    active_pattern_coarse_include_block: bool = True
+    active_pattern_coarse_include_radial: bool = True
+    active_pattern_coarse_include_species: bool = True
     block_schur_residual_equation: bool = False
     block_schur_residual_equation_max_rank: int = 24
     block_schur_residual_equation_include_global: bool = False
@@ -278,6 +295,26 @@ class RHS1QIDevicePreconditionerMetadata:
     residual_region_bounce_coarse_bounce_boundary: float
     residual_region_bounce_coarse_min_region_energy_fraction: float
     residual_region_bounce_coarse_region_bands: str
+    active_pattern_coarse_enabled: bool
+    active_pattern_coarse_candidate_count: int
+    active_pattern_coarse_rank: int
+    active_pattern_coarse_stage_count: int
+    active_pattern_coarse_stage_ranks: tuple[int, ...]
+    active_pattern_coarse_max_rank_requested: int
+    active_pattern_coarse_max_candidates_requested: int
+    active_pattern_coarse_solver: str
+    active_pattern_coarse_condition_estimate: float
+    active_pattern_coarse_residual_before: float
+    active_pattern_coarse_residual_after: float
+    active_pattern_coarse_min_chunk_energy_fraction: float
+    active_pattern_coarse_include_global: bool
+    active_pattern_coarse_include_block_pitch: bool
+    active_pattern_coarse_include_block_angular: bool
+    active_pattern_coarse_include_radial_pitch: bool
+    active_pattern_coarse_include_radial_angular: bool
+    active_pattern_coarse_include_block: bool
+    active_pattern_coarse_include_radial: bool
+    active_pattern_coarse_include_species: bool
     block_schur_residual_equation_enabled: bool
     block_schur_residual_equation_group_count: int
     block_schur_residual_equation_candidate_count: int
@@ -376,6 +413,7 @@ class RHS1QIDevicePreconditionerState:
             + int(self.metadata.residual_galerkin_equation_rank)
             + int(self.metadata.phase_space_residual_equation_rank)
             + int(self.metadata.residual_region_bounce_coarse_rank)
+            + int(self.metadata.active_pattern_coarse_rank)
             + int(self.metadata.block_schur_residual_equation_rank)
             + int(self.metadata.residual_snapshot_residual_equation_rank)
         )
@@ -392,6 +430,7 @@ class RHS1QIDevicePreconditionerState:
             or bool(self.metadata.residual_galerkin_equation_enabled)
             or bool(self.metadata.phase_space_residual_equation_enabled)
             or bool(self.metadata.residual_region_bounce_coarse_enabled)
+            or bool(self.metadata.active_pattern_coarse_enabled)
             or bool(self.metadata.block_schur_residual_equation_enabled)
             or bool(self.metadata.residual_snapshot_residual_equation_enabled)
         ):
@@ -451,6 +490,9 @@ class RHS1QIDevicePreconditionerState:
             bool(self.metadata.residual_region_bounce_coarse_enabled)
             and bool(self.metadata.residual_region_bounce_coarse_include_global)
         ) or (
+            bool(self.metadata.active_pattern_coarse_enabled)
+            and bool(self.metadata.active_pattern_coarse_include_global)
+        ) or (
             bool(self.metadata.block_schur_residual_equation_enabled)
             and bool(self.metadata.block_schur_residual_equation_include_global)
         ) or (
@@ -478,6 +520,10 @@ class RHS1QIDevicePreconditionerState:
                 or (
                     bool(self.metadata.residual_region_bounce_coarse_enabled)
                     and self.metadata.residual_region_bounce_coarse_solver == "galerkin"
+                )
+                or (
+                    bool(self.metadata.active_pattern_coarse_enabled)
+                    and self.metadata.active_pattern_coarse_solver == "galerkin"
                 )
             ):
                 coefficients = _regularized_projected_solve(
@@ -1363,6 +1409,85 @@ def _build_residual_region_bounce_coarse_bases_from_metadata(
         layout,
         residual,
         config=region_config,
+    )
+    rank = int(basis.metadata.rank)
+    candidate_count = int(basis.metadata.candidate_count)
+    residual_before = float(jnp.linalg.norm(residual))
+    if rank <= 0:
+        return (), candidate_count, (), 0, float("inf"), residual_before, float("inf")
+
+    q = jnp.asarray(basis.vectors, dtype=dtype)
+    action = _operator_on_basis(operator_matvec, q, shape=shape, dtype=dtype)
+    coarse_operator = jnp.conjugate(q).T @ action
+    threshold = max(float(config.basis_atol), float(config.basis_rtol) * max(1.0, residual_before))
+    if solver == "galerkin":
+        coefficients = _regularized_projected_solve(
+            coarse_operator,
+            jnp.conjugate(q).T @ residual,
+            rcond=float(config.regularization_rcond),
+        )
+        condition_matrix = coarse_operator
+    else:
+        coefficients = _regularized_least_squares(
+            action,
+            residual,
+            rcond=float(config.regularization_rcond),
+        )
+        condition_matrix = action
+    next_residual = residual - action @ coefficients
+    residual_after = float(jnp.linalg.norm(next_residual))
+    condition_estimate = _condition_estimate(condition_matrix, threshold=threshold)
+    if (not np.isfinite(residual_after)) or residual_after >= residual_before - threshold:
+        return (), candidate_count, (), 0, condition_estimate, residual_before, residual_after
+    return (basis,), candidate_count, (rank,), rank, condition_estimate, residual_before, residual_after
+
+
+def _build_active_pattern_coarse_bases_from_metadata(
+    *,
+    operator_matvec: Callable[[ArrayLike], ArrayLike],
+    geometry_metadata: Mapping[str, object] | None,
+    residual_seed: ArrayLike,
+    shape: tuple[int, int],
+    total_size: int,
+    dtype: Any,
+    config: RHS1QIDevicePreconditionerConfig,
+) -> tuple[tuple[RHS1QICoarseBasis, ...], int, tuple[int, ...], int, float, float, float]:
+    """Build a residual active-pattern coarse equation.
+
+    The candidate directions are selected from actual high-energy residual
+    pitch/angular/radial/species chunks, then accepted only if the cached
+    ``A Q`` least-squares residual equation reduces the setup residual.  This
+    gives hard QI seeds a stronger residual-derived global closure without
+    adding apply-time host callbacks or unbounded smoother work.
+    """
+
+    if int(shape[0]) != int(shape[1]):
+        raise ValueError("active-pattern coarse requires a square operator")
+    layout = _multilevel_layout_from_metadata(geometry_metadata=geometry_metadata, total_size=total_size)
+    residual = jnp.asarray(residual_seed, dtype=dtype).reshape((-1,))
+    if int(residual.shape[0]) != int(total_size):
+        raise ValueError(f"residual_seed length {residual.shape[0]} does not match operator size {total_size}")
+
+    solver = _normalize_multilevel_residual_equation_solver(config.active_pattern_coarse_solver)
+    active_config = RHS1QIActivePatternCoarseConfig(
+        max_rank=max(1, int(config.active_pattern_coarse_max_rank)),
+        max_candidates=max(1, int(config.active_pattern_coarse_max_candidates)),
+        min_chunk_energy_fraction=float(config.active_pattern_coarse_min_chunk_energy_fraction),
+        include_block_pitch_chunks=bool(config.active_pattern_coarse_include_block_pitch),
+        include_block_angular_chunks=bool(config.active_pattern_coarse_include_block_angular),
+        include_radial_pitch_chunks=bool(config.active_pattern_coarse_include_radial_pitch),
+        include_radial_angular_chunks=bool(config.active_pattern_coarse_include_radial_angular),
+        include_block_chunks=bool(config.active_pattern_coarse_include_block),
+        include_radial_chunks=bool(config.active_pattern_coarse_include_radial),
+        include_species_chunks=bool(config.active_pattern_coarse_include_species),
+        rtol=float(config.basis_rtol),
+        atol=float(config.basis_atol),
+        dtype=dtype,
+    )
+    basis = build_rhs1_qi_active_pattern_coarse_basis(
+        layout,
+        residual,
+        config=active_config,
     )
     rank = int(basis.metadata.rank)
     candidate_count = int(basis.metadata.candidate_count)
@@ -3308,6 +3433,39 @@ def setup_rhs1_qi_device_preconditioner(
         residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
             residual_region_bounce_coarse_solver for _ in residual_region_bounce_bases
         )
+    active_pattern_coarse_solver = _normalize_multilevel_residual_equation_solver(
+        config_use.active_pattern_coarse_solver
+    )
+    active_pattern_coarse_candidate_count = 0
+    active_pattern_coarse_rank = 0
+    active_pattern_coarse_stage_ranks: tuple[int, ...] = ()
+    active_pattern_coarse_condition_estimate = float("inf")
+    active_pattern_coarse_residual_before = float("inf")
+    active_pattern_coarse_residual_after = float("inf")
+    if bool(config_use.active_pattern_coarse):
+        if residual_seed is None:
+            raise ValueError("residual_seed is required when active_pattern_coarse=True")
+        (
+            active_pattern_bases,
+            active_pattern_coarse_candidate_count,
+            active_pattern_coarse_stage_ranks,
+            active_pattern_coarse_rank,
+            active_pattern_coarse_condition_estimate,
+            active_pattern_coarse_residual_before,
+            active_pattern_coarse_residual_after,
+        ) = _build_active_pattern_coarse_bases_from_metadata(
+            operator_matvec=operator_matvec,
+            geometry_metadata=geometry_metadata,
+            residual_seed=residual_seed,
+            shape=shape,
+            total_size=int(shape[1]),
+            dtype=dtype_use,
+            config=config_use,
+        )
+        residual_equation_bases = residual_equation_bases + active_pattern_bases
+        residual_equation_stage_solvers = residual_equation_stage_solvers + tuple(
+            active_pattern_coarse_solver for _ in active_pattern_bases
+        )
     phase_space_residual_equation_solver = _normalize_multilevel_residual_equation_solver(
         config_use.phase_space_residual_equation_solver
     )
@@ -3454,6 +3612,8 @@ def setup_rhs1_qi_device_preconditioner(
         reason = "built_with_residual_galerkin_equation"
     elif bool(config_use.residual_region_bounce_coarse) and residual_region_bounce_coarse_rank > 0:
         reason = "built_with_residual_region_bounce_coarse"
+    elif bool(config_use.active_pattern_coarse) and active_pattern_coarse_rank > 0:
+        reason = "built_with_active_pattern_coarse"
     elif bool(config_use.phase_space_residual_equation) and phase_space_residual_equation_rank > 0:
         reason = "built_with_phase_space_residual_equation"
     elif bool(config_use.block_schur_residual_equation) and block_schur_residual_equation_rank > 0:
@@ -3666,6 +3826,42 @@ def setup_rhs1_qi_device_preconditioner(
         ),
         residual_region_bounce_coarse_region_bands=str(
             config_use.residual_region_bounce_coarse_region_bands
+        ),
+        active_pattern_coarse_enabled=bool(
+            config_use.active_pattern_coarse and active_pattern_coarse_rank > 0
+        ),
+        active_pattern_coarse_candidate_count=int(active_pattern_coarse_candidate_count),
+        active_pattern_coarse_rank=int(active_pattern_coarse_rank),
+        active_pattern_coarse_stage_count=len(active_pattern_coarse_stage_ranks),
+        active_pattern_coarse_stage_ranks=tuple(int(v) for v in active_pattern_coarse_stage_ranks),
+        active_pattern_coarse_max_rank_requested=int(config_use.active_pattern_coarse_max_rank),
+        active_pattern_coarse_max_candidates_requested=int(
+            config_use.active_pattern_coarse_max_candidates
+        ),
+        active_pattern_coarse_solver=active_pattern_coarse_solver,
+        active_pattern_coarse_condition_estimate=float(active_pattern_coarse_condition_estimate),
+        active_pattern_coarse_residual_before=float(active_pattern_coarse_residual_before),
+        active_pattern_coarse_residual_after=float(active_pattern_coarse_residual_after),
+        active_pattern_coarse_min_chunk_energy_fraction=float(
+            config_use.active_pattern_coarse_min_chunk_energy_fraction
+        ),
+        active_pattern_coarse_include_global=bool(config_use.active_pattern_coarse_include_global),
+        active_pattern_coarse_include_block_pitch=bool(
+            config_use.active_pattern_coarse_include_block_pitch
+        ),
+        active_pattern_coarse_include_block_angular=bool(
+            config_use.active_pattern_coarse_include_block_angular
+        ),
+        active_pattern_coarse_include_radial_pitch=bool(
+            config_use.active_pattern_coarse_include_radial_pitch
+        ),
+        active_pattern_coarse_include_radial_angular=bool(
+            config_use.active_pattern_coarse_include_radial_angular
+        ),
+        active_pattern_coarse_include_block=bool(config_use.active_pattern_coarse_include_block),
+        active_pattern_coarse_include_radial=bool(config_use.active_pattern_coarse_include_radial),
+        active_pattern_coarse_include_species=bool(
+            config_use.active_pattern_coarse_include_species
         ),
         block_schur_residual_equation_enabled=bool(
             config_use.block_schur_residual_equation and block_schur_residual_equation_rank > 0

@@ -2252,6 +2252,38 @@ def test_qi_seed_progress_parser_preserves_residual_bounce_region_bands() -> Non
     )
 
 
+def test_qi_seed_progress_parser_records_active_pattern_coarse() -> None:
+    progress = qi_seed._infer_qi_device_progress(
+        [
+            (
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner active-pattern coarse "
+                "(max_rank=64 max_candidates=96 solver=action_lstsq "
+                "min_energy=2.0e-03 include_global=1)"
+            ),
+            (
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner accepted residual 3.0e-05 -> 2.7e-05 "
+                "(rank=13 cycles=1 ratio=9.000000e-01 operator_krylov=1 "
+                "coarse_reuse=1 active_pattern_coarse=1 active_pattern_rank=5 "
+                "active_pattern_candidates=18)"
+            ),
+        ]
+    )
+
+    assert progress["xblock_qi_device_preconditioner_active_pattern_coarse"] is True
+    assert progress["xblock_qi_device_preconditioner_active_pattern_coarse_max_rank"] == 64
+    assert progress["xblock_qi_device_preconditioner_active_pattern_coarse_max_candidates"] == 96
+    assert progress["xblock_qi_device_preconditioner_active_pattern_coarse_solver"] == "action_lstsq"
+    assert progress["xblock_qi_device_preconditioner_active_pattern_coarse_include_global"] is True
+    assert (
+        progress["xblock_qi_device_preconditioner_active_pattern_coarse_min_chunk_energy_fraction"]
+        == 2.0e-03
+    )
+    assert progress["xblock_qi_device_preconditioner_active_pattern_coarse_rank"] == 5
+    assert progress["xblock_qi_device_preconditioner_active_pattern_coarse_candidate_count"] == 18
+
+
 def test_evidence_classification_does_not_treat_false_residual_bounce_as_observed(
     tmp_path: Path,
 ) -> None:
@@ -2672,6 +2704,30 @@ def test_evidence_manifest_does_not_promote_failed_larger_artifact(tmp_path: Pat
     )
     assert "runtime hook" in residual_bounce_preset["description"]
     assert "fail-closed" in residual_bounce_preset["description"]
+    active_pattern_preset = manifest["probe_presets"]["active-pattern-device-qi"]
+    assert (
+        active_pattern_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE"
+        ]
+        == "1"
+    )
+    assert (
+        active_pattern_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_RANK"
+        ]
+        == "64"
+    )
+    assert (
+        active_pattern_preset["env"][
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_CANDIDATES"
+        ]
+        == "96"
+    )
+    assert "--probe-preset active-pattern-device-qi" in active_pattern_preset[
+        "recommended_command"
+    ]
+    assert "high-energy pitch/angular/radial/species" in active_pattern_preset["description"]
+    assert "fail-closed" in active_pattern_preset["description"]
     block_schur_preset = manifest["probe_presets"]["block-schur-device-qi"]
     assert (
         block_schur_preset["env"][

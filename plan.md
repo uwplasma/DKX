@@ -15173,12 +15173,26 @@ Closure-state clarification for the QI lane:
   the wider production-resolution seed/backend ladder before any public closure
   claim.
 - Current non-smoother infrastructure push: the active-pattern chunked coarse
-  primitive and augmented-seed Krylov recycling path are implemented as
-  fail-closed infrastructure. The active-pattern primitive is standalone and
-  tested but not a public solver default; the augmented-seed probe is a setup
-  path with bounded host synchronization and finite/shape validation, not a
-  host-transfer-free JIT kernel. The next promotion attempt must use these
-  pieces to build a coupled region-aware coarse operator or true Schur/residual
-  equation over accepted bounce/residual regions, probe only the needed device
-  `A Q` actions, and beat `7.336295e-06` and `158.58 s` before it is worth
-  promoting to another GPU hard-seed closure attempt.
+  path and augmented-seed Krylov recycling path are implemented as fail-closed
+  infrastructure. The active-pattern path is now wired through
+  `RHS1QIDevicePreconditionerConfig`, the RHSMode=1 driver environment controls,
+  progress metadata, runner preset/classification, and focused JIT/unit tests.
+  It builds residual-derived pitch/angular/radial/species chunk bases, probes
+  cached device `A Q` actions, solves the coarse correction by Galerkin or
+  action least squares, and accepts the stage only if the true setup residual
+  decreases. It is not a public solver default until bounded scale-0.60
+  hard-seed CPU/GPU artifacts write converged output and traces.
+- Active-pattern validation completed locally before the hard-seed evidence
+  run: `ruff` passed for the touched driver/preconditioner/runner/tests;
+  `compileall` passed for the same modules; focused active-pattern tests passed
+  with `13 passed, 81 deselected`; broader preconditioner/runner tests passed
+  with `88 passed`; QI smoke/wave-3 tests passed with `31 passed`; release
+  gates, research-lane gates, strict Sphinx docs, and `git diff --check` passed.
+- Next promotion attempt: run the office GPU preset
+  `active-pattern-device-qi` on the same scale-0.60 hard seed, inspect the
+  compact JSON for observed active-pattern metadata, and keep it only as
+  promotion evidence if it beats the best existing true-device residual
+  `7.336295e-06` and writes accepted-converged output. If it again stalls
+  above the `3.021487e-11` write gate, classify it as negative evidence and
+  move the remaining true-QI work to a deeper coupled Schur/multilevel
+  residual-equation design rather than further smoother or restart tuning.
