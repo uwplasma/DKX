@@ -277,6 +277,10 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT
     / "docs"
     / "_static"
+    / "qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json",
+    REPO_ROOT
+    / "docs"
+    / "_static"
     / "qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json",
     REPO_ROOT
     / "docs"
@@ -890,6 +894,9 @@ PROGRESS_EVENT_LIMIT = 24
 PROGRESS_STICKY_EVENT_LIMIT = 12
 PROGRESS_MARKERS = (
     "active matrix size=",
+    "active_size=",
+    "total_size=",
+    "Runtime hint:",
     "active-DOF mode enabled",
     "RHSMode=1 BiCGStab",
     "building RHSMode=1 preconditioner",
@@ -927,12 +934,19 @@ PROGRESS_MARKERS = (
     "CUDA_ERROR",
 )
 PROGRESS_STICKY_MARKERS = (
+    "active matrix size=",
+    "active_size=",
+    "total_size=",
+    "Runtime hint:",
+    "active-DOF mode enabled",
     "QI augmented Krylov",
     "QI device preconditioner accepted",
     "QI device preconditioner rejected",
     "QI device preconditioner operator-Krylov",
     "QI device preconditioner multilevel",
     "QI device preconditioner block-Schur",
+    "QI device preconditioner coupled residual equation",
+    "QI device preconditioner installed in Krylov after seed probe reject",
     "QI device preconditioner residual Galerkin",
     "QI device preconditioner phase-space",
     "QI device preconditioner residual-region",

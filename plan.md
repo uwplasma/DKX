@@ -15322,10 +15322,29 @@ Next gates:
   peak host RSS `5.58 GB`. It built the coupled stage (`rank=17`,
   `candidates=40`) but rejected the QI preconditioner because the one-shot
   seed residual only changed from `3.021487e-05` to `3.018785e-05`.
-- Rerun the bounded scale-0.60 GPU hard seed with the Krylov-install coupled
-  mode enabled by `--probe-preset coupled-residual-device-qi` on `office`.
-- Accept the route only if it writes HDF5 and solver trace, satisfies the
-  residual/write gate, reports observed coupled residual-equation metadata,
-  avoids host fallback, and beats the current best true-device residual
-  (`7.336295e-06`). Otherwise record it as fail-closed negative evidence and
-  keep production QI on the non-autodiff host fallback.
+- The follow-up bounded scale-0.60 GPU hard seed with Krylov-install coupled
+  mode did enter the mathematically relevant preconditioner context instead of
+  changing the initial seed:
+  `docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json`.
+  The run installed the coupled residual equation in Krylov after the seed
+  probe rejected it (`rank=13`, coupled rank `17`, coupled candidates `40`),
+  reduced wall time from `8:07.61` to `3:08.10`, and reduced peak host RSS from
+  `5.58 GB` to `3.90 GB` relative to the seed-gated coupled attempt. It still
+  failed the production gate: final residual `2.450895e-05`, target
+  `3.021487e-13`, no HDF5 output, and no solver trace summary because output is
+  intentionally refused for nonconverged production-sized RHSMode=1 solves.
+- Fixed evidence preservation for this class of failed long GPU runs. The
+  runner now treats coupled residual-equation setup and
+  install-in-Krylov-after-reject progress lines as sticky progress events, so
+  compact artifacts and manifests retain observed coupled-QI metadata even when
+  the solve fails before HDF5/solver-trace emission. Failed artifacts remain
+  fail-closed and non-promotion evidence.
+- Current conclusion after the new literature/code pass: field-split Schur,
+  multigrid-preconditioned Krylov, and Fortran v3/PETSc practice all support
+  judging reusable preconditioners inside Krylov, but the latest GPU result
+  shows the present rank-17 coupled coarse space still does not contain the
+  dominant hard-seed error. Do not spend more effort on smoother/restart or
+  active-pattern tuning for this lane. The next real algorithmic option is a
+  deeper residual equation with coarse variables derived from the final Krylov
+  residual/error modes, or else keep true device-QI explicitly deferred and use
+  the documented non-autodiff host fallback for production large-QI runs.

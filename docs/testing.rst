@@ -905,6 +905,14 @@ hypothesis: a passing artifact must report
 and solver trace, satisfy the residual gate, and remain on the device-QI path
 without host fallback. Until such an artifact exists, the evidence manifest
 keeps the lane fail-closed.
+The first one-GPU Krylov-install artifact,
+``docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json``,
+does report observed coupled residual-equation setup and installation inside
+Krylov, and it reduces runtime/RSS relative to the seed-gated coupled attempt.
+It still refuses output because the residual remains above the write gate, so
+the manifest records it as fail-closed blocker evidence. The runner tests also
+assert that these coupled setup/install progress lines survive compacting even
+when a long GPU run fails before writing HDF5 or solver trace metadata.
 
 The latest residual-weighted angular probe-coarse artifact
 ``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``

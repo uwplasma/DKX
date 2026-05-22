@@ -1676,6 +1676,13 @@ def test_extract_progress_events_preserves_qi_setup_when_device_cycles_are_long(
                 "QI device preconditioner accepted residual 3.0e-05 -> 2.8e-05 "
                 "(rank=13 operator_krylov=1 coarse_reuse=1)",
                 "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner coupled residual equation "
+                "(max_rank=128 solver=action_lstsq include_flat=1 install_on_reject=1 "
+                "min_improvement=0.000e+00)",
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner installed in Krylov after seed probe reject "
+                "(rank=144 coupled_rank=37 coupled_candidates=92 residual 3.0e-05 -> 2.4e-05)",
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                 "QI augmented Krylov enabled rank=13 mode=combined",
                 *[
                     "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
@@ -1691,8 +1698,11 @@ def test_extract_progress_events_preserves_qi_setup_when_device_cycles_are_long(
 
     events = qi_seed._extract_progress_events(stdout_path, max_events=8)
 
+    assert any("active matrix size=81377" in event for event in events)
     assert any("operator-Krylov coarse enrichment" in event for event in events)
     assert any("coarse_reuse=1" in event for event in events)
+    assert any("coupled residual equation" in event for event in events)
+    assert any("installed in Krylov after seed probe reject" in event for event in events)
     assert any("QI augmented Krylov enabled" in event for event in events)
     assert any("device-cycle cycle=29" in event for event in events)
     assert any("Refusing to write nonconverged" in event for event in events)
@@ -2324,6 +2334,80 @@ def test_qi_seed_progress_parser_records_coupled_residual_equation() -> None:
     assert progress["xblock_qi_device_preconditioner_coupled_residual_equation_rank"] == 37
     assert progress["xblock_qi_device_preconditioner_coupled_residual_equation_candidate_count"] == 92
     assert progress["xblock_qi_device_preconditioner_installed_in_krylov_after_seed_reject"] is True
+
+
+def test_compact_failure_artifact_preserves_coupled_krylov_install_progress(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text("&resolutionParameters\n  Ntheta = 15\n/\n", encoding="utf-8")
+    progress_events = [
+        "solve_v3_full_system_linear_gmres: active-DOF mode enabled (size=81377/139502)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        "QI device preconditioner coupled residual equation "
+        "(max_rank=128 solver=action_lstsq include_flat=1 install_on_reject=1 "
+        "min_improvement=0.000e+00)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        "QI device preconditioner installed in Krylov after seed probe reject "
+        "(rank=13 coupled_rank=17 coupled_candidates=40 residual 3.021487e-05 -> 3.018785e-05)",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        "QI augmented Krylov enabled rank=13 mode=combined",
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
+        "method=fgmres_jax elapsed_s=185.323 iters=73 matvecs=5 "
+        "residual=2.450895e-05 target=3.021487e-13 ksp_residual=2.450895e-05",
+    ]
+    manifest = {
+        "source_input": str(input_path),
+        "resolution_scale": 0.6,
+        "case_count": 1,
+        "solve_method": "xblock_sparse_pc_gmres",
+        "probe_env": qi_seed.COUPLED_RESIDUAL_DEVICE_QI_ENV,
+        "probe_preset": "coupled-residual-device-qi",
+        "cases": [
+            {
+                "case": "qi_seed_0003",
+                "resolution": {"NTHETA": 15, "NZETA": 31, "NX": 5, "NXI": 60},
+            }
+        ],
+        "execution": {
+            "summary": {"attempted": 1, "process_failed": 1},
+            "gates": {"passed": False},
+            "timeout_s": 900.0,
+            "heartbeat_s": 15.0,
+            "fail_fast": False,
+            "results": [
+                {
+                    "case": "qi_seed_0003",
+                    "seed": 3,
+                    "returncode": 2,
+                    "timed_out": False,
+                    "output_exists": False,
+                    "solver_trace_exists": False,
+                    "solver_trace_summary": None,
+                    "elapsed_s": 188.0,
+                    "progress_events": progress_events,
+                    "stdout_tail": progress_events[-2:],
+                    "stderr_tail": ["Refusing to write nonconverged RHSMode=1 diagnostics"],
+                    "heartbeat": "qi_seed_0003/runner_heartbeat.jsonl",
+                    "heartbeat_count": 12,
+                }
+            ],
+        },
+    }
+
+    payload = qi_seed._compact_execution_artifact(manifest)
+    seed = payload["seeds"][0]
+
+    assert seed["xblock_qi_device_preconditioner_coupled_residual_equation"] is True
+    assert seed["xblock_qi_device_preconditioner_coupled_residual_equation_rank"] == 17
+    assert seed["xblock_qi_device_preconditioner_installed_in_krylov_after_seed_reject"] is True
+    assert seed["observed_qi_device_coupled_residual_equation"] is True
+    assert seed["observed_qi_device_installed_krylov"] is True
+    assert seed["run_outcome"] == "process_failed"
+    aggregate = payload["evidence_classification"]
+    assert aggregate["classes"] == ["device_qi_installed_krylov"]
+    assert aggregate["has_failed_before_summary_json"] is True
+    assert aggregate["has_observed_coupled_residual_equation"] is True
+    assert aggregate["has_observed_installed_krylov"] is True
+    assert aggregate["promotion_eligible_seed_count"] == 0
 
 
 def test_evidence_classification_does_not_treat_false_residual_bounce_as_observed(

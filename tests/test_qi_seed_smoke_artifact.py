@@ -848,9 +848,9 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 107
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 108
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 75
+    assert current["nonpassing_artifact_count"] == 76
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
@@ -1073,6 +1073,10 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale060_rankdef_schur_gpu0_2026_05_20.json",
         (
             "docs/_static/"
+            "qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json"
+        ),
+        (
+            "docs/_static/"
             "qi_seed_robustness_scale060_qi_device_krylov_nohost_recycle_seed3_gpu0_2026_05_19.json"
         ),
         "docs/_static/qi_seed_robustness_scale060_gpu_rejected_solver_probes_2026_05_13.json",
@@ -1092,6 +1096,20 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert active_pattern["last_reported_residual_norm"] == pytest.approx(1.622338e-05)
     assert "requested_active_pattern_coarse_device_qi" in active_pattern["evidence_classes"]
     assert "device_qi_active_pattern_coarse_reuse" in active_pattern["fail_closed_observed_classes"]
+
+    coupled_krylov_install = next(
+        artifact
+        for artifact in payload["source_artifacts"]
+        if artifact["path"]
+        == "docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json"
+    )
+    assert coupled_krylov_install["passed"] is False
+    assert coupled_krylov_install["active_size"] == 81377
+    assert coupled_krylov_install["total_size"] == 139502
+    assert coupled_krylov_install["last_reported_residual_norm"] == pytest.approx(2.450895e-05)
+    assert "requested_coupled_residual_equation_device_qi" in coupled_krylov_install["evidence_classes"]
+    assert "device_qi_installed_krylov" in coupled_krylov_install["fail_closed_observed_classes"]
+    assert "observed_coupled_residual_equation" in coupled_krylov_install["fail_closed_observed_tags"]
 
     recycle = next(
         artifact

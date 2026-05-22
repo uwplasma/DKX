@@ -22,6 +22,14 @@ Unreleased
   stages whose seed probe is rejected. This tests the preconditioner in the
   mathematically relevant Krylov context without relaxing convergence gates or
   changing the initial seed.
+- Recorded the first scale-0.60 GPU coupled-residual Krylov-install evidence.
+  It improves the coupled-probe runtime and host RSS versus the seed-gated
+  attempt but still fails the residual/write gate, so true device-QI remains
+  an explicit research lane.
+- Hardened QI evidence extraction for failed long GPU runs so coupled
+  residual-equation and install-in-Krylov progress lines remain visible in
+  compact artifacts and fail-closed manifests even when no HDF5 output or
+  solver trace is written.
 - Updated QI evidence counts, multi-GPU wording, and source-map closure text so
   release-facing docs distinguish production host fallback from research
   device-QI probes.
