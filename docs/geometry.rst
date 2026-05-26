@@ -114,6 +114,12 @@ VMEC-centered user workflows typically use either:
 - the namelist ``equilibriumFile`` entry, or
 - the explicit Python / CLI override ``wout_path=...`` / ``--wout-path ...``.
 
+Large public VMEC fixtures such as ``wout_w7x_standardConfig.nc`` are
+release-hosted rather than tracked in the repository. If a namelist or example
+references one of these known basenames, `sfincs_jax` resolves it through the
+same path search described in :doc:`inputs` and downloads the checked release
+asset into the user cache when needed.
+
 Optional JAX-native geometry producers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -323,6 +329,11 @@ follow the representable-mode policy imposed by the discrete grid:
 with the expected Nyquist exclusions when sine/cosine pairs would otherwise be
 duplicated. This matters numerically because the resolved harmonic content directly
 changes both the geometric coefficients and the trapped-passing boundary structure.
+
+The packaged examples can refer to release-hosted ``.bc`` fixtures by basename,
+for example ``hsx3free.bc`` or ``w7x_standardConfig.bc``. The resolver verifies
+the release archive checksum and each extracted file checksum before using those
+fixtures, so CI and user runs do not depend on unreviewed local copies.
 
 Radial coordinates and geometry-derived scales
 ----------------------------------------------
