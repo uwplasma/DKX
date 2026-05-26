@@ -18,7 +18,7 @@
   rN_wish = 0.12247
 
   VMECRadialOption = 0
-  equilibriumFile = "../../../../equilibria/wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc"
+  equilibriumFile = "wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc"
   min_Bmn_to_load = 0
 
 /
@@ -92,4 +92,3 @@ Nxi= 100
 &export_f
 /
                                   
-

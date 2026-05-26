@@ -59,7 +59,7 @@ def _default_wout_candidates() -> list[Path]:
     candidates.extend(
         [
             Path("/Users/rogeriojorge/local/vmec_jax/examples/data/wout_circular_tokamak.nc"),
-            _REPO_ROOT / "tests" / "ref" / "wout_w7x_standardConfig.nc",
+            _REPO_ROOT / "sfincs_jax" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
         ]
     )
     return candidates

@@ -92,7 +92,7 @@ def _optional_wout_fixture() -> Path | None:
     candidates = [
         Path("/Users/rogeriojorge/local/vmec_jax/examples/data/wout_circular_tokamak.nc"),
         Path("/Users/rogeriojorge/local/booz_xform_jax/tests/test_files/wout_circular_tokamak.nc"),
-        _REPO / "tests" / "ref" / "wout_w7x_standardConfig.nc",
+        _REPO / "sfincs_jax" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
     ]
     for candidate in candidates:
         if candidate.exists():

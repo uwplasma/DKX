@@ -19,7 +19,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--wout-path",
         type=Path,
-        default=_REPO_ROOT / "tests" / "ref" / "wout_w7x_standardConfig.nc",
+        default=_REPO_ROOT / "sfincs_jax" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
         help="Explicit VMEC equilibrium override.",
     )
     parser.add_argument(

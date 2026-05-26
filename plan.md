@@ -1501,7 +1501,8 @@ Core requirement right now:
 ### 4.4 Examples
 - Main examples: `/Users/rogeriojorge/local/tests/sfincs_jax/examples`
 - Additional high-res case: `/Users/rogeriojorge/local/tests/sfincs_jax/examples/additional_examples/input.namelist`
-- Prior additional input: `/Users/rogeriojorge/local/tests/sfincs_jax/examples/additional_examples/input.namelist_old`
+- Historical duplicate `input.namelist_old` was removed in the repository
+  slimming pass; use the current additional-example input above.
 
 ### 4.5 Documentation
 - Docs root: `/Users/rogeriojorge/local/tests/sfincs_jax/docs`
@@ -2708,8 +2709,8 @@ Release-ready means:
   - `vmec_geometry.py`: `8% -> 97%`
 - Added direct fixture-based geometry loader checks informed by the upstream SFINCS
   technical notes and paper:
-  - Boozer `.bc` loader consistency on `tests/ref/w7x_standardConfig.bc`
-  - VMEC `wout` loader consistency on `tests/ref/wout_w7x_standardConfig.nc`
+  - Boozer `.bc` loader consistency on `sfincs_jax/data/equilibria/w7x_standardConfig.bc`
+  - VMEC `wout` loader consistency on `sfincs_jax/data/equilibria/wout_w7x_standardConfig.nc`
   - analytic/spectral identities for differentiation and Boozer-coordinate field relations
 - Added operational `io` coverage for:
   - geometryScheme=12 non-stellarator-symmetric Boozer localization
@@ -15851,3 +15852,54 @@ Best next steps:
    production true-device-QI tolerance closure remains the explicitly
    documented research lane, with current CPU/GPU hard-seed residuals below
    `3e-5` but not yet at the production write gate.
+
+### 35.68 Repository slimming and large-file audit gate
+
+Scope:
+
+- Audited tracked files and confirmed the current repository bloat is dominated
+  by bundled equilibrium fixtures plus historical benchmark artifacts. The
+  local checkout can be much larger than a fresh clone because ignored
+  benchmark/test outputs accumulate under `tests/`, `benchmarks/`, `dist/`, and
+  `docs/_build/`.
+- Removed tracked CPU/GPU production pilot run directories under
+  `benchmarks/production_resolution_*_pilot_2026-04-30/`. These were generated
+  run artifacts, not source inputs, and were referenced only in this plan.
+- Removed exact duplicate W7-X fixtures from `tests/ref/`; examples/tests now
+  point at the canonical copies in `sfincs_jax/data/equilibria/`.
+- Removed `_old` duplicate QI VMEC files from examples/benchmarks and made the
+  remaining QI inputs self-contained by pointing to the local file name.
+- Added `scripts/check_repo_size.py` and `tests/test_repo_size_policy.py` so
+  future tracked files above `2 MiB` must be reviewed and allowlisted with a
+  reason.
+- Added ignore coverage for future production pilot benchmark scratch outputs.
+
+Measured impact:
+
+- Tracked working-tree payload: `158.8 MiB -> 107.3 MiB`.
+- Tracked files above `2 MiB`: `11 -> 7`.
+- The remaining reviewed large files are the canonical HSX/W7-X/QI equilibrium
+  fixtures needed by public examples or benchmark inputs.
+
+Important Git-history note:
+
+- This commit reduces the current checkout and wheel/source tree surface, but
+  it does not fully reduce regular `git clone` transfer size because deleted
+  blobs remain in Git history. Shrinking the clone download requires a
+  coordinated history rewrite with `git filter-repo` or moving large artifacts
+  to releases/LFS/external downloads. Do not do that without team coordination
+  because it rewrites commit hashes.
+
+Validation:
+
+- `python scripts/check_repo_size.py`
+- `python - <<'PY' ...` tracked-size audit: `107.3 MiB`, `7` reviewed files
+  above `2 MiB`.
+
+Best next steps:
+
+1. Run focused tests and strict docs/release gates.
+2. Commit and push the slimming checkpoint if clean.
+3. Plan a separate coordinated history-rewrite/release-asset migration if the
+   goal is to reduce regular clone transfer below the current historical pack
+   size.
