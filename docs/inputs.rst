@@ -48,7 +48,9 @@ The CLI and Python API use the same equilibrium search order:
 - relative to the input namelist directory,
 - relative to the current working directory,
 - directories listed in ``SFINCS_JAX_EQUILIBRIA_DIRS``,
-- then bundled test/example data directories.
+- small bundled test/example data directories,
+- then known release-hosted public fixtures by basename, fetched into the
+  ``SFINCS_JAX_DATA_DIR`` cache when needed.
 
 Runtime overrides
 -----------------
@@ -98,7 +100,12 @@ Practical notes for users
   - relative to the input namelist directory,
   - relative to the current working directory,
   - directories listed in ``SFINCS_JAX_EQUILIBRIA_DIRS``,
-  - and then bundled reference/data directories used by tests and packaged examples.
+  - small bundled reference/data directories used by tests and packaged examples,
+  - and release-hosted public W7-X/HSX/QI fixtures by basename.
+
+- The release-hosted fixture cache keeps regular clones and wheels small. Prefetch
+  it with ``python scripts/fetch_equilibria.py`` or set
+  ``SFINCS_JAX_OFFLINE=1`` to require a pre-populated cache.
 
 - If you need to point a run at a different equilibrium without editing ``input.namelist``,
   use:

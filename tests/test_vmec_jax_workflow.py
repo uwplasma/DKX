@@ -92,12 +92,16 @@ def _optional_wout_fixture() -> Path | None:
     candidates = [
         Path("/Users/rogeriojorge/local/vmec_jax/examples/data/wout_circular_tokamak.nc"),
         Path("/Users/rogeriojorge/local/booz_xform_jax/tests/test_files/wout_circular_tokamak.nc"),
-        _REPO / "sfincs_jax" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
     ]
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    return None
+    from sfincs_jax.paths import resolve_existing_path
+
+    try:
+        return resolve_existing_path("wout_w7x_standardConfig.nc").path
+    except FileNotFoundError:
+        return None
 
 
 def test_vmec_jax_boozer_proxy_gate_passes_or_skips_cleanly(tmp_path: Path) -> None:

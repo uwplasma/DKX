@@ -76,7 +76,7 @@ def read_vmec_wout(path: str | Path) -> VmecWout:
     """
     p = Path(path).expanduser().resolve()
     if not p.exists():
-        raise FileNotFoundError(str(p))
+        p = resolve_existing_path(path).path.resolve()
     if p.suffix.lower() in {".txt", ".dat"}:
         # Many upstream distributions provide both an ASCII and a netCDF wout file. Prefer netCDF.
         p_nc = p.with_suffix(".nc")

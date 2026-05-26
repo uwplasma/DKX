@@ -17,16 +17,9 @@ import sys
 DEFAULT_THRESHOLD_MIB = 2.0
 
 # Files above the default threshold that are intentionally kept in the current
-# tree. Each entry needs a short reason so the audit is reviewable.
-REVIEWED_LARGE_FILES: dict[str, str] = {
-    "sfincs_jax/data/equilibria/hsx3free.bc": "canonical HSX Boozer equilibrium used by public geometryScheme=11 examples",
-    "sfincs_jax/data/equilibria/w7x_standardConfig.bc": "canonical W7-X Boozer equilibrium used by geometryScheme=11 examples",
-    "sfincs_jax/data/equilibria/w7x-sc1.bc": "small W7-X Boozer equilibrium used by paper/example parity cases",
-    "sfincs_jax/data/equilibria/wout_w7x_standardConfig.nc": "canonical W7-X VMEC netCDF equilibrium used by geometryScheme=5 examples",
-    "sfincs_jax/data/equilibria/wout_w7x_standardConfig.txt": "ASCII VMEC fixture retained for geometryScheme=5 ASCII compatibility",
-    "examples/additional_examples/wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc": "self-contained QI VMEC example input",
-    "benchmarks/production_resolution_inputs_2026-04-30/inputs/additional_examples/wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc": "self-contained production-resolution QI benchmark input",
-}
+# tree. Each entry needs a short reason so the audit is reviewable. Public
+# multi-megabyte equilibrium fixtures are release-hosted, not tracked.
+REVIEWED_LARGE_FILES: dict[str, str] = {}
 
 
 def _repo_root() -> Path:

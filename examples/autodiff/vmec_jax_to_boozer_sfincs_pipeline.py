@@ -49,6 +49,7 @@ from sfincs_jax.jax_geometry_adapters import (  # noqa: E402
     geometry_proxy_workflow_summary,
     optional_jax_geometry_backend_report,
 )
+from sfincs_jax.paths import resolve_existing_path  # noqa: E402
 
 
 def _default_wout_candidates() -> list[Path]:
@@ -69,6 +70,10 @@ def _find_default_wout() -> Path:
     for candidate in _default_wout_candidates():
         if candidate.exists():
             return candidate
+    try:
+        return resolve_existing_path("wout_w7x_standardConfig.nc").path
+    except FileNotFoundError:
+        pass
     joined = "\n  ".join(str(path) for path in _default_wout_candidates())
     raise FileNotFoundError(
         "No default VMEC wout fixture found. Provide --wout or set "

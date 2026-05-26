@@ -15903,3 +15903,34 @@ Best next steps:
 3. Plan a separate coordinated history-rewrite/release-asset migration if the
    goal is to reduce regular clone transfer below the current historical pack
    size.
+
+### 35.69 Release-hosted equilibrium data and history-slimming pass
+
+Scope:
+
+- Promote the remaining multi-megabyte public equilibrium fixtures out of the
+  tracked source tree and into a checksum-pinned GitHub release asset
+  (``sfincs-jax-data-v1``).
+- Add a small embedded manifest plus a stdlib-only fetch/cache helper so public
+  examples, CI, and compatibility tests can resolve known W7-X/HSX/QI
+  equilibrium basenames without bloating normal clones or wheels.
+- Update CI to prefetch the release data before coverage and example smoke
+  jobs, while keeping lazy first-use downloads available for normal users.
+- Add repository-size and external-data unit gates so large fixtures are not
+  accidentally reintroduced and release-data checksum behavior remains tested.
+- Rewrite git history after the source-tree migration so ordinary clones no
+  longer transfer deleted large blobs from old commits.
+
+Validation plan:
+
+- `python scripts/fetch_equilibria.py --quiet`
+- `python scripts/check_repo_size.py`
+- targeted external-data, path-resolution, VMEC output, and repo-size tests
+- strict docs build
+- `git diff --check`
+- post-rewrite object/ref audit for removed fixture paths
+
+Coordination note:
+
+- Rewriting ``main`` changes commit hashes. After the force-push, collaborators
+  should re-clone or reset local branches to the rewritten ``origin/main``.

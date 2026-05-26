@@ -87,5 +87,17 @@ def resolve_existing_path(
         if found is not None:
             return ResolveResult(path=found, tried=tuple(tried))
 
-    raise FileNotFoundError(f"Unable to resolve existing path for {raw!r}. Tried: {tried}")
+    # Public examples reference several multi-megabyte equilibrium fixtures by
+    # basename. These fixtures live in a release asset instead of the git tree,
+    # so resolve them lazily into the user cache when requested.
+    try:
+        from .data_fetch import resolve_external_equilibrium
 
+        found = resolve_external_equilibrium(p)
+    except Exception as exc:  # noqa: BLE001
+        raise FileNotFoundError(f"Unable to resolve existing path for {raw!r}. Tried: {tried}") from exc
+    if found is not None:
+        tried.append(found)
+        return ResolveResult(path=found, tried=tuple(tried))
+
+    raise FileNotFoundError(f"Unable to resolve existing path for {raw!r}. Tried: {tried}")

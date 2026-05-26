@@ -6,7 +6,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import IO, Iterable, Iterator, List, Tuple
+from typing import IO, Iterator, List, Tuple
 
 import numpy as np
 
@@ -61,7 +61,9 @@ def _read_boozer_bc_header_uncached(*, path: str | Path, geometry_scheme: int) -
 
     p = Path(path).expanduser()
     if not p.exists():
-        raise FileNotFoundError(str(p))
+        from .paths import resolve_existing_path
+
+        p = resolve_existing_path(p).path
 
     turkin_sign = 1
     with p.open("r") as f:
@@ -98,7 +100,9 @@ def _read_boozer_bc_header_uncached(*, path: str | Path, geometry_scheme: int) -
 def _bc_cache_key(path: str | Path) -> tuple[str, int, int]:
     p = Path(path).expanduser().resolve()
     if not p.exists():
-        raise FileNotFoundError(str(p))
+        from .paths import resolve_existing_path
+
+        p = resolve_existing_path(path).path.resolve()
     st = p.stat()
     return str(p), int(st.st_mtime_ns), int(st.st_size)
 

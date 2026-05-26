@@ -156,6 +156,10 @@ def _copy_equilibrium(dest_dir: Path, filename: str = "w7x_standardConfig.bc") -
     src = REPO_ROOT / "sfincs_jax" / "data" / "equilibria" / filename
     if not src.exists():
         src = REPO_ROOT / "tests" / "ref" / filename
+    if not src.exists():
+        from sfincs_jax.paths import resolve_existing_path
+
+        src = resolve_existing_path(filename).path
     shutil.copyfile(src, dest_dir / filename)
 
 
@@ -234,7 +238,7 @@ def main() -> None:
         "!ss scanType = 1",
         "!ss NthetaMinFactor = 1.0",
         "!ss NthetaMaxFactor = 2.0",
-        f\"!ss NthetaNumRuns = {2 if fast else 3}\",
+        f"!ss NthetaNumRuns = {2 if fast else 3}",
     ]
     _prepare_input(
         base_rhs1,
@@ -256,7 +260,7 @@ def main() -> None:
     work.mkdir(parents=True, exist_ok=True)
     extra = [
         "!ss scanType = 2",
-        f\"!ss NErs = {2 if fast else 3}\",
+        f"!ss NErs = {2 if fast else 3}",
         "!ss ErMin = -1e-3",
         "!ss ErMax = 1e-3",
     ]
@@ -278,7 +282,7 @@ def main() -> None:
         "!ss scanVariable = nu_n",
         "!ss scanVariableMin = 1e-3",
         "!ss scanVariableMax = 2e-3",
-        f\"!ss scanVariableN = {2 if fast else 3}\",
+        f"!ss scanVariableN = {2 if fast else 3}",
         "!ss scanVariableScale = lin",
     ]
     _prepare_input(base_rhs1, work / "input.namelist", extra_lines=extra, resolution_overrides=res_overrides)
@@ -297,7 +301,7 @@ def main() -> None:
     extra = [
         "!ss scanType = 4",
         "!ss profilesScheme = 1",
-        f\"!ss Nradius = {2 if fast else 3}\",
+        f"!ss Nradius = {2 if fast else 3}",
         "!ss rN_min = 0.2",
         "!ss rN_max = 0.4",
     ]
@@ -319,7 +323,7 @@ def main() -> None:
     extra = [
         "!ss scanType = 5",
         "!ss profilesScheme = 1",
-        f\"!ss Nradius = {2 if fast else 3}\",
+        f"!ss Nradius = {2 if fast else 3}",
         "!ss rN_min = 0.2",
         "!ss rN_max = 0.4",
     ]
@@ -435,7 +439,7 @@ def main() -> None:
         _run(
             [sys.executable, str(UTILS / "sfincsScan"), "--yes"],
             cwd=work,
-            label=f\"mono-scan{idx}-run\",
+            label=f"mono-scan{idx}-run",
             timeout_s=timeout_s,
         )
         _run(

@@ -49,6 +49,18 @@ cd sfincs_jax
 pip install .
 ```
 
+Large public equilibrium fixtures are not stored in the git clone or wheel. They
+are fetched from the `sfincs-jax-data-v1` GitHub release on first use and cached
+under `~/.cache/sfincs_jax/data/2026-05-26-v1` by default. To prefetch them for
+CI, offline work, or reproducible examples, run:
+
+```bash
+python scripts/fetch_equilibria.py
+```
+
+Set `SFINCS_JAX_DATA_DIR=/path/to/cache` to choose a different cache root, or set
+`SFINCS_JAX_OFFLINE=1` to require that the release data is already cached.
+
 After installing, run the CLI on an input file. For most users this is the
 entire workflow: provide `input.namelist`, optionally override the geometry file
 with `--wout-path`, and let the default `auto` policy choose the fastest

@@ -19,6 +19,15 @@ Run from the repo root:
    cd sfincs_jax
    python examples/getting_started/build_grids_and_geometry.py
 
+Some geometry examples reference public W7-X/HSX/QI equilibrium fixtures by
+basename. Those multi-megabyte files are fetched from the
+``sfincs-jax-data-v1`` release into the local `sfincs_jax` data cache on first
+use. To prefetch them before running examples, use:
+
+.. code-block:: bash
+
+   python scripts/fetch_equilibria.py
+
 Writing `sfincsOutput.h5` (Python + CLI):
 
 .. code-block:: bash

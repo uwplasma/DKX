@@ -33,8 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--wout-path",
         type=Path,
-        default=_REPO_ROOT / "sfincs_jax" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
-        help="Explicit VMEC equilibrium override.",
+        default=Path("wout_w7x_standardConfig.nc"),
+        help="Explicit VMEC equilibrium override. Known public fixtures are fetched on demand.",
     )
     parser.add_argument(
         "--out",
