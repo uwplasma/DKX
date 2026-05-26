@@ -4,8 +4,8 @@
 [![Docs](https://github.com/uwplasma/sfincs_jax/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/uwplasma/sfincs_jax/actions/workflows/docs.yml)
 [![PyPI](https://img.shields.io/pypi/v/sfincs_jax)](https://pypi.org/project/sfincs_jax/)
 [![Coverage](https://codecov.io/gh/uwplasma/sfincs_jax/branch/main/graph/badge.svg)](https://codecov.io/gh/uwplasma/sfincs_jax)
-![Python versions](https://img.shields.io/pypi/pyversions/sfincs_jax)
-![License](https://img.shields.io/github/license/uwplasma/sfincs_jax)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/github/license/uwplasma/sfincs_jax)](LICENSE)
 
 `sfincs_jax` is a standalone neoclassical transport code for radially local
 drift-kinetic calculations in stellarator and tokamak geometry. It combines

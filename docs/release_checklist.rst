@@ -179,6 +179,10 @@ Manual audit commands:
 
 .. code-block:: bash
 
+   python scripts/fetch_equilibria.py --quiet
+   SFINCS_JAX_OFFLINE=1 python examples/getting_started/write_sfincs_output_vmec.py \
+     --out /tmp/sfincs_jax_vmec_release_data_smoke.h5
+
    python scripts/audit_suite_output_keys.py \
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
