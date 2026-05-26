@@ -15934,3 +15934,59 @@ Coordination note:
 
 - Rewriting ``main`` changes commit hashes. After the force-push, collaborators
   should re-clone or reset local branches to the rewritten ``origin/main``.
+
+### 35.70 CI release-data gate, image compression, and 95% coverage plan
+
+Scope:
+
+- Strengthen CI/CD so release-hosted equilibrium data is not only fetched by the
+  coverage and examples jobs, but also tested in an isolated offline smoke lane.
+  The gate must fetch the ``sfincs-jax-data-v1`` archive, verify manifest files,
+  run the VMEC ``wout_path`` output path, and execute the public VMEC example
+  with ``SFINCS_JAX_OFFLINE=1``.
+- Fix the top README Python badge by using a stable linked ``python-3.10+`` badge
+  instead of a badge that can appear missing when PyPI metadata is incomplete.
+- Compress current documentation images with a pip-installable optimizer
+  (Pillow locally; optional external optimizers are allowed if they give a
+  material lossless win). Recheck git-history image blobs after compression.
+  Do not rewrite history unless an audit finds image blobs above the reviewed
+  size threshold or a material clone-size reduction; history was already
+  rewritten for the equilibrium-fixture migration.
+- Document the testing strategy explicitly in ``docs/testing.rst``:
+  release-data gates, offline-cache behavior, coverage staging, physics oracles,
+  metamorphic/property-based tests, CPU/GPU/JIT equivalence, regression policy,
+  and size/runtime constraints.
+- Add testing-methodology references to ``docs/references.rst``. Literature
+  basis: scientific-software testing systematic reviews, metamorphic testing for
+  oracle-limited simulations, empirical coverage-effectiveness results,
+  Hypothesis/property-based testing, Chex JAX variants, and JAX ``checkify``.
+
+Coverage-to-95 plan:
+
+1. Refactor before raising the floor: continue extracting ``v3_driver.py`` and
+   large output branches into pure policy, residual, normalization, output-schema,
+   and preconditioner modules.
+2. Put each extracted module behind direct unit tests, module docstrings,
+   source-map docs, and one driver-wrapper regression.
+3. Add cheap physics oracles instead of long solve padding: conservation,
+   symmetry, nullspace, limiting-case, normalization, coordinate-chain-rule,
+   Fourier/circulant, finite-difference, VMEC/Boozer, and ``E_r=0`` trajectory
+   equivalence gates.
+4. Use metamorphic/property-based tests for input parsing, path localization,
+   scan orchestration, output-format selection, environment-variable policy, and
+   solver-branch selection.
+5. Keep production Fortran/GPU comparisons as release/nightly gates and keep
+   every-commit CI under the target wall-time budget.
+6. Raise coverage thresholds only after denominator-reducing refactors:
+   ``43 -> 60 -> 75 -> 85 -> 90 -> 95``.
+7. Enforce repository-size policy: generated synthetic fixtures, release-hosted
+   data, and compact JSON artifacts are preferred; no new multi-megabyte tracked
+   fixtures for coverage.
+
+Validation plan:
+
+- Run the release-data fetch in a clean cache and rerun the offline VMEC smoke.
+- Run the focused release-data, repo-size, and output-return tests.
+- Run strict docs.
+- Run image-size and git-history image audits after compression.
+- Run ``git diff --check`` and push only if clean.

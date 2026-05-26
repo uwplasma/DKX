@@ -150,8 +150,30 @@ The same checks are also represented in the repository CI/CD configuration:
 - ``.github/workflows/ci.yml`` runs the test matrix and example smoke tests,
 - the same CI workflow also runs the audited coverage job and uploads ``coverage.xml``
   through Codecov using GitHub OIDC,
+- ``external-data-smoke`` fetches the release-hosted W7-X/HSX/QI equilibrium
+  archive into an isolated cache, then reruns VMEC-path output tests and the
+  VMEC getting-started example with ``SFINCS_JAX_OFFLINE=1`` so CI proves that
+  public release data is complete and usable without accidental network access,
 - ``.github/workflows/docs.yml`` builds the Sphinx documentation,
 - ``.github/workflows/publish-pypi.yml`` handles packaging/release publication.
+
+Release-hosted data gates
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Large public equilibrium fixtures are intentionally not tracked in git and are
+not included in wheels. The CI contract for those files is:
+
+- fetch the checksum-pinned ``sfincs-jax-data-v1`` release archive with
+  ``python scripts/fetch_equilibria.py --quiet``;
+- verify every manifest entry exists in the configured cache;
+- rerun the public VMEC output path in offline mode;
+- keep ``tests/test_data_fetch.py`` as the unit gate for manifest structure,
+  checksum extraction, unknown-basename handling, and missing-cache offline
+  failure behavior.
+
+This prevents a common packaging regression: a repository can pass pure unit
+tests while the release examples fail because a moved equilibrium file is
+missing, renamed, or no longer checksum-compatible with the embedded manifest.
 
 The current audited full-suite command on ``main`` is:
 
@@ -159,12 +181,13 @@ The current audited full-suite command on ``main`` is:
 
    pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
 
-On the current audited local release tree this command yields ``579 tests collected``,
-``579 passed`` in the stable chunked rerun, and
-roughly ``55%`` package coverage. That number is materially higher than the Linux
-CI runner floor, but it also makes the remaining gap explicit: the dominant uncovered
-surface is still the large solver/geometry stack, especially ``v3_driver.py``,
-``io.py``, ``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. The latest
+The exact collected-test count changes as targeted regression tests are added, so
+release notes should cite a dated local/CI artifact rather than hard-code a
+permanent number here. The Linux CI coverage floor is intentionally conservative
+until the remaining driver monolith is split further; the research-grade target
+is ``95%`` meaningful package coverage, with the dominant uncovered surface still
+the large solver/geometry stack, especially ``v3_driver.py``, ``io.py``,
+``geometry.py``, ``grids.py``, and ``vmec_geometry.py``. The latest
 low-cost campaign improved the analytic geometry/grid surface materially
 (``geometry.py`` to about ``88%``, ``grids.py`` to about ``82%``, and
 ``vmec_geometry.py`` to about ``97%``) and then added direct coverage for the
@@ -472,6 +495,56 @@ running a transport solve.
 The documentation build is part of the release discipline, not a separate afterthought.
 If a docs change breaks Sphinx or leaves pages internally inconsistent, it should be
 treated as a real regression.
+
+Coverage-to-95 plan
+-------------------
+
+The ``95%`` target is useful only if it reduces real scientific and operational
+bugs. Literature on scientific-software testing repeatedly highlights the oracle
+problem, and empirical software-engineering work warns that coverage alone is a
+weak proxy for test effectiveness. The project therefore treats coverage as a
+gap-finding metric, not as the final quality metric.
+
+The staged path is:
+
+1. **Refactor before raising the floor.** Continue extracting ``v3_driver.py`` and
+   large I/O branches into pure policy, residual, normalization, output-schema,
+   and preconditioner modules. Each extracted module must land with module-level
+   docstrings, source-map documentation, direct unit tests, and one driver-wrapper
+   regression so behavior stays unchanged.
+2. **Add cheap physics oracles.** Prefer tests based on conservation, symmetry,
+   limiting behavior, and normalization identities: PAS ``L=0`` null modes,
+   collision positivity/symmetry where applicable, zero-drive flux limits,
+   finite-difference order conditions, Fourier/circulant exactness, VMEC
+   interpolation conventions, Boozer-coordinate field-component identities,
+   radial-coordinate chain rules, and trajectory-model equivalences at
+   ``E_r=0``.
+3. **Use metamorphic and property-based tests for hard oracles.** For input
+   parsing, scan orchestration, output-format selection, path localization,
+   environment variables, and solver-policy branch selection, generate families
+   of small cases and assert invariants under harmless transformations instead
+   of storing many large fixtures.
+4. **Keep backend equivalence cheap.** CPU/GPU and ``jit``/eager equivalence tests
+   should use tiny bounded fixtures, synthetic operators, or frozen artifacts.
+   Production CPU/GPU and Fortran comparisons remain release or nightly gates,
+   not every-commit CI gates.
+5. **Gate every fixed bug.** Any bug found in profiling, solver selection,
+   output writing, release-data lookup, or geometry loading gets a regression
+   test at the smallest level that reproduces it, plus a higher-level test only
+   when the bug was caused by orchestration.
+6. **Raise CI thresholds in steps.** Move the fail-under gate only after each
+   extraction batch makes the denominator meaningful: ``43 -> 60 -> 75 -> 85 ->
+   90 -> 95``. Each increase requires full CI, strict docs, release-data smoke,
+   and the fast release gates to pass within the target wall-time budget.
+7. **Keep size and runtime bounded.** New tests should use generated synthetic
+   fixtures, release-hosted data, or compact JSON artifacts. Do not add
+   multi-megabyte tracked fixtures to increase coverage; the repo-size gate and
+   release-data manifest are part of the testing strategy.
+
+The practical completion criterion is not only ``95%`` line coverage. A release
+is considered research-grade when the coverage floor, physics gates, output-key
+coverage, CPU/GPU equivalence gates, release-data gates, docs build, and
+runtime/memory benchmark artifacts all agree.
 
 How to work safely
 ------------------
