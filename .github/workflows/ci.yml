@@ -144,7 +144,6 @@ jobs:
       SFINCS_JAX_PROFILE: "0"
       SFINCS_JAX_CI: "1"
       SFINCS_JAX_FAST_EXAMPLES: "1"
-      SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -157,10 +156,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
       - name: Fetch release-hosted equilibrium data
+        env:
+          SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
         run: |
           python scripts/fetch_equilibria.py --quiet
       - name: Verify release data in offline mode
         env:
+          SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
           SFINCS_JAX_OFFLINE: "1"
         run: |
           python - <<'PY'
