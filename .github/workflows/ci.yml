@@ -38,6 +38,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+      - name: Fetch external equilibrium data
+        run: |
+          python scripts/fetch_equilibria.py --quiet
       - name: Coverage shard
         run: |
           python -m pytest -q -n auto --dist=loadscope --splits 4 --group ${{ matrix.group }} --splitting-algorithm least_duration --cov=sfincs_jax --cov-report=
@@ -105,6 +108,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e "."
+      - name: Fetch external equilibrium data
+        run: |
+          python scripts/fetch_equilibria.py --quiet
       - name: Smoke-run examples (no optional deps)
         run: |
           python examples/getting_started/build_grids_and_geometry.py
