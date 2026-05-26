@@ -22,6 +22,12 @@ from sfincs_jax.vmec_geometry import vmec_geometry_from_wout, vmec_geometry_from
 from sfincs_jax.vmec_wout import read_vmec_wout
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_EQUILIBRIA_DIR = _REPO_ROOT / "sfincs_jax" / "data" / "equilibria"
+_W7X_BC = _EQUILIBRIA_DIR / "w7x_standardConfig.bc"
+_W7X_WOUT = _EQUILIBRIA_DIR / "wout_w7x_standardConfig.nc"
+
+
 def test_optional_jax_geometry_backend_status_is_shallow(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
@@ -140,10 +146,9 @@ def test_vmec_half_mesh_finite_difference_matches_v3_pattern() -> None:
 
 
 def test_boozer_bc_geometry_loader_on_reference_fixture() -> None:
-    ref = Path(__file__).parent / "ref" / "w7x_standardConfig.bc"
     theta = np.linspace(0.0, 2.0 * np.pi, 8, endpoint=False)
     zeta = np.linspace(0.0, 2.0 * np.pi / 5.0, 6, endpoint=False)
-    geom = boozer_geometry_from_bc_file(path=str(ref), theta=theta, zeta=zeta, r_n_wish=0.5)
+    geom = boozer_geometry_from_bc_file(path=str(_W7X_BC), theta=theta, zeta=zeta, r_n_wish=0.5)
 
     b_hat = np.asarray(geom.b_hat)
     d_hat = np.asarray(geom.d_hat)
@@ -157,11 +162,10 @@ def test_boozer_bc_geometry_loader_on_reference_fixture() -> None:
 
 
 def test_vmec_geometry_loader_on_reference_fixture_is_consistent_with_bc_range() -> None:
-    ref = Path(__file__).parent / "ref"
     theta = np.linspace(0.0, 2.0 * np.pi, 8, endpoint=False)
     zeta = np.linspace(0.0, 2.0 * np.pi / 5.0, 6, endpoint=False)
-    geom_bc = boozer_geometry_from_bc_file(path=str(ref / "w7x_standardConfig.bc"), theta=theta, zeta=zeta, r_n_wish=0.5)
-    geom_vmec = vmec_geometry_from_wout_file(path=ref / "wout_w7x_standardConfig.nc", theta=theta, zeta=zeta, psi_n_wish=0.25)
+    geom_bc = boozer_geometry_from_bc_file(path=str(_W7X_BC), theta=theta, zeta=zeta, r_n_wish=0.5)
+    geom_vmec = vmec_geometry_from_wout_file(path=_W7X_WOUT, theta=theta, zeta=zeta, psi_n_wish=0.25)
 
     b_bc = np.asarray(geom_bc.b_hat)
     b_vmec = np.asarray(geom_vmec.b_hat)
@@ -176,11 +180,10 @@ def test_vmec_geometry_loader_on_reference_fixture_is_consistent_with_bc_range()
 
 
 def test_vmec_geometry_from_preloaded_wout_matches_file_wrapper() -> None:
-    ref = Path(__file__).parent / "ref" / "wout_w7x_standardConfig.nc"
     theta = np.linspace(0.0, 2.0 * np.pi, 8, endpoint=False)
     zeta = np.linspace(0.0, 2.0 * np.pi / 5.0, 6, endpoint=False)
-    from_file = vmec_geometry_from_wout_file(path=ref, theta=theta, zeta=zeta, psi_n_wish=0.25)
-    from_object = vmec_geometry_from_wout(w=read_vmec_wout(ref), theta=theta, zeta=zeta, psi_n_wish=0.25)
+    from_file = vmec_geometry_from_wout_file(path=_W7X_WOUT, theta=theta, zeta=zeta, psi_n_wish=0.25)
+    from_object = vmec_geometry_from_wout(w=read_vmec_wout(_W7X_WOUT), theta=theta, zeta=zeta, psi_n_wish=0.25)
 
     np.testing.assert_equal(np.asarray(from_object.b_hat).shape, (8, 6))
     np.testing.assert_allclose(np.asarray(from_object.b_hat), np.asarray(from_file.b_hat), rtol=0.0, atol=0.0)

@@ -8,6 +8,11 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3 import _equilibrium_file_key, grids_from_namelist
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_EQUILIBRIA_DIR = _REPO_ROOT / "sfincs_jax" / "data" / "equilibria"
+_W7X_WOUT = _EQUILIBRIA_DIR / "wout_w7x_standardConfig.nc"
+
+
 def test_write_output_return_results(tmp_path: Path) -> None:
     input_path = Path(__file__).parent / "ref" / "output_scheme4_1species_tiny.input.namelist"
     out_path = tmp_path / "sfincsOutput.h5"
@@ -33,7 +38,6 @@ def test_write_output_wout_path_override_resolves_missing_scheme5_input(tmp_path
         encoding="utf-8",
     )
     out_path = tmp_path / "sfincsOutput.h5"
-    actual_wout = Path(__file__).parent / "ref" / "wout_w7x_standardConfig.nc"
 
     with pytest.raises(FileNotFoundError):
         write_sfincs_jax_output_h5(
@@ -44,22 +48,21 @@ def test_write_output_wout_path_override_resolves_missing_scheme5_input(tmp_path
     write_sfincs_jax_output_h5(
         input_namelist=patched_input,
         output_path=out_path,
-        wout_path=actual_wout,
+        wout_path=_W7X_WOUT,
     )
 
     data = read_sfincs_h5(out_path)
     input_text = str(data["input.namelist"])
     assert "missing_wout.nc" not in input_text
-    assert str(actual_wout) in input_text
+    assert str(_W7X_WOUT) in input_text
 
 
 def test_output_geom_cache_key_reuses_copied_equilibrium_content(tmp_path: Path) -> None:
     here = Path(__file__).parent
     source_input = here / "ref" / "output_scheme5_1species_tiny.input.namelist"
-    source_wout = here / "ref" / "wout_w7x_standardConfig.nc"
 
     copied_wout = tmp_path / "copy_wout.nc"
-    copied_wout.write_bytes(source_wout.read_bytes())
+    copied_wout.write_bytes(_W7X_WOUT.read_bytes())
 
     patched_input = tmp_path / "input_copy.namelist"
     patched_input.write_text(

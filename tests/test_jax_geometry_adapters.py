@@ -657,7 +657,7 @@ def _optional_vmec_jax_wout_fixture(vmec_jax_module) -> Path | None:
             / "data"
             / "wout_circular_tokamak.nc",
             Path("/Users/rogeriojorge/local/vmec_jax/examples/data/wout_circular_tokamak.nc"),
-            Path.cwd() / "tests" / "ref" / "wout_w7x_standardConfig.nc",
+            Path.cwd() / "sfincs_jax" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
         ]
     )
     for candidate in candidates:
