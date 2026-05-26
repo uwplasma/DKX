@@ -30,6 +30,7 @@ def test_unknown_external_equilibrium_does_not_fetch() -> None:
 
 
 def test_external_equilibrium_download_extract_and_resolve(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_OFFLINE", raising=False)
     payload = b"small release-hosted fixture\n"
     rel_path = Path("sfincs_jax/data/equilibria/tiny.bc")
     release_dir = tmp_path / "release"

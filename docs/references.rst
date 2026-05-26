@@ -48,6 +48,23 @@ For implicit differentiation through linear solves (and other solver-aware workf
 - `JAX linear transpose <https://jax.readthedocs.io/en/latest/_autosummary/jax.linear_transpose.html>`_
 - `JAX sparse linear algebra <https://jax.readthedocs.io/en/latest/jax.scipy.html>`_
 
+Testing, validation, and coverage methodology
+---------------------------------------------
+
+The testing strategy is informed by scientific-software verification work and
+by empirical evidence that line coverage is useful for finding untested code but
+is not sufficient as a quality target:
+
+- U. Kanewala and J. M. Bieman,
+  `Testing Scientific Software: A Systematic Literature Review <https://arxiv.org/abs/1804.01954>`_.
+- S. Segura et al.,
+  `Metamorphic Testing: Testing the Untestable <https://doi.org/10.1109/MS.2018.2875968>`_.
+- L. Inozemtseva and R. Holmes,
+  `Coverage Is Not Strongly Correlated with Test Suite Effectiveness <https://www.cs.ubc.ca/~rtholmes/papers/icse_2014_inozemtseva.pdf>`_.
+- `Hypothesis property-based testing documentation <https://hypothesis.readthedocs.io/>`_.
+- `Chex documentation for JAX test variants and assertions <https://chex.readthedocs.io/>`_.
+- `JAX checkify documentation for functionalized runtime checks <https://docs.jax.dev/en/latest/jax.experimental.checkify.html>`_.
+
 Linear algebra and preconditioning
 ----------------------------------
 
