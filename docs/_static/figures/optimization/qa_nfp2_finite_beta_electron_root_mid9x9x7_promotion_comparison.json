@@ -1,0 +1,120 @@
+{
+  "comparisons": {
+    "cpu_gpu": {
+      "candidate_label": "gpu",
+      "comparison": "cpu_vs_gpu_promotion",
+      "failures": [],
+      "metrics": {
+        "bootstrap_objective": {
+          "abs_diff": 1.0083080204115191e-16,
+          "atol": 0.0,
+          "candidate": 0.001766389081777711,
+          "limit": 1.7663890817776105e-08,
+          "reference": 0.0017663890817776102,
+          "rel_diff": 5.70830079744835e-14,
+          "rtol": 1e-05,
+          "status": "pass"
+        },
+        "flux_objective_total": {
+          "abs_diff": 5.36425415550288e-29,
+          "atol": 0.0,
+          "candidate": 1.8122090214727218e-15,
+          "limit": 1.812209021472775e-21,
+          "reference": 1.8122090214727754e-15,
+          "rel_diff": 2.960063707851632e-14,
+          "rtol": 1e-06,
+          "status": "pass"
+        },
+        "gate_status": {
+          "candidate": "pass",
+          "reference": "pass",
+          "required": "pass",
+          "status": "pass"
+        },
+        "selected_root_er": {
+          "abs_diff": 8.93729534823251e-14,
+          "atol": 1e-06,
+          "candidate": 0.40063667568030115,
+          "limit": 1.0400636675680212e-06,
+          "reference": 0.4006366756802118,
+          "rel_diff": 2.2307731395430856e-13,
+          "rtol": 1e-07,
+          "status": "pass"
+        }
+      },
+      "reference_label": "cpu",
+      "status": "pass",
+      "tolerances": {
+        "bootstrap_objective_rtol": 1e-05,
+        "flux_objective_total_rtol": 1e-06,
+        "selected_root_er_atol": 1e-06,
+        "selected_root_er_rtol": 1e-07
+      }
+    },
+    "sfincs_jax_fortran_v3": {
+      "candidate_label": "fortran_v3",
+      "comparison": "sfincs_jax_vs_fortran_v3_promotion",
+      "failures": [],
+      "metrics": {
+        "bootstrap_objective": {
+          "abs_diff": 1.1623376044858982e-08,
+          "atol": 0.0,
+          "candidate": 0.001766400705153655,
+          "limit": 1.7663890817776105e-08,
+          "reference": 0.0017663890817776102,
+          "rel_diff": 6.58030337979771e-06,
+          "rtol": 1e-05,
+          "status": "pass"
+        },
+        "flux_objective_total": {
+          "abs_diff": 3.8948564999780533e-22,
+          "atol": 0.0,
+          "candidate": 1.8122086319871254e-15,
+          "limit": 1.812209021472775e-21,
+          "reference": 1.8122090214727754e-15,
+          "rel_diff": 2.149231382157406e-07,
+          "rtol": 1e-06,
+          "status": "pass"
+        },
+        "gate_status": {
+          "candidate": "pass",
+          "reference": "pass",
+          "required": "pass",
+          "status": "pass"
+        },
+        "selected_root_er": {
+          "abs_diff": 1.9011297980320307e-07,
+          "atol": 1e-06,
+          "candidate": 0.4006368657931916,
+          "limit": 1.0400636675680212e-06,
+          "reference": 0.4006366756802118,
+          "rel_diff": 4.7452714976836337e-07,
+          "rtol": 1e-07,
+          "status": "pass"
+        }
+      },
+      "reference_label": "sfincs_jax",
+      "status": "pass",
+      "tolerances": {
+        "bootstrap_objective_rtol": 1e-05,
+        "flux_objective_total_rtol": 1e-06,
+        "selected_root_er_atol": 1e-06,
+        "selected_root_er_rtol": 1e-07
+      }
+    }
+  },
+  "failures": [],
+  "inputs": {
+    "cpu": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_mid9x9x7_cpu_promotion.json",
+    "fortran": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_mid9x9x7_fortran_v3_promotion.json",
+    "gpu": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_mid9x9x7_gpu_promotion.json"
+  },
+  "status": "pass",
+  "tolerances": {
+    "bootstrap_objective_rtol": 1e-05,
+    "flux_objective_total_rtol": 1e-06,
+    "selected_root_er_atol": 1e-06,
+    "selected_root_er_rtol": 1e-07
+  },
+  "workflow": "sfincs_jax_optimization_promotion_comparison"
+}
