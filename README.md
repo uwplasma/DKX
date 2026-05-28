@@ -214,11 +214,13 @@ CPU/GPU and optional Fortran-v3 promotion summaries can be compared with:
 python examples/optimization/compare_sfincs_jax_promotion_runs.py --cpu cpu_promotion.json --gpu gpu_promotion.json --fortran fortran_promotion.json
 ```
 
-The checked documentation now includes a real reduced-W7-X PAS/DKES
-two-species promotion comparison generated from separate CPU, GPU, and SFINCS
-Fortran v3 JSON files. That artifact validates backend/reference agreement for
-the shared model scope; finite-beta QA and electron-root design claims still
-require their own promoted scans and convergence evidence.
+The checked documentation includes two real promotion artifacts generated from
+separate CPU, GPU, and SFINCS Fortran v3 JSON files: a reduced-W7-X PAS/DKES
+two-species comparison for shared-model backend/reference agreement, and a
+low-resolution finite-beta QA positive-electron-root comparison. The finite-beta
+artifact demonstrates the full promotion workflow on a VMEC finite-beta QA
+geometry; production-resolution radial/profile convergence remains a separate
+claim-specific validation step.
 
 ## Physics in One Page
 
