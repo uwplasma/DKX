@@ -616,6 +616,25 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       :math:`N_\theta=25`, :math:`N_\zeta=51`, :math:`N_\xi=100`,
       :math:`N_L=4`, :math:`N_x=4`.
 
+   A follow-up medium-resolution solver-policy probe now covers the next
+   non-dense rung for this same finite-beta QA deck.  At
+   :math:`N_\theta=17`, :math:`N_\zeta=21`, :math:`N_\xi=12`,
+   :math:`N_L=4`, :math:`N_x=4` with two species, ``solve_method="auto"``
+   selects ``xblock_sparse_pc_gmres``.  The CPU run wrote output in about
+   7 seconds, required 139 matrix-vector products, and reached a true residual
+   :math:`1.44\times10^{-13}` against a target
+   :math:`2.71\times10^{-13}`.  The same point matched the written Fortran-v3
+   output to better than :math:`1.6\times10^{-6}` relative over the
+   bootstrap-current, flow, particle-flux, and heat-flux observables.  This
+   validates the bounded medium-resolution solver policy and keeps the
+   production floor honest: the full
+   :math:`25\times51\times100\times4` ladder has
+   :math:`1{,}020{,}004` active unknowns, so it still requires a larger
+   non-dense campaign before being promoted as a production convergence claim.
+
+   The solver-policy audit is stored in
+   ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe.json``.
+
    Regenerate the ladder summary from archived promotion JSON files with:
 
    .. code-block:: bash

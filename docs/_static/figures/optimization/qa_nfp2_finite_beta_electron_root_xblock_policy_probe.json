@@ -1,0 +1,65 @@
+{
+  "workflow": "sfincs_jax_finite_beta_electron_root_xblock_policy_probe",
+  "status": "pass_bounded",
+  "claim_boundary": "This is a medium-resolution solver-policy probe for the finite-beta QA electron-root workflow, not a production-floor convergence claim.",
+  "resolution": {
+    "Ntheta": 17,
+    "Nzeta": 21,
+    "Nxi": 12,
+    "NL": 4,
+    "Nx": 4
+  },
+  "active_size": 34276,
+  "n_species": 2,
+  "jax_auto": {
+    "backend": "cpu",
+    "linear_solver_method": "xblock_sparse_pc_gmres",
+    "wrapper_elapsed_s": 7.05,
+    "logged_total_elapsed_s": 6.3,
+    "solver_elapsed_s": 5.675,
+    "matvecs": 139,
+    "residual_norm": 1.4447449544744763e-13,
+    "residual_target": 2.7119146635082425e-13,
+    "FSABjHat": -0.0878408302085646
+  },
+  "jax_forced_xblock": {
+    "backend": "cpu",
+    "linear_solver_method": "xblock_sparse_pc_gmres",
+    "wrapper_elapsed_s": 8.133,
+    "logged_total_elapsed_s": 7.4,
+    "solver_elapsed_s": 6.383,
+    "matvecs": 139,
+    "residual_norm": 1.4447449544744763e-13,
+    "residual_target": 2.7119146635082425e-13
+  },
+  "fortran_v3": {
+    "executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+    "output_written": true,
+    "cli_return_code": 1,
+    "failure_after_output": "MPI_Finalize returned exit status 143 after writing sfincsOutput.h5.",
+    "logged_solve_time_s": 1.4035659999999552,
+    "logged_ksp_iterations": 43,
+    "FSABjHat": -0.08784085883273111
+  },
+  "jax_vs_fortran_v3": {
+    "FSABjHat_max_abs": 2.8624166510548517e-08,
+    "FSABjHat_max_rel": 3.258638684978151e-07,
+    "FSABjHatOverRootFSAB2_max_abs": 4.862559050323185e-09,
+    "FSABjHatOverRootFSAB2_max_rel": 3.258638686130546e-07,
+    "FSABFlow_max_abs": 3.427858649709844e-08,
+    "FSABFlow_max_rel": 1.5364276738274262e-06,
+    "particleFlux_vm_psiHat_max_abs": 6.235689753262747e-14,
+    "particleFlux_vm_psiHat_max_rel": 4.285598342933786e-07,
+    "heatFlux_vm_psiHat_max_abs": 1.1330975447970895e-13,
+    "heatFlux_vm_psiHat_max_rel": 3.025008689505442e-07
+  },
+  "production_floor": {
+    "Ntheta": 25,
+    "Nzeta": 51,
+    "Nxi": 100,
+    "NL": 4,
+    "Nx": 4,
+    "active_size": 1020004,
+    "dense_matrix_gib": 7751.525998234749
+  }
+}
