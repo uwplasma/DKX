@@ -167,9 +167,20 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   relative, and GPU/Fortran-v3 observable agreement was `<=2.7e-6` relative.
   The default multispecies x-block policy is now bounded to the measured
   `30k-60k` active-unknown, `12<=Nxi<=14` window.
+- [x] Extended the same finite-beta QA solver-policy evidence to
+  `25 x 31 x 16 x 4` (`99,204` active unknowns, about `73 GiB` dense-matrix
+  equivalent). Forced `xblock_sparse_pc_gmres` converged on local CPU in
+  `68.1 s` wrapper time (`501` matvecs, residual
+  `2.74e-14 < 4.00e-13`) and on one office GPU in `232 s` wrapper time
+  (`407` matvecs, residual `1.75e-13 < 4.00e-13`, max RSS about `3.3 GB`).
+  CPU/GPU observable agreement was `<=3.2e-8` relative, and
+  GPU/Fortran-v3 observable agreement was `<=4.5e-7` relative. The default
+  multispecies x-block policy is now bounded to the measured
+  `30k-100k` active-unknown, `12<=Nxi<=16` window. This remains a host-factor,
+  non-differentiable route; CPU is faster than GPU at this rung.
 - [ ] Next validation/promotion work: run the finite-beta QA electron-root
   ladder at the declared production floor (`25 x 51 x 100 x 4`) or extend the
-  non-dense RHSMode=1 path beyond the current `30k-60k` active-unknown measured
+  non-dense RHSMode=1 path beyond the current `30k-100k` active-unknown measured
   window. The production-floor active size is `1,020,004`, so it must not be
   silently routed through dense materialization or an unmeasured x-block policy.
 
@@ -16225,3 +16236,63 @@ Best next steps:
 3. If more algorithmic work is requested, do not widen this same policy by
    threshold alone; the next step is a new larger-system path or factor-reuse
    campaign before attempting the full production floor.
+
+### 35.73 Finite-beta QA 99k active-unknown x-block promotion
+
+Scope:
+
+- Tested the next finite-beta QA central-surface non-dense rung at
+  `25 x 31 x 16 x 4`, with two species and `99,204` active unknowns.
+- Promoted the default two-species 3D full-FP x-block sparse-PC window only to
+  the measured bound: `30,000 <= active_size <= 100,000` and
+  `12 <= Nxi <= 16`.
+- Kept the production floor excluded from automatic x-block selection because
+  `25 x 51 x 100 x 4` has `1,020,004` active unknowns and per-x blocks more
+  than ten times larger in pitch-angle dimension than the promoted rung.
+
+Validation:
+
+- Local CPU forced `xblock_sparse_pc_gmres` converged with true residual
+  `2.740873e-14 < 3.995699e-13` in `68.05 s` wrapper time. Solver metadata:
+  setup/factorization `23.75 s`, solve `41.90 s`, `501` matvecs, LGMRES
+  method-rescue selected by the side probe.
+- Office GPU forced `xblock_sparse_pc_gmres` from a fresh `825966c` checkout
+  converged with true residual `1.748714e-13 < 3.995699e-13` in `232.27 s`
+  wrapper time. Solver metadata: setup/factorization `49.78 s`, solve
+  `178.05 s`, `407` matvecs, max RSS about `3.3 GB`.
+- SFINCS Fortran v3 wrote `sfincsOutput.h5` and logged completion before the
+  known MPI finalization return-code issue. Its logged solve time was
+  `9.376978 s`; the wrapper returned after `85.75 s`.
+- CPU/GPU observable agreement: `FSABjHat` max relative `4.30e-10`,
+  `FSABFlow` `3.05e-9`, particle flux `2.70e-8`, heat flux `3.19e-8`.
+- GPU/Fortran-v3 observable agreement: `FSABjHat` max relative `2.24e-7`,
+  `FSABFlow` `2.42e-7`, particle flux `4.44e-7`, heat flux `4.43e-7`.
+
+Interpretation:
+
+- This is a correctness and bounded-runtime promotion for the host-factor
+  non-differentiable x-block path. It is not a GPU-performance claim: the GPU
+  solve is slower than local CPU because the current route uses host SuperLU
+  factors and host-backed preconditioner applications.
+- The next real production-floor step should be a larger-system algorithmic
+  change, not another threshold-only increase: either lower-memory inexact
+  per-x factors, a device-resident preconditioner with validated residual
+  behavior, or reuse/amortization across a radial/profile ladder.
+
+Progress:
+
+- Finite-beta QA electron-root promotion lane: `85%`; the bounded non-dense
+  policy now has CPU/GPU/Fortran-compatible evidence through `99,204` active
+  unknowns. The remaining blocker is the million-unknown production-floor
+  ladder.
+- Overall remaining-lane completion estimate: `97%`.
+
+Best next steps:
+
+1. Verify `solve_method="auto"` selects the `25 x 31 x 16 x 4` rung and remains
+   fail-closed above `100,000` active unknowns and above `Nxi=16`.
+2. Run focused policy/artifact tests, strict docs, release gates, and commit.
+3. For production-floor work, stop widening this host-factor policy and instead
+   implement either a true large-block inexact factor route or a device-resident
+   coarse/preconditioner route that can handle `Nxi=100` without storing dense
+   or exact per-x factors.

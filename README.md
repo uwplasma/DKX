@@ -231,10 +231,14 @@ matched the written Fortran-v3 output to better than `1.6e-6` relative on the
 reported current/flux observables, and avoids dense matrix materialization. The
 next `21 x 25 x 14 x 4` rung also converged on CPU and GPU and matched the
 written Fortran-v3 output to better than `2.7e-6` relative on the same
-observables. The default non-dense multispecies x-block policy is therefore
-bounded to this measured range. The full `25 x 51 x 100 x 4` production floor
-is still documented as a larger algorithmic validation step rather than a
-closed convergence claim.
+observables. A larger `25 x 31 x 16 x 4` rung (`99,204` active unknowns) also
+converged on CPU and one office GPU, stayed parity-clean against the written
+Fortran-v3 output, and established the current default non-dense multispecies
+x-block policy window through `100,000` active unknowns and `Nxi <= 16`.
+This is still a host-factor non-differentiable route; at this rung CPU is
+faster than GPU because the sparse factors are host-backed. The full
+`25 x 51 x 100 x 4` production floor is still documented as a larger
+algorithmic validation step rather than a closed convergence claim.
 
 ## Physics in One Page
 
