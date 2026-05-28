@@ -574,6 +574,29 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    ``qa_nfp2_sfincs_jax_promotion_comparison.*`` for fast documentation and
    script-layout regression checks.
 
+   .. figure:: _static/figures/optimization/qa_nfp2_finite_beta_electron_root_promotion_comparison.png
+      :alt: Finite-beta QA CPU/GPU/Fortran positive electron-root promotion comparison.
+      :align: center
+      :width: 90%
+
+      Finite-beta QA positive-electron-root promotion comparison generated
+      from separate CPU, GPU, and SFINCS Fortran v3 promotion JSON files.  This
+      low-resolution validation used a VMEC finite-beta QA geometry,
+      :math:`N_\theta=7`, :math:`N_\zeta=7`, :math:`N_\xi=5`,
+      :math:`N_L=4`, :math:`N_x=4`, ``solverTolerance = 1e-8``,
+      ``dNHatdrHats = (0, -5)``, and ``dTHatdrHats = (0, -10)``.  All three
+      lanes selected a positive electron root in the bracket
+      :math:`E_r\in[0.25,0.5]`; the JAX CPU/GPU roots agreed to
+      :math:`3.1\times10^{-13}` absolute difference, and the SFINCS-JAX versus
+      Fortran-v3 root differed by :math:`7.1\times10^{-8}`.  The comparison
+      used explicit promotion tolerances ``selected_root_er_atol = 1e-7``,
+      ``bootstrap_objective_rtol = 1e-5``, and
+      ``flux_objective_total_rtol = 1e-6``.  This closes the first finite-beta
+      QA positive-electron-root promotion artifact; production-resolution
+      radial/profile convergence remains a separate validation requirement
+      before making an engineering or publication claim about an optimized
+      configuration.
+
 VMEC JAX Integration
 --------------------
 

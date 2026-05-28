@@ -30,8 +30,8 @@ Examples:
   and optional Fortran-v3 promotion summaries, writing JSON plus PNG/PDF
   comparison reports for selected ambipolar root, bootstrap objective, and flux
   objective gates. The docs include both a fast demo/format-only comparison and
-  a reduced-W7-X real comparison generated from separate CPU, GPU, and SFINCS
-  Fortran v3 promotion JSON files.
+  real reduced-W7-X and finite-beta QA comparisons generated from separate CPU,
+  GPU, and SFINCS Fortran v3 promotion JSON files.
 - `run_promotion_evidence_campaign.py` — one-command campaign wrapper that
   writes a JSON plan, runs selected CPU/GPU/Fortran scan lanes, audits each
   completed scan, and compares the resulting promotion JSON files. Use
