@@ -74,6 +74,7 @@ This manual is organized around the actual user and developer workflows:
 
    installation
    applications
+   optimization
    examples
    usage
    inputs
