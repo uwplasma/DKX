@@ -61,3 +61,16 @@ def test_finite_beta_electron_root_xblock_policy_probe_is_bounded_and_clean() ->
     assert summary["jax_auto"]["wrapper_elapsed_s"] < 10.0
     assert summary["jax_vs_fortran_v3"]["FSABFlow_max_rel"] < 2.0e-6
     assert summary["production_floor"]["active_size"] > 1_000_000
+
+
+def test_finite_beta_electron_root_xblock_21x25x14_probe_is_cpu_gpu_fortran_clean() -> None:
+    summary = _load("qa_nfp2_finite_beta_electron_root_xblock_policy_probe_21x25x14.json")
+
+    assert summary["status"] == "pass_bounded"
+    assert summary["active_size"] == 58804
+    assert summary["jax_cpu_forced_xblock"]["residual_norm"] < summary["jax_cpu_forced_xblock"]["residual_target"]
+    assert summary["jax_gpu_forced_xblock"]["residual_norm"] < summary["jax_gpu_forced_xblock"]["residual_target"]
+    assert summary["jax_cpu_vs_gpu"]["FSABjHat_max_rel"] < 1.0e-8
+    assert summary["jax_gpu_vs_fortran_v3"]["FSABFlow_max_rel"] < 1.0e-6
+    assert summary["policy_after_probe"]["default_multispecies_active_size_max"] == 60000
+    assert summary["production_floor"]["active_size"] > summary["active_size"] * 10
