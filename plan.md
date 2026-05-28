@@ -122,10 +122,20 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   tolerances: CPU/GPU relative differences were below `5e-13`, and
   SFINCS-JAX/Fortran-v3 relative differences were below `8e-11` for root,
   bootstrap objective, and flux objective.
-- [ ] Next validation/promotion work: run real CPU/GPU/Fortran promotion scans
-  for at least one accepted finite-beta QA candidate with a positive
-  electron-root target, archive the three promotion JSON files, and add that as
-  the first finite-beta QA optimization promotion artifact.
+- [x] Added the first real finite-beta QA positive-electron-root promotion
+  artifact from separate completed CPU, GPU, and SFINCS Fortran v3 promotion
+  JSON files. The scan used a VMEC finite-beta QA geometry,
+  `Ntheta=7`, `Nzeta=7`, `Nxi=5`, `NL=4`, `Nx=4`,
+  `solverTolerance=1e-8`, `dNHatdrHats=(0,-5)`, `dTHatdrHats=(0,-10)`, and
+  `Er=[-1,0,0.25,0.5,0.75,1,5]`. CPU, GPU, and Fortran all passed promotion
+  and selected the positive root bracket `[0.25,0.5]`; CPU/GPU root agreement
+  was `3.1e-13` absolute, and SFINCS-JAX/Fortran-v3 root agreement was
+  `7.1e-8` absolute. The archived comparison uses explicit finite-beta
+  low-resolution tolerances `selected_root_er_atol=1e-7`,
+  `bootstrap_objective_rtol=1e-5`, and `flux_objective_total_rtol=1e-6`.
+- [ ] Next validation/promotion work: repeat the finite-beta QA electron-root
+  campaign at production resolution across a radial/profile convergence ladder
+  before making optimized-configuration publication or engineering claims.
 
 Current active lane (2026-05-18, CI/CD and sharded-JIT modernization):
 - [x] GitHub Actions CI and docs are green on `main` after commit `f363009`;
