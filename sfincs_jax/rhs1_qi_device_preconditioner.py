@@ -2209,8 +2209,20 @@ def _operator_on_basis(
         raise ValueError(f"basis row count {q.shape[0]} does not match operator columns {shape[1]}")
     if int(q.shape[1]) == 0:
         return jnp.zeros((int(shape[0]), 0), dtype=dtype)
-    columns = [jnp.asarray(operator_matvec(q[:, idx]), dtype=dtype).reshape((-1,)) for idx in range(int(q.shape[1]))]
-    return jnp.stack(columns, axis=1)
+
+    def apply_column(column: ArrayLike) -> ArrayLike:
+        action = jnp.asarray(operator_matvec(column), dtype=dtype).reshape((-1,))
+        if int(action.shape[0]) != int(shape[0]):
+            raise ValueError(f"operator action row count {action.shape[0]} does not match operator rows {shape[0]}")
+        return action
+
+    try:
+        return jax.vmap(apply_column, in_axes=1, out_axes=1)(q)
+    except NotImplementedError:
+        # JAX CSR matvec currently lacks a batching rule; keep that device CSR
+        # path working while matrix-free operators use the batched action.
+        columns = [apply_column(q[:, idx]) for idx in range(int(q.shape[1]))]
+        return jnp.stack(columns, axis=1)
 
 
 def _autodiff_transpose_matvec(

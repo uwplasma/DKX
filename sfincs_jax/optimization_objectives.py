@@ -322,6 +322,47 @@ def qa_proxy_neoclassical_components(
     with high-fidelity SFINCS solves.
     """
 
+    return symmetry_proxy_neoclassical_components(
+        active_bmnc_b,
+        ixm_b,
+        ixn_b,
+        theta=theta,
+        zeta=zeta,
+        b00=b00,
+        target_impurity_flux=target_impurity_flux,
+        target_electron_root_drive=target_electron_root_drive,
+        hinge_softness=hinge_softness,
+        symmetry="qa",
+        nfp=1,
+    )
+
+
+def symmetry_proxy_neoclassical_components(
+    active_bmnc_b: Any,
+    ixm_b: Any,
+    ixn_b: Any,
+    *,
+    theta: Any,
+    zeta: Any,
+    b00: float = 1.0,
+    target_impurity_flux: float = 0.035,
+    target_electron_root_drive: float = 0.02,
+    hinge_softness: float = 2.0e-3,
+    symmetry: str = "qa",
+    nfp: int = 1,
+) -> dict[str, jnp.ndarray]:
+    """Differentiable QA/QI screening proxy for neoclassical objectives.
+
+    This is a geometry-screening objective, not a kinetic SFINCS solve.  For
+    ``symmetry="qa"`` the regularization penalizes non-axisymmetric Boozer
+    field-strength content, matching the historical QA proxy.  For
+    ``symmetry="qi"`` the regularization instead rewards a field strength whose
+    dominant contours close poloidally by allowing ``m=0`` toroidal wells and
+    penalizing poloidal ripple.  The QI model is deliberately conservative:
+    accepted designs must still pass high-fidelity ``scan-er`` promotion before
+    any electron-root claim.
+    """
+
     active = jnp.asarray(active_bmnc_b)
     coeff = jnp.concatenate([jnp.asarray([b00], dtype=active.dtype), active])
     m_mode = jnp.asarray(ixm_b)
@@ -344,19 +385,32 @@ def qa_proxy_neoclassical_components(
     theta_roughness = jnp.mean(theta_delta**2)
     zeta_roughness = jnp.mean(zeta_delta**2)
 
-    nonqa_mask = n_mode != 0
+    normalized_symmetry = str(symmetry).strip().lower().replace("-", "_")
+    if normalized_symmetry not in {"qa", "qi"}:
+        raise ValueError(f"symmetry must be 'qa' or 'qi', got {symmetry!r}")
+    nfp_int = max(1, int(nfp))
     active_coeff = coeff / (jnp.abs(coeff[0]) + 1.0e-14)
-    nonqa_energy = jnp.sum(jnp.where(nonqa_mask, active_coeff**2, 0.0))
+    if normalized_symmetry == "qa":
+        nonqa_mask = n_mode != 0
+        symmetry_regularization = jnp.sum(jnp.where(nonqa_mask, active_coeff**2, 0.0))
+        allowed_root_drive = zeta_roughness + 0.2 * symmetry_regularization
+    else:
+        field_periodic = jnp.equal(jnp.mod(jnp.abs(n_mode), nfp_int), 0)
+        qi_allowed_mask = jnp.logical_and(m_mode == 0, field_periodic)
+        symmetry_regularization = jnp.sum(jnp.where(qi_allowed_mask, 0.0, active_coeff**2))
+        theta_mean = jnp.mean(bhat, axis=0)
+        qi_well_variation = jnp.mean((theta_mean - jnp.mean(theta_mean)) ** 2)
+        allowed_root_drive = qi_well_variation + 0.05 * zeta_roughness
 
-    bootstrap_proxy = nonqa_energy + 0.05 * zeta_roughness
-    main_particle_proxy = variance + 0.25 * nonqa_energy
+    bootstrap_proxy = symmetry_regularization + 0.05 * zeta_roughness
+    main_particle_proxy = variance + 0.25 * symmetry_regularization
     main_heat_proxy = 1.4 * variance + 0.15 * (theta_roughness + zeta_roughness)
-    impurity_outward_proxy = nonqa_energy + 0.5 * zeta_roughness
+    impurity_outward_proxy = symmetry_regularization + 0.5 * zeta_roughness
     impurity_penalty = _smooth_hinge(
         jnp.asarray(target_impurity_flux, dtype=active.dtype) - impurity_outward_proxy,
         hinge_softness,
     ) ** 2
-    electron_root_drive = zeta_roughness + 0.2 * nonqa_energy
+    electron_root_drive = allowed_root_drive
     electron_root_penalty_proxy = _smooth_hinge(
         jnp.asarray(target_electron_root_drive, dtype=active.dtype) - electron_root_drive,
         hinge_softness,
@@ -368,7 +422,8 @@ def qa_proxy_neoclassical_components(
         "main_particle_flux": main_particle_proxy,
         "main_heat_flux": main_heat_proxy,
         "impurity_flux": impurity_penalty,
-        "qa_regularization": nonqa_energy,
+        "qa_regularization": symmetry_regularization,
+        "symmetry_regularization": symmetry_regularization,
         "electron_root_drive": electron_root_drive,
         "impurity_outward_proxy": impurity_outward_proxy,
         "field_variance": variance,
@@ -391,6 +446,37 @@ def qa_proxy_neoclassical_objective(
 
     w = NeoclassicalObjectiveWeights() if weights is None else weights
     components = qa_proxy_neoclassical_components(
+        active_bmnc_b,
+        ixm_b,
+        ixn_b,
+        theta=theta,
+        zeta=zeta,
+        **component_kwargs,
+    )
+    return (
+        float(w.bootstrap) * components["bootstrap"]
+        + float(w.electron_root) * components["electron_root"]
+        + float(w.main_particle_flux) * components["main_particle_flux"]
+        + float(w.main_heat_flux) * components["main_heat_flux"]
+        + float(w.impurity_flux) * components["impurity_flux"]
+        + float(w.qa_regularization) * components["qa_regularization"]
+    )
+
+
+def symmetry_proxy_neoclassical_objective(
+    active_bmnc_b: Any,
+    ixm_b: Any,
+    ixn_b: Any,
+    *,
+    theta: Any,
+    zeta: Any,
+    weights: NeoclassicalObjectiveWeights | None = None,
+    **component_kwargs: Any,
+) -> jnp.ndarray:
+    """Return the weighted QA/QI screening proxy objective."""
+
+    w = NeoclassicalObjectiveWeights() if weights is None else weights
+    components = symmetry_proxy_neoclassical_components(
         active_bmnc_b,
         ixm_b,
         ixn_b,
@@ -473,4 +559,6 @@ __all__ = [
     "qa_proxy_gradient_gate",
     "qa_proxy_neoclassical_components",
     "qa_proxy_neoclassical_objective",
+    "symmetry_proxy_neoclassical_components",
+    "symmetry_proxy_neoclassical_objective",
 ]

@@ -14,6 +14,9 @@ from sfincs_jax.compare import compare_sfincs_outputs
 from sfincs_jax.namelist import read_sfincs_input
 
 
+MAX_DEFAULT_TIMEOUT_S = 600.0
+
+
 def _rhs_mode_from_input(path: Path) -> int:
     """Return the input RHSMode, defaulting to the SFINCS v3 full-system mode."""
     try:
@@ -148,11 +151,52 @@ def _solver_path_summary(stdout: str) -> dict[str, object]:
     }
 
 
+def _benchmark_progress_summary(
+    stdout: str,
+    stderr: str = "",
+    *,
+    profile_requested: bool,
+    timeout_s: float,
+    status: str,
+    wall_s: float,
+) -> dict[str, object]:
+    """Return bounded progress/profiling evidence for one benchmark row."""
+    combined = f"{stdout}\n{stderr}"
+    profile_events = _parse_profile_events(combined)
+    preconditioners = _rhs1_preconditioners(combined)
+    stage_durations = _profile_stage_durations(profile_events)
+    result_marker_count = sum(1 for line in combined.splitlines() if line.startswith("@@RESULT@@"))
+    return {
+        "status": str(status),
+        "wall_s": round(float(wall_s), 3),
+        "timeout_s": float(timeout_s),
+        "default_timeout_cap_s": MAX_DEFAULT_TIMEOUT_S,
+        "within_default_timeout_cap": float(timeout_s) <= MAX_DEFAULT_TIMEOUT_S,
+        "profile_requested": bool(profile_requested),
+        "profile_event_count": len(profile_events),
+        "profile_stage_count": len(stage_durations),
+        "rhs1_preconditioner_count": len(preconditioners),
+        "last_rhs1_preconditioner": preconditioners[-1] if preconditioners else None,
+        "result_marker_count": result_marker_count,
+        "progress_markers_seen": bool(profile_events or preconditioners or result_marker_count),
+    }
+
+
 def _resource_maxrss_mb(raw_value: int, *, platform: str = sys.platform) -> float:
     """Convert ``resource.ru_maxrss`` to MB on Linux and macOS."""
     if str(platform).startswith("darwin"):
         return float(raw_value) / (1024.0 * 1024.0)
     return float(raw_value) / 1024.0
+
+
+def _validate_timeout_budget(timeout_s: float, *, allow_long_run: bool) -> None:
+    if bool(allow_long_run):
+        return
+    if float(timeout_s) > MAX_DEFAULT_TIMEOUT_S:
+        raise ValueError(
+            "benchmark_case_variants runs are capped at 600s by default; "
+            "pass --allow-long-run for explicit longer profiling jobs"
+        )
 
 
 def main() -> int:
@@ -166,7 +210,12 @@ def main() -> int:
     )
     parser.add_argument("--rtol", type=float, default=5e-4)
     parser.add_argument("--atol", type=float, default=1e-9)
-    parser.add_argument("--timeout-s", type=float, default=900.0)
+    parser.add_argument("--timeout-s", type=float, default=MAX_DEFAULT_TIMEOUT_S)
+    parser.add_argument(
+        "--allow-long-run",
+        action="store_true",
+        help="Allow per-variant timeouts above 600s for explicit long profiling jobs.",
+    )
     parser.add_argument("--json-out", type=Path, default=None)
     parser.add_argument(
         "--differentiable",
@@ -184,6 +233,10 @@ def main() -> int:
         help="Run only the explicitly requested variants instead of prepending the unmodified default route.",
     )
     args = parser.parse_args()
+    try:
+        _validate_timeout_budget(float(args.timeout_s), allow_long_run=bool(args.allow_long_run))
+    except ValueError as exc:
+        parser.error(str(exc))
 
     repo = Path(__file__).resolve().parents[1]
     case_dir = args.case_dir.resolve()
@@ -267,15 +320,24 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_raw": raw_rss,
                     timeout=float(args.timeout_s),
                 )
             except subprocess.TimeoutExpired as exc:
+                wall = time.perf_counter() - t0
                 rows.append(
                     {
                         "variant": name,
-                        "wall_s": round(time.perf_counter() - t0, 3),
+                        "wall_s": round(wall, 3),
                         "returncode": None,
                         "env": extra_env,
                         "status": "timeout",
                         "stdout_tail": _tail_text(exc.stdout, 2500),
                         "stderr_tail": _tail_text(exc.stderr, 2000),
+                        "benchmark_progress": _benchmark_progress_summary(
+                            _tail_text(exc.stdout, 2500),
+                            _tail_text(exc.stderr, 2000),
+                            profile_requested=bool(args.profile),
+                            timeout_s=float(args.timeout_s),
+                            status="timeout",
+                            wall_s=wall,
+                        ),
                     }
                 )
                 continue
@@ -290,6 +352,14 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_raw": raw_rss,
                 row["status"] = "error"
                 row["stderr_tail"] = _tail_text(proc.stderr, 2000)
                 row["stdout_tail"] = _tail_text(proc.stdout, 2500)
+                row["benchmark_progress"] = _benchmark_progress_summary(
+                    proc.stdout,
+                    proc.stderr,
+                    profile_requested=bool(args.profile),
+                    timeout_s=float(args.timeout_s),
+                    status="error",
+                    wall_s=wall,
+                )
                 rows.append(row)
                 continue
             marker = [line for line in proc.stdout.splitlines() if line.startswith("@@RESULT@@")][-1]
@@ -317,6 +387,14 @@ print("@@RESULT@@" + json.dumps({"elapsed_s": elapsed, "ru_maxrss_raw": raw_rss,
                     "used_pas_tokamak_theta": "preconditioner=pas_tokamak_theta" in combined_log,
                     "used_lgmres": "solve method forced by env -> lgmres" in combined_log,
                     "used_explicit_sparse_helper": "explicit sparse helper" in combined_log,
+                    "benchmark_progress": _benchmark_progress_summary(
+                        proc.stdout,
+                        proc.stderr,
+                        profile_requested=bool(args.profile),
+                        timeout_s=float(args.timeout_s),
+                        status="ok",
+                        wall_s=wall,
+                    ),
                 }
             )
             if have_reference:

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import jax
 import jax.numpy as jnp
+import pytest
 
 from sfincs_jax.optimization_objectives import (
     bootstrap_current_objective,
@@ -16,6 +17,8 @@ from sfincs_jax.optimization_objectives import (
     kinetic_validation_gate,
     qa_proxy_gradient_gate,
     qa_proxy_neoclassical_objective,
+    symmetry_proxy_neoclassical_components,
+    symmetry_proxy_neoclassical_objective,
 )
 
 
@@ -104,6 +107,51 @@ def test_qa_proxy_objective_decreases_along_negative_gradient() -> None:
 
     value, grad = jax.value_and_grad(objective)(active)
     candidate = active - 0.1 * grad
+
+    assert float(objective(candidate)) < float(value)
+
+
+def test_qi_proxy_keeps_allowed_nfp2_toroidal_well_unpenalized() -> None:
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, 20, endpoint=False, dtype=jnp.float64)
+    zeta = jnp.linspace(0.0, jnp.pi, 16, endpoint=False, dtype=jnp.float64)
+    active = jnp.asarray([0.06, 0.025], dtype=jnp.float64)
+    ixm_b = jnp.asarray([0, 0, 1], dtype=jnp.int32)
+    ixn_b = jnp.asarray([0, 2, 2], dtype=jnp.int32)
+
+    components = symmetry_proxy_neoclassical_components(
+        active,
+        ixm_b,
+        ixn_b,
+        theta=theta,
+        zeta=zeta,
+        symmetry="qi",
+        nfp=2,
+    )
+
+    assert float(components["symmetry_regularization"]) == pytest.approx(float(active[1] ** 2))
+    assert float(components["electron_root_drive"]) > 0.0
+
+
+def test_qi_proxy_objective_decreases_along_negative_gradient() -> None:
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, 20, endpoint=False, dtype=jnp.float64)
+    zeta = jnp.linspace(0.0, jnp.pi, 16, endpoint=False, dtype=jnp.float64)
+    active = jnp.asarray([0.085, -0.030, 0.014, 0.020, -0.012], dtype=jnp.float64)
+    ixm_b = jnp.asarray([0, 0, 0, 1, 1, 2], dtype=jnp.int32)
+    ixn_b = jnp.asarray([0, 2, 4, 2, -2, 4], dtype=jnp.int32)
+
+    def objective(x):
+        return symmetry_proxy_neoclassical_objective(
+            x,
+            ixm_b,
+            ixn_b,
+            theta=theta,
+            zeta=zeta,
+            symmetry="qi",
+            nfp=2,
+        )
+
+    value, grad = jax.value_and_grad(objective)(active)
+    candidate = active - 0.05 * grad
 
     assert float(objective(candidate)) < float(value)
 

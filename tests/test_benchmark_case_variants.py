@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def _load_benchmark_module():
     repo = Path(__file__).resolve().parents[1]
@@ -73,6 +75,51 @@ def test_solver_path_summary_parses_profile_marks_and_memory_units() -> None:
     assert module._resource_maxrss_mb(1024, platform="linux") == 1.0
 
 
+def test_timeout_budget_requires_explicit_long_run_opt_in() -> None:
+    module = _load_benchmark_module()
+
+    module._validate_timeout_budget(600.0, allow_long_run=False)
+    module._validate_timeout_budget(601.0, allow_long_run=True)
+
+    with pytest.raises(ValueError, match="capped at 600s"):
+        module._validate_timeout_budget(601.0, allow_long_run=False)
+
+
+def test_benchmark_progress_summary_records_profile_progress_and_budget() -> None:
+    module = _load_benchmark_module()
+
+    stdout = "\n".join(
+        [
+            "profiling: rhs1_sparse_precond_build_start total_s=1.0 delta_s=0.1 rss_mb=100.0",
+            "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner=pas_tz (active-DOF)",
+            "profiling: rhs1_sparse_precond_build_done total_s=1.5 delta_s=0.5 rss_mb=150.0",
+            '@@RESULT@@{"elapsed_s": 0.25}',
+        ]
+    )
+
+    summary = module._benchmark_progress_summary(
+        stdout,
+        "",
+        profile_requested=True,
+        timeout_s=300.0,
+        status="ok",
+        wall_s=1.23456,
+    )
+
+    assert summary["status"] == "ok"
+    assert summary["wall_s"] == 1.235
+    assert summary["timeout_s"] == 300.0
+    assert summary["default_timeout_cap_s"] == 600.0
+    assert summary["within_default_timeout_cap"] is True
+    assert summary["profile_requested"] is True
+    assert summary["profile_event_count"] == 2
+    assert summary["profile_stage_count"] == 1
+    assert summary["rhs1_preconditioner_count"] == 1
+    assert summary["last_rhs1_preconditioner"] == "pas_tz"
+    assert summary["result_marker_count"] == 1
+    assert summary["progress_markers_seen"] is True
+
+
 def test_benchmark_case_variants_smoke(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
     source = repo / "tests" / "reduced_inputs" / "tokamak_1species_PASCollisions_noEr_Nx1.input.namelist"
@@ -115,6 +162,8 @@ def test_benchmark_case_variants_smoke(tmp_path: Path) -> None:
     assert rows[2]["vs_default"]["count"] == 0
     assert not rows[1]["used_lgmres"]
     assert rows[2]["used_lgmres"]
+    assert rows[0]["benchmark_progress"]["timeout_s"] == 120.0
+    assert rows[0]["benchmark_progress"]["within_default_timeout_cap"] is True
 
 
 def test_benchmark_case_variants_no_default_smoke(tmp_path: Path) -> None:

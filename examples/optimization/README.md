@@ -7,6 +7,8 @@ Optimization examples that leverage differentiability:
 - bounded optional ecosystem gates for differentiable objective wrappers
 - QA nfp=2 neoclassical optimization proxies with explicit `sfincs_jax`
   high-fidelity promotion gates from completed `scan-er` outputs
+- QA/QI NFP screening proxies that choose a QI fallback target when QA
+  electron-root evidence is still under production resolution
 
 Examples:
 - `fit_geometry_harmonics_with_optax.py`
@@ -18,6 +20,10 @@ Examples:
   and generates PNG/PDF plots. The proxy layer is differentiable, but accepted
   designs still need real `sfincs_jax scan-er` outputs before kinetic
   validation or publication claims.
+- `screen_qi_electron_root_nfp.py` — fast QA/QI screening lane for electron-root
+  optimization fallback. It ranks QA and QI NFP candidates with the same
+  proxy/evidence boundary, recommends QI `nfp=2` when QA remains deferred, and
+  writes a promotion plan for the first real `scan-er` CPU/GPU/Fortran artifact.
 - `evaluate_sfincs_jax_promotion_scan.py` — high-fidelity promotion audit for
   completed `sfincs_jax scan-er` directories. It reads `sfincsOutput.h5` files,
   checks ambipolar roots, bootstrap current, species fluxes, and residual gates,
@@ -48,6 +54,7 @@ Real promotion checklist:
 
 ```bash
 python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 120 --out-dir runs/qa_candidate01/proxy --stem candidate01_proxy
+python examples/optimization/screen_qi_electron_root_nfp.py --steps 70 --out-dir runs/qa_candidate01/proxy --stem qi_electron_root_nfp_screen
 python examples/optimization/launch_sfincs_jax_candidate_scan.py --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --er-min -3 --er-max 3 --n-er 7 --jobs 4
 python examples/optimization/run_promotion_evidence_campaign.py --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/evidence_r0p50 --values -3 -2 -1 0 1 2 3 --run-cpu --run-gpu --gpu-device 0 --run-fortran --fortran-exe /path/to/sfincs --jobs 4 --dry-run
 JAX_PLATFORM_NAME=cpu sfincs_jax scan-er --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --values -3 -2 -1 0 1 2 3 --compute-solution --skip-existing --jobs 4

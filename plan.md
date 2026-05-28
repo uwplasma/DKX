@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-20 (Europe/Lisbon)
+Last updated: 2026-05-29 (Europe/Paris)
 Owner: incoming agent
 
 ## 1) Prompt For A New Agent (copy/paste)
@@ -183,6 +183,38 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   non-dense RHSMode=1 path beyond the current `30k-100k` active-unknown measured
   window. The production-floor active size is `1,020,004`, so it must not be
   silently routed through dense materialization or an unmeasured x-block policy.
+- [x] Hardened the checked finite-beta QA electron-root artifact lane without
+  touching solver internals: the real-artifact tests now verify that the ladder
+  config resolves to checked CPU/GPU/Fortran promotion JSON files, the generated
+  ladder summary matches those files and remains positive-electron-root
+  evidence, and the archived x-block policy probes stay monotonic, two-species,
+  bounded, and below the declared production floor. The optimization docs now
+  make the QA/QI boundary explicit: these QA artifacts do not close
+  production-resolution QI seed ladders or true differentiable device-QI.
+- [x] Added a QI fallback screening lane for the electron-root optimization
+  workflow. `examples/optimization/screen_qi_electron_root_nfp.py` ranks QA/QI
+  NFP candidates with the same differentiable proxy/evidence boundary and
+  recommends QI `nfp=2` when the QA candidate is deferred. The checked artifact
+  `docs/_static/figures/optimization/qi_electron_root_nfp_screen.*` is a
+  screening/ranking artifact only; it explicitly requires completed
+  `sfincs_jax scan-er` CPU/GPU/Fortran promotion before any kinetic
+  electron-root claim. This moves the QA/QI optimization lane from a
+  QA-only path to a fail-closed QA-or-QI promotion workflow. Completion for the
+  optimization orchestration lane is now `90%`; the remaining `10%` is the
+  first real QI `nfp=2` kinetic promotion scan and resolution ladder.
+- [x] Advanced true device-QI infrastructure by batching matrix-free coarse
+  actions with `jax.vmap` in `rhs1_qi_device_preconditioner.py`, with a narrow
+  fallback for CSR matvec primitives that lack batching rules. This reduces
+  Python-loop overhead for coarse `A Q` setup and is a real operator/coarse-reuse
+  improvement rather than smoother tuning. Device-QI infrastructure completion
+  moves from `98%` to `98.5%`; the remaining blocker is still a production
+  hard-seed residual reducer, not setup batching.
+- [x] Added benchmark/profiling safety for remaining performance lanes:
+  `scripts/benchmark_case_variants.py` now caps default per-variant runs at
+  `600 s` unless `--allow-long-run` is explicit, and each row records bounded
+  progress/profile evidence. This supports long-lane debugging without silent
+  stalls. Benchmark/profiling orchestration completion moves to `95%`; remaining
+  work is real production-floor GPU/CPU evidence, not tooling.
 
 Current active lane (2026-05-18, CI/CD and sharded-JIT modernization):
 - [x] GitHub Actions CI and docs are green on `main` after commit `f363009`;

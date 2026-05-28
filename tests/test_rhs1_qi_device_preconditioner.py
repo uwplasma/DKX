@@ -214,6 +214,42 @@ def test_device_preconditioner_matrix_free_coarse_only_path_avoids_csr() -> None
     np.testing.assert_allclose(dense @ x, rhs, rtol=1.0e-10, atol=1.0e-10)
 
 
+def test_device_preconditioner_batches_matrix_free_coarse_basis_action() -> None:
+    dense = jnp.asarray(
+        [
+            [2.0, 0.5, 0.0],
+            [0.0, 3.0, -0.25],
+            [1.0, 0.0, 4.0],
+        ],
+        dtype=jnp.float64,
+    )
+    calls = 0
+
+    def mv(x):
+        nonlocal calls
+        calls += 1
+        vector = jnp.asarray(x, dtype=jnp.float64)
+        if vector.ndim != 1:
+            raise ValueError("test operator only accepts one vector")
+        return dense @ vector
+
+    state = setup_rhs1_qi_device_preconditioner(
+        operator=mv,
+        total_size=3,
+        coarse_basis=jnp.eye(3, dtype=jnp.float64),
+        coarse_labels=("e0", "e1", "e2"),
+        config=RHS1QIDevicePreconditionerConfig(
+            local_smoother_kind="none",
+            regularization_rcond=1.0e-14,
+        ),
+    )
+
+    assert calls == 1
+    assert state.metadata.operator_source == "matrix_free"
+    assert state.metadata.operator_on_basis_shape == (3, 3)
+    np.testing.assert_allclose(state.operator_on_basis, dense, rtol=1.0e-12, atol=1.0e-12)
+
+
 def test_device_preconditioner_multilevel_coarse_candidate_reduces_low_mode_residual() -> None:
     layout = _angular_radial_layout()
     multilevel_config = RHS1QIMultilevelCoarseConfig(
