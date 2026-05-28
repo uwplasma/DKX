@@ -652,6 +652,26 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    The above-window solver-policy audit is stored in
    ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_21x25x14.json``.
 
+   The next medium rung,
+   :math:`N_\theta=25`, :math:`N_\zeta=31`, :math:`N_\xi=16`,
+   :math:`N_L=4`, :math:`N_x=4`, has :math:`99{,}204` active unknowns and
+   estimated dense storage of about 73 GiB.  Forced ``xblock_sparse_pc_gmres``
+   converged on local CPU in 68.1 seconds wrapper time with residual
+   :math:`2.74\times10^{-14}` against target :math:`4.00\times10^{-13}`.
+   The same input converged on one office GPU in 232 seconds wrapper time with
+   residual :math:`1.75\times10^{-13}`.  CPU/GPU agreement was better than
+   :math:`3.2\times10^{-8}` relative on current and flux observables, and
+   GPU/Fortran-v3 agreement was better than :math:`4.5\times10^{-7}` relative
+   on those observables.  Since this path uses host sparse factors, it is a
+   correctness-safe GPU route but not a GPU-performance claim at this size; the
+   CPU path is faster for this rung.  The default multispecies non-dense
+   x-block policy is now bounded to
+   :math:`30{,}000 \le n_\mathrm{active} \le 100{,}000`,
+   :math:`12 \le N_\xi \le 16`.
+
+   The medium-rung solver-policy audit is stored in
+   ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_25x31x16.json``.
+
    Regenerate the ladder summary from archived promotion JSON files with:
 
    .. code-block:: bash
