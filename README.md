@@ -229,8 +229,12 @@ validated the non-dense `xblock_sparse_pc_gmres` route for the same two-species
 finite-beta QA deck: the automatic CPU path converged in about 7 s wall time,
 matched the written Fortran-v3 output to better than `1.6e-6` relative on the
 reported current/flux observables, and avoids dense matrix materialization. The
-full `25 x 51 x 100 x 4` production floor is still documented as a larger
-algorithmic validation step rather than a closed convergence claim.
+next `21 x 25 x 14 x 4` rung also converged on CPU and GPU and matched the
+written Fortran-v3 output to better than `2.7e-6` relative on the same
+observables. The default non-dense multispecies x-block policy is therefore
+bounded to this measured range. The full `25 x 51 x 100 x 4` production floor
+is still documented as a larger algorithmic validation step rather than a
+closed convergence claim.
 
 ## Physics in One Page
 
