@@ -597,6 +597,36 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       before making an engineering or publication claim about an optimized
       configuration.
 
+   .. figure:: _static/figures/optimization/qa_nfp2_finite_beta_electron_root_convergence_ladder.png
+      :alt: Finite-beta QA electron-root convergence ladder.
+      :align: center
+      :width: 90%
+
+      Bounded finite-beta QA electron-root convergence ladder at
+      :math:`r_N=0.5`.  The first tier is the checked
+      :math:`7\times7\times5\times4` CPU/GPU/Fortran promotion artifact above;
+      the second tier is a completed :math:`9\times9\times7\times4`
+      CPU/GPU/Fortran scan.  The intermediate tier remains backend-clean:
+      CPU/GPU root agreement is :math:`8.94\times10^{-14}` and
+      SFINCS-JAX/Fortran-v3 root agreement is :math:`1.91\times10^{-7}`.  The
+      root moved from :math:`E_r=0.4136092671` to
+      :math:`E_r=0.4006366757`, so the ladder is useful evidence but not a
+      final physics claim.  The summary is intentionally marked ``deferred``
+      because the final checked tier is below the declared production floor
+      :math:`N_\theta=25`, :math:`N_\zeta=51`, :math:`N_\xi=100`,
+      :math:`N_L=4`, :math:`N_x=4`.
+
+   Regenerate the ladder summary from archived promotion JSON files with:
+
+   .. code-block:: bash
+
+      python examples/optimization/summarize_finite_beta_electron_root_ladder.py \
+        --config docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_ladder_config.json \
+        --out-dir docs/_static/figures/optimization \
+        --stem qa_nfp2_finite_beta_electron_root_convergence_ladder \
+        --backend-root-atol 1e-6 \
+        --root-drift-atol 2e-2
+
 VMEC JAX Integration
 --------------------
 

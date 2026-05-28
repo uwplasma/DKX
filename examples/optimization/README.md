@@ -38,6 +38,11 @@ Examples:
   `--dry-run` first on expensive inputs. The Fortran lane allows missing
   linear-residual datasets by default because upstream v3 outputs often do not
   write the JAX residual fields; JAX CPU/GPU lanes still require residuals.
+- `summarize_finite_beta_electron_root_ladder.py` — reads already-promoted
+  finite-beta QA electron-root CPU/GPU/Fortran JSON files across resolution
+  tiers, checks backend root agreement and root drift, and writes a fail-closed
+  convergence-ladder JSON/PNG/PDF. It reports under-resolved ladders as
+  `deferred`, not `pass`.
 
 Real promotion checklist:
 

@@ -1,0 +1,152 @@
+{
+  "blockers": [
+    "mid_9x9x7: final tier does not meet production floor"
+  ],
+  "claim_boundary": "This summary compares already-promoted finite-beta QA electron-root scans across resolution tiers. It is publication-grade only when the final tier reaches the declared production floor and the convergence/backend gates pass.",
+  "failures": [],
+  "production_floor": {
+    "NL": 4,
+    "Ntheta": 25,
+    "Nx": 4,
+    "Nxi": 100,
+    "Nzeta": 51
+  },
+  "status": "deferred",
+  "tiers": [
+    {
+      "active_size_estimate": 1964,
+      "backend_root_diffs": {
+        "cpu_fortran_v3": 7.020468406615521e-08,
+        "cpu_gpu": 3.0231372960543013e-13
+      },
+      "convergence_gate": {
+        "root_drift_atol": 0.02,
+        "root_drift_from_previous": 0.0,
+        "status": "baseline"
+      },
+      "dense_matrix_gib": 0.028739094734191895,
+      "failures": [],
+      "lanes": {
+        "cpu": {
+          "bootstrap_objective": 0.002907590638264122,
+          "flux_objective_total": 3.4879089720996627e-15,
+          "gate_status": "pass",
+          "root_bracket": [
+            0.25,
+            0.5
+          ],
+          "root_slope": 1.3746923666332625e-08,
+          "root_type": "electron",
+          "selected_root_er": 0.41360926708504353
+        },
+        "fortran_v3": {
+          "bootstrap_objective": 0.002907603963023935,
+          "flux_objective_total": 3.487907701465192e-15,
+          "gate_status": "pass",
+          "root_bracket": [
+            0.25,
+            0.5
+          ],
+          "root_slope": 1.3747061917690947e-08,
+          "root_type": "electron",
+          "selected_root_er": 0.41360919688035946
+        },
+        "gpu": {
+          "bootstrap_objective": 0.002907590638264088,
+          "flux_objective_total": 3.4879089721001316e-15,
+          "gate_status": "pass",
+          "root_bracket": [
+            0.25,
+            0.5
+          ],
+          "root_slope": 1.3746923666337218e-08,
+          "root_type": "electron",
+          "selected_root_er": 0.41360926708534584
+        }
+      },
+      "n_species": 2,
+      "name": "low_7x7x5",
+      "production_floor_met": false,
+      "r_n": 0.5,
+      "reference_root_er": 0.41360926708504353,
+      "resolution": {
+        "NL": 4,
+        "Ntheta": 7,
+        "Nx": 4,
+        "Nxi": 5,
+        "Nzeta": 7
+      },
+      "status": "pass"
+    },
+    {
+      "active_size_estimate": 4540,
+      "backend_root_diffs": {
+        "cpu_fortran_v3": 1.9011297980320307e-07,
+        "cpu_gpu": 8.93729534823251e-14
+      },
+      "convergence_gate": {
+        "root_drift_atol": 0.02,
+        "root_drift_from_previous": 0.012972591404831757,
+        "status": "pass"
+      },
+      "dense_matrix_gib": 0.15356838703155518,
+      "failures": [],
+      "lanes": {
+        "cpu": {
+          "bootstrap_objective": 0.0017663890817776102,
+          "flux_objective_total": 1.8122090214727754e-15,
+          "gate_status": "pass",
+          "root_bracket": [
+            0.25,
+            0.5
+          ],
+          "root_slope": 6.8246871530480665e-09,
+          "root_type": "electron",
+          "selected_root_er": 0.4006366756802118
+        },
+        "fortran_v3": {
+          "bootstrap_objective": 0.001766400705153655,
+          "flux_objective_total": 1.8122086319871254e-15,
+          "gate_status": "pass",
+          "root_bracket": [
+            0.25,
+            0.5
+          ],
+          "root_slope": 6.824828871888819e-09,
+          "root_type": "electron",
+          "selected_root_er": 0.4006368657931916
+        },
+        "gpu": {
+          "bootstrap_objective": 0.001766389081777711,
+          "flux_objective_total": 1.8122090214727218e-15,
+          "gate_status": "pass",
+          "root_bracket": [
+            0.25,
+            0.5
+          ],
+          "root_slope": 6.824687153071889e-09,
+          "root_type": "electron",
+          "selected_root_er": 0.40063667568030115
+        }
+      },
+      "n_species": 2,
+      "name": "mid_9x9x7",
+      "production_floor_met": false,
+      "r_n": 0.5,
+      "reference_root_er": 0.4006366756802118,
+      "resolution": {
+        "NL": 4,
+        "Ntheta": 9,
+        "Nx": 4,
+        "Nxi": 7,
+        "Nzeta": 9
+      },
+      "status": "pass"
+    }
+  ],
+  "tolerances": {
+    "backend_root_atol": 1e-06,
+    "root_drift_atol": 0.02
+  },
+  "workflow": "sfincs_jax_finite_beta_electron_root_convergence_ladder"
+}

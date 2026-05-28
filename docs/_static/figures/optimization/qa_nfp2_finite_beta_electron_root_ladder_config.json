@@ -1,0 +1,45 @@
+{
+  "workflow": "sfincs_jax_finite_beta_electron_root_convergence_ladder_config",
+  "description": "Bounded finite-beta QA electron-root promotion ladder at r_N=0.5. The final checked tier is intentionally below the production floor, so the generated summary must remain deferred.",
+  "production_floor": {
+    "Ntheta": 25,
+    "Nzeta": 51,
+    "Nxi": 100,
+    "NL": 4,
+    "Nx": 4
+  },
+  "tiers": [
+    {
+      "name": "low_7x7x5",
+      "r_n": 0.5,
+      "resolution": {
+        "Ntheta": 7,
+        "Nzeta": 7,
+        "Nxi": 5,
+        "NL": 4,
+        "Nx": 4
+      },
+      "promotions": {
+        "cpu": "qa_nfp2_finite_beta_electron_root_cpu_promotion.json",
+        "gpu": "qa_nfp2_finite_beta_electron_root_gpu_promotion.json",
+        "fortran_v3": "qa_nfp2_finite_beta_electron_root_fortran_v3_promotion.json"
+      }
+    },
+    {
+      "name": "mid_9x9x7",
+      "r_n": 0.5,
+      "resolution": {
+        "Ntheta": 9,
+        "Nzeta": 9,
+        "Nxi": 7,
+        "NL": 4,
+        "Nx": 4
+      },
+      "promotions": {
+        "cpu": "qa_nfp2_finite_beta_electron_root_mid9x9x7_cpu_promotion.json",
+        "gpu": "qa_nfp2_finite_beta_electron_root_mid9x9x7_gpu_promotion.json",
+        "fortran_v3": "qa_nfp2_finite_beta_electron_root_mid9x9x7_fortran_v3_promotion.json"
+      }
+    }
+  ]
+}

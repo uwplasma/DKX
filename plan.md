@@ -133,9 +133,25 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   `7.1e-8` absolute. The archived comparison uses explicit finite-beta
   low-resolution tolerances `selected_root_er_atol=1e-7`,
   `bootstrap_objective_rtol=1e-5`, and `flux_objective_total_rtol=1e-6`.
-- [ ] Next validation/promotion work: repeat the finite-beta QA electron-root
-  campaign at production resolution across a radial/profile convergence ladder
-  before making optimized-configuration publication or engineering claims.
+- [x] Added a fail-closed finite-beta QA electron-root convergence-ladder
+  summarizer in `sfincs_jax/optimization_ladder.py` and
+  `examples/optimization/summarize_finite_beta_electron_root_ladder.py`.
+  It compares archived promotion JSON files across resolution tiers, checks
+  CPU/GPU/Fortran root agreement, records estimated active size and dense-memory
+  growth, and reports under-production ladders as `deferred` rather than
+  `pass`.
+- [x] Ran the next bounded central-surface tier at
+  `Ntheta=9`, `Nzeta=9`, `Nxi=7`, `NL=4`, `Nx=4` for
+  `Er=[-1,0,0.25,0.5,0.75,1,5]` using local CPU, office GPU, and SFINCS
+  Fortran v3. All three lanes passed promotion and selected the positive root
+  bracket `[0.25,0.5]`; CPU/GPU root agreement was `8.94e-14` absolute, and
+  SFINCS-JAX/Fortran-v3 root agreement was `1.91e-7` absolute. The CPU root
+  moved from the low-tier `0.4136092671` to `0.4006366757`, so the checked
+  ladder remains useful evidence but not production-converged evidence.
+- [ ] Next validation/promotion work: run the finite-beta QA electron-root
+  ladder at the declared production floor (`25 x 51 x 100 x 4`) or implement a
+  production-safe non-dense RHSMode=1 path that makes that ladder affordable on
+  local GPU/cluster hardware.
 
 Current active lane (2026-05-18, CI/CD and sharded-JIT modernization):
 - [x] GitHub Actions CI and docs are green on `main` after commit `f363009`;
