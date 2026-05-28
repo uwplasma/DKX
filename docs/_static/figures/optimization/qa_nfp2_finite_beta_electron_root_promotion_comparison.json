@@ -1,0 +1,120 @@
+{
+  "comparisons": {
+    "cpu_gpu": {
+      "candidate_label": "gpu",
+      "comparison": "cpu_vs_gpu_promotion",
+      "failures": [],
+      "metrics": {
+        "bootstrap_objective": {
+          "abs_diff": 3.382710778154774e-17,
+          "atol": 0.0,
+          "candidate": 0.002907590638264088,
+          "limit": 2.9075906382641223e-08,
+          "reference": 0.002907590638264122,
+          "rel_diff": 1.163406819941581e-14,
+          "rtol": 1e-05,
+          "status": "pass"
+        },
+        "flux_objective_total": {
+          "abs_diff": 4.689778081538915e-28,
+          "atol": 0.0,
+          "candidate": 3.4879089721001316e-15,
+          "limit": 3.487908972099662e-21,
+          "reference": 3.4879089720996627e-15,
+          "rel_diff": 1.3445815584790756e-13,
+          "rtol": 1e-06,
+          "status": "pass"
+        },
+        "gate_status": {
+          "candidate": "pass",
+          "reference": "pass",
+          "required": "pass",
+          "status": "pass"
+        },
+        "selected_root_er": {
+          "abs_diff": 3.0231372960543013e-13,
+          "atol": 1e-07,
+          "candidate": 0.41360926708534584,
+          "limit": 1.4136092670850435e-07,
+          "reference": 0.41360926708504353,
+          "rel_diff": 7.30916238255538e-13,
+          "rtol": 1e-07,
+          "status": "pass"
+        }
+      },
+      "reference_label": "cpu",
+      "status": "pass",
+      "tolerances": {
+        "bootstrap_objective_rtol": 1e-05,
+        "flux_objective_total_rtol": 1e-06,
+        "selected_root_er_atol": 1e-07,
+        "selected_root_er_rtol": 1e-07
+      }
+    },
+    "sfincs_jax_fortran_v3": {
+      "candidate_label": "fortran_v3",
+      "comparison": "sfincs_jax_vs_fortran_v3_promotion",
+      "failures": [],
+      "metrics": {
+        "bootstrap_objective": {
+          "abs_diff": 1.3324759812888276e-08,
+          "atol": 0.0,
+          "candidate": 0.002907603963023935,
+          "limit": 2.9075906382641223e-08,
+          "reference": 0.002907590638264122,
+          "rel_diff": 4.582749592577919e-06,
+          "rtol": 1e-05,
+          "status": "pass"
+        },
+        "flux_objective_total": {
+          "abs_diff": 1.2706344707366556e-21,
+          "atol": 0.0,
+          "candidate": 3.487907701465192e-15,
+          "limit": 3.487908972099662e-21,
+          "reference": 3.4879089720996627e-15,
+          "rel_diff": 3.6429691282102323e-07,
+          "rtol": 1e-06,
+          "status": "pass"
+        },
+        "gate_status": {
+          "candidate": "pass",
+          "reference": "pass",
+          "required": "pass",
+          "status": "pass"
+        },
+        "selected_root_er": {
+          "abs_diff": 7.020468406615521e-08,
+          "atol": 1e-07,
+          "candidate": 0.41360919688035946,
+          "limit": 1.4136092670850435e-07,
+          "reference": 0.41360926708504353,
+          "rel_diff": 1.6973672896869644e-07,
+          "rtol": 1e-07,
+          "status": "pass"
+        }
+      },
+      "reference_label": "sfincs_jax",
+      "status": "pass",
+      "tolerances": {
+        "bootstrap_objective_rtol": 1e-05,
+        "flux_objective_total_rtol": 1e-06,
+        "selected_root_er_atol": 1e-07,
+        "selected_root_er_rtol": 1e-07
+      }
+    }
+  },
+  "failures": [],
+  "inputs": {
+    "cpu": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_cpu_promotion.json",
+    "fortran": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_fortran_v3_promotion.json",
+    "gpu": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_gpu_promotion.json"
+  },
+  "status": "pass",
+  "tolerances": {
+    "bootstrap_objective_rtol": 1e-05,
+    "flux_objective_total_rtol": 1e-06,
+    "selected_root_er_atol": 1e-07,
+    "selected_root_er_rtol": 1e-07
+  },
+  "workflow": "sfincs_jax_optimization_promotion_comparison"
+}
