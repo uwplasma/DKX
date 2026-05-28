@@ -43,6 +43,90 @@ Immediate priorities:
 - Reduce worst runtime/memory offenders (especially PAS-heavy paths),
 - Improve practical scaling strategy (CPU cores, GPU path, cluster portability).
 
+Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
+- [x] Added a reusable objective layer in
+  `sfincs_jax/optimization_objectives.py` for bootstrap-current penalties,
+  ambipolar electron-root classification, main-species heat/particle flux
+  penalties, outward impurity-flux shortfall penalties, kinetic-validation
+  gates, and a pure-JAX differentiable QA Boozer-spectrum proxy objective. This
+  is proxy-layer differentiability, not a claim that promoted kinetic scans are
+  differentiable.
+- [x] Added the public example
+  `examples/optimization/qa_nfp2_sfincs_jax_objectives.py`. It supports
+  `bootstrap`, `electron-root`, `flux-selective`, and `balanced` objective
+  presets, runs quickly without heavy SFINCS solves, records JSON provenance,
+  finite-difference checks the proxy gradient, and writes PNG/PDF figures.
+- [x] Generated publication-style optimization artifacts under
+  `docs/_static/figures/optimization/qa_nfp2_sfincs_jax_optimization_lane.*`.
+  The checked figure is a proxy/autodiff tradeoff dashboard, not a kinetic
+  SFINCS transport claim.
+- [x] Added focused tests for ambipolar-root gates, electron-root penalties,
+  bootstrap-current normalization, flux-selectivity signs, kinetic residual
+  gates, JAX autodiff/finite-difference agreement, and the public example
+  execution path.
+- [x] Added `docs/optimization.rst`, indexed it in the docs, updated
+  `examples/optimization/README.md`, and added the optimization dashboard and
+  command to the top-level README.
+- [x] Added a high-fidelity promotion evaluator in
+  `sfincs_jax/optimization_promotion.py` and public script
+  `examples/optimization/evaluate_sfincs_jax_promotion_scan.py`. The evaluator
+  reads completed `sfincs_jax scan-er` outputs, computes ambipolar roots,
+  bootstrap-current objectives, species flux-selectivity objectives, and linear
+  residual gates, then writes machine-readable promotion summaries.
+- [x] Added promotion-scan tests and generated a small promotion dashboard under
+  `docs/_static/figures/optimization/qa_nfp2_sfincs_jax_promotion_scan.*`.
+  The checked plot is generated from a tiny synthetic SFINCS-style scan so CI
+  stays fast; production campaigns should pass a real completed scan directory.
+- [x] Added accepted-candidate scan planning in
+  `sfincs_jax/optimization_workflow.py` plus the public dry-run/execute script
+  `examples/optimization/launch_sfincs_jax_candidate_scan.py`. A proxy JSON and
+  SFINCS input template now produce a reproducible `scan-er` command, promotion
+  command, and `candidate_scan_plan.json` before any long solve is launched.
+- [x] Added CPU/GPU and optional SFINCS-JAX/Fortran-v3 promotion comparison
+  helpers in `sfincs_jax/optimization_comparison.py`, the public reporting
+  script `examples/optimization/compare_sfincs_jax_promotion_runs.py`, focused
+  tests, and a small checked demonstration report under
+  `docs/_static/figures/optimization/qa_nfp2_sfincs_jax_promotion_comparison.*`.
+  The plotting path now separates the signed ambipolar root from log-scaled
+  objective values and log-scaled gate differences so real evidence remains
+  readable across transport scales.
+- [x] Documented the real-promotion command sequence: generate proxy
+  provenance, dry-plan the accepted-candidate scan, run completed CPU
+  `sfincs_jax scan-er` outputs, audit the CPU scan, run and audit the matching
+  GPU scan, optionally run/audit matching Fortran-v3 scan points, then call
+  `compare_sfincs_jax_promotion_runs.py` on the resulting promotion JSON files.
+- [x] Added one-command promotion evidence campaign plumbing in
+  `sfincs_jax/optimization_evidence.py` and
+  `examples/optimization/run_promotion_evidence_campaign.py`. It records a JSON
+  plan, runs selected CPU/GPU/Fortran scan lanes, audits each completed scan,
+  and compares the resulting promotion JSON files, with dry-run tests so CI
+  does not launch heavy solves.
+- [x] Added an explicit Fortran-reference residual policy:
+  `evaluate_sfincs_jax_promotion_scan.py --allow-missing-residuals` keeps JAX
+  CPU/GPU promotion residual-gated while allowing Fortran-v3 reference HDF5
+  files that do not carry JAX linear-residual datasets.
+- [x] Bounded execution checks for the new campaign wrapper:
+  local CPU tiny scan ran `3` points in `3.254 s`; office GPU tiny scan ran `2`
+  points on RTX A4000 in `14.641 s` including first-point setup/download; local
+  Fortran-v3 tiny scan ran `2` points with the explicit missing-residual
+  reference policy. These are API/portability checks only; each toy scan failed
+  promotion only because the one-species radial-current curve was not
+  ambipolar-bracketed.
+- [x] Added a real reduced-W7-X PAS/DKES two-species promotion-evidence
+  artifact from separate completed CPU, GPU, and SFINCS Fortran v3 promotion
+  JSON files. The scan used `Ntheta=7`, `Nzeta=11`, `Nxi=10`, `Nx=4`, and
+  `Er = [-80, -40, 0, 40, 80]`. The selected root is an ion root at
+  `Er=-33.714544096`, so this closes backend/reference agreement for the
+  promotion machinery in shared model scope but not the finite-beta QA
+  electron-root design claim. Default comparison gates passed without relaxed
+  tolerances: CPU/GPU relative differences were below `5e-13`, and
+  SFINCS-JAX/Fortran-v3 relative differences were below `8e-11` for root,
+  bootstrap objective, and flux objective.
+- [ ] Next validation/promotion work: run real CPU/GPU/Fortran promotion scans
+  for at least one accepted finite-beta QA candidate with a positive
+  electron-root target, archive the three promotion JSON files, and add that as
+  the first finite-beta QA optimization promotion artifact.
+
 Current active lane (2026-05-18, CI/CD and sharded-JIT modernization):
 - [x] GitHub Actions CI and docs are green on `main` after commit `f363009`;
   coverage/action artifact upload/download now use Node 24 action majors, and

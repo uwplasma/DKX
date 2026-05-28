@@ -146,6 +146,80 @@ without running expensive solves; full CPU/GPU/Fortran runtime and memory sweeps
 should be launched on local, `office`, or cluster hardware with explicit
 resource budgets.
 
+## Optimization Lane
+
+`sfincs_jax` also provides optimization-oriented helpers for adding
+neoclassical objectives to stellarator design loops. The recommended workflow is
+two-tiered: use fast JAX-native proxy objectives inside the optimizer, then
+promote accepted designs to full `sfincs_jax` electric-field scans and kinetic
+validation gates before making physics claims.
+
+```bash
+python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 120
+```
+
+![QA nfp=2 sfincs_jax optimization proxy dashboard](docs/_static/figures/optimization/qa_nfp2_sfincs_jax_optimization_lane.png)
+
+The example supports `bootstrap`, `electron-root`, `flux-selective`, and
+`balanced` presets. It writes a JSON provenance file plus PNG/PDF plots. The
+proxy layer is differentiable and finite-difference checked; this does not make
+the promoted kinetic scan differentiable. Accepted designs still need completed
+`sfincs_jax scan-er` outputs before high-fidelity SFINCS kinetic gates can be
+used for bootstrap current, ambipolar roots, particle/heat/impurity fluxes,
+residual convergence, CPU/GPU agreement, and Fortran v3 comparison when
+applicable. See `docs/optimization.rst`.
+
+Concise real-promotion sequence:
+
+```bash
+python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 120 --out-dir runs/qa_candidate01/proxy --stem candidate01_proxy
+python examples/optimization/launch_sfincs_jax_candidate_scan.py --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --er-min -3 --er-max 3 --n-er 7 --jobs 4
+python examples/optimization/run_promotion_evidence_campaign.py --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/evidence_r0p50 --values -3 -2 -1 0 1 2 3 --run-cpu --run-gpu --gpu-device 0 --run-fortran --fortran-exe /path/to/sfincs --jobs 4 --impurity-species-index 2 --target-impurity-flux 0.01
+```
+
+The campaign command writes a JSON plan, launches matching CPU/GPU/Fortran scan
+lanes, audits each completed scan, and compares the resulting promotion JSON
+files. To inspect commands without launching solves, add `--dry-run`. Fortran
+v3 outputs often do not contain JAX linear-residual datasets, so the campaign
+allows missing residuals only for the Fortran lane by default; CPU/GPU JAX lanes
+still require residual diagnostics.
+
+Equivalent manual commands are:
+
+```bash
+JAX_PLATFORM_NAME=cpu sfincs_jax scan-er --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --values -3 -2 -1 0 1 2 3 --compute-solution --skip-existing --jobs 4
+python examples/optimization/evaluate_sfincs_jax_promotion_scan.py --scan-dir runs/qa_candidate01/scan_cpu/r0p50 --out-dir runs/qa_candidate01/audit --stem candidate01_r0p50_cpu --require-electron-root
+CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu sfincs_jax scan-er --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_gpu/r0p50 --values -3 -2 -1 0 1 2 3 --compute-solution --skip-existing --jobs 1
+python examples/optimization/evaluate_sfincs_jax_promotion_scan.py --scan-dir runs/qa_candidate01/scan_gpu/r0p50 --out-dir runs/qa_candidate01/audit --stem candidate01_r0p50_gpu --require-electron-root
+python examples/optimization/compare_sfincs_jax_promotion_runs.py --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json --out-dir runs/qa_candidate01/audit --stem candidate01_r0p50_comparison
+```
+
+After running a real `sfincs_jax scan-er` for an accepted candidate, audit the
+high-fidelity promotion gate with:
+
+```bash
+python examples/optimization/evaluate_sfincs_jax_promotion_scan.py --scan-dir /path/to/scan-er-directory
+```
+
+To go from a proxy optimization JSON to a reproducible scan command without
+starting a long solve immediately:
+
+```bash
+python examples/optimization/launch_sfincs_jax_candidate_scan.py --proxy-summary qa_nfp2_sfincs_jax_optimization_lane.json --input input.namelist --out-dir candidate_scan
+```
+
+CPU/GPU and optional Fortran-v3 promotion summaries can be compared with:
+
+```bash
+python examples/optimization/compare_sfincs_jax_promotion_runs.py --cpu cpu_promotion.json --gpu gpu_promotion.json --fortran fortran_promotion.json
+```
+
+The checked documentation now includes a real reduced-W7-X PAS/DKES
+two-species promotion comparison generated from separate CPU, GPU, and SFINCS
+Fortran v3 JSON files. That artifact validates backend/reference agreement for
+the shared model scope; finite-beta QA and electron-root design claims still
+require their own promoted scans and convergence evidence.
+
 ## Physics in One Page
 
 `sfincs_jax` solves the radially local, steady, linearized drift-kinetic

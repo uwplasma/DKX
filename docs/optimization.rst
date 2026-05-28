@@ -1,0 +1,599 @@
+Optimization Workflows
+======================
+
+``sfincs_jax`` supports optimization workflows in two layers:
+
+1. **Fast differentiable proxies** used inside a stellarator optimizer.
+2. **High-fidelity kinetic gates** run on accepted designs before making a
+   physics or publication claim.
+
+This split is deliberate.  A full neoclassical solve at every VMEC objective
+evaluation is usually too expensive, and it can make optimizer behavior depend
+on solver tolerances, branch choices, and one-off failed scans.  The recommended
+workflow is therefore to optimize with cheap JAX-native terms and promote only
+selected candidates to full ``sfincs_jax`` scans.
+
+The implementation lives in
+``sfincs_jax.optimization_objectives`` and the public example is
+``examples/optimization/qa_nfp2_sfincs_jax_objectives.py``.
+
+QA nfp=2 Example
+----------------
+
+Run the fast QA optimization lane from the repository root:
+
+.. code-block:: bash
+
+   python examples/optimization/qa_nfp2_sfincs_jax_objectives.py \
+     --objective balanced \
+     --steps 120 \
+     --out-dir docs/_static/figures/optimization \
+     --stem qa_nfp2_sfincs_jax_optimization_lane
+
+This produces a JSON provenance file plus PNG/PDF figures:
+
+.. figure:: _static/figures/optimization/qa_nfp2_sfincs_jax_optimization_lane.png
+   :alt: QA nfp=2 sfincs_jax optimization proxy dashboard.
+   :align: center
+   :width: 95%
+
+   Fast QA nfp=2 neoclassical optimization proxy.  Panels A-B show the
+   differentiable JAX objective and gradient norm.  Panel C shows the proxy
+   terms before and after optimization.  Panels D-E show the initial and
+   optimized normalized Boozer field strength.  Panel F shows the proxy
+   electron-root and impurity-flux target amplitudes.  This figure is an
+   optimizer-design diagnostic, not a replacement for high-fidelity SFINCS
+   kinetic validation.
+
+Available objective presets are:
+
+``bootstrap``
+   Prioritize small bootstrap-current and QA-like geometry penalties.
+
+``electron-root``
+   Prioritize a proxy for a resolved positive ambipolar root.
+
+``flux-selective``
+   Penalize main-species heat and particle flux while encouraging outward
+   impurity flux.
+
+``balanced``
+   Combine all terms in one tradeoff objective for demonstrations and optimizer
+   smoke tests.
+
+Objective Terms
+---------------
+
+Bootstrap current
+~~~~~~~~~~~~~~~~~
+
+For a set of radial surfaces :math:`\rho_i`, the high-fidelity bootstrap-current
+objective is
+
+.. math::
+
+   J_\mathrm{boot}
+   =
+   \sum_i w_i
+   \left(
+   \frac{\langle \mathbf{J}\cdot\mathbf{B}\rangle_i}
+        {J_0 \sqrt{\langle B^2\rangle_i}}
+   \right)^2 .
+
+In ``sfincs_jax`` output this uses ``FSABjHatOverRootFSAB2``.  The helper
+``bootstrap_current_objective`` evaluates the normalized least-squares penalty
+from completed kinetic outputs or cached radial profiles.
+
+Ambipolar electron root
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The radial current used for ambipolarity is
+
+.. math::
+
+   j_r(E_r) = \sum_s Z_s \Gamma_s(E_r),
+
+where :math:`\Gamma_s` is the radial particle flux for species :math:`s`.  An
+electron-root objective requires a resolved positive root
+
+.. math::
+
+   j_r(E_r^\star)=0,\qquad E_r^\star > 0 .
+
+The helper ``find_ambipolar_roots`` sorts the scan, finds bracketed roots, and
+classifies each root as ion, near-zero, or electron.  The helper
+``electron_root_penalty`` returns zero only when a positive root exists with a
+finite local slope.  This avoids promoting flat or unbracketed ambipolar curves
+as meaningful electron-root evidence.
+
+Flux selectivity
+~~~~~~~~~~~~~~~~
+
+For main species :math:`m` and an impurity species :math:`Z`, the selected flux
+objective is
+
+.. math::
+
+   J_\mathrm{flux}
+   =
+   w_\Gamma \left\langle \Gamma_m^2 \right\rangle
+   +
+   w_Q \left\langle Q_m^2 \right\rangle
+   +
+   w_Z
+   \left[
+   \max\left(0,\Gamma_Z^\mathrm{target}-\Gamma_Z^\mathrm{out}\right)
+   \right]^2 .
+
+The last term is written as a shortfall penalty rather than an unbounded
+``maximize impurity flux`` objective.  This keeps the optimizer well-scaled and
+prevents it from increasing impurity transport at any cost.
+
+Differentiable Proxy
+--------------------
+
+The public proxy path uses a Boozer spectrum
+
+.. math::
+
+   B(\theta,\zeta) =
+   \sum_k B_k \cos(m_k\theta - n_k\zeta)
+
+with the :math:`B_{00}` component fixed.  For QA optimization, terms with
+:math:`n_k \ne 0` are treated as non-QA content.  The differentiable proxy
+combines field-strength variance, angular roughness, non-QA spectral energy,
+and smooth hinge penalties for electron-root and impurity-flux targets.
+
+The proxy layer is evaluated with JAX and checked by finite differences through
+``qa_proxy_gradient_gate``.  It is appropriate for optimizer steering, unit
+tests, and rapid design iteration.  It is not a high-fidelity kinetic transport
+claim, and it does not make the later promoted kinetic ``scan-er`` outputs
+differentiable.
+
+High-Fidelity Promotion Gates
+-----------------------------
+
+Accepted designs should be promoted to actual ``sfincs_jax`` solves before
+publication or engineering decisions.  Real promotion starts only after the
+candidate has completed ``sfincs_jax scan-er`` outputs containing
+``sfincsOutput.h5`` files for the requested electric-field grid.  The minimum
+promotion evidence is:
+
+- Same-profile ``sfincs_jax`` electric-field scans over each selected radius.
+- Ambipolar root bracketing with a positive electron root when requested.
+- Bootstrap-current normalization audit using ``FSABjHatOverRootFSAB2``.
+- Particle, heat, and impurity flux sign-convention audit.
+- Linear residual convergence and solver-path provenance.
+- CPU/GPU agreement for selected final designs.
+- SFINCS Fortran v3 comparison when the case lies in the shared model scope.
+
+The helper ``kinetic_validation_gate`` records residual and CPU/GPU agreement
+checks for promoted designs.  For production optimization campaigns, store the
+JSON summary generated by each proxy run together with the completed SFINCS
+scan outputs and solver traces.  The synthetic scan generated when
+``evaluate_sfincs_jax_promotion_scan.py`` is run without ``--scan-dir`` is only
+a plotting/API demonstration and must not be treated as promotion evidence.
+
+Real Promotion Checklist
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Replace the paths and electric-field grid with the accepted candidate's actual
+VMEC geometry, profiles, species, radial surface, and campaign tolerances.  The
+promotion boundary is the first command that evaluates a completed ``scan-er``
+directory; anything before that is proxy provenance or scan planning.
+
+.. code-block:: bash
+
+   mkdir -p runs/qa_candidate01/proxy runs/qa_candidate01/audit
+   python examples/optimization/qa_nfp2_sfincs_jax_objectives.py \
+     --objective balanced \
+     --steps 120 \
+     --out-dir runs/qa_candidate01/proxy \
+     --stem candidate01_proxy
+   python examples/optimization/launch_sfincs_jax_candidate_scan.py \
+     --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json \
+     --input runs/qa_candidate01/input_r0p50.namelist \
+     --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
+     --er-min -3 \
+     --er-max 3 \
+     --n-er 7 \
+     --jobs 4 \
+     --impurity-species-index 2 \
+     --target-impurity-flux 0.01
+
+For production evidence, the one-command campaign wrapper is preferred because
+it records the CPU, GPU, optional Fortran, audit, and comparison commands in one
+JSON plan before launching any expensive solves:
+
+.. code-block:: bash
+
+   python examples/optimization/run_promotion_evidence_campaign.py \
+     --input runs/qa_candidate01/input_r0p50.namelist \
+     --out-dir runs/qa_candidate01/evidence_r0p50 \
+     --values -3 -2 -1 0 1 2 3 \
+     --run-cpu \
+     --run-gpu \
+     --gpu-device 0 \
+     --run-fortran \
+     --fortran-exe /path/to/sfincs \
+     --jobs 4 \
+     --impurity-species-index 2 \
+     --target-impurity-flux 0.01
+
+Add ``--dry-run`` to write ``promotion_evidence_plan.json`` without executing
+the scans.  The manual commands below are equivalent and are useful when a
+cluster scheduler should own each lane separately.  Fortran-v3 HDF5 files often
+do not contain the JAX linear-residual datasets, so the campaign wrapper allows
+missing residuals only for the Fortran lane by default; JAX CPU/GPU promotion
+still requires residual diagnostics unless the user explicitly relaxes the
+standalone evaluator with ``--allow-missing-residuals``.
+
+.. code-block:: bash
+
+   JAX_PLATFORM_NAME=cpu sfincs_jax scan-er \
+     --input runs/qa_candidate01/input_r0p50.namelist \
+     --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
+     --values -3 -2 -1 0 1 2 3 \
+     --compute-solution \
+     --skip-existing \
+     --jobs 4
+   python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+     --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
+     --out-dir runs/qa_candidate01/audit \
+     --stem candidate01_r0p50_cpu \
+     --require-electron-root \
+     --impurity-species-index 2 \
+     --target-impurity-flux 0.01
+   CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu sfincs_jax scan-er \
+     --input runs/qa_candidate01/input_r0p50.namelist \
+     --out-dir runs/qa_candidate01/scan_gpu/r0p50 \
+     --values -3 -2 -1 0 1 2 3 \
+     --compute-solution \
+     --skip-existing \
+     --jobs 1
+   python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+     --scan-dir runs/qa_candidate01/scan_gpu/r0p50 \
+     --out-dir runs/qa_candidate01/audit \
+     --stem candidate01_r0p50_gpu \
+     --require-electron-root \
+     --impurity-species-index 2 \
+     --target-impurity-flux 0.01
+   python examples/optimization/compare_sfincs_jax_promotion_runs.py \
+     --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json \
+     --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json \
+     --out-dir runs/qa_candidate01/audit \
+     --stem candidate01_r0p50_comparison
+
+If the case is in shared SFINCS Fortran v3 scope, add a Fortran-derived scan
+audit before the final comparison:
+
+.. code-block:: bash
+
+   for run_dir in runs/qa_candidate01/scan_cpu/r0p50/Er*; do
+     er_dir=$(basename "${run_dir}")
+     mkdir -p "runs/qa_candidate01/scan_fortran/r0p50/${er_dir}"
+     sfincs_jax run-fortran \
+       --exe /path/to/sfincs \
+       --input "${run_dir}/input.namelist" \
+       --workdir "runs/qa_candidate01/scan_fortran/r0p50/${er_dir}"
+   done
+   python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+     --scan-dir runs/qa_candidate01/scan_fortran/r0p50 \
+     --out-dir runs/qa_candidate01/audit \
+     --stem candidate01_r0p50_fortran \
+     --require-electron-root \
+     --impurity-species-index 2 \
+     --target-impurity-flux 0.01
+   python examples/optimization/compare_sfincs_jax_promotion_runs.py \
+     --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json \
+     --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json \
+     --fortran runs/qa_candidate01/audit/candidate01_r0p50_fortran.json \
+     --out-dir runs/qa_candidate01/audit \
+     --stem candidate01_r0p50_comparison
+
+Promotion Scan Example
+~~~~~~~~~~~~~~~~~~~~~~
+
+After running an electric-field scan for an accepted candidate, evaluate it with:
+
+.. code-block:: bash
+
+   python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+     --scan-dir /path/to/completed/scan-er-directory \
+     --out-dir promotion_audit \
+     --stem candidate01_promotion
+
+The script reads each completed ``sfincsOutput.h5`` file, computes
+:math:`\sum_s Z_s\Gamma_s(E_r)`, classifies ambipolar roots, audits bootstrap
+current and species fluxes, and checks linear residual diagnostics.  If
+``--scan-dir`` is omitted, it creates a tiny synthetic SFINCS-style scan so the
+plotting and gate logic can be demonstrated without a long solve.  That
+synthetic mode is demo-only and cannot promote an optimization candidate.
+
+.. figure:: _static/figures/optimization/qa_nfp2_sfincs_jax_promotion_scan.png
+   :alt: High-fidelity sfincs_jax promotion scan dashboard.
+   :align: center
+   :width: 90%
+
+   Promotion dashboard for an optimization candidate.  Panel A shows the
+   ambipolar radial-current bracket and selected electron root.  Panel B shows
+   the bootstrap-current observable.  Panels C-D show particle and heat fluxes
+   by species, together with the promotion gate status.  Real optimization
+   campaigns should use completed ``sfincs_jax scan-er`` outputs rather than the
+   synthetic demonstration scan used to generate this documentation artifact.
+
+Practical End-To-End Lane
+-------------------------
+
+Use this lane when a QA optimizer has produced a small set of accepted
+``vmec_jax`` candidates and you want a reproducible path from proxy evidence to
+kinetic validation.  The repository does not make ``vmec_jax`` or
+``booz_xform_jax`` hard dependencies; a production campaign may run the VMEC
+optimization in a separate checkout and hand this repository an accepted
+``wout`` plus the SFINCS profiles, species, radial surface, and resolution.
+
+The scalar optimized in the proxy stage has the same role as the terms above:
+
+.. math::
+
+   J_\mathrm{proxy}(\mathbf{a})
+   =
+   w_B \operatorname{var}(\widehat B)
+   + w_R \|\nabla_{\theta,\zeta}\widehat B\|_2^2
+   + w_\mathrm{QA}\sum_{k:n_k\ne 0} a_k^2
+   + w_e \left[\max(0,d_e^\mathrm{target}-d_e(\mathbf{a}))\right]^2
+   + w_Z \left[\max(0,\Gamma_Z^\mathrm{target}
+     -\Gamma_Z^\mathrm{out}(\mathbf{a}))\right]^2 .
+
+Here :math:`\mathbf{a}` are the active Boozer-spectrum coefficients and
+:math:`\widehat B = B/B_{00}`.  This objective is an optimizer-steering scalar,
+not a kinetic solve.  It can rank candidates and record a gradient/provenance
+gate, but it cannot by itself establish ambipolar roots, bootstrap-current
+accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
+
+1. Run the optional VMEC/Boozer preflight and proxy-gradient handoff.
+
+   The status command is safe when optional geometry packages are absent:
+
+   .. code-block:: bash
+
+      python examples/optimization/vmec_jax_workflow_status.py --json
+
+   For an accepted ``vmec_jax`` candidate with a written ``wout`` file, persist
+   the file-backed proxy-gradient provenance:
+
+   .. code-block:: bash
+
+      mkdir -p runs/qa_candidate01/proxy
+      python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
+        --wout /path/to/vmec_jax/run/wout_candidate01.nc \
+        --mboz 3 \
+        --nboz 3 \
+        --surface 0.5 \
+        --steps 0 \
+        --summary-json runs/qa_candidate01/proxy/vmec_boozer_proxy_gradient.json
+
+   For the repository-local QA nfp=2 proxy smoke test, run:
+
+   .. code-block:: bash
+
+      python examples/optimization/qa_nfp2_sfincs_jax_objectives.py \
+        --objective balanced \
+        --steps 120 \
+        --out-dir runs/qa_candidate01/proxy \
+        --stem candidate01_proxy
+
+   The resulting ``candidate01_proxy.json`` is provenance for the proxy
+   objective, not a SFINCS input file.  It should travel with the accepted
+   candidate so later audits can see the weights, final proxy coefficients,
+   finite-difference gradient gate, and required promotion plan.
+
+2. Build the SFINCS input and run the high-fidelity electric-field scan.
+
+   Create a normal SFINCS ``input.namelist`` for the accepted VMEC geometry and
+   selected radial surface.  The input must encode the same profiles and species
+   used for the physics claim.  To create an auditable scan plan without
+   starting a long run, use:
+
+   .. code-block:: bash
+
+      python examples/optimization/launch_sfincs_jax_candidate_scan.py \
+        --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json \
+        --input runs/qa_candidate01/input_r0p50.namelist \
+        --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
+        --er-min -3 \
+        --er-max 3 \
+        --n-er 7 \
+        --jobs 4 \
+        --impurity-species-index 2 \
+        --target-impurity-flux 0.01
+
+   This writes ``candidate_scan_plan.json`` with the exact ``scan-er`` command
+   and the follow-up promotion-audit command.  Add ``--execute`` only when you
+   are ready to launch the scan.  The equivalent direct command is:
+
+   .. code-block:: bash
+
+      mkdir -p runs/qa_candidate01/scan_cpu/r0p50
+      JAX_PLATFORM_NAME=cpu sfincs_jax scan-er \
+        --input runs/qa_candidate01/input_r0p50.namelist \
+        --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
+        --values -3 -2 -1 0 1 2 3 \
+        --compute-solution \
+        --skip-existing \
+        --jobs 4
+
+   For ``RHSMode=2`` or ``RHSMode=3`` transport-matrix inputs, use
+   ``--compute-transport-matrix`` instead of ``--compute-solution``:
+
+   .. code-block:: bash
+
+      JAX_PLATFORM_NAME=cpu sfincs_jax scan-er \
+        --input runs/qa_candidate01/input_r0p50.namelist \
+        --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
+        --min -3 \
+        --max 3 \
+        --n 13 \
+        --compute-transport-matrix \
+        --skip-existing \
+        --jobs 4
+
+   The scan directory contains subdirectories such as ``Er1/`` and
+   ``Er-1/``.  Each completed point must contain ``sfincsOutput.h5``.  The
+   ambipolar curve audited downstream is
+
+   .. math::
+
+      j_r(E_r) = \sum_s Z_s\Gamma_s(E_r),
+      \qquad
+      j_r(E_r^\star)=0 .
+
+   A claimed electron root additionally needs :math:`E_r^\star>0` and a
+   bracketed sign change with finite local slope.
+
+3. Audit the promoted scan.
+
+   The promotion audit reads the completed scan outputs, computes the
+   ambipolar roots, checks bootstrap-current and flux observables, and records
+   residual diagnostics:
+
+   .. code-block:: bash
+
+      python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+        --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
+        --out-dir runs/qa_candidate01/audit \
+        --stem candidate01_r0p50_cpu \
+        --require-electron-root
+
+   If you also want upstream-style ambipolar root files in the scan directory,
+   run:
+
+   .. code-block:: bash
+
+      sfincs_jax ambipolar-solve \
+        --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
+        --n-fine 1000
+
+   Passing this audit means the specific completed scan has internally
+   consistent promotion evidence.  It does not imply convergence with respect
+   to kinetic resolution, radial grid choice, profile uncertainty, or optimizer
+   robustness unless those studies are run and stored separately.
+
+4. Compare CPU, GPU, and Fortran evidence at selected final points.
+
+   Re-run the same scan on a GPU-capable installation:
+
+   .. code-block:: bash
+
+      mkdir -p runs/qa_candidate01/scan_gpu/r0p50
+      CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu sfincs_jax scan-er \
+        --input runs/qa_candidate01/input_r0p50.namelist \
+        --out-dir runs/qa_candidate01/scan_gpu/r0p50 \
+        --values -3 -2 -1 0 1 2 3 \
+        --compute-solution \
+        --skip-existing \
+        --jobs 1
+
+   Compare matching CPU/GPU scan points near the selected ambipolar root:
+
+   .. code-block:: bash
+
+      ER_DIR=Er1
+      sfincs_jax compare-h5 \
+        --a runs/qa_candidate01/scan_cpu/r0p50/${ER_DIR}/sfincsOutput.h5 \
+        --b runs/qa_candidate01/scan_gpu/r0p50/${ER_DIR}/sfincsOutput.h5 \
+        --rtol 1e-8 \
+        --atol 1e-10 \
+        --show-all
+
+   When the case lies in the shared ``sfincs_jax``/SFINCS Fortran v3 model
+   scope and a compiled Fortran executable is available, run the same selected
+   point through Fortran and compare the HDF5 outputs:
+
+   .. code-block:: bash
+
+      mkdir -p runs/qa_candidate01/fortran/r0p50_${ER_DIR}
+      sfincs_jax run-fortran \
+        --input runs/qa_candidate01/scan_cpu/r0p50/${ER_DIR}/input.namelist \
+        --workdir runs/qa_candidate01/fortran/r0p50_${ER_DIR}
+      sfincs_jax compare-h5 \
+        --a runs/qa_candidate01/scan_cpu/r0p50/${ER_DIR}/sfincsOutput.h5 \
+        --b runs/qa_candidate01/fortran/r0p50_${ER_DIR}/sfincsOutput.h5 \
+        --rtol 1e-8 \
+        --atol 1e-10 \
+        --show-all
+
+   A compact way to describe the numerical comparison is
+
+   .. math::
+
+      \delta_y(A,B)
+      =
+      \frac{\|y_A-y_B\|_\infty}
+           {\max(\|y_B\|_\infty, y_\mathrm{floor})}.
+
+   Set the actual tolerances in the campaign record before looking at the
+   results, and keep them observable-specific.  CPU/GPU agreement establishes
+   backend reproducibility for the compared inputs.  Fortran agreement
+   establishes reference parity only for keys and physics options supported by
+   both implementations.  Neither comparison upgrades a proxy-only candidate to
+   a publication claim unless the promoted kinetic scans, convergence evidence,
+   and claim-specific tolerances are all archived.
+
+   Once the CPU, GPU, and optional Fortran promotion JSON files exist, create a
+   compact comparison report:
+
+   .. code-block:: bash
+
+      python examples/optimization/compare_sfincs_jax_promotion_runs.py \
+        --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json \
+        --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json \
+        --fortran runs/qa_candidate01/audit/candidate01_r0p50_fortran.json \
+        --out-dir runs/qa_candidate01/audit \
+        --stem candidate01_r0p50_comparison
+
+   .. figure:: _static/figures/optimization/qa_nfp2_sfincs_jax_promotion_comparison_w7x_reduced_real.png
+      :alt: CPU/GPU/Fortran promotion-comparison report.
+      :align: center
+      :width: 90%
+
+      Real reduced-W7-X promotion comparison generated from separate completed
+      CPU, GPU, and SFINCS Fortran v3 promotion JSON files.  The scan used the
+      shared PAS/DKES two-species model scope with
+      :math:`N_\theta=7`, :math:`N_\zeta=11`, :math:`N_\xi=10`, and
+      :math:`N_x=4`.  The selected root is an ion root,
+      :math:`E_r=-33.714544096`, so this artifact validates backend/reference
+      agreement for the promotion machinery and shared model outputs; it is not
+      an electron-root or finite-beta QA optimization claim.
+
+   The reduced-W7-X comparison passed the default strict gates without relaxed
+   tolerances: CPU/GPU root, bootstrap-objective, and flux-objective relative
+   differences were below :math:`5\times 10^{-13}`, and the SFINCS-JAX versus
+   Fortran-v3 differences were below :math:`8\times 10^{-11}`.  The checked
+   demo/format-only comparison remains available as
+   ``qa_nfp2_sfincs_jax_promotion_comparison.*`` for fast documentation and
+   script-layout regression checks.
+
+VMEC JAX Integration
+--------------------
+
+The current ``vmec_jax`` QA script already exposes objective tuples such as
+aspect ratio, mean iota, and quasisymmetry.  The neoclassical lane should be
+added as an outer-loop or accepted-candidate gate:
+
+.. code-block:: python
+
+   from sfincs_jax.optimization_objectives import (
+       bootstrap_current_objective,
+       find_ambipolar_roots,
+       flux_selectivity_objective,
+       qa_proxy_neoclassical_objective,
+   )
+
+Inside every VMEC optimizer residual evaluation, use the differentiable proxy
+if a transport-informed term is needed.  After a candidate is accepted, write a
+VMEC ``wout``, transform or load the geometry, run the selected ``sfincs_jax``
+surfaces, and evaluate the high-fidelity gates above.
+
+This keeps the optimizer fast while preserving a clear evidence path from
+geometry optimization to validated neoclassical transport metrics.
