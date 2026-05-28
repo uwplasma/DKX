@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from sfincs_jax.optimization_ladder import estimate_rhs1_active_size
+
 
 _REPO = Path(__file__).resolve().parents[1]
 _OPT_FIGURES = _REPO / "docs" / "_static" / "figures" / "optimization"
@@ -10,6 +12,16 @@ _OPT_FIGURES = _REPO / "docs" / "_static" / "figures" / "optimization"
 
 def _load(name: str) -> dict[str, object]:
     return json.loads((_OPT_FIGURES / name).read_text(encoding="utf-8"))
+
+
+def _promotion_root(payload: dict[str, object]) -> dict[str, object]:
+    root = payload["selected_root"]
+    assert isinstance(root, dict)
+    assert root["root_type"] == "electron"
+    assert root["bracket"] == [0.25, 0.5]
+    assert root["er"] > 0.0
+    assert root["slope"] > 0.0
+    return root
 
 
 def test_finite_beta_electron_root_promotion_artifact_passes() -> None:
@@ -28,14 +40,69 @@ def test_finite_beta_electron_root_promotion_artifact_passes() -> None:
     }
 
     for payload in (cpu, gpu, fortran):
-        root = payload["selected_root"]
         assert payload["gate_status"] == "pass"
-        assert isinstance(root, dict)
-        assert root["root_type"] == "electron"
-        assert root["bracket"] == [0.25, 0.5]
+        _promotion_root(payload)
 
     assert abs(cpu["selected_root"]["er"] - gpu["selected_root"]["er"]) < 1.0e-12
     assert abs(cpu["selected_root"]["er"] - fortran["selected_root"]["er"]) < 1.0e-7
+
+
+def test_finite_beta_electron_root_ladder_config_resolves_checked_artifacts() -> None:
+    config = _load("qa_nfp2_finite_beta_electron_root_ladder_config.json")
+    summary = _load("qa_nfp2_finite_beta_electron_root_convergence_ladder.json")
+
+    assert config["production_floor"] == summary["production_floor"]
+    assert config["workflow"] == "sfincs_jax_finite_beta_electron_root_convergence_ladder_config"
+    assert summary["workflow"] == "sfincs_jax_finite_beta_electron_root_convergence_ladder"
+
+    config_tiers = config["tiers"]
+    summary_tiers = summary["tiers"]
+    assert isinstance(config_tiers, list)
+    assert isinstance(summary_tiers, list)
+    assert len(config_tiers) == len(summary_tiers)
+
+    previous_active_size = 0
+    for config_tier, summary_tier in zip(config_tiers, summary_tiers, strict=True):
+        assert isinstance(config_tier, dict)
+        assert isinstance(summary_tier, dict)
+        assert summary_tier["name"] == config_tier["name"]
+        assert summary_tier["resolution"] == config_tier["resolution"]
+        assert summary_tier["r_n"] == config_tier["r_n"]
+        assert summary_tier["status"] == "pass"
+        assert summary_tier["production_floor_met"] is False
+
+        resolution = config_tier["resolution"]
+        assert isinstance(resolution, dict)
+        expected_active_size = estimate_rhs1_active_size(
+            ntheta=resolution["Ntheta"],
+            nzeta=resolution["Nzeta"],
+            nxi=resolution["Nxi"],
+            nx=resolution["Nx"],
+            n_species=2,
+        )
+        assert summary_tier["active_size_estimate"] == expected_active_size
+        assert expected_active_size > previous_active_size
+        previous_active_size = expected_active_size
+
+        promotions = config_tier["promotions"]
+        lanes = summary_tier["lanes"]
+        assert isinstance(promotions, dict)
+        assert isinstance(lanes, dict)
+        assert sorted(promotions) == ["cpu", "fortran_v3", "gpu"]
+        assert sorted(lanes) == sorted(promotions)
+
+        for lane_name, artifact_name in promotions.items():
+            assert isinstance(artifact_name, str)
+            payload = _load(artifact_name)
+            root = _promotion_root(payload)
+            lane = lanes[lane_name]
+            assert isinstance(lane, dict)
+            assert payload["gate_status"] == "pass"
+            assert lane["gate_status"] == "pass"
+            assert lane["root_type"] == "electron"
+            assert lane["root_bracket"] == root["bracket"]
+            assert lane["selected_root_er"] == root["er"]
+            assert lane["root_slope"] == root["slope"]
 
 
 def test_finite_beta_electron_root_ladder_is_deferred_not_failed() -> None:
@@ -93,3 +160,59 @@ def test_finite_beta_electron_root_xblock_25x31x16_probe_is_bounded_backend_clea
     assert summary["policy_after_probe"]["default_multispecies_active_size_max"] == 100000
     assert summary["policy_after_probe"]["default_multispecies_nxi_max"] == 16
     assert summary["production_floor"]["active_size"] > summary["active_size"] * 10
+
+
+def test_finite_beta_xblock_policy_probe_window_stays_below_production_floor() -> None:
+    probe_names = [
+        "qa_nfp2_finite_beta_electron_root_xblock_policy_probe.json",
+        "qa_nfp2_finite_beta_electron_root_xblock_policy_probe_21x25x14.json",
+        "qa_nfp2_finite_beta_electron_root_xblock_policy_probe_25x31x16.json",
+    ]
+    probes = [_load(name) for name in probe_names]
+
+    active_sizes = [probe["active_size"] for probe in probes]
+    nxi_values = [probe["resolution"]["Nxi"] for probe in probes]
+    production_floor = probes[-1]["production_floor"]
+
+    assert active_sizes == sorted(active_sizes)
+    assert nxi_values == sorted(nxi_values)
+    assert all(probe["status"] == "pass_bounded" for probe in probes)
+    assert all(probe["n_species"] == 2 for probe in probes)
+    assert all(probe["production_floor"] == production_floor for probe in probes)
+    assert all(probe["active_size"] < production_floor["active_size"] for probe in probes)
+    assert active_sizes[-1] < production_floor["active_size"] / 10
+
+    for probe in probes[1:]:
+        policy = probe["policy_after_probe"]
+        assert policy["default_multispecies_active_size_min"] == 30_000
+        assert policy["default_multispecies_active_size_max"] >= probe["active_size"]
+        assert policy["default_multispecies_nxi_min"] == 12
+        assert policy["default_multispecies_nxi_max"] >= probe["resolution"]["Nxi"]
+
+
+def test_qi_electron_root_nfp_screen_recommends_qi_nfp2_without_kinetic_claim() -> None:
+    payload = _load("qi_electron_root_nfp_screen.json")
+
+    assert payload["workflow"] == "sfincs_jax_qi_qa_electron_root_nfp_screening_proxy"
+    assert "not a kinetic SFINCS transport claim" in payload["claim_boundary"]
+    best = payload["recommended_candidate"]
+    assert isinstance(best, dict)
+    assert best["candidate"] == "qi:nfp2"
+    assert best["symmetry"] == "qi"
+    assert best["nfp"] == 2
+    assert best["screening_gate"]["status"] == "defer"
+
+    candidates = payload["candidates"]
+    assert isinstance(candidates, list)
+    labels = {row["candidate"] for row in candidates}
+    assert {"qa:nfp2", "qi:nfp1", "qi:nfp2", "qi:nfp5"}.issubset(labels)
+    qi_candidates = [row for row in candidates if row["symmetry"] == "qi"]
+    assert qi_candidates
+    assert all(row["screening_gate"]["claim_boundary"].startswith("proxy screening") for row in qi_candidates)
+    assert all(row["final_components"]["electron_root_drive"] > 0.0 for row in qi_candidates)
+    assert all(row["final_components"]["symmetry_regularization"] >= 0.0 for row in qi_candidates)
+
+    plan = payload["promotion_plan"]
+    assert plan["recommended_candidate"] == "qi:nfp2"
+    assert any("scan-er" in command for command in plan["next_commands"])
+    assert "positive ambipolar root bracket from completed kinetic scan" in plan["required_gates"]
