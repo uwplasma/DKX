@@ -221,6 +221,9 @@ low-resolution finite-beta QA positive-electron-root comparison. The finite-beta
 artifact demonstrates the full promotion workflow on a VMEC finite-beta QA
 geometry; production-resolution radial/profile convergence remains a separate
 claim-specific validation step.
+The first bounded convergence ladder extends that artifact to `9 x 9 x 7 x 4`
+at the central surface and remains explicitly `deferred` because it does not
+meet the production floor.
 
 ## Physics in One Page
 
