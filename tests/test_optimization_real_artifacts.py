@@ -37,3 +37,14 @@ def test_finite_beta_electron_root_promotion_artifact_passes() -> None:
     assert abs(cpu["selected_root"]["er"] - gpu["selected_root"]["er"]) < 1.0e-12
     assert abs(cpu["selected_root"]["er"] - fortran["selected_root"]["er"]) < 1.0e-7
 
+
+def test_finite_beta_electron_root_ladder_is_deferred_not_failed() -> None:
+    summary = _load("qa_nfp2_finite_beta_electron_root_convergence_ladder.json")
+
+    assert summary["status"] == "deferred"
+    assert summary["failures"] == []
+    assert summary["tiers"][0]["name"] == "low_7x7x5"
+    assert summary["tiers"][1]["name"] == "mid_9x9x7"
+    assert summary["tiers"][1]["convergence_gate"]["status"] == "pass"
+    assert not summary["tiers"][1]["production_floor_met"]
+    assert any("production floor" in blocker for blocker in summary["blockers"])

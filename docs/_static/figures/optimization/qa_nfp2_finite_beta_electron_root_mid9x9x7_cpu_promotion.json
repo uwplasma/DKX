@@ -1,0 +1,195 @@
+{
+  "bootstrap_objective": 0.0017663890817776102,
+  "claim_boundary": "This audit evaluates completed sfincs_jax kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
+  "electron_root_penalty": 0.0,
+  "failures": [],
+  "flux_objective": {
+    "impurity_penalty": 0.0,
+    "main_heat": 1.2508167324321888e-15,
+    "main_particle": 5.613922890405866e-16,
+    "mean_impurity_flux": 2.3693718345599253e-08,
+    "total": 1.8122090214727754e-15
+  },
+  "gate_status": "pass",
+  "runs": [
+    {
+      "bootstrap_current": -0.015888621751123155,
+      "er": -1.0,
+      "heat_flux": [
+        2.028740801974857e-08,
+        6.136191137675262e-08
+      ],
+      "particle_flux": [
+        1.4313036515976445e-08,
+        2.3868772135428783e-08
+      ],
+      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/cpu_scan/Er-1/sfincsOutput.h5",
+      "radial_current": -9.555735619452338e-09,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 8.636869453577577e-18,
+        "residual_target": 2.5834878940408143e-13,
+        "status": "pass"
+      },
+      "residual_norm": 8.636869453577577e-18,
+      "residual_target": 2.5834878940408143e-13
+    },
+    {
+      "bootstrap_current": -0.015885904741599205,
+      "er": 0.0,
+      "heat_flux": [
+        3.1053067022244625e-08,
+        6.116330653825479e-08
+      ],
+      "particle_flux": [
+        2.100957067554578e-08,
+        2.3743929935205598e-08
+      ],
+      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/cpu_scan/Er0/sfincsOutput.h5",
+      "radial_current": -2.734359259659818e-09,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 4.94895776785886e-18,
+        "residual_target": 2.595452096744347e-17,
+        "status": "pass"
+      },
+      "residual_norm": 4.94895776785886e-18,
+      "residual_target": 2.595452096744347e-17
+    },
+    {
+      "bootstrap_current": -0.015885173346748074,
+      "er": 0.25,
+      "heat_flux": [
+        3.374529796460604e-08,
+        6.111348989504305e-08
+      ],
+      "particle_flux": [
+        2.2684544326813668e-08,
+        2.3712592512106277e-08
+      ],
+      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/cpu_scan/Er0.25/sfincsOutput.h5",
+      "radial_current": -1.0280481852926094e-09,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 1.3819157761416388e-18,
+        "residual_target": 6.458720213495312e-14,
+        "status": "pass"
+      },
+      "residual_norm": 1.3819157761416388e-18,
+      "residual_target": 6.458720213495312e-14
+    },
+    {
+      "bootstrap_current": -0.015884445439449585,
+      "er": 0.5,
+      "heat_flux": [
+        3.6436524291348455e-08,
+        6.106368598675484e-08
+      ],
+      "particle_flux": [
+        2.435939212571221e-08,
+        2.36812685227428e-08
+      ],
+      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/cpu_scan/Er0.5/sfincsOutput.h5",
+      "radial_current": 6.781236029694072e-10,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 8.396765621423348e-19,
+        "residual_target": 1.2917439653155266e-13,
+        "status": "pass"
+      },
+      "residual_norm": 8.396765621423348e-19,
+      "residual_target": 1.2917439653155266e-13
+    },
+    {
+      "bootstrap_current": -0.01588373319807799,
+      "er": 0.75,
+      "heat_flux": [
+        3.912608149024298e-08,
+        6.101393428275326e-08
+      ],
+      "particle_flux": [
+        2.6033883357269976e-08,
+        2.3649990066581882e-08
+      ],
+      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/cpu_scan/Er0.75/sfincsOutput.h5",
+      "radial_current": 2.3838932906880944e-09,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 3.3137479274446916e-18,
+        "residual_target": 1.9376159266646654e-13,
+        "status": "pass"
+      },
+      "residual_norm": 3.3137479274446916e-18,
+      "residual_target": 1.9376159266646654e-13
+    },
+    {
+      "bootstrap_current": -0.015883048805141454,
+      "er": 1.0,
+      "heat_flux": [
+        4.181330795275689e-08,
+        6.09642742654306e-08
+      ],
+      "particle_flux": [
+        2.7707788506258157e-08,
+        2.3618789252164547e-08
+      ],
+      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/cpu_scan/Er1/sfincsOutput.h5",
+      "radial_current": 4.088999254093609e-09,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 3.855860599962074e-18,
+        "residual_target": 2.5834878923595904e-13,
+        "status": "pass"
+      },
+      "residual_norm": 3.855860599962074e-18,
+      "residual_target": 2.5834878923595904e-13
+    },
+    {
+      "bootstrap_current": -0.015885850696102682,
+      "er": 5.0,
+      "heat_flux": [
+        8.398434645447728e-08,
+        6.021449808547984e-08
+      ],
+      "particle_flux": [
+        5.4237643290318764e-08,
+        2.3156418153646572e-08
+      ],
+      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/cpu_scan/Er5/sfincsOutput.h5",
+      "radial_current": 3.108122513667219e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 3.0176396474684885e-17,
+        "residual_target": 1.2917439402581079e-12,
+        "status": "pass"
+      },
+      "residual_norm": 3.0176396474684885e-17,
+      "residual_target": 1.2917439402581079e-12
+    }
+  ],
+  "scan_dir": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/cpu_scan",
+  "selected_root": {
+    "bracket": [
+      0.25,
+      0.5
+    ],
+    "er": 0.4006366756802118,
+    "root_type": "electron",
+    "slope": 6.8246871530480665e-09
+  },
+  "workflow": "sfincs_jax_optimization_high_fidelity_promotion"
+}
