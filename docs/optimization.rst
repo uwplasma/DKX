@@ -672,6 +672,15 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    The medium-rung solver-policy audit is stored in
    ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_25x31x16.json``.
 
+   These checked finite-beta artifacts are QA electron-root evidence only.  They
+   do not close production-resolution QI seed ladders, true differentiable
+   device-QI, or a generic QI electron-root optimization claim.  Treat the
+   non-dense x-block policy window as bounded to the archived
+   :math:`17\times21\times12\times4`,
+   :math:`21\times25\times14\times4`, and
+   :math:`25\times31\times16\times4` probes until a larger checked campaign
+   writes matching promotion and convergence artifacts.
+
    Regenerate the ladder summary from archived promotion JSON files with:
 
    .. code-block:: bash
@@ -682,6 +691,40 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
         --stem qa_nfp2_finite_beta_electron_root_convergence_ladder \
         --backend-root-atol 1e-6 \
         --root-drift-atol 2e-2
+
+QI fallback screen
+------------------
+
+The finite-beta QA artifacts above are useful positive-root evidence, but they
+are not yet production-resolution evidence.  If a QA optimizer cannot preserve a
+positive electron-root candidate under the production ladder, start the QI
+fallback lane with a cheap NFP screen:
+
+.. code-block:: bash
+
+   python examples/optimization/screen_qi_electron_root_nfp.py \
+     --steps 70 \
+     --out-dir docs/_static/figures/optimization \
+     --stem qi_electron_root_nfp_screen
+
+.. figure:: _static/figures/optimization/qi_electron_root_nfp_screen.png
+   :alt: QA/QI electron-root NFP screening proxy.
+
+   QA/QI NFP screening proxy.  The checked run recommends QI ``nfp=2`` as the
+   first fallback target because the current QA lane is still under production
+   resolution and the repository already has QI ``nfp=2`` fixtures and
+   seed-robustness infrastructure.  This is also consistent with recent
+   SFINCS-based QI electron-root optimization work (`Lascas Neto et al. 2025
+   <https://doi.org/10.1017/S0022377824001466>`_, open preprint
+   `arXiv:2405.12058 <https://arxiv.org/abs/2405.12058>`_).  This is not a
+   kinetic electron-root claim: it only selects the next ``sfincs_jax scan-er``
+   CPU/GPU/Fortran promotion campaign.
+
+The screen writes ``qi_electron_root_nfp_screen.json`` with the full candidate
+table, proxy gates, and next commands.  A candidate is publication-eligible only
+after completed kinetic scans show a positive ambipolar root, residual
+convergence, CPU/GPU agreement, resolution convergence, and Fortran-v3
+agreement when the input is in the shared model scope.
 
 VMEC JAX Integration
 --------------------

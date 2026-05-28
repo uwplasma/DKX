@@ -41,6 +41,7 @@ def _assert_artifacts(out_dir: Path, stem: str) -> dict:
 def test_public_optimization_scripts_show_help() -> None:
     scripts = {
         _OPTIMIZATION_DIR / "qa_nfp2_sfincs_jax_objectives.py": ["--out-dir", "--stem"],
+        _OPTIMIZATION_DIR / "screen_qi_electron_root_nfp.py": ["--candidates", "--target-electron-root-drive"],
         _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py": ["--out-dir", "--stem"],
         _OPTIMIZATION_DIR / "launch_sfincs_jax_candidate_scan.py": ["--out-dir", "--promotion-stem"],
         _OPTIMIZATION_DIR / "compare_sfincs_jax_promotion_runs.py": ["--out-dir", "--stem"],
@@ -78,6 +79,31 @@ def test_qa_nfp2_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> Non
     assert payload["autodiff_gradient_gate"]["status"] == "pass"
     assert len(payload["history"]) == 1
     assert "required_high_fidelity_gates" in payload["promotion_plan"]
+
+
+def test_qi_screen_public_script_pivots_to_qi_nfp2_when_qa_is_deferred(tmp_path: Path) -> None:
+    stem = "qi_screen_cli"
+    script = _OPTIMIZATION_DIR / "screen_qi_electron_root_nfp.py"
+
+    _run_script(
+        script,
+        [
+            "--steps",
+            "2",
+            "--out-dir",
+            str(tmp_path),
+            "--stem",
+            stem,
+        ],
+    )
+
+    payload = _assert_artifacts(tmp_path, stem)
+    assert payload["workflow"] == "sfincs_jax_qi_qa_electron_root_nfp_screening_proxy"
+    assert "not a kinetic SFINCS transport claim" in payload["claim_boundary"]
+    assert payload["recommended_candidate"]["candidate"] == "qi:nfp2"
+    assert payload["recommended_candidate"]["symmetry"] == "qi"
+    assert payload["recommended_candidate"]["nfp"] == 2
+    assert "sfincs_jax scan-er" in " ".join(payload["promotion_plan"]["next_commands"])
 
 
 def test_promotion_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:
