@@ -1,0 +1,115 @@
+{
+  "active_size": 99204,
+  "claim_boundary": "This is a medium-resolution solver-policy probe for the finite-beta QA electron-root workflow, not a production-floor convergence claim.",
+  "fortran_v3": {
+    "FSABjHat": -0.08799412802161682,
+    "cli_return_code": 143,
+    "executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+    "failure_after_output": "MPI_Finalize returned exit status 143 after writing sfincsOutput.h5.",
+    "logged_solve_time_s": 9.376978000000008,
+    "output_written": true,
+    "wrapper_elapsed_s": 85.75
+  },
+  "jax_cpu_forced_xblock": {
+    "FSABjHat": -0.08799410826576566,
+    "backend": "cpu",
+    "krylov_method": "lgmres",
+    "linear_solver_method": "xblock_sparse_pc_lgmres",
+    "matvecs": 501,
+    "residual_norm": 2.740873268900989e-14,
+    "residual_target": 3.995699e-13,
+    "setup_s": 23.746332624927163,
+    "solver_elapsed_s": 65.65197295811959,
+    "solve_s": 41.903043875005096,
+    "wrapper_elapsed_s": 68.05
+  },
+  "jax_cpu_auto": {
+    "FSABjHat": -0.0879941082660344,
+    "backend": "cpu",
+    "krylov_method": "lgmres",
+    "linear_solver_method": "xblock_sparse_pc_lgmres",
+    "matvecs": 439,
+    "residual_norm": 2.89609249669843e-13,
+    "residual_target": 3.995699e-13,
+    "setup_s": 22.621527708135545,
+    "solver_elapsed_s": 57.570246583083645,
+    "solve_s": 34.94653308414854,
+    "wrapper_elapsed_s": 59.425
+  },
+  "jax_cpu_vs_fortran_v3": {
+    "FSABFlow_max_abs": 2.0432187844421357e-08,
+    "FSABFlow_max_rel": 2.424547852055134e-07,
+    "FSABjHatOverRootFSAB2_max_abs": 3.356045052971268e-09,
+    "FSABjHatOverRootFSAB2_max_rel": 2.2451329018874524e-07,
+    "FSABjHat_max_abs": 1.9755851163316684e-08,
+    "FSABjHat_max_rel": 2.2451328977842046e-07,
+    "heatFlux_vm_psiHat_max_abs": 9.840766354872249e-14,
+    "heatFlux_vm_psiHat_max_rel": 4.408113826396111e-07,
+    "particleFlux_vm_psiHat_max_abs": 6.478235911692682e-14,
+    "particleFlux_vm_psiHat_max_rel": 4.4223464422891073e-07
+  },
+  "jax_cpu_vs_gpu": {
+    "FSABFlow_max_abs": 4.9218892850255713e-11,
+    "FSABFlow_max_rel": 3.0501484575436016e-09,
+    "FSABjHatOverRootFSAB2_max_abs": 6.432581897697354e-12,
+    "FSABjHatOverRootFSAB2_max_rel": 4.303280877003395e-10,
+    "FSABjHat_max_abs": 3.786633506752679e-11,
+    "FSABjHat_max_rel": 4.3032807306672646e-10,
+    "heatFlux_vm_psiHat_max_abs": 1.197066448676987e-14,
+    "heatFlux_vm_psiHat_max_rel": 3.192429350888871e-08,
+    "particleFlux_vm_psiHat_max_abs": 3.937135426156468e-15,
+    "particleFlux_vm_psiHat_max_rel": 2.702966161525577e-08
+  },
+  "jax_gpu_forced_xblock": {
+    "FSABjHat": -0.08799410830363199,
+    "backend": "gpu",
+    "device": "office:CUDA_VISIBLE_DEVICES=0",
+    "krylov_method": "gmres",
+    "linear_solver_method": "xblock_sparse_pc_gmres",
+    "matvecs": 407,
+    "max_resident_set_mb": 3317.95,
+    "residual_norm": 1.7487138265971926e-13,
+    "residual_target": 3.995699e-13,
+    "setup_s": 49.77796623855829,
+    "solver_elapsed_s": 227.84819062892348,
+    "solve_s": 178.05369186401367,
+    "wrapper_elapsed_s": 232.27
+  },
+  "jax_gpu_vs_fortran_v3": {
+    "FSABFlow_max_abs": 2.03829689515711e-08,
+    "FSABFlow_max_rel": 2.418707382994783e-07,
+    "FSABjHatOverRootFSAB2_max_abs": 3.349612471073571e-09,
+    "FSABjHatOverRootFSAB2_max_rel": 2.240829621974741e-07,
+    "FSABjHat_max_abs": 1.9717984828249158e-08,
+    "FSABjHat_max_rel": 2.240829618017829e-07,
+    "heatFlux_vm_psiHat_max_abs": 1.1037832803549236e-13,
+    "heatFlux_vm_psiHat_max_rel": 4.426399524502117e-07,
+    "particleFlux_vm_psiHat_max_abs": 6.505554436836373e-14,
+    "particleFlux_vm_psiHat_max_rel": 4.4409953436450667e-07
+  },
+  "n_species": 2,
+  "policy_after_probe": {
+    "default_multispecies_active_size_max": 100000,
+    "default_multispecies_active_size_min": 30000,
+    "default_multispecies_nxi_max": 16,
+    "default_multispecies_nxi_min": 12
+  },
+  "production_floor": {
+    "NL": 4,
+    "Ntheta": 25,
+    "Nx": 4,
+    "Nxi": 100,
+    "Nzeta": 51,
+    "active_size": 1020004,
+    "dense_matrix_gib": 7751.525998234749
+  },
+  "resolution": {
+    "NL": 4,
+    "Ntheta": 25,
+    "Nx": 4,
+    "Nxi": 16,
+    "Nzeta": 31
+  },
+  "status": "pass_bounded",
+  "workflow": "sfincs_jax_finite_beta_electron_root_xblock_policy_probe"
+}
