@@ -224,6 +224,13 @@ claim-specific validation step.
 The first bounded convergence ladder extends that artifact to `9 x 9 x 7 x 4`
 at the central surface and remains explicitly `deferred` because it does not
 meet the production floor.
+A follow-up medium-resolution solver-policy probe at `17 x 21 x 12 x 4`
+validated the non-dense `xblock_sparse_pc_gmres` route for the same two-species
+finite-beta QA deck: the automatic CPU path converged in about 7 s wall time,
+matched the written Fortran-v3 output to better than `1.6e-6` relative on the
+reported current/flux observables, and avoids dense matrix materialization. The
+full `25 x 51 x 100 x 4` production floor is still documented as a larger
+algorithmic validation step rather than a closed convergence claim.
 
 ## Physics in One Page
 

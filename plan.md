@@ -148,10 +148,21 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   SFINCS-JAX/Fortran-v3 root agreement was `1.91e-7` absolute. The CPU root
   moved from the low-tier `0.4136092671` to `0.4006366757`, so the checked
   ladder remains useful evidence but not production-converged evidence.
+- [x] Added a bounded non-dense RHSMode=1 policy step for the same finite-beta
+  QA two-species deck. The medium `17 x 21 x 12 x 4` central point now selects
+  `xblock_sparse_pc_gmres` automatically on CPU/GPU backends in the measured
+  active-size window. Local CPU auto-selection wrote output in `~7.1 s`,
+  reached residual `1.44e-13` against target `2.71e-13`, and matched the
+  written SFINCS Fortran v3 output to `<=1.6e-6` relative over the
+  current/flow/particle-flux/heat-flux observables. The Fortran process wrote a
+  valid `sfincsOutput.h5` and logged completion before an MPI finalization
+  return code, so the output was used as the parity anchor but not as a clean
+  CLI-exit benchmark.
 - [ ] Next validation/promotion work: run the finite-beta QA electron-root
-  ladder at the declared production floor (`25 x 51 x 100 x 4`) or implement a
-  production-safe non-dense RHSMode=1 path that makes that ladder affordable on
-  local GPU/cluster hardware.
+  ladder at the declared production floor (`25 x 51 x 100 x 4`) or extend the
+  non-dense RHSMode=1 path beyond the current `30k-45k` active-unknown measured
+  window. The production-floor active size is `1,020,004`, so it must not be
+  silently routed through dense materialization or an unmeasured x-block policy.
 
 Current active lane (2026-05-18, CI/CD and sharded-JIT modernization):
 - [x] GitHub Actions CI and docs are green on `main` after commit `f363009`;
@@ -16100,3 +16111,61 @@ Validation plan:
 - Run strict docs.
 - Run image-size and git-history image audits after compression.
 - Run ``git diff --check`` and push only if clean.
+
+### 35.71 Finite-beta QA medium non-dense RHSMode=1 policy probe
+
+Scope:
+
+- Closed the next bounded solver-policy step for the finite-beta QA
+  electron-root workflow without overclaiming the production floor.
+- Extended `rhs1_fp_3d_xblock_sparse_pc_auto_allowed(...)` so two-species 3D
+  full-FP RHSMode=1 systems can use `xblock_sparse_pc_gmres` automatically in a
+  measured medium window (`30k-45k` active unknowns, `12 <= Nxi <= 20` by
+  default). One-species QI behavior is preserved under the previous `Nxi >= 50`
+  gate.
+- Kept small two-species systems on dense LU and kept the
+  `25 x 51 x 100 x 4` finite-beta production floor outside the default x-block
+  window until a million-unknown non-dense campaign is measured.
+
+Validation:
+
+- Forced `xblock_sparse_pc_gmres` on the `9 x 9 x 7 x 4` finite-beta central
+  point: residual `1.09e-14` vs target `1.29e-13`, `123` matvecs, total logged
+  elapsed `1.4 s`; physical HDF5 fields matched the dense reference, with only
+  residual-ratio diagnostics differing because the dense residual was near
+  machine zero.
+- Forced `xblock_sparse_pc_gmres` on the `17 x 21 x 12 x 4` finite-beta central
+  point: residual `1.44e-13` vs target `2.71e-13`, `139` matvecs, wrapper
+  elapsed `8.1 s`.
+- Default `solve_method="auto"` on the same `17 x 21 x 12 x 4` point selected
+  `xblock_sparse_pc_gmres`, wrote output in `~7.1 s`, and produced the same
+  physical output as the explicit x-block run.
+- SFINCS Fortran v3 on the same `17 x 21 x 12 x 4` input wrote
+  `sfincsOutput.h5` and logged completion before an MPI finalization return
+  code. Comparing the written output gave max relative differences of
+  `3.26e-7` for `FSABjHat`, `1.54e-6` for `FSABFlow`, `4.29e-7` for
+  `particleFlux_vm_psiHat`, and `3.03e-7` for `heatFlux_vm_psiHat`.
+- Focused policy tests:
+  `python -m pytest -q tests/test_rhs1_host_policy.py::test_rhs1_fp_3d_xblock_sparse_pc_auto_targets_qi_window tests/test_rhs1_host_policy.py::test_rhs1_fp_3d_xblock_sparse_pc_auto_targets_finite_beta_multispecies_window`
+  (`2 passed`).
+- Lint:
+  `python -m ruff check sfincs_jax/rhs1_host_policy.py tests/test_rhs1_host_policy.py`.
+
+Progress:
+
+- Finite-beta QA electron-root promotion lane: `75%`; low and mid promotion
+  artifacts are backend-clean, and a medium non-dense policy point is now
+  validated. The remaining blocker is the production-floor million-unknown
+  ladder.
+- Overall remaining-lane completion estimate: `96%`.
+
+Best next steps:
+
+1. Run the full focused policy/optimization/docs validation for this checkpoint
+   and push if green.
+2. If additional algorithmic work is requested, target the next non-dense rung
+   above `45k` active unknowns before attempting the full
+   `25 x 51 x 100 x 4` ladder.
+3. Keep production-floor finite-beta claims marked deferred until the
+   million-unknown ladder converges and has CPU/GPU/Fortran-compatible
+   observables.

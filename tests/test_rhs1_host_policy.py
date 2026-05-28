@@ -375,6 +375,11 @@ def test_rhs1_fp_3d_xblock_sparse_pc_auto_targets_qi_window(monkeypatch) -> None
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MAX", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN_NXI", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN_NXI", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX_NXI", raising=False)
 
     common = {
         "op": _op(has_fp=True, constraint_scheme=1, n_xi=50),
@@ -413,6 +418,45 @@ def test_rhs1_fp_3d_xblock_sparse_pc_auto_targets_qi_window(monkeypatch) -> None
     assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**common)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC", "on")
+    assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 1})
+
+
+def test_rhs1_fp_3d_xblock_sparse_pc_auto_targets_finite_beta_multispecies_window(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN_NXI", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX_NXI", raising=False)
+
+    finite_beta_like = _op(has_fp=True, constraint_scheme=1, n_xi=12, n_species=2)
+    common = {
+        "op": finite_beta_like,
+        "active_size": 34_276,
+        "use_implicit": False,
+        "solve_method_kind": "auto",
+        "backend": "cpu",
+        "eparallel_abs": 0.0,
+    }
+
+    assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**common)
+    assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "backend": "gpu"})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 4_540})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 1_020_004})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+        **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=7, n_species=2)}
+    )
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+        **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=100, n_species=2)}
+    )
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+        **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=12, n_species=3)}
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES", "off")
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**common)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES", "on")
     assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 1})
 
 

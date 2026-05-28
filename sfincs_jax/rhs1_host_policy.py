@@ -547,11 +547,12 @@ def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
 ) -> bool:
     """Return whether 3D full-FP RHSMode=1 should use x-block sparse-PC GMRES.
 
-    The scale-0.50 QI CPU/GPU ladder is too large for dense fallback and too
-    stiff for the active-DOF XMG/strong-preconditioner route, but it converges
-    quickly with host-assembled x-block sparse LU as a right preconditioner.
-    Keep this as a bounded non-differentiable output/CLI route until larger QI
-    ladders are checked.
+    The scale-0.50 QI CPU/GPU ladder and the finite-beta two-species QA
+    electron-root mid-resolution deck are too large for dense fallback but
+    converge quickly with host-assembled x-block sparse LU as a right
+    preconditioner. Keep this as a bounded non-differentiable output/CLI route:
+    small systems still use dense LU, and production-floor systems remain
+    deferred until a larger non-dense ladder is measured.
     """
 
     env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC")
@@ -569,7 +570,8 @@ def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
         return False
     if op.fblock.fp is None or op.fblock.pas is not None:
         return False
-    if int(getattr(op, "n_species", 1)) != 1:
+    n_species = int(getattr(op, "n_species", 1))
+    if n_species not in {1, 2}:
         return False
     if int(getattr(op, "n_zeta", 1)) <= 1:
         return False
@@ -578,14 +580,29 @@ def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
     if abs(float(eparallel_abs)) > 0.0:
         return False
 
-    min_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN_NXI", 50)
-    if int(getattr(op, "n_xi", max(0, int(min_nxi)))) < max(0, int(min_nxi)):
-        return False
+    if n_species == 1:
+        min_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN_NXI", 50)
+        max_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MAX_NXI", 10_000_000)
+        min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN", 30_000)
+        max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MAX", 45_000)
+        if env is True:
+            min_size = 0
+    else:
+        multispecies_env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES")
+        if multispecies_env is False:
+            return False
+        min_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN_NXI", 12)
+        max_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX_NXI", 20)
+        min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN", 30_000)
+        max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX", 45_000)
+        if env is True or multispecies_env is True:
+            min_size = 0
 
-    min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN", 30_000)
-    max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MAX", 45_000)
-    if env is True:
-        min_size = 0
+    n_xi = int(getattr(op, "n_xi", max(0, int(min_nxi))))
+    if n_xi < max(0, int(min_nxi)):
+        return False
+    if int(max_nxi) > 0 and n_xi > int(max_nxi):
+        return False
     if int(max_size) > 0 and int(active_size) > int(max_size):
         return False
     return int(active_size) >= max(0, int(min_size))

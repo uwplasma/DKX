@@ -48,3 +48,16 @@ def test_finite_beta_electron_root_ladder_is_deferred_not_failed() -> None:
     assert summary["tiers"][1]["convergence_gate"]["status"] == "pass"
     assert not summary["tiers"][1]["production_floor_met"]
     assert any("production floor" in blocker for blocker in summary["blockers"])
+
+
+def test_finite_beta_electron_root_xblock_policy_probe_is_bounded_and_clean() -> None:
+    summary = _load("qa_nfp2_finite_beta_electron_root_xblock_policy_probe.json")
+
+    assert summary["status"] == "pass_bounded"
+    assert summary["resolution"] == {"Ntheta": 17, "Nzeta": 21, "Nxi": 12, "NL": 4, "Nx": 4}
+    assert summary["active_size"] == 34276
+    assert summary["jax_auto"]["linear_solver_method"] == "xblock_sparse_pc_gmres"
+    assert summary["jax_auto"]["residual_norm"] < summary["jax_auto"]["residual_target"]
+    assert summary["jax_auto"]["wrapper_elapsed_s"] < 10.0
+    assert summary["jax_vs_fortran_v3"]["FSABFlow_max_rel"] < 2.0e-6
+    assert summary["production_floor"]["active_size"] > 1_000_000
