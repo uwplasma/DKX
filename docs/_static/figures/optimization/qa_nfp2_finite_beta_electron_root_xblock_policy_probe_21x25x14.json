@@ -1,0 +1,97 @@
+{
+  "workflow": "sfincs_jax_finite_beta_electron_root_xblock_policy_probe",
+  "status": "pass_bounded",
+  "claim_boundary": "This is an above-window medium-resolution solver-policy probe for the finite-beta QA electron-root workflow, not a production-floor convergence claim.",
+  "resolution": {
+    "Ntheta": 21,
+    "Nzeta": 25,
+    "Nxi": 14,
+    "NL": 4,
+    "Nx": 4
+  },
+  "active_size": 58804,
+  "n_species": 2,
+  "jax_cpu_forced_xblock": {
+    "backend": "cpu",
+    "linear_solver_method": "xblock_sparse_pc_gmres",
+    "wrapper_elapsed_s": 18.807,
+    "logged_total_elapsed_s": 17.3,
+    "solver_elapsed_s": 15.962,
+    "matvecs": 219,
+    "residual_norm": 2.9136569593460534e-13,
+    "residual_target": 3.2886795899277614e-13,
+    "FSABjHat": -0.08795881643364321
+  },
+  "jax_cpu_auto": {
+    "backend": "cpu",
+    "linear_solver_method": "xblock_sparse_pc_gmres",
+    "wrapper_elapsed_s": 17.40,
+    "logged_total_elapsed_s": 16.4,
+    "solver_elapsed_s": 15.738,
+    "matvecs": 219,
+    "residual_norm": 2.9136569593460534e-13,
+    "residual_target": 3.2886795899277614e-13,
+    "FSABjHat": -0.08795881643364321
+  },
+  "jax_gpu_forced_xblock": {
+    "backend": "gpu",
+    "device": "office:CUDA_VISIBLE_DEVICES=0",
+    "linear_solver_method": "xblock_sparse_pc_gmres",
+    "wrapper_elapsed_s": 85.95,
+    "logged_total_elapsed_s": 85.021,
+    "solver_elapsed_s": 80.946,
+    "max_resident_set_mb": 2007.4,
+    "matvecs": 227,
+    "residual_norm": 3.216556368639968e-13,
+    "residual_target": 3.2886795899277604e-13,
+    "FSABjHat": -0.08795881635946394
+  },
+  "fortran_v3": {
+    "executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+    "output_written": true,
+    "cli_return_code": 1,
+    "failure_after_output": "MPI_Finalize returned exit status 143 after writing sfincsOutput.h5.",
+    "wrapper_elapsed_s": 89.57,
+    "logged_solve_time_s": 12.607461999999941,
+    "FSABjHat": -0.0879588197617953
+  },
+  "jax_cpu_vs_gpu": {
+    "FSABjHat_max_abs": 7.417927e-11,
+    "FSABjHat_max_rel": 8.433410e-10,
+    "FSABjHatOverRootFSAB2_max_abs": 1.260128e-11,
+    "FSABjHatOverRootFSAB2_max_rel": 8.433408e-10,
+    "FSABFlow_max_abs": 1.184294e-10,
+    "FSABFlow_max_rel": 1.194492e-08,
+    "particleFlux_vm_psiHat_max_abs": 2.869834e-15,
+    "particleFlux_vm_psiHat_max_rel": 1.970934e-08,
+    "heatFlux_vm_psiHat_max_abs": 1.003200e-14,
+    "heatFlux_vm_psiHat_max_rel": 2.676338e-08
+  },
+  "jax_gpu_vs_fortran_v3": {
+    "FSABjHat_max_abs": 3.402331e-09,
+    "FSABjHat_max_rel": 3.868096e-08,
+    "FSABjHatOverRootFSAB2_max_abs": 5.779745e-10,
+    "FSABjHatOverRootFSAB2_max_rel": 3.868096e-08,
+    "FSABFlow_max_abs": 7.046432e-09,
+    "FSABFlow_max_rel": 9.836932e-07,
+    "particleFlux_vm_psiHat_max_abs": 3.925691e-13,
+    "particleFlux_vm_psiHat_max_rel": 2.680727e-06,
+    "heatFlux_vm_psiHat_max_abs": 5.484250e-13,
+    "heatFlux_vm_psiHat_max_rel": 2.633113e-06
+  },
+  "production_floor": {
+    "Ntheta": 25,
+    "Nzeta": 51,
+    "Nxi": 100,
+    "NL": 4,
+    "Nx": 4,
+    "active_size": 1020004,
+    "dense_matrix_gib": 7751.525998234749
+  },
+  "policy_after_probe": {
+    "default_multispecies_active_size_min": 30000,
+    "default_multispecies_active_size_max": 60000,
+    "default_multispecies_nxi_min": 12,
+    "default_multispecies_nxi_max": 14
+  }
+}

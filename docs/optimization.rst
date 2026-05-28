@@ -635,6 +635,23 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    The solver-policy audit is stored in
    ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe.json``.
 
+   The next above-window rung,
+   :math:`N_\theta=21`, :math:`N_\zeta=25`, :math:`N_\xi=14`,
+   :math:`N_L=4`, :math:`N_x=4`, has :math:`58{,}804` active unknowns and was
+   run on local CPU, one office GPU, and SFINCS Fortran v3.  The CPU path
+   converged in 18.8 seconds wall time, the GPU path converged in 86.0 seconds
+   wall time, and both reached the requested true residual.  CPU/GPU agreement
+   was better than :math:`2.7\times10^{-8}` relative on current and flux
+   observables; GPU/Fortran-v3 agreement was better than
+   :math:`2.7\times10^{-6}` relative.  The default multispecies non-dense
+   x-block policy is now bounded to this measured window
+   (:math:`30{,}000 \le n_\mathrm{active} \le 60{,}000`,
+   :math:`12 \le N_\xi \le 14`) and intentionally does not cover the
+   million-unknown production floor.
+
+   The above-window solver-policy audit is stored in
+   ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_21x25x14.json``.
+
    Regenerate the ladder summary from archived promotion JSON files with:
 
    .. code-block:: bash

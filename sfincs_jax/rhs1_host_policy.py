@@ -547,12 +547,12 @@ def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
 ) -> bool:
     """Return whether 3D full-FP RHSMode=1 should use x-block sparse-PC GMRES.
 
-    The scale-0.50 QI CPU/GPU ladder and the finite-beta two-species QA
-    electron-root mid-resolution deck are too large for dense fallback but
-    converge quickly with host-assembled x-block sparse LU as a right
-    preconditioner. Keep this as a bounded non-differentiable output/CLI route:
-    small systems still use dense LU, and production-floor systems remain
-    deferred until a larger non-dense ladder is measured.
+    The scale-0.50 QI CPU/GPU ladder and measured finite-beta two-species QA
+    electron-root decks are too large for dense fallback but converge with
+    host-assembled x-block sparse LU as a right preconditioner. Keep this as a
+    bounded non-differentiable output/CLI route: small systems still use dense
+    LU, and production-floor systems remain deferred until larger non-dense
+    ladders are measured.
     """
 
     env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC")
@@ -592,9 +592,9 @@ def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
         if multispecies_env is False:
             return False
         min_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN_NXI", 12)
-        max_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX_NXI", 20)
+        max_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX_NXI", 14)
         min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN", 30_000)
-        max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX", 45_000)
+        max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX", 60_000)
         if env is True or multispecies_env is True:
             min_size = 0
 

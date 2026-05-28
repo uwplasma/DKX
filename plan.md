@@ -158,9 +158,18 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   valid `sfincsOutput.h5` and logged completion before an MPI finalization
   return code, so the output was used as the parity anchor but not as a clean
   CLI-exit benchmark.
+- [x] Extended the non-dense finite-beta QA solver-policy evidence one rung
+  higher to `21 x 25 x 14 x 4` (`58,804` active unknowns). Forced
+  `xblock_sparse_pc_gmres` converged on local CPU in `18.8 s` wrapper time
+  (`219` matvecs, residual `2.91e-13 < 3.29e-13`) and on office GPU in
+  `86.0 s` wrapper time (`227` matvecs, residual `3.22e-13 < 3.29e-13`,
+  max RSS about `2.0 GB`). CPU/GPU observable agreement was `<=2.7e-8`
+  relative, and GPU/Fortran-v3 observable agreement was `<=2.7e-6` relative.
+  The default multispecies x-block policy is now bounded to the measured
+  `30k-60k` active-unknown, `12<=Nxi<=14` window.
 - [ ] Next validation/promotion work: run the finite-beta QA electron-root
   ladder at the declared production floor (`25 x 51 x 100 x 4`) or extend the
-  non-dense RHSMode=1 path beyond the current `30k-45k` active-unknown measured
+  non-dense RHSMode=1 path beyond the current `30k-60k` active-unknown measured
   window. The production-floor active size is `1,020,004`, so it must not be
   silently routed through dense materialization or an unmeasured x-block policy.
 
@@ -16169,3 +16178,50 @@ Best next steps:
 3. Keep production-floor finite-beta claims marked deferred until the
    million-unknown ladder converges and has CPU/GPU/Fortran-compatible
    observables.
+
+### 35.72 Finite-beta QA above-window x-block policy extension
+
+Scope:
+
+- Tested the next finite-beta QA central-surface non-dense rung above the
+  previous `30k-45k` active-unknown window.
+- Promoted the default two-species 3D full-FP x-block sparse-PC window only to
+  the measured bound: `30,000 <= active_size <= 60,000` and
+  `12 <= Nxi <= 14`.
+- Kept the production floor excluded from automatic x-block selection because
+  `25 x 51 x 100 x 4` has `1,020,004` active unknowns.
+
+Validation:
+
+- Local CPU forced `xblock_sparse_pc_gmres` on
+  `Ntheta=21`, `Nzeta=25`, `Nxi=14`, `NL=4`, `Nx=4`:
+  active size `58,804`, wrapper elapsed `18.807 s`, logged total `17.3 s`,
+  `219` matvecs, residual `2.913657e-13`, target `3.288680e-13`.
+- Office GPU forced `xblock_sparse_pc_gmres` from a fresh `99145fb` checkout:
+  wrapper elapsed `85.95 s`, logged total `85.021 s`, `227` matvecs,
+  residual `3.216556e-13`, target `3.288680e-13`, max RSS about `2.0 GB`.
+- SFINCS Fortran v3 wrote `sfincsOutput.h5` and logged completion before the
+  same MPI finalization return-code issue observed on the lower rung. Its
+  logged solve time was `12.607 s`.
+- CPU/GPU observable agreement: `FSABjHat` max relative `8.43e-10`,
+  `FSABFlow` `1.19e-8`, particle flux `1.97e-8`, heat flux `2.68e-8`.
+- GPU/Fortran-v3 observable agreement: `FSABjHat` max relative `3.87e-8`,
+  `FSABFlow` `9.84e-7`, particle flux `2.68e-6`, heat flux `2.63e-6`.
+
+Progress:
+
+- Finite-beta QA electron-root promotion lane: `80%`; the bounded non-dense
+  policy now has CPU/GPU/Fortran-compatible evidence through `58,804` active
+  unknowns. The remaining blocker is the million-unknown production-floor
+  ladder.
+- Overall remaining-lane completion estimate: `96.5%`.
+
+Best next steps:
+
+1. Verify `solve_method="auto"` selects the extended window on the local
+   `21 x 25 x 14 x 4` deck and remains fail-closed above `60,000` active
+   unknowns.
+2. Run focused policy/artifact tests, strict docs, release gates, and commit.
+3. If more algorithmic work is requested, do not widen this same policy by
+   threshold alone; the next step is a new larger-system path or factor-reuse
+   campaign before attempting the full production floor.

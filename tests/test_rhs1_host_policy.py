@@ -441,13 +441,17 @@ def test_rhs1_fp_3d_xblock_sparse_pc_auto_targets_finite_beta_multispecies_windo
 
     assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**common)
     assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "backend": "gpu"})
+    assert rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+        **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=14, n_species=2), "active_size": 58_804}
+    )
     assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 4_540})
+    assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 60_001})
     assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(**{**common, "active_size": 1_020_004})
     assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
         **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=7, n_species=2)}
     )
     assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
-        **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=100, n_species=2)}
+        **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=15, n_species=2)}
     )
     assert not rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
         **{**common, "op": _op(has_fp=True, constraint_scheme=1, n_xi=12, n_species=3)}
