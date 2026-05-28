@@ -160,14 +160,26 @@ python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanc
 
 ![QA nfp=2 sfincs_jax optimization proxy dashboard](docs/_static/figures/optimization/qa_nfp2_sfincs_jax_optimization_lane.png)
 
-The example supports `bootstrap`, `electron-root`, `flux-selective`, and
-`balanced` presets. It writes a JSON provenance file plus PNG/PDF plots. The
-proxy layer is differentiable and finite-difference checked; this does not make
-the promoted kinetic scan differentiable. Accepted designs still need completed
-`sfincs_jax scan-er` outputs before high-fidelity SFINCS kinetic gates can be
-used for bootstrap current, ambipolar roots, particle/heat/impurity fluxes,
-residual convergence, CPU/GPU agreement, and Fortran v3 comparison when
-applicable. See `docs/optimization.rst`.
+The QA example supports `bootstrap`, `electron-root`, `flux-selective`, and
+`balanced` presets. If the QA proxy does not provide a strong electron-root
+candidate, use the QI/QA NFP screen to pick the next kinetic promotion target:
+
+```bash
+python examples/optimization/screen_qi_electron_root_nfp.py --steps 70
+```
+
+![QI electron-root NFP screening proxy](docs/_static/figures/optimization/qi_electron_root_nfp_screen.png)
+
+The checked screen recommends QI `nfp=2` as the first fallback target, because
+QA has only low/mid-resolution positive-root evidence so far and QI electron-root
+promotion still needs its first real kinetic artifact. Both scripts write JSON
+provenance plus PNG/PDF plots. The proxy layer is differentiable and
+finite-difference checked; this does not make the promoted kinetic scan
+differentiable. Accepted designs still need completed `sfincs_jax scan-er`
+outputs before high-fidelity SFINCS kinetic gates can be used for bootstrap
+current, ambipolar roots, particle/heat/impurity fluxes, residual convergence,
+CPU/GPU agreement, and Fortran v3 comparison when applicable. See
+`docs/optimization.rst`.
 
 Concise real-promotion sequence:
 
