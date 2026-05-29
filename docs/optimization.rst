@@ -749,6 +749,8 @@ the same electric-field grid on CPU, one office GPU, and SFINCS Fortran v3:
      --gpu-device 0 \
      --run-fortran \
      --fortran-exe /path/to/sfincs \
+     --jax-scan-timeout-s 1800 \
+     --promotion-timeout-s 300 \
      --jobs 1
 
 For two-species ion/electron electron-root promotion scans, omit
@@ -758,6 +760,10 @@ three-or-more-species studies with a real impurity objective.  The comparison
 wrapper then automatically allows missing flux-objective scalars while still
 checking the selected root, bootstrap objective, residual gates, and backend
 agreement.
+For expensive CPU/GPU ladders, keep the timeout flags in the command. A timeout
+does not create promotion evidence, but it does write
+``promotion_evidence_campaign.json`` with ``campaign_status="fail"`` and a
+structured lane-failure record so the stalled run is auditable.
 
 The checked run used
 :math:`N_\theta=7`, :math:`N_\zeta=7`, :math:`N_\xi=7`,
@@ -1034,6 +1040,9 @@ rung, the missing ``15x`` GPU promotion, and the explicit production floor
 ``25 x 51 x 100 x 4``.  Its status is deliberately ``deferred`` so downstream
 docs/tests can use the artifact without turning it into a production-resolution
 QI claim.
+The next bounded execution command for the missing ``15x`` GPU rung should use
+the same timeout-protected campaign wrapper, with ``--run-gpu --gpu-device 0``
+on a clean checkout and a localized VMEC equilibrium file.
 
 VMEC JAX Integration
 --------------------
