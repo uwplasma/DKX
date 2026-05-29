@@ -65,6 +65,13 @@ tolerance. Further research is needed to make this path better: specifically,
 the remaining error must be attacked with a stronger residual-equation/coarse
 space built from final Krylov error modes and current/constraint/profile
 moments, not by further smoother or restart tuning.
+The current promotion boundary is intentionally strict: the best checked
+one-GPU true-device artifact is the recycled augmented-Krylov probe with final
+residual ``7.336295e-6`` against the production write target
+``3.021487e-11``. The later coupled/post-residual-equation probes reduce their
+own setup residuals but finish at ``O(2e-5)`` and write no HDF5 output or solver
+trace. They are therefore fail-closed research evidence, not production or
+documentation-claim evidence.
 Separate the closed infrastructure blockers from the open claim blockers:
 transpose/VJP safety for the projected block smoother and the prior CUDA
 illegal-address crash are closed for the tested paths, while residual
@@ -156,8 +163,10 @@ the true residual does not decrease.
 Next implementation
 ~~~~~~~~~~~~~~~~~~~
 
-Use the opt-in two-level RHSMode=1 QI primitive as the next research branch only
-if it adds genuinely new residual information beyond the checked bases:
+Use the existing two-level/device-QI primitives only as infrastructure for the
+next research branch. Another smoother, damping, restart, or rank-only sweep is
+not a credible closure route unless it adds genuinely new residual information
+beyond the checked bases:
 
 .. math::
 
@@ -747,9 +756,12 @@ Bounded QI evidence is strong up to the scale-0.55 CPU/GPU seed-robustness
 ladders, selected scale-0.60 probes, and the first QI ``nfp=2`` kinetic
 promotion artifacts. The checked kinetic lane now includes a two-species
 ``7 x 7 x 7 x 4`` CPU/GPU/Fortran electron-root artifact and a refined
-``9 x 9 x 11 x 4`` CPU/GPU rung. The refined rung keeps CPU and GPU roots
-identical to roundoff, but the low-to-refined root drift is about ``0.155``,
-so it is persistence evidence rather than a convergence claim.
+``9 x 9 x 11 x 4`` CPU/GPU/Fortran rung. A second bounded
+``11 x 11 x 13 x 4`` CPU/GPU/Fortran rung now exercises the fixed mid-size
+RHSMode=1 full-FP dense policy and preserves CPU/GPU/Fortran root agreement at
+fixed resolution. The low-to-refined and refined-to-next-refined root drifts
+remain visible, so these rungs are persistence and solver-policy evidence
+rather than convergence claims.
 
 Production-resolution ladders remain open because the scale-0.60 GPU hard seed
 is not closed by a true device algorithm and because the QI kinetic
@@ -758,10 +770,9 @@ electron-root scan still needs a wider CPU/GPU/Fortran resolution ladder.
 Next implementation
 ~~~~~~~~~~~~~~~~~~~
 
-After the two-level device preconditioner clears the hard seed, run:
+After a true device-QI hard-seed artifact writes converged output and solver
+trace, run:
 
-- a Fortran-v3 audit for the refined QI ``nfp=2`` rung when the input remains
-  in shared model scope;
 - the next QI ``nfp=2`` kinetic CPU/GPU/Fortran resolution rungs, with fixed
   profiles, species, electric-field grid, and claim tolerances;
 - scale-0.60 five-seed CPU and one-GPU ladders;
@@ -799,7 +810,9 @@ Relevant implementation:
   bounded reduction chunks from configured byte budgets.
 - ``sfincs_jax/rhs1_pas_policy.py`` contains PAS applicability and memory gates.
 - ``scripts/benchmark_pas_tz_memory_fallback.py`` records promotion/rejection
-  evidence.
+  evidence. Its dry-runs are explicitly non-promoting; a row becomes
+  ``promotion_ready`` only after real child solves pass residual, stall, RSS,
+  backend, solver-path, guarded-fallback, and baseline-improvement gates.
 
 Next implementation
 ~~~~~~~~~~~~~~~~~~~
@@ -866,6 +879,15 @@ Move from process-per-sample benchmarking to compiled operator reuse:
   device-count runs.
 - promote single-case sharding only when the amortization model predicts enough
   per-device work to dominate setup, halo exchange, and Krylov collectives.
+
+The CI-safe planner now records this target explicitly through
+``plan_single_case_operator_coarse_reuse`` and the
+``operator_coarse_reuse_plan`` field in
+``benchmark_sharded_solve_scaling.py --plan-only`` artifacts. A promotable
+artifact must reuse the assembled operator and replicated coarse state, pass the
+deterministic output gate, beat the warm one-device solve, and prove that the
+multi-device peak memory does not increase. This keeps the next implementation
+step concrete without letting dry-run metadata become a scaling claim.
 
 Promotion gate
 ~~~~~~~~~~~~~~
