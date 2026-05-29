@@ -876,6 +876,33 @@ The checked machine-readable artifacts for this second refinement rung are:
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_fortran.json``
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.json``
 
+Third QI refinement CPU solver-policy rung
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The next bounded CPU rung uses
+:math:`N_\theta=13`, :math:`N_\zeta=13`, :math:`N_\xi=15`,
+:math:`N_L=4`, :math:`N_x=4`.  This rung originally exposed two different
+solver-policy failures: one-device matrix-free Krylov was slower and refused
+output because the residual missed the write gate, while explicit full-system
+sparse-host routes attempted to factor a much larger system than needed.  The
+current default CPU policy now skips directly to the accepted active-DOF
+sparse-LU rescue for this mid-size RHSMode=1 full-FP shape.
+
+The resulting eight-point CPU scan completes in ``263.1 s``.  The mean
+per-point solve time is ``32.85 s`` and the slowest point is ``35.72 s``.  All
+eight residual gates pass, with residuals between :math:`9.6\times10^{-19}` and
+:math:`2.0\times10^{-17}`.  The fixed-resolution scan selects an electron root
+at :math:`E_r=2.2153427467` in the bracket :math:`[2,3]`.
+
+This closes the bounded CPU evidence for the ``13 x 13 x 15 x 4`` rung, not the
+full production claim.  The matching office-GPU and Fortran-v3 fixed-resolution
+comparison still need to pass before this rung can be promoted in the public QI
+resolution ladder.
+
+The checked machine-readable artifact for this CPU solver-policy rung is:
+
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_cpu_sparse_skip.json``
+
 The next rung should continue to a wider CPU/GPU/Fortran resolution ladder.  Do
 not promote the QI electron-root candidate as production-resolution evidence
 until the selected root, bootstrap current, fluxes, residuals, and
