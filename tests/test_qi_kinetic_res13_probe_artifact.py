@@ -31,10 +31,18 @@ def test_qi_res13_single_point_probe_stays_bounded_and_fail_scoped() -> None:
     assert result["total_size"] == 20284
     assert result["converged"] is True
     assert result["residual_norm"] < result["residual_target"]
-    assert result["solver_elapsed_s"] == pytest.approx(107.87407708284445)
-    assert result["peak_rss_mb"] == pytest.approx(2018.140625)
+    assert result["solver_elapsed_s"] == pytest.approx(35.277955916011706)
+    assert result["peak_rss_mb"] == pytest.approx(1872.109375)
+
+    comparison = payload["performance_comparison"]
+    assert comparison["baseline_auto_solver_elapsed_s"] == pytest.approx(107.87407708284445)
+    assert comparison["sparse_skip_speedup"] > 3.0
+    assert comparison["max_key_observable_abs_difference"] == 0.0
+    assert comparison["max_key_observable_rel_difference"] == 0.0
 
     policy = payload["policy_result"]
+    assert policy["selected_route"] == "auto -> active sparse-LU rescue"
+    assert "stage2 GMRES" in policy["skipped_routes"]
     assert policy["top_level_sharding_preserved"] is True
     assert policy["transformed_matvec_path"] == "local_unsharded_jit"
 

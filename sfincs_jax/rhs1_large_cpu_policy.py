@@ -129,6 +129,44 @@ def rhs1_large_cpu_sparse_rescue_first(
     return bool(large_cpu_sparse_rescue) and str(strong_precond_env).strip().lower() in {"", "auto"}
 
 
+def rhs1_large_cpu_sparse_skip_primary_allowed(
+    *,
+    op: Any,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    use_implicit: bool,
+    backend: str,
+) -> bool:
+    """Return whether mid-size full-FP solves may jump directly to sparse LU.
+
+    This is the early-entry form of the existing non-differentiable host sparse
+    rescue for systems just above the dense cutoff where the measured default
+    Krylov path only serves as a slow gateway to exact active sparse LU. It is
+    deliberately bounded by the same exact-LU cap used by the rescue itself.
+    """
+
+    env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY")
+    if env in _FALSE_VALUES:
+        return False
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
+        return False
+    if not _is_explicit_rhs1_fp(op):
+        return False
+    if str(solve_method_kind).strip().lower() in {"dense", "dense_ksp"}:
+        return False
+    if int(active_size) <= int(sparse_max_size):
+        return False
+    skip_min_default = max(int(sparse_max_size) + 1, 8000)
+    skip_min = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MIN", skip_min_default)
+    if int(active_size) < max(1, int(skip_min)):
+        return False
+    skip_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MAX", 30000)
+    if int(active_size) > max(1, int(skip_max)):
+        return False
+    return rhs1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size))
+
+
 def rhs1_large_cpu_sparse_exact_lu_xblock_allowed(
     *,
     op: Any,
@@ -325,6 +363,7 @@ __all__ = [
     "rhs1_large_cpu_sparse_exact_lu_xblock_allowed",
     "rhs1_large_cpu_sparse_rescue_allowed",
     "rhs1_large_cpu_sparse_rescue_first",
+    "rhs1_large_cpu_sparse_skip_primary_allowed",
     "rhs1_large_cpu_xblock_skip_primary_allowed",
     "rhs1_sparse_sxblock_rescue_allowed",
     "rhs1_sparse_xblock_rescue_allowed",

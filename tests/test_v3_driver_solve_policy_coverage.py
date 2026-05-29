@@ -281,6 +281,43 @@ def test_large_cpu_xblock_skip_primary_allowed_positive_and_guards(monkeypatch) 
     )
 
 
+def test_large_cpu_sparse_skip_primary_allowed_positive_and_guards(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_MAX", raising=False)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+
+    assert vd._rhsmode1_large_cpu_sparse_skip_primary_allowed(
+        op=_rhs1_fp_op(),
+        solve_method_kind="incremental",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=False,
+    )
+    assert not vd._rhsmode1_large_cpu_sparse_skip_primary_allowed(
+        op=_rhs1_fp_op(),
+        solve_method_kind="dense",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=False,
+    )
+    assert not vd._rhsmode1_large_cpu_sparse_skip_primary_allowed(
+        op=_rhs1_fp_op(include_phi1=True),
+        solve_method_kind="incremental",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=False,
+    )
+    assert vd._rhsmode1_large_cpu_sparse_skip_primary_allowed(
+        op=_rhs1_fp_op(),
+        solve_method_kind="incremental",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=True,
+    )
+
+
 def test_transport_sparse_direct_first_attempt_handles_invalid_cpu_max_env(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT", raising=False)
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_FIRST_CPU_MAX", "bad")

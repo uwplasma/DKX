@@ -1582,6 +1582,18 @@ Controls:
   cached sharded path for top-level CPU/GPU matvecs. The safety gate was added
   after the ``13 x 13 x 15 x 4`` QI single-point probe failed before Krylov
   progress on a multi-device CPU runtime.
+- ``SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY`` (default: on): bounded
+  early-entry policy for mid-size explicit RHSMode=1 full-FP systems that are
+  just above the dense cutoff and within the measured exact active sparse-LU
+  cap. It skips theta-line/primary-Krylov/stage-2 setup and goes directly to the
+  existing active sparse-LU rescue. On the checked QI ``13 x 13 x 15 x 4``
+  single point, this reduced solver time from ``107.9 s`` to ``35.3 s`` with
+  zero difference in the recorded key HDF5 observables. Controls:
+  ``SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY=0``,
+  ``SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MIN`` (default
+  ``max(sparse_max+1, 8000)``), and
+  ``SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MAX`` (default
+  ``30000``).
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING`` (default: off): opt-in
   smoothed global-coupling wrapper for explicit ``xblock_sparse_pc_gmres``. It
   builds low-rank load vectors from RHS/source rows, low-L flux-surface-average

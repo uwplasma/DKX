@@ -1,7 +1,7 @@
 {
   "artifact_kind": "qi_nfp2_kinetic_single_point_probe",
   "backend": "cpu",
-  "claim_boundary": "This is a bounded single-point solver-safety and profiling probe. It is not a full electron-root scan or production-resolution QI promotion artifact.",
+  "claim_boundary": "This is a bounded single-point solver-safety, profiling, and policy-speedup probe. It is not a full electron-root scan or production-resolution QI promotion artifact.",
   "er": 0.3,
   "failed_or_rejected_routes": [
     {
@@ -36,8 +36,22 @@
       -0.000000000396753792
     ]
   },
+  "performance_comparison": {
+    "baseline_auto_solver_elapsed_s": 107.87407708284445,
+    "baseline_peak_rss_mb": 2018.140625,
+    "max_key_observable_abs_difference": 0.0,
+    "max_key_observable_rel_difference": 0.0,
+    "sparse_skip_solver_elapsed_s": 35.277955916011706,
+    "sparse_skip_speedup": 3.058962308404698,
+    "sparse_skip_peak_rss_mb": 1872.109375
+  },
   "policy_result": {
-    "selected_route": "auto -> theta_line setup -> active sparse-LU rescue",
+    "selected_route": "auto -> active sparse-LU rescue",
+    "skipped_routes": [
+      "theta_line preconditioner setup",
+      "primary Krylov",
+      "stage2 GMRES"
+    ],
     "top_level_sharding_preserved": true,
     "transformed_matvec_path": "local_unsharded_jit"
   },
@@ -51,12 +65,12 @@
   "result": {
     "active_size": 11496,
     "converged": true,
-    "peak_rss_mb": 2018.140625,
+    "peak_rss_mb": 1872.109375,
     "residual_norm": 2.0913627762603e-18,
     "residual_target": 1.4661821662963957e-11,
-    "solver_elapsed_s": 107.87407708284445,
+    "solver_elapsed_s": 35.277955916011706,
     "total_size": 20284,
-    "wrapper_elapsed_s": 110.329
+    "wrapper_elapsed_s": 35.561
   },
   "status": "pass_bounded_single_point",
   "workflow": "sfincs_jax_qi_nfp2_kinetic_res13_solver_safety_probe"

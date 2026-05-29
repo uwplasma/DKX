@@ -194,6 +194,7 @@ from .rhs1_large_cpu_policy import (
     rhs1_large_cpu_sparse_exact_lu_xblock_allowed as _rhs1_large_cpu_sparse_exact_lu_xblock_allowed_impl,
     rhs1_large_cpu_sparse_rescue_allowed as _rhs1_large_cpu_sparse_rescue_allowed_impl,
     rhs1_large_cpu_sparse_rescue_first as _rhs1_large_cpu_sparse_rescue_first_impl,
+    rhs1_large_cpu_sparse_skip_primary_allowed as _rhs1_large_cpu_sparse_skip_primary_allowed_impl,
     rhs1_large_cpu_xblock_skip_primary_allowed as _rhs1_large_cpu_xblock_skip_primary_allowed_impl,
     rhs1_sparse_sxblock_rescue_allowed as _rhs1_sparse_sxblock_rescue_allowed_impl,
     rhs1_sparse_xblock_rescue_allowed as _rhs1_sparse_xblock_rescue_allowed_impl,
@@ -1165,6 +1166,24 @@ def _rhsmode1_large_cpu_sparse_rescue_first(*, large_cpu_sparse_rescue: bool, st
     return _rhs1_large_cpu_sparse_rescue_first_impl(
         large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue),
         strong_precond_env=strong_precond_env,
+    )
+
+
+def _rhsmode1_large_cpu_sparse_skip_primary_allowed(
+    *,
+    op: V3FullSystemOperator,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    use_implicit: bool,
+) -> bool:
+    return _rhs1_large_cpu_sparse_skip_primary_allowed_impl(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
     )
 
 
@@ -23426,6 +23445,29 @@ def solve_v3_full_system_linear_gmres(
             use_implicit=bool(use_implicit),
             solve_method_kind=str(solve_method_kind),
         )
+        cpu_large_sparse_shortcut = _rhsmode1_large_cpu_sparse_skip_primary_allowed(
+            op=op,
+            solve_method_kind=solve_method_kind,
+            active_size=int(active_size),
+            sparse_max_size=int(sparse_max_size),
+            use_implicit=bool(use_implicit),
+        )
+        if cpu_large_sparse_shortcut:
+            # This path intentionally bypasses the setup-time RHSMode=1
+            # preconditioner and primary Krylov attempt. For the measured
+            # mid-size QI full-FP rung, those stages only gate the exact active
+            # sparse-LU rescue that actually writes the converged solution.
+            rhs1_precond_enabled = False
+            rhs1_precond_kind = None
+            rhs1_bicgstab_kind = None
+            if emit is not None:
+                backend_name = str(jax.default_backend()).strip().lower()
+                sparse_label = "CPU" if backend_name == "cpu" else f"{backend_name} host-sparse"
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: "
+                    f"{sparse_label} sparse-LU shortcut -> skip primary preconditioner build",
+                )
 
         def _solve_host_dense_reduced(*, x0_dense: jnp.ndarray | None = None) -> GMRESSolveResult:
             use_row_scaled = bool(
@@ -24268,6 +24310,7 @@ def solve_v3_full_system_linear_gmres(
                 )
                 or gpu_dkes_sparse_shortcut
                 or cpu_large_xblock_shortcut
+                or cpu_large_sparse_shortcut
             )
             if skip_primary_krylov:
                 if emit is not None:
@@ -24280,6 +24323,13 @@ def solve_v3_full_system_linear_gmres(
                             "CPU large FP x-block shortcut"
                             if backend_name == "cpu"
                             else f"{backend_name} host-sparse FP x-block shortcut"
+                        )
+                    elif cpu_large_sparse_shortcut:
+                        backend_name = str(jax.default_backend()).strip().lower()
+                        reason = (
+                            "CPU large FP sparse-LU shortcut"
+                            if backend_name == "cpu"
+                            else f"{backend_name} host-sparse FP sparse-LU shortcut"
                         )
                     emit(
                         0,
@@ -24584,6 +24634,14 @@ def solve_v3_full_system_linear_gmres(
                     "solve_v3_full_system_linear_gmres: CPU large FP x-block shortcut "
                     "skipping stage2 GMRES and proceeding directly to x-block rescue",
                 )
+        if cpu_large_sparse_shortcut:
+            stage2_trigger = False
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: CPU large FP sparse-LU shortcut "
+                    "skipping stage2 GMRES and proceeding directly to sparse rescue",
+                )
         if rhs1_pas_stage2_skip(
             has_pas=op.fblock.pas is not None,
             rhs1_precond_kind=rhs1_precond_kind,
@@ -24653,7 +24711,7 @@ def solve_v3_full_system_linear_gmres(
             except ValueError:
                 fallback_floor = default_floor
             bicgstab_fallback_target = max(float(target_reduced), max(0.0, float(fallback_floor)))
-        if solver_kind == "bicgstab" and (
+        if (not cpu_large_sparse_shortcut) and solver_kind == "bicgstab" and (
             (not _gmres_result_is_finite(res_reduced))
             or (bicgstab_fallback_strict and float(res_reduced.residual_norm) > bicgstab_fallback_target)
         ):

@@ -16470,3 +16470,65 @@ Best next steps:
    one-device and full sparse-host paths.
 3. Re-run the `13 x 13 x 15 x 4` full CPU/GPU/Fortran scan only after the
    per-point time is reduced enough to keep the campaign bounded.
+
+### 35.75 QI 13x sparse-LU skip-primary speedup
+
+Scope:
+
+- Added the first follow-up algorithmic shortcut after the 13x mesh-context
+  fix: `rhs1_large_cpu_sparse_skip_primary_allowed(...)` in
+  `sfincs_jax/rhs1_large_cpu_policy.py`.
+- The default policy applies only to explicit RHSMode=1 full-FP systems above
+  the sparse/dense cutoff and within the measured exact active sparse-LU cap
+  (`SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MIN`,
+  `SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MAX`, default max
+  `30000` active unknowns). It jumps directly to the existing active sparse-LU
+  rescue and skips theta-line preconditioner setup, primary Krylov, and stage-2
+  GMRES.
+- This is not a new physics solver or a true device-QI claim. It is an earlier
+  entry into the already accepted non-differentiable sparse-LU fallback used by
+  the 13x QI point.
+
+Validation:
+
+- Focused policy tests and lint passed:
+  `python -m pytest -q tests/test_rhs1_large_cpu_policy.py tests/test_v3_driver_solve_policy_coverage.py`
+  (`29 passed`),
+  `python -m ruff check sfincs_jax/rhs1_large_cpu_policy.py tests/test_rhs1_large_cpu_policy.py tests/test_v3_driver_solve_policy_coverage.py`,
+  and
+  `python -m ruff check --select F821,F823 sfincs_jax/v3_driver.py`.
+- Broader focused solver/artifact/docs checks passed:
+  `55 passed` across RHSMode=1 policy, transformed matvec, sharding, Schwarz,
+  and the checked QI artifact test; Sphinx strict docs, release-gate,
+  research-lane, repo-size, and diff-whitespace checks passed.
+- Full local suite passed after the routing change:
+  `python -m pytest -q` (`1946 passed in 449.60 s`).
+- Re-ran the same QI `13 x 13 x 15 x 4`, `E_r=0.3` CPU point. The new default
+  log shows `CPU sparse-LU shortcut -> skip primary preconditioner build`,
+  `skipping initial Krylov`, and `skipping stage2 GMRES`.
+- Solver elapsed time improved from `107.874 s` to `35.278 s` (`3.06x`
+  faster). Wrapper elapsed time was `35.561 s`; peak RSS dropped from
+  `2018 MB` to `1872 MB`.
+- Residual stayed unchanged at `2.0913627762603e-18` against target
+  `1.4661821662963957e-11`.
+- Key HDF5 observables were bitwise identical to the baseline auto output:
+  `FSABjHat`, `FSABjHatOverRootFSAB2`, `FSABFlow`,
+  `particleFlux_vm_psiHat`, and `heatFlux_vm_psiHat` all had max absolute and
+  relative difference `0.0`.
+
+Progress:
+
+- QI kinetic promotion ladder: `75%`; the next resolution point is now
+  solver-safe and fast enough that a bounded CPU scan is plausible, but GPU and
+  Fortran coverage are still required before promotion.
+- Production-resolution QI ladders: `47%`; one measured policy speedup landed,
+  but production-size QI still needs device/backend ladder evidence.
+- Overall remaining-lane completion estimate: `97.6%`.
+
+Best next steps:
+
+1. Run the focused solver/artifact/docs/release gates and commit this
+   skip-primary policy if green.
+2. Launch a bounded CPU-only 13x multi-point scan to estimate full ladder cost.
+3. If CPU scan cost is acceptable, run the matching office GPU and Fortran-v3
+   fixed-resolution comparison before updating any public QI promotion claim.

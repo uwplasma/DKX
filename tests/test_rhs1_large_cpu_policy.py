@@ -8,6 +8,7 @@ from sfincs_jax.rhs1_large_cpu_policy import (
     rhs1_large_cpu_sparse_exact_lu_xblock_allowed,
     rhs1_large_cpu_sparse_rescue_allowed,
     rhs1_large_cpu_sparse_rescue_first,
+    rhs1_large_cpu_sparse_skip_primary_allowed,
     rhs1_large_cpu_xblock_skip_primary_allowed,
     rhs1_sparse_sxblock_rescue_allowed,
     rhs1_sparse_xblock_rescue_allowed,
@@ -186,6 +187,88 @@ def test_large_cpu_sparse_rescue_first_and_exact_lu_cap(monkeypatch) -> None:
     assert not rhs1_large_cpu_sparse_exact_lu_allowed(active_size=68670)
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FIRST", "0")
     assert not rhs1_large_cpu_sparse_rescue_first(large_cpu_sparse_rescue=True, strong_precond_env="")
+
+
+def test_large_cpu_sparse_skip_primary_targets_measured_exact_lu_window(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_MAX", raising=False)
+
+    assert rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=_op(n_species=2),
+        solve_method_kind="incremental",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=_op(n_species=2),
+        solve_method_kind="incremental",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=False,
+        backend="gpu",
+    )
+    assert rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=_op(n_species=2, has_pas=True),
+        solve_method_kind="incremental",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=_op(n_species=2),
+        solve_method_kind="incremental",
+        active_size=7264,
+        sparse_max_size=6000,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=_op(n_species=2),
+        solve_method_kind="incremental",
+        active_size=40000,
+        sparse_max_size=6000,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=_op(n_species=2, has_fp=False, has_pas=True),
+        solve_method_kind="incremental",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert not rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=_op(n_species=2),
+        solve_method_kind="dense",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=False,
+        backend="cpu",
+    )
+    assert rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=_op(n_species=2),
+        solve_method_kind="incremental",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=True,
+        backend="cpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY", "0")
+    assert not rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=_op(n_species=2),
+        solve_method_kind="incremental",
+        active_size=11496,
+        sparse_max_size=6000,
+        use_implicit=True,
+        backend="cpu",
+    )
 
 
 def test_exact_lu_xblock_promotion_requires_good_explicit_cpu_seed(monkeypatch) -> None:
