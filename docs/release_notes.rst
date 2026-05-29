@@ -45,6 +45,11 @@ Unreleased
   the guarded route is not requested or cannot be built. This is infrastructure
   for the next one-GPU QI timing gate, not yet a production true-device-QI
   performance claim.
+- Production-sized nonconverged RHSMode=1 ``write-output`` runs now write the
+  requested JSON solver-trace sidecar before refusing to write HDF5/NetCDF/NPZ
+  diagnostics. The physical output gate remains fail-closed, but failed large
+  runs preserve solver path, residual, matvec, memory-estimate, and
+  preconditioner metadata for debugging.
 - Added the second refined QI ``nfp=2`` kinetic promotion rung at
   ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
   cliff. The bounded dense policy now covers active sizes up to ``8000`` and
