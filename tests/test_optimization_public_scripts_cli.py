@@ -153,7 +153,17 @@ def test_promotion_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> N
     stem = "promotion_cli"
     script = _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py"
 
-    _run_script(script, ["--out-dir", str(tmp_path), "--stem", stem])
+    _run_script(
+        script,
+        [
+            "--out-dir",
+            str(tmp_path),
+            "--stem",
+            stem,
+            "--impurity-species-index",
+            "2",
+        ],
+    )
 
     payload = _assert_artifacts(tmp_path, stem)
     assert payload["workflow"] == "sfincs_jax_optimization_high_fidelity_promotion"
@@ -162,6 +172,50 @@ def test_promotion_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> N
     assert payload["bootstrap_objective"] > 0.0
     assert payload["flux_objective"]["mean_impurity_flux"] > 0.0
     assert len(payload["runs"]) == 4
+
+
+def test_promotion_public_script_allows_two_species_scan_without_impurity_objective(tmp_path: Path) -> None:
+    stem = "promotion_two_species_cli"
+    scan_dir = tmp_path / "scan"
+    script = _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py"
+
+    from sfincs_jax.io import write_sfincs_h5
+
+    for er, current in [(-0.3, -1.0), (0.3, -0.2), (1.0, 0.3), (3.0, 1.4)]:
+        run_dir = scan_dir / f"Er{er:g}"
+        run_dir.mkdir(parents=True)
+        write_sfincs_h5(
+            path=run_dir / "sfincsOutput.h5",
+            data={
+                "Er": er,
+                "Nspecies": 2,
+                "Zs": [1.0, -1.0],
+                "particleFlux_vm_rHat": [[0.1 * er], [0.1 * er - current]],
+                "heatFlux_vm_rHat": [[0.01], [0.02]],
+                "FSABjHatOverRootFSAB2": [0.01 * er],
+                "linearSolverResidualNorm": 1.0e-10,
+                "linearSolverResidualTarget": 1.0e-8,
+            },
+            overwrite=True,
+        )
+
+    _run_script(
+        script,
+        [
+            "--scan-dir",
+            str(scan_dir),
+            "--out-dir",
+            str(tmp_path),
+            "--stem",
+            stem,
+            "--require-electron-root",
+        ],
+    )
+
+    payload = _assert_artifacts(tmp_path, stem)
+    assert payload["gate_status"] == "pass"
+    assert payload["selected_root"]["root_type"] == "electron"
+    assert payload["flux_objective"] is None
 
 
 def test_candidate_scan_launcher_and_comparison_script_write_artifacts(tmp_path: Path) -> None:
