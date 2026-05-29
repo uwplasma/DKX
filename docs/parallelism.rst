@@ -516,6 +516,11 @@ On GPUs, JAX will automatically see all local devices.
   ``SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN``), otherwise it uses theta/zeta line
   blocks. This keeps the preconditioner apply local to each shard, mirroring
   PETSc-style block-Jacobi/Schwarz behavior.
+- The cached sharded matvec path is intentionally a top-level execution path.
+  RHSMode=1 setup probes that call the operator from inside ``vmap``/``jit`` or
+  a custom linear solve use a local unsharded JIT matvec instead. This avoids
+  nested ``jax.set_mesh``/``pjit`` contexts while keeping normal CPU/GPU
+  top-level matvecs sharded.
 - Collisionless, ExB, and magnetic-drift derivative kernels now use a
   sparse-row gather apply when the differentiation matrices are banded/sparse
   (common 3‑point/5‑point schemes). This keeps the operator matrix-free and
