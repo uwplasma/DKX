@@ -17038,3 +17038,43 @@ Best next steps:
 2. Check GitHub CI/Docs after push.
 3. Continue only with a qualitatively new true-device-QI algorithm or keep the
    lane explicitly deferred; do not spend more time on smoother/restart tuning.
+
+### 35.85 CI-fast guard for QI claim-boundary/count drift
+
+Scope:
+
+- Added a regression guard in ``tests/test_qi_seed_smoke_artifact.py`` that
+  loads ``docs/_static/qi_seed_robustness_evidence_manifest.json`` and verifies
+  the human-facing docs still reflect the manifest's artifact counts.
+- The same guard rejects stale README/docs wording that would imply the
+  operator-reuse route still lacks bounded one-GPU evidence or is about to
+  become a public performance claim.
+- The guard also requires the README/testing text to preserve the current
+  claim boundary: the mid-size GPU operator-reuse rerun verifies route
+  activation and factor skipping, but remains fail-closed and is not production
+  true-device-QI promotion.
+
+Results:
+
+- The first assertion attempt found only a line-wrap mismatch in
+  ``docs/testing.rst``; the test now checks the two claim-boundary phrases in a
+  wrap-tolerant way.
+- Focused QI artifact/doc-boundary tests passed with ``10 passed``.
+- ``python -m ruff check tests/test_qi_seed_smoke_artifact.py && git diff --check``
+  passed.
+
+Progress:
+
+- QI kinetic promotion ladder: ``90%``; unchanged.
+- True GPU/device QI performance: ``81%``; unchanged technically, but the
+  release guard now makes accidental overclaiming harder.
+- Production-resolution QI ladders: ``61%``; unchanged.
+- Overall remaining-lane completion estimate: ``98.6%``.
+
+Best next steps:
+
+1. Run the broader release/research/docs gate set.
+2. Commit and push the CI-fast claim-boundary guard if checks pass.
+3. Treat future device-QI work as a new algorithmic lane only if it changes the
+   global residual equation/coarse closure, not if it tunes smoothers or
+   restarts.

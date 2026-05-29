@@ -2029,3 +2029,39 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         == "adaptive_residual_equation"
     )
     assert "negative-evidence" in adaptive_preset["description"]
+
+
+def test_qi_seed_manifest_counts_and_claim_boundary_are_reflected_in_docs() -> None:
+    manifest_path = Path("docs/_static/qi_seed_robustness_evidence_manifest.json")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    evidence = payload["current_evidence"]
+
+    artifact_count = int(evidence["artifact_count"])
+    passing_count = int(evidence["passing_artifact_count"])
+    nonpassing_count = int(evidence["nonpassing_artifact_count"])
+
+    validation_matrix = Path("docs/validation_matrix.rst").read_text(encoding="utf-8")
+    testing_docs = Path("docs/testing.rst").read_text(encoding="utf-8")
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert f"rolls in {artifact_count} checked source artifacts" in validation_matrix
+    assert (
+        f"{passing_count} passing bounded artifacts and {nonpassing_count} non-passing"
+        in validation_matrix
+    )
+    assert f"{passing_count} passing artifacts and {nonpassing_count} non-passing" in testing_docs
+
+    stale_phrases = [
+        "needs bounded one-GPU timing evidence",
+        "still needs bounded one-GPU timing evidence",
+        "before it becomes a public performance claim",
+    ]
+    for phrase in stale_phrases:
+        assert phrase not in readme
+        assert phrase not in validation_matrix
+        assert phrase not in testing_docs
+
+    assert "bounded one-GPU rerun verifies route activation" in readme
+    assert "it remains fail-closed because the residual misses" in readme
+    assert "route-level evidence, not production" in testing_docs
+    assert "true-device-QI promotion" in testing_docs
