@@ -15,12 +15,14 @@ from sfincs_jax.io import (
     _raise_for_nonconverged_rhsmode1_output,
     _rhsmode1_result_residual_and_target,
     _should_fail_nonconverged_rhsmode1_output,
+    _write_nonconverged_rhsmode1_solver_trace_json,
     read_sfincs_h5,
     read_sfincs_output_file,
     write_sfincs_h5,
     write_sfincs_output_file,
 )
 from sfincs_jax.namelist import Namelist
+from sfincs_jax.solver_trace import read_solver_trace_json
 
 
 def _minimal_namelist(groups: dict[str, dict]) -> Namelist:
@@ -91,6 +93,66 @@ def test_nonconverged_rhsmode1_production_output_gate(monkeypatch) -> None:
         residual_norm=residual_norm,
         residual_target=residual_target,
     )
+
+
+def test_nonconverged_rhsmode1_solver_trace_sidecar_is_written(tmp_path: Path) -> None:
+    trace_path = tmp_path / "solver_trace.json"
+    input_path = tmp_path / "input.namelist"
+    output_path = tmp_path / "sfincsOutput.h5"
+    input_path.write_text("&general\n/\n")
+    op = SimpleNamespace(total_size=20_284, active_size=11_496, collision_operator=0)
+    result = SimpleNamespace(
+        op=op,
+        residual_norm=np.asarray(1.334334e-5),
+        rhs=np.asarray([1.466182e-5], dtype=np.float64),
+        metadata={
+            "accepted_converged": False,
+            "acceptance_criterion": "true_residual",
+            "setup_s": 0.4,
+            "solve_s": 193.8,
+            "matvecs": 803,
+            "solver_kind": "xblock_sparse_pc_gmres",
+            "xblock_qi_device_operator_reuse_enabled": True,
+            "sparse_pc_xblock_preconditioner_built": False,
+        },
+    )
+
+    _write_nonconverged_rhsmode1_solver_trace_json(
+        solver_trace_path=trace_path,
+        input_namelist=input_path,
+        output_path=output_path,
+        output_format="h5",
+        rhs_mode=1,
+        geom_scheme_hint=5,
+        compute_solution=True,
+        compute_transport_matrix=False,
+        differentiable=None,
+        result=result,
+        op_fallback=op,
+        solver_tol=1.0e-6,
+        solve_method="xblock_sparse_pc_gmres",
+        residual_norm=1.334334e-5,
+        residual_target=1.466182e-11,
+        active_total_size=11_496,
+        run_t0=0.0,
+        profiler=None,
+    )
+
+    trace = read_solver_trace_json(trace_path)
+    assert trace.rhs_mode == 1
+    assert trace.selected_path == "rhsmode1_solution"
+    assert trace.solve_method == "xblock_sparse_pc_gmres"
+    assert trace.active_size == 11_496
+    assert trace.total_size == 20_284
+    assert trace.residual_norm == pytest.approx(1.334334e-5)
+    assert trace.residual_target == pytest.approx(1.466182e-11)
+    assert trace.converged is False
+    assert trace.matvec_count == 803
+    assert trace.metadata["output_refused"] is True
+    assert trace.metadata["failure_reason"] == "nonconverged_rhsmode1_output"
+    solver_metadata = trace.metadata["solver_metadata"]
+    assert solver_metadata["xblock_qi_device_operator_reuse_enabled"] is True
+    assert solver_metadata["sparse_pc_xblock_preconditioner_built"] is False
 
 
 def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:

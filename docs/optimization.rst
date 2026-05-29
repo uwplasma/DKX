@@ -996,6 +996,17 @@ route-level infrastructure.  It does not close the public true-device-QI
 performance claim until a bounded office-GPU run writes residual-clean output
 and beats the host-sparse GPU route under the documented timing gate.
 
+The first bounded office-GPU check on the ``13 x 13 x 15 x 4``,
+``E_r=0.3`` point activated this route and skipped local x-block factors, but it
+did not pass the residual gate.  The QI-device preconditioner probe was rejected
+because the residual decreased only from ``1.466e-5`` to ``1.456e-5``.  The
+remaining device Krylov solve ran for about ``3.3 min`` and ``803`` matvecs with
+peak host RSS about ``5.8 GB``, ending at residual ``1.33e-5`` against target
+``1.47e-11``.  The production output gate correctly refused to write
+nonconverged HDF5 diagnostics.  Therefore the route remains documented as
+infrastructure, while the release-ready path for this QI rung remains the
+non-autodiff host sparse solve.
+
 VMEC JAX Integration
 --------------------
 

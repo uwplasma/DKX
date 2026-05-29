@@ -305,6 +305,163 @@ def _solver_trace_memory_estimate(
     }
 
 
+def _write_nonconverged_rhsmode1_solver_trace_json(
+    *,
+    solver_trace_path: Path,
+    input_namelist: Path,
+    output_path: Path,
+    output_format: str,
+    rhs_mode: int,
+    geom_scheme_hint: int | None,
+    compute_solution: bool,
+    compute_transport_matrix: bool,
+    differentiable: bool | None,
+    result: Any,
+    op_fallback: Any,
+    solver_tol: float,
+    solve_method: str,
+    residual_norm: float | None,
+    residual_target: float | None,
+    active_total_size: int,
+    run_t0: float,
+    profiler: Any | None = None,
+) -> None:
+    """Write a JSON trace before refusing nonconverged RHSMode=1 diagnostics.
+
+    The main HDF5/NetCDF/NPZ output stays fail-closed for production-sized
+    nonconverged solves, but the sidecar trace is still safe and useful because
+    it contains only solver-path metadata and convergence diagnostics.
+    """
+    try:
+        import jax  # noqa: PLC0415
+
+        backend = str(jax.default_backend())
+        device_count = len(jax.devices())
+    except Exception:
+        backend = "unknown"
+        device_count = None
+
+    trace_op = getattr(result, "op", None)
+    if trace_op is None:
+        trace_op = getattr(result, "op0", None)
+    if trace_op is None:
+        trace_op = op_fallback
+
+    trace_total_size = None
+    trace_active_size = None
+    trace_collision_operator = None
+    if trace_op is not None:
+        try:
+            trace_total_size = int(getattr(trace_op, "total_size"))
+        except Exception:
+            trace_total_size = None
+        trace_active_size = _rhs1_active_size_for_trace(trace_op)
+        if trace_active_size is None:
+            try:
+                trace_active_size = int(getattr(trace_op, "active_size"))
+            except Exception:
+                trace_active_size = trace_total_size
+        try:
+            trace_collision_operator = str(getattr(trace_op, "collision_operator"))
+        except Exception:
+            trace_collision_operator = None
+    if trace_active_size is None:
+        trace_active_size = int(active_total_size)
+
+    solver_metadata = _solver_metadata_dict(result)
+    if residual_target is None:
+        rhs_vec = getattr(result, "rhs", None)
+        if rhs_vec is not None:
+            try:
+                residual_target = max(0.0, float(solver_tol) * float(np.linalg.norm(np.asarray(rhs_vec))))
+            except Exception:
+                residual_target = None
+
+    trace_metadata: dict[str, object] = {
+        "input_namelist": str(input_namelist.resolve()),
+        "output_path": str(output_path.resolve()),
+        "output_format": str(output_format),
+        "compute_solution": bool(compute_solution),
+        "compute_transport_matrix": bool(compute_transport_matrix),
+        "differentiable": None if differentiable is None else bool(differentiable),
+        "output_refused": True,
+        "failure_reason": "nonconverged_rhsmode1_output",
+        "solver_metadata": solver_metadata,
+    }
+    if "accepted_converged" in solver_metadata:
+        trace_metadata["accepted_converged"] = bool(solver_metadata["accepted_converged"])
+    if "acceptance_criterion" in solver_metadata:
+        trace_metadata["acceptance_criterion"] = str(solver_metadata["acceptance_criterion"])
+    if residual_norm is not None and residual_target is not None:
+        trace_metadata["converged"] = bool(float(residual_norm) <= float(residual_target))
+    if profiler is not None and getattr(profiler, "entries", None):
+        trace_metadata["profile_entries"] = list(getattr(profiler, "entries"))
+
+    try:
+        from .profiling import _peak_rss_mb, _rss_mb  # noqa: PLC0415
+
+        peak_rss_mb = _peak_rss_mb()
+        if peak_rss_mb is None:
+            peak_rss_mb = _rss_mb()
+    except Exception:
+        peak_rss_mb = None
+    active_rss_mb = None
+    device_peak_mb = None
+    if profiler is not None and getattr(profiler, "entries", None):
+        active_rss_mb, device_peak_mb, profiler_peak_rss_mb = _profile_memory_summary(profiler)
+        if profiler_peak_rss_mb is not None:
+            peak_rss_mb = profiler_peak_rss_mb
+
+    memory_estimate = _solver_trace_memory_estimate(
+        total_size=trace_total_size,
+        active_size=trace_active_size,
+        solver_metadata=solver_metadata,
+        device_count=device_count,
+    )
+    if memory_estimate is not None:
+        trace_metadata["memory_estimate"] = memory_estimate
+
+    trace = SolverTrace(
+        backend=backend,
+        rhs_mode=int(rhs_mode),
+        selected_path="rhsmode1_solution" if bool(compute_solution) else "geometry_only",
+        solve_method=str(solve_method),
+        preconditioner=(
+            None
+            if "preconditioner_kind" not in solver_metadata
+            else str(solver_metadata["preconditioner_kind"])
+        ),
+        geometry_scheme=int(geom_scheme_hint) if geom_scheme_hint is not None else None,
+        collision_operator=trace_collision_operator,
+        total_size=trace_total_size,
+        active_size=trace_active_size,
+        device_count=device_count,
+        residual_norm=residual_norm,
+        residual_target=residual_target,
+        converged=False if residual_norm is not None and residual_target is not None else None,
+        elapsed_s=float(time.perf_counter() - run_t0),
+        setup_s=float(solver_metadata["setup_s"]) if "setup_s" in solver_metadata else None,
+        solve_s=float(solver_metadata["solve_s"]) if "solve_s" in solver_metadata else None,
+        peak_rss_mb=peak_rss_mb,
+        active_rss_mb=active_rss_mb,
+        device_peak_mb=device_peak_mb,
+        estimated_dense_nbytes=(
+            None if memory_estimate is None else int(memory_estimate["dense_operator_nbytes"])
+        ),
+        estimated_csr_nbytes=(
+            None
+            if memory_estimate is None or memory_estimate["csr_operator_nbytes"] is None
+            else int(memory_estimate["csr_operator_nbytes"])
+        ),
+        estimated_gmres_basis_nbytes=(
+            None if memory_estimate is None else int(memory_estimate["gmres_basis_nbytes"])
+        ),
+        matvec_count=_metadata_int(solver_metadata, "matvecs"),
+        metadata=trace_metadata,
+    )
+    write_solver_trace_json(solver_trace_path, trace)
+
+
 def _add_rhsmode1_solver_diagnostics(
     data: dict[str, Any],
     *,
@@ -3893,6 +4050,38 @@ def write_sfincs_jax_output_h5(
             solve_method=str(solve_method),
             solver_metadata=solver_metadata_for_output,
         )
+        if solver_trace_path is not None and _should_fail_nonconverged_rhsmode1_output(
+            active_total_size=int(active_total_size),
+            residual_norm=residual_norm_for_output,
+            residual_target=residual_target_for_output,
+            accepted_converged=bool(solver_metadata_for_output.get("accepted_converged", False)),
+        ):
+            _write_nonconverged_rhsmode1_solver_trace_json(
+                solver_trace_path=Path(solver_trace_path),
+                input_namelist=input_namelist,
+                output_path=output_path,
+                output_format=output_format,
+                rhs_mode=int(rhs_mode),
+                geom_scheme_hint=geom_scheme_hint,
+                compute_solution=bool(compute_solution),
+                compute_transport_matrix=bool(compute_transport_matrix),
+                differentiable=differentiable,
+                result=result,
+                op_fallback=op0,
+                solver_tol=float(solver_tol),
+                solve_method=str(solve_method),
+                residual_norm=residual_norm_for_output,
+                residual_target=residual_target_for_output,
+                active_total_size=int(active_total_size),
+                run_t0=run_t0,
+                profiler=profiler,
+            )
+            if emit is not None:
+                emit(
+                    1,
+                    " wrote nonconverged solver trace -> "
+                    f"{Path(solver_trace_path).resolve()}",
+                )
         _raise_for_nonconverged_rhsmode1_output(
             active_total_size=int(active_total_size),
             residual_norm=residual_norm_for_output,

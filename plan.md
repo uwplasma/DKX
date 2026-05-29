@@ -16819,3 +16819,63 @@ Best next steps:
    If it fails, keep the route documented as infrastructure and use the
    non-autodiff host sparse path for production while the true device-QI
    performance lane remains open.
+
+### 35.81 Office GPU operator-reuse gate and nonconverged trace fix
+
+Scope:
+
+- Ran the explicit matrix-free QI-device operator-reuse route on ``office`` from
+  a clean shallow checkout at ``cad7e35`` using one RTX A4000, the
+  ``13 x 13 x 15 x 4`` QI ``nfp=2`` ``E_r=0.3`` input, and a ``600 s`` timeout.
+- The run used:
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=gmres-jax``,
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK=0``,
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1``,
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1``,
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1``,
+  and ``--solve-method xblock_sparse_pc_gmres``.
+- Added failure-safe JSON solver-trace writing before the production
+  nonconverged-output gate raises. This keeps HDF5/NetCDF/NPZ output fail-closed
+  while preserving residual, matvec, memory-estimate, and solver-path metadata
+  for large failed runs.
+
+Results:
+
+- Route activation succeeded: the log printed
+  ``using matrix-free QI-device operator reuse; skipping local x-block factors``.
+- The QI-device preconditioner probe was rejected because the residual only
+  improved from ``1.466182e-05`` to ``1.456304e-05`` with ratio ``0.993``.
+- Device GMRES then ran effectively without the missing global preconditioner,
+  completed ``803`` matvecs in ``193.8 s`` solver time, and ended at residual
+  ``1.334334e-05`` against target ``1.466182e-11``.
+- Total wall time was ``3:19.28`` and peak host RSS was about ``5.76 GB``.
+- The run correctly refused to write nonconverged production diagnostics. This
+  is a fail-closed result, not a GPU-promotion result.
+
+Validation:
+
+- ``python -m pytest -q tests/test_io_export_and_h5_coverage.py::test_nonconverged_rhsmode1_solver_trace_sidecar_is_written tests/test_io_export_and_h5_coverage.py::test_nonconverged_rhsmode1_production_output_gate``
+  reported ``2 passed``.
+- ``python -m ruff check sfincs_jax/io.py tests/test_io_export_and_h5_coverage.py``
+  passed.
+- ``python -m py_compile sfincs_jax/io.py`` passed.
+- GitHub CI and Docs for ``cad7e35`` both passed before this trace-sidecar
+  follow-up.
+
+Progress:
+
+- QI kinetic promotion ladder: ``90%``; unchanged.
+- True GPU/device QI performance: ``79%``; the route now executes on GPU without
+  local x-block factors, but the preconditioner rejection and residual miss keep
+  production true-device QI open.
+- Production-resolution QI ladders: ``61%``; unchanged.
+- Overall remaining-lane completion estimate: ``98.4%``.
+
+Best next steps:
+
+1. Commit the failure-safe trace fix and fail-closed GPU evidence.
+2. Do not spend more time on this exact preconditioner probe configuration; it
+   is too weak. The next device-QI attempt must change the coarse/global
+   residual model enough that the probe is accepted before Krylov starts.
+3. Keep the documented non-autodiff host sparse path as the release-ready
+   production route for the current QI ladder.
