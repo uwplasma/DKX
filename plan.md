@@ -17148,3 +17148,64 @@ Best next steps:
    ladder only if the expected wall time is bounded; do not promote the
    true-device lane until residual-clean GPU output and solver trace artifacts
    exist.
+
+### 35.87 Timeout-safe QI promotion campaign wrapper
+
+Scope:
+
+- Added bounded execution controls to
+  ``examples/optimization/run_promotion_evidence_campaign.py``:
+  ``--jax-scan-timeout-s`` for each CPU/GPU scan lane,
+  ``--promotion-timeout-s`` for each promotion-audit subprocess, and
+  ``--continue-on-lane-failure`` for independent multi-lane campaigns.
+- The wrapper now writes ``promotion_evidence_campaign.json`` even when a JAX
+  scan times out or a lane command returns nonzero. The summary records
+  ``campaign_status="fail"``, the failed lane, stage, error type, failure kind,
+  timeout, command, and stdout/stderr tails.
+- Prepared the next ``15 x 15 x 17 x 4`` QI GPU rung for execution on
+  ``office`` by creating a clean remote checkout at
+  ``~/tmp/sfincs_jax_clean_main`` and a localized input/equilibrium bundle at
+  ``~/tmp/sfincs_jax_qi_res15_inputs``. Both office GPUs were occupied by
+  unrelated ``spectraxgk`` jobs, so the actual GPU solve was not launched.
+
+Results:
+
+- A forced ``0.001 s`` scan timeout test now exits nonzero and leaves a
+  structured campaign summary instead of losing the run state.
+- Dry-running the missing ``15x`` GPU campaign with ``--jax-scan-timeout-s 900``
+  and ``--promotion-timeout-s 120`` produces the expected bounded plan.
+- This does not close the GPU rung, but it removes the run-management blocker:
+  the next GPU attempt is now bounded and auditable.
+
+Validation:
+
+- ``python -m pytest -q tests/test_optimization_evidence.py tests/test_optimization_public_scripts_cli.py::test_public_optimization_scripts_show_help``.
+- ``python -m ruff check examples/optimization/run_promotion_evidence_campaign.py tests/test_optimization_evidence.py``.
+- ``python scripts/check_research_lanes.py``.
+- ``python scripts/check_release_gates.py``.
+- ``python scripts/check_repo_size.py``.
+- ``python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization --min-relevant 1``.
+- ``git diff --check``.
+- ``python -m sphinx -W --keep-going -b html docs docs/_build/html``.
+
+Progress:
+
+- QI kinetic promotion ladder: ``92%``; unchanged until the res15 GPU scan
+  completes.
+- True GPU/device QI performance: ``84%``; unchanged technically.
+- Production-resolution QI ladders: ``65%``. The missing GPU rung now has a
+  timeout-safe execution path and clean remote launch bundle, but no passing
+  GPU artifact yet.
+- Overall remaining-lane completion estimate: ``99.0%``.
+
+Best next steps:
+
+1. When an office GPU is free, update the clean checkout and run the bounded
+   ``15x`` GPU campaign from ``~/tmp/sfincs_jax_clean_main`` against
+   ``~/tmp/sfincs_jax_qi_res15_inputs/input.namelist``.
+2. If the ``15x`` GPU scan passes, add the GPU promotion JSON and update the
+   QI ladder rollup from ``deferred`` to the next bounded status. If it fails
+   or times out, check in only a fail-closed blocker artifact with no promotion
+   claim.
+3. Keep production-floor ``25 x 51 x 100 x 4`` as open until both CPU and GPU
+   scan ladders write residual-clean outputs under bounded wall-time budgets.

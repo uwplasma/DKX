@@ -121,3 +121,44 @@ def test_run_promotion_evidence_campaign_dry_run_writes_plan(tmp_path: Path) -> 
     assert payload["er_values"] == [-1.0, 0.0, 1.0]
     assert payload["comparison_command"] is not None
     assert payload["lanes"][0]["scan_command"][:3] == [sys.executable, "-m", "sfincs_jax"]
+
+
+def test_run_promotion_evidence_campaign_records_jax_scan_timeout(tmp_path: Path) -> None:
+    script = _REPO / "examples" / "optimization" / "run_promotion_evidence_campaign.py"
+    env = os.environ.copy()
+    env.setdefault("MPLBACKEND", "Agg")
+    out_dir = tmp_path / "campaign_timeout"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--input",
+            str(_INPUT),
+            "--out-dir",
+            str(out_dir),
+            "--values",
+            "-1",
+            "0",
+            "--run-cpu",
+            "--jax-scan-timeout-s",
+            "0.001",
+            "--json",
+        ],
+        cwd=_REPO,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=20,
+    )
+
+    summary_path = out_dir / "promotion_evidence_campaign.json"
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    assert result.returncode == 1
+    assert payload["campaign_status"] == "fail"
+    assert payload["jax_scan_timeout_s"] == 0.001
+    assert payload["lane_results"][0]["status"] == "fail"
+    assert payload["lane_results"][0]["failure_kind"] == "timeout"
+    assert payload["comparison_result"] is None

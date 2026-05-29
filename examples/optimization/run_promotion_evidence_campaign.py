@@ -39,6 +39,21 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fortran-exe", type=Path, help="SFINCS Fortran v3 executable.")
     parser.add_argument("--fortran-timeout-s", type=float, default=600.0, help="Per-point Fortran timeout.")
     parser.add_argument(
+        "--jax-scan-timeout-s",
+        type=float,
+        help="Wall-time timeout for each sfincs_jax CPU/GPU scan lane subprocess.",
+    )
+    parser.add_argument(
+        "--promotion-timeout-s",
+        type=float,
+        help="Wall-time timeout for each promotion-audit subprocess.",
+    )
+    parser.add_argument(
+        "--continue-on-lane-failure",
+        action="store_true",
+        help="Keep running independent lanes after one lane fails; campaign exits nonzero and records failures.",
+    )
+    parser.add_argument(
         "--require-fortran-residuals",
         action="store_true",
         help=(
@@ -65,19 +80,45 @@ def _emit(message: str) -> None:
     print(message, flush=True)
 
 
-def _run_command(command: tuple[str, ...], *, env_delta: dict[str, str]) -> None:
+class LaneCommandError(RuntimeError):
+    """Wrap one failed lane subprocess with the campaign stage that failed."""
+
+    def __init__(self, stage: str, original: BaseException) -> None:
+        self.stage = str(stage)
+        self.original = original
+        super().__init__(f"{self.stage}: {type(original).__name__}: {original}")
+
+
+def _run_command(
+    command: tuple[str, ...],
+    *,
+    env_delta: dict[str, str],
+    timeout_s: float | None = None,
+) -> None:
     env = os.environ.copy()
     env.update(env_delta)
-    subprocess.run(command, cwd=_REPO_ROOT, env=env, check=True)
+    subprocess.run(command, cwd=_REPO_ROOT, env=env, check=True, timeout=timeout_s)
 
 
-def _run_jax_lane(lane: PromotionEvidenceLane, *, promotion_stem: str) -> dict[str, object]:
+def _run_jax_lane(
+    lane: PromotionEvidenceLane,
+    *,
+    promotion_stem: str,
+    scan_timeout_s: float | None,
+    promotion_timeout_s: float | None,
+) -> dict[str, object]:
     if lane.scan_command is None:
         raise ValueError(f"{lane.label} lane has no JAX scan command")
     _emit(f"[{lane.label}] scan command: {' '.join(lane.scan_command)}")
-    _run_command(lane.scan_command, env_delta=lane.env)
+    try:
+        _run_command(lane.scan_command, env_delta=lane.env, timeout_s=scan_timeout_s)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError) as exc:
+        raise LaneCommandError("scan", exc) from exc
     _emit(f"[{lane.label}] promotion command: {' '.join(lane.promotion_command)}")
-    _run_command(lane.promotion_command, env_delta=lane.env)
+    try:
+        _run_command(lane.promotion_command, env_delta=lane.env, timeout_s=promotion_timeout_s)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError) as exc:
+        raise LaneCommandError("promotion", exc) from exc
     return _lane_result(lane, promotion_stem=promotion_stem)
 
 
@@ -88,6 +129,7 @@ def _run_fortran_lane(
     er_values: tuple[float, ...],
     fortran_exe: Path | None,
     timeout_s: float,
+    promotion_timeout_s: float | None,
     skip_existing: bool,
     promotion_stem: str,
 ) -> dict[str, object]:
@@ -102,7 +144,10 @@ def _run_fortran_lane(
         emit=lambda _level, msg: _emit(msg),
     )
     _emit(f"[{lane.label}] promotion command: {' '.join(lane.promotion_command)}")
-    _run_command(lane.promotion_command, env_delta=lane.env)
+    try:
+        _run_command(lane.promotion_command, env_delta=lane.env, timeout_s=promotion_timeout_s)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError) as exc:
+        raise LaneCommandError("promotion", exc) from exc
     return _lane_result(lane, promotion_stem=promotion_stem)
 
 
@@ -115,11 +160,51 @@ def _lane_result(lane: PromotionEvidenceLane, *, promotion_stem: str) -> dict[st
     return {
         "label": lane.label,
         "backend": lane.backend,
+        "status": "pass",
         "promotion_json": str(promotion_json.resolve()),
         "gate_status": payload.get("gate_status"),
         "failures": payload.get("failures", []),
         "selected_root": payload.get("selected_root"),
     }
+
+
+def _text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return str(value)
+
+
+def _lane_failure_result(
+    lane: PromotionEvidenceLane,
+    *,
+    stage: str,
+    exc: BaseException,
+) -> dict[str, object]:
+    command = getattr(exc, "cmd", None)
+    result: dict[str, object] = {
+        "label": lane.label,
+        "backend": lane.backend,
+        "status": "fail",
+        "stage": str(stage),
+        "error_type": type(exc).__name__,
+        "error": str(exc),
+        "command": [str(part) for part in command] if isinstance(command, (list, tuple)) else command,
+    }
+    if isinstance(exc, subprocess.TimeoutExpired):
+        result["failure_kind"] = "timeout"
+        result["timeout_s"] = float(exc.timeout) if exc.timeout is not None else None
+        result["stdout_tail"] = _text(exc.stdout)[-4000:]
+        result["stderr_tail"] = _text(exc.stderr)[-4000:]
+    elif isinstance(exc, subprocess.CalledProcessError):
+        result["failure_kind"] = "returncode"
+        result["returncode"] = int(exc.returncode)
+        result["stdout_tail"] = _text(exc.stdout)[-4000:]
+        result["stderr_tail"] = _text(exc.stderr)[-4000:]
+    else:
+        result["failure_kind"] = "exception"
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -164,7 +249,12 @@ def main(argv: list[str] | None = None) -> int:
         **plan.as_dict(),
         "plan_json": str(plan_path),
         "executed": not bool(args.dry_run),
+        "campaign_status": "planned" if bool(args.dry_run) else "running",
+        "jax_scan_timeout_s": None if args.jax_scan_timeout_s is None else float(args.jax_scan_timeout_s),
+        "promotion_timeout_s": None if args.promotion_timeout_s is None else float(args.promotion_timeout_s),
+        "continue_on_lane_failure": bool(args.continue_on_lane_failure),
         "lane_results": [],
+        "campaign_failures": [],
         "comparison_result": None,
     }
     if args.dry_run:
@@ -173,24 +263,49 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     lane_results: list[dict[str, object]] = []
+    campaign_failures: list[dict[str, object]] = []
     for lane in plan.lanes:
-        if lane.backend == "fortran_v3":
-            lane_results.append(
-                _run_fortran_lane(
-                    lane,
-                    input_namelist=args.input.resolve(),
-                    er_values=er_values,
-                    fortran_exe=args.fortran_exe,
-                    timeout_s=float(args.fortran_timeout_s),
-                    skip_existing=not bool(args.no_skip_existing),
-                    promotion_stem=args.promotion_stem,
+        try:
+            if lane.backend == "fortran_v3":
+                lane_results.append(
+                    _run_fortran_lane(
+                        lane,
+                        input_namelist=args.input.resolve(),
+                        er_values=er_values,
+                        fortran_exe=args.fortran_exe,
+                        timeout_s=float(args.fortran_timeout_s),
+                        promotion_timeout_s=args.promotion_timeout_s,
+                        skip_existing=not bool(args.no_skip_existing),
+                        promotion_stem=args.promotion_stem,
+                    )
                 )
-            )
-        else:
-            lane_results.append(_run_jax_lane(lane, promotion_stem=args.promotion_stem))
+            else:
+                lane_results.append(
+                    _run_jax_lane(
+                        lane,
+                        promotion_stem=args.promotion_stem,
+                        scan_timeout_s=args.jax_scan_timeout_s,
+                        promotion_timeout_s=args.promotion_timeout_s,
+                    )
+                )
+        except LaneCommandError as exc:
+            failure = _lane_failure_result(lane, stage=exc.stage, exc=exc.original)
+            lane_results.append(failure)
+            campaign_failures.append(failure)
+            _emit(f"[{lane.label}] failed during {exc.stage}: {type(exc.original).__name__}: {exc.original}")
+            if not bool(args.continue_on_lane_failure):
+                break
+        except (OSError, RuntimeError, ValueError) as exc:
+            failure = _lane_failure_result(lane, stage="setup", exc=exc)
+            lane_results.append(failure)
+            campaign_failures.append(failure)
+            _emit(f"[{lane.label}] failed during setup: {type(exc).__name__}: {exc}")
+            if not bool(args.continue_on_lane_failure):
+                break
     result["lane_results"] = lane_results
+    result["campaign_failures"] = campaign_failures
 
-    if plan.comparison_command is not None and not bool(args.no_compare):
+    if plan.comparison_command is not None and not bool(args.no_compare) and not campaign_failures:
         _emit(f"[comparison] command: {' '.join(plan.comparison_command)}")
         completed = subprocess.run(
             plan.comparison_command,
@@ -208,6 +323,14 @@ def main(argv: list[str] | None = None) -> int:
         print(completed.stderr, end="", file=sys.stderr)
         if completed.returncode != 0:
             _emit("[comparison] failed; keeping lane artifacts for inspection")
+    elif campaign_failures and plan.comparison_command is not None and not bool(args.no_compare):
+        result["comparison_result"] = {
+            "returncode": None,
+            "skipped": True,
+            "reason": "lane_failure",
+        }
+
+    result["campaign_status"] = "fail" if campaign_failures else "pass"
 
     summary_path = out_dir / "promotion_evidence_campaign.json"
     summary_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -215,8 +338,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     comparison = result.get("comparison_result")
-    if isinstance(comparison, dict) and int(comparison.get("returncode", 0)) != 0:
+    comparison_returncode = comparison.get("returncode", 0) if isinstance(comparison, dict) else 0
+    if comparison_returncode is not None and int(comparison_returncode) != 0:
         return 2
+    if campaign_failures:
+        return 1
     return 0
 
 
