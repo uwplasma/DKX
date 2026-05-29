@@ -14,6 +14,13 @@ Unreleased
   ``108 s`` to about ``35 s`` with identical key observables and records that
   one-device and explicit full-system sparse-host routes are not promotion
   candidates for this rung.
+- Added a bounded eight-point CPU solver-policy audit for the same QI
+  ``13 x 13 x 15 x 4`` rung. The sparse-LU skip-primary policy completes the
+  scan in ``263.1 s``, with mean solve time ``32.85 s``, max solve time
+  ``35.72 s``, all residual gates passing, and a fixed-resolution electron root
+  at ``E_r=2.2153427467``. This closes CPU evidence only; the matching GPU and
+  Fortran-v3 comparison remains required before a public production-resolution
+  QI claim.
 - Added the second refined QI ``nfp=2`` kinetic promotion rung at
   ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
   cliff. The bounded dense policy now covers active sizes up to ``8000`` and

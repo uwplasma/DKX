@@ -16532,3 +16532,43 @@ Best next steps:
 2. Launch a bounded CPU-only 13x multi-point scan to estimate full ladder cost.
 3. If CPU scan cost is acceptable, run the matching office GPU and Fortran-v3
    fixed-resolution comparison before updating any public QI promotion claim.
+
+### 35.76 QI 13x CPU sparse-LU promotion scan
+
+Scope:
+
+- Ran the bounded CPU-only ``13 x 13 x 15 x 4`` QI ``nfp=2`` kinetic
+  eight-point electric-field scan with the new sparse-LU skip-primary default.
+- Added a compact checked artifact,
+  ``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_cpu_sparse_skip.json``,
+  so this evidence survives without committing raw HDF5/trace outputs.
+
+Validation:
+
+- Command:
+  ``JAX_ENABLE_X64=True sfincs_jax scan-er --input outputs/qi_nfp2_electron_root_kinetic/twospecies_13x13x15x4/input.input.namelist --out-dir outputs/qi_nfp2_electron_root_kinetic/twospecies_13x13x15x4/cpu_scan_sparse_skip --values -0.3 -0.1 0 0.1 0.3 1 2 3 --compute-solution --jobs 1``.
+- The scan completed all eight points in ``263.068 s``. Mean per-point solver
+  time was ``32.846 s`` and max solver time was ``35.720 s``.
+- Every point used the active sparse-LU rescue shortcut and passed the residual
+  gate. Residuals ranged from ``9.585e-19`` to ``1.954e-17`` against targets
+  between ``1.395e-11`` and ``4.124e-11``.
+- The promotion evaluator passed with no failures and selected an electron root
+  at ``E_r = 2.2153427466642333`` in the ``[2, 3]`` bracket.
+
+Progress:
+
+- QI kinetic promotion ladder: ``80%``; the 13x CPU rung is now bounded,
+  residual-clean, and documented.
+- Production-resolution QI ladders: ``50%``; one more resolution rung has CPU
+  evidence, but GPU and Fortran-v3 fixed-resolution comparisons remain required
+  before any public production claim.
+- Overall remaining-lane completion estimate: ``97.8%``.
+
+Best next steps:
+
+1. Run focused artifact, docs, release-gate, and repo hygiene checks and commit
+   the CPU scan evidence.
+2. Launch the matching office GPU fixed-resolution scan for the same eight
+   ``E_r`` values and compare residuals/observables against the CPU artifact.
+3. Run the matching Fortran-v3 fixed-resolution reference only if GPU agrees
+   with CPU; otherwise fix the backend discrepancy before spending Fortran time.
