@@ -274,8 +274,10 @@ artifact and a `15 x 15 x 17 x 4` CPU/Fortran rung. The `15x` rung selects
 relative on the selected root, with all residual gates passing. GPU promotion at
 this resolution is intentionally not claimed yet: the next route is the new
 matrix-free QI-device operator-reuse path, which now exists behind explicit
-advanced controls and still needs bounded one-GPU timing evidence before it
-becomes a public performance claim.
+advanced controls. A bounded one-GPU rerun verifies route activation and local
+x-block factor skipping, but it remains fail-closed because the residual misses
+the requested target; it is infrastructure evidence, not a public performance
+claim.
 
 The separate finite-beta QA convergence ladder extends the finite-beta QA
 artifact to `9 x 9 x 7 x 4` at the central surface and remains explicitly

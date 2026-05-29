@@ -386,6 +386,12 @@ the manifest keeps true device-QI marked ``closed_deferred`` rather than
 promoted. This is intentionally a data gate: it prevents documentation or
 release notes from turning a residual-improving but nonconverged hard-seed
 probe into a production-resolution claim.
+The bounded ``13 x 13 x 15 x 4`` office-GPU operator-reuse artifact is checked
+separately by ``tests/test_qi_kinetic_res13_probe_artifact.py``. That gate
+requires route activation, skipped local x-block factors, host fallback disabled,
+fail-safe trace metadata, corrected device-cycle iteration/matvec accounting,
+and explicit residual-gate failure. It is route-level evidence, not production
+true-device-QI promotion.
 
 The scan/CLI progress surface is also guarded without running expensive scan
 points.  ``tests/test_scans_progress_and_recycle.py`` covers duration formatting,
@@ -963,7 +969,7 @@ because it writes no output or solver trace.
 into the current production-readiness gate. It records the production target
 ``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
 passing bounded grid ``139502``, the largest attempted bounded grid ``139502``,
-32 passing artifacts and 75 non-passing blocker artifacts, a ``60%``
+32 passing artifacts and 78 non-passing blocker artifacts, a ``60%``
 per-axis lane-completion estimate based only on passing artifacts, and
 ``86.32%`` of production total size still uncovered. The production acceptance
 gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
