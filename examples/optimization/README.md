@@ -38,7 +38,9 @@ Examples:
   two-species QI `nfp=2` input derived from
   `examples/additional_examples/input.namelist` plus JSON provenance. This is
   only a kinetic promotion candidate; electron-root claims require completed
-  CPU/GPU/Fortran scan and comparison gates.
+  CPU/GPU/Fortran scan and comparison gates. The checked docs now contain the
+  first low-resolution CPU/GPU/Fortran artifact plus a refined `9 x 9 x 11 x 4`
+  CPU/GPU rung; the root drift keeps the production-resolution ladder open.
 - `compare_sfincs_jax_promotion_runs.py` — compares CPU/GPU promotion summaries
   and optional Fortran-v3 promotion summaries, writing JSON plus PNG/PDF
   comparison reports for selected ambipolar root, bootstrap objective, and flux
@@ -87,3 +89,7 @@ electron-root evidence until the CPU/GPU/Fortran scans, promotion audits,
 backend comparison, and resolution ladder have passed.
 For this two-species ion/electron QI contract, leave the impurity objective
 unset unless you explicitly add a third impurity species.
+
+The no-impurity path is the default for two-species electron-root scans. Pass
+`--impurity-species-index` only when a real impurity species is present and the
+flux-selectivity objective is part of the claim.
