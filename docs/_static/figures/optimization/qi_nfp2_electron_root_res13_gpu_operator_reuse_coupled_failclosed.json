@@ -1,0 +1,77 @@
+{
+  "artifact_kind": "qi_nfp2_kinetic_res13_gpu_operator_reuse_coupled_failclosed",
+  "status": "fail_closed_nonconverged_device_qi",
+  "claim_boundary": "This artifact validates route activation, failure-safe solver tracing, and device-cycle accounting for the explicit matrix-free QI-device operator-reuse lane. It does not close production GPU QI performance or production-resolution QI convergence; the release-ready route for this rung remains the non-autodiff host sparse solve.",
+  "generated_on": "2026-05-29",
+  "sfincs_jax_commit": "32594809a25f9179abf11d4131108fbc43c2c444",
+  "remote_host": "office",
+  "gpu": "NVIDIA RTX A4000",
+  "jax_version": "0.6.2",
+  "backend": "gpu",
+  "run_temperature": "warm_after_previous_same_shape_jit_compile",
+  "resolution": {
+    "Ntheta": 13,
+    "Nzeta": 13,
+    "Nxi": 15,
+    "NL": 4,
+    "Nx": 4,
+    "solverTolerance": "1d-6"
+  },
+  "input_contract": {
+    "geometry": "QI nfp=2 VMEC",
+    "rN_wish": 0.12247,
+    "Er": 0.3,
+    "RHSMode": 1,
+    "collisionOperator": 0,
+    "includePhi1": false,
+    "includeXDotTerm": true,
+    "includeElectricFieldTermInXiDot": true,
+    "useDKESExBDrift": false
+  },
+  "route": {
+    "solve_method": "xblock_sparse_pc_gmres",
+    "probe_preset": "coupled-residual-device-qi",
+    "operator_reuse_enabled": true,
+    "operator_reuse_reason": "matrix-free-qi-device-krylov",
+    "local_xblock_preconditioner_built": false,
+    "host_fallback": false,
+    "qi_device_preconditioner_used": true,
+    "qi_device_preconditioner_reason": "krylov_installed_after_seed_probe_reject"
+  },
+  "coupled_residual_equation": {
+    "accepted": true,
+    "rank": 24,
+    "candidate_count": 56,
+    "residual_before": 1.466182166296396e-05,
+    "residual_after": 1.3119910104751057e-05
+  },
+  "result": {
+    "active_size": 11496,
+    "total_size": 20284,
+    "converged": false,
+    "residual_norm": 9.707075939812348e-06,
+    "residual_target": 1.466182166296396e-11,
+    "residual_ratio": 662064.7940584768,
+    "output_refused": true,
+    "failure_reason": "nonconverged_rhsmode1_output",
+    "elapsed_s_trace": 19.71908447984606,
+    "wall_time_s_time_command": 21.44,
+    "solve_s": 10.687091920524836,
+    "peak_rss_mb_trace": 1384.03125,
+    "peak_rss_mb_time_command": 1462.97265625,
+    "iterations": 960,
+    "matvecs": 962,
+    "python_matvecs": 5,
+    "device_cycle_estimated_matvecs": 962
+  },
+  "promotion_gates": {
+    "operator_reuse_activated": "pass",
+    "local_xblock_factor_skip": "pass",
+    "failure_safe_trace_written": "pass",
+    "device_cycle_accounting": "pass",
+    "coupled_residual_equation_setup": "pass",
+    "residual_convergence": "fail",
+    "production_gpu_qi_performance": "deferred",
+    "production_resolution_qi_convergence": "open"
+  }
+}

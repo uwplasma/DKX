@@ -55,6 +55,12 @@ Unreleased
   matvecs. Solver traces keep ``python_matvecs`` separately so long GPU runs no
   longer look artificially cheap when the Krylov work is inside a compiled
   device loop.
+- Added a checked fail-closed office-GPU artifact for the QI ``13 x 13 x 15 x 4``
+  matrix-free operator-reuse route. It verifies operator-reuse activation,
+  local x-block factor skipping, failure-safe trace writing, coupled-residual
+  setup, and corrected device-cycle accounting, while explicitly keeping
+  residual convergence failed and production true-device-QI performance
+  deferred.
 - Added the second refined QI ``nfp=2`` kinetic promotion rung at
   ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
   cliff. The bounded dense policy now covers active sizes up to ``8000`` and

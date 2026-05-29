@@ -26,6 +26,11 @@ RES15_CPU_FORTRAN_ARTIFACT = (
     / "qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json"
 )
 
+RES13_GPU_OPERATOR_REUSE_FAILCLOSED_ARTIFACT = (
+    Path("docs/_static/figures/optimization")
+    / "qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json"
+)
+
 
 def test_qi_res13_single_point_probe_stays_bounded_and_fail_scoped() -> None:
     payload = json.loads(ARTIFACT.read_text(encoding="utf-8"))
@@ -215,3 +220,69 @@ def test_qi_res15_cpu_fortran_artifact_records_policy_cliff_fix() -> None:
     assert all(run["residual_norm"] < run["residual_target"] for run in runs)
     assert min(run["radial_current"] for run in runs) < 0.0
     assert max(run["radial_current"] for run in runs) > 0.0
+
+
+def test_qi_res13_gpu_operator_reuse_artifact_stays_fail_closed() -> None:
+    payload = json.loads(
+        RES13_GPU_OPERATOR_REUSE_FAILCLOSED_ARTIFACT.read_text(encoding="utf-8")
+    )
+
+    assert payload["artifact_kind"] == (
+        "qi_nfp2_kinetic_res13_gpu_operator_reuse_coupled_failclosed"
+    )
+    assert payload["status"] == "fail_closed_nonconverged_device_qi"
+    assert "does not close production GPU QI performance" in payload["claim_boundary"]
+    assert payload["backend"] == "gpu"
+    assert payload["gpu"] == "NVIDIA RTX A4000"
+    assert payload["resolution"] == {
+        "Ntheta": 13,
+        "Nzeta": 13,
+        "Nxi": 15,
+        "NL": 4,
+        "Nx": 4,
+        "solverTolerance": "1d-6",
+    }
+
+    route = payload["route"]
+    assert route["solve_method"] == "xblock_sparse_pc_gmres"
+    assert route["probe_preset"] == "coupled-residual-device-qi"
+    assert route["operator_reuse_enabled"] is True
+    assert route["operator_reuse_reason"] == "matrix-free-qi-device-krylov"
+    assert route["local_xblock_preconditioner_built"] is False
+    assert route["host_fallback"] is False
+    assert route["qi_device_preconditioner_used"] is True
+    assert route["qi_device_preconditioner_reason"] == "krylov_installed_after_seed_probe_reject"
+
+    coupled = payload["coupled_residual_equation"]
+    assert coupled["accepted"] is True
+    assert coupled["rank"] == 24
+    assert coupled["candidate_count"] == 56
+    assert coupled["residual_after"] < coupled["residual_before"]
+
+    result = payload["result"]
+    assert result["active_size"] == 11496
+    assert result["total_size"] == 20284
+    assert result["converged"] is False
+    assert result["residual_norm"] > result["residual_target"]
+    assert result["residual_ratio"] == pytest.approx(
+        result["residual_norm"] / result["residual_target"]
+    )
+    assert result["residual_ratio"] > 6.0e5
+    assert result["output_refused"] is True
+    assert result["failure_reason"] == "nonconverged_rhsmode1_output"
+    assert result["iterations"] == 960
+    assert result["matvecs"] == 962
+    assert result["python_matvecs"] == 5
+    assert result["device_cycle_estimated_matvecs"] == 962
+    assert result["peak_rss_mb_trace"] < 1600.0
+    assert result["wall_time_s_time_command"] < 30.0
+
+    gates = payload["promotion_gates"]
+    assert gates["operator_reuse_activated"] == "pass"
+    assert gates["local_xblock_factor_skip"] == "pass"
+    assert gates["failure_safe_trace_written"] == "pass"
+    assert gates["device_cycle_accounting"] == "pass"
+    assert gates["coupled_residual_equation_setup"] == "pass"
+    assert gates["residual_convergence"] == "fail"
+    assert gates["production_gpu_qi_performance"] == "deferred"
+    assert gates["production_resolution_qi_convergence"] == "open"

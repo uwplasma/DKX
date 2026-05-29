@@ -1017,6 +1017,13 @@ lower memory and a slightly smaller residual than the minimal route, but still
 about ``6.6e5`` times above the requested target.  It is therefore recorded as
 fail-closed evidence, not a promoted production GPU path.
 
+The checked artifact for that bounded office-GPU rerun is
+``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json``.
+It records the route activation, skipped local x-block factors,
+failure-safe trace writing, coupled-residual setup, and device-cycle
+iteration/matvec accounting.  The same artifact marks residual convergence as
+``fail`` and leaves production GPU QI performance ``deferred``.
+
 VMEC JAX Integration
 --------------------
 

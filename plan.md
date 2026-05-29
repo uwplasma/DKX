@@ -16939,3 +16939,59 @@ Best next steps:
 3. Keep true device-QI as a documented research lane requiring a qualitatively
    stronger global closure. For release, use the residual-clean host sparse
    route and the fixed CPU/Fortran QI ladder.
+
+### 35.83 Checked GPU operator-reuse fail-closed artifact
+
+Scope:
+
+- Preserved the latest bounded office-GPU rerun of the ``13 x 13 x 15 x 4`` QI
+  ``nfp=2`` ``E_r=0.3`` matrix-free operator-reuse path as a small checked JSON
+  artifact:
+  ``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json``.
+- Added a regression gate that asserts the route activated, local x-block
+  factors were skipped, host fallback stayed disabled, failure-safe trace
+  writing was available, coupled-residual setup was accepted, and device-cycle
+  Krylov accounting reports the internal ``960`` iterations / ``962`` matvecs
+  instead of the Python wrapper count alone.
+- Updated optimization docs and release notes to keep the evidence visible
+  while explicitly marking the production GPU/device-QI claim as deferred.
+
+Results:
+
+- The warm office-GPU rerun finished in ``21.44 s`` wall time with trace
+  elapsed time ``19.72 s`` and solve time ``10.69 s``.
+- Peak RSS was ``1384 MB`` from the solver trace and ``1463 MB`` from
+  ``/usr/bin/time``.
+- The coupled residual equation reduced the setup residual from
+  ``1.466182e-05`` to ``1.311991e-05`` and used rank ``24`` from ``56``
+  candidates.
+- Final residual was ``9.707076e-06`` against target ``1.466182e-11``, a ratio
+  of ``6.62e5``. The physical output gate correctly refused nonconverged
+  HDF5/NetCDF/NPZ output. This is useful infrastructure/performance evidence,
+  not a convergence closure.
+
+Progress:
+
+- QI kinetic promotion ladder: ``90%``; unchanged.
+- True GPU/device QI performance: ``81%``; the checked artifact now locks in
+  the route, memory, timing, failure-safe output behavior, and accounting
+  evidence. The residual gate remains open.
+- Production-resolution QI ladders: ``61%``; unchanged.
+- Overall remaining-lane completion estimate: ``98.6%``.
+
+Validation:
+
+- ``python -m pytest -q tests/test_qi_kinetic_res13_probe_artifact.py tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_device_cycle_jit_reports_internal_iterations tests/test_io_export_and_h5_coverage.py::test_nonconverged_rhsmode1_solver_trace_sidecar_is_written``
+  reported ``7 passed``.
+- ``python -m ruff check tests/test_qi_kinetic_res13_probe_artifact.py`` passed.
+- ``python -m sphinx -W --keep-going -b html docs docs/_build/html`` passed.
+- ``python scripts/check_research_lanes.py && python scripts/check_release_gates.py && python scripts/check_repo_size.py && git diff --check``
+  passed.
+
+Best next steps:
+
+1. Commit and push the artifact/docs/test update.
+2. Check GitHub CI/Docs after push.
+3. Do not keep tuning the current device-QI smoother stack. Either defer true
+   device-QI with this checked evidence or replace it with a qualitatively
+   stronger global closure in a future research lane.
