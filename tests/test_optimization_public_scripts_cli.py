@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from sfincs_jax.namelist import read_sfincs_input
+
 
 _REPO = Path(__file__).resolve().parents[1]
 _OPTIMIZATION_DIR = _REPO / "examples" / "optimization"
@@ -46,6 +48,7 @@ def test_public_optimization_scripts_show_help() -> None:
         _OPTIMIZATION_DIR / "launch_sfincs_jax_candidate_scan.py": ["--out-dir", "--promotion-stem"],
         _OPTIMIZATION_DIR / "compare_sfincs_jax_promotion_runs.py": ["--out-dir", "--stem"],
         _OPTIMIZATION_DIR / "run_promotion_evidence_campaign.py": ["--run-cpu", "--run-gpu", "--run-fortran"],
+        _OPTIMIZATION_DIR / "materialize_qi_nfp2_promotion_input.py": ["--source", "--out-dir", "--equilibrium-file"],
     }
 
     for script, expected_flags in scripts.items():
@@ -104,6 +107,46 @@ def test_qi_screen_public_script_pivots_to_qi_nfp2_when_qa_is_deferred(tmp_path:
     assert payload["recommended_candidate"]["symmetry"] == "qi"
     assert payload["recommended_candidate"]["nfp"] == 2
     assert "sfincs_jax scan-er" in " ".join(payload["promotion_plan"]["next_commands"])
+
+
+def test_qi_nfp2_promotion_input_helper_materializes_low_resolution_two_species_candidate(tmp_path: Path) -> None:
+    stem = "qi_nfp2_input"
+    script = _OPTIMIZATION_DIR / "materialize_qi_nfp2_promotion_input.py"
+
+    _run_script(script, ["--out-dir", str(tmp_path), "--stem", stem])
+
+    input_path = tmp_path / f"{stem}.input.namelist"
+    summary_path = tmp_path / f"{stem}.json"
+    assert input_path.is_file()
+    assert summary_path.is_file()
+
+    text = input_path.read_text(encoding="utf-8")
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    nml = read_sfincs_input(input_path)
+
+    assert payload["workflow"] == "sfincs_jax_qi_nfp2_kinetic_promotion_input"
+    assert payload["candidate"] == {
+        "nfp": 2,
+        "resolution": "low",
+        "species": "ion_electron",
+        "symmetry": "QI",
+    }
+    assert "kinetic promotion candidate" in payload["claim_boundary"]
+    assert "CPU/GPU/Fortran Er scans" in payload["claim_boundary"]
+    assert any("--run-cpu --run-gpu --run-fortran" in command for command in payload["next_commands"])
+
+    species = nml.group("speciesParameters")
+    resolution = nml.group("resolutionParameters")
+    assert species["ZS"] == [1.0, -1.0]
+    assert species["MHATS"] == [1.0, 5.446170214e-4]
+    assert species["NHATS"] == [1.0, 1.0]
+    assert resolution["NTHETA"] == 7
+    assert resolution["NZETA"] == 7
+    assert resolution["NXI"] == 7
+    assert resolution["NX"] == 4
+    assert "wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc" in text
+    assert "!ss scanType = 1" in text
+    assert "runSpecFile" not in text
 
 
 def test_promotion_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:

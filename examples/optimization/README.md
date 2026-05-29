@@ -32,6 +32,11 @@ Examples:
   proxy optimization JSON to a reproducible `sfincs_jax scan-er` command. By
   default it writes a JSON plan and prints commands; pass `--execute` only when
   ready to launch the high-fidelity scan.
+- `materialize_qi_nfp2_promotion_input.py` — writes a low-resolution
+  two-species QI `nfp=2` input derived from
+  `examples/additional_examples/input.namelist` plus JSON provenance. This is
+  only a kinetic promotion candidate; electron-root claims require completed
+  CPU/GPU/Fortran scan and comparison gates.
 - `compare_sfincs_jax_promotion_runs.py` — compares CPU/GPU promotion summaries
   and optional Fortran-v3 promotion summaries, writing JSON plus PNG/PDF
   comparison reports for selected ambipolar root, bootstrap objective, and flux
@@ -67,3 +72,14 @@ python examples/optimization/compare_sfincs_jax_promotion_runs.py --cpu runs/qa_
 Add `--fortran runs/qa_candidate01/audit/candidate01_r0p50_fortran.json` to the
 final comparison only after a Fortran-v3-derived promotion audit has been
 generated from matching completed scan points.
+
+QI `nfp=2` low-resolution promotion input materialization:
+
+```bash
+python examples/optimization/materialize_qi_nfp2_promotion_input.py --out-dir runs/qi_nfp2_candidate01 --stem qi_nfp2_lowres
+python examples/optimization/run_promotion_evidence_campaign.py --input runs/qi_nfp2_candidate01/qi_nfp2_lowres.input.namelist --out-dir runs/qi_nfp2_candidate01/evidence --values -0.3 -0.1 0 0.1 0.3 1 2 3 --run-cpu --run-gpu --run-fortran --dry-run
+```
+
+This generated input is a kinetic promotion candidate only. Do not cite it as
+electron-root evidence until the CPU/GPU/Fortran scans, promotion audits,
+backend comparison, and resolution ladder have passed.

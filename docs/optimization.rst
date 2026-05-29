@@ -726,6 +726,71 @@ after completed kinetic scans show a positive ambipolar root, residual
 convergence, CPU/GPU agreement, resolution convergence, and Fortran-v3
 agreement when the input is in the shared model scope.
 
+First bounded QI kinetic promotion artifact
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The first QI ``nfp=2`` kinetic artifact is now checked in as a bounded
+low-resolution promotion, not as a production-resolution optimization claim.
+It starts from ``examples/additional_examples/input.namelist``, converts that
+one-species QI seed into a two-species ion/electron kinetic scan, and runs
+the same electric-field grid on CPU, one office GPU, and SFINCS Fortran v3:
+
+.. code-block:: bash
+
+   python examples/optimization/materialize_qi_nfp2_promotion_input.py \
+     --out-dir runs/qi_nfp2_candidate01 \
+     --stem qi_nfp2_lowres
+   python examples/optimization/run_promotion_evidence_campaign.py \
+     --input runs/qi_nfp2_candidate01/qi_nfp2_lowres.input.namelist \
+     --out-dir runs/qi_nfp2_candidate01/evidence \
+     --values -0.3 -0.1 0 0.1 0.3 1 2 3 \
+     --run-cpu \
+     --run-gpu \
+     --gpu-device 0 \
+     --run-fortran \
+     --fortran-exe /path/to/sfincs \
+     --jobs 1 \
+     --impurity-species-index 1 \
+     --target-impurity-flux 0.0
+
+The checked run used
+:math:`N_\theta=7`, :math:`N_\zeta=7`, :math:`N_\xi=7`,
+:math:`N_L=4`, :math:`N_x=4`, ``RHSMode=1``, ``collisionOperator=0``,
+``includeXDotTerm=.true.``, ``includeElectricFieldTermInXiDot=.true.``,
+``useDKESExBDrift=.false.``, and ``includePhi1=.false.``.  The CPU scan
+completed the eight points in about 25 seconds.  The one-GPU scan completed in
+about 86 seconds from a clean checkout on an RTX A4000.  The Fortran-v3
+reference campaign completed in about 528 seconds; the wrapper accepts outputs
+that reached ``Goodbye!`` and wrote ``sfincsOutput.h5`` even when the local MPI
+runtime reports a post-output ``MPI_Finalize`` error.
+
+.. figure:: _static/figures/optimization/qi_nfp2_electron_root_lowres_reference_tolerance_comparison.png
+   :alt: QI nfp=2 low-resolution kinetic electron-root CPU, GPU, and Fortran comparison.
+
+   First bounded QI ``nfp=2`` kinetic electron-root comparison.  CPU and GPU
+   select the same positive ambipolar root,
+   :math:`E_r=2.4386009865`, to better than :math:`10^{-10}` absolute
+   agreement.  The SFINCS Fortran v3 root differs by
+   :math:`1.02\times10^{-6}` in normalized :math:`E_r`; this passes the
+   documented low-resolution reference tolerance
+   :math:`|\Delta E_r|/|E_r| < 10^{-6}`.  Bootstrap and flux objectives agree
+   within the checked reference tolerances
+   (:math:`10^{-3}` and :math:`10^{-5}` relative, respectively).
+
+The checked machine-readable artifacts are:
+
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_cpu.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_gpu.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_fortran.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_reference_tolerance_comparison.json``
+
+This closes the first real QI kinetic promotion artifact and validates the
+QA-to-QI fallback workflow at a bounded low resolution.  It does not close the
+production-resolution QI ladder, the radial/profile convergence ladder, or the
+true differentiable device-QI hard-seed lane.  The next promotion step is to run
+the same two-species QI ``nfp=2`` contract through a resolution ladder and keep
+the selected electron root stable under the documented tolerances.
+
 VMEC JAX Integration
 --------------------
 
