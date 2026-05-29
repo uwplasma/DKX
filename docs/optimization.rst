@@ -1024,6 +1024,17 @@ failure-safe trace writing, coupled-residual setup, and device-cycle
 iteration/matvec accounting.  The same artifact marks residual convergence as
 ``fail`` and leaves production GPU QI performance ``deferred``.
 
+The ladder rollup is now machine-readable as
+``docs/_static/figures/optimization/qi_nfp2_electron_root_convergence_ladder.json``
+with the companion configuration
+``docs/_static/figures/optimization/qi_nfp2_electron_root_ladder_config.json``.
+It records the checked ``7x``, ``9x``, ``11x``, ``13x``, and ``15x`` rungs, the
+improving selected-root drift down to ``0.00210`` on the latest CPU/Fortran
+rung, the missing ``15x`` GPU promotion, and the explicit production floor
+``25 x 51 x 100 x 4``.  Its status is deliberately ``deferred`` so downstream
+docs/tests can use the artifact without turning it into a production-resolution
+QI claim.
+
 VMEC JAX Integration
 --------------------
 
