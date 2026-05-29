@@ -1577,6 +1577,14 @@ def _get_apply_full_system_operator_pjit_flat(_signature: tuple[object, ...]):
 def apply_v3_full_system_operator_cached(
     op: V3FullSystemOperator, x_full: jnp.ndarray, *, include_jacobian_terms: bool = True
 ) -> jnp.ndarray:
+    if _value_contains_tracer(x_full, depth=0):
+        # This function is also called from custom-linear-solve matvecs and
+        # vmapped setup probes.  In those transformed contexts, entering
+        # `jax.set_mesh` for the pjit path raises in recent JAX releases.  Keep
+        # the transformed call local/unsharded; top-level calls can still use
+        # the sharded cached path below.
+        fn = _get_apply_full_system_operator_jit(_operator_signature_cached(op))
+        return fn(op, x_full, include_jacobian_terms, 0)
     shard_axis = _matvec_shard_axis(op)
     if shard_axis is not None:
         axis_name = "p" if shard_axis == "flat" else shard_axis

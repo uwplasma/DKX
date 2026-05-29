@@ -3138,7 +3138,19 @@ def _matvec_submatrix(
     for start in range(0, int(col_idx.shape[0]), int(chunk_cols)):
         idx = col_idx[start : start + int(chunk_cols)]
         basis = jax.nn.one_hot(jnp.asarray(idx, dtype=jnp.int32), total_size, dtype=jnp.float64)
-        y = jax.vmap(lambda v: apply_v3_full_system_operator_cached(op_pc, v))(basis)
+        # Preconditioner submatrix assembly batches basis-vector probes with
+        # `vmap`.  Do not call the cached/pjit matvec here: on multi-device
+        # hosts it can enter `jax.set_mesh` inside the transform, which JAX
+        # rejects.  The submatrix is a setup-time host object, so use the
+        # unsharded operator application explicitly.
+        y = jax.vmap(
+            lambda v: apply_v3_full_system_operator(
+                op_pc,
+                v,
+                include_jacobian_terms=True,
+                allow_sharding=False,
+            )
+        )(basis)
         y_sub = y[:, row_idx_jnp]
         blocks.append(np.asarray(y_sub, dtype=np.float64))
     if len(blocks) == 1:

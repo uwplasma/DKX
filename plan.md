@@ -16400,3 +16400,73 @@ Best next steps:
    implement either a true large-block inexact factor route or a device-resident
    coarse/preconditioner route that can handle `Nxi=100` without storing dense
    or exact per-x factors.
+
+### 35.74 QI transformed-matvec mesh-context fix and 13x probe
+
+Scope:
+
+- Continued the QI `nfp=2` kinetic promotion ladder with a bounded
+  `13 x 13 x 15 x 4` single-point CPU probe at `E_r=0.3`.
+- Fixed the multi-device JAX mesh-context failure found by that probe.
+  `_matvec_submatrix(...)` now uses the explicit unsharded full-system operator
+  inside the setup-time `vmap`, and
+  `apply_v3_full_system_operator_cached(...)` falls back to the local JIT path
+  when called with a traced vector from `vmap`/`custom_linear_solve`.
+- Kept the top-level cached sharded matvec path intact, so the fix removes
+  illegal nested `jax.set_mesh` contexts without disabling CPU/GPU sharding for
+  normal operator applications.
+
+Validation:
+
+- Focused transformed-matvec tests passed:
+  `python -m pytest -q tests/test_v3_system_cached_matvec.py tests/test_v3_driver_rhs1_dispatch_coverage.py::test_matvec_submatrix_uses_unsharded_operator_inside_vmap tests/test_distributed_gmres_axis.py tests/test_rhs1_schwarz_heuristic.py`
+  plus the checked artifact scope test (`26 passed`). The tracer fallback test
+  now exercises real `jax.vmap` and `jax.jit` contexts for both theta and flat
+  sharding selectors rather than relying only on monkeypatched tracer detection.
+- Default multi-device CPU `scan-er` on the `13 x 13 x 15 x 4` QI point wrote
+  HDF5 output and solver trace. The solver reported active size `11496`, total
+  size `20284`, residual `2.0913627762603e-18` against target
+  `1.4661821662963957e-11`, logged solve elapsed `107.874 s`, wrapper elapsed
+  `110.329 s`, and peak RSS `2018 MB`.
+- One-device CPU with sharding disabled took `212.086 s` and refused output
+  with residual `1.220319e-08 > 1.466182e-11`, so it is not a better default.
+- Explicit full-system `sparse_host` and `sparse_pc_gmres` both failed during
+  the full sparse factorization after building a `21,907,808`-nonzero system.
+  The current viable route for this rung is therefore the default auto policy
+  that reaches the active sparse-LU rescue.
+
+Progress:
+
+- QI kinetic promotion ladder: `70%`; the next resolution point is now
+  solver-safe and residual-clean, but a full eight-point CPU/GPU/Fortran scan at
+  this rung is too expensive under the bounded campaign rules without another
+  per-point speedup.
+- True differentiable/device-QI: unchanged at `99%` infrastructure and `89%`
+  convergence evidence; this patch is a sharded host/default-policy safety fix,
+  not a true device-QI closure.
+- Production-resolution QI ladders: `45%`; one additional single-point
+  resolution rung is checked, but production promotion still requires complete
+  backend/Fortran ladders and convergence trends.
+- Overall remaining-lane completion estimate: `97.2%`.
+
+Repository checks:
+
+- `python -m ruff check tests/test_v3_system_cached_matvec.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_qi_kinetic_res13_probe_artifact.py`
+  passed.
+- `python -m ruff check --select F821,F823 sfincs_jax/v3_system.py sfincs_jax/v3_driver.py`
+  passed.
+- `python -m sphinx -W --keep-going -b html docs docs/_build/html` passed.
+- `python scripts/check_research_lanes.py && python scripts/check_release_gates.py && python scripts/check_repo_size.py && git diff --check`
+  passed.
+- Full local test suite passed: `python -m pytest -q` (`1940 passed in
+  545.42 s`).
+
+Best next steps:
+
+1. Run strict focused tests, docs, release gates, repo-size checks, and push this
+   safety fix.
+2. Add an auto-policy shortcut that can enter the successful active sparse-LU
+   rescue earlier for mid-size QI full-FP systems, avoiding the failing/slow
+   one-device and full sparse-host paths.
+3. Re-run the `13 x 13 x 15 x 4` full CPU/GPU/Fortran scan only after the
+   per-point time is reduced enough to keep the campaign bounded.

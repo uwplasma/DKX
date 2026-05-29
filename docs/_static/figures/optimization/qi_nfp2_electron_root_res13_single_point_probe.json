@@ -1,0 +1,63 @@
+{
+  "artifact_kind": "qi_nfp2_kinetic_single_point_probe",
+  "backend": "cpu",
+  "claim_boundary": "This is a bounded single-point solver-safety and profiling probe. It is not a full electron-root scan or production-resolution QI promotion artifact.",
+  "er": 0.3,
+  "failed_or_rejected_routes": [
+    {
+      "elapsed_s": 212.086,
+      "reason": "residual 1.220319e-08 exceeded target 1.466182e-11, so HDF5 output was refused",
+      "route": "one_device_unsharded_cpu"
+    },
+    {
+      "elapsed_s": 44.229,
+      "reason": "full-system SuperLU factorization failed after building 21907808 nonzeros",
+      "route": "sparse_host"
+    },
+    {
+      "elapsed_s": 32.814,
+      "reason": "full-system SuperLU factorization failed after building 21907808 nonzeros",
+      "route": "sparse_pc_gmres"
+    }
+  ],
+  "observables": {
+    "FSABFlow": [
+      0.000115155161,
+      0.0000300274849
+    ],
+    "FSABjHat": 0.0000851276764,
+    "FSABjHatOverRootFSAB2": 0.0000152849314,
+    "heatFlux_vm_psiHat": [
+      -0.000000028848004,
+      -0.000000000747481196
+    ],
+    "particleFlux_vm_psiHat": [
+      -0.0000000133561994,
+      -0.000000000396753792
+    ]
+  },
+  "policy_result": {
+    "selected_route": "auto -> theta_line setup -> active sparse-LU rescue",
+    "top_level_sharding_preserved": true,
+    "transformed_matvec_path": "local_unsharded_jit"
+  },
+  "resolution": {
+    "Ntheta": 13,
+    "Nx": 4,
+    "Nxi": 15,
+    "Nzeta": 13,
+    "solverTolerance": "1d-6"
+  },
+  "result": {
+    "active_size": 11496,
+    "converged": true,
+    "peak_rss_mb": 2018.140625,
+    "residual_norm": 2.0913627762603e-18,
+    "residual_target": 1.4661821662963957e-11,
+    "solver_elapsed_s": 107.87407708284445,
+    "total_size": 20284,
+    "wrapper_elapsed_s": 110.329
+  },
+  "status": "pass_bounded_single_point",
+  "workflow": "sfincs_jax_qi_nfp2_kinetic_res13_solver_safety_probe"
+}

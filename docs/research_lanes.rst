@@ -763,6 +763,16 @@ fixed resolution. The low-to-refined and refined-to-next-refined root drifts
 remain visible, so these rungs are persistence and solver-policy evidence
 rather than convergence claims.
 
+The next single-point QI probe at ``13 x 13 x 15 x 4`` exposed and fixed a
+multi-device JAX mesh-context bug: transformed RHSMode=1 matvecs must not enter
+the cached sharded ``pjit`` path from inside ``vmap`` or
+``custom_linear_solve``. The fixed default CPU route writes a converged
+``E_r=0.3`` output with active size ``11496``, residual ``2.09e-18`` against
+target ``1.47e-11``, and peak RSS about ``2.0 GB``. It is deliberately recorded
+as a bounded single-point safety/profiling probe, not as a full resolution
+ladder: a complete scan at this size would exceed the current bounded campaign
+budget unless the next algorithmic shortcut reduces per-point time.
+
 Production-resolution ladders remain open because the scale-0.60 GPU hard seed
 is not closed by a true device algorithm and because the QI kinetic
 electron-root scan still needs a wider CPU/GPU/Fortran resolution ladder.

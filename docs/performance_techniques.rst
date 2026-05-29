@@ -1574,6 +1574,14 @@ Controls:
   only kept fallback behavior is reusing a non-GMRES candidate as a GMRES initial
   guess when it strictly improves the finite RHS norm and is not a
   right-preconditioned coordinate state.
+- Transformed RHSMode=1 matvecs use a different sharding boundary than
+  top-level operator applications. Setup probes that call the full-system
+  operator inside ``vmap`` and matvecs that run inside ``custom_linear_solve``
+  now force the local/unsharded JIT path. This avoids nested
+  ``jax.set_mesh``/``pjit`` contexts on multi-device hosts while preserving the
+  cached sharded path for top-level CPU/GPU matvecs. The safety gate was added
+  after the ``13 x 13 x 15 x 4`` QI single-point probe failed before Krylov
+  progress on a multi-device CPU runtime.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING`` (default: off): opt-in
   smoothed global-coupling wrapper for explicit ``xblock_sparse_pc_gmres``. It
   builds low-rank load vectors from RHS/source rows, low-L flux-surface-average

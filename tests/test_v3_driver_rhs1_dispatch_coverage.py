@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import jax.numpy as jnp
+import numpy as np
+
 import sfincs_jax.v3_driver as vd
 
 
@@ -131,6 +134,29 @@ def test_rhs1_dispatch_default_falls_back_to_block_preconditioner(monkeypatch) -
         is sentinel
     )
     assert seen == {"species": 2, "x": 3, "xi": 4}
+
+
+def test_matvec_submatrix_uses_unsharded_operator_inside_vmap(monkeypatch) -> None:
+    def _cached_matvec(*_args, **_kwargs):
+        raise AssertionError("preconditioner submatrix assembly must not enter cached sharded matvec")
+
+    def _unsharded_matvec(_op, vector, *, include_jacobian_terms=True, allow_sharding=True):
+        assert include_jacobian_terms is True
+        assert allow_sharding is False
+        return 2.0 * vector + jnp.arange(vector.shape[0], dtype=vector.dtype)
+
+    monkeypatch.setattr(vd, "apply_v3_full_system_operator_cached", _cached_matvec)
+    monkeypatch.setattr(vd, "apply_v3_full_system_operator", _unsharded_matvec)
+
+    submatrix = vd._matvec_submatrix(
+        SimpleNamespace(),
+        col_idx=np.asarray([0, 2], dtype=np.int32),
+        row_idx=np.asarray([0, 2], dtype=np.int32),
+        total_size=4,
+        chunk_cols=2,
+    )
+
+    np.testing.assert_allclose(submatrix, np.asarray([[2.0, 2.0], [0.0, 4.0]]))
 
 
 def test_rhs1_dkes_gmres_budget_respects_explicit_limits() -> None:
