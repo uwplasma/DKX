@@ -216,3 +216,39 @@ def test_qi_electron_root_nfp_screen_recommends_qi_nfp2_without_kinetic_claim() 
     assert plan["recommended_candidate"] == "qi:nfp2"
     assert any("scan-er" in command for command in plan["next_commands"])
     assert "positive ambipolar root bracket from completed kinetic scan" in plan["required_gates"]
+
+
+def test_qi_nfp2_lowres_kinetic_electron_root_artifacts_pass_cpu_gpu_and_reference_gates() -> None:
+    cpu = _load("qi_nfp2_electron_root_lowres_cpu.json")
+    gpu = _load("qi_nfp2_electron_root_lowres_gpu.json")
+    fortran = _load("qi_nfp2_electron_root_lowres_fortran.json")
+    comparison = _load("qi_nfp2_electron_root_lowres_reference_tolerance_comparison.json")
+
+    for payload in (cpu, gpu, fortran):
+        assert payload["workflow"] == "sfincs_jax_optimization_high_fidelity_promotion"
+        assert payload["gate_status"] == "pass"
+        assert payload["failures"] == []
+        root = payload["selected_root"]
+        assert root["root_type"] == "electron"
+        assert root["bracket"] == [2.0, 3.0]
+        assert 2.43 < root["er"] < 2.45
+        assert root["slope"] > 0.0
+        assert len(payload["runs"]) == 8
+
+    assert abs(cpu["selected_root"]["er"] - gpu["selected_root"]["er"]) < 1.0e-10
+    assert abs(cpu["selected_root"]["er"] - fortran["selected_root"]["er"]) < 2.0e-6
+
+    for run in cpu["runs"] + gpu["runs"]:
+        assert run["residual_norm"] <= run["residual_target"]
+        assert run["residual_gate"]["status"] == "pass"
+
+    assert comparison["status"] == "pass"
+    assert comparison["failures"] == []
+    assert comparison["tolerances"] == {
+        "bootstrap_objective_rtol": 1.0e-3,
+        "flux_objective_total_rtol": 1.0e-5,
+        "selected_root_er_atol": 1.0e-10,
+        "selected_root_er_rtol": 1.0e-6,
+    }
+    assert comparison["comparisons"]["cpu_gpu"]["status"] == "pass"
+    assert comparison["comparisons"]["sfincs_jax_fortran_v3"]["status"] == "pass"
