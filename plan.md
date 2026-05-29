@@ -16995,3 +16995,46 @@ Best next steps:
 3. Do not keep tuning the current device-QI smoother stack. Either defer true
    device-QI with this checked evidence or replace it with a qualitatively
    stronger global closure in a future research lane.
+
+### 35.84 Claim-boundary cleanup after checked GPU operator-reuse artifact
+
+Scope:
+
+- Removed stale README wording that said the QI operator-reuse GPU route still
+  needed bounded one-GPU timing evidence. The bounded office-GPU evidence now
+  exists, but it fails the residual gate, so the claim boundary is
+  infrastructure-only.
+- Updated research-lane, testing, validation-matrix, and structured
+  research-lane metadata so the new ``13 x 13 x 15 x 4`` GPU artifact is visible
+  as route/accounting/failure-safe trace evidence without promoting production
+  true-device QI.
+- Corrected QI evidence-manifest counts in docs from ``107`` artifacts and
+  ``75`` non-passing blockers to the current ``110`` artifacts and ``78``
+  non-passing blockers.
+
+Results:
+
+- Release-facing QI wording is now consistent: production QI still uses the
+  residual-clean non-autodiff host sparse path; true device-QI remains deferred
+  until a production hard-seed artifact writes converged output and solver trace.
+- The checked mid-size GPU route remains useful because it demonstrates
+  factor-skip/operator-reuse infrastructure, ``21.44 s`` warm wall time, and
+  ``1384 MB`` trace RSS, but it is explicitly not a performance or convergence
+  claim.
+
+Best next steps:
+
+Validation:
+
+- ``python -m pytest -q tests/test_qi_kinetic_res13_probe_artifact.py tests/test_qi_device_research_lane_artifacts.py tests/test_research_lane_policy.py``
+  reported ``16 passed``.
+- ``python scripts/check_research_lanes.py && python scripts/check_release_gates.py && python scripts/check_repo_size.py && git diff --check``
+  passed.
+- ``python -m sphinx -W --keep-going -b html docs docs/_build/html`` passed.
+
+Best next steps:
+
+1. Commit and push the docs-only claim-boundary cleanup.
+2. Check GitHub CI/Docs after push.
+3. Continue only with a qualitatively new true-device-QI algorithm or keep the
+   lane explicitly deferred; do not spend more time on smoother/restart tuning.

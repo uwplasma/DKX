@@ -156,6 +156,10 @@
         {
           "claim": "Scale-0.60 forced x-block one-GPU LGMRES rescue selected the intended method-rescue path but timed out after 950 matvecs, so GPU promotion requires a stronger residual-reducing algorithm rather than another solver-label toggle.",
           "path": "docs/_static/qi_seed_robustness_scale060_xblock_lgmres_rescue_seed3_gpu0_2026_05_15_retry.json"
+        },
+        {
+          "claim": "Bounded 13 x 13 x 15 x 4 QI nfp=2 office-GPU operator-reuse rerun activates the matrix-free route, skips local x-block factors, writes fail-safe trace metadata, and records corrected device-cycle accounting, but fails the residual gate and is not production true-device-QI evidence.",
+          "path": "docs/_static/figures/optimization/qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json"
         }
       ],
       "gates": [
@@ -169,7 +173,7 @@
       "next_actions": [
         "Keep the production non-autodiff host fallback release-ready by preserving metadata that records fallback use, non-autodiff scope, output/trace writes, and residual convergence.",
         "Do not widen the public full-FP 3D x-block sparse-PC default window from the new GPU artifacts; public-auto, forced x-block GMRES, and forced x-block LGMRES scale-0.60 hard-seed reruns timed out under strict gates.",
-        "Revisit true device-QI only post-release with a stronger residual-reducing algorithm; the current fail-closed Galerkin selector correctly rejects the rank-32 hard-seed probe, and the new local residual-minimizing smoother remains bounded infrastructure until a scale-0.60 CPU/GPU hard-seed artifact accepts it."
+        "Revisit true device-QI only with a stronger residual-reducing algorithm; the checked mid-size operator-reuse route now proves factor-skip/accounting/trace infrastructure, but the residual remains far above target and the scale-0.60 GPU hard-seed artifact is still the promotion blocker."
       ],
       "second_push_delta_percent": 76,
       "second_push_result": "scale-0.50 and scale-0.55 public auto CPU and one-GPU five-seed QI ladders pass; scale-0.60 CPU now also passes seeds 0..4 with the bounded side-probe/LGMRES rescue. The large-QI production escape hatch is closed by a release-ready non-autodiff host fallback for explicit device-Krylov requests. True differentiable/device-QI is closed deferred post-release: the JAX Galerkin coarse preconditioner is implemented and fail-closed, and the new residual-minimizing device smoother improves a bounded local probe, but the scale-0.60 GPU hard seed still lacks a residual-clean accepted device-local artifact.",
