@@ -202,6 +202,21 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   QA-only path to a fail-closed QA-or-QI promotion workflow. Completion for the
   optimization orchestration lane is now `90%`; the remaining `10%` is the
   first real QI `nfp=2` kinetic promotion scan and resolution ladder.
+- [x] Closed the first real QI `nfp=2` bounded kinetic electron-root promotion
+  artifact. A two-species ion/electron VMEC QI deck at
+  `7 x 7 x 7 x 4` was scanned over
+  `Er=[-0.3,-0.1,0,0.1,0.3,1,2,3]`. Local CPU completed the scan in about
+  `25 s`, one office RTX A4000 completed the same scan from a clean checkout in
+  about `86 s`, and SFINCS Fortran v3 completed the reference campaign in about
+  `528 s`. CPU/GPU promotion passed strict gates with selected electron root
+  `Er=2.4386009865`; Fortran v3 selected `Er=2.4385999679` and passed the
+  documented low-resolution reference tolerances (`root rtol=1e-6`,
+  bootstrap rtol=`1e-3`, flux rtol=`1e-5`). Checked artifacts are
+  `docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_*` and
+  `qi_nfp2_electron_root_lowres_reference_tolerance_comparison.*`.
+  This moves the QA/QI optimization orchestration lane to `95%`. Remaining work
+  is the QI production-resolution/resolution-convergence ladder and true
+  differentiable device-QI hard-seed closure, not the first kinetic artifact.
 - [x] Advanced true device-QI infrastructure by batching matrix-free coarse
   actions with `jax.vmap` in `rhs1_qi_device_preconditioner.py`, with a narrow
   fallback for CSR matvec primitives that lack batching rules. This reduces

@@ -59,21 +59,30 @@ def run_sfincs_fortran(
         localize_equilibrium_file_in_place(input_namelist=dst_input, overwrite=False)
 
     log_path = workdir / "sfincs.log"
+    output_path = workdir / "sfincsOutput.h5"
     with log_path.open("w") as log:
         merged_env = os.environ.copy()
         if env:
             merged_env.update(env)
-        subprocess.run(
+        completed = subprocess.run(
             [str(exe)],
             cwd=str(workdir),
             stdout=log,
             stderr=subprocess.STDOUT,
             env=merged_env,
-            check=True,
+            check=False,
             timeout=timeout_s,
         )
 
-    output_path = workdir / "sfincsOutput.h5"
+    if completed.returncode != 0 and output_path.exists():
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")
+        completed_cleanly = "Goodbye!" in log_text and "Saving diagnostics to h5 file" in log_text
+        mpi_finalize_failure = "MPI_Finalize failed" in log_text or "internal_Finalize" in log_text
+        if not (completed_cleanly and mpi_finalize_failure):
+            raise subprocess.CalledProcessError(completed.returncode, [str(exe)])
+    elif completed.returncode != 0:
+        raise subprocess.CalledProcessError(completed.returncode, [str(exe)])
+
     if not output_path.exists():
         raise RuntimeError(
             f"Fortran run finished but did not create {output_path}. See {log_path}."

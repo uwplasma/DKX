@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import runpy
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -240,7 +241,7 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
 
     def _fake_run(cmd, cwd, stdout, stderr, env, check, timeout):
         calls.append((cmd, cwd, timeout))
-        assert check is True
+        assert check is False
         assert env["EXTRA"] == "1"
         Path(cwd, "sfincsOutput.h5").write_bytes(b"")
         return SimpleNamespace(returncode=0)
@@ -257,6 +258,26 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
     )
     assert out == workdir / "sfincsOutput.h5"
     assert calls == [([str(exe.resolve())], str(workdir.resolve()), 5.0)]
+
+    def _fake_finalize_failure(cmd, cwd, stdout, stderr, env, check, timeout):
+        Path(cwd, "sfincsOutput.h5").write_bytes(b"complete")
+        stdout.write("Saving diagnostics to h5 file for iteration 1\n")
+        stdout.write("Goodbye!\n")
+        stdout.write("MPI_Finalize failed\n")
+        return SimpleNamespace(returncode=143)
+
+    monkeypatch.setattr("sfincs_jax.fortran.subprocess.run", _fake_finalize_failure)
+    out = run_sfincs_fortran(input_namelist=input_path, exe=exe, workdir=workdir)
+    assert out == workdir / "sfincsOutput.h5"
+
+    def _fake_real_failure(cmd, cwd, stdout, stderr, env, check, timeout):
+        Path(cwd, "sfincsOutput.h5").write_bytes(b"incomplete")
+        stdout.write("MPI_Finalize failed\n")
+        return SimpleNamespace(returncode=2)
+
+    monkeypatch.setattr("sfincs_jax.fortran.subprocess.run", _fake_real_failure)
+    with pytest.raises(subprocess.CalledProcessError):
+        run_sfincs_fortran(input_namelist=input_path, exe=exe, workdir=workdir)
 
     monkeypatch.setattr("sfincs_jax.cli.main", lambda: 7)
     sys.modules.pop("sfincs_jax.__main__", None)

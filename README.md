@@ -172,7 +172,7 @@ python examples/optimization/screen_qi_electron_root_nfp.py --steps 70
 
 The checked screen recommends QI `nfp=2` as the first fallback target, because
 QA has only low/mid-resolution positive-root evidence so far and QI electron-root
-promotion still needs its first real kinetic artifact. Both scripts write JSON
+promotion now has a first bounded kinetic artifact. Both scripts write JSON
 provenance plus PNG/PDF plots. The proxy layer is differentiable and
 finite-difference checked; this does not make the promoted kinetic scan
 differentiable. Accepted designs still need completed `sfincs_jax scan-er`
@@ -233,6 +233,14 @@ low-resolution finite-beta QA positive-electron-root comparison. The finite-beta
 artifact demonstrates the full promotion workflow on a VMEC finite-beta QA
 geometry; production-resolution radial/profile convergence remains a separate
 claim-specific validation step.
+It also now includes a first bounded QI `nfp=2` kinetic electron-root promotion
+artifact from a two-species VMEC scan at `7 x 7 x 7 x 4`. CPU and GPU pass
+strict agreement for the positive ambipolar root at `E_r = 2.4386009865`; the
+SFINCS Fortran v3 reference agrees within the documented low-resolution
+reference tolerances. This closes the first QI kinetic artifact, not the
+production-resolution QI ladder.
+
+![QI nfp=2 low-resolution kinetic electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_reference_tolerance_comparison.png)
 The first bounded convergence ladder extends that artifact to `9 x 9 x 7 x 4`
 at the central surface and remains explicitly `deferred` because it does not
 meet the production floor.
