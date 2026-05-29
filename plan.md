@@ -16625,3 +16625,71 @@ Best next steps:
    device-compatible operator/coarse reuse path.
 3. Do not promote QI production-resolution performance until the GPU route is
    faster than CPU or clearly documented as a correctness-only backend fallback.
+
+### 35.78 QI next-lane decision after res13 parity
+
+Decision:
+
+- The next physics-resolution campaign should be CPU/Fortran first at
+  ``15 x 15 x 17 x 4``. It directly tests whether the ``13x -> 15x`` electron
+  root drift is small enough to continue the ladder and avoids spending GPU time
+  on a route already known to be correctness-clean but slow.
+- The next GPU performance implementation should be a true device
+  operator/coarse-reuse path, not smoother tuning and not more host sparse-LU
+  scans. It should enter before the current accelerator host-sparse rescue for
+  RHSMode=1 QI full-FP systems in the ``8000..30000`` active-size window, try a
+  device CSR/matrix-free operator with reusable QI coarse action, and fall back
+  to the existing host sparse-LU route if residual or memory gates fail.
+
+Implementation touchpoints for the GPU replacement lane:
+
+- Add a policy helper such as ``rhs1_qi_device_operator_reuse_allowed(...)`` for
+  accelerator RHSMode=1, full-FP, 3D, no-Phi1, non-PAS, constraint-safe systems.
+- Extend ``sfincs_jax/rhs1_device_operator.py`` with chunked device CSR/value
+  probing or a matrix-free coarse-only operator-reuse path that avoids dense
+  color-seed assembly.
+- Reuse ``sfincs_jax/rhs1_qi_device_preconditioner.py`` for cached
+  ``(Q, A Q)`` coarse/operator actions and residual-equation bases.
+- Wire the route in ``sfincs_jax/v3_driver.py`` before
+  ``cpu_large_sparse_shortcut`` / accelerator host-sparse rescue. Accepted
+  solutions must write HDF5 and solver trace without invoking host SuperLU.
+
+Required gates before defaulting that GPU route:
+
+- Unit policy tests: accelerator allowed for the 13x QI shape, CPU unchanged,
+  PAS/Phi1/dense modes rejected, env off/force honored.
+- Matvec tests: device operator action matches the existing matrix-free active
+  operator on synthetic and reduced RHSMode=1 active systems.
+- Driver routing tests: host sparse direct factorization is not called on route
+  success, and fallback still fires on residual or memory rejection.
+- Real 13x GPU point: residual below target, HDF5 written, no CUDA illegal
+  address, no host sparse metadata.
+- Real 13x GPU scan: CPU/GPU observables agree within the current
+  ``~1e-12`` backend tolerance and selected root remains
+  ``E_r ~= 2.2153427467``.
+- Performance: mean GPU solver time must beat the current host-sparse GPU mean
+  ``142.744 s``; require at least ``2x`` speedup before enabling by default.
+
+Next bounded CPU/Fortran rung:
+
+- Materialize ``outputs/qi_nfp2_electron_root_kinetic/twospecies_15x15x17x4``
+  with the same QI VMEC geometry, ``Ntheta=15``, ``Nzeta=15``, ``Nxi=17``,
+  ``Nx=4``, and ``solverTolerance=1d-6``.
+- Run the eight-point CPU scan first. Continue only if every residual gate
+  passes, the scan stays close to the ``<=10 min`` target, and the selected root
+  is finite, positive, and bracketed.
+- Run Fortran-v3 next. Pass if CPU/Fortran selected-root relative difference is
+  within ``2e-6``, ``FSABFlow``/bootstrap-current differences remain below
+  ``2e-3`` relative, and particle/heat-flux differences remain below ``1e-5``.
+- Treat ``13x -> 15x`` selected-root drift ``<=2e-2`` as acceptable continuation
+  evidence and ``<=5e-3`` as strong convergence evidence.
+
+Progress:
+
+- QI kinetic promotion ladder: ``86%``; parity is closed at 13x, and the next
+  resolution rung is scoped.
+- True GPU/device QI performance: ``72%``; correctness is clean via host sparse
+  fallback, but the real device replacement path remains unimplemented.
+- Production-resolution QI ladders: ``56%``; the next higher-resolution rung
+  and GPU performance replacement are the remaining blockers.
+- Overall remaining-lane completion estimate: ``98.1%``.
