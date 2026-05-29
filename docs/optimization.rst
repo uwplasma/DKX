@@ -1007,6 +1007,16 @@ nonconverged HDF5 diagnostics.  Therefore the route remains documented as
 infrastructure, while the release-ready path for this QI rung remains the
 non-autodiff host sparse solve.
 
+A stronger coupled-residual device-QI preset was also tested on the same point.
+It built residual snapshots, block-Schur residual equations, multilevel residual
+equations, and a coupled residual equation.  The coupled residual equation
+itself was accepted, reducing the setup residual from ``1.466e-5`` to
+``1.312e-5``, and the Krylov-installed preconditioner reduced the final residual
+to ``9.71e-6`` in about ``2.1 min`` with peak host RSS about ``1.6 GB``.  This is
+lower memory and a slightly smaller residual than the minimal route, but still
+about ``6.6e5`` times above the requested target.  It is therefore recorded as
+fail-closed evidence, not a promoted production GPU path.
+
 VMEC JAX Integration
 --------------------
 

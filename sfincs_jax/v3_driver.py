@@ -19342,9 +19342,11 @@ def solve_v3_full_system_linear_gmres(
                     "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                     f"device-cycle cycle={int(cycle)} iterations={int(iterations)} "
                     f"residual={float(residual_norm):.6e} target={float(target):.6e} "
-                    f"ratio={float(ratio):.6e} elapsed_s={sparse_timer.elapsed_s():.3f}",
-                )
+                        f"ratio={float(ratio):.6e} elapsed_s={sparse_timer.elapsed_s():.3f}",
+                    )
 
+            device_krylov_iterations: int | None = None
+            device_krylov_estimated_matvecs: int | None = None
             if xblock_krylov_method == "lgmres":
                 x_np, residual_norm_xblock_pc, history = lgmres_solve_with_history_scipy(
                     matvec=solve_matvec,
@@ -19394,6 +19396,9 @@ def solve_v3_full_system_linear_gmres(
                 history_arr = np.asarray(jax.device_get(gmres_jax_result.residual_history), dtype=np.float64)
                 n_iterations = int(jax.device_get(gmres_jax_result.n_iterations))
                 history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
+                device_krylov_iterations = int(n_iterations)
+                if bool(xblock_device_fgmres_jit) and xblock_device_fgmres_jit_mode == "cycle":
+                    device_krylov_estimated_matvecs = max(int(mv_count), int(n_iterations) + 2)
             elif xblock_krylov_method == "fgmres_jax":
                 fgmres_solver = (
                     (
@@ -19430,6 +19435,9 @@ def solve_v3_full_system_linear_gmres(
                 history_arr = np.asarray(jax.device_get(fgmres_result.residual_history), dtype=np.float64)
                 n_iterations = int(jax.device_get(fgmres_result.n_iterations))
                 history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
+                device_krylov_iterations = int(n_iterations)
+                if bool(xblock_device_fgmres_jit) and xblock_device_fgmres_jit_mode == "cycle":
+                    device_krylov_estimated_matvecs = max(int(mv_count), int(n_iterations) + 2)
             elif xblock_krylov_method == "bicgstab_jax":
                 bicgstab_jax_result, _bicgstab_jax_residual = bicgstab_solve_with_residual(
                     matvec=solve_matvec,
@@ -19449,6 +19457,7 @@ def solve_v3_full_system_linear_gmres(
                 )
                 n_iterations = int(jax.device_get(bicgstab_jax_result.n_iterations))
                 history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
+                device_krylov_iterations = int(n_iterations)
             elif xblock_krylov_method == "tfqmr_jax":
                 tfqmr_jax_result, _tfqmr_jax_residual = tfqmr_solve_with_residual(
                     matvec=solve_matvec,
@@ -19469,6 +19478,7 @@ def solve_v3_full_system_linear_gmres(
                 )
                 n_iterations = int(jax.device_get(tfqmr_jax_result.n_iterations))
                 history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
+                device_krylov_iterations = int(n_iterations)
             elif xblock_krylov_method == "gcrotmk":
                 x_np, residual_norm_xblock_pc, history = gcrotmk_solve_with_history_scipy(
                     matvec=solve_matvec,
@@ -19520,8 +19530,18 @@ def solve_v3_full_system_linear_gmres(
                 residual_norm_xblock_pc = float(residual_norm_xblock_pc)
             candidate_krylov_method = str(xblock_krylov_method)
             candidate_residual_norm = float(residual_norm_xblock_pc)
-            candidate_iterations = int(len(history or []))
-            candidate_matvecs = int(mv_count)
+            reported_iterations = (
+                int(device_krylov_iterations)
+                if device_krylov_iterations is not None
+                else int(len(history or []))
+            )
+            reported_matvecs = (
+                int(device_krylov_estimated_matvecs)
+                if device_krylov_estimated_matvecs is not None
+                else int(mv_count)
+            )
+            candidate_iterations = int(reported_iterations)
+            candidate_matvecs = int(reported_matvecs)
             fallback_started_from_candidate = False
             fallback_candidate_improved_rhs = False
             fallback_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FALLBACK_GMRES", "").strip().lower()
@@ -19575,6 +19595,8 @@ def solve_v3_full_system_linear_gmres(
                 )
                 solve_s += sparse_timer.elapsed_s() - fallback_start_s
                 xblock_krylov_method = "gmres"
+                device_krylov_iterations = None
+                device_krylov_estimated_matvecs = None
                 x_solution_np = np.asarray(x_np, dtype=np.float64)
                 x_physical_np = np.asarray(
                     jax.device_get(solve_solution_to_physical(jnp.asarray(x_solution_np, dtype=jnp.float64))),
@@ -19588,6 +19610,16 @@ def solve_v3_full_system_linear_gmres(
                     residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
                 except Exception:
                     residual_norm_xblock_pc = float(residual_norm_xblock_pc)
+            reported_iterations = (
+                int(device_krylov_iterations)
+                if device_krylov_iterations is not None
+                else int(len(history or []))
+            )
+            reported_matvecs = (
+                int(device_krylov_estimated_matvecs)
+                if device_krylov_estimated_matvecs is not None
+                else int(mv_count)
+            )
             x_np = x_physical_np
             post_solve_policy = _read_rhs1_post_solve_correction_policy()
             post_minres_policy = post_solve_policy.post_minres
@@ -19883,8 +19915,8 @@ def solve_v3_full_system_linear_gmres(
                     0,
                     "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
                     f"method={xblock_krylov_method} elapsed_s={sparse_timer.elapsed_s():.3f} "
-                    f"iters={len(history or [])} "
-                    f"matvecs={int(mv_count)} residual={float(residual_norm_xblock_pc):.6e} "
+                    f"iters={int(reported_iterations)} "
+                    f"matvecs={int(reported_matvecs)} residual={float(residual_norm_xblock_pc):.6e} "
                     f"target={float(target_xblock):.6e}{ksp_suffix}",
                 )
             xblock_solver_kind = (
@@ -19926,8 +19958,12 @@ def solve_v3_full_system_linear_gmres(
                         target_xblock,
                     ),
                     "acceptance_criterion": "true_residual",
-                    "iterations": int(len(history or [])),
-                    "matvecs": int(mv_count),
+                    "iterations": int(reported_iterations),
+                    "matvecs": int(reported_matvecs),
+                    "python_matvecs": int(mv_count),
+                    "device_cycle_estimated_matvecs": (
+                        None if device_krylov_estimated_matvecs is None else int(device_krylov_estimated_matvecs)
+                    ),
                     "krylov_method": str(xblock_krylov_method),
                     "candidate_krylov_method": str(candidate_krylov_method),
                     "candidate_iterations": int(candidate_iterations),

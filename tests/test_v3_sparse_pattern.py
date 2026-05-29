@@ -68,6 +68,25 @@ def _fast_device_krylov_result(**kwargs):
     )
 
 
+def _fast_device_cycle_krylov_result(**kwargs):
+    """Return a converged cycle-JIT FGMRES result with many internal iterations."""
+
+    b = jnp.asarray(kwargs["b"], dtype=jnp.float64)
+    x = jnp.zeros_like(b)
+    history = jnp.asarray([jnp.linalg.norm(b), 1.0e-6, 0.0], dtype=jnp.float64)
+    return (
+        FlexibleGMRESSolveResult(
+            x=x,
+            residual_norm=jnp.asarray(0.0, dtype=jnp.float64),
+            residual_history=history,
+            n_iterations=jnp.asarray(80, dtype=jnp.int32),
+            n_restarts=jnp.asarray(1, dtype=jnp.int32),
+            converged=jnp.asarray(True),
+        ),
+        jnp.zeros_like(b),
+    )
+
+
 def test_xblock_precondition_side_defaults_right_only_for_full_fp_er() -> None:
     side, auto_right = _rhs1_xblock_precondition_side(
         env_value="",
@@ -1366,6 +1385,37 @@ def test_xblock_sparse_pc_device_krylov_records_experimental_metadata(
     assert result.metadata["xblock_global_coupling_setup_budget_s"] == 180.0
     assert result.metadata["xblock_global_coupling_setup_budget_reached"] is False
     assert len(result.metadata["xblock_global_coupling_singular_values"]) >= 1
+
+
+def test_xblock_sparse_pc_device_cycle_jit_reports_internal_iterations(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV", "fgmres")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE", "cycle")
+
+    monkeypatch.setattr(
+        v3_driver_module,
+        "fgmres_cycle_jit_solve_with_residual",
+        _fast_device_cycle_krylov_result,
+    )
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="xblock_sparse_pc_gmres",
+        tol=1.0e-3,
+        maxiter=80,
+    )
+
+    assert float(result.residual_norm) < 1.0e-3
+    assert result.metadata["solver_kind"] == "xblock_sparse_pc_fgmres_jax"
+    assert result.metadata["iterations"] == 80
+    assert result.metadata["matvecs"] >= 82
+    assert result.metadata["device_cycle_estimated_matvecs"] == result.metadata["matvecs"]
+    assert result.metadata["python_matvecs"] < result.metadata["matvecs"]
+    assert result.metadata["candidate_iterations"] == 80
+    assert result.metadata["candidate_matvecs"] == result.metadata["matvecs"]
 
 
 def test_xblock_sparse_pc_device_host_fallback_records_non_autodiff_host_policy(monkeypatch) -> None:

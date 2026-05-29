@@ -16879,3 +16879,63 @@ Best next steps:
    residual model enough that the probe is accepted before Krylov starts.
 3. Keep the documented non-autodiff host sparse path as the release-ready
    production route for the current QI ladder.
+
+### 35.82 Coupled-residual device-QI rerun and device-cycle accounting
+
+Scope:
+
+- Re-ran the same ``13 x 13 x 15 x 4`` QI ``nfp=2`` ``E_r=0.3`` GPU point on
+  ``office`` after updating the clean checkout to ``8d428a6``.
+- Used the existing ``coupled-residual-device-qi`` preset: residual snapshots,
+  block-Schur residual equations, multilevel residual equations, coupled
+  residual equation, augmented Krylov, and JIT cycle FGMRES.
+- Fixed solver metadata for JIT-cycle device Krylov so ``iterations`` and
+  ``matvecs`` report internal device-cycle work rather than only Python-visible
+  wrapper matvecs. The old wrapper count remains available as
+  ``python_matvecs`` and cycle estimates are exposed as
+  ``device_cycle_estimated_matvecs``.
+
+Results:
+
+- Operator reuse activated and local x-block factors were skipped.
+- The coupled residual equation was accepted with rank ``24`` and ``56``
+  candidates, reducing the setup residual from ``1.466182e-05`` to
+  ``1.311991e-05``.
+- The overall QI-device preconditioner was still installed after seed-probe
+  rejection, not accepted directly; this keeps the run fail-closed.
+- JIT cycle FGMRES reached ``960`` internal iterations and final residual
+  ``9.707076e-06`` against target ``1.466182e-11``. The residual ratio remained
+  about ``6.62e5``.
+- Total wall time was ``2:04.09`` and peak host RSS was about ``1.58 GB``. This
+  is a memory/runtime improvement over the minimal device route, but nowhere
+  near the convergence gate.
+- The new failure-safe trace path wrote
+  ``/tmp/sfincs_jax_qi_device_reuse_13x_coupled/solver_trace.json`` before the
+  production output gate refused nonconverged HDF5 diagnostics.
+
+Validation:
+
+- ``python -m pytest -q tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_device_cycle_jit_reports_internal_iterations tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_device_krylov_records_experimental_metadata tests/test_io_export_and_h5_coverage.py::test_nonconverged_rhsmode1_solver_trace_sidecar_is_written``
+  reported ``4 passed``.
+- ``python -m ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py sfincs_jax/io.py tests/test_io_export_and_h5_coverage.py``
+  passed.
+- ``python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/io.py`` passed.
+- GitHub CI and Docs for ``8d428a6`` both passed.
+
+Progress:
+
+- QI kinetic promotion ladder: ``90%``; unchanged.
+- True GPU/device QI performance: ``80%``; device execution, factor-skip,
+  coupled residual-equation setup, failure-safe traces, and accurate accounting
+  now work, but convergence remains open.
+- Production-resolution QI ladders: ``61%``; unchanged.
+- Overall remaining-lane completion estimate: ``98.5%``.
+
+Best next steps:
+
+1. Commit the accounting fix and coupled-run evidence.
+2. Stop promoting this coupled-residual preset for production; it improves
+   memory and residual modestly but does not solve the QI hard seed.
+3. Keep true device-QI as a documented research lane requiring a qualitatively
+   stronger global closure. For release, use the residual-clean host sparse
+   route and the fixed CPU/Fortran QI ladder.
