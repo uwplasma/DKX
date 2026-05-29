@@ -54,7 +54,9 @@ Examples:
   completed scan, and compares the resulting promotion JSON files. Use
   `--dry-run` first on expensive inputs. The Fortran lane allows missing
   linear-residual datasets by default because upstream v3 outputs often do not
-  write the JAX residual fields; JAX CPU/GPU lanes still require residuals.
+  write the JAX residual fields; JAX CPU/GPU lanes still require residuals. For
+  expensive GPU campaigns, add `--jax-scan-timeout-s` and
+  `--promotion-timeout-s` so a stalled lane writes a fail-closed campaign JSON.
 - `summarize_finite_beta_electron_root_ladder.py` — reads already-promoted
   finite-beta QA electron-root CPU/GPU/Fortran JSON files across resolution
   tiers, checks backend root agreement and root drift, and writes a fail-closed
@@ -67,7 +69,7 @@ Real promotion checklist:
 python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 120 --out-dir runs/qa_candidate01/proxy --stem candidate01_proxy
 python examples/optimization/screen_qi_electron_root_nfp.py --steps 70 --out-dir runs/qa_candidate01/proxy --stem qi_electron_root_nfp_screen
 python examples/optimization/launch_sfincs_jax_candidate_scan.py --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --er-min -3 --er-max 3 --n-er 7 --jobs 4
-python examples/optimization/run_promotion_evidence_campaign.py --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/evidence_r0p50 --values -3 -2 -1 0 1 2 3 --run-cpu --run-gpu --gpu-device 0 --run-fortran --fortran-exe /path/to/sfincs --jobs 4 --dry-run
+python examples/optimization/run_promotion_evidence_campaign.py --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/evidence_r0p50 --values -3 -2 -1 0 1 2 3 --run-cpu --run-gpu --gpu-device 0 --run-fortran --fortran-exe /path/to/sfincs --jobs 4 --jax-scan-timeout-s 1800 --promotion-timeout-s 300 --dry-run
 JAX_PLATFORM_NAME=cpu sfincs_jax scan-er --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_cpu/r0p50 --values -3 -2 -1 0 1 2 3 --compute-solution --skip-existing --jobs 4
 python examples/optimization/evaluate_sfincs_jax_promotion_scan.py --scan-dir runs/qa_candidate01/scan_cpu/r0p50 --out-dir runs/qa_candidate01/audit --stem candidate01_r0p50_cpu --require-electron-root
 CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu sfincs_jax scan-er --input runs/qa_candidate01/input_r0p50.namelist --out-dir runs/qa_candidate01/scan_gpu/r0p50 --values -3 -2 -1 0 1 2 3 --compute-solution --skip-existing --jobs 1
@@ -83,7 +85,7 @@ QI `nfp=2` low-resolution promotion input materialization:
 
 ```bash
 python examples/optimization/materialize_qi_nfp2_promotion_input.py --out-dir runs/qi_nfp2_candidate01 --stem qi_nfp2_lowres
-python examples/optimization/run_promotion_evidence_campaign.py --input runs/qi_nfp2_candidate01/qi_nfp2_lowres.input.namelist --out-dir runs/qi_nfp2_candidate01/evidence --values -0.3 -0.1 0 0.1 0.3 1 2 3 --run-cpu --run-gpu --run-fortran --dry-run
+python examples/optimization/run_promotion_evidence_campaign.py --input runs/qi_nfp2_candidate01/qi_nfp2_lowres.input.namelist --out-dir runs/qi_nfp2_candidate01/evidence --values -0.3 -0.1 0 0.1 0.3 1 2 3 --run-cpu --run-gpu --run-fortran --jax-scan-timeout-s 1800 --promotion-timeout-s 300 --dry-run
 ```
 
 This generated input is a kinetic promotion candidate only. Do not cite it as
