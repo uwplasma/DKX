@@ -768,10 +768,14 @@ multi-device JAX mesh-context bug: transformed RHSMode=1 matvecs must not enter
 the cached sharded ``pjit`` path from inside ``vmap`` or
 ``custom_linear_solve``. The fixed default CPU route writes a converged
 ``E_r=0.3`` output with active size ``11496``, residual ``2.09e-18`` against
-target ``1.47e-11``, and peak RSS about ``2.0 GB``. It is deliberately recorded
-as a bounded single-point safety/profiling probe, not as a full resolution
-ladder: a complete scan at this size would exceed the current bounded campaign
-budget unless the next algorithmic shortcut reduces per-point time.
+target ``1.47e-11``. The follow-up sparse-LU skip-primary policy bypasses the
+theta-line setup, primary Krylov attempt, and stage-2 GMRES for this measured
+mid-size window, reducing solver time from about ``108 s`` to about ``35 s``
+and peak RSS from about ``2.0 GB`` to about ``1.9 GB`` with identical key
+observables. It is deliberately recorded as a bounded single-point
+safety/profiling/speedup probe, not as a full resolution ladder: a complete
+CPU/GPU/Fortran scan at this size still needs backend coverage before it can be
+promoted.
 
 Production-resolution ladders remain open because the scale-0.60 GPU hard seed
 is not closed by a true device algorithm and because the QI kinetic
