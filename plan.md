@@ -16693,3 +16693,66 @@ Progress:
 - Production-resolution QI ladders: ``56%``; the next higher-resolution rung
   and GPU performance replacement are the remaining blockers.
 - Overall remaining-lane completion estimate: ``98.1%``.
+
+### 35.79 QI 15x CPU/Fortran rung and sparse x-block cliff fix
+
+Scope:
+
+- Materialized the next QI ``nfp=2`` kinetic promotion rung at
+  ``15 x 15 x 17 x 4`` with the same scaled QI VMEC geometry and
+  ``solverTolerance=1d-6``.
+- Reproduced a solver-policy cliff at ``E_r=0.3``: the old automatic policy
+  built sparse x-block rescue factors and then still performed the exact active
+  sparse-LU solve, taking about ``316.9 s``.
+- Updated ``rhs1_sparse_xblock_rescue_allowed(...)`` so the sparse x-block
+  rescue default starts above the direct sparse skip-primary cap. Mid-size
+  RHSMode=1 systems already covered by exact active sparse LU no longer pay for
+  redundant x-block setup unless explicitly forced by
+  ``SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MIN``.
+
+Validation:
+
+- The ``E_r=0.3`` point now takes about ``69.4 s`` with the same residual
+  ``6.53e-18`` against target ``1.69e-11`` and unchanged key observables,
+  giving a measured ``4.57x`` speedup for the policy-cliff point.
+- The full eight-point CPU scan completed in ``535.8 s``. Mean solver time was
+  ``66.93 s`` and max solver time was ``69.37 s``. All residual gates passed at
+  roundoff scale.
+- The CPU evaluator selected an electron root at
+  ``E_r = 2.213238923947695``. The ``13x -> 15x`` selected-root drift is
+  ``0.002103822716538417``, inside the strong continuation threshold.
+- The matching SFINCS Fortran v3 scan completed in ``8.57 s`` and selected
+  ``E_r = 2.213236890600478``. CPU/Fortran selected-root relative difference is
+  ``9.19e-7``.
+- CPU/Fortran observable agreement passed the rung gates: worst ``FSABFlow``
+  relative difference ``4.11e-4``, worst bootstrap-current relative difference
+  ``2.09e-4``, and worst particle/heat-flux relative difference below
+  ``7.4e-6``.
+- Added the checked artifact
+  ``docs/_static/figures/optimization/qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json``
+  and regression coverage so future solver-policy changes cannot silently
+  reintroduce this cliff.
+
+Progress:
+
+- QI kinetic promotion ladder: ``90%``; the ``15 x 15 x 17 x 4`` CPU/Fortran
+  rung is now residual-clean, reference-checked, and strongly consistent with
+  the ``13x`` root.
+- True GPU/device QI performance: ``72%``; no status change. The next required
+  work is still a true device/operator-reuse route before another GPU
+  performance claim.
+- Production-resolution QI ladders: ``60%``; the next physics rung is now
+  supported, but the production floor remains gated on device/backend scaling
+  and a higher-resolution ladder.
+- Overall remaining-lane completion estimate: ``98.3%``.
+
+Best next steps:
+
+1. Run focused solver-policy, artifact, docs, release-gate, and repo-size
+   checks, then commit this rung.
+2. Start the true device/operator-reuse GPU route described in section 35.78.
+   The acceptance gate is not another smoother-tuning win; it must avoid host
+   sparse LU on success and beat the current ``13x`` host-sparse GPU mean by at
+   least ``2x``.
+3. Only after that route exists, rerun the ``15x`` GPU scan and continue the
+   higher-resolution QI ladder.

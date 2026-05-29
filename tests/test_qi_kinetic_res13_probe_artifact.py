@@ -21,6 +21,11 @@ REFERENCE_COMPARISON_ARTIFACT = (
     / "qi_nfp2_electron_root_res13_reference_tolerance_comparison_sparse_skip.json"
 )
 
+RES15_CPU_FORTRAN_ARTIFACT = (
+    Path("docs/_static/figures/optimization")
+    / "qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json"
+)
+
 
 def test_qi_res13_single_point_probe_stays_bounded_and_fail_scoped() -> None:
     payload = json.loads(ARTIFACT.read_text(encoding="utf-8"))
@@ -149,3 +154,64 @@ def test_qi_res13_reference_comparison_artifact_keeps_claim_boundary() -> None:
     assert elapsed["gpu_split_wall_elapsed_s"]["gpu0_split"] < 600.0
     assert elapsed["gpu_split_wall_elapsed_s"]["gpu1_split"] < 650.0
     assert elapsed["fortran_v3_wall_elapsed_s"]["sum"] < 10.0
+
+
+def test_qi_res15_cpu_fortran_artifact_records_policy_cliff_fix() -> None:
+    payload = json.loads(RES15_CPU_FORTRAN_ARTIFACT.read_text(encoding="utf-8"))
+
+    assert payload["artifact_kind"] == (
+        "qi_nfp2_kinetic_res15_cpu_fortran_sparse_skip_comparison"
+    )
+    assert payload["status"] == "pass_refined_cpu_fortran_rung_open_gpu_performance_and_convergence"
+    assert "does not close GPU performance" in payload["claim_boundary"]
+    assert payload["resolution"] == {
+        "Ntheta": 15,
+        "Nzeta": 15,
+        "Nxi": 17,
+        "NL": 4,
+        "Nx": 4,
+        "solverTolerance": "1d-6",
+    }
+
+    gates = payload["gates"]
+    assert gates["cpu_residuals"] == "pass"
+    assert gates["cpu_fortran_reference_agreement"] == "pass"
+    assert gates["res13_to_res15_root_drift"] == "strong"
+    assert gates["gpu_res15"] == "deferred_until_device_operator_reuse_path"
+    assert gates["production_resolution_convergence"] == "open"
+
+    policy = payload["policy_delta"]
+    assert policy["active_size"] == 17104
+    assert policy["speedup"] > 4.0
+    assert policy["new_default_elapsed_s"] < 75.0
+    assert policy["old_default_elapsed_s"] > 300.0
+    assert policy["residual_norm"] < policy["residual_target"]
+    assert policy["unchanged_key_observables"] is True
+
+    roots = payload["fixed_resolution_roots"]
+    assert roots["cpu"]["root_type"] == "electron"
+    assert roots["fortran_v3"]["root_type"] == "electron"
+    assert roots["cpu"]["er"] == pytest.approx(2.213238923947695)
+    assert roots["fortran_v3"]["er"] == pytest.approx(2.213236890600478)
+
+    root_differences = payload["root_differences"]
+    assert root_differences["cpu_minus_fortran_rel"] < 2.0e-6
+    assert root_differences["cpu_minus_res13_abs"] < 5.0e-3
+
+    comparison = payload["comparison_summary"]["cpu_vs_fortran"]
+    assert comparison["FSABFlow"]["max_rel"] < 2.0e-3
+    assert comparison["FSABjHat"]["max_rel"] < 2.0e-3
+    assert comparison["particleFlux_vm_psiHat"]["max_rel"] < 1.0e-5
+    assert comparison["heatFlux_vm_psiHat"]["max_rel"] < 1.0e-5
+
+    elapsed = payload["elapsed_summary"]
+    assert elapsed["cpu_serial_scan_elapsed_s"] < 600.0
+    assert elapsed["cpu_solver_elapsed_s"]["max"] < 75.0
+    assert elapsed["fortran_v3_wall_elapsed_s"]["sum"] < 15.0
+
+    runs = payload["runs"]
+    assert len(runs) == 8
+    assert [run["er"] for run in runs] == [-0.3, -0.1, 0.0, 0.1, 0.3, 1.0, 2.0, 3.0]
+    assert all(run["residual_norm"] < run["residual_target"] for run in runs)
+    assert min(run["radial_current"] for run in runs) < 0.0
+    assert max(run["radial_current"] for run in runs) > 0.0

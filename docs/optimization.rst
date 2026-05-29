@@ -921,6 +921,45 @@ not promote the QI electron-root candidate as production-resolution evidence
 until the selected root, bootstrap current, fluxes, residuals, and
 backend/reference comparisons are stable across that ladder.
 
+Fourth QI refinement: ``15 x 15 x 17 x 4`` CPU/Fortran rung
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The next CPU/Fortran rung increases the kinetic grid to
+:math:`N_\theta=15`, :math:`N_\zeta=15`, :math:`N_\xi=17`,
+:math:`N_L=4`, :math:`N_x=4`.  This run exposed a solver-policy cliff rather
+than a physics mismatch.  The previous automatic policy built sparse x-block
+rescue factors for the :math:`E_r=0.3` point and then still fell through to the
+exact active sparse-LU solve.  That redundant setup took about ``316.9 s``.
+The current default raises the sparse x-block rescue threshold above the direct
+sparse skip-primary cap, so this mid-size RHSMode=1 system goes directly to the
+accepted active sparse-LU route.  The same point now takes about ``69.4 s`` with
+the same residual, :math:`6.5\times10^{-18}` against a target of
+:math:`1.7\times10^{-11}`, and unchanged key observables.
+
+The eight-point CPU scan completes in ``535.8 s``.  The mean per-point solve
+time is ``66.93 s`` and the slowest point is ``69.37 s``.  All residual gates
+pass at roundoff scale.  The selected electron root is
+:math:`E_r=2.2132389239`, so the ``13x -> 15x`` selected-root drift is
+``0.00210``.  That is inside the strong continuation gate used for the QI
+promotion ladder.
+
+The matching SFINCS Fortran v3 scan selects
+:math:`E_r=2.2132368906`.  The CPU/Fortran relative selected-root difference is
+:math:`9.2\times10^{-7}`.  The worst checked CPU/Fortran relative difference is
+``4.1e-4`` for ``FSABFlow``, ``2.1e-4`` for bootstrap-current observables, and
+below ``7.4e-6`` for particle and heat fluxes.  This closes the
+``15 x 15 x 17 x 4`` CPU/Fortran fixed-resolution rung.
+
+The GPU claim is still intentionally scoped.  The ``13x`` GPU route was
+correctness-clean but slower than CPU because it used host sparse LU.  The next
+GPU promotion step is therefore a true device/operator-reuse path, not another
+host sparse-LU timing run.  This is a performance boundary, not a parity
+boundary.
+
+The checked machine-readable artifact for this rung is:
+
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json``
+
 VMEC JAX Integration
 --------------------
 

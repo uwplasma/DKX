@@ -232,7 +232,8 @@ def rhs1_sparse_xblock_rescue_allowed(
     if int(pre_theta) != 0 or int(pre_zeta) != 0:
         return False
 
-    rescue_min_default = max(int(sparse_max_size) + 1, 12000)
+    skip_primary_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MAX", 30000)
+    rescue_min_default = max(int(sparse_max_size) + 1, 12000, int(skip_primary_max) + 1)
     rescue_min = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MIN", rescue_min_default)
     rescue_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MAX", 120000)
     if int(active_size) < max(1, int(rescue_min)):

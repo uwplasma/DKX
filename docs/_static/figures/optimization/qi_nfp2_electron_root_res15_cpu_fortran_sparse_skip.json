@@ -1,0 +1,171 @@
+{
+  "artifact_kind": "qi_nfp2_kinetic_res15_cpu_fortran_sparse_skip_comparison",
+  "claim_boundary": "This artifact closes the fixed-resolution CPU/Fortran-v3 QI nfp=2 15x rung and records the sparse x-block policy cliff fix. It does not close GPU performance or production-resolution QI convergence; the next GPU claim requires a true device/operator-reuse route instead of the current host sparse-LU fallback.",
+  "comparison_summary": {
+    "cpu_vs_fortran": {
+      "FSABFlow": {
+        "max_abs": 1.0455754208547511e-08,
+        "max_rel": 0.00041080628241048844,
+        "worst": "Er2"
+      },
+      "FSABjHat": {
+        "max_abs": 8.77140694881376e-09,
+        "max_rel": 0.00020887119000920259,
+        "worst": "Er2"
+      },
+      "FSABjHatOverRootFSAB2": {
+        "max_abs": 1.5749313343399189e-09,
+        "max_rel": 0.00020887119000928753,
+        "worst": "Er2"
+      },
+      "heatFlux_vm_psiHat": {
+        "max_abs": 1.3859951583374422e-14,
+        "max_rel": 7.33286016293061e-06,
+        "worst": "Er3"
+      },
+      "particleFlux_vm_psiHat": {
+        "max_abs": 8.428394845907963e-15,
+        "max_rel": 6.856348106814228e-06,
+        "worst": "Er2"
+      }
+    }
+  },
+  "elapsed_summary": {
+    "cpu_serial_scan_elapsed_s": 535.77,
+    "cpu_solver_elapsed_s": {
+      "max": 69.37006250000559,
+      "mean": 66.93481823446928,
+      "sum": 535.4785458757542
+    },
+    "fortran_v3_wall_elapsed_s": {
+      "max": 1.2657118749339134,
+      "mean": 1.071644041716354,
+      "sum": 8.573152333730832
+    }
+  },
+  "fixed_resolution_roots": {
+    "cpu": {
+      "bracket": [
+        2.0,
+        3.0
+      ],
+      "er": 2.213238923947695,
+      "root_type": "electron"
+    },
+    "fortran_v3": {
+      "bracket": [
+        2.0,
+        3.0
+      ],
+      "er": 2.213236890600478,
+      "root_type": "electron"
+    },
+    "res13_cpu": {
+      "bracket": [
+        2.0,
+        3.0
+      ],
+      "er": 2.2153427466642333,
+      "root_type": "electron"
+    }
+  },
+  "gates": {
+    "cpu_fortran_reference_agreement": "pass",
+    "cpu_residuals": "pass",
+    "gpu_res15": "deferred_until_device_operator_reuse_path",
+    "production_resolution_convergence": "open",
+    "res13_to_res15_root_drift": "strong"
+  },
+  "policy_delta": {
+    "active_size": 17104,
+    "change": "Sparse x-block rescue now defaults above the direct sparse skip-primary cap, so mid-size RHSMode=1 systems do not pay for redundant x-block factorization before the exact active sparse-LU solve.",
+    "er": 0.3,
+    "new_default_elapsed_s": 69.404,
+    "old_default_elapsed_s": 316.876,
+    "residual_norm": 6.528584738783771e-18,
+    "residual_target": 1.6909689036435523e-11,
+    "speedup": 4.565673448216241,
+    "unchanged_key_observables": true
+  },
+  "resolution": {
+    "NL": 4,
+    "Ntheta": 15,
+    "Nx": 4,
+    "Nxi": 17,
+    "Nzeta": 15,
+    "solverTolerance": "1d-6"
+  },
+  "root_differences": {
+    "cpu_minus_fortran_abs": 2.0333472168232447e-06,
+    "cpu_minus_fortran_rel": 9.18721003367865e-07,
+    "cpu_minus_res13_abs": 0.002103822716538417
+  },
+  "runs": [
+    {
+      "bootstrap_current": 1.021416732093507e-05,
+      "er": -0.3,
+      "radial_current": -1.6477368469052658e-08,
+      "residual_norm": 9.334774419064569e-18,
+      "residual_target": 2.4695776934070927e-11,
+      "solver_elapsed_s": 66.47501900000405
+    },
+    {
+      "bootstrap_current": 1.0301842817312137e-05,
+      "er": -0.1,
+      "radial_current": -1.583762109862449e-08,
+      "residual_norm": 1.966319430972343e-17,
+      "residual_target": 2.1704094003370203e-11,
+      "solver_elapsed_s": 66.37566349999012
+    },
+    {
+      "bootstrap_current": 1.0196255840611537e-05,
+      "er": 0.0,
+      "radial_current": -1.533283515768639e-08,
+      "residual_norm": 4.32817393915633e-18,
+      "residual_target": 2.0327887418268353e-11,
+      "solver_elapsed_s": 59.615258500038646
+    },
+    {
+      "bootstrap_current": 1.0140058698916258e-05,
+      "er": 0.1,
+      "radial_current": -1.4712746869552515e-08,
+      "residual_norm": 3.3587387886454607e-18,
+      "residual_target": 1.9054826811536487e-11,
+      "solver_elapsed_s": 66.98066175001487
+    },
+    {
+      "bootstrap_current": 9.781744862926824e-06,
+      "er": 0.3,
+      "radial_current": -1.3180559805905566e-08,
+      "residual_norm": 6.528584738783771e-18,
+      "residual_target": 1.6909689036435523e-11,
+      "solver_elapsed_s": 68.78990925000049
+    },
+    {
+      "bootstrap_current": 8.385846389598208e-06,
+      "er": 1.0,
+      "radial_current": -6.841530200254169e-09,
+      "residual_norm": 2.7418889251386254e-18,
+      "residual_target": 1.6084838379732665e-11,
+      "solver_elapsed_s": 69.26062674995046
+    },
+    {
+      "bootstrap_current": 7.5402037699401674e-06,
+      "er": 2.0,
+      "radial_current": -6.785784940106475e-10,
+      "residual_norm": 1.5259495201513003e-18,
+      "residual_target": 2.9580936412390837e-11,
+      "solver_elapsed_s": 68.61134462500934
+    },
+    {
+      "bootstrap_current": 7.626462381061916e-06,
+      "er": 3.0,
+      "radial_current": 2.5036664800687366e-09,
+      "residual_norm": 2.1280611543540884e-18,
+      "residual_target": 4.7562089177044794e-11,
+      "solver_elapsed_s": 69.37006250000559
+    }
+  ],
+  "status": "pass_refined_cpu_fortran_rung_open_gpu_performance_and_convergence",
+  "workflow": "sfincs_jax_qi_nfp2_kinetic_res15_reference_tolerance_comparison"
+}

@@ -28,6 +28,15 @@ Unreleased
   ``FSABFlow`` and below ``9e-6`` on particle/heat fluxes. The GPU route is
   correctness-clean but still performance-open because it safely enters host
   sparse LU and is slower than CPU at this size.
+- Added the next QI ``15 x 15 x 17 x 4`` CPU/Fortran-v3 rung and fixed the
+  sparse x-block policy cliff it exposed. The previous default spent about
+  ``316.9 s`` on redundant x-block setup for the ``E_r=0.3`` point before
+  falling through to the exact active sparse-LU solve. The new default skips
+  that redundant setup for mid-size systems covered by the direct sparse-LU
+  cap, reducing the point to about ``69.4 s`` with the same residual and key
+  observables. The eight-point CPU scan completes in ``535.8 s`` with all
+  residual gates passing, selects ``E_r=2.2132389239``, and agrees with the
+  SFINCS Fortran v3 selected root to ``9.2e-7`` relative.
 - Added the second refined QI ``nfp=2`` kinetic promotion rung at
   ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
   cliff. The bounded dense policy now covers active sizes up to ``8000`` and

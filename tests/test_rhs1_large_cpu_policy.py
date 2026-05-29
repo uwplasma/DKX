@@ -324,6 +324,8 @@ def test_sparse_xblock_rescue_defaults_and_guards(monkeypatch) -> None:
     assert not rhs1_sparse_xblock_rescue_allowed(**{**kwargs, "preconditioner_x": 0})
     assert not rhs1_sparse_xblock_rescue_allowed(**{**kwargs, "pre_theta": 1})
     assert not rhs1_sparse_xblock_rescue_allowed(**{**kwargs, "backend": "gpu"})
+    assert not rhs1_sparse_xblock_rescue_allowed(**{**kwargs, "active_size": 20000, "backend": "gpu"})
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MIN", "12000")
     assert rhs1_sparse_xblock_rescue_allowed(**{**kwargs, "active_size": 20000, "backend": "gpu"})
 
 
