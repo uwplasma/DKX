@@ -793,9 +793,9 @@ The checked machine-readable artifacts are:
 This closes the first real QI kinetic promotion artifact and validates the
 QA-to-QI fallback workflow at a bounded low resolution.  It does not close the
 production-resolution QI ladder, the radial/profile convergence ladder, or the
-true differentiable device-QI hard-seed lane.  The next promotion step is to run
-the same two-species QI ``nfp=2`` contract through a resolution ladder and keep
-the selected electron root stable under the documented tolerances.
+true differentiable device-QI hard-seed lane.  The next promotion step is the
+same two-species QI ``nfp=2`` contract through a resolution ladder with stable
+selected roots under documented tolerances.
 
 First QI refinement rung
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -829,6 +829,13 @@ The checked machine-readable artifacts for this first refinement rung are:
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu.json``
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_gpu.json``
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu_gpu.json``
+
+The next rung should add a Fortran-v3 audit for this refined grid when the
+input remains in the shared model scope, then continue to a wider
+CPU/GPU/Fortran resolution ladder.  Do not promote the QI electron-root
+candidate as production-resolution evidence until the selected root, bootstrap
+current, fluxes, residuals, and backend/reference comparisons are stable across
+that ladder.
 
 VMEC JAX Integration
 --------------------

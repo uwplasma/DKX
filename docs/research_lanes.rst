@@ -743,15 +743,27 @@ Production-resolution QI ladders
 Current state
 ~~~~~~~~~~~~~
 
-Bounded QI evidence is strong up to the scale-0.55 CPU/GPU ladders and
-selected scale-0.60 probes. Production-resolution ladders remain open because
-the scale-0.60 GPU hard seed is not closed by a true device algorithm.
+Bounded QI evidence is strong up to the scale-0.55 CPU/GPU seed-robustness
+ladders, selected scale-0.60 probes, and the first QI ``nfp=2`` kinetic
+promotion artifacts. The checked kinetic lane now includes a two-species
+``7 x 7 x 7 x 4`` CPU/GPU/Fortran electron-root artifact and a refined
+``9 x 9 x 11 x 4`` CPU/GPU rung. The refined rung keeps CPU and GPU roots
+identical to roundoff, but the low-to-refined root drift is about ``0.155``,
+so it is persistence evidence rather than a convergence claim.
+
+Production-resolution ladders remain open because the scale-0.60 GPU hard seed
+is not closed by a true device algorithm and because the QI kinetic
+electron-root scan still needs a wider CPU/GPU/Fortran resolution ladder.
 
 Next implementation
 ~~~~~~~~~~~~~~~~~~~
 
 After the two-level device preconditioner clears the hard seed, run:
 
+- a Fortran-v3 audit for the refined QI ``nfp=2`` rung when the input remains
+  in shared model scope;
+- the next QI ``nfp=2`` kinetic CPU/GPU/Fortran resolution rungs, with fixed
+  profiles, species, electric-field grid, and claim tolerances;
 - scale-0.60 five-seed CPU and one-GPU ladders;
 - production-resolution proxy ladders at the documented floor, or the
   equivalent production manifest inputs;

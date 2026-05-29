@@ -249,6 +249,15 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   progress/profile evidence. This supports long-lane debugging without silent
   stalls. Benchmark/profiling orchestration completion moves to `95%`; remaining
   work is real production-floor GPU/CPU evidence, not tooling.
+- [x] Completed a documentation consistency pass after the refined QI kinetic
+  rung. Updated the landing page, optimization guide, research-lane page,
+  testing page, release notes, README, and optimization example README so they
+  consistently state that the first QI low-resolution artifact is closed, the
+  `9 x 9 x 11 x 4` CPU/GPU rung passes fixed-resolution gates, the root drift
+  keeps the production-resolution QI ladder open, and two-species electron-root
+  scans should leave `--impurity-species-index` unset. Validation passed with
+  strict Sphinx, release gates, research-lane gates, and focused optimization
+  artifact tests.
 
 Current active lane (2026-05-18, CI/CD and sharded-JIT modernization):
 - [x] GitHub Actions CI and docs are green on `main` after commit `f363009`;
