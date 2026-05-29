@@ -3315,9 +3315,9 @@ def write_sfincs_jax_output_h5(
                 )
         dense_active_cutoff_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF", "").strip()
         try:
-            dense_active_cutoff = int(dense_active_cutoff_env) if dense_active_cutoff_env else 5000
+            dense_active_cutoff = int(dense_active_cutoff_env) if dense_active_cutoff_env else 8000
         except ValueError:
-            dense_active_cutoff = 5000
+            dense_active_cutoff = 8000
         dense_pas_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", "").strip()
         try:
             # Dense solves can be *fast* for very small RHSMode=1 systems, but for a few
@@ -3708,7 +3708,6 @@ def write_sfincs_jax_output_h5(
                 emit(0, "write_sfincs_jax_output_h5: includePhi1=true -> Newton–Krylov solve with history")
             fast_explicit_phi1 = bool(differentiable is False)
             nk_solve_method = "incremental" if (fast_explicit_phi1 or int(op0.total_size) <= 5000) else "batched"
-            include_phi1_in_collisions = bool(phys_params.get("INCLUDEPHI1INCOLLISIONOPERATOR", False))
             dense_cutoff_env = os.environ.get("SFINCS_JAX_PHI1_NK_DENSE_CUTOFF", "").strip()
             try:
                 dense_cutoff = int(dense_cutoff_env) if dense_cutoff_env else 5000
@@ -5371,11 +5370,21 @@ def write_sfincs_jax_output_h5(
             if "solve_s" in trace_solver_metadata
             else None
         )
+        trace_solve_method = (
+            str(solve_method)
+            if solve_method is not None
+            else str(trace_solver_metadata.get("solver_kind", "auto"))
+        )
         trace = SolverTrace(
             backend=backend,
             rhs_mode=int(rhs_mode),
             selected_path=selected_path,
-            solve_method=str(solve_method) if "solve_method" in locals() else "auto",
+            solve_method=trace_solve_method,
+            preconditioner=(
+                None
+                if "preconditioner_kind" not in trace_solver_metadata
+                else str(trace_solver_metadata["preconditioner_kind"])
+            ),
             geometry_scheme=int(geom_scheme_hint) if geom_scheme_hint is not None else None,
             collision_operator=trace_collision_operator,
             total_size=trace_total_size,

@@ -235,6 +235,7 @@ def run_er_scan(
             compute_transport_matrix=bool(compute_transport_matrix),
             compute_solution=bool(compute_solution),
             emit=emit,
+            solver_trace_path=run_dir / "sfincsOutput.solver_trace.json",
         )
         return run_dir, out_path, float(time.perf_counter() - point_t0), False
 

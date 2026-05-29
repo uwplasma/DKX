@@ -22,6 +22,7 @@ from sfincs_jax.transport_parallel_sharding import (
     plan_compiled_sharded_operator_reuse,
     plan_sharded_solve_deterministic_output_gate,
     plan_single_case_sharded_solve,
+    plan_single_case_operator_coarse_reuse,
 )
 from sfincs_jax.v3_driver import solve_v3_full_system_linear_gmres
 from sfincs_jax.v3_system import full_system_operator_from_namelist
@@ -606,6 +607,19 @@ def _build_sharded_solve_benchmark_plan(
         if deterministic_output_probe
         else "not_measured",
     )
+    operator_coarse_reuse_plan = plan_single_case_operator_coarse_reuse(
+        active_devices=max(normalized_devices),
+        backend=str(backend),
+        rhs_mode=1,
+        shard_axis=str(shard_axis),
+        benchmark_kind="single_case_sharded_solve",
+        experimental_single_case_scaling=True,
+        operator_reuse_enabled=bool(assembled_operator_reuse["enabled"]),
+        operator_reuse_gate_pass=bool(operator_reuse_gate["passes"]),
+        deterministic_output_gate_pass=bool(deterministic_gate["passes"]),
+        coarse_strategy="replicated_schur_schwarz",
+        coarse_levels=0 if schwarz_coarse_levels is None else int(schwarz_coarse_levels),
+    ).to_dict()
     device_plan = []
     for d in normalized_devices:
         sharding_plan = plan_single_case_sharded_solve(
@@ -695,6 +709,7 @@ def _build_sharded_solve_benchmark_plan(
         "timing_semantics": timing_semantics,
         "operator_reuse_gate": operator_reuse_gate,
         "assembled_operator_reuse": assembled_operator_reuse,
+        "operator_coarse_reuse_plan": operator_coarse_reuse_plan,
         "global_warmup": int(global_warmup),
         "per_device_warmup": int(warmup),
         "repeats": int(repeats),
@@ -718,6 +733,7 @@ def _build_sharded_solve_benchmark_plan(
             "single_case_strong_scaling_is_experimental": True,
             "requires_operator_reuse_gate": True,
             "requires_deterministic_output_gate_for_claim": True,
+            "requires_operator_coarse_reuse_plan": True,
         },
         "memory_gate_semantics": {
             "status": "bounded_by_child_timeout_and_allocator_settings",
@@ -1614,6 +1630,23 @@ def main() -> None:
         "deterministic_output_dir": _display_path(deterministic_output_dir, repo_root=repo_root),
         "deterministic_output_gate": deterministic_output_gate,
     }
+    payload["operator_coarse_reuse_plan"] = plan_single_case_operator_coarse_reuse(
+        active_devices=max(devices),
+        backend=str(args.backend),
+        rhs_mode=1,
+        shard_axis=str(args.shard_axis),
+        benchmark_kind="single_case_sharded_solve",
+        experimental_single_case_scaling=True,
+        operator_reuse_enabled=bool(payload["assembled_operator_reuse"]["enabled"]),
+        operator_reuse_gate_pass=bool(payload["operator_reuse_gate"]["passes"]),
+        deterministic_output_gate_pass=bool(
+            payload["deterministic_output_gate"].get("passes")
+        ),
+        coarse_strategy="replicated_schur_schwarz",
+        coarse_levels=0
+        if args.schwarz_coarse_levels is None
+        else int(args.schwarz_coarse_levels),
+    ).to_dict()
     if _normalized_backend(args.backend) == "gpu":
         payload["gpu_device_count"] = int(max(devices))
         payload["visible_gpu_ids"] = [str(i) for i in range(int(max(devices)))]

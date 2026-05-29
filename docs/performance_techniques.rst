@@ -910,7 +910,7 @@ For **small FP systems**, ``sfincs_jax`` now defaults to a direct dense solve
 instead of running GMRES first. This avoids JIT/Krylov overhead in cases where a
 direct solve is both faster and more robust for parity. The FP threshold is
 ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF`` (default:
-``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF, 6000)``). Setting this
+``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF, 8000)``). Setting this
 environment variable to ``0`` disables the initial dense shortcut on tight-memory
 hosts. On GPU/accelerator backends, the default dense shortcut also requires
 ``active_size >= SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN`` (default:
@@ -1435,7 +1435,7 @@ rescue transport-matrix solves that stall.
 Controls:
 
 - ``SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX`` (default: ``400``).
-- ``SFINCS_JAX_RHSMODE1_DENSE_FP_MAX`` (default: ``6000``) for full Fokker–Planck
+- ``SFINCS_JAX_RHSMODE1_DENSE_FP_MAX`` (default: ``8000``) for full Fokker–Planck
   cases (``collisionOperator=0``).
 - ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX`` (default: disabled) for PAS/constraintScheme=2
   cases (notably DKES trajectories); set a positive value to enable.
@@ -2186,6 +2186,14 @@ path actually ran. Rows must contain a guarded PAS-TZ message such as the
 structured-fallback guard, guarded correction, or guarded retry-skip trace before
 they can pass all gates or appear as promotion-eligible variants. This blocks
 false-positive runtime/residual wins from unrelated dispatch paths.
+Dry-run JSON is planning evidence only: ``summary.all_gates_passed`` remains
+``false`` until at least one real child row is present, and
+``summary.promotion_ready`` is true only when all row gates pass and at least one
+row records a material runtime or RSS win. Guarded-correction evidence may be
+recorded in nested row metadata, including lists of candidate records, but still
+must prove ``stream_update_chunks=true`` or
+``pas_tz_guarded_correction_streamed=true`` without
+``full_update_materialized=true``.
 The checked smoke artifact
 ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
 records the intended guard behavior on the geometryScheme=4 PAS deck. The

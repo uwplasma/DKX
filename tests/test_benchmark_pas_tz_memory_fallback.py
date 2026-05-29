@@ -138,6 +138,8 @@ def test_dry_run_writes_reproducible_plan(tmp_path: Path) -> None:
     assert payload["plan"]["gates"]["max_residual_norm"] == 1.0e-3
     assert "must not regress elapsed_s or max_rss_mb" in payload["plan"]["gates"]["promotion_policy"]
     assert payload["summary"]["result_count"] == 0
+    assert payload["summary"]["all_gates_passed"] is False
+    assert payload["summary"]["promotion_ready"] is False
     assert payload["results"] == []
 
 
@@ -518,6 +520,56 @@ def test_result_gates_reject_dense_guarded_correction_without_streaming_evidence
     assert gates["guarded_correction_memory"]["reason"] == "streamed-guarded-correction-evidence-recorded"
 
 
+def test_guarded_correction_evidence_can_live_in_nested_metadata_lists() -> None:
+    args = type(
+        "Args",
+        (),
+        {
+            "timeout_s": 9.0,
+            "stall_s": 9.0,
+            "max_rss_mb": 0.0,
+            "max_residual_norm": 1.0e-3,
+            "expected_backend": "auto",
+            "allow_solver_churn": False,
+            "solve_method": "incremental",
+            "require_default_promotion_gate": False,
+        },
+    )()
+    row = {
+        "status": "ok",
+        "elapsed_s": 1.0,
+        "max_rss_mb": 800.0,
+        "residual_norm": 1.0e-5,
+        "phase_metadata": [{"name": "solve", "status": "ok", "elapsed_s": 1.0}],
+        "guarded_pas_tz_seen": True,
+        "solver_provenance": {
+            "requested_solve_method": "incremental",
+            "realized_solve_method": "incremental",
+        },
+        "metadata": {
+            "accepted_converged": True,
+            "candidate_records": [
+                {
+                    "matrix_free_metadata": {
+                        "stream_update_chunks": True,
+                        "full_update_materialized": False,
+                    }
+                },
+                {
+                    "pas_tz_guarded_correction_streamed": True,
+                    "pas_tz_guarded_correction_full_update_materialized": False,
+                },
+            ],
+        },
+    }
+
+    gates = result_gates(args, row, "collision-tzfft-correction")
+
+    assert gates["guarded_correction_memory"]["status"] == "pass"
+    assert gates["guarded_correction_memory"]["diagnostics"]["streamed"] is True
+    assert gates["guarded_correction_memory"]["diagnostics"]["full_update_materialized"] is False
+
+
 def test_default_promotion_gate_requires_baseline_and_runtime_or_memory_win() -> None:
     args = type(
         "Args",
@@ -683,6 +735,16 @@ def test_summarize_results_lists_only_promotion_win_rows() -> None:
 
     assert summary["all_gates_passed"] is True
     assert summary["promotion_eligible_variants"] == ["tzfft"]
+    assert summary["promotion_ready"] is True
+
+
+def test_summarize_results_does_not_mark_empty_dry_run_as_passed() -> None:
+    summary = summarize_results([])
+
+    assert summary["result_count"] == 0
+    assert summary["all_gates_passed"] is False
+    assert summary["promotion_eligible_variants"] == []
+    assert summary["promotion_ready"] is False
 
 
 def test_main_rejects_long_timeout_without_explicit_opt_in(tmp_path: Path) -> None:

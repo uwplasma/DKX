@@ -320,14 +320,20 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         "/\n"
     )
 
-    calls: list[tuple[Path, Path]] = []
+    calls: list[tuple[Path, Path, Path]] = []
 
     def _fake_localize(*, input_namelist: Path, overwrite: bool) -> None:
         assert overwrite is False
         assert input_namelist.exists()
 
     def _fake_write(**kwargs):
-        calls.append((Path(kwargs["input_namelist"]), Path(kwargs["output_path"])))
+        calls.append(
+            (
+                Path(kwargs["input_namelist"]),
+                Path(kwargs["output_path"]),
+                Path(kwargs["solver_trace_path"]),
+            )
+        )
         Path(kwargs["output_path"]).write_bytes(b"")
 
     monkeypatch.setattr("sfincs_jax.scans.localize_equilibrium_file_in_place", _fake_localize)
@@ -348,6 +354,7 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
     assert all(path.exists() for path in result.outputs)
     assert [p.name for p in result.run_dirs] == ["Er1.5", "Er0.5", "Er-0.25"]
     assert len(calls) == 3
+    assert all(trace.name == "sfincsOutput.solver_trace.json" for _, _, trace in calls)
     assert any("ETA becomes available after the first completed point" in msg for _, msg in emits)
     assert any("scan-er: progress 3/3" in msg and "est_remaining=" in msg for _, msg in emits)
 
@@ -381,6 +388,7 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
     assert result_partial_resume.values == (1.5, 0.5, -0.25)
     assert len(calls) == 1
     assert calls[0][1] == missing_output
+    assert calls[0][2] == missing_output.with_name("sfincsOutput.solver_trace.json")
     assert missing_output.exists()
     assert any("scan-er: progress 3/3" in msg for _, msg in emits)
 

@@ -1,0 +1,229 @@
+{
+  "bootstrap_objective": 3.860013455181696e-09,
+  "claim_boundary": "This audit evaluates completed sfincs_jax kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
+  "electron_root_penalty": 0.0,
+  "failures": [],
+  "flux_objective": null,
+  "gate_status": "pass",
+  "runs": [
+    {
+      "bootstrap_current": 2.4625019600966943e-05,
+      "er": -0.3,
+      "heat_flux": [
+        -3.663054749636699e-08,
+        -6.857878656522989e-10
+      ],
+      "particle_flux": [
+        -1.7747499333583323e-08,
+        -3.524729971143535e-10
+      ],
+      "path": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_11x11x13x4/fortran_campaign/fortran_v3_scan/Er-0.3/sfincsOutput.h5",
+      "radial_current": -1.739502633646897e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [
+          "missing residual_norm or residual_target"
+        ],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": null,
+        "residual_target": null,
+        "status": "fail"
+      },
+      "residual_norm": null,
+      "residual_target": null
+    },
+    {
+      "bootstrap_current": 2.464470868681819e-05,
+      "er": -0.1,
+      "heat_flux": [
+        -3.5814439107977626e-08,
+        -7.22500679979015e-10
+      ],
+      "particle_flux": [
+        -1.7132008652201962e-08,
+        -3.747128761227622e-10
+      ],
+      "path": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_11x11x13x4/fortran_campaign/fortran_v3_scan/Er-0.1/sfincsOutput.h5",
+      "radial_current": -1.67572957760792e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [
+          "missing residual_norm or residual_target"
+        ],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": null,
+        "residual_target": null,
+        "status": "fail"
+      },
+      "residual_norm": null,
+      "residual_target": null
+    },
+    {
+      "bootstrap_current": 2.4486469316585474e-05,
+      "er": 0.0,
+      "heat_flux": [
+        -3.498295562729625e-08,
+        -7.408849672775482e-10
+      ],
+      "particle_flux": [
+        -1.661909631743054e-08,
+        -3.8593144271696745e-10
+      ],
+      "path": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_11x11x13x4/fortran_campaign/fortran_v3_scan/Er0/sfincsOutput.h5",
+      "radial_current": -1.623316487471357e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [
+          "missing residual_norm or residual_target"
+        ],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": null,
+        "residual_target": null,
+        "status": "fail"
+      },
+      "residual_norm": null,
+      "residual_target": null
+    },
+    {
+      "bootstrap_current": 2.422253916520369e-05,
+      "er": 0.1,
+      "heat_flux": [
+        -3.3882306470592246e-08,
+        -7.59259168106662e-10
+      ],
+      "particle_flux": [
+        -1.597647816871954e-08,
+        -3.9720746728769226e-10
+      ],
+      "path": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_11x11x13x4/fortran_campaign/fortran_v3_scan/Er0.1/sfincsOutput.h5",
+      "radial_current": -1.5579270701431848e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [
+          "missing residual_norm or residual_target"
+        ],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": null,
+        "residual_target": null,
+        "status": "fail"
+      },
+      "residual_norm": null,
+      "residual_target": null
+    },
+    {
+      "bootstrap_current": 2.342508867191694e-05,
+      "er": 0.3,
+      "heat_flux": [
+        -3.100414464582645e-08,
+        -7.960448995883792e-10
+      ],
+      "particle_flux": [
+        -1.436684431579832e-08,
+        -4.199177748621104e-10
+      ],
+      "path": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_11x11x13x4/fortran_campaign/fortran_v3_scan/Er0.3/sfincsOutput.h5",
+      "radial_current": -1.394692654093621e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [
+          "missing residual_norm or residual_target"
+        ],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": null,
+        "residual_target": null,
+        "status": "fail"
+      },
+      "residual_norm": null,
+      "residual_target": null
+    },
+    {
+      "bootstrap_current": 1.957135284148344e-05,
+      "er": 1.0,
+      "heat_flux": [
+        -1.86448140814548e-08,
+        -9.247015132966583e-10
+      ],
+      "particle_flux": [
+        -7.68516360467784e-09,
+        -4.99866893716876e-10
+      ],
+      "path": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_11x11x13x4/fortran_campaign/fortran_v3_scan/Er1/sfincsOutput.h5",
+      "radial_current": -7.185296710960964e-09,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [
+          "missing residual_norm or residual_target"
+        ],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": null,
+        "residual_target": null,
+        "status": "fail"
+      },
+      "residual_norm": null,
+      "residual_target": null
+    },
+    {
+      "bootstrap_current": 1.6455333977424313e-05,
+      "er": 2.0,
+      "heat_flux": [
+        -7.172702658353784e-09,
+        -1.1073661408094184e-09
+      ],
+      "particle_flux": [
+        -1.3386634119845966e-09,
+        -6.124485565394937e-10
+      ],
+      "path": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_11x11x13x4/fortran_campaign/fortran_v3_scan/Er2/sfincsOutput.h5",
+      "radial_current": -7.262148554451029e-10,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [
+          "missing residual_norm or residual_target"
+        ],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": null,
+        "residual_target": null,
+        "status": "fail"
+      },
+      "residual_norm": null,
+      "residual_target": null
+    },
+    {
+      "bootstrap_current": 1.604340885635161e-05,
+      "er": 3.0,
+      "heat_flux": [
+        -2.005961208508928e-09,
+        -1.2883186884348348e-09
+      ],
+      "particle_flux": [
+        1.8163716574971495e-09,
+        -7.227036283821202e-10
+      ],
+      "path": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_11x11x13x4/fortran_campaign/fortran_v3_scan/Er3/sfincsOutput.h5",
+      "radial_current": 2.5390752858792697e-09,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [
+          "missing residual_norm or residual_target"
+        ],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": null,
+        "residual_target": null,
+        "status": "fail"
+      },
+      "residual_norm": null,
+      "residual_target": null
+    }
+  ],
+  "scan_dir": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_11x11x13x4/fortran_campaign/fortran_v3_scan",
+  "selected_root": {
+    "bracket": [
+      2.0,
+      3.0
+    ],
+    "er": 2.2224043879759354,
+    "root_type": "electron",
+    "slope": 3.2652901413243726e-09
+  },
+  "workflow": "sfincs_jax_optimization_high_fidelity_promotion"
+}

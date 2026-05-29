@@ -123,7 +123,7 @@ def test_rhs1_dense_fallback_max_respects_fp_pas_and_env_overrides(monkeypatch) 
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", raising=False)
 
-    assert rhs1_dense_fallback_max(_op(has_fp=True)) == 6000
+    assert rhs1_dense_fallback_max(_op(has_fp=True)) == 8000
     assert rhs1_dense_fallback_max(_op(has_fp=False, has_pas=True, constraint_scheme=1)) == 0
     assert rhs1_dense_fallback_max(_op(has_fp=False, has_pas=True, constraint_scheme=0)) == 5000
 
@@ -146,7 +146,7 @@ def test_rhs1_dense_auto_fp_cutoff_matches_fallback_budget(monkeypatch) -> None:
 
     assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=5000) == 5000
     assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=3200) == 3200
-    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=9000) == 6000
+    assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=9000) == 8000
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "2628")
     assert rhs1_dense_auto_fp_cutoff(dense_active_cutoff=5000) == 2628
@@ -176,16 +176,18 @@ def test_rhs1_dense_auto_fp_allowed_keeps_tiny_accelerator_off_dense(monkeypatch
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", raising=False)
 
-    assert rhs1_dense_auto_fp_allowed(backend="cpu", active_size=500, dense_active_cutoff=6000)
-    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=500, dense_active_cutoff=6000)
-    assert rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=6000)
-    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=7000, dense_active_cutoff=6000)
+    assert rhs1_dense_auto_fp_allowed(backend="cpu", active_size=500, dense_active_cutoff=8000)
+    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=500, dense_active_cutoff=8000)
+    assert rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=8000)
+    assert rhs1_dense_auto_fp_allowed(backend="cpu", active_size=7264, dense_active_cutoff=8000)
+    assert rhs1_dense_auto_fp_allowed(backend="gpu", active_size=7264, dense_active_cutoff=8000)
+    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=9000, dense_active_cutoff=8000)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", "6000")
-    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=6000)
+    assert not rhs1_dense_auto_fp_allowed(backend="gpu", active_size=5007, dense_active_cutoff=8000)
 
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "0")
-    assert not rhs1_dense_auto_fp_allowed(backend="cpu", active_size=500, dense_active_cutoff=6000)
+    assert not rhs1_dense_auto_fp_allowed(backend="cpu", active_size=500, dense_active_cutoff=8000)
 
 
 def test_rhs1_host_sparse_direct_and_pc_rescue_policy(monkeypatch) -> None:

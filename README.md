@@ -247,13 +247,26 @@ production-resolution QI ladder.
 
 ![QI nfp=2 low-resolution kinetic electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_reference_tolerance_comparison.png)
 
-The first refined QI `nfp=2` CPU/GPU rung at `9 x 9 x 11 x 4` also passes
-fixed-resolution backend gates: CPU selected `E_r = 2.2834299271`, GPU selected
-the same root within `4.3e-14`, and both residual gates passed. The root drift
-from the `7 x 7 x 7 x 4` artifact is about `0.155`, so this is persistence
-evidence, not a convergence claim.
+The first refined QI `nfp=2` rung at `9 x 9 x 11 x 4` also passes
+fixed-resolution CPU/GPU/Fortran gates: CPU selected `E_r = 2.2834299271`, GPU
+selected the same root within `4.3e-14`, and the Fortran-v3 reference selected
+`E_r = 2.2834273232` within the documented refined-grid tolerance. The root
+drift from the `7 x 7 x 7 x 4` artifact is about `0.155`, so this is
+persistence evidence, not a convergence claim.
 
-![QI nfp=2 first refined CPU/GPU electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu_gpu.png)
+![QI nfp=2 first refined CPU/GPU/Fortran electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res9_reference_tolerance_comparison.png)
+
+A second bounded rung at `11 x 11 x 13 x 4` now checks the same CPU/GPU/Fortran
+contract after fixing a mid-size RHSMode=1 solver-policy cliff. The default
+dense full-FP lane covers active sizes up to `8000`; this reduced the checked
+`11 x 11 x 13 x 4` CPU scan from about `326 s` to about `23 s`, and the office
+GPU0 scan also completes in about `23 s`. CPU and GPU selected
+`E_r = 2.2224054815` within `2.5e-13`; Fortran-v3 selected
+`E_r = 2.2224043880`, within the documented `2e-6` reference tolerance. The
+root still drifts from the `9 x 9 x 11 x 4` rung, so production-resolution QI
+remains an explicit research lane.
+
+![QI nfp=2 second refined CPU/GPU/Fortran electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.png)
 
 The separate finite-beta QA convergence ladder extends the finite-beta QA
 artifact to `9 x 9 x 7 x 4` at the central surface and remains explicitly

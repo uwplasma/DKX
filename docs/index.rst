@@ -21,9 +21,9 @@ grids, QI seed robustness, solver-policy extraction, optimization promotion,
 and single-case sharding. These artifacts are documented with their claim
 boundaries: mapped-grid tests cover PAS RHSMode=2 smoke/reduced comparisons, the
 QI kinetic lane has a first low-resolution CPU/GPU/Fortran promotion artifact
-plus a refined CPU/GPU rung, and production-resolution QI, true device-QI, and
-single-case multi-GPU strong scaling remain explicit research lanes until their
-promotion gates pass.
+plus two bounded refined CPU/GPU/Fortran rungs, and production-resolution QI,
+true device-QI, and single-case multi-GPU strong scaling remain explicit
+research lanes until their promotion gates pass.
 
 What this documentation covers
 ------------------------------

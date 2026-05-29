@@ -376,6 +376,14 @@ def test_sharded_solve_plan_records_hot_timing_timeout_and_non_release_gate(tmp_
     assert plan["operator_reuse"] == "auto"
     assert plan["assembled_operator_reuse"]["enabled"] is True
     assert plan["assembled_operator_reuse"]["scope"] == "child_process_full_system_operator"
+    assert plan["operator_coarse_reuse_plan"]["plan_valid"] is True
+    assert plan["operator_coarse_reuse_plan"]["promotion_ready"] is False
+    assert plan["operator_coarse_reuse_plan"]["operator_reuse_gate_pass"] is True
+    assert plan["operator_coarse_reuse_plan"]["deterministic_output_gate_pass"] is False
+    assert plan["operator_coarse_reuse_plan"]["coarse_levels"] == 2
+    assert plan["operator_coarse_reuse_plan"]["coarse_operator_scope"] == "replicated_small_dense_operator"
+    blockers = plan["operator_coarse_reuse_plan"]["promotion_blockers"]
+    assert "deterministic 1-vs-N output gate has not passed" in blockers
     assert plan["deterministic_output_gate"]["passes"] is False
     assert plan["deterministic_output_gate"]["status"] == "not_measured"
     assert plan["deterministic_output_gate"]["evidence_source"] == "not_measured"
@@ -384,6 +392,7 @@ def test_sharded_solve_plan_records_hot_timing_timeout_and_non_release_gate(tmp_
     assert plan["speedup_gate_semantics"]["gate_scope"] == "schema_and_honesty_only"
     assert plan["speedup_gate_semantics"]["requires_operator_reuse_gate"] is True
     assert plan["speedup_gate_semantics"]["requires_deterministic_output_gate_for_claim"] is True
+    assert plan["speedup_gate_semantics"]["requires_operator_coarse_reuse_plan"] is True
     assert plan["memory_gate_semantics"]["child_process_timeout_enabled"] is True
     assert plan["parallel_claim_scope"]["claim_scope"] == "single_case_sharded_solve_experimental"
     assert plan["parallel_claim_scope"]["claim_scope_release_eligible"] is True

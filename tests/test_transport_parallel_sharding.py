@@ -6,6 +6,7 @@ from sfincs_jax.transport_parallel_sharding import (
     estimate_sharded_solve_amortization,
     plan_compiled_sharded_operator_reuse,
     plan_sharded_solve_deterministic_output_gate,
+    plan_single_case_operator_coarse_reuse,
     plan_single_case_sharded_solve,
 )
 
@@ -194,3 +195,70 @@ def test_sharded_solve_amortization_accepts_compute_dominated_claim() -> None:
     assert diagnostics.parallel_efficiency > 0.9
     assert diagnostics.communication_fraction < 0.01
     assert diagnostics.failures == ()
+
+
+def test_operator_coarse_reuse_plan_records_required_promotion_blockers() -> None:
+    plan = plan_single_case_operator_coarse_reuse(
+        active_devices=2,
+        backend="gpu",
+        rhs_mode=1,
+        shard_axis="theta",
+        operator_reuse_enabled=True,
+        operator_reuse_gate_pass=True,
+        deterministic_output_gate_pass=False,
+        coarse_strategy="replicated_schur_schwarz",
+        coarse_levels=2,
+        max_coarse_rank=32,
+    )
+
+    assert plan.plan_valid is True
+    assert plan.promotion_ready is False
+    assert plan.backend == "gpu"
+    assert plan.operator_build_scope == "once_per_child_process"
+    assert plan.operator_action_scope == "compiled_sharded_device_function"
+    assert plan.preconditioner_scope == "local_theta_slab_apply"
+    assert plan.coarse_operator_scope == "replicated_small_dense_operator"
+    assert "compiled_operator_reuse_gate" in plan.required_runtime_gates
+    assert "deterministic 1-vs-N output gate has not passed" in plan.promotion_blockers
+    assert "hot 1-vs-N speedup has not been measured" in plan.promotion_blockers
+    assert "1-vs-N peak-memory growth has not been measured" in plan.promotion_blockers
+
+
+def test_operator_coarse_reuse_plan_can_be_promotion_ready_after_measured_gates() -> None:
+    plan = plan_single_case_operator_coarse_reuse(
+        active_devices=2,
+        backend="cpu",
+        rhs_mode=1,
+        shard_axis="zeta",
+        operator_reuse_enabled=True,
+        operator_reuse_gate_pass=True,
+        deterministic_output_gate_pass=True,
+        measured_hot_speedup=1.25,
+        min_hot_speedup=1.15,
+        memory_growth_fraction=-0.05,
+        coarse_levels=1,
+    )
+
+    assert plan.plan_valid is True
+    assert plan.promotion_ready is True
+    assert plan.failures == ()
+    assert plan.promotion_blockers == ()
+    assert plan.per_device_components[0] == "zeta_slab_state"
+    assert "projected_coarse_operator" in plan.replicated_components
+
+
+def test_operator_coarse_reuse_plan_fails_closed_for_non_rhs1_or_bad_axis() -> None:
+    plan = plan_single_case_operator_coarse_reuse(
+        active_devices=1,
+        backend="cpu",
+        rhs_mode=2,
+        shard_axis="flat",
+        experimental_single_case_scaling=False,
+    )
+
+    assert plan.plan_valid is False
+    assert plan.promotion_ready is False
+    assert any("RHSMode=1" in failure for failure in plan.failures)
+    assert any("shard_axis" in failure for failure in plan.failures)
+    assert any("at least two active devices" in failure for failure in plan.failures)
+    assert any("marked experimental" in failure for failure in plan.failures)

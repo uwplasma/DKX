@@ -169,6 +169,49 @@ class ShardedSolveDeterministicOutputGate:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class SingleCaseOperatorCoarseReusePlan:
+    """Fail-closed architecture plan for single-case compiled operator reuse."""
+
+    schema_version: int
+    benchmark_kind: str
+    backend: str
+    rhs_mode: int
+    shard_axis: str
+    active_devices: int
+    experimental_single_case_scaling: bool
+    operator_reuse_enabled: bool
+    operator_reuse_gate_pass: bool
+    deterministic_output_gate_pass: bool
+    measured_hot_speedup: float | None
+    min_hot_speedup: float
+    memory_growth_fraction: float | None
+    max_memory_growth_fraction: float
+    coarse_strategy: str
+    coarse_levels: int
+    max_coarse_rank: int | None
+    operator_build_scope: str
+    operator_action_scope: str
+    preconditioner_scope: str
+    coarse_operator_scope: str
+    coarse_solve_scope: str
+    compiled_components: tuple[str, ...]
+    reused_components: tuple[str, ...]
+    per_device_components: tuple[str, ...]
+    replicated_components: tuple[str, ...]
+    required_runtime_gates: tuple[str, ...]
+    plan_valid: bool
+    promotion_ready: bool
+    failures: tuple[str, ...]
+    promotion_blockers: tuple[str, ...]
+    notes: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-serializable architecture plan."""
+
+        return asdict(self)
+
+
 def _positive_int(value: object, *, name: str) -> int:
     try:
         parsed = int(value)
@@ -710,8 +753,175 @@ def plan_sharded_solve_deterministic_output_gate(
     )
 
 
+def plan_single_case_operator_coarse_reuse(
+    *,
+    active_devices: int,
+    backend: str = "auto",
+    rhs_mode: int = 1,
+    shard_axis: str = "theta",
+    benchmark_kind: str = "single_case_sharded_solve",
+    experimental_single_case_scaling: bool = True,
+    operator_reuse_enabled: bool = True,
+    operator_reuse_gate_pass: bool = False,
+    deterministic_output_gate_pass: bool = False,
+    measured_hot_speedup: float | None = None,
+    min_hot_speedup: float = 1.15,
+    memory_growth_fraction: float | None = None,
+    max_memory_growth_fraction: float = 0.0,
+    coarse_strategy: str = "replicated_schur",
+    coarse_levels: int = 0,
+    max_coarse_rank: int | None = None,
+) -> SingleCaseOperatorCoarseReusePlan:
+    """Plan the next sharded RHSMode=1 operator/coarse-reuse architecture.
+
+    The helper is intentionally pure. It does not claim speedup; it records the
+    executable architecture that a measured single-case scaling artifact must
+    use before being considered for promotion.
+    """
+
+    devices = _positive_int(active_devices, name="active_devices")
+    rhs_mode_value = _positive_int(rhs_mode, name="rhs_mode")
+    backend_norm = _normalize_backend(backend)
+    axis = _normalized_token(shard_axis)
+    kind = _normalized_token(benchmark_kind)
+    coarse_level_count = _nonnegative_int(coarse_levels, name="coarse_levels")
+    coarse_rank = (
+        None
+        if max_coarse_rank is None
+        else _positive_int(max_coarse_rank, name="max_coarse_rank")
+    )
+    speedup_gate = float(min_hot_speedup)
+    memory_gate = float(max_memory_growth_fraction)
+    if not math.isfinite(speedup_gate) or speedup_gate < 1.0:
+        raise ValueError("min_hot_speedup must be finite and >= 1.0")
+    if not math.isfinite(memory_gate):
+        raise ValueError("max_memory_growth_fraction must be finite")
+
+    hot_speedup = None if measured_hot_speedup is None else float(measured_hot_speedup)
+    memory_growth = (
+        None if memory_growth_fraction is None else float(memory_growth_fraction)
+    )
+
+    failures: list[str] = []
+    blockers: list[str] = []
+    notes: list[str] = []
+    if kind not in _SHARDED_SOLVE_KINDS:
+        failures.append("operator/coarse reuse plan requires single-case sharded-solve benchmark_kind")
+    if rhs_mode_value != 1:
+        failures.append("operator/coarse reuse plan currently applies only to RHSMode=1")
+    if axis not in _SUPPORTED_SINGLE_CASE_AXES:
+        failures.append(
+            f"operator/coarse reuse plan requires shard_axis in {sorted(_SUPPORTED_SINGLE_CASE_AXES)}"
+        )
+    if devices < 2:
+        failures.append("operator/coarse reuse plan needs at least two active devices")
+    if not bool(experimental_single_case_scaling):
+        failures.append("single-case operator/coarse reuse must remain marked experimental")
+    if not bool(operator_reuse_enabled):
+        blockers.append("assembled operator reuse is disabled")
+    if not bool(operator_reuse_gate_pass):
+        blockers.append("compiled operator-reuse gate has not passed")
+    if not bool(deterministic_output_gate_pass):
+        blockers.append("deterministic 1-vs-N output gate has not passed")
+    if hot_speedup is None:
+        blockers.append("hot 1-vs-N speedup has not been measured")
+    elif not math.isfinite(hot_speedup) or hot_speedup < speedup_gate:
+        blockers.append(
+            f"hot speedup {hot_speedup:.3g}x is below gate {speedup_gate:.3g}x"
+        )
+    if memory_growth is None:
+        blockers.append("1-vs-N peak-memory growth has not been measured")
+    elif not math.isfinite(memory_growth) or memory_growth > memory_gate:
+        blockers.append(
+            "peak-memory growth exceeds gate "
+            f"({memory_growth:.3g} > {memory_gate:.3g})"
+        )
+    if coarse_level_count == 0:
+        notes.append("coarse reuse is planned but no Schwarz/coarse levels are requested")
+    if coarse_rank is None:
+        notes.append("coarse rank is not capped in this plan; measured runs must record actual rank")
+
+    compiled_components = (
+        "sharded_full_system_matvec",
+        "local_slab_preconditioner_apply",
+        "coarse_projection",
+        "coarse_correction_apply",
+    )
+    reused_components = (
+        "full_system_operator_signature",
+        "operator_constants",
+        "local_preconditioner_blocks",
+        "coarse_basis",
+        "projected_coarse_operator",
+    )
+    per_device_components = (
+        f"{axis}_slab_state",
+        f"{axis}_slab_matvec_workspace",
+        "local_preconditioner_workspace",
+    )
+    replicated_components = (
+        "coarse_basis_metadata",
+        "projected_coarse_operator",
+        "coarse_solution_vector",
+    )
+    required_runtime_gates = (
+        "compiled_operator_reuse_gate",
+        "deterministic_output_gate",
+        "hot_1_vs_n_speedup_gate",
+        "peak_memory_nonincrease_gate",
+    )
+
+    valid = not failures
+    ready = valid and not blockers
+    if valid:
+        notes.append(
+            "planned path keeps the expensive operator/coarse setup outside timed hot solves"
+        )
+        notes.append("coarse solve is replicated; only slab residual data should cross devices")
+
+    return SingleCaseOperatorCoarseReusePlan(
+        schema_version=1,
+        benchmark_kind=kind,
+        backend=backend_norm,
+        rhs_mode=rhs_mode_value,
+        shard_axis=axis,
+        active_devices=devices,
+        experimental_single_case_scaling=bool(experimental_single_case_scaling),
+        operator_reuse_enabled=bool(operator_reuse_enabled),
+        operator_reuse_gate_pass=bool(operator_reuse_gate_pass),
+        deterministic_output_gate_pass=bool(deterministic_output_gate_pass),
+        measured_hot_speedup=hot_speedup,
+        min_hot_speedup=speedup_gate,
+        memory_growth_fraction=memory_growth,
+        max_memory_growth_fraction=memory_gate,
+        coarse_strategy=_normalized_token(coarse_strategy or "replicated_schur"),
+        coarse_levels=coarse_level_count,
+        max_coarse_rank=coarse_rank,
+        operator_build_scope=(
+            "once_per_child_process"
+            if bool(operator_reuse_enabled)
+            else "per_timed_solve"
+        ),
+        operator_action_scope="compiled_sharded_device_function",
+        preconditioner_scope=f"local_{axis}_slab_apply",
+        coarse_operator_scope="replicated_small_dense_operator",
+        coarse_solve_scope="replicated_device_dense_solve",
+        compiled_components=compiled_components,
+        reused_components=reused_components,
+        per_device_components=per_device_components,
+        replicated_components=replicated_components,
+        required_runtime_gates=required_runtime_gates,
+        plan_valid=valid,
+        promotion_ready=ready,
+        failures=tuple(failures),
+        promotion_blockers=tuple(dict.fromkeys(blockers)),
+        notes=tuple(notes),
+    )
+
+
 __all__ = [
     "CompiledShardedOperatorReuseGate",
+    "SingleCaseOperatorCoarseReusePlan",
     "ShardedSolveDeterministicOutputGate",
     "ShardedSolveAmortizationDiagnostics",
     "ShardedSolveBalanceDiagnostics",
@@ -720,5 +930,6 @@ __all__ = [
     "estimate_sharded_solve_amortization",
     "plan_compiled_sharded_operator_reuse",
     "plan_sharded_solve_deterministic_output_gate",
+    "plan_single_case_operator_coarse_reuse",
     "plan_single_case_sharded_solve",
 ]

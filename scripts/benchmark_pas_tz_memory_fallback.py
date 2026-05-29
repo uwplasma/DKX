@@ -380,11 +380,13 @@ def _guarded_pas_tz_evidence(row: dict[str, Any]) -> tuple[bool, list[str]]:
 
 
 def _iter_nested_dicts(value: Any):
-    if not isinstance(value, dict):
-        return
-    yield value
-    for item in value.values():
-        if isinstance(item, dict):
+    """Yield dictionaries inside nested benchmark metadata containers."""
+    if isinstance(value, dict):
+        yield value
+        for item in value.values():
+            yield from _iter_nested_dicts(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
             yield from _iter_nested_dicts(item)
 
 
@@ -1008,13 +1010,16 @@ def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             if isinstance(promotion_gate, dict) and promotion_gate.get("status") == "pass":
                 if gate == "pass" and promotion_gate.get("reason") == "promotion-win-recorded":
                     promotion_eligible_variants.append(str(row.get("variant", "unknown")))
+    result_count = len(results)
+    all_gates_passed = result_count > 0 and by_gate.get("fail", 0) == 0
     return {
-        "result_count": len(results),
+        "result_count": result_count,
         "by_status": by_status,
         "by_gate": by_gate,
-        "all_gates_passed": by_gate.get("fail", 0) == 0,
+        "all_gates_passed": all_gates_passed,
         "failed_variants": failed_variants,
         "promotion_eligible_variants": promotion_eligible_variants,
+        "promotion_ready": bool(all_gates_passed and promotion_eligible_variants),
         "failure_reasons": failure_reasons,
     }
 

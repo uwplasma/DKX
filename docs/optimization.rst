@@ -800,42 +800,86 @@ selected roots under documented tolerances.
 First QI refinement rung
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-The next bounded CPU/GPU rung has also been run at
+The next bounded CPU/GPU/Fortran rung has also been run at
 :math:`N_\theta=9`, :math:`N_\zeta=9`, :math:`N_\xi=11`,
 :math:`N_L=4`, :math:`N_x=4` with the same eight electric-field points.  This
 is still below the production-resolution floor, but it is useful because it
-tests whether the positive root survives a first refinement and whether CPU and
-GPU remain consistent when the flux-selectivity objective is intentionally
-disabled for the two-species ion/electron contract.
+tests whether the positive root survives a first refinement, whether CPU and
+GPU remain consistent, and whether the shared-scope Fortran-v3 reference still
+agrees when the flux-selectivity objective is intentionally disabled for the
+two-species ion/electron contract.
 
 The CPU lane completed the eight points in about ``9.7 s`` locally, and the
 one-GPU lane completed them in about ``28.6 s`` on office GPU0.  Both lanes
 passed residual gates and selected
 :math:`E_r=2.2834299271` in the bracket :math:`[2,3]`; the CPU/GPU root
-difference was :math:`4.3\times10^{-14}`.  However, the root drift from the
+difference was :math:`4.3\times10^{-14}`.  The Fortran-v3 reference selected
+:math:`E_r=2.2834273232`, differing from the CPU result by
+:math:`2.6\times10^{-6}` and passing the documented refined-grid reference
+tolerance.  However, the root drift from the
 ``7 x 7 x 7 x 4`` low-resolution CPU artifact is about ``0.155``, so this rung
 is evidence that the positive root persists, not evidence that the QI ladder is
 converged.
 
-.. figure:: _static/figures/optimization/qi_nfp2_electron_root_res9_cpu_gpu.png
-   :alt: QI nfp=2 first refined CPU/GPU electron-root comparison.
+.. figure:: _static/figures/optimization/qi_nfp2_electron_root_res9_reference_tolerance_comparison.png
+   :alt: QI nfp=2 first refined CPU/GPU/Fortran electron-root comparison.
 
-   First refined QI ``nfp=2`` CPU/GPU electron-root comparison.  Backend
-   agreement is clean at fixed resolution, but the low-to-refined root drift
-   keeps the production-resolution QI ladder open.
+   First refined QI ``nfp=2`` CPU/GPU/Fortran electron-root comparison.
+   Backend agreement and the Fortran-v3 refined-grid audit are clean at fixed
+   resolution, but the low-to-refined root drift keeps the
+   production-resolution QI ladder open.
 
 The checked machine-readable artifacts for this first refinement rung are:
 
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu.json``
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_gpu.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_fortran.json``
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu_gpu.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_reference_tolerance_comparison.json``
 
-The next rung should add a Fortran-v3 audit for this refined grid when the
-input remains in the shared model scope, then continue to a wider
-CPU/GPU/Fortran resolution ladder.  Do not promote the QI electron-root
-candidate as production-resolution evidence until the selected root, bootstrap
-current, fluxes, residuals, and backend/reference comparisons are stable across
-that ladder.
+Second QI refinement rung and solver-policy audit
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following bounded rung uses
+:math:`N_\theta=11`, :math:`N_\zeta=11`, :math:`N_\xi=13`,
+:math:`N_L=4`, :math:`N_x=4`, again with the same eight electric-field points.
+It was added after profiling exposed a mid-size RHSMode=1 full-FP policy cliff:
+the old automatic path crossed the dense cutoff, entered a slower generic
+fallback, and took about ``326 s`` for the CPU scan even though the active dense
+operator was small enough for the checked workstation/GPU hosts.  The default
+full-FP dense policy now covers active sizes up to ``8000`` and ``scan-er``
+writes a per-point ``sfincsOutput.solver_trace.json`` sidecar so this kind of
+solver-path change is auditable.
+
+With that policy in place, the ``11 x 11 x 13 x 4`` CPU scan completed in about
+``23 s`` locally and the matching office GPU0 scan completed in about ``23 s``.
+Both selected :math:`E_r=2.2224054815` in the bracket :math:`[2,3]`; the
+CPU/GPU root difference was :math:`2.5\times10^{-13}`.  The Fortran-v3
+reference selected :math:`E_r=2.2224043880`, giving a relative root difference
+of :math:`4.9\times10^{-7}` and passing the documented
+:math:`2\times10^{-6}` reference tolerance.  The root still shifts by about
+``0.061`` from the first refinement rung, so this is stronger persistence and
+backend/reference evidence, not a production-converged QI claim.
+
+.. figure:: _static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.png
+   :alt: QI nfp=2 second refined CPU/GPU/Fortran electron-root comparison.
+
+   Second refined QI ``nfp=2`` CPU/GPU/Fortran electron-root comparison after
+   the bounded RHSMode=1 dense-policy fix.  The fixed-resolution CPU, GPU, and
+   Fortran-v3 roots agree within the documented tolerance, while the
+   resolution-ladder drift keeps the production-resolution lane open.
+
+The checked machine-readable artifacts for this second refinement rung are:
+
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_cpu_dense8000_default.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_gpu_dense8000_default.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_fortran.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.json``
+
+The next rung should continue to a wider CPU/GPU/Fortran resolution ladder.  Do
+not promote the QI electron-root candidate as production-resolution evidence
+until the selected root, bootstrap current, fluxes, residuals, and
+backend/reference comparisons are stable across that ladder.
 
 VMEC JAX Integration
 --------------------

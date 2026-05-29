@@ -40,6 +40,7 @@ def test_er_scan_writes_outputs_and_ambipolar_solve_runs(tmp_path: Path) -> None
     # Ensure outputs exist and contain the patched Er value.
     for v, out_h5 in zip(scan.values, scan.outputs, strict=True):
         assert out_h5.exists()
+        assert out_h5.with_name("sfincsOutput.solver_trace.json").exists()
         d = read_sfincs_h5(out_h5)
         np.testing.assert_allclose(float(np.asarray(d["Er"]).reshape(())), float(v), rtol=0.0, atol=0.0)
         assert "particleFlux_vm_rHat" in d
@@ -60,4 +61,3 @@ def test_er_scan_writes_outputs_and_ambipolar_solve_runs(tmp_path: Path) -> None
     # Roots may or may not exist depending on this tiny fixture; ensure consistency if they do.
     if res.roots_var.size:
         np.testing.assert_allclose(np.asarray(payload["roots"], dtype=np.float64), np.asarray(res.roots_var, dtype=np.float64))
-

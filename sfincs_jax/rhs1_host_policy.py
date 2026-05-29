@@ -123,7 +123,7 @@ def rhs1_dense_fallback_max(op: Any) -> int:
     elif dense_fp_cutoff_raw:
         dense_fp_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", base_max)
     else:
-        dense_fp_max = 6000
+        dense_fp_max = 8000
     if dense_fp_max <= 0:
         return base_max
     return max(base_max, dense_fp_max)
@@ -134,7 +134,7 @@ def rhs1_dense_auto_fp_cutoff(*, dense_active_cutoff: int) -> int:
 
     This is the pre-Krylov auto-selection threshold used by the CLI/output
     writer. It intentionally matches the default full-FP dense fallback budget
-    (6000 active unknowns) so moderate FP systems do not first run through the
+    (8000 active unknowns) so moderate FP systems do not first run through the
     expensive Krylov/strong/sparse rescue ladder. Users may still disable the
     initial dense path with ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF=0`` or lower it
     for memory-constrained hosts.
@@ -145,7 +145,7 @@ def rhs1_dense_auto_fp_cutoff(*, dense_active_cutoff: int) -> int:
             return max(0, int(raw))
         except ValueError:
             pass
-    return min(max(0, int(dense_active_cutoff)), 6000)
+    return min(max(0, int(dense_active_cutoff)), 8000)
 
 
 def rhs1_dense_auto_fp_accelerator_min() -> int:

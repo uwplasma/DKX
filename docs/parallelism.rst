@@ -706,6 +706,21 @@ checks that the artifact is schema-valid and honestly marked as experimental;
 it does not convert a single-case sharded timing into a release transport
 throughput claim.
 
+The plan JSON also records
+``operator_coarse_reuse_plan`` from
+``sfincs_jax.transport_parallel_sharding.plan_single_case_operator_coarse_reuse``.
+This is the executable target for the next single-case scaling push: build the
+RHSMode=1 full-system operator once per child process, compile the sharded
+matvec/local-preconditioner/coarse-correction apply, keep the projected coarse
+operator replicated on each device, and measure only hot solves after the
+compiled operator/coarse state is reusable. The plan is deliberately
+fail-closed. It remains ``promotion_ready=false`` until the same artifact has:
+
+- a passing compiled-operator reuse gate;
+- a passing deterministic 1-vs-N residual/output gate;
+- a measured hot 1-vs-N speedup above the configured threshold;
+- non-increasing peak memory relative to the one-device run.
+
 On this host, long 8-device CPU runs still hit occasional XLA rendezvous timeouts,
 so published strong-scaling results are currently capped at 5 devices.
 

@@ -230,6 +230,35 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   `docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu.*`,
   `qi_nfp2_electron_root_res9_gpu.*`, and
   `qi_nfp2_electron_root_res9_cpu_gpu.*`.
+- [x] Added the matching SFINCS Fortran-v3 audit for the refined
+  `9 x 9 x 11 x 4` QI `nfp=2` rung. The Fortran-v3 lane selected
+  `Er=2.2834273232`, passed the documented refined-grid reference tolerance
+  against the SFINCS-JAX CPU artifact, and is archived as
+  `docs/_static/figures/optimization/qi_nfp2_electron_root_res9_fortran.*` plus
+  `qi_nfp2_electron_root_res9_reference_tolerance_comparison.*`. This upgrades
+  the refined rung from CPU/GPU-only evidence to CPU/GPU/Fortran fixed-resolution
+  evidence; the root drift still keeps the production-resolution QI ladder open.
+- [x] Audited the next `11 x 11 x 13 x 4` CPU/Fortran rung. Both lanes pass the
+  electron-root gate and select the same root (`Er=2.2224048008` for SFINCS-JAX
+  CPU and `Er=2.2224043880` for Fortran-v3), but the CPU scan exposed a
+  mid-size RHSMode=1 solver-policy cliff: the default path took about `323 s`
+  because it fell above the dense cutoff into generic auto/sparse rescue, while
+  a forced dense CPU point at the same resolution solved in `3.7 s` with
+  residual `3.97e-18`.
+- [x] Converted that cliff into a bounded policy/test change: full-FP RHSMode=1
+  dense auto now covers active sizes up to `8000` by default, and `scan-er`
+  writes `sfincsOutput.solver_trace.json` beside each non-skipped output so
+  future optimization and promotion artifacts preserve solver path, elapsed
+  time, residual, active-size, and memory-estimate provenance.
+- [x] Re-ran the `11 x 11 x 13 x 4` QI `nfp=2` rung after the policy change on
+  CPU and office GPU0. The CPU scan now completes in about `23 s` instead of
+  the pre-fix `326 s`, the current-code GPU scan completes in about `23 s`
+  instead of the older slow fallback path, all eight scan points write solver
+  trace sidecars, and CPU/GPU/Fortran fixed-resolution comparison passes with
+  CPU/GPU root difference `2.5e-13` and SFINCS-JAX/Fortran-v3 root relative
+  difference `4.9e-7`. Compact JSON/PNG/PDF evidence is archived under
+  `docs/_static/figures/optimization/qi_nfp2_electron_root_res11_*`; raw
+  scan outputs stay in `outputs/`.
 - [x] Fixed the optimization promotion CLI so flux selectivity is opt-in rather
   than assuming `impurity_species_index=2`. This prevents two-species
   ion/electron electron-root campaigns from failing after successful solves.
@@ -253,9 +282,9 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   rung. Updated the landing page, optimization guide, research-lane page,
   testing page, release notes, README, and optimization example README so they
   consistently state that the first QI low-resolution artifact is closed, the
-  `9 x 9 x 11 x 4` CPU/GPU rung passes fixed-resolution gates, the root drift
-  keeps the production-resolution QI ladder open, and two-species electron-root
-  scans should leave `--impurity-species-index` unset. Validation passed with
+  `9 x 9 x 11 x 4` CPU/GPU/Fortran rung passes fixed-resolution gates, the root
+  drift keeps the production-resolution QI ladder open, and two-species
+  electron-root scans should leave `--impurity-species-index` unset. Validation passed with
   strict Sphinx, release gates, research-lane gates, and focused optimization
   artifact tests.
 
