@@ -135,7 +135,7 @@ Current artifacts:
    plotted bars show wall-clock runtime and active solver memory for SFINCS
    Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU cold/warm
    across the reference-runtime-window rows whose Fortran v3 reference runtime
-   is at least ``10 s``. The summary JSON records which legacy frozen rows still
+   is at least ``10 s``. The summary JSON records which previous frozen rows still
    need full production-resolution reruns. JAX active memory subtracts the fixed Python/JAX/XLA runtime
    baseline using profiler RSS deltas while preserving full process RSS in the
    JSON audit fields. Cases are ordered by best warm ``sfincs_jax`` speedup over the
