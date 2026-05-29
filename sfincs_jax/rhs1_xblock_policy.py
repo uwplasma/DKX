@@ -77,6 +77,35 @@ class RHS1XBlockDeviceHostFallbackDecision:
 
 
 @dataclass(frozen=True)
+class RHS1XBlockQIDeviceOperatorReuseDecision:
+    """Resolved gate for the QI device operator/coarse-reuse x-block route."""
+
+    enabled: bool
+    reason: str
+    requested: bool
+    skip_xblock_factors: bool
+    requested_device_krylov: bool
+    matrix_free: bool
+    use_in_krylov: bool
+    precondition_side: str
+    qi_like_full_fp_3d: bool
+
+    def to_metadata(self) -> dict[str, object]:
+        """Return JSON-ready routing metadata."""
+        return {
+            "enabled": bool(self.enabled),
+            "reason": self.reason,
+            "requested": bool(self.requested),
+            "skip_xblock_factors": bool(self.skip_xblock_factors),
+            "requested_device_krylov": bool(self.requested_device_krylov),
+            "matrix_free": bool(self.matrix_free),
+            "use_in_krylov": bool(self.use_in_krylov),
+            "precondition_side": self.precondition_side,
+            "qi_like_full_fp_3d": bool(self.qi_like_full_fp_3d),
+        }
+
+
+@dataclass(frozen=True)
 class RHS1XBlockLocalSolveTuning:
     """Sparse local factorization tuning for one x-block candidate."""
 
@@ -729,6 +758,100 @@ def rhs1_xblock_device_host_fallback_decision(
     )
 
 
+def rhs1_xblock_qi_device_operator_reuse_decision(
+    *,
+    env_value: str,
+    requested_krylov_method: str,
+    host_fallback_used: bool,
+    rhs_mode: int,
+    constraint_scheme: int,
+    include_phi1: bool,
+    has_fp: bool,
+    has_pas: bool,
+    n_zeta: int,
+    qi_device_preconditioner_requested: bool,
+    qi_device_matrix_free_requested: bool,
+    qi_device_use_in_krylov_requested: bool,
+    precondition_side: str,
+) -> RHS1XBlockQIDeviceOperatorReuseDecision:
+    """Return whether QI-device Krylov can skip local x-block factors.
+
+    This is deliberately narrower than the host-fallback policy: it only
+    activates for explicit matrix-free QI-device Krylov requests, because those
+    runs already build and reuse ``(Q, A Q)`` coarse actions on device. In that
+    configuration, building local host/JAX x-block factors first can dominate
+    setup time and memory without improving the final device route.
+    """
+    raw_mode = _normalize_policy_token(env_value)
+    ignored_env = False
+    if raw_mode in _FALSE_VALUES or raw_mode in {"disabled", "disable"}:
+        mode = "off"
+    elif raw_mode in _TRUE_VALUES or raw_mode in {"force", "forced", "device", "reuse"}:
+        mode = "force"
+    elif raw_mode in _DEFAULT_VALUES:
+        mode = "auto"
+    else:
+        mode = "auto"
+        ignored_env = bool(raw_mode)
+
+    requested_method = _normalize_policy_token(requested_krylov_method)
+    requested_device = requested_method in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+    side = _normalize_policy_token(precondition_side)
+    qi_like_full_fp_3d = bool(
+        int(rhs_mode) == 1
+        and int(constraint_scheme) == 1
+        and not bool(include_phi1)
+        and bool(has_fp)
+        and not bool(has_pas)
+        and int(n_zeta) > 1
+    )
+    requested = bool(
+        requested_device
+        and bool(qi_device_preconditioner_requested)
+        and bool(qi_device_matrix_free_requested)
+        and bool(qi_device_use_in_krylov_requested)
+    )
+
+    enabled = False
+    reason = "disabled"
+    if ignored_env:
+        reason = "ignored-env-auto"
+    if mode == "off":
+        reason = "disabled"
+    elif not requested_device:
+        reason = "not-device-krylov"
+    elif bool(host_fallback_used):
+        reason = "host-fallback-active"
+    elif not bool(qi_device_preconditioner_requested):
+        reason = "qi-device-preconditioner-not-requested"
+    elif not bool(qi_device_matrix_free_requested):
+        reason = "matrix-free-not-requested"
+    elif not bool(qi_device_use_in_krylov_requested):
+        reason = "use-in-krylov-not-requested"
+    elif side == "none":
+        reason = "precondition-side-none"
+    elif mode == "force":
+        enabled = True
+        reason = "forced"
+    elif not qi_like_full_fp_3d:
+        reason = "not-qi-full-fp-3d"
+    else:
+        enabled = True
+        reason = "matrix-free-qi-device-krylov"
+
+    return RHS1XBlockQIDeviceOperatorReuseDecision(
+        enabled=bool(enabled),
+        reason=reason,
+        requested=bool(requested),
+        skip_xblock_factors=bool(enabled),
+        requested_device_krylov=bool(requested_device),
+        matrix_free=bool(qi_device_matrix_free_requested),
+        use_in_krylov=bool(qi_device_use_in_krylov_requested),
+        precondition_side=side,
+        qi_like_full_fp_3d=bool(qi_like_full_fp_3d),
+    )
+
+
 def rhs1_xblock_lgmres_rescue_maxiter(env_value: str, current_maxiter: int) -> tuple[int, bool]:
     """Return the bounded LGMRES-rescue outer-iteration limit and cap flag."""
     try:
@@ -930,6 +1053,7 @@ __all__ = [
     "RHS1XBlockSparsePCPolicy",
     "resolve_rhs1_xblock_sparse_pc_policy",
     "rhs1_xblock_device_host_fallback_decision",
+    "rhs1_xblock_qi_device_operator_reuse_decision",
     "rhs1_xblock_gmres_restart",
     "rhs1_xblock_krylov_method",
     "rhs1_xblock_local_solve_candidate",

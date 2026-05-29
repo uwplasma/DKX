@@ -960,6 +960,42 @@ The checked machine-readable artifact for this rung is:
 
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json``
 
+Device-QI operator-reuse route
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The first guarded route for the next GPU timing gate is now available for
+explicit advanced use.  It targets RHSMode=1, full-FP, three-dimensional QI-like
+runs with no ``Phi1`` solve, an explicit x-block Krylov method, and the
+matrix-free QI-device preconditioner installed inside Krylov.  Under those
+conditions the driver skips local sparse x-block factor construction and uses
+the device/operator-reuse path instead.  The route is intentionally opt-in at
+the method level; ordinary automatic solves still fall back to the proven
+host-sparse path when that is safer.
+
+The minimal environment for this lane is:
+
+.. code-block:: bash
+
+   export SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=gmres-jax
+   export SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1
+   export SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1
+   export SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1
+
+and the solve should request the x-block Krylov lane, for example
+``--solve-method xblock_sparse_pc_gmres``.  The default
+``SFINCS_JAX_RHSMODE1_XBLOCK_QI_DEVICE_OPERATOR_REUSE=auto`` enables the skip
+only when the guarded route is actually viable; setting it to ``0`` disables the
+skip, and setting it to ``force`` allows controlled debugging outside the
+QI-like geometry gate.
+
+Successful activation is visible in solver metadata through
+``xblock_qi_device_operator_reuse_enabled=True``,
+``xblock_qi_device_operator_reuse_reason="matrix-free-qi-device-krylov"``, and
+``sparse_pc_xblock_preconditioner_built=False``.  This closes the missing
+route-level infrastructure.  It does not close the public true-device-QI
+performance claim until a bounded office-GPU run writes residual-clean output
+and beats the host-sparse GPU route under the documented timing gate.
+
 VMEC JAX Integration
 --------------------
 

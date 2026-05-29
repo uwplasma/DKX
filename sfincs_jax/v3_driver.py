@@ -14373,31 +14373,6 @@ def solve_v3_full_system_linear_gmres(
                 xblock_device_krylov_requested
                 and xblock_jax_factors_env not in {"1", "true", "t", "yes", "on", ".true.", ".t."}
             )
-            if emit is not None:
-                factor_backend = "jax" if bool(xblock_jax_factors) else "host"
-                factor_reason = " device-krylov" if bool(xblock_device_krylov_forced_jax_factors) else ""
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building "
-                    f"{factor_backend} x-block preconditioner preconditioner_xi={int(xblock_preconditioner_xi)}"
-                    f"{factor_reason}",
-                )
-            factor_start_s = sparse_timer.elapsed_s()
-            precond_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
-                op=op,
-                build_jax_factors=bool(xblock_jax_factors),
-                preconditioner_species=preconditioner_species,
-                preconditioner_xi=xblock_preconditioner_xi,
-                drop_tol=xblock_drop_tol,
-                drop_rel=xblock_drop_rel,
-                ilu_drop_tol=xblock_ilu_drop_tol,
-                fill_factor=xblock_fill_factor,
-                force_assembled_host_fp=bool(force_assembled_host_fp),
-                emit=emit,
-            )
-            pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
-            setup_s = sparse_timer.elapsed_s()
-
             side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
             full_fp_3d_right_pc_max_env = os.environ.get(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX", ""
@@ -14435,7 +14410,78 @@ def solve_v3_full_system_linear_gmres(
                         1,
                         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                         f"ignoring unknown SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV={xblock_krylov_env!r}",
+                    )
+            xblock_qi_device_operator_reuse_decision = (
+                _rhs1_xblock_policy.rhs1_xblock_qi_device_operator_reuse_decision(
+                    env_value=os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_QI_DEVICE_OPERATOR_REUSE",
+                        "",
+                    ),
+                    requested_krylov_method=str(xblock_krylov_method),
+                    host_fallback_used=bool(xblock_device_host_fallback_decision.used),
+                    rhs_mode=int(op.rhs_mode),
+                    constraint_scheme=int(op.constraint_scheme),
+                    include_phi1=bool(op.include_phi1),
+                    has_fp=op.fblock.fp is not None,
+                    has_pas=op.fblock.pas is not None,
+                    n_zeta=int(getattr(op, "n_zeta", 1)),
+                    qi_device_preconditioner_requested=bool(
+                        qi_device_preconditioner_requested_for_fallback
+                    ),
+                    qi_device_matrix_free_requested=bool(
+                        qi_device_matrix_free_requested_for_fallback
+                    ),
+                    qi_device_use_in_krylov_requested=bool(
+                        qi_device_use_in_krylov_requested_for_fallback
+                    ),
+                    precondition_side=str(precondition_side),
                 )
+            )
+            xblock_qi_device_operator_reuse_skip_factors = bool(
+                xblock_qi_device_operator_reuse_decision.skip_xblock_factors
+            )
+            if xblock_qi_device_operator_reuse_skip_factors:
+                xblock_jax_factors = False
+                xblock_device_krylov_forced_jax_factors = False
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        "using matrix-free QI-device operator reuse; skipping local x-block factors",
+                    )
+            elif emit is not None:
+                factor_backend = "jax" if bool(xblock_jax_factors) else "host"
+                factor_reason = " device-krylov" if bool(xblock_device_krylov_forced_jax_factors) else ""
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building "
+                    f"{factor_backend} x-block preconditioner preconditioner_xi={int(xblock_preconditioner_xi)}"
+                    f"{factor_reason}",
+                )
+            factor_start_s = sparse_timer.elapsed_s()
+            xblock_preconditioner_built = False
+            if xblock_qi_device_operator_reuse_skip_factors:
+
+                def precond_xblock(v: jnp.ndarray) -> jnp.ndarray:
+                    return jnp.asarray(v, dtype=jnp.float64)
+
+                pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
+            else:
+                precond_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
+                    op=op,
+                    build_jax_factors=bool(xblock_jax_factors),
+                    preconditioner_species=preconditioner_species,
+                    preconditioner_xi=xblock_preconditioner_xi,
+                    drop_tol=xblock_drop_tol,
+                    drop_rel=xblock_drop_rel,
+                    ilu_drop_tol=xblock_ilu_drop_tol,
+                    fill_factor=xblock_fill_factor,
+                    force_assembled_host_fp=bool(force_assembled_host_fp),
+                    emit=emit,
+                )
+                pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
+                xblock_preconditioner_built = True
+            setup_s = sparse_timer.elapsed_s()
             progress_every_env = os.environ.get("SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY", "").strip()
             try:
                 progress_every = int(progress_every_env) if progress_every_env else 25
@@ -19902,6 +19948,7 @@ def solve_v3_full_system_linear_gmres(
                     "elapsed_s": float(sparse_timer.elapsed_s()),
                     "sparse_pc_factor_s": float(pc_factor_s),
                     "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
+                    "sparse_pc_xblock_preconditioner_built": bool(xblock_preconditioner_built),
                     "sparse_pc_xblock_assembled_host": bool(xblock_assembled_host_fp),
                     "sparse_pc_xblock_jax_factors": bool(xblock_jax_factors),
                     "sparse_pc_xblock_jax_factor_format": (
@@ -19942,6 +19989,18 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     "xblock_device_host_fallback_non_autodiff": bool(
                         xblock_device_host_fallback_decision.non_autodiff
+                    ),
+                    "xblock_qi_device_operator_reuse": (
+                        xblock_qi_device_operator_reuse_decision.to_metadata()
+                    ),
+                    "xblock_qi_device_operator_reuse_enabled": bool(
+                        xblock_qi_device_operator_reuse_decision.enabled
+                    ),
+                    "xblock_qi_device_operator_reuse_reason": str(
+                        xblock_qi_device_operator_reuse_decision.reason
+                    ),
+                    "xblock_qi_device_operator_reuse_skip_xblock_factors": bool(
+                        xblock_qi_device_operator_reuse_decision.skip_xblock_factors
                     ),
                     "xblock_device_gmres_enabled": bool(str(xblock_krylov_method) == "gmres_jax"),
                     "xblock_device_fgmres_enabled": bool(str(xblock_krylov_method) == "fgmres_jax"),

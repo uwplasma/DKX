@@ -268,6 +268,15 @@ remains an explicit research lane.
 
 ![QI nfp=2 second refined CPU/GPU/Fortran electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.png)
 
+The QI ladder also has a `13 x 13 x 15 x 4` fixed-resolution CPU/GPU/Fortran
+artifact and a `15 x 15 x 17 x 4` CPU/Fortran rung. The `15x` rung selects
+`E_r = 2.2132389239` on CPU and agrees with SFINCS Fortran v3 to `9.2e-7`
+relative on the selected root, with all residual gates passing. GPU promotion at
+this resolution is intentionally not claimed yet: the next route is the new
+matrix-free QI-device operator-reuse path, which now exists behind explicit
+advanced controls and still needs bounded one-GPU timing evidence before it
+becomes a public performance claim.
+
 The separate finite-beta QA convergence ladder extends the finite-beta QA
 artifact to `9 x 9 x 7 x 4` at the central surface and remains explicitly
 `deferred` because it does not meet the production floor.

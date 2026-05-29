@@ -441,6 +441,7 @@ def test_xblock_sparse_pc_post_residual_equation_records_metadata(monkeypatch) -
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
     monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
     monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+
     messages: list[str] = []
 
     result = solve_v3_full_system_linear_gmres(
@@ -1446,6 +1447,15 @@ def test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback(m
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART", "2")
     monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _fast_device_krylov_result)
     monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _fast_device_krylov_result)
+
+    def _forbidden_xblock_factor_build(**_kwargs):
+        raise AssertionError("device-QI operator reuse should bypass local x-block factors")
+
+    monkeypatch.setattr(
+        v3_driver_module,
+        "_build_rhsmode1_xblock_tz_sparse_preconditioner",
+        _forbidden_xblock_factor_build,
+    )
     messages: list[str] = []
 
     def _accepted_probe(**kwargs):
@@ -1489,6 +1499,11 @@ def test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback(m
     assert result.metadata["xblock_device_host_fallback_used"] is False
     assert result.metadata["xblock_device_host_fallback_reason"] == "disabled"
     assert result.metadata["xblock_device_host_fallback_auto_disabled_by_qi_device"] is True
+    assert result.metadata["sparse_pc_xblock_preconditioner_built"] is False
+    assert result.metadata["sparse_pc_xblock_jax_factors"] is False
+    assert result.metadata["xblock_qi_device_operator_reuse_enabled"] is True
+    assert result.metadata["xblock_qi_device_operator_reuse_skip_xblock_factors"] is True
+    assert result.metadata["xblock_qi_device_operator_reuse_reason"] == "matrix-free-qi-device-krylov"
     assert result.metadata["xblock_device_krylov_method"] == "gmres_jax"
     assert result.metadata["xblock_qi_device_preconditioner_built"] is True
     assert result.metadata["xblock_qi_device_preconditioner_used"] is True
@@ -1522,6 +1537,7 @@ def test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback(m
     assert result.metadata["xblock_qi_device_preconditioner_coarse_reuse"] is True
     assert any("global moment residual equation" in msg for msg in messages)
     assert any("host fallback disabled by explicit matrix-free QI-device" in msg for msg in messages)
+    assert any("skipping local x-block factors" in msg for msg in messages)
 
 
 def test_xblock_sparse_pc_device_krylov_can_use_compact_csr_factors(monkeypatch) -> None:

@@ -37,6 +37,14 @@ Unreleased
   observables. The eight-point CPU scan completes in ``535.8 s`` with all
   residual gates passing, selects ``E_r=2.2132389239``, and agrees with the
   SFINCS Fortran v3 selected root to ``9.2e-7`` relative.
+- Added a guarded matrix-free QI-device operator-reuse route for explicit
+  RHSMode=1 x-block Krylov runs. When ``xblock_sparse_pc_gmres`` is requested
+  with the QI-device matrix-free preconditioner installed in Krylov, the driver
+  can now skip local sparse x-block factor construction and report the decision
+  in solver metadata. The existing host-sparse fallback remains unchanged when
+  the guarded route is not requested or cannot be built. This is infrastructure
+  for the next one-GPU QI timing gate, not yet a production true-device-QI
+  performance claim.
 - Added the second refined QI ``nfp=2`` kinetic promotion rung at
   ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
   cliff. The bounded dense policy now covers active sizes up to ``8000`` and

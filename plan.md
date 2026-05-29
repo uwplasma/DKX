@@ -16756,3 +16756,66 @@ Best next steps:
    least ``2x``.
 3. Only after that route exists, rerun the ``15x`` GPU scan and continue the
    higher-resolution QI ladder.
+
+### 35.80 QI device operator-reuse route avoids local x-block factors
+
+Scope:
+
+- Added a guarded route-level policy,
+  ``rhs1_xblock_qi_device_operator_reuse_decision(...)``, for explicit RHSMode=1
+  x-block Krylov solves that request the matrix-free QI-device preconditioner
+  inside Krylov.
+- Wired the decision before local sparse x-block preconditioner construction in
+  ``v3_driver.py``. When the guarded route is active, the driver skips
+  ``_build_rhsmode1_xblock_tz_sparse_preconditioner(...)`` and records
+  metadata rather than paying for host/local sparse factors.
+- Kept the proven host-sparse fallback unchanged. The route is skipped whenever
+  device Krylov is not requested, host fallback is active, the QI-device
+  preconditioner is missing, matrix-free mode is off, the preconditioner is not
+  installed in Krylov, or the solve is not a QI-like full-FP 3D RHSMode=1 case
+  under the default ``auto`` gate.
+- Added explicit metadata:
+  ``xblock_qi_device_operator_reuse``,
+  ``xblock_qi_device_operator_reuse_enabled``,
+  ``xblock_qi_device_operator_reuse_reason``,
+  ``xblock_qi_device_operator_reuse_skip_xblock_factors``, and
+  ``sparse_pc_xblock_preconditioner_built``.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/rhs1_xblock_policy.py sfincs_jax/v3_driver.py``
+  passed.
+- Targeted route tests passed:
+  ``pytest -q tests/test_rhs1_xblock_policy.py::test_qi_device_operator_reuse_requires_matrix_free_device_krylov tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback``
+  reported ``2 passed``.
+- Broader adjacent route suite passed with ``109 passed`` across
+  ``tests/test_rhs1_xblock_policy.py``,
+  ``tests/test_rhs1_qi_device_preconditioner.py``, and the selected
+  ``tests/test_v3_sparse_pattern.py`` QI-device/x-block coverage.
+- ``ruff check`` passed on the touched source and test files.
+
+Progress:
+
+- QI kinetic promotion ladder: ``90%``; unchanged. The rung evidence remains
+  the ``15 x 15 x 17 x 4`` CPU/Fortran artifact.
+- True GPU/device QI performance: ``78%``; route-level infrastructure now avoids
+  local x-block factors on the explicit matrix-free device route, but real
+  office-GPU timing and residual-clean output are still required.
+- Production-resolution QI ladders: ``61%``; the next GPU route now exists, but
+  promotion still depends on bounded backend timing evidence and a higher
+  resolution ladder.
+- Overall remaining-lane completion estimate: ``98.4%``.
+
+Best next steps:
+
+1. Run Sphinx, release-gate, repo-size, and adjacent regression checks, then
+   commit the route.
+2. On ``office``, run a bounded ``13 x 13 x 15 x 4`` QI GPU point with
+   ``xblock_sparse_pc_gmres`` plus the matrix-free QI-device operator-reuse
+   environment. Gate success on residual-clean output, no host sparse factor
+   construction, and at least ``2x`` speedup over the previous host-sparse GPU
+   route.
+3. If the ``13x`` GPU point passes, run the same route at ``15 x 15 x 17 x 4``.
+   If it fails, keep the route documented as infrastructure and use the
+   non-autodiff host sparse path for production while the true device-QI
+   performance lane remains open.
