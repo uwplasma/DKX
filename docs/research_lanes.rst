@@ -42,6 +42,16 @@ but the final residual was still ``2.450895e-5`` against the
 ``3.021487e-13`` Krylov target, so it is also fail-closed evidence. Its compact
 artifact is
 ``docs/_static/qi_seed_robustness_scale060_coupled_residual_krylov_install_device_qi_gpu1.json``.
+The lower-resolution ``13 x 13 x 15 x 4`` QI ``nfp=2`` operator-reuse route is
+now also checked as a bounded office-GPU artifact:
+``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json``.
+That rerun activated matrix-free operator reuse, skipped local x-block factors,
+kept host fallback disabled, wrote fail-safe solver-trace evidence, and records
+the corrected device-cycle count of ``960`` iterations / ``962`` matvecs.
+It finished in ``21.44 s`` wall time with peak trace RSS ``1384 MB``, but the
+residual was ``9.707076e-6`` against target ``1.466182e-11``. This closes the
+route/accounting evidence for the mid-size rung and keeps production true
+device-QI convergence explicitly open.
 The current source tree also includes the next fail-closed residual-learning
 hook:
 ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION``. It builds a bounded
@@ -70,8 +80,10 @@ one-GPU true-device artifact is the recycled augmented-Krylov probe with final
 residual ``7.336295e-6`` against the production write target
 ``3.021487e-11``. The later coupled/post-residual-equation probes reduce their
 own setup residuals but finish at ``O(2e-5)`` and write no HDF5 output or solver
-trace. They are therefore fail-closed research evidence, not production or
-documentation-claim evidence.
+trace. The mid-size operator-reuse artifact writes fail-safe trace evidence and
+has a useful lower memory/timing profile, but it is not the production hard seed
+and fails the residual gate by ``O(1e6)``. These artifacts are therefore
+fail-closed research evidence, not production or documentation-claim evidence.
 Separate the closed infrastructure blockers from the open claim blockers:
 transpose/VJP safety for the projected block smoother and the prior CUDA
 illegal-address crash are closed for the tested paths, while residual

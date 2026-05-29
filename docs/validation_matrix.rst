@@ -407,7 +407,11 @@ Current open lane board
   ``256 s`` before refusing nonconverged output, so it remains fail-closed
   research evidence. The matched GPU0 rerun is CUDA-safe and numerically
   consistent, finishing at the same residual in ``302 s`` before the same
-  nonconverged-output guard.
+  nonconverged-output guard. A separate mid-size ``13 x 13 x 15 x 4`` QI
+  operator-reuse GPU artifact now verifies route activation, skipped local
+  x-block factors, fail-safe trace metadata, and corrected device-cycle
+  accounting, but it also fails the residual gate and remains route-level
+  evidence rather than a production-resolution QI claim.
   The ``residual-galerkin-device-qi`` path is implemented and checked as a
   residual-derived Galerkin coarse equation over actual residual and block
   residual variables. Its bounded CPU artifact accepts
@@ -530,8 +534,8 @@ Scope and status:
   public method ``auto``, all seeds ``converged=true``, and maximum residual
   ratio below ``1e-6``. Treat it as runner and default-solver-policy evidence
   only, not a production-resolution robustness claim.
-- The current production-readiness manifest rolls in 107 checked source artifacts:
-  32 passing bounded artifacts and 75 non-passing blocker artifacts. The largest
+- The current production-readiness manifest rolls in 110 checked source artifacts:
+  32 passing bounded artifacts and 78 non-passing blocker artifacts. The largest
   passing and attempted bounded grid is ``15 x 31 x 60 x 5`` with active size
   ``81377`` and total size ``139502``. A bounded CPU scale-0.60 seed-3
   probe-coarse artifact, the QI coarse-seed CPU artifact, and the
