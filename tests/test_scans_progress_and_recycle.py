@@ -120,7 +120,7 @@ def test_patch_scalar_in_group_appends_and_reports_malformed_namelists() -> None
 
 def test_run_er_scan_subset_and_serial_recycle_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     template = _minimal_scan_input(tmp_path / "input.namelist")
-    writes: list[tuple[str, str | None, str | None]] = []
+    writes: list[tuple[str, str | None, str | None, Path]] = []
 
     def _fake_localize(*, input_namelist: Path, overwrite: bool) -> None:
         assert input_namelist.exists()
@@ -132,7 +132,14 @@ def test_run_er_scan_subset_and_serial_recycle_state(tmp_path: Path, monkeypatch
         state_out = os.environ.get("SFINCS_JAX_STATE_OUT")
         if state_out:
             Path(state_out).write_bytes(b"state")
-        writes.append((out_path.parent.name, os.environ.get("SFINCS_JAX_STATE_IN"), state_out))
+        writes.append(
+            (
+                out_path.parent.name,
+                os.environ.get("SFINCS_JAX_STATE_IN"),
+                state_out,
+                Path(kwargs["solver_trace_path"]),
+            )
+        )
 
     monkeypatch.setattr(scans, "localize_equilibrium_file_in_place", _fake_localize)
     monkeypatch.setattr(scans, "write_sfincs_jax_output_h5", _fake_write)
@@ -153,9 +160,11 @@ def test_run_er_scan_subset_and_serial_recycle_state(tmp_path: Path, monkeypatch
     assert writes[0][0] == "Er3"
     assert writes[0][1] is None
     assert writes[0][2] is not None and writes[0][2].endswith("Er3/sfincs_jax_state.npz")
+    assert writes[0][3].name == "sfincsOutput.solver_trace.json"
     assert writes[1][0] == "Er1"
     assert writes[1][1] is not None and writes[1][1].endswith("Er3/sfincs_jax_state.npz")
     assert writes[1][2] is not None and writes[1][2].endswith("Er1/sfincs_jax_state.npz")
+    assert writes[1][3].parent.name == "Er1"
 
 
 def test_run_er_scan_rejects_invalid_subset_index(tmp_path: Path) -> None:
