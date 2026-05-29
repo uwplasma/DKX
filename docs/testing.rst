@@ -961,10 +961,14 @@ gate requires five seeds on both CPU and one GPU with ``public_cli_default_path`
 ``solve_method=auto``, ``process_failed=0``, ``timed_out=0``,
 ``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
 ``max_residual_ratio <= 1``. Treat these as bounded runner and solver-policy
-evidence, not as a production-resolution QI robustness claim. Promote QI
-robustness only after the next bounded scale and production-resolution CPU/GPU
-seed ladders are checked with solver traces and the evidence manifest is
-regenerated.
+evidence, not as a production-resolution QI robustness claim. The separate
+kinetic-promotion lane has now closed the first QI ``nfp=2`` low-resolution
+CPU/GPU/Fortran artifact and a refined ``9 x 9 x 11 x 4`` CPU/GPU rung, but
+the refined root drift remains large enough that the ladder is still open.
+Promote QI robustness only after the next bounded scale and production-resolution
+CPU/GPU seed ladders are checked with solver traces, and promote the QI
+electron-root kinetic claim only after the CPU/GPU/Fortran resolution ladder is
+stable and the evidence manifest is regenerated.
 
 The active-pattern GPU probe
 ``docs/_static/qi_seed_robustness_scale060_active_pattern_device_qi_gpu0.json``

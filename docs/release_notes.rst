@@ -4,6 +4,17 @@ Release notes
 Unreleased
 ----------
 
+- Added the first refined QI ``nfp=2`` kinetic promotion rung at
+  ``9 x 9 x 11 x 4``. The two-species ion/electron scan passes CPU/GPU
+  fixed-resolution backend gates with selected
+  ``E_r = 2.2834299271`` and CPU/GPU root difference ``4.3e-14``. The
+  low-to-refined root drift is still about ``0.155``, so production-resolution
+  QI remains an open research lane.
+- Fixed the promotion-audit default for two-species electron-root scans:
+  ``--impurity-species-index`` is now optional, and no-impurity CPU/GPU
+  comparisons automatically allow missing flux-objective scalars while still
+  checking selected roots, bootstrap objectives, residuals, and backend
+  agreement.
 - Added residual-region/bounce-region QI coarse-reuse evidence plumbing and
   runtime documentation while keeping true differentiable device-QI
   production-resolution closure fail-closed.
