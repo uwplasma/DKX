@@ -4,12 +4,22 @@ Release notes
 Unreleased
 ----------
 
+- Added the second refined QI ``nfp=2`` kinetic promotion rung at
+  ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
+  cliff. The bounded dense policy now covers active sizes up to ``8000`` and
+  ``scan-er`` writes per-point solver-trace sidecars. The checked CPU scan
+  dropped from about ``326 s`` on the old automatic fallback to about ``23 s``;
+  the matching office GPU0 scan also completes in about ``23 s``. CPU/GPU roots
+  agree to ``2.5e-13`` and the Fortran-v3 selected root agrees within the
+  documented ``2e-6`` refined-grid tolerance. The remaining resolution drift
+  keeps production-resolution QI open.
 - Added the first refined QI ``nfp=2`` kinetic promotion rung at
-  ``9 x 9 x 11 x 4``. The two-species ion/electron scan passes CPU/GPU
-  fixed-resolution backend gates with selected
-  ``E_r = 2.2834299271`` and CPU/GPU root difference ``4.3e-14``. The
-  low-to-refined root drift is still about ``0.155``, so production-resolution
-  QI remains an open research lane.
+  ``9 x 9 x 11 x 4``. The two-species ion/electron scan passes CPU/GPU/Fortran
+  fixed-resolution gates with CPU/GPU selected
+  ``E_r = 2.2834299271``, CPU/GPU root difference ``4.3e-14``, and Fortran-v3
+  selected ``E_r = 2.2834273232`` within the documented refined-grid
+  tolerance. The low-to-refined root drift is still about ``0.155``, so
+  production-resolution QI remains an open research lane.
 - Fixed the promotion-audit default for two-species electron-root scans:
   ``--impurity-species-index`` is now optional, and no-impurity CPU/GPU
   comparisons automatically allow missing flux-objective scalars while still

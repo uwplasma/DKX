@@ -818,7 +818,7 @@ performance without changing the input file:
   `sfincs_jax` now **defaults to a direct dense solve** instead of Krylov to match
   Fortran and avoid expensive fallback paths. This cutoff controls the active-size
   threshold for that default (default: ``min(SFINCS_JAX_RHSMODE1_DENSE_ACTIVE_CUTOFF,
-  6000)``; set ``0`` to disable the initial dense path).
+  8000)``; set ``0`` to disable the initial dense path).
 - ``SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN``: minimum active size for the
   default accelerator dense shortcut in full-FP RHSMode=1 cases (default: ``1000``).
   This keeps tiny GPU fixtures on the lower-overhead matrix-free path while allowing
@@ -834,7 +834,7 @@ performance without changing the input file:
   the tokamak-Er dense default (default: ``350000000``). Lower this on
   memory-constrained hosts.
 - ``SFINCS_JAX_RHSMODE1_DENSE_FP_MAX``: override the RHSMode=1 dense fallback ceiling for
-  full Fokker–Planck (``collisionOperator=0``) cases (default: ``6000``).
+  full Fokker–Planck (``collisionOperator=0``) cases (default: ``8000``).
 - ``SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX``: override the RHSMode=1 dense fallback ceiling for
   PAS/constraintScheme=2 cases. Dense PAS fallback is **disabled by default** to
   preserve parity; set this explicitly (e.g. ``5000``) to enable it.
@@ -1220,9 +1220,13 @@ you can use the ``scan-er`` subcommand:
      --min -0.1 --max 0.1 --n 5 \
      --compute-transport-matrix
 
-This creates subdirectories like ``Er0.1/``, each containing ``input.namelist`` and ``sfincsOutput.h5``,
-plus a scan-style ``input.namelist`` in the scan directory with ``!ss`` directives so the upstream
-scan plotting scripts can infer the directory list.
+This creates subdirectories like ``Er0.1/``, each containing ``input.namelist``,
+``sfincsOutput.h5``, and ``sfincsOutput.solver_trace.json``.  The scan directory
+also gets a scan-style ``input.namelist`` with ``!ss`` directives so the upstream
+scan plotting scripts can infer the directory list.  The JSON sidecar is the
+auditable record for each point: it stores backend, selected solver lane, active
+size, elapsed time, residual target, residual norm, and memory estimates without
+changing the Fortran-compatible physics output.
 
 For large scans, you can parallelize scan points:
 

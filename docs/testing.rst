@@ -265,13 +265,14 @@ The runner also has a liveness gate for long GPU attempts: pass
 the solver trace. Tests cover both normal heartbeat completion and process-group
 termination on timeout, so a hung GPU attempt leaves explicit evidence instead
 of a silent SSH session.
-logic: constraint-scheme routing, sparse-exact-LU selection, x-block/sxblock
-rescue eligibility, transport sparse-direct and host-GMRES guard rails, host-only
-SciPy Krylov dispatch, and distributed-incompatible GMRES rejection. These tests
-do not attempt to prove convergence of every large solve; they prove that the
-policy ladder surrounding those solves takes the right branch on bounded,
-physically meaningful synthetic inputs. The latest bounded ``io.py`` pass then
-extended that same strategy to the output side: cache-directory selection,
+The same policy-first strategy now covers solver-path logic: constraint-scheme
+routing, sparse-exact-LU selection, x-block/sxblock rescue eligibility,
+transport sparse-direct and host-GMRES guard rails, host-only SciPy Krylov
+dispatch, and distributed-incompatible GMRES rejection. These tests do not
+attempt to prove convergence of every large solve; they prove that the policy
+ladder surrounding those solves takes the right branch on bounded, physically
+meaningful synthetic inputs. The latest bounded ``io.py`` pass then extended
+that same strategy to the output side: cache-directory selection,
 HDF5 read/write guards, Fortran-layout serialization, export-``f`` configuration
 and mapping, and small output-policy helpers such as Newton-step selection and
 scalar/list parsing. That moved the audited tree to ``579/579`` while nudging
@@ -377,6 +378,14 @@ avoids the slow sparse/fallback ladder for the fragile ``Nxi=25`` QI window whil
 keeping tiny GPU fixtures on the matrix-free path. The evidence manifest keeps
 the lane at ``bounded_proxy`` until production-resolution CPU and GPU artifacts
 exist and pass the same residual/convergence gates.
+``tests/test_qi_device_research_lane_artifacts.py`` protects the separate
+true-device-QI claim boundary. It checks that the best checked one-GPU
+device-QI hard-seed residual is still recorded as fail-closed evidence, that no
+nonconverged device-QI artifact writes HDF5 output or a solver trace, and that
+the manifest keeps true device-QI marked ``closed_deferred`` rather than
+promoted. This is intentionally a data gate: it prevents documentation or
+release notes from turning a residual-improving but nonconverged hard-seed
+probe into a production-resolution claim.
 
 The scan/CLI progress surface is also guarded without running expensive scan
 points.  ``tests/test_scans_progress_and_recycle.py`` covers duration formatting,
@@ -963,8 +972,11 @@ gate requires five seeds on both CPU and one GPU with ``public_cli_default_path`
 ``max_residual_ratio <= 1``. Treat these as bounded runner and solver-policy
 evidence, not as a production-resolution QI robustness claim. The separate
 kinetic-promotion lane has now closed the first QI ``nfp=2`` low-resolution
-CPU/GPU/Fortran artifact and a refined ``9 x 9 x 11 x 4`` CPU/GPU rung, but
-the refined root drift remains large enough that the ladder is still open.
+CPU/GPU/Fortran artifact, a refined ``9 x 9 x 11 x 4`` CPU/GPU/Fortran rung,
+and a second ``11 x 11 x 13 x 4`` CPU/GPU/Fortran rung that also verifies the
+bounded dense-policy fix for mid-size RHSMode=1 full-FP systems. The
+resolution-ladder root drift remains large enough that the ladder is still
+open.
 Promote QI robustness only after the next bounded scale and production-resolution
 CPU/GPU seed ladders are checked with solver traces, and promote the QI
 electron-root kinetic claim only after the CPU/GPU/Fortran resolution ladder is
@@ -1102,7 +1114,11 @@ The same scaffold is now resumable for heavy runs: ``run_er_scan`` accepts
 ``skip_existing=True``, the ``sfincs_jax scan-er`` CLI exposes ``--skip-existing``,
 and the publication script adds ``--skip-existing``, ``--scan-only``, and
 ``--index/--stride`` so the heavy W7-X reference ladder can be filled across multiple
-devices before a final aggregation pass.
+devices before a final aggregation pass. Each non-skipped scan point now also
+writes ``sfincsOutput.solver_trace.json`` beside ``sfincsOutput.h5``. Tests assert
+that the sidecar path is forwarded in serial, recycled, and end-to-end scan
+paths, so future promotion artifacts cannot silently lose solver-path timing and
+residual provenance.
 
 Further reading
 ---------------
