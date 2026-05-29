@@ -17166,16 +17166,22 @@ Scope:
   ``office`` by creating a clean remote checkout at
   ``~/tmp/sfincs_jax_clean_main`` and a localized input/equilibrium bundle at
   ``~/tmp/sfincs_jax_qi_res15_inputs``. Both office GPUs were occupied by
-  unrelated ``spectraxgk`` jobs, so the actual GPU solve was not launched.
+  unrelated ``spectraxgk`` jobs, so the real solve was queued behind a
+  GPU-idle guard instead of being launched immediately.
 
 Results:
 
 - A forced ``0.001 s`` scan timeout test now exits nonzero and leaves a
   structured campaign summary instead of losing the run state.
 - Dry-running the missing ``15x`` GPU campaign with ``--jax-scan-timeout-s 900``
-  and ``--promotion-timeout-s 120`` produces the expected bounded plan.
+  and ``--promotion-timeout-s 120`` produces the expected bounded plan locally
+  and on the clean office checkout.
+- A background office runner was started as PID ``3274914``. It polls GPU 0 and
+  launches only when memory is below ``2048 MiB`` and utilization is below
+  ``25%``. Logs and artifacts will land in
+  ``~/tmp/sfincs_jax_qi_res15_gpu_bounded``.
 - This does not close the GPU rung, but it removes the run-management blocker:
-  the next GPU attempt is now bounded and auditable.
+  the next GPU attempt is now bounded, non-interfering, and auditable.
 
 Validation:
 
