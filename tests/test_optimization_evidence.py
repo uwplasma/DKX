@@ -44,8 +44,26 @@ def test_promotion_evidence_plan_builds_cpu_gpu_fortran_commands(tmp_path: Path)
     assert "--allow-missing-residuals" in payload["lanes"][2]["promotion_command"]
     assert payload["comparison_command"] is not None
     assert "--fortran" in payload["comparison_command"]
+    assert "--allow-missing-flux" not in payload["comparison_command"]
     assert "--jobs 2" in payload["lanes"][0]["scan_command_string"]
     assert "--allow-no-electron-root" in payload["lanes"][0]["promotion_command"]
+
+
+def test_promotion_evidence_plan_allows_missing_flux_when_no_impurity_objective(tmp_path: Path) -> None:
+    plan = build_promotion_evidence_plan(
+        input_namelist=_INPUT,
+        out_dir=tmp_path / "campaign",
+        er_values=(-1.0, 1.0),
+        include_cpu=True,
+        include_gpu=True,
+        require_electron_root=True,
+        impurity_species_index=None,
+    )
+    payload = plan.as_dict()
+
+    assert payload["comparison_command"] is not None
+    assert "--allow-missing-flux" in payload["comparison_command"]
+    assert "--impurity-species-index" not in payload["lanes"][0]["promotion_command"]
 
 
 def test_prepare_fortran_er_scan_inputs_matches_scan_directory_contract(tmp_path: Path) -> None:
