@@ -50,6 +50,11 @@ Unreleased
   diagnostics. The physical output gate remains fail-closed, but failed large
   runs preserve solver path, residual, matvec, memory-estimate, and
   preconditioner metadata for debugging.
+- JIT-cycle device Krylov metadata now reports internal restart-cycle
+  iterations and estimated matvecs instead of only Python-visible wrapper
+  matvecs. Solver traces keep ``python_matvecs`` separately so long GPU runs no
+  longer look artificially cheap when the Krylov work is inside a compiled
+  device loop.
 - Added the second refined QI ``nfp=2`` kinetic promotion rung at
   ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
   cliff. The bounded dense policy now covers active sizes up to ``8000`` and
