@@ -16572,3 +16572,56 @@ Best next steps:
    ``E_r`` values and compare residuals/observables against the CPU artifact.
 3. Run the matching Fortran-v3 fixed-resolution reference only if GPU agrees
    with CPU; otherwise fix the backend discrepancy before spending Fortran time.
+
+### 35.77 QI 13x GPU and Fortran-v3 fixed-resolution comparison
+
+Scope:
+
+- Ran the matching ``13 x 13 x 15 x 4`` QI ``nfp=2`` GPU scan on office from a
+  fresh clean checkout at commit ``211985f``.
+- Split the eight electric-field points across the two RTX A4000 devices to
+  keep each process bounded:
+  GPU0 ``[-0.3, 0, 0.3, 2]`` and GPU1 ``[-0.1, 0.1, 1, 3]``.
+- Ran the same eight-point scan with the local SFINCS Fortran v3 executable at
+  ``/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs``.
+- Added a compact checked comparison artifact,
+  ``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_reference_tolerance_comparison_sparse_skip.json``.
+
+Validation:
+
+- GPU correctness is clean. The evaluator passed with no failures and selected
+  ``E_r = 2.215342746664281`` in the ``[2, 3]`` electron-root bracket. CPU/GPU
+  selected-root difference is ``4.75e-14``.
+- GPU residual gates passed for all eight points. Max residual/target ratio was
+  ``6.58e-7``. Max CPU/GPU relative difference across checked observables was
+  ``5.20e-13``.
+- GPU performance is still open. The safe GPU route uses host sparse LU,
+  averaged ``142.744 s`` solver time per point, and the split wall times were
+  ``539.442 s`` and ``604.364 s``. This is robust but not a GPU speedup for this
+  rung.
+- Fortran-v3 completed all eight points in ``4.966 s`` total wall time and
+  selected ``E_r = 2.2153427541116004``. CPU/Fortran selected-root difference is
+  ``7.45e-9``.
+- CPU/Fortran-v3 observable agreement is within the documented fixed-resolution
+  tolerance for this rung: worst ``FSABFlow`` relative difference
+  ``1.75e-3`` and worst particle/heat flux relative difference below
+  ``8.6e-6``.
+
+Progress:
+
+- QI kinetic promotion ladder: ``85%``; the ``13 x 13 x 15 x 4`` rung now has
+  CPU/GPU/Fortran fixed-resolution evidence.
+- Production-resolution QI ladders: ``55%``; the next blocker is higher
+  resolution convergence and a genuinely faster GPU/device path, not parity at
+  this rung.
+- Overall remaining-lane completion estimate: ``98.0%``.
+
+Best next steps:
+
+1. Run artifact/docs/release-gate checks and commit the GPU/Fortran comparison
+   evidence.
+2. Decide whether to spend the next bounded campaign on a ``15 x 15 x 17 x 4``
+   CPU/Fortran rung or on replacing the GPU host sparse-LU route with a true
+   device-compatible operator/coarse reuse path.
+3. Do not promote QI production-resolution performance until the GPU route is
+   faster than CPU or clearly documented as a correctness-only backend fallback.

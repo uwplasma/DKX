@@ -18,9 +18,16 @@ Unreleased
   ``13 x 13 x 15 x 4`` rung. The sparse-LU skip-primary policy completes the
   scan in ``263.1 s``, with mean solve time ``32.85 s``, max solve time
   ``35.72 s``, all residual gates passing, and a fixed-resolution electron root
-  at ``E_r=2.2153427467``. This closes CPU evidence only; the matching GPU and
-  Fortran-v3 comparison remains required before a public production-resolution
-  QI claim.
+  at ``E_r=2.2153427467``. This closes the CPU part of the rung and keeps the
+  public production-resolution QI claim gated on backend/reference and
+  resolution-ladder evidence.
+- Added the matching fixed-resolution GPU and Fortran-v3 comparison for the QI
+  ``13 x 13 x 15 x 4`` rung. CPU/GPU selected roots agree to ``4.8e-14`` and
+  CPU/Fortran-v3 agrees to ``7.4e-9``. Checked CPU/GPU observables agree within
+  ``5.2e-13`` relative; CPU/Fortran-v3 differs by at most ``1.8e-3`` on
+  ``FSABFlow`` and below ``9e-6`` on particle/heat fluxes. The GPU route is
+  correctness-clean but still performance-open because it safely enters host
+  sparse LU and is slower than CPU at this size.
 - Added the second refined QI ``nfp=2`` kinetic promotion rung at
   ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
   cliff. The bounded dense policy now covers active sizes up to ``8000`` and

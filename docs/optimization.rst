@@ -894,14 +894,27 @@ eight residual gates pass, with residuals between :math:`9.6\times10^{-19}` and
 :math:`2.0\times10^{-17}`.  The fixed-resolution scan selects an electron root
 at :math:`E_r=2.2153427467` in the bracket :math:`[2,3]`.
 
-This closes the bounded CPU evidence for the ``13 x 13 x 15 x 4`` rung, not the
-full production claim.  The matching office-GPU and Fortran-v3 fixed-resolution
-comparison still need to pass before this rung can be promoted in the public QI
-resolution ladder.
+The matching office-GPU and Fortran-v3 fixed-resolution checks also pass.  The
+GPU scan was split across the two office RTX A4000 devices and selected
+:math:`E_r=2.2153427467`, differing from CPU by
+:math:`4.8\times10^{-14}`.  The Fortran-v3 reference selected
+:math:`E_r=2.2153427541`, differing from CPU by
+:math:`7.4\times10^{-9}`.  The worst CPU/GPU relative observable difference
+over checked bootstrap/flow/flux outputs was :math:`5.2\times10^{-13}`.  The
+worst CPU/Fortran-v3 relative difference was :math:`1.8\times10^{-3}` for
+``FSABFlow`` and below :math:`9\times10^{-6}` for particle and heat fluxes.
 
-The checked machine-readable artifact for this CPU solver-policy rung is:
+This closes fixed-resolution CPU/GPU/Fortran parity for the
+``13 x 13 x 15 x 4`` rung, not the full production claim.  The safe GPU route
+still uses host sparse LU and is slower than CPU at this size, and the root
+still shifts by about ``0.0071`` from the ``11 x 11 x 13 x 4`` rung.  Higher
+resolution and a genuinely faster GPU/device route remain open before this QI
+candidate can be promoted as production-resolution evidence.
+
+The checked machine-readable artifacts for this solver-policy rung are:
 
 - ``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_cpu_sparse_skip.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res13_reference_tolerance_comparison_sparse_skip.json``
 
 The next rung should continue to a wider CPU/GPU/Fortran resolution ladder.  Do
 not promote the QI electron-root candidate as production-resolution evidence
