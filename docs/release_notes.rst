@@ -9,9 +9,11 @@ Unreleased
   custom-linear-solve matvecs now avoid entering ``jax.set_mesh``/``pjit`` from
   inside JAX transforms, while top-level matvecs still use the sharded cached
   path. The checked ``13 x 13 x 15 x 4`` CPU probe at ``E_r=0.3`` converges
-  with residual ``2.09e-18`` against target ``1.47e-11`` in about ``108 s`` and
-  records that one-device and explicit full-system sparse-host routes are not
-  promotion candidates for this rung.
+  with residual ``2.09e-18`` against target ``1.47e-11``. A bounded sparse-LU
+  skip-primary policy then reduces the measured solver time from about
+  ``108 s`` to about ``35 s`` with identical key observables and records that
+  one-device and explicit full-system sparse-host routes are not promotion
+  candidates for this rung.
 - Added the second refined QI ``nfp=2`` kinetic promotion rung at
   ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
   cliff. The bounded dense policy now covers active sizes up to ``8000`` and
