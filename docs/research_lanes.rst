@@ -119,11 +119,14 @@ Relevant implementation:
   matrix-free coarse-only path that builds just ``A Q`` by JAX matvec probes
   when full CSR materialization is too expensive. Both paths expose
   setup/apply/probe metadata and keep the timed apply path free of SciPy, host
-  LU/ILU, and Python callbacks. It also exposes an opt-in adaptive multilevel
-  residual-equation grouping that forms global, aggregate, and block residual
-  source spaces. The first hard-seed GPU evidence worsened the residual relative
-  to recycled augmented Krylov, so it is retained only as negative evidence and
-  a tested research control.
+  LU/ILU, and Python callbacks. The coupled residual-equation setup now batches
+  ``A Q`` construction when the operator supports JAX batching and reuses the
+  cached action/coarse operator when that stage is installed in Krylov; metadata
+  records reuse versus recompute counts and actual JAX array placement. It also
+  exposes an opt-in adaptive multilevel residual-equation grouping that forms
+  global, aggregate, and block residual source spaces. The first hard-seed GPU
+  evidence worsened the residual relative to recycled augmented Krylov, so it is
+  retained only as negative evidence and a tested research control.
 - ``sfincs_jax/rhs1_qi_multilevel_coarse.py`` provides the standalone
   multilevel angular-radial coarse prototype. It builds deterministic radial
   aggregate levels, angular/radial candidates, rank-gated prolongation spaces,
@@ -131,7 +134,9 @@ Relevant implementation:
   architecture can be expressed without driver coupling, not evidence that the
   production hard seed is closed.
 - ``sfincs_jax/rhs1_device_operator.py`` provides bounded device CSR matvec
-  utilities.
+  utilities and records requested/default backend, available platforms, concrete
+  array devices, concrete array platforms, and same-device placement for audit
+  trails.
 - ``sfincs_jax/rhs1_qi_galerkin_policy.py`` rejects Galerkin candidates unless
   a true residual probe improves.
 - ``sfincs_jax/v3_driver.py`` wires the x-block sparse-PC, device-Krylov,

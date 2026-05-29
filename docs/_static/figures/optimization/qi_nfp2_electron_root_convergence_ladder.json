@@ -1,0 +1,221 @@
+{
+  "workflow": "sfincs_jax_qi_nfp2_electron_root_convergence_ladder",
+  "status": "deferred",
+  "generated_at": "2026-05-29",
+  "claim_boundary": "This no-solve summary rolls up already checked QI nfp=2 electron-root artifacts. It supports bounded kinetic-promotion progress, but it is not a production-resolution QI convergence or performance claim until the 25 x 51 x 100 x 4 CPU and GPU ladder is solved and gated.",
+  "production_floor": {
+    "Ntheta": 25,
+    "Nzeta": 51,
+    "Nxi": 100,
+    "NL": 4,
+    "Nx": 4
+  },
+  "production_target": "25 x 51 x 100 x 4 CPU and GPU QI ladder",
+  "tolerances": {
+    "backend_root_atol": 1e-6,
+    "fortran_root_atol": 3e-6,
+    "latest_root_drift_atol_for_trend_only": 0.005
+  },
+  "blockers": [
+    "No checked tier meets the 25 x 51 x 100 x 4 production floor.",
+    "The res15 rung has CPU/Fortran agreement but no promoted GPU solve.",
+    "The res13 one-GPU operator-reuse route activates and stays device-QI, but remains fail-closed because the residual gate fails."
+  ],
+  "gates": {
+    "cpu_gpu_backend_agreement_through_res13": "pass_bounded",
+    "fortran_v3_reference_agreement_through_res15": "pass_bounded",
+    "latest_root_drift_trend": "pass_bounded",
+    "res15_gpu_promotion": "open",
+    "production_resolution_qi_convergence": "open"
+  },
+  "tiers": [
+    {
+      "name": "low_7x7x7",
+      "status": "pass_bounded",
+      "resolution": {
+        "Ntheta": 7,
+        "Nzeta": 7,
+        "Nxi": 7,
+        "NL": 4,
+        "Nx": 4
+      },
+      "production_floor_met": false,
+      "source_artifacts": [
+        "qi_nfp2_electron_root_lowres_cpu.json",
+        "qi_nfp2_electron_root_lowres_gpu.json",
+        "qi_nfp2_electron_root_lowres_fortran.json",
+        "qi_nfp2_electron_root_lowres_reference_tolerance_comparison.json"
+      ],
+      "lanes": {
+        "cpu": {
+          "selected_root_er": 2.4386009865306164,
+          "root_type": "electron"
+        },
+        "gpu": {
+          "selected_root_er": 2.4386009865307274,
+          "root_type": "electron"
+        },
+        "fortran_v3": {
+          "selected_root_er": 2.4385999678949233,
+          "root_type": "electron"
+        }
+      },
+      "backend_root_diffs": {
+        "cpu_gpu_abs": 1.1102230246251565e-13,
+        "cpu_fortran_v3_abs": 1.0186356931359187e-6
+      },
+      "root_drift_from_previous": 0.0
+    },
+    {
+      "name": "res9_9x9x11",
+      "status": "pass_bounded",
+      "resolution": {
+        "Ntheta": 9,
+        "Nzeta": 9,
+        "Nxi": 11,
+        "NL": 4,
+        "Nx": 4
+      },
+      "production_floor_met": false,
+      "source_artifacts": [
+        "qi_nfp2_electron_root_res9_cpu.json",
+        "qi_nfp2_electron_root_res9_gpu.json",
+        "qi_nfp2_electron_root_res9_fortran.json",
+        "qi_nfp2_electron_root_res9_reference_tolerance_comparison.json"
+      ],
+      "lanes": {
+        "cpu": {
+          "selected_root_er": 2.2834299271183274,
+          "root_type": "electron"
+        },
+        "gpu": {
+          "selected_root_er": 2.2834299271182843,
+          "root_type": "electron"
+        },
+        "fortran_v3": {
+          "selected_root_er": 2.28342732317581,
+          "root_type": "electron"
+        }
+      },
+      "backend_root_diffs": {
+        "cpu_gpu_abs": 4.3076653355456074e-14,
+        "cpu_fortran_v3_abs": 2.603942517395863e-6
+      },
+      "root_drift_from_previous": 0.155171059412289
+    },
+    {
+      "name": "res11_11x11x13",
+      "status": "pass_bounded",
+      "resolution": {
+        "Ntheta": 11,
+        "Nzeta": 11,
+        "Nxi": 13,
+        "NL": 4,
+        "Nx": 4
+      },
+      "production_floor_met": false,
+      "source_artifacts": [
+        "qi_nfp2_electron_root_res11_cpu_dense8000_default.json",
+        "qi_nfp2_electron_root_res11_gpu_dense8000_default.json",
+        "qi_nfp2_electron_root_res11_fortran.json",
+        "qi_nfp2_electron_root_res11_reference_tolerance_comparison_dense8000_default.json"
+      ],
+      "lanes": {
+        "cpu": {
+          "selected_root_er": 2.2224054814957914,
+          "root_type": "electron"
+        },
+        "gpu": {
+          "selected_root_er": 2.2224054814955405,
+          "root_type": "electron"
+        },
+        "fortran_v3": {
+          "selected_root_er": 2.2224043879759354,
+          "root_type": "electron"
+        }
+      },
+      "backend_root_diffs": {
+        "cpu_gpu_abs": 2.5091040356528538e-13,
+        "cpu_fortran_v3_abs": 1.0935198559916505e-6
+      },
+      "root_drift_from_previous": 0.06102444562253601
+    },
+    {
+      "name": "res13_13x13x15",
+      "status": "pass_fixed_resolution_parity_open_performance_and_convergence",
+      "resolution": {
+        "Ntheta": 13,
+        "Nzeta": 13,
+        "Nxi": 15,
+        "NL": 4,
+        "Nx": 4
+      },
+      "production_floor_met": false,
+      "active_size_estimate": 11496,
+      "source_artifacts": [
+        "qi_nfp2_electron_root_res13_cpu_sparse_skip.json",
+        "qi_nfp2_electron_root_res13_reference_tolerance_comparison_sparse_skip.json",
+        "qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json"
+      ],
+      "lanes": {
+        "cpu": {
+          "selected_root_er": 2.2153427466642333,
+          "root_type": "electron"
+        },
+        "gpu": {
+          "selected_root_er": 2.215342746664281,
+          "root_type": "electron"
+        },
+        "fortran_v3": {
+          "selected_root_er": 2.2153427541116004,
+          "root_type": "electron"
+        }
+      },
+      "backend_root_diffs": {
+        "cpu_gpu_abs": 4.75175454539567e-14,
+        "cpu_fortran_v3_abs": 7.447367167158224e-9
+      },
+      "root_drift_from_previous": 0.007062734835766852,
+      "device_qi_route_probe": {
+        "artifact": "qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json",
+        "status": "fail_closed_nonconverged_device_qi",
+        "residual_ratio": 662064.7940584768,
+        "output_refused": true
+      }
+    },
+    {
+      "name": "res15_15x15x17",
+      "status": "pass_refined_cpu_fortran_rung_open_gpu_performance_and_convergence",
+      "resolution": {
+        "Ntheta": 15,
+        "Nzeta": 15,
+        "Nxi": 17,
+        "NL": 4,
+        "Nx": 4
+      },
+      "production_floor_met": false,
+      "active_size_estimate": 17104,
+      "source_artifacts": [
+        "qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json"
+      ],
+      "lanes": {
+        "cpu": {
+          "selected_root_er": 2.213238923947695,
+          "root_type": "electron"
+        },
+        "fortran_v3": {
+          "selected_root_er": 2.213236890600478,
+          "root_type": "electron"
+        }
+      },
+      "backend_root_diffs": {
+        "cpu_fortran_v3_abs": 2.0333472168232447e-6,
+        "cpu_fortran_v3_rel": 9.18721003367865e-7
+      },
+      "root_drift_from_previous": 0.002103822716538417,
+      "missing_lanes": [
+        "gpu"
+      ]
+    }
+  ]
+}

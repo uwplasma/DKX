@@ -221,6 +221,11 @@ class RHS1QIDevicePreconditionerMetadata:
     device_resident: bool
     host_fallback_used: bool
     host_callback_free: bool
+    jax_default_backend: str
+    jax_available_platforms: tuple[str, ...]
+    operator_array_devices: tuple[str, ...]
+    operator_array_platforms: tuple[str, ...]
+    operator_arrays_same_device: bool
     operator_metadata_keys: tuple[str, ...]
     geometry_metadata_keys: tuple[str, ...]
     accepted_basis_labels: tuple[str, ...]
@@ -263,6 +268,8 @@ class RHS1QIDevicePreconditionerMetadata:
     coupled_residual_equation_residual_after: float
     coupled_residual_equation_accepted: bool
     coupled_residual_equation_reason: str
+    residual_equation_operator_reuse_stage_count: int
+    residual_equation_operator_recomputed_stage_count: int
     global_moment_residual_equation_enabled: bool
     global_moment_residual_equation_candidate_count: int
     global_moment_residual_equation_rank: int
@@ -3163,6 +3170,11 @@ def setup_rhs1_qi_device_preconditioner(
         dtype_use = operator.data.dtype
         nnz = int(operator.nnz)
         operator_source = "device_csr"
+        placement_default_backend = str(operator.metadata.default_backend)
+        placement_available_platforms = tuple(str(value) for value in operator.metadata.available_platforms)
+        placement_array_devices = tuple(str(value) for value in operator.metadata.array_devices)
+        placement_array_platforms = tuple(str(value) for value in operator.metadata.array_platforms)
+        placement_arrays_same_device = bool(operator.metadata.all_arrays_same_device)
     else:
         if total_size is None:
             if isinstance(coarse_basis, RHS1QICoarseBasis):
@@ -3177,6 +3189,17 @@ def setup_rhs1_qi_device_preconditioner(
         dtype_use = jnp.dtype(dtype)
         nnz = 0
         operator_source = "matrix_free"
+        try:
+            placement_default_backend = str(jax.default_backend())
+        except RuntimeError:
+            placement_default_backend = ""
+        try:
+            placement_available_platforms = tuple(sorted({str(device.platform) for device in jax.devices()}))
+        except RuntimeError:
+            placement_available_platforms = ()
+        placement_array_devices = ()
+        placement_array_platforms = ()
+        placement_arrays_same_device = False
 
     if int(shape[0]) != int(shape[1]):
         raise ValueError("device QI preconditioner requires a square operator")
@@ -3363,6 +3386,8 @@ def setup_rhs1_qi_device_preconditioner(
     residual_equation_actions: tuple[ArrayLike, ...] = ()
     residual_equation_coarse_operators: tuple[ArrayLike, ...] = ()
     residual_equation_stage_solvers: tuple[str, ...] = ()
+    residual_equation_precomputed_actions: tuple[ArrayLike, ...] = ()
+    residual_equation_precomputed_coarse_operators: tuple[ArrayLike, ...] = ()
     residual_equation_stage_count = 0
     residual_equation_rank = 0
     residual_equation_stage_ranks: tuple[int, ...] = ()
@@ -3651,15 +3676,35 @@ def setup_rhs1_qi_device_preconditioner(
         if coupled_residual_equation_accepted and coupled_residual_equation_rank > 0:
             residual_equation_bases = (coupled_state.basis,)
             residual_equation_stage_solvers = (coupled_residual_equation_solver,)
+            residual_equation_precomputed_actions = (coupled_state.operator_on_basis,)
+            residual_equation_precomputed_coarse_operators = (coupled_state.coarse_operator,)
     residual_equation_action_list: list[ArrayLike] = []
     residual_equation_coarse_operator_list: list[ArrayLike] = []
-    for level_basis in residual_equation_bases:
-        level_q = jnp.asarray(level_basis.vectors, dtype=dtype_use)
-        level_action = _operator_on_basis(operator_matvec, level_q, shape=shape, dtype=dtype_use)
-        residual_equation_action_list.append(level_action)
-        residual_equation_coarse_operator_list.append(jnp.conjugate(level_q).T @ level_action)
-    residual_equation_actions = tuple(residual_equation_action_list)
-    residual_equation_coarse_operators = tuple(residual_equation_coarse_operator_list)
+    residual_equation_operator_reuse_stage_count = 0
+    residual_equation_operator_recomputed_stage_count = 0
+    if (
+        residual_equation_precomputed_actions
+        and len(residual_equation_precomputed_actions) == len(residual_equation_bases)
+        and len(residual_equation_precomputed_coarse_operators) == len(residual_equation_bases)
+    ):
+        residual_equation_operator_reuse_stage_count = len(residual_equation_bases)
+        residual_equation_actions = tuple(
+            jnp.asarray(action, dtype=dtype_use)
+            for action in residual_equation_precomputed_actions
+        )
+        residual_equation_coarse_operators = tuple(
+            jnp.asarray(coarse_operator, dtype=dtype_use)
+            for coarse_operator in residual_equation_precomputed_coarse_operators
+        )
+    else:
+        for level_basis in residual_equation_bases:
+            level_q = jnp.asarray(level_basis.vectors, dtype=dtype_use)
+            level_action = _operator_on_basis(operator_matvec, level_q, shape=shape, dtype=dtype_use)
+            residual_equation_action_list.append(level_action)
+            residual_equation_coarse_operator_list.append(jnp.conjugate(level_q).T @ level_action)
+        residual_equation_operator_recomputed_stage_count = len(residual_equation_bases)
+        residual_equation_actions = tuple(residual_equation_action_list)
+        residual_equation_coarse_operators = tuple(residual_equation_coarse_operator_list)
     rank = int(basis.metadata.rank)
     if rank > 0:
         aq = _operator_on_basis(operator_matvec, basis.vectors, shape=shape, dtype=dtype_use)
@@ -3741,6 +3786,11 @@ def setup_rhs1_qi_device_preconditioner(
         device_resident=True,
         host_fallback_used=False,
         host_callback_free=True,
+        jax_default_backend=placement_default_backend,
+        jax_available_platforms=placement_available_platforms,
+        operator_array_devices=placement_array_devices,
+        operator_array_platforms=placement_array_platforms,
+        operator_arrays_same_device=bool(placement_arrays_same_device),
         operator_metadata_keys=_metadata_keys(operator_metadata),
         geometry_metadata_keys=_metadata_keys(geometry_metadata),
         accepted_basis_labels=tuple(str(label) for label in basis.metadata.accepted_labels),
@@ -3797,6 +3847,12 @@ def setup_rhs1_qi_device_preconditioner(
         coupled_residual_equation_residual_after=float(coupled_residual_equation_residual_after),
         coupled_residual_equation_accepted=bool(coupled_residual_equation_accepted),
         coupled_residual_equation_reason=str(coupled_residual_equation_reason),
+        residual_equation_operator_reuse_stage_count=int(
+            residual_equation_operator_reuse_stage_count
+        ),
+        residual_equation_operator_recomputed_stage_count=int(
+            residual_equation_operator_recomputed_stage_count
+        ),
         global_moment_residual_equation_enabled=bool(
             config_use.global_moment_residual_equation and global_moment_residual_equation_rank > 0
         ),

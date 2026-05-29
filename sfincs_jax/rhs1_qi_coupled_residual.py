@@ -21,6 +21,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 import jax.numpy as jnp
+import jax
 
 from .rhs1_qi_coarse import RHS1QICoarseBasis, orthonormalize_rhs1_qi_coarse_basis
 
@@ -262,7 +263,17 @@ def _apply_operator_to_basis(operator: LinearOperator, basis_vectors: ArrayLike)
         raise ValueError("basis vectors must be a 2D matrix")
     if int(q.shape[1]) == 0:
         return jnp.zeros((int(q.shape[0]), 0), dtype=q.dtype)
-    return jnp.stack(tuple(jnp.asarray(operator(q[:, index])).reshape((-1,)) for index in range(int(q.shape[1]))), axis=1)
+
+    def apply_column(column: ArrayLike) -> ArrayLike:
+        return jnp.asarray(operator(column), dtype=q.dtype).reshape((-1,))
+
+    try:
+        return jax.vmap(apply_column, in_axes=1, out_axes=1)(q)
+    except NotImplementedError:
+        # Some sparse matvec primitives still do not expose batching rules.
+        # Keep those paths correct while matrix-free operators use one batched
+        # trace instead of a Python loop over every coarse column.
+        return jnp.stack(tuple(apply_column(q[:, index]) for index in range(int(q.shape[1]))), axis=1)
 
 
 def _solve_cached(

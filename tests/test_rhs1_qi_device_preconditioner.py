@@ -101,6 +101,11 @@ def test_device_preconditioner_builds_field_split_state_and_metadata() -> None:
     assert state.metadata.device_resident is True
     assert state.metadata.host_fallback_used is False
     assert state.metadata.host_callback_free is True
+    assert state.metadata.jax_default_backend == device_operator.metadata.default_backend
+    assert state.metadata.jax_available_platforms == device_operator.metadata.available_platforms
+    assert state.metadata.operator_array_devices == device_operator.metadata.array_devices
+    assert state.metadata.operator_array_platforms == device_operator.metadata.array_platforms
+    assert state.metadata.operator_arrays_same_device is True
     assert state.metadata.operator_metadata_keys == ("source",)
     assert state.metadata.geometry_metadata_keys == ("n_theta", "n_zeta")
     assert state.metadata.local_smoother_reason == "built"

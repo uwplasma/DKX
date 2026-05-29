@@ -17078,3 +17078,73 @@ Best next steps:
 3. Treat future device-QI work as a new algorithmic lane only if it changes the
    global residual equation/coarse closure, not if it tunes smoothers or
    restarts.
+
+### 35.86 Device-QI operator-action reuse and QI ladder rollup
+
+Scope:
+
+- Replaced the coupled residual-equation ``A Q`` setup loop with a batched
+  ``jax.vmap`` path when the matrix-free operator supports batching, with a
+  compatibility fallback for sparse primitives that do not expose batching
+  rules.
+- Reused the already computed coupled residual-equation ``A Q`` and
+  ``Q^T A Q`` objects when the coupled stage is installed inside the
+  RHSMode=1 QI device preconditioner. This avoids one redundant setup pass over
+  the same operator/basis pair and records reuse versus recompute counts in
+  preconditioner metadata.
+- Added device-placement audit metadata to ``DeviceCSR`` and the QI device
+  preconditioner: default backend, available platforms, concrete array devices,
+  array platforms, and same-device placement.
+- Added a CI-fast QI device artifact policy and CLI checker so bounded GPU
+  operator-reuse artifacts cannot be promoted unless they record backend,
+  route, host-fallback, local-factor-skip, residual-gate, and fail-closed output
+  metadata.
+- Added no-solve QI ``nfp=2`` electron-root ladder rollup artifacts for the
+  checked ``7x``, ``9x``, ``11x``, ``13x``, and ``15x`` rungs. The rollup
+  records improving selected-root drift through ``0.00210`` on the latest rung,
+  CPU/GPU/Fortran agreement where available, the missing ``15x`` GPU promotion,
+  and the explicit ``25 x 51 x 100 x 4`` production floor.
+
+Results:
+
+- Small-system tests show the coupled residual-equation setup calls a batchable
+  matrix-free operator once for a three-column basis instead of once per
+  column.
+- The QI device preconditioner now reuses the coupled residual-equation action
+  in the installed Krylov stage and reports
+  ``residual_equation_operator_reuse_stage_count=1`` with zero recomputed stages
+  in the focused regression.
+- The checked ``13 x 13 x 15 x 4`` GPU operator-reuse artifact passes the new
+  offline QI-device policy while remaining fail-closed on residual convergence.
+- The QI kinetic ladder has a single machine-readable deferred summary, so
+  docs/tests can reason about progress without treating bounded rungs as
+  production-resolution closure.
+
+Validation:
+
+- Focused validation for this push:
+  ``pytest -q tests/test_qi_device_artifact_policy.py tests/test_qi_nfp2_electron_root_ladder_artifacts.py tests/test_rhs1_device_operator_unit.py tests/test_rhs1_qi_device_preconditioner.py::test_device_preconditioner_builds_field_split_state_and_metadata tests/test_rhs1_qi_coupled_residual.py``.
+- Artifact policy validation:
+  ``python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization/qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json``.
+- Release validation to run before commit: ``python scripts/check_research_lanes.py && python scripts/check_release_gates.py && python scripts/check_repo_size.py && git diff --check`` plus a warning-clean docs build.
+
+Progress:
+
+- QI kinetic promotion ladder: ``92%``. The bounded rungs are now rolled up and
+  tested as one ladder with a clear deferred production boundary.
+- True GPU/device QI performance: ``84%``. Device placement, route policy,
+  batched coarse setup, and cached operator-action reuse are implemented and
+  tested; convergence remains open.
+- Production-resolution QI ladders: ``64%``. The production floor and missing
+  GPU/rung evidence are now machine-readable, but no production solve has been
+  promoted.
+- Overall remaining-lane completion estimate: ``98.9%``.
+
+Best next steps:
+
+1. Run the focused tests, release gates, docs build, and QI artifact checker.
+2. Commit and push this device-QI/ladder evidence push if validation passes.
+3. For further progress, run a real ``15x`` GPU or next-rung CPU/GPU/Fortran
+   ladder only if the expected wall time is bounded; do not promote the
+   true-device lane until residual-clean GPU output and solver trace artifacts
+   exist.

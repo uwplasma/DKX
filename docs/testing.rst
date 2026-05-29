@@ -637,6 +637,10 @@ unit/regression suite:
   before their completion estimate is increased. The policy is target-capped:
   if a lane has fewer percentage points remaining than the current push target,
   it must reach its checked target rather than overclaiming beyond it.
+- ``scripts/check_qi_device_artifacts.py`` and
+  ``tests/test_qi_device_artifact_policy.py`` add the QI-specific offline gate
+  for device/operator-reuse artifacts. The gate checks provenance and
+  fail-closed metadata only; it is not a convergence certificate.
 
 The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep family:
 
@@ -1028,6 +1032,30 @@ For the current release documentation this is a scoped research result, not a
 production claim: this hard seed is now below ``3e-5`` on CPU and GPU, while
 additional algorithmic work is still required to reach the production write
 tolerance.
+
+The current QI device-preconditioner unit gate now checks one more non-smoother
+piece of infrastructure: coupled residual-equation setup batches the ``A Q``
+operator-action construction with ``jax.vmap`` when the operator has a batching
+rule, and the installed device preconditioner reuses that cached action instead
+of recomputing it.  The same state records ``jax_default_backend``,
+``jax_available_platforms``, operator array devices/platforms, and reuse versus
+recompute stage counts.  ``tests/test_rhs1_qi_coupled_residual.py`` and
+``tests/test_rhs1_qi_device_preconditioner.py`` lock these metadata fields on
+small systems so the large GPU lane can be audited without launching a long
+solve.
+
+QI device artifacts also have a CI-fast overclaiming gate:
+
+.. code-block:: bash
+
+   python scripts/check_qi_device_artifacts.py \
+     docs/_static/figures/optimization/qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json
+
+This checker is intentionally narrower than the PAS benchmark artifact policy.
+It classifies QI/device JSON artifacts, requires backend/provenance and claim
+boundary fields, rejects operator-reuse routes that silently fall back to host
+x-block factors, and requires fail-closed artifacts to refuse nonconverged
+outputs.
 
 The latest residual-weighted angular probe-coarse artifact
 ``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``

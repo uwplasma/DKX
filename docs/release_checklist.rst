@@ -47,6 +47,7 @@ From the repository root:
    pytest -q
    python scripts/check_release_gates.py
    python scripts/check_research_lanes.py
+   python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization --min-relevant 1
    sphinx-build -W -b html docs docs/_build/html
    python -m build
    python -m twine check dist/*
@@ -65,6 +66,7 @@ For a fast claim-scope check without running the whole suite, use:
    pytest -q tests/test_benchmark_doc_claims.py tests/test_generate_fortran_suite_benchmark_summary.py
    python scripts/check_release_gates.py
    python scripts/check_research_lanes.py
+   python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization --min-relevant 1
 
 This validates that publication-facing lanes are either implemented for the
 documented current claim, kept as bounded scaffolds/proxies, or explicitly closed as
@@ -77,6 +79,8 @@ the gate does not allow percentages to exceed the target just to satisfy a
 requested point increase.
 The benchmark-doc checks make the README/docs runtime and memory claims fail if
 they drift from the checked-in CPU/GPU suite reports or benchmark summary JSON.
+The QI device-artifact check is a no-solve guard against accidentally promoting
+nonconverged GPU/operator-reuse evidence into a production true-device-QI claim.
 
 For the current mapped-grid / QI / solver-path integration branch, also run the
 bounded integration checks before promoting any of those lanes into release-facing

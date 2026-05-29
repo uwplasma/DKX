@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Literal
 
 import jax
@@ -31,6 +31,12 @@ class DeviceCSRMetadata:
     source_nnz: int | None = None
     active_mapping_nbytes: int = 0
     drop_tol: float = 0.0
+    requested_device: str | None = None
+    default_backend: str = ""
+    available_platforms: tuple[str, ...] = ()
+    array_devices: tuple[str, ...] = ()
+    array_platforms: tuple[str, ...] = ()
+    all_arrays_same_device: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -47,6 +53,12 @@ class DeviceCSRMetadata:
             "source_nnz": self.source_nnz,
             "active_mapping_nbytes": int(self.active_mapping_nbytes),
             "drop_tol": float(self.drop_tol),
+            "requested_device": self.requested_device,
+            "default_backend": self.default_backend,
+            "available_platforms": tuple(self.available_platforms),
+            "array_devices": tuple(self.array_devices),
+            "array_platforms": tuple(self.array_platforms),
+            "all_arrays_same_device": bool(self.all_arrays_same_device),
         }
 
 
@@ -137,6 +149,64 @@ def _resolve_max_csr_nbytes(*, max_csr_nbytes: int | None, max_csr_mb: float | N
     if max_csr_mb is not None:
         limits.append(int(max(0.0, float(max_csr_mb)) * 1.0e6))
     return min(limits) if limits else None
+
+
+def _device_string(device: Any) -> str:
+    if device is None:
+        return ""
+    return str(device)
+
+
+def _device_platform(device: Any) -> str:
+    return str(getattr(device, "platform", "") or "")
+
+
+def _array_devices(array: Any) -> tuple[Any, ...]:
+    if array is None:
+        return ()
+    devices_attr = getattr(array, "devices", None)
+    if callable(devices_attr):
+        try:
+            return tuple(sorted(devices_attr(), key=str))
+        except TypeError:
+            return ()
+    device_attr = getattr(array, "device", None)
+    if callable(device_attr):
+        try:
+            return (device_attr(),)
+        except TypeError:
+            return ()
+    if device_attr is not None:
+        return (device_attr,)
+    return ()
+
+
+def _placement_metadata(
+    arrays: tuple[Any, ...],
+    *,
+    requested_device: jax.Device | None,
+) -> dict[str, object]:
+    devices: list[Any] = []
+    for array in arrays:
+        devices.extend(_array_devices(array))
+    unique_devices = tuple(sorted({_device_string(device) for device in devices if device is not None}))
+    platforms = tuple(sorted({_device_platform(device) for device in devices if device is not None and _device_platform(device)}))
+    try:
+        default_backend = str(jax.default_backend())
+    except RuntimeError:
+        default_backend = ""
+    try:
+        available_platforms = tuple(sorted({str(device.platform) for device in jax.devices()}))
+    except RuntimeError:
+        available_platforms = ()
+    return {
+        "requested_device": None if requested_device is None else _device_string(requested_device),
+        "default_backend": default_backend,
+        "available_platforms": available_platforms,
+        "array_devices": unique_devices,
+        "array_platforms": platforms,
+        "all_arrays_same_device": bool(unique_devices) and len(unique_devices) == 1,
+    }
 
 
 def _check_csr_budget(metadata: DeviceCSRMetadata) -> None:
@@ -333,6 +403,13 @@ def device_csr_from_scipy_csr(
     indices = jax.device_put(np.asarray(csr.indices, dtype=index_dtype_np), device=device)
     indptr = jax.device_put(np.asarray(csr.indptr, dtype=index_dtype_np), device=device)
     active_jax = None if active is None else jax.device_put(np.asarray(active, dtype=index_dtype_np), device=device)
+    metadata = replace(
+        metadata,
+        **_placement_metadata(
+            (data, indices, indptr, active_jax),
+            requested_device=device,
+        ),
+    )
     return DeviceCSR(
         data=jnp.asarray(data),
         indices=jnp.asarray(indices),

@@ -43,6 +43,15 @@ def test_device_csr_from_scipy_csr_exposes_arrays_and_jitted_matvec() -> None:
     assert device_operator.metadata.row_indices_nbytes == 0
     assert device_operator.row_indices is None
     assert device_operator.indices.dtype == jnp.int32
+    assert device_operator.metadata.default_backend == jax.default_backend()
+    assert device_operator.metadata.array_devices
+    assert device_operator.metadata.array_platforms
+    assert device_operator.metadata.all_arrays_same_device is True
+    assert device_operator.metadata.array_platforms[0] in device_operator.metadata.available_platforms
+    metadata_dict = device_operator.metadata.to_dict()
+    assert metadata_dict["array_devices"] == device_operator.metadata.array_devices
+    assert metadata_dict["array_platforms"] == device_operator.metadata.array_platforms
+    assert metadata_dict["all_arrays_same_device"] is True
 
     x = jnp.asarray([1.0, 2.0, 3.0], dtype=jnp.float64)
     np.testing.assert_allclose(np.asarray(device_operator.matvec(x)), matrix @ np.asarray(x))

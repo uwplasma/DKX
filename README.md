@@ -279,6 +279,11 @@ x-block factor skipping, but it remains fail-closed because the residual misses
 the requested target; it is infrastructure evidence, not a public performance
 claim.
 
+A checked no-solve rollup now records the QI `nfp=2` electron-root ladder from
+`7x` through `15x`. The latest root drift is `0.00210`, but the rollup remains
+`deferred` because the `15x` GPU rung and the full `25 x 51 x 100 x 4`
+production floor are still open.
+
 The separate finite-beta QA convergence ladder extends the finite-beta QA
 artifact to `9 x 9 x 7 x 4` at the central surface and remains explicitly
 `deferred` because it does not meet the production floor.
