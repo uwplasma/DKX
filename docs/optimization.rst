@@ -749,9 +749,15 @@ the same electric-field grid on CPU, one office GPU, and SFINCS Fortran v3:
      --gpu-device 0 \
      --run-fortran \
      --fortran-exe /path/to/sfincs \
-     --jobs 1 \
-     --impurity-species-index 1 \
-     --target-impurity-flux 0.0
+     --jobs 1
+
+For two-species ion/electron electron-root promotion scans, omit
+``--impurity-species-index`` so the flux-selectivity objective is not
+evaluated as if the electron were an impurity.  Add that option only for
+three-or-more-species studies with a real impurity objective.  The comparison
+wrapper then automatically allows missing flux-objective scalars while still
+checking the selected root, bootstrap objective, residual gates, and backend
+agreement.
 
 The checked run used
 :math:`N_\theta=7`, :math:`N_\zeta=7`, :math:`N_\xi=7`,
@@ -790,6 +796,39 @@ production-resolution QI ladder, the radial/profile convergence ladder, or the
 true differentiable device-QI hard-seed lane.  The next promotion step is to run
 the same two-species QI ``nfp=2`` contract through a resolution ladder and keep
 the selected electron root stable under the documented tolerances.
+
+First QI refinement rung
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The next bounded CPU/GPU rung has also been run at
+:math:`N_\theta=9`, :math:`N_\zeta=9`, :math:`N_\xi=11`,
+:math:`N_L=4`, :math:`N_x=4` with the same eight electric-field points.  This
+is still below the production-resolution floor, but it is useful because it
+tests whether the positive root survives a first refinement and whether CPU and
+GPU remain consistent when the flux-selectivity objective is intentionally
+disabled for the two-species ion/electron contract.
+
+The CPU lane completed the eight points in about ``9.7 s`` locally, and the
+one-GPU lane completed them in about ``28.6 s`` on office GPU0.  Both lanes
+passed residual gates and selected
+:math:`E_r=2.2834299271` in the bracket :math:`[2,3]`; the CPU/GPU root
+difference was :math:`4.3\times10^{-14}`.  However, the root drift from the
+``7 x 7 x 7 x 4`` low-resolution CPU artifact is about ``0.155``, so this rung
+is evidence that the positive root persists, not evidence that the QI ladder is
+converged.
+
+.. figure:: _static/figures/optimization/qi_nfp2_electron_root_res9_cpu_gpu.png
+   :alt: QI nfp=2 first refined CPU/GPU electron-root comparison.
+
+   First refined QI ``nfp=2`` CPU/GPU electron-root comparison.  Backend
+   agreement is clean at fixed resolution, but the low-to-refined root drift
+   keeps the production-resolution QI ladder open.
+
+The checked machine-readable artifacts for this first refinement rung are:
+
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_gpu.json``
+- ``docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu_gpu.json``
 
 VMEC JAX Integration
 --------------------

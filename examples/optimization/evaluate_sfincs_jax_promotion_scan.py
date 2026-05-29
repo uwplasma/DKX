@@ -41,7 +41,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stem", default="qa_nfp2_sfincs_jax_promotion_scan", help="Output file stem.")
     parser.add_argument("--require-electron-root", action="store_true", default=True)
     parser.add_argument("--allow-no-electron-root", action="store_false", dest="require_electron_root")
-    parser.add_argument("--impurity-species-index", type=int, default=2)
+    parser.add_argument(
+        "--impurity-species-index",
+        type=int,
+        default=None,
+        help=(
+            "Optional species index for the flux-selectivity objective. "
+            "Leave unset for two-species electron-root scans without an impurity."
+        ),
+    )
     parser.add_argument("--target-impurity-flux", type=float, default=0.01)
     parser.add_argument("--bootstrap-normalizer", type=float, default=1.0)
     parser.add_argument(
@@ -181,7 +189,9 @@ def main(argv: list[str] | None = None) -> int:
     summary = evaluate_sfincs_scan_promotion(
         scan_dir,
         require_electron_root=bool(args.require_electron_root),
-        impurity_species_index=int(args.impurity_species_index),
+        impurity_species_index=(
+            None if args.impurity_species_index is None else int(args.impurity_species_index)
+        ),
         target_impurity_flux=float(args.target_impurity_flux),
         bootstrap_normalizer=float(args.bootstrap_normalizer),
         require_residuals=bool(args.require_residuals),

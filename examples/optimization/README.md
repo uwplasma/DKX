@@ -28,6 +28,8 @@ Examples:
   completed `sfincs_jax scan-er` directories. It reads `sfincsOutput.h5` files,
   checks ambipolar roots, bootstrap current, species fluxes, and residual gates,
   then writes JSON plus PNG/PDF promotion plots.
+  Pass `--impurity-species-index` only for a real impurity/flux-selectivity
+  objective; omit it for two-species ion/electron electron-root scans.
 - `launch_sfincs_jax_candidate_scan.py` — accepted-candidate handoff from a
   proxy optimization JSON to a reproducible `sfincs_jax scan-er` command. By
   default it writes a JSON plan and prints commands; pass `--execute` only when
@@ -83,3 +85,5 @@ python examples/optimization/run_promotion_evidence_campaign.py --input runs/qi_
 This generated input is a kinetic promotion candidate only. Do not cite it as
 electron-root evidence until the CPU/GPU/Fortran scans, promotion audits,
 backend comparison, and resolution ladder have passed.
+For this two-species ion/electron QI contract, leave the impurity objective
+unset unless you explicitly add a third impurity species.

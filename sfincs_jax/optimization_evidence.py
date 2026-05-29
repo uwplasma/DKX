@@ -190,6 +190,7 @@ def build_promotion_evidence_plan(
         out_dir=root / "comparison",
         stem=compare_stem,
         promotion_stem=promotion_stem,
+        require_flux_objective=impurity_species_index is not None,
     )
     return PromotionEvidencePlan(
         input_namelist=input_path,
@@ -409,6 +410,7 @@ def _comparison_command(
     out_dir: Path,
     stem: str,
     promotion_stem: str,
+    require_flux_objective: bool,
 ) -> tuple[str, ...] | None:
     by_label = {lane.label: lane for lane in lanes}
     if "cpu" not in by_label or "gpu" not in by_label:
@@ -432,6 +434,8 @@ def _comparison_command(
                 str(by_label["fortran_v3"].promotion_dir / f"{promotion_stem}.json"),
             ]
         )
+    if not bool(require_flux_objective):
+        cmd.append("--allow-missing-flux")
     return tuple(cmd)
 
 

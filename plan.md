@@ -217,6 +217,25 @@ Current active lane (2026-05-27, QA nfp=2 neoclassical optimization):
   This moves the QA/QI optimization orchestration lane to `95%`. Remaining work
   is the QI production-resolution/resolution-convergence ladder and true
   differentiable device-QI hard-seed closure, not the first kinetic artifact.
+- [x] Launched the next bounded QI kinetic promotion rung at
+  `9 x 9 x 11 x 4` for the same two-species ion/electron QI `nfp=2` contract.
+  Local CPU solved the eight-point electric-field scan in `9.7 s` and selected
+  a positive electron root `Er=2.2834299271`. Office GPU0 solved the matching
+  scan in `28.6 s` and selected the same root to `4.3e-14` absolute agreement;
+  residual gates passed on both backends. This first refinement proves the
+  positive root is not a one-off low-resolution CPU artifact and exercises the
+  no-impurity promotion path, but the root drift from the `7 x 7 x 7 x 4`
+  artifact is about `0.155`, so the QI production-resolution ladder remains
+  open. Checked artifacts are
+  `docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu.*`,
+  `qi_nfp2_electron_root_res9_gpu.*`, and
+  `qi_nfp2_electron_root_res9_cpu_gpu.*`.
+- [x] Fixed the optimization promotion CLI so flux selectivity is opt-in rather
+  than assuming `impurity_species_index=2`. This prevents two-species
+  ion/electron electron-root campaigns from failing after successful solves.
+  `run_promotion_evidence_campaign.py` now emits `--allow-missing-flux` in
+  CPU/GPU comparisons when no impurity objective is requested. Focused tests
+  cover the two-species no-impurity path and the comparison-plan behavior.
 - [x] Advanced true device-QI infrastructure by batching matrix-free coarse
   actions with `jax.vmap` in `rhs1_qi_device_preconditioner.py`, with a narrow
   fallback for CSR matvec primitives that lack batching rules. This reduces

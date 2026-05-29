@@ -1,0 +1,59 @@
+{
+  "comparisons": {
+    "cpu_gpu": {
+      "candidate_label": "gpu",
+      "comparison": "cpu_vs_gpu_promotion",
+      "failures": [],
+      "metrics": {
+        "bootstrap_objective": {
+          "abs_diff": 3.940688438202624e-21,
+          "atol": 0.0,
+          "candidate": 1.5227139154490944e-08,
+          "limit": 1.5227139154494883e-14,
+          "reference": 1.5227139154494885e-08,
+          "rel_diff": 2.587937496479354e-13,
+          "rtol": 1e-06,
+          "status": "pass"
+        },
+        "gate_status": {
+          "candidate": "pass",
+          "reference": "pass",
+          "required": "pass",
+          "status": "pass"
+        },
+        "selected_root_er": {
+          "abs_diff": 4.3076653355456074e-14,
+          "atol": 1e-10,
+          "candidate": 2.2834299271182843,
+          "limit": 2.2844299271183272e-07,
+          "reference": 2.2834299271183274,
+          "rel_diff": 1.8864889543520397e-14,
+          "rtol": 1e-07,
+          "status": "pass"
+        }
+      },
+      "reference_label": "cpu",
+      "status": "pass",
+      "tolerances": {
+        "bootstrap_objective_rtol": 1e-06,
+        "flux_objective_total_rtol": 1e-06,
+        "selected_root_er_atol": 1e-10,
+        "selected_root_er_rtol": 1e-07
+      }
+    }
+  },
+  "failures": [],
+  "inputs": {
+    "cpu": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_9x9x11x4/cpu_campaign/cpu_promotion/qi_nfp2_electron_root_res9_cpu.json",
+    "fortran": null,
+    "gpu": "/Users/rogeriojorge/local/tests/sfincs_jax/outputs/qi_nfp2_electron_root_kinetic/twospecies_9x9x11x4/gpu_campaign/gpu_promotion/qi_nfp2_electron_root_res9_gpu.json"
+  },
+  "status": "pass",
+  "tolerances": {
+    "bootstrap_objective_rtol": 1e-06,
+    "flux_objective_total_rtol": 1e-06,
+    "selected_root_er_atol": 1e-10,
+    "selected_root_er_rtol": 1e-07
+  },
+  "workflow": "sfincs_jax_optimization_promotion_comparison"
+}

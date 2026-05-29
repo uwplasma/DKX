@@ -213,6 +213,11 @@ high-fidelity promotion gate with:
 python examples/optimization/evaluate_sfincs_jax_promotion_scan.py --scan-dir /path/to/scan-er-directory
 ```
 
+Pass `--impurity-species-index` only when the scan includes a real impurity
+species and the flux-selectivity objective is part of the claim. For two-species
+ion/electron electron-root scans, omit it; the backend comparison still checks
+the selected root, bootstrap objective, residuals, and CPU/GPU agreement.
+
 To go from a proxy optimization JSON to a reproducible scan command without
 starting a long solve immediately:
 
@@ -241,9 +246,18 @@ reference tolerances. This closes the first QI kinetic artifact, not the
 production-resolution QI ladder.
 
 ![QI nfp=2 low-resolution kinetic electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_lowres_reference_tolerance_comparison.png)
-The first bounded convergence ladder extends that artifact to `9 x 9 x 7 x 4`
-at the central surface and remains explicitly `deferred` because it does not
-meet the production floor.
+
+The first refined QI `nfp=2` CPU/GPU rung at `9 x 9 x 11 x 4` also passes
+fixed-resolution backend gates: CPU selected `E_r = 2.2834299271`, GPU selected
+the same root within `4.3e-14`, and both residual gates passed. The root drift
+from the `7 x 7 x 7 x 4` artifact is about `0.155`, so this is persistence
+evidence, not a convergence claim.
+
+![QI nfp=2 first refined CPU/GPU electron-root comparison](docs/_static/figures/optimization/qi_nfp2_electron_root_res9_cpu_gpu.png)
+
+The separate finite-beta QA convergence ladder extends the finite-beta QA
+artifact to `9 x 9 x 7 x 4` at the central surface and remains explicitly
+`deferred` because it does not meet the production floor.
 A follow-up medium-resolution solver-policy probe at `17 x 21 x 12 x 4`
 validated the non-dense `xblock_sparse_pc_gmres` route for the same two-species
 finite-beta QA deck: the automatic CPU path converged in about 7 s wall time,

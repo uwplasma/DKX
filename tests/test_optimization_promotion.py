@@ -103,6 +103,8 @@ def test_public_promotion_example_runs_demo(tmp_path: Path) -> None:
             str(tmp_path),
             "--stem",
             "promotion_test",
+            "--impurity-species-index",
+            "2",
         ],
         cwd=_REPO,
         check=True,
