@@ -540,6 +540,21 @@ until real scale-0.60 CPU/GPU hard-seed artifacts pass the gate below. A
 post-enrichment bounded rerun showed that the remaining active blocker is path
 ordering in the large active-DOF RHSMode=1 FP branch: the expensive host x-block
 rescue can dominate before a bounded QI-device probe produces evidence.
+The latest production-floor follow-up keeps that branch fail-closed but makes it
+more bounded and more observable. Host sparse x-block rescue now skips local
+blocks above the default ``30000``-unknown cap instead of repeatedly attempting
+singular high-fill ILU on the largest speed block, escalates local diagonal
+regularization on singular ILU retries, and emits explicit breadcrumbs for the
+post-seed refinement and SciPy polish. For very large active systems the default
+post-x-block polish is a short probe, not a hidden long solve; users can still
+force the historical uncapped local factorization or a longer polish with
+environment overrides when running offline experiments. A good explicit x-block
+seed also skips full global sparse rescue by default in this narrow branch,
+because assembling the full active operator is the dominant memory/runtime
+offender; setting ``SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK=0``
+keeps the old rescue ordering for comparison studies. The same bounded branch
+also avoids launching the final SciPy rescue by default; the resulting artifact
+remains nonconverged unless the true residual gate is met.
 
 The earlier residual-deflated path remains useful context but is no longer the
 preferred next closure path after the operator-Krylov evidence:

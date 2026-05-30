@@ -436,13 +436,26 @@ The sparse helper coverage in ``tests/test_v3_driver_sparse_helper_coverage.py``
 also protects the host full-FP x-block exact-LU cap. It verifies that only the
 non-differentiable full-FP x-block path defaults to the larger production-floor
 cap, while PAS and JAX-factor paths retain the lower memory-conservative cap.
+``tests/test_rhs1_xblock_sparse_host_policy.py`` also covers the production
+host x-block factor cap: by default, very large local sparse factors are skipped
+instead of spending the full runtime budget on singular ILU attempts, while an
+explicit ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX=0`` keeps the
+historical uncapped experiment available. ``tests/test_v3_sparse_pattern.py``
+then checks that singular local ILU attempts escalate diagonal regularization
+before failing closed, which makes high-resolution blocker evidence more
+diagnostic without changing the physical operator.
 
 The follow-up post-x-block policy split is covered by
 ``tests/test_rhs1_post_xblock_policy.py``. These tests check the residual and
 active-size gates for fast post-x-block polish, targeted FP polish, and explicit
-skip-global-sparse-after-xblock routing after a good x-block seed. The tests keep
+disable/override behavior for skip-global-sparse-after-xblock routing after a
+good x-block seed. The tests keep
 large-case convergence handoff decisions visible while avoiding heavyweight CI
-runs.
+runs. ``tests/test_rhs1_sparse_polish_policy.py`` also covers the large-system
+post-x-block polish budget: for active systems above the configured floor, the
+default SciPy polish is a short ``restart=10, maxiter=1`` probe rather than a
+second long solve, unless the user explicitly overrides the restart or maxiter
+environment variables.
 
 Small acceptance/probe gates are covered directly by
 ``tests/test_rhs1_acceptance_policy.py``. That file checks the large-PAS
