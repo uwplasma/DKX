@@ -83,7 +83,10 @@
         "Nx": 4
       },
       "artifacts": {
-        "cpu_fortran_comparison": "qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json"
+        "cpu_fortran_comparison": "qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json",
+        "gpu": "qi_nfp2_electron_root_res15_gpu.json",
+        "gpu_campaign": "qi_nfp2_electron_root_res15_gpu_campaign.json",
+        "gpu_campaign_summary": "qi_nfp2_electron_root_res15_gpu_campaign_summary.json"
       }
     }
   ]

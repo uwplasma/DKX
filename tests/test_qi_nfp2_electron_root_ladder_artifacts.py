@@ -29,7 +29,7 @@ def test_qi_nfp2_electron_root_ladder_rollup_is_fail_closed() -> None:
     assert all(tier["production_floor_met"] is False for tier in tiers)
     assert all((ARTIFACT_DIR / source).exists() for tier in tiers for source in tier["source_artifacts"])
     assert summary["gates"]["production_resolution_qi_convergence"] == "open"
-    assert summary["gates"]["res15_gpu_promotion"] == "open"
+    assert summary["gates"]["res15_gpu_promotion"] == "pass_bounded"
 
 
 def test_qi_nfp2_electron_root_ladder_values_match_source_artifacts() -> None:
@@ -43,6 +43,7 @@ def test_qi_nfp2_electron_root_ladder_values_match_source_artifacts() -> None:
         ARTIFACT_DIR / "qi_nfp2_electron_root_res13_reference_tolerance_comparison_sparse_skip.json"
     )
     res15_comparison = _read(ARTIFACT_DIR / "qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json")
+    res15_gpu = _read(ARTIFACT_DIR / "qi_nfp2_electron_root_res15_gpu_campaign.json")
 
     assert tier_by_name["low_7x7x7"]["lanes"]["cpu"]["selected_root_er"] == low_cpu["selected_root"]["er"]
     assert tier_by_name["res9_9x9x11"]["lanes"]["gpu"]["selected_root_er"] == res9_gpu["selected_root"]["er"]
@@ -55,6 +56,11 @@ def test_qi_nfp2_electron_root_ladder_values_match_source_artifacts() -> None:
         tier_by_name["res15_15x15x17"]["lanes"]["cpu"]["selected_root_er"]
         == res15_comparison["fixed_resolution_roots"]["cpu"]["er"]
     )
+    assert (
+        tier_by_name["res15_15x15x17"]["lanes"]["gpu"]["selected_root_er"]
+        == res15_gpu["gpu_selected_root"]["er"]
+    )
+    assert tier_by_name["res15_15x15x17"]["gpu_campaign_gate"]["status"] == "pass_bounded_gpu_res15"
 
 
 def test_qi_nfp2_ladder_convergence_trend_is_improving_but_not_promoted() -> None:
@@ -65,3 +71,26 @@ def test_qi_nfp2_ladder_convergence_trend_is_improving_but_not_promoted() -> Non
     assert drifts[-1] < summary["tolerances"]["latest_root_drift_atol_for_trend_only"]
     assert summary["status"] == "deferred"
     assert any("No checked tier meets" in blocker for blocker in summary["blockers"])
+
+
+def test_qi_nfp2_res15_gpu_campaign_artifact_passes_fixed_resolution_gate() -> None:
+    campaign = _read(ARTIFACT_DIR / "qi_nfp2_electron_root_res15_gpu_campaign.json")
+    promotion = _read(ARTIFACT_DIR / "qi_nfp2_electron_root_res15_gpu.json")
+    campaign_summary = _read(ARTIFACT_DIR / "qi_nfp2_electron_root_res15_gpu_campaign_summary.json")
+
+    assert campaign["workflow"] == "sfincs_jax_qi_nfp2_res15_gpu_campaign_evidence"
+    assert campaign["status"] == "pass_bounded_gpu_res15"
+    assert campaign["failures"] == []
+    assert campaign["gates"]["gpu_residuals"] == "pass"
+    assert campaign["gates"]["gpu_cpu_root_agreement"] == "pass"
+    assert campaign["gates"]["gpu_fortran_v3_root_agreement"] == "pass"
+    assert campaign["gates"]["production_resolution_qi_convergence"] == "open"
+    assert campaign["residual_summary"]["run_count"] == 8
+    assert campaign["residual_summary"]["max_residual_ratio"] < 1.0e-5
+    assert campaign["root_differences"]["gpu_minus_cpu_abs"] < 1.0e-12
+    assert campaign["root_differences"]["gpu_minus_fortran_v3_abs"] < 3.0e-6
+
+    assert promotion["gate_status"] == "pass"
+    assert promotion["selected_root"]["root_type"] == "electron"
+    assert promotion["selected_root"]["er"] == campaign["gpu_selected_root"]["er"]
+    assert campaign_summary["campaign_status"] == "pass"

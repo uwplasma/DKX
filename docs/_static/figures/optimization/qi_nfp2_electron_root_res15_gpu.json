@@ -1,0 +1,213 @@
+{
+  "bootstrap_objective": 6.98264156652717e-10,
+  "claim_boundary": "This audit evaluates completed sfincs_jax kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
+  "electron_root_penalty": 0.0,
+  "failures": [],
+  "flux_objective": null,
+  "gate_status": "pass",
+  "runs": [
+    {
+      "bootstrap_current": 1.0214167320934593e-05,
+      "er": -0.3,
+      "heat_flux": [
+        -3.464484099560954e-08,
+        -6.56681610829035e-10
+      ],
+      "particle_flux": [
+        -1.6817495312022665e-08,
+        -3.4012684297058304e-10
+      ],
+      "path": "/home/rjorge/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest/gpu_scan/Er-0.3/sfincsOutput.h5",
+      "radial_current": -1.6477368469052082e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 2.1647114289179366e-17,
+        "residual_target": 2.4695776934070918e-11,
+        "status": "pass"
+      },
+      "residual_norm": 2.1647114289179366e-17,
+      "residual_target": 2.4695776934070918e-11
+    },
+    {
+      "bootstrap_current": 1.030184281731463e-05,
+      "er": -0.1,
+      "heat_flux": [
+        -3.3817554807670164e-08,
+        -6.919993600445531e-10
+      ],
+      "particle_flux": [
+        -1.619943061699763e-08,
+        -3.6180951837185693e-10
+      ],
+      "path": "/home/rjorge/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest/gpu_scan/Er-0.1/sfincsOutput.h5",
+      "radial_current": -1.583762109862577e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 5.662629514316411e-19,
+        "residual_target": 2.1704094003370197e-11,
+        "status": "pass"
+      },
+      "residual_norm": 5.662629514316411e-19,
+      "residual_target": 2.1704094003370197e-11
+    },
+    {
+      "bootstrap_current": 1.0196255840608732e-05,
+      "er": 0.0,
+      "heat_flux": [
+        -3.302440586298061e-08,
+        -7.096018937202413e-10
+      ],
+      "particle_flux": [
+        -1.570545072531404e-08,
+        -3.726155676293538e-10
+      ],
+      "path": "/home/rjorge/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest/gpu_scan/Er0/sfincsOutput.h5",
+      "radial_current": -1.5332835157684685e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 3.2187814993931105e-18,
+        "residual_target": 2.0327887418268353e-11,
+        "status": "pass"
+      },
+      "residual_norm": 3.2187814993931105e-18,
+      "residual_target": 2.0327887418268353e-11
+    },
+    {
+      "bootstrap_current": 1.0140058698918669e-05,
+      "er": 0.1,
+      "heat_flux": [
+        -3.19888256410039e-08,
+        -7.272868115257638e-10
+      ],
+      "particle_flux": [
+        -1.5096373026305913e-08,
+        -3.836261567513219e-10
+      ],
+      "path": "/home/rjorge/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest/gpu_scan/Er0.1/sfincsOutput.h5",
+      "radial_current": -1.4712746869554591e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 2.9710054304965373e-18,
+        "residual_target": 1.905482681153649e-11,
+        "status": "pass"
+      },
+      "residual_norm": 2.9710054304965373e-18,
+      "residual_target": 1.905482681153649e-11
+    },
+    {
+      "bootstrap_current": 9.781744862929093e-06,
+      "er": 0.3,
+      "heat_flux": [
+        -2.931145043539799e-08,
+        -7.625519587453011e-10
+      ],
+      "particle_flux": [
+        -1.358613969969365e-08,
+        -4.055798937868397e-10
+      ],
+      "path": "/home/rjorge/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest/gpu_scan/Er0.3/sfincsOutput.h5",
+      "radial_current": -1.318055980590681e-08,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 6.33696028725133e-18,
+        "residual_target": 1.6909689036435527e-11,
+        "status": "pass"
+      },
+      "residual_norm": 6.33696028725133e-18,
+      "residual_target": 1.6909689036435527e-11
+    },
+    {
+      "bootstrap_current": 8.385846389598224e-06,
+      "er": 1.0,
+      "heat_flux": [
+        -1.782036336811178e-08,
+        -8.860074124225175e-10
+      ],
+      "particle_flux": [
+        -7.3245163700200554e-09,
+        -4.82986169766339e-10
+      ],
+      "path": "/home/rjorge/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest/gpu_scan/Er1/sfincsOutput.h5",
+      "radial_current": -6.841530200253716e-09,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 1.846575659229995e-18,
+        "residual_target": 1.6084838379732662e-11,
+        "status": "pass"
+      },
+      "residual_norm": 1.846575659229995e-18,
+      "residual_target": 1.6084838379732662e-11
+    },
+    {
+      "bootstrap_current": 7.540203769940283e-06,
+      "er": 2.0,
+      "heat_flux": [
+        -6.955773961980554e-09,
+        -1.0614350230797195e-09
+      ],
+      "particle_flux": [
+        -1.2707569004228625e-09,
+        -5.921784064121805e-10
+      ],
+      "path": "/home/rjorge/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest/gpu_scan/Er2/sfincsOutput.h5",
+      "radial_current": -6.78578494010682e-10,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 1.9942625654804068e-18,
+        "residual_target": 2.9580936412390837e-11,
+        "status": "pass"
+      },
+      "residual_norm": 1.9942625654804068e-18,
+      "residual_target": 2.9580936412390837e-11
+    },
+    {
+      "bootstrap_current": 7.626462381061689e-06,
+      "er": 3.0,
+      "heat_flux": [
+        -1.9538839845529413e-09,
+        -1.2351818513807628e-09
+      ],
+      "particle_flux": [
+        1.804560099886851e-09,
+        -6.991063801816236e-10
+      ],
+      "path": "/home/rjorge/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest/gpu_scan/Er3/sfincsOutput.h5",
+      "radial_current": 2.5036664800684748e-09,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 7.189184912295761e-19,
+        "residual_target": 4.756208917704479e-11,
+        "status": "pass"
+      },
+      "residual_norm": 7.189184912295761e-19,
+      "residual_target": 4.756208917704479e-11
+    }
+  ],
+  "scan_dir": "/home/rjorge/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest/gpu_scan",
+  "selected_root": {
+    "bracket": [
+      2.0,
+      3.0
+    ],
+    "er": 2.2132389239477206,
+    "root_type": "electron",
+    "slope": 3.182244974079157e-09
+  },
+  "workflow": "sfincs_jax_optimization_high_fidelity_promotion"
+}

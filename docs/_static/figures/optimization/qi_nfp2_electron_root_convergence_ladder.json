@@ -18,14 +18,13 @@
   },
   "blockers": [
     "No checked tier meets the 25 x 51 x 100 x 4 production floor.",
-    "The res15 rung has CPU/Fortran agreement but no promoted GPU solve.",
     "The res13 one-GPU operator-reuse route activates and stays device-QI, but remains fail-closed because the residual gate fails."
   ],
   "gates": {
-    "cpu_gpu_backend_agreement_through_res13": "pass_bounded",
+    "cpu_gpu_backend_agreement_through_res15": "pass_bounded",
     "fortran_v3_reference_agreement_through_res15": "pass_bounded",
     "latest_root_drift_trend": "pass_bounded",
-    "res15_gpu_promotion": "open",
+    "res15_gpu_promotion": "pass_bounded",
     "production_resolution_qi_convergence": "open"
   },
   "tiers": [
@@ -185,7 +184,7 @@
     },
     {
       "name": "res15_15x15x17",
-      "status": "pass_refined_cpu_fortran_rung_open_gpu_performance_and_convergence",
+      "status": "pass_refined_cpu_gpu_fortran_rung_open_production_convergence",
       "resolution": {
         "Ntheta": 15,
         "Nzeta": 15,
@@ -196,11 +195,18 @@
       "production_floor_met": false,
       "active_size_estimate": 17104,
       "source_artifacts": [
-        "qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json"
+        "qi_nfp2_electron_root_res15_cpu_fortran_sparse_skip.json",
+        "qi_nfp2_electron_root_res15_gpu.json",
+        "qi_nfp2_electron_root_res15_gpu_campaign.json",
+        "qi_nfp2_electron_root_res15_gpu_campaign_summary.json"
       ],
       "lanes": {
         "cpu": {
           "selected_root_er": 2.213238923947695,
+          "root_type": "electron"
+        },
+        "gpu": {
+          "selected_root_er": 2.2132389239477206,
           "root_type": "electron"
         },
         "fortran_v3": {
@@ -209,13 +215,18 @@
         }
       },
       "backend_root_diffs": {
+        "cpu_gpu_abs": 2.5757174171303632e-14,
         "cpu_fortran_v3_abs": 2.0333472168232447e-6,
+        "gpu_fortran_v3_abs": 2.033347242580419e-6,
         "cpu_fortran_v3_rel": 9.18721003367865e-7
       },
       "root_drift_from_previous": 0.002103822716538417,
-      "missing_lanes": [
-        "gpu"
-      ]
+      "gpu_campaign_gate": {
+        "artifact": "qi_nfp2_electron_root_res15_gpu_campaign.json",
+        "status": "pass_bounded_gpu_res15",
+        "max_residual_ratio": 8.765512559888108e-7,
+        "scan_elapsed_s": 1326.235
+      }
     }
   ]
 }

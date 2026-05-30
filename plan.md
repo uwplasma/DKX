@@ -17276,3 +17276,59 @@ Best next steps:
    with no ladder promotion.
 3. If the office runner is still waiting, leave it queued and avoid starting
    competing GPU jobs.
+
+### 35.89 QI res15 GPU bounded promotion closed
+
+Scope:
+
+- Reconnected to ``office`` and inspected the queued
+  ``~/tmp/sfincs_jax_qi_res15_gpu_bounded`` run. It had launched from the older
+  checkout, did not explicitly set ``JAX_ENABLE_X64=True``, and timed out after
+  ``900 s`` with an incomplete scan. That artifact remains fail-closed and was
+  not promoted.
+- Updated ``~/tmp/sfincs_jax_clean_main`` to ``88860d0`` and launched a fresh
+  ``JAX_ENABLE_X64=True`` one-GPU campaign in
+  ``~/tmp/sfincs_jax_qi_res15_gpu_bounded_x64_latest`` with a ``2400 s`` scan
+  timeout and ``300 s`` promotion timeout.
+- Copied the small campaign summary, GPU promotion JSON, and PNG/PDF figure
+  into ``docs/_static/figures/optimization`` and passed them through
+  ``examples/optimization/ingest_qi_res15_gpu_campaign.py`` before updating the
+  ladder rollup.
+
+Results:
+
+- Fresh GPU scan completed all eight electric-field points in ``1326.235 s``.
+- Promotion audit passed with selected electron root
+  ``E_r = 2.2132389239477206``.
+- The claim-safe ingestion artifact
+  ``qi_nfp2_electron_root_res15_gpu_campaign.json`` reports
+  ``status="pass_bounded_gpu_res15"`` with no failures.
+- CPU/GPU selected-root difference at ``15x``:
+  ``2.5757174171303632e-14``.
+- GPU/Fortran-v3 selected-root difference at ``15x``:
+  ``2.033347242580419e-6``.
+- Maximum residual ratio over the eight GPU points:
+  ``8.765512559888108e-7``.
+- Updated the QI convergence ladder so ``res15_gpu_promotion`` is now
+  ``pass_bounded``. The ladder remains ``deferred`` because no checked tier
+  meets the ``25 x 51 x 100 x 4`` production floor.
+
+Progress:
+
+- QI kinetic promotion ladder: ``96%``. The fixed-resolution CPU/GPU/Fortran
+  ``15x`` rung is now closed as bounded evidence.
+- True GPU/device QI performance: ``86%``. The run is correct and bounded on
+  one GPU, but it still uses the host-sparse fallback route rather than a fully
+  true-device production path.
+- Production-resolution QI ladders: ``70%``. The next blocker is the production
+  ``25 x 51 x 100 x 4`` CPU/GPU ladder, not the intermediate ``15x`` GPU rung.
+- Overall remaining-lane completion estimate: ``99.3%``.
+
+Best next steps:
+
+1. Run the focused QI artifact tests, ingestion tests, release gates, and docs
+   build.
+2. Commit and push the bounded ``15x`` GPU artifacts and ladder/docs updates if
+   validation passes.
+3. Keep production-resolution QI as the only remaining QI ladder blocker; do
+   not relabel the host-sparse GPU route as true-device QI.
