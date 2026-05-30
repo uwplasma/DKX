@@ -68,6 +68,9 @@ def rhs1_fast_post_xblock_polish_allowed(
     polish_min = _env_int("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MIN", 12000)
     if int(active_size) < max(1, int(polish_min)):
         return False
+    polish_max = _env_int("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MAX", 200000)
+    if int(polish_max) > 0 and int(active_size) > int(polish_max):
+        return False
     polish_ratio = _env_float("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_RATIO", 1.0e3)
     polish_abs = _env_float("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_ABS", 1.0e-6)
     threshold = max(float(polish_abs), float(target) * max(1.0, float(polish_ratio)))
@@ -115,7 +118,7 @@ def rhs1_skip_global_sparse_after_xblock_allowed(
 ) -> bool:
     """Return whether a good x-block seed may skip global sparse rescue."""
     env = _env_token("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK")
-    if env not in _TRUE_VALUES:
+    if env in _FALSE_VALUES:
         return False
     if not bool(used_large_cpu_xblock_shortcut) or not bool(used_explicit_fp_xblock_seed):
         return False

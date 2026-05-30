@@ -913,10 +913,10 @@ def test_skip_global_sparse_after_xblock_respects_guards(monkeypatch) -> None:
     )
 
 
-def test_skip_global_sparse_after_xblock_disabled_by_default(monkeypatch) -> None:
+def test_skip_global_sparse_after_xblock_enabled_by_default_and_opt_out(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", raising=False)
     monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
-    assert not _rhsmode1_skip_global_sparse_after_xblock_allowed(
+    kwargs = dict(
         op=_op(constraint_scheme=1),
         active_size=68670,
         residual_norm=4.1e-4,
@@ -925,6 +925,9 @@ def test_skip_global_sparse_after_xblock_disabled_by_default(monkeypatch) -> Non
         used_explicit_fp_xblock_seed=True,
         use_implicit=False,
     )
+    assert _rhsmode1_skip_global_sparse_after_xblock_allowed(**kwargs)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", "0")
+    assert not _rhsmode1_skip_global_sparse_after_xblock_allowed(**kwargs)
 
 
 def test_large_cpu_sparse_exact_lu_promoted_after_good_xblock_seed(monkeypatch) -> None:

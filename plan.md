@@ -17408,3 +17408,81 @@ Best next steps:
 3. Do not tag a new release until the next algorithmic push either converges
    the exact production-floor seed under budget or documents a stricter public
    scope that excludes production-floor QI.
+
+### 35.91 Bounded exact-floor x-block rescue and fail-closed output guard
+
+Scope:
+
+- Added a production-floor host x-block factor cap for the non-autodiff
+  RHSMode=1 FP sparse rescue. The default cap is ``30000`` unknowns per local
+  x-block factor, and ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX=0``
+  restores the historical uncapped experiment. This prevents the exact
+  ``25 x 51 x 100 x 4`` QI seed from spending the whole budget in repeated
+  singular high-fill local ILU attempts on the largest speed blocks.
+- Added singular-pivot diagonal regularization escalation for sparse ILU host
+  factors, with explicit breadcrumbs when the rescue increases regularization.
+  This improves diagnosability of local factor failures without changing the
+  default physical operator.
+- Bounded the large-system post-x-block SciPy polish. For active systems above
+  ``SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_MIN`` (default ``200000``), the
+  default explicit x-block polish is now a short ``restart=10, maxiter=1``
+  probe unless the user explicitly overrides the polish environment variables.
+- Made the good explicit x-block seed route skip full global sparse rescue and
+  the final CPU SciPy rescue by default in this narrow branch. This is
+  intentionally fail-closed: if the residual is not accepted, production-sized
+  RHSMode=1 output is refused instead of silently writing a partial transport
+  artifact.
+
+Results:
+
+- A high-cap office CPU probe still timed out at ``600 s`` after reaching the
+  x-block seed and entering a long polish/rescue tail. The x-block seed residual
+  was ``4.897725e-05``.
+- With the ``30000`` host-block cap and short large-system polish, the exact
+  production-floor CPU probe skipped the ``48450``, ``89250``, and ``127500``
+  local x-block factors, formed only the ``20400`` block factor, and completed
+  the bounded solver branch in ``31.666 s`` solver time / ``34.98 s`` wrapper
+  wall time.
+- The final bounded exact-floor residual was ``4.502975e-05`` against a
+  production output target of ``4.783963e-11``. The runner therefore failed the
+  convergence gate, wrote only the solver trace, and refused HDF5 output with
+  ``accepted_converged=False``. This is the desired claim-safe behavior.
+- Peak wrapper RSS for the exact-floor bounded CPU probe was ``2.13 GB``, down
+  from the previous long high-cap attempts while preserving the nonconverged
+  blocker classification.
+
+Validation:
+
+- Focused policy/sparse tests passed locally after the patch:
+  ``tests/test_rhs1_post_xblock_policy.py``,
+  ``tests/test_rhs1_sparse_polish_policy.py``,
+  ``tests/test_rhs1_xblock_sparse_host_policy.py``, and
+  ``tests/test_v3_sparse_pattern.py::test_sparse_host_ilu_escalates_regularization_after_singular_factor``.
+- The stale full-suite expectation that global sparse rescue was disabled by
+  default after a good x-block seed was updated to assert the new bounded
+  default and the explicit ``SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK=0``
+  opt-out.
+- The office exact-floor rerun used the synchronized main checkout and the
+  strict ``600 s`` runner timeout. It did not time out; it failed only because
+  the true residual gate was not met.
+- Final local validation passed with ``python -m pytest -q``:
+  ``1973 passed in 430.82s``.
+
+Progress:
+
+- QI kinetic promotion ladder: ``96%``. Existing bounded CPU/GPU/Fortran rungs
+  remain closed.
+- True GPU/device QI performance: ``86%``. No new true-device convergence claim
+  is made by this host fail-closed branch.
+- Production-resolution QI ladders: ``75%``. The exact CPU floor is now
+  bounded, observable, and claim-safe under budget, but still not converged.
+- Overall remaining-lane completion estimate: ``99.5%``.
+
+Best next steps:
+
+1. Run the full release gate stack and the full local test suite after this
+   bounded-rescue patch.
+2. Commit and push if all gates pass.
+3. Keep exact production-floor QI convergence as the remaining research item:
+   it needs a genuinely stronger global/coarse preconditioner, not more local
+   smoother or restart tuning.

@@ -50,6 +50,10 @@ def test_fast_post_xblock_polish_respects_guards(monkeypatch) -> None:
     )
     assert not rhs1_fast_post_xblock_polish_allowed(**{**kwargs, "residual_norm": 1.0e-7})
     assert not rhs1_fast_post_xblock_polish_allowed(**{**kwargs, "active_size": 8000})
+    assert not rhs1_fast_post_xblock_polish_allowed(**{**kwargs, "active_size": 250000})
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MAX", "300000")
+    assert rhs1_fast_post_xblock_polish_allowed(**{**kwargs, "active_size": 250000})
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MAX", raising=False)
     assert not rhs1_fast_post_xblock_polish_allowed(
         **{**kwargs, "used_large_cpu_xblock_shortcut": False},
     )
@@ -97,7 +101,7 @@ def test_fp_targeted_polish_respects_guards(monkeypatch) -> None:
 
 
 def test_skip_global_sparse_after_xblock_requires_explicit_good_seed(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", "1")
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK_MIN", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK_RATIO", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK_ABS", raising=False)
@@ -114,7 +118,7 @@ def test_skip_global_sparse_after_xblock_requires_explicit_good_seed(monkeypatch
 
 
 def test_skip_global_sparse_after_xblock_respects_guards(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", "1")
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", raising=False)
     kwargs = dict(
         op=_op(),
         active_size=68670,
@@ -135,7 +139,7 @@ def test_skip_global_sparse_after_xblock_respects_guards(monkeypatch) -> None:
     )
     assert not rhs1_skip_global_sparse_after_xblock_allowed(**{**kwargs, "use_implicit": True})
     assert not rhs1_skip_global_sparse_after_xblock_allowed(**{**kwargs, "backend": "gpu"})
-    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SKIP_GLOBAL_SPARSE_AFTER_XBLOCK", "0")
     assert not rhs1_skip_global_sparse_after_xblock_allowed(**kwargs)
 
 

@@ -52,3 +52,58 @@ def test_rhs1_parse_polish_gmres_config_uses_defaults_and_bounds(monkeypatch) ->
         min_restart=7,
         min_maxiter=11,
     ) == (7, 11)
+
+
+def test_rhs1_parse_polish_gmres_config_bounds_large_default_without_overriding_user(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("MY_RESTART", raising=False)
+    monkeypatch.delenv("MY_MAXITER", raising=False)
+    monkeypatch.delenv("MY_LARGE_MIN", raising=False)
+    monkeypatch.delenv("MY_LARGE_RESTART", raising=False)
+    monkeypatch.delenv("MY_LARGE_DEFAULT", raising=False)
+
+    assert rhs1_parse_polish_gmres_config(
+        restart_env_name="MY_RESTART",
+        maxiter_env_name="MY_MAXITER",
+        default_restart=40,
+        default_maxiter=80,
+        active_size=250000,
+        large_active_min_env_name="MY_LARGE_MIN",
+        large_default_restart_env_name="MY_LARGE_RESTART",
+        large_default_maxiter_env_name="MY_LARGE_DEFAULT",
+        default_large_restart=10,
+        default_large_maxiter=5,
+    ) == (10, 5)
+
+    monkeypatch.setenv("MY_RESTART", "35")
+    monkeypatch.setenv("MY_MAXITER", "65")
+    assert rhs1_parse_polish_gmres_config(
+        restart_env_name="MY_RESTART",
+        maxiter_env_name="MY_MAXITER",
+        default_restart=40,
+        default_maxiter=80,
+        active_size=250000,
+        large_active_min_env_name="MY_LARGE_MIN",
+        large_default_restart_env_name="MY_LARGE_RESTART",
+        large_default_maxiter_env_name="MY_LARGE_DEFAULT",
+        default_large_restart=10,
+        default_large_maxiter=5,
+    ) == (35, 65)
+
+    monkeypatch.delenv("MY_RESTART", raising=False)
+    monkeypatch.delenv("MY_MAXITER", raising=False)
+    monkeypatch.setenv("MY_LARGE_RESTART", "8")
+    monkeypatch.setenv("MY_LARGE_DEFAULT", "12")
+    assert rhs1_parse_polish_gmres_config(
+        restart_env_name="MY_RESTART",
+        maxiter_env_name="MY_MAXITER",
+        default_restart=40,
+        default_maxiter=80,
+        active_size=250000,
+        large_active_min_env_name="MY_LARGE_MIN",
+        large_default_restart_env_name="MY_LARGE_RESTART",
+        large_default_maxiter_env_name="MY_LARGE_DEFAULT",
+        default_large_restart=10,
+        default_large_maxiter=5,
+    ) == (8, 12)

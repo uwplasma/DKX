@@ -87,6 +87,27 @@ def _fast_device_cycle_krylov_result(**kwargs):
     )
 
 
+def test_sparse_host_ilu_escalates_regularization_after_singular_factor(monkeypatch) -> None:
+    v3_driver_module._RHSMODE1_SPARSE_ILU_CACHE.clear()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "2")
+    messages: list[str] = []
+
+    _a_full, _a_drop, ilu = v3_driver_module._factorize_sparse_matrix_csr_host(
+        a_csr_full=sp.csr_matrix([[0.0, 0.0], [0.0, 1.0]]),
+        cache_key=("singular-regularization-test",),
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=10.0,
+        factorization="ilu",
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert ilu is not None
+    assert any("increasing diagonal regularization" in msg for msg in messages)
+
+
 def test_xblock_precondition_side_defaults_right_only_for_full_fp_er() -> None:
     side, auto_right = _rhs1_xblock_precondition_side(
         env_value="",

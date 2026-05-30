@@ -2159,6 +2159,12 @@ def _build_sparse_ilu_from_matvec(
     except ValueError:
         reg = 1.0e-12 * max_abs
     reg = max(0.0, float(reg))
+    singular_reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ILU_SINGULAR_REG_REL", "").strip()
+    try:
+        singular_reg_rel = float(singular_reg_env) if singular_reg_env else 1.0e-10
+    except ValueError:
+        singular_reg_rel = 1.0e-10
+    singular_reg_rel = max(0.0, float(singular_reg_rel))
     attempts_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "").strip()
     try:
         attempts = int(attempts_env) if attempts_env else 3
@@ -2243,6 +2249,16 @@ def _build_sparse_ilu_from_matvec(
                 raise
             if ("singular" in msg) or ("pivot" in msg) or ("dpivot" in msg) or ("zero" in msg):
                 # Retry with a denser sparsification and stronger (less dropping) ILU.
+                if singular_reg_rel > 0.0:
+                    reg_candidate = max(1.0e-12, float(singular_reg_rel) * (10.0 ** int(attempt)) * max_abs)
+                    if reg_candidate > float(reg):
+                        reg = float(reg_candidate)
+                        if emit is not None:
+                            emit(
+                                1,
+                                f"{log_tag}: increasing diagonal regularization to {float(reg):.3e} "
+                                "after singular local factorization",
+                            )
                 ilu_drop_tol_eff = max(0.0, float(ilu_drop_tol_eff) * 0.1)
                 fill_factor_eff = max(float(fill_factor_eff), float(fill_factor) * 2.0, 20.0)
                 continue
@@ -2426,6 +2442,12 @@ def _factorize_sparse_matrix_csr_host(
     except ValueError:
         reg = 1.0e-12 * max_abs
     reg = max(0.0, float(reg))
+    singular_reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ILU_SINGULAR_REG_REL", "").strip()
+    try:
+        singular_reg_rel = float(singular_reg_env) if singular_reg_env else 1.0e-10
+    except ValueError:
+        singular_reg_rel = 1.0e-10
+    singular_reg_rel = max(0.0, float(singular_reg_rel))
 
     attempts_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ILU_ATTEMPTS", "").strip()
     try:
@@ -2488,6 +2510,16 @@ def _factorize_sparse_matrix_csr_host(
                     continue
                 raise
             if ("singular" in msg) or ("pivot" in msg) or ("dpivot" in msg) or ("zero" in msg):
+                if singular_reg_rel > 0.0:
+                    reg_candidate = max(1.0e-12, float(singular_reg_rel) * (10.0 ** int(attempt)) * max_abs)
+                    if reg_candidate > float(reg):
+                        reg = float(reg_candidate)
+                        if emit is not None:
+                            emit(
+                                1,
+                                f"{log_tag}: increasing diagonal regularization to {float(reg):.3e} "
+                                "after singular local factorization",
+                            )
                 ilu_drop_tol_eff = max(0.0, float(ilu_drop_tol_eff) * 0.1)
                 fill_factor_eff = max(float(fill_factor_eff), float(fill_factor) * 2.0, 20.0)
                 continue
@@ -11245,6 +11277,10 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL_MAX_BLOCK_SIZE",
         "",
     ).strip()
+    host_block_max_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX",
+        "",
+    ).strip()
     lower_fill_mode, lower_fill_ignored_env = _rhs1_xblock_policy.rhs1_xblock_lower_fill_mode(lower_fill_env)
 
     def _local_factor_candidate(block_size: int) -> _rhs1_xblock_policy.RHS1XBlockLocalSolveCandidate:
@@ -11289,6 +11325,7 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         lower_fill_row_cap_env,
         lower_fill_compact_row_cap_env,
         lower_fill_max_block_env,
+        host_block_max_env if not build_jax_factors else "",
     )
 
     if build_jax_factors:
@@ -11780,6 +11817,25 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
                     if block_size <= 0:
                         continue
                     block_slice = slice(start, start + block_size)
+                    if (
+                        not build_jax_factors
+                        and not _rhs1_xblock_sparse_host_policy.rhs1_xblock_sparse_host_block_factor_allowed(
+                            block_size=int(block_size),
+                            max_block_size_env_value=host_block_max_env,
+                        )
+                    ):
+                        if emit is not None:
+                            emit(
+                                1,
+                                "xblock_sparse_host: skipping local factor "
+                                f"(species={int(s)} x={int(ix)} size={int(block_size)} "
+                                "exceeds host block cap; set "
+                                "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX=0 "
+                                "to force the historical uncapped path)",
+                            )
+                        block_slices.append((start, block_size))
+                        block_factors.append(None)
+                        continue
 
                     def _mv_block(v_block: jnp.ndarray, *, _block_slice=block_slice) -> jnp.ndarray:
                         x_full = jnp.zeros((total_size,), dtype=v_block.dtype)
@@ -27671,6 +27727,17 @@ def solve_v3_full_system_linear_gmres(
                                 maxiter_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_MAXITER",
                                 default_restart=min(int(restart), 40),
                                 default_maxiter=min(int(maxiter or 80), 80),
+                                active_size=int(active_size),
+                                large_active_min_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_MIN",
+                                large_default_restart_env_name=(
+                                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_RESTART_DEFAULT"
+                                ),
+                                large_default_maxiter_env_name=(
+                                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_MAXITER_DEFAULT"
+                                ),
+                                default_large_restart=10,
+                                default_large_maxiter=1,
+                                min_maxiter=1,
                             )
                             base_residual_norm = float(res_reduced.residual_norm)
                             x_trial = jnp.asarray(precond_sparse_xblock(rhs_reduced), dtype=jnp.float64)
@@ -27689,7 +27756,8 @@ def solve_v3_full_system_linear_gmres(
                                     "solve_v3_full_system_linear_gmres: explicit FP x-block seed "
                                     f"(residual={residual_norm_sparse_xblock:.6e} current={base_residual_norm:.6e})",
                                 )
-                            for _ in range(refine_steps):
+                            performed_refines = 0
+                            for refine_index in range(refine_steps):
                                 if not np.isfinite(residual_norm_sparse_xblock) or residual_norm_sparse_xblock == 0.0:
                                     break
                                 dx_trial = jnp.asarray(precond_sparse_xblock(residual_vec_sparse_xblock), dtype=jnp.float64)
@@ -27701,12 +27769,28 @@ def solve_v3_full_system_linear_gmres(
                                 x_trial = x_next
                                 residual_vec_sparse_xblock = residual_vec_next
                                 residual_norm_sparse_xblock = residual_norm_next
+                                performed_refines = int(refine_index) + 1
+                            if emit is not None and int(refine_steps) > 0:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: explicit FP x-block refinement "
+                                    f"steps={int(performed_refines)}/{int(refine_steps)} "
+                                    f"residual={float(residual_norm_sparse_xblock):.6e}",
+                                )
                             if (
                                 np.isfinite(residual_norm_sparse_xblock)
                                 and residual_norm_sparse_xblock <= max(float(target_reduced), base_residual_norm * accept_ratio)
                             ):
                                 if polish_enabled and residual_norm_sparse_xblock > float(target_reduced):
                                     polish_precond = precond_sparse_xblock if precond_sparse_xblock is not None else ksp_precond
+                                    if emit is not None:
+                                        emit(
+                                            1,
+                                            "solve_v3_full_system_linear_gmres: explicit FP x-block polish "
+                                            f"start residual={float(residual_norm_sparse_xblock):.6e} "
+                                            f"target={float(target_reduced):.3e} restart={int(polish_restart)} "
+                                            f"maxiter={int(polish_maxiter)}",
+                                        )
                                     x_np, _rn_sparse_xblock, _history = gmres_solve_with_history_scipy(
                                         matvec=mv_reduced,
                                         b=rhs_reduced,
@@ -27721,6 +27805,12 @@ def solve_v3_full_system_linear_gmres(
                                     x_polish = jnp.asarray(x_np, dtype=jnp.float64)
                                     residual_vec_polish = rhs_reduced - mv_reduced(x_polish)
                                     residual_norm_polish = float(jnp.linalg.norm(residual_vec_polish))
+                                    if emit is not None:
+                                        emit(
+                                            1,
+                                            "solve_v3_full_system_linear_gmres: explicit FP x-block polish "
+                                            f"done residual={float(residual_norm_polish):.6e}",
+                                        )
                                     if np.isfinite(residual_norm_polish) and residual_norm_polish < residual_norm_sparse_xblock:
                                         x_trial = x_polish
                                         residual_norm_sparse_xblock = residual_norm_polish
@@ -29186,6 +29276,7 @@ def solve_v3_full_system_linear_gmres(
             and int(op.rhs_mode) == 1
             and (not bool(op.include_phi1))
             and float(res_reduced.residual_norm) > float(target_reduced)
+            and (not skip_global_sparse_after_xblock)
         ):
             scipy_rescue_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE", "").strip().lower()
             if scipy_rescue_env not in {"0", "false", "no", "off"}:
@@ -29301,6 +29392,20 @@ def solve_v3_full_system_linear_gmres(
                         "solve_v3_full_system_linear_gmres: skipping SciPy rescue after x-block seed "
                         f"(residual={float(res_reduced.residual_norm):.3e} <= floor={float(rescue_abs_floor):.1e})",
                     )
+        elif (
+            (not bool(use_implicit))
+            and jax.default_backend() == "cpu"
+            and int(op.rhs_mode) == 1
+            and (not bool(op.include_phi1))
+            and float(res_reduced.residual_norm) > float(target_reduced)
+            and skip_global_sparse_after_xblock
+            and emit is not None
+        ):
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: skipping SciPy rescue after bounded x-block seed "
+                f"(residual={float(res_reduced.residual_norm):.3e}; not accepted as converged)",
+            )
         if use_pas_projection:
             f_full = _expand_active_f(res_reduced.x)
             f_full = _project_pas_f(f_full)
