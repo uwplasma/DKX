@@ -17215,3 +17215,64 @@ Best next steps:
    claim.
 3. Keep production-floor ``25 x 51 x 100 x 4`` as open until both CPU and GPU
    scan ladders write residual-clean outputs under bounded wall-time budgets.
+
+### 35.88 Claim-safe QI res15 GPU campaign ingestion
+
+Scope:
+
+- Added ``sfincs_jax.qi_res15_gpu_campaign`` and
+  ``examples/optimization/ingest_qi_res15_gpu_campaign.py`` so the eventual
+  bounded ``15 x 15 x 17 x 4`` GPU campaign cannot be folded into the checked
+  QI ladder directly from a raw execution summary.
+- The ingestion gate reads ``promotion_evidence_campaign.json``, resolves the
+  GPU promotion JSON, requires ``campaign_status="pass"``, requires the GPU
+  promotion gate and residual gates to pass, and compares the GPU selected
+  electron root against the checked CPU and Fortran-v3 ``15x`` reference roots.
+- Failure writes a structured ``fail_closed`` artifact rather than promotion
+  evidence. Passing output is still scoped only as
+  ``pass_bounded_gpu_res15``; the production-resolution claim remains open until
+  the ``25 x 51 x 100 x 4`` CPU/GPU ladder passes.
+
+Results:
+
+- The next office artifact has a deterministic local acceptance path:
+  ``python examples/optimization/ingest_qi_res15_gpu_campaign.py --campaign
+  <campaign>/promotion_evidence_campaign.json --out-dir <checked>``.
+- Synthetic passing, root-mismatch, residual-mismatch, and public CLI paths are
+  covered by tests.
+- Office SSH was unreachable during this continuation pass, so the queued GPU
+  runner could not be inspected further. The local work completed the missing
+  post-run gate instead of waiting idly on the remote host.
+
+Validation:
+
+- ``python -m pytest -q tests/test_qi_res15_gpu_campaign.py tests/test_optimization_public_scripts_cli.py::test_public_optimization_scripts_show_help tests/test_qi_nfp2_electron_root_ladder_artifacts.py``.
+- ``python -m ruff check sfincs_jax/qi_res15_gpu_campaign.py examples/optimization/ingest_qi_res15_gpu_campaign.py tests/test_qi_res15_gpu_campaign.py tests/test_optimization_public_scripts_cli.py``.
+- ``python scripts/check_research_lanes.py``.
+- ``python scripts/check_release_gates.py``.
+- ``python scripts/check_repo_size.py``.
+- ``python scripts/check_qi_device_artifacts.py docs/_static/figures/optimization --min-relevant 1``.
+- ``git diff --check``.
+- ``python -m sphinx -W --keep-going -b html docs docs/_build/html``.
+
+Progress:
+
+- QI kinetic promotion ladder: ``93%``. The missing GPU run is still pending,
+  but its promotion/rejection gate is now implemented and tested.
+- True GPU/device QI performance: ``84%``; unchanged technically until the
+  office GPU run produces residual-clean or fail-closed evidence.
+- Production-resolution QI ladders: ``66%``. The res15 GPU rung now has both a
+  bounded execution wrapper and a claim-safe ingestion gate.
+- Overall remaining-lane completion estimate: ``99.1%``.
+
+Best next steps:
+
+1. Reconnect to ``office`` and inspect
+   ``~/tmp/sfincs_jax_qi_res15_gpu_bounded/run.log`` plus
+   ``promotion_evidence_campaign.json``.
+2. If the campaign completed, copy the small JSON artifacts locally and run
+   ``examples/optimization/ingest_qi_res15_gpu_campaign.py``. Promote only a
+   ``pass_bounded_gpu_res15`` artifact; otherwise commit the fail-closed blocker
+   with no ladder promotion.
+3. If the office runner is still waiting, leave it queued and avoid starting
+   competing GPU jobs.

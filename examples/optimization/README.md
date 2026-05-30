@@ -57,6 +57,11 @@ Examples:
   write the JAX residual fields; JAX CPU/GPU lanes still require residuals. For
   expensive GPU campaigns, add `--jax-scan-timeout-s` and
   `--promotion-timeout-s` so a stalled lane writes a fail-closed campaign JSON.
+- `ingest_qi_res15_gpu_campaign.py` — validates a completed bounded QI `15x`
+  GPU campaign before it is folded into the convergence ladder. It resolves the
+  GPU promotion JSON from `promotion_evidence_campaign.json`, checks residuals,
+  and compares the selected electron root against the checked CPU/Fortran `15x`
+  reference artifact.
 - `summarize_finite_beta_electron_root_ladder.py` — reads already-promoted
   finite-beta QA electron-root CPU/GPU/Fortran JSON files across resolution
   tiers, checks backend root agreement and root drift, and writes a fail-closed
@@ -86,6 +91,7 @@ QI `nfp=2` low-resolution promotion input materialization:
 ```bash
 python examples/optimization/materialize_qi_nfp2_promotion_input.py --out-dir runs/qi_nfp2_candidate01 --stem qi_nfp2_lowres
 python examples/optimization/run_promotion_evidence_campaign.py --input runs/qi_nfp2_candidate01/qi_nfp2_lowres.input.namelist --out-dir runs/qi_nfp2_candidate01/evidence --values -0.3 -0.1 0 0.1 0.3 1 2 3 --run-cpu --run-gpu --run-fortran --jax-scan-timeout-s 1800 --promotion-timeout-s 300 --dry-run
+python examples/optimization/ingest_qi_res15_gpu_campaign.py --campaign runs/qi_nfp2_candidate01/evidence/promotion_evidence_campaign.json --out-dir runs/qi_nfp2_candidate01/evidence/checked --stem qi_nfp2_res15_gpu_checked
 ```
 
 This generated input is a kinetic promotion candidate only. Do not cite it as

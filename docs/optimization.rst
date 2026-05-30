@@ -764,6 +764,20 @@ For expensive CPU/GPU ladders, keep the timeout flags in the command. A timeout
 does not create promotion evidence, but it does write
 ``promotion_evidence_campaign.json`` with ``campaign_status="fail"`` and a
 structured lane-failure record so the stalled run is auditable.
+After a bounded QI ``15x`` GPU campaign completes, gate it before changing any
+checked ladder artifact:
+
+.. code-block:: bash
+
+   python examples/optimization/ingest_qi_res15_gpu_campaign.py \
+     --campaign runs/qi_nfp2_candidate01/evidence/promotion_evidence_campaign.json \
+     --out-dir runs/qi_nfp2_candidate01/evidence/checked \
+     --stem qi_nfp2_res15_gpu_checked
+
+The ingestion step resolves the GPU promotion JSON, requires the promotion and
+all residual gates to pass, and compares the selected electron root with the
+checked CPU/Fortran ``15x`` reference artifact.  A failed ingestion writes a
+``fail_closed`` JSON and must not be folded into the convergence ladder.
 
 The checked run used
 :math:`N_\theta=7`, :math:`N_\zeta=7`, :math:`N_\xi=7`,
@@ -1042,7 +1056,10 @@ docs/tests can use the artifact without turning it into a production-resolution
 QI claim.
 The next bounded execution command for the missing ``15x`` GPU rung should use
 the same timeout-protected campaign wrapper, with ``--run-gpu --gpu-device 0``
-on a clean checkout and a localized VMEC equilibrium file.
+on a clean checkout and a localized VMEC equilibrium file.  The resulting
+``promotion_evidence_campaign.json`` should then be passed through
+``examples/optimization/ingest_qi_res15_gpu_campaign.py`` before any ``res15``
+GPU status is promoted.
 
 VMEC JAX Integration
 --------------------
