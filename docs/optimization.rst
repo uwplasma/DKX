@@ -1049,17 +1049,26 @@ The ladder rollup is now machine-readable as
 with the companion configuration
 ``docs/_static/figures/optimization/qi_nfp2_electron_root_ladder_config.json``.
 It records the checked ``7x``, ``9x``, ``11x``, ``13x``, and ``15x`` rungs, the
-improving selected-root drift down to ``0.00210`` on the latest CPU/Fortran
-rung, the missing ``15x`` GPU promotion, and the explicit production floor
+improving selected-root drift down to ``0.00210`` on the latest CPU/GPU/Fortran
+rung, the bounded ``15x`` GPU promotion, and the explicit production floor
 ``25 x 51 x 100 x 4``.  Its status is deliberately ``deferred`` so downstream
 docs/tests can use the artifact without turning it into a production-resolution
 QI claim.
-The next bounded execution command for the missing ``15x`` GPU rung should use
-the same timeout-protected campaign wrapper, with ``--run-gpu --gpu-device 0``
-on a clean checkout and a localized VMEC equilibrium file.  The resulting
-``promotion_evidence_campaign.json`` should then be passed through
-``examples/optimization/ingest_qi_res15_gpu_campaign.py`` before any ``res15``
-GPU status is promoted.
+The bounded ``15x`` GPU campaign ran on the office RTX A4000 from a clean
+``JAX_ENABLE_X64=True`` checkout at ``88860d0``.  The eight-point scan completed
+in ``1326.235 s`` and selected
+``E_r = 2.2132389239477206``.  The CPU/GPU selected-root difference is
+``2.58e-14`` and the GPU/Fortran-v3 difference is ``2.03e-6``; both pass the
+fixed-resolution ingestion gate.  Production-resolution QI convergence remains
+open until the ``25 x 51 x 100 x 4`` CPU/GPU ladder is solved and gated.
+
+.. figure:: _static/figures/optimization/qi_nfp2_electron_root_res15_gpu.png
+   :alt: Bounded QI nfp=2 res15 GPU electron-root promotion scan.
+
+   Bounded ``15x`` GPU QI ``nfp=2`` electron-root promotion scan.  The scan is
+   fixed-resolution evidence only: all residual gates pass and the selected
+   electron root agrees with CPU/Fortran-v3 references, but the production
+   ``25 x 51 x 100 x 4`` convergence floor is still open.
 
 VMEC JAX Integration
 --------------------
