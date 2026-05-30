@@ -164,6 +164,22 @@ The QA example supports `bootstrap`, `electron-root`, `flux-selective`, and
 `balanced` presets. If the QA proxy does not provide a strong electron-root
 candidate, use the QI/QA NFP screen to pick the next kinetic promotion target:
 
+For a more focused bootstrap-current teaching example, compare a QA nfp=2
+configuration optimized only for quasisymmetry, rotational transform, and aspect
+ratio 6 against the same proxy with a small-bootstrap-current objective:
+
+```bash
+python examples/optimization/qa_nfp2_bootstrap_current_comparison.py --steps 160
+```
+
+![QA nfp=2 bootstrap-current optimization comparison](docs/_static/figures/optimization/qa_nfp2_bootstrap_current_comparison.png)
+
+This proxy run reduces the normalized bootstrap-current RMS by 97% in the
+checked artifact while preserving the QA/iota/aspect audit. The plotted
+`<J.B>/sqrt(<B^2>)` profile is an optimizer-steering proxy, not a kinetic
+transport claim; promote accepted candidates with completed `sfincs_jax scan-er`
+outputs before using the current profile in a paper or design decision.
+
 ```bash
 python examples/optimization/screen_qi_electron_root_nfp.py --steps 70
 ```
