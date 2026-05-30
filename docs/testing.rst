@@ -640,7 +640,9 @@ unit/regression suite:
 - ``scripts/check_qi_device_artifacts.py`` and
   ``tests/test_qi_device_artifact_policy.py`` add the QI-specific offline gate
   for device/operator-reuse artifacts. The gate checks provenance and
-  fail-closed metadata only; it is not a convergence certificate.
+  fail-closed metadata only; it is not a convergence certificate. The release
+  metadata checker now runs the same policy over ``docs/_static`` so legacy or
+  newly checked QI-device artifacts cannot silently overclaim GPU/device status.
 
 The first new lane on the refactor branch is the ``E_r`` trajectory-model sweep family:
 
@@ -971,11 +973,11 @@ because it writes no output or solver trace.
 
 ``docs/_static/qi_seed_robustness_evidence_manifest.json`` rolls those artifacts
 into the current production-readiness gate. It records the production target
-``25 x 51 x 100 x 8`` with estimated total size ``1020002``, the largest checked
-passing bounded grid ``139502``, the largest attempted bounded grid ``139502``,
-32 passing artifacts and 78 non-passing blocker artifacts, a ``60%``
+``25 x 51 x 100 x 4`` with estimated total size ``510002``, the largest checked
+passing bounded grid ``139502``, the largest attempted grid ``510002``,
+32 passing artifacts and 80 non-passing blocker artifacts, a ``60%``
 per-axis lane-completion estimate based only on passing artifacts, and
-``86.32%`` of production total size still uncovered. The production acceptance
+``72.65%`` of production total size still uncovered. The production acceptance
 gate requires five seeds on both CPU and one GPU with ``public_cli_default_path``,
 ``solve_method=auto``, ``process_failed=0``, ``timed_out=0``,
 ``outputs_written=5``, ``solver_traces_written=5``, ``converged=5``, and
@@ -1049,13 +1051,14 @@ QI device artifacts also have a CI-fast overclaiming gate:
 .. code-block:: bash
 
    python scripts/check_qi_device_artifacts.py \
-     docs/_static/figures/optimization/qi_nfp2_electron_root_res13_gpu_operator_reuse_coupled_failclosed.json
+     docs/_static --min-relevant 1
 
 This checker is intentionally narrower than the PAS benchmark artifact policy.
 It classifies QI/device JSON artifacts, requires backend/provenance and claim
 boundary fields, rejects operator-reuse routes that silently fall back to host
 x-block factors, and requires fail-closed artifacts to refuse nonconverged
-outputs.
+outputs. Older fail-closed GPU blocker artifacts may use the ``gpu0``/``gpu1``
+file name as provenance only when they write no output and fail their gates.
 
 The latest residual-weighted angular probe-coarse artifact
 ``docs/_static/qi_seed_robustness_scale060_probe_coarse_angular_residual_seed3_cpu_2026_05_14.json``
