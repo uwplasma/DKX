@@ -17332,3 +17332,79 @@ Best next steps:
    validation passes.
 3. Keep production-resolution QI as the only remaining QI ladder blocker; do
    not relabel the host-sparse GPU route as true-device QI.
+
+### 35.90 Exact QI production-floor runner and artifact gate hardening
+
+Scope:
+
+- Fixed the QI seed-robustness runner so the production-floor target can be
+  materialized exactly with ``--target-ntheta``, ``--target-nzeta``,
+  ``--target-nxi``, and ``--target-nx``. This closes a tooling ambiguity where
+  the source deck's ``Nx=8`` could only be scaled, while the public QI floor is
+  the one-species ``25 x 51 x 100 x 4`` grid.
+- Regenerated ``docs/_static/qi_seed_robustness_evidence_manifest.json`` with
+  the explicit ``25 x 51 x 100 x 4`` target. The manifest now records a
+  ``510002`` total-size floor, ``285602`` active DOFs for the exact seed-0
+  probe, ``510002`` as the largest attempted non-passing grid, and a remaining
+  uncovered production-size fraction of ``72.65%``.
+- Hardened the release metadata gate so ``scripts/check_release_gates.py`` also
+  scans QI-device artifacts under ``docs/_static``. This prevents future claims
+  from bypassing the stricter QI-device artifact policy.
+- Added a legacy fail-closed policy for old GPU blocker artifacts that mention
+  ``gpu`` in the filename but wrote no outputs, accepted no converged solves,
+  and explicitly failed gates. GPU artifacts that write outputs or claim
+  convergence still require real GPU provenance from ``backend='gpu'`` or
+  ``probe_env.JAX_PLATFORM_NAME='gpu'``.
+- Ran exact-floor CPU and GPU seed-0 probes on ``office`` from the synchronized
+  main checkout with a strict ``600 s`` timeout and checked in only the compact
+  JSON summaries:
+  ``docs/_static/qi_seed_robustness_exact_floor_cpu_seed0_timeout_2026_05_30.json``
+  and
+  ``docs/_static/qi_seed_robustness_exact_floor_gpu_seed0_timeout_2026_05_30.json``.
+
+Results:
+
+- The exact materialization path produces the intended input resolution:
+  ``Ntheta=25, Nzeta=51, Nxi=100, Nx=4``.
+- CPU exact-floor probe timed out after ``600.267 s`` with no HDF5 output. It
+  used about ``2.0 GB`` maximum RSS at the wrapper level and reached the
+  fallback branch
+  ``SciPy rescue (residual=1.732e+05 > 1.0e+03x target=4.784e-13)``.
+- GPU exact-floor probe timed out after ``600.167 s`` with no HDF5 output. It
+  used about ``1.0 GB`` host RSS at the wrapper level, built the RHSMode=1
+  collision preconditioner on the large active system, and entered Krylov
+  iterations without reaching a residual report before the cap.
+- These artifacts are blocker evidence, not promotion evidence. They show that
+  the production-floor QI lane is now reproducible and audited, but not closed.
+
+Validation:
+
+- ``python -m pytest -q``: ``1970 passed in 455.41s``.
+- ``python -m pytest -q tests/test_qi_device_artifact_policy.py tests/test_run_qi_seed_robustness.py tests/test_qi_seed_smoke_artifact.py::test_qi_seed_evidence_manifest_tracks_production_gap_and_gates tests/test_qi_device_research_lane_artifacts.py``.
+- ``python scripts/check_qi_device_artifacts.py docs/_static --min-relevant 1``:
+  ``checked=185, relevant=29, failed=0``.
+- ``python scripts/check_release_gates.py``.
+- ``python -m ruff check scripts/run_qi_seed_robustness.py scripts/check_release_gates.py sfincs_jax/qi_device_artifact_policy.py tests/test_run_qi_seed_robustness.py tests/test_qi_seed_smoke_artifact.py tests/test_qi_device_research_lane_artifacts.py tests/test_qi_device_artifact_policy.py``.
+- ``python -m sphinx -W --keep-going -b html docs docs/_build/html``.
+
+Progress:
+
+- QI kinetic promotion ladder: ``96%``. The bounded ``15x`` CPU/GPU/Fortran
+  rung remains closed, and the exact production-floor runner now targets the
+  correct grid.
+- True GPU/device QI performance: ``86%``. The new GPU artifact is useful
+  blocker evidence, but it does not yet promote a true-device path.
+- Production-resolution QI ladders: ``72%``. Exact CPU/GPU seed-0 probes are
+  now reproducible and fail-closed under budget; the remaining work is the
+  actual production-floor solver/preconditioner improvement.
+- Overall remaining-lane completion estimate: ``99.4%``.
+
+Best next steps:
+
+1. Rerun the QI-device artifact scan after adding the exact-floor blocker
+   summaries and keep it wired into ``scripts/check_release_gates.py``.
+2. Run the docs build and release metadata gates one more time, then commit and
+   push this claim-safe tooling/evidence update.
+3. Do not tag a new release until the next algorithmic push either converges
+   the exact production-floor seed under budget or documents a stricter public
+   scope that excludes production-floor QI.

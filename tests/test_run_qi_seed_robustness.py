@@ -113,6 +113,47 @@ def test_qi_seed_runner_materializes_deterministic_localized_cases(tmp_path: Pat
     ]
 
 
+def test_qi_seed_runner_materializes_exact_production_floor_resolution(tmp_path: Path) -> None:
+    input_path = tmp_path / "source" / "input.namelist"
+    _write_qi_input(input_path)
+    out_root = tmp_path / "lane"
+
+    assert (
+        qi_seed.main(
+            [
+                "--input",
+                str(input_path),
+                "--out-root",
+                str(out_root),
+                "--seeds",
+                "0",
+                "--resolution-scale",
+                "1.0",
+                "--target-ntheta",
+                "25",
+                "--target-nzeta",
+                "51",
+                "--target-nxi",
+                "100",
+                "--target-nx",
+                "4",
+                "--clean",
+            ]
+        )
+        == 0
+    )
+
+    manifest = json.loads((out_root / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["exact_resolution"] == {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100}
+    case = manifest["cases"][0]
+    assert case["resolution"] == {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100}
+    text = (out_root / case["input"]).read_text(encoding="utf-8")
+    assert "Ntheta = 25" in text
+    assert "Nzeta = 51" in text
+    assert "Nx = 4" in text
+    assert "Nxi = 100" in text
+
+
 def test_qi_seed_runner_records_mocked_execution_results(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
     input_path = tmp_path / "source" / "input.namelist"
     _write_qi_input(input_path)

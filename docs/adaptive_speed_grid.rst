@@ -193,13 +193,14 @@ norm, residual target, residual ratio, and convergence flags.
 The checked production-readiness manifest is
 ``docs/_static/qi_seed_robustness_evidence_manifest.json``. It keeps the lane at
 ``bounded_proxy`` because the largest checked passing grid is still ``139502``
-estimated unknowns versus ``1020002`` at the authored production resolution
-``25 x 51 x 100 x 8``. The largest attempted bounded grid is also ``139502``
-estimated unknowns; it includes passing scale-0.60 CPU/GPU seed-0 evidence,
-passing scale-0.60 CPU five-seed evidence, and rejected scale-0.60 GPU hard-seed
-solver/global-coupling/device-Krylov probes. The bounded lane-completion estimate is therefore
+estimated unknowns versus ``510002`` at the exact production-floor seed target
+``25 x 51 x 100 x 4``. The largest attempted grid is the exact production-floor
+``510002``-unknown seed-0 CPU/GPU timeout probe; it includes passing scale-0.60
+CPU/GPU seed-0 evidence, passing scale-0.60 CPU five-seed evidence, rejected
+scale-0.60 GPU hard-seed solver/global-coupling/device-Krylov probes, and the
+exact-floor blocker runs. The bounded lane-completion estimate is therefore
 ``60%`` by the smallest per-axis resolution fraction of the largest passing
-artifact, while ``86.32%`` of the production total-size estimate remains
+artifact, while ``72.65%`` of the production total-size estimate remains
 uncovered.
 
 Production-resolution promotion requires both scheduled ladders below to pass
@@ -211,10 +212,10 @@ before changing the gate status:
      --out-root tests/qi_seed_robustness_prod_cpu \
      --seeds 0 1 2 3 4 \
      --resolution-scale 1.0 \
-     --min-ntheta 25 \
-     --min-nzeta 51 \
-     --min-nx 8 \
-     --min-nxi 100 \
+     --target-ntheta 25 \
+     --target-nzeta 51 \
+     --target-nx 4 \
+     --target-nxi 100 \
      --execute \
      --timeout-s 3600 \
      --max-residual-ratio 1 \
@@ -228,10 +229,10 @@ before changing the gate status:
      --out-root tests/qi_seed_robustness_prod_gpu0 \
      --seeds 0 1 2 3 4 \
      --resolution-scale 1.0 \
-     --min-ntheta 25 \
-     --min-nzeta 51 \
-     --min-nx 8 \
-     --min-nxi 100 \
+     --target-ntheta 25 \
+     --target-nzeta 51 \
+     --target-nx 4 \
+     --target-nxi 100 \
      --execute \
      --timeout-s 3600 \
      --max-residual-ratio 1 \

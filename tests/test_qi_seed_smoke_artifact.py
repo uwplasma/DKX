@@ -840,27 +840,27 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
     assert payload["production_target"]["resolution"] == {
         "NTHETA": 25,
         "NZETA": 51,
-        "NX": 8,
+        "NX": 4,
         "NXI": 100,
     }
-    assert payload["production_target"]["total_size_estimate"] == 1020002
+    assert payload["production_target"]["total_size_estimate"] == 510002
     assert payload["production_target"]["seed_count"] == 5
     assert payload["production_target"]["required_backends"] == ["cpu", "gpu"]
 
     current = payload["current_evidence"]
-    assert current["artifact_count"] == len(payload["source_artifacts"]) == 110
+    assert current["artifact_count"] == len(payload["source_artifacts"]) == 112
     assert current["passing_artifact_count"] == 32
-    assert current["nonpassing_artifact_count"] == 78
+    assert current["nonpassing_artifact_count"] == 80
     assert current["checked_backends"] == ["cpu", "gpu"]
     assert current["max_checked_active_size"] == 81377
     assert current["max_checked_total_size"] == 139502
-    assert current["largest_attempted_total_size"] == 139502
-    assert current["largest_nonpassing_total_size"] == 139502
-    assert current["max_checked_total_size_fraction"] > 0.13
+    assert current["largest_attempted_total_size"] == 510002
+    assert current["largest_nonpassing_total_size"] == 510002
+    assert current["max_checked_total_size_fraction"] > 0.27
     assert current["max_checked_per_axis_resolution_fraction"] == 0.6
     assert current["bounded_lane_completion_estimate_percent"] == 60.0
     assert current["completion_estimate_basis"] == "largest passing measured artifact only"
-    assert 85.0 < current["production_total_size_uncovered_percent"] < 90.0
+    assert 70.0 < current["production_total_size_uncovered_percent"] < 75.0
 
     source_paths = {artifact["path"] for artifact in payload["source_artifacts"]}
     assert (
@@ -1099,7 +1099,21 @@ def test_qi_seed_evidence_manifest_tracks_production_gap_and_gates() -> None:
         "docs/_static/qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json",
         "docs/_static/qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json",
         "docs/_static/qi_seed_robustness_scale060_device_operator_rejected_2026_05_13.json",
+        "docs/_static/qi_seed_robustness_exact_floor_cpu_seed0_timeout_2026_05_30.json",
+        "docs/_static/qi_seed_robustness_exact_floor_gpu_seed0_timeout_2026_05_30.json",
     } == source_paths
+
+    for backend in ("cpu", "gpu"):
+        exact_floor = next(
+            artifact
+            for artifact in payload["source_artifacts"]
+            if artifact["path"] == f"docs/_static/qi_seed_robustness_exact_floor_{backend}_seed0_timeout_2026_05_30.json"
+        )
+        assert exact_floor["passed"] is False
+        assert exact_floor["active_size"] == 285602
+        assert exact_floor["total_size"] == 510002
+        assert exact_floor["run_outcomes"] == ["timed_out"]
+        assert exact_floor["max_elapsed_s"] >= 600.0
 
     active_pattern = next(
         artifact

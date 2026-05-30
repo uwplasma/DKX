@@ -64,7 +64,8 @@ def qi_device_artifact_errors(
     backend = str(payload.get("backend", "")).lower()
     probe_env = payload.get("probe_env") if isinstance(payload.get("probe_env"), Mapping) else {}
     jax_platform = str(probe_env.get("JAX_PLATFORM_NAME", "")).lower()
-    if "gpu" in text and backend != "gpu" and jax_platform != "gpu":
+    legacy_fail_closed_gpu = _legacy_fail_closed_gpu_artifact(text, payload)
+    if "gpu" in text and backend != "gpu" and jax_platform != "gpu" and not legacy_fail_closed_gpu:
         errors.append(f"{source}: GPU QI artifact must record backend='gpu' or probe_env JAX_PLATFORM_NAME=gpu")
 
     if bool(route_map.get("operator_reuse_enabled")):
@@ -147,4 +148,25 @@ def _looks_like_qi_device_artifact(text: str, payload: Mapping[str, Any]) -> boo
     route = payload.get("route")
     if isinstance(route, Mapping) and route.get("operator_reuse_enabled") is True:
         return True
+    return False
+
+
+def _legacy_fail_closed_gpu_artifact(text: str, payload: Mapping[str, Any]) -> bool:
+    """Return true for old no-output GPU blocker artifacts that predate backend fields."""
+
+    if "gpu" not in text:
+        return False
+    execution_summary = (
+        payload.get("execution_summary")
+        if isinstance(payload.get("execution_summary"), Mapping)
+        else {}
+    )
+    if execution_summary:
+        outputs = int(execution_summary.get("outputs_written", 0) or 0)
+        accepted = int(execution_summary.get("accepted_converged", 0) or 0)
+        passed = payload.get("gates", {}).get("passed") if isinstance(payload.get("gates"), Mapping) else None
+        return outputs == 0 and accepted == 0 and passed is False
+    result = payload.get("result") if isinstance(payload.get("result"), Mapping) else {}
+    if result:
+        return result.get("output_refused") is True and result.get("converged") is False
     return False

@@ -52,6 +52,38 @@ def test_qi_device_policy_rejects_overpromoted_nonconverged_gpu_artifact() -> No
     assert any("production GPU QI performance cannot pass" in error for error in errors)
 
 
+def test_qi_device_policy_accepts_legacy_fail_closed_gpu_artifact_without_backend() -> None:
+    payload = {
+        "artifact_kind": "qi_seed_execution_summary",
+        "probe_preset": "post-residual-equation-device-qi",
+        "evidence_note": "legacy fail-closed GPU blocker artifact",
+        "execution_summary": {
+            "accepted_converged": 0,
+            "outputs_written": 0,
+        },
+        "gates": {"passed": False},
+    }
+
+    assert qi_device_artifact_errors(payload, path="qi_seed_gpu0_device_qi.json") == []
+
+
+def test_qi_device_policy_still_rejects_claimed_gpu_artifact_without_backend() -> None:
+    payload = {
+        "artifact_kind": "qi_seed_execution_summary",
+        "probe_preset": "post-residual-equation-device-qi",
+        "evidence_note": "claimed GPU output without backend provenance",
+        "execution_summary": {
+            "accepted_converged": 1,
+            "outputs_written": 1,
+        },
+        "gates": {"passed": True},
+    }
+
+    errors = qi_device_artifact_errors(payload, path="qi_seed_gpu0_device_qi.json")
+
+    assert any("GPU QI artifact must record backend='gpu'" in error for error in errors)
+
+
 def test_qi_device_artifact_file_classifies_unrelated_json_as_irrelevant(tmp_path: Path) -> None:
     path = tmp_path / "unrelated.json"
     path.write_text(json.dumps({"artifact_kind": "pas_benchmark"}), encoding="utf-8")

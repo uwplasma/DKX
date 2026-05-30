@@ -38,7 +38,7 @@ def test_true_device_qi_manifest_stays_closed_deferred_until_production_gate_pas
 
     production_target = payload["production_target"]
     assert isinstance(production_target, dict)
-    assert production_target["resolution"] == {"NTHETA": 25, "NZETA": 51, "NXI": 100, "NX": 8}
+    assert production_target["resolution"] == {"NTHETA": 25, "NZETA": 51, "NXI": 100, "NX": 4}
     assert production_target["seed_count"] == 5
 
     blockers = payload["open_blockers"]

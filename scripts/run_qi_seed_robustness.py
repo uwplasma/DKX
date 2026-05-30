@@ -371,8 +371,11 @@ DEFAULT_EVIDENCE_ARTIFACTS = (
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_global_coupling_rejected_2026_05_13.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_device_krylov_rejected_2026_05_13.json",
     REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_scale060_device_operator_rejected_2026_05_13.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_exact_floor_cpu_seed0_timeout_2026_05_30.json",
+    REPO_ROOT / "docs" / "_static" / "qi_seed_robustness_exact_floor_gpu_seed0_timeout_2026_05_30.json",
 )
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
+DEFAULT_QI_PRODUCTION_RESOLUTION = {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100}
 LOG_TAIL_LINES = 16
 OPERATOR_KRYLOV_DEVICE_QI_PROBE_PRESET = "operator-krylov-device-qi"
 OPERATOR_KRYLOV_COMPOSITE_DEVICE_QI_PROBE_PRESET = "operator-krylov-composite-device-qi"
@@ -1226,6 +1229,22 @@ def _canonical_resolution(resolution: object) -> dict[str, int]:
     return out
 
 
+def _canonical_target_resolution(
+    target: dict[str, int] | None,
+    *,
+    fallback: dict[str, int],
+) -> dict[str, int]:
+    """Return an exact target resolution, filling omitted axes from fallback."""
+
+    out = dict(fallback)
+    if target:
+        out.update(_canonical_resolution(target))
+    missing = [key for key in RESOLUTION_KEYS if key not in out]
+    if missing:
+        raise ValueError(f"target resolution is missing {', '.join(missing)}")
+    return {key: int(out[key]) for key in RESOLUTION_KEYS}
+
+
 def _resolution_fractions(resolution: dict[str, object], production_resolution: dict[str, int]) -> dict[str, float]:
     fractions: dict[str, float] = {}
     for key in RESOLUTION_KEYS:
@@ -1256,7 +1275,11 @@ def _scaled_resolution(
     min_nzeta: int,
     min_nx: int,
     min_nxi: int,
+    exact_resolution: dict[str, int] | None = None,
 ) -> dict[str, int]:
+    if exact_resolution is not None:
+        return {key: int(exact_resolution[key]) for key in RESOLUTION_KEYS}
+
     def scaled_value(key: str, minimum: int) -> int:
         source = int(resolution.get(key, minimum))
         return max(int(minimum), int(round(source * float(scale))))
@@ -1325,6 +1348,7 @@ def _materialize_case(
     solve_method: str,
     probe_preset: str,
     probe_env: dict[str, str],
+    exact_resolution: dict[str, int] | None = None,
 ) -> dict[str, object]:
     case_name = f"qi_seed_{int(seed):04d}"
     case_dir = out_root / case_name
@@ -1338,6 +1362,7 @@ def _materialize_case(
         min_nzeta=min_nzeta,
         min_nx=min_nx,
         min_nxi=min_nxi,
+        exact_resolution=exact_resolution,
     )
     for key, value in resolution.items():
         text = _replace_or_append_parameter(text, group="resolutionParameters", key=key, value=str(int(value)))
@@ -4066,17 +4091,14 @@ def build_evidence_manifest(
     source_input: Path,
     production_seed_count: int,
     production_timeout_s: float,
+    production_resolution: dict[str, int] | None = None,
 ) -> dict[str, object]:
     """Build the QI production-readiness manifest from checked summary artifacts."""
     source_text = source_input.read_text(encoding="utf-8")
     source_resolution = _read_resolution(source_text)
-    production_resolution = _scaled_resolution(
-        source_resolution,
-        scale=1.0,
-        min_ntheta=int(source_resolution.get("NTHETA", 25)),
-        min_nzeta=int(source_resolution.get("NZETA", 51)),
-        min_nx=int(source_resolution.get("NX", 8)),
-        min_nxi=int(source_resolution.get("NXI", 100)),
+    production_resolution = _canonical_target_resolution(
+        production_resolution or DEFAULT_QI_PRODUCTION_RESOLUTION,
+        fallback=source_resolution,
     )
     production_total_size = _total_size_from_resolution(production_resolution)
 
@@ -4174,13 +4196,13 @@ def build_evidence_manifest(
         *[str(seed) for seed in range(int(production_seed_count))],
         "--resolution-scale",
         "1.0",
-        "--min-ntheta",
+        "--target-ntheta",
         str(production_resolution["NTHETA"]),
-        "--min-nzeta",
+        "--target-nzeta",
         str(production_resolution["NZETA"]),
-        "--min-nx",
+        "--target-nx",
         str(production_resolution["NX"]),
-        "--min-nxi",
+        "--target-nxi",
         str(production_resolution["NXI"]),
         "--execute",
         "--timeout-s",
@@ -4201,13 +4223,13 @@ def build_evidence_manifest(
         *[str(seed) for seed in range(int(production_seed_count))],
         "--resolution-scale",
         "1.0",
-        "--min-ntheta",
+        "--target-ntheta",
         str(production_resolution["NTHETA"]),
-        "--min-nzeta",
+        "--target-nzeta",
         str(production_resolution["NZETA"]),
-        "--min-nx",
+        "--target-nx",
         str(production_resolution["NX"]),
-        "--min-nxi",
+        "--target-nxi",
         str(production_resolution["NXI"]),
         "--execute",
         "--timeout-s",
@@ -4919,6 +4941,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-nzeta", type=int, default=11)
     parser.add_argument("--min-nx", type=int, default=4)
     parser.add_argument("--min-nxi", type=int, default=16)
+    parser.add_argument("--target-ntheta", type=int, default=None, help="Exact NTHETA override for materialized cases.")
+    parser.add_argument("--target-nzeta", type=int, default=None, help="Exact NZETA override for materialized cases.")
+    parser.add_argument("--target-nx", type=int, default=None, help="Exact NX override for materialized cases.")
+    parser.add_argument("--target-nxi", type=int, default=None, help="Exact NXI override for materialized cases.")
     parser.add_argument("--nu-jitter", type=float, default=0.05, help="Relative symmetric nu_n jitter per seed.")
     parser.add_argument("--er-jitter", type=float, default=0.02, help="Additive symmetric Er jitter per seed.")
     parser.add_argument(
@@ -5068,6 +5094,20 @@ def main(argv: list[str] | None = None) -> int:
         solve_method=str(args.solve_method),
         probe_preset=str(args.probe_preset),
     )
+    target_resolution_raw = {
+        "NTHETA": args.target_ntheta,
+        "NZETA": args.target_nzeta,
+        "NX": args.target_nx,
+        "NXI": args.target_nxi,
+    }
+    exact_resolution = (
+        _canonical_target_resolution(
+            {key: int(value) for key, value in target_resolution_raw.items() if value is not None},
+            fallback=source_resolution,
+        )
+        if any(value is not None for value in target_resolution_raw.values())
+        else None
+    )
     cases = [
         _materialize_case(
             seed=int(seed),
@@ -5086,6 +5126,7 @@ def main(argv: list[str] | None = None) -> int:
             solve_method=str(solve_method),
             probe_preset=str(args.probe_preset),
             probe_env=probe_env,
+            exact_resolution=exact_resolution,
         )
         for seed in args.seeds
     ]
@@ -5101,6 +5142,7 @@ def main(argv: list[str] | None = None) -> int:
         "requested_solve_method": str(args.solve_method),
         "probe_preset": str(args.probe_preset),
         "probe_env": dict(sorted(probe_env.items())),
+        "exact_resolution": exact_resolution,
         "case_count": len(cases),
         "cases": cases,
     }

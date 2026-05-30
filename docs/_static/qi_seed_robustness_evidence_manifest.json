@@ -19,7 +19,7 @@
   },
   "artifact_kind": "qi_seed_production_gate_manifest",
   "current_evidence": {
-    "artifact_count": 110,
+    "artifact_count": 112,
     "bounded_lane_completion_estimate_percent": 60.0,
     "checked_backends": [
       "cpu",
@@ -28,7 +28,7 @@
     "completion_estimate_basis": "largest passing measured artifact only",
     "evidence_class_counts": {
       "device_qi_seed_only_probe": 14,
-      "public_auto_or_legacy": 58,
+      "public_auto_or_legacy": 60,
       "requested_active_pattern_coarse_device_qi": 1,
       "requested_augmented_krylov_device_qi": 3,
       "requested_augmented_seed_device_qi": 1,
@@ -45,8 +45,8 @@
       "requested_residual_snapshot_residual_equation_device_qi": 1
     },
     "evidence_tag_counts": {
-      "failed_before_solver_trace_summary": 74,
-      "no_hdf5_output": 31,
+      "failed_before_solver_trace_summary": 76,
+      "no_hdf5_output": 33,
       "requested_active_pattern_coarse": 1,
       "requested_augmented_krylov": 11,
       "requested_augmented_seed": 1,
@@ -65,16 +65,16 @@
       "requested_residual_snapshot": 6,
       "requested_residual_snapshot_residual_equation": 4
     },
-    "failed_before_summary_json_count": 74,
-    "largest_attempted_total_size": 139502,
-    "largest_nonpassing_total_size": 139502,
+    "failed_before_summary_json_count": 76,
+    "largest_attempted_total_size": 510002,
+    "largest_nonpassing_total_size": 510002,
     "max_checked_active_size": 81377,
     "max_checked_per_axis_resolution_fraction": 0.6,
     "max_checked_total_size": 139502,
-    "max_checked_total_size_fraction": 0.13676639849725786,
-    "nonpassing_artifact_count": 78,
+    "max_checked_total_size_fraction": 0.27353226065780134,
+    "nonpassing_artifact_count": 80,
     "passing_artifact_count": 32,
-    "production_total_size_uncovered_percent": 86.32
+    "production_total_size_uncovered_percent": 72.65
   },
   "lane": "qi_seed_robustness",
   "open_blockers": [
@@ -956,12 +956,12 @@
     ],
     "resolution": {
       "NTHETA": 25,
-      "NX": 8,
+      "NX": 4,
       "NXI": 100,
       "NZETA": 51
     },
     "seed_count": 5,
-    "total_size_estimate": 1020002
+    "total_size_estimate": 510002
   },
   "regeneration_commands": {
     "active_pattern_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_GLOBAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_CANDIDATES=96 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MIN_CHUNK_ENERGY_FRACTION=0.002 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_SOLVER=action_lstsq SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=256 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_active_pattern_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset active-pattern-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_active_pattern_device_qi_gpu0.json --clean",
@@ -979,8 +979,8 @@
     "operator_krylov_composite_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=160 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_MODE=multiplicative SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=128 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_operator_krylov_composite_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset operator-krylov-composite-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_operator_krylov_composite_device_qi_gpu0.json --clean",
     "operator_krylov_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=160 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=128 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset operator-krylov-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_operator_krylov_device_qi_gpu0.json --clean",
     "phase_space_coarse_reuse_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=192 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY=0.35 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_RADIAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_SPECIES=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER=action_lstsq SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset phase-space-coarse-reuse-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_phase_space_coarse_reuse_device_qi_gpu0.json --clean",
-    "production_cpu_seed_ladder": "JAX_PLATFORM_NAME=cpu python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_prod_cpu --seeds 0 1 2 3 4 --resolution-scale 1.0 --min-ntheta 25 --min-nzeta 51 --min-nx 8 --min-nxi 100 --execute --timeout-s 3600.0 --max-residual-ratio 1 --require-converged --summary-output docs/_static/qi_seed_robustness_prod_cpu.json --clean",
-    "production_gpu0_seed_ladder": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_prod_gpu0 --seeds 0 1 2 3 4 --resolution-scale 1.0 --min-ntheta 25 --min-nzeta 51 --min-nx 8 --min-nxi 100 --execute --timeout-s 3600.0 --max-residual-ratio 1 --require-converged --summary-output docs/_static/qi_seed_robustness_prod_gpu0.json --clean",
+    "production_cpu_seed_ladder": "JAX_PLATFORM_NAME=cpu python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_prod_cpu --seeds 0 1 2 3 4 --resolution-scale 1.0 --target-ntheta 25 --target-nzeta 51 --target-nx 4 --target-nxi 100 --execute --timeout-s 3600.0 --max-residual-ratio 1 --require-converged --summary-output docs/_static/qi_seed_robustness_prod_cpu.json --clean",
+    "production_gpu0_seed_ladder": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_prod_gpu0 --seeds 0 1 2 3 4 --resolution-scale 1.0 --target-ntheta 25 --target-nzeta 51 --target-nx 4 --target-nxi 100 --execute --timeout-s 3600.0 --max-residual-ratio 1 --require-converged --summary-output docs/_static/qi_seed_robustness_prod_gpu0.json --clean",
     "recycled_augmented_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=128 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_recycled_augmented_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset recycled-augmented-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_recycled_augmented_device_qi_gpu0.json --clean",
     "refresh_evidence_manifest": "python scripts/run_qi_seed_robustness.py --summarize-artifacts-only --evidence-manifest-output docs/_static/qi_seed_robustness_evidence_manifest.json",
     "residual_bounce_region_device_qi_gpu0_probe": "CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu SFINCS_JAX_GMRES_PRECONDITION_SIDE=right SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER=960 SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART=40 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE=cycle SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K=32 SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV=fgmres-jax SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE=combined SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES=12 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER=matrix_free_block_minres_hybrid SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY=residual_minimizing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS=4 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK=224 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS=3 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE=2 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH=64 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_BOUNCE_BOUNDARY=0.35 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_INCLUDE_GLOBAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_INCLUDE_RADIAL=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_INCLUDE_SPECIES=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MAX_RANK=48 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_REGION_BANDS=bounce,trapped,passing SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_SOLVER=action_lstsq SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG=1 SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY=minres SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV=1 python scripts/run_qi_seed_robustness.py --out-root tests/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0 --seeds 3 --resolution-scale 0.60 --probe-preset residual-bounce-region-device-qi --solve-method xblock_sparse_pc_gmres --execute --timeout-s 900 --heartbeat-s 15 --summary-output docs/_static/qi_seed_robustness_scale060_residual_bounce_region_device_qi_gpu0.json --clean",
@@ -1139,7 +1139,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.28,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.15,
         "NZETA": 0.21568627450980393
       },
@@ -1201,7 +1201,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.28,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.25,
         "NZETA": 0.2549019607843137
       },
@@ -1263,7 +1263,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.28,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.25,
         "NZETA": 0.2549019607843137
       },
@@ -1326,7 +1326,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.36,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.35,
         "NZETA": 0.37254901960784315
       },
@@ -1388,7 +1388,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.28,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.25,
         "NZETA": 0.2549019607843137
       },
@@ -1450,7 +1450,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.44,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.45,
         "NZETA": 0.45098039215686275
       },
@@ -1514,7 +1514,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.52,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.5,
         "NZETA": 0.5294117647058824
       },
@@ -1578,7 +1578,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.52,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.5,
         "NZETA": 0.5294117647058824
       },
@@ -1640,7 +1640,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.52,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.5,
         "NZETA": 0.5294117647058824
       },
@@ -1702,7 +1702,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.52,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.5,
         "NZETA": 0.5294117647058824
       },
@@ -1764,7 +1764,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.52,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.5,
         "NZETA": 0.5294117647058824
       },
@@ -1826,7 +1826,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.52,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.5,
         "NZETA": 0.5294117647058824
       },
@@ -1890,7 +1890,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.55,
         "NZETA": 0.5686274509803921
       },
@@ -1952,7 +1952,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.55,
         "NZETA": 0.5686274509803921
       },
@@ -2014,7 +2014,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.55,
         "NZETA": 0.5686274509803921
       },
@@ -2076,7 +2076,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.55,
         "NZETA": 0.5686274509803921
       },
@@ -2138,7 +2138,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.5,
+        "NX": 1.0,
         "NXI": 0.55,
         "NZETA": 0.5686274509803921
       },
@@ -2200,7 +2200,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2262,7 +2262,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2324,7 +2324,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2386,7 +2386,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2448,7 +2448,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2510,7 +2510,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2572,7 +2572,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2634,7 +2634,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2696,7 +2696,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2758,7 +2758,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2824,7 +2824,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2890,7 +2890,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -2956,7 +2956,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3022,7 +3022,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3088,7 +3088,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3154,7 +3154,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3220,7 +3220,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3286,7 +3286,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3352,7 +3352,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3418,7 +3418,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3484,7 +3484,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3550,7 +3550,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3616,7 +3616,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3682,7 +3682,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3748,7 +3748,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3814,7 +3814,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3880,7 +3880,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -3946,7 +3946,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4012,7 +4012,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4078,7 +4078,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4144,7 +4144,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4210,7 +4210,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4276,7 +4276,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4344,7 +4344,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4410,7 +4410,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4486,7 +4486,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4574,7 +4574,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4662,7 +4662,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4750,7 +4750,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4842,7 +4842,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -4934,7 +4934,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5028,7 +5028,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5120,7 +5120,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5212,7 +5212,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5304,7 +5304,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5400,7 +5400,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5492,7 +5492,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5584,7 +5584,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5676,7 +5676,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5768,7 +5768,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5864,7 +5864,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -5960,7 +5960,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6056,7 +6056,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6152,7 +6152,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6244,7 +6244,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6336,7 +6336,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6428,7 +6428,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6528,7 +6528,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6616,7 +6616,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6704,7 +6704,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6770,7 +6770,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6836,7 +6836,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -6940,7 +6940,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7048,7 +7048,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7156,7 +7156,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7222,7 +7222,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7288,7 +7288,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7352,7 +7352,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7416,7 +7416,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7480,7 +7480,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7544,7 +7544,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7608,7 +7608,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7672,7 +7672,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7736,7 +7736,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7800,7 +7800,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7864,7 +7864,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7928,7 +7928,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -7992,7 +7992,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8056,7 +8056,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8120,7 +8120,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8184,7 +8184,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8248,7 +8248,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8312,7 +8312,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8376,7 +8376,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8440,7 +8440,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8504,7 +8504,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8568,7 +8568,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8632,7 +8632,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8696,7 +8696,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8759,7 +8759,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8822,7 +8822,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8884,7 +8884,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8952,7 +8952,7 @@
       },
       "resolution_fractions": {
         "NTHETA": 0.6,
-        "NX": 0.625,
+        "NX": 1.25,
         "NXI": 0.6,
         "NZETA": 0.6078431372549019
       },
@@ -8961,6 +8961,138 @@
       ],
       "schema_version": 2,
       "total_size": 139502
+    },
+    {
+      "active_size": 285602,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "evidence_classes": [
+        "public_auto_or_legacy"
+      ],
+      "evidence_classification": {
+        "classes": [
+          "public_auto_or_legacy"
+        ],
+        "fail_closed": true,
+        "fail_closed_observed_classes": [],
+        "fail_closed_observed_tags": [],
+        "has_failed_before_summary_json": true,
+        "has_observed_active_pattern_coarse": false,
+        "has_observed_block_schur_residual": false,
+        "has_observed_coarse_reuse": false,
+        "has_observed_coupled_residual_equation": false,
+        "has_observed_global_moment_residual_equation": false,
+        "has_observed_installed_krylov": false,
+        "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
+        "has_observed_residual_bounce_region_coarse": false,
+        "has_observed_residual_galerkin_equation": false,
+        "has_observed_residual_snapshot": false,
+        "outcomes": [
+          "timed_out"
+        ],
+        "promotion_eligible_seed_count": 0,
+        "tags": [
+          "failed_before_solver_trace_summary",
+          "no_hdf5_output"
+        ]
+      },
+      "evidence_tags": [
+        "failed_before_solver_trace_summary",
+        "no_hdf5_output"
+      ],
+      "fail_closed_observed_classes": [],
+      "fail_closed_observed_tags": [],
+      "last_reported_residual_norm": 173200.0,
+      "max_elapsed_s": 600.2667039521039,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_exact_floor_cpu_seed0_timeout_2026_05_30.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "resolution_fractions": {
+        "NTHETA": 1.0,
+        "NX": 1.0,
+        "NXI": 1.0,
+        "NZETA": 1.0
+      },
+      "run_outcomes": [
+        "timed_out"
+      ],
+      "schema_version": 2,
+      "total_size": 510002
+    },
+    {
+      "active_size": 285602,
+      "artifact_kind": "qi_seed_execution_summary",
+      "backends": [],
+      "case_count": 1,
+      "evidence_classes": [
+        "public_auto_or_legacy"
+      ],
+      "evidence_classification": {
+        "classes": [
+          "public_auto_or_legacy"
+        ],
+        "fail_closed": true,
+        "fail_closed_observed_classes": [],
+        "fail_closed_observed_tags": [],
+        "has_failed_before_summary_json": true,
+        "has_observed_active_pattern_coarse": false,
+        "has_observed_block_schur_residual": false,
+        "has_observed_coarse_reuse": false,
+        "has_observed_coupled_residual_equation": false,
+        "has_observed_global_moment_residual_equation": false,
+        "has_observed_installed_krylov": false,
+        "has_observed_multilevel_residual_equation": false,
+        "has_observed_phase_space_residual_equation": false,
+        "has_observed_residual_bounce_region_coarse": false,
+        "has_observed_residual_galerkin_equation": false,
+        "has_observed_residual_snapshot": false,
+        "outcomes": [
+          "timed_out"
+        ],
+        "promotion_eligible_seed_count": 0,
+        "tags": [
+          "failed_before_solver_trace_summary",
+          "no_hdf5_output"
+        ]
+      },
+      "evidence_tags": [
+        "failed_before_solver_trace_summary",
+        "no_hdf5_output"
+      ],
+      "fail_closed_observed_classes": [],
+      "fail_closed_observed_tags": [],
+      "last_reported_residual_norm": null,
+      "max_elapsed_s": 600.1665075588971,
+      "max_residual_ratio": null,
+      "passed": false,
+      "path": "docs/_static/qi_seed_robustness_exact_floor_gpu_seed0_timeout_2026_05_30.json",
+      "public_cli_default_path": true,
+      "resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "resolution_fractions": {
+        "NTHETA": 1.0,
+        "NX": 1.0,
+        "NXI": 1.0,
+        "NZETA": 1.0
+      },
+      "run_outcomes": [
+        "timed_out"
+      ],
+      "schema_version": 2,
+      "total_size": 510002
     }
   ],
   "source_input": "examples/additional_examples/input.namelist"
