@@ -43,6 +43,10 @@ def _assert_artifacts(out_dir: Path, stem: str) -> dict:
 def test_public_optimization_scripts_show_help() -> None:
     scripts = {
         _OPTIMIZATION_DIR / "qa_nfp2_sfincs_jax_objectives.py": ["--out-dir", "--stem"],
+        _OPTIMIZATION_DIR / "qa_nfp2_bootstrap_current_comparison.py": [
+            "--bootstrap-weight",
+            "--target-aspect",
+        ],
         _OPTIMIZATION_DIR / "screen_qi_electron_root_nfp.py": ["--candidates", "--target-electron-root-drive"],
         _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py": ["--out-dir", "--stem"],
         _OPTIMIZATION_DIR / "launch_sfincs_jax_candidate_scan.py": ["--out-dir", "--promotion-stem"],
@@ -83,6 +87,32 @@ def test_qa_nfp2_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> Non
     assert payload["autodiff_gradient_gate"]["status"] == "pass"
     assert len(payload["history"]) == 1
     assert "required_high_fidelity_gates" in payload["promotion_plan"]
+
+
+def test_qa_bootstrap_comparison_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:
+    stem = "qa_bootstrap_comparison_cli"
+    script = _OPTIMIZATION_DIR / "qa_nfp2_bootstrap_current_comparison.py"
+
+    _run_script(
+        script,
+        [
+            "--steps",
+            "120",
+            "--out-dir",
+            str(tmp_path),
+            "--stem",
+            stem,
+        ],
+    )
+
+    payload = _assert_artifacts(tmp_path, stem)
+    assert payload["workflow"] == "sfincs_jax_qa_bootstrap_current_proxy_comparison"
+    assert payload["nfp"] == 2
+    assert payload["targets"]["aspect_ratio"] == 6.0
+    assert "not a high-fidelity SFINCS kinetic current" in payload["claim_boundary"]
+    assert payload["comparison"]["bootstrap_current_rms_ratio"] < 0.10
+    assert payload["qa_plus_bootstrap"]["bootstrap_current_rms"] < payload["qa_only"]["bootstrap_current_rms"]
+    assert "sfincs_jax scan-er" in " ".join(payload["promotion_plan"]["required_gates"])
 
 
 def test_qi_screen_public_script_pivots_to_qi_nfp2_when_qa_is_deferred(tmp_path: Path) -> None:

@@ -17486,3 +17486,71 @@ Best next steps:
 3. Keep exact production-floor QI convergence as the remaining research item:
    it needs a genuinely stronger global/coarse preconditioner, not more local
    smoother or restart tuning.
+
+### 35.92 QA bootstrap-current optimization comparison for release docs
+
+Scope:
+
+- Added a focused public optimization example,
+  ``examples/optimization/qa_nfp2_bootstrap_current_comparison.py``. It runs a
+  fast JAX differentiable QA ``nfp=2`` proxy twice: first with only
+  quasisymmetry, rotational-transform, and aspect-ratio-6 targets, and then
+  with the same targets plus a small-bootstrap-current objective.
+- Generated checked static artifacts under
+  ``docs/_static/figures/optimization/qa_nfp2_bootstrap_current_comparison.*``.
+  The figure compares 3D LCFS proxies, LCFS cuts, the normalized
+  ``<J.B>/sqrt(<B^2>)`` bootstrap-current proxy profile versus normalized
+  toroidal-flux radius, current RMS/max bars, and the QA/iota/aspect audit.
+- Updated ``README.md``, ``docs/optimization.rst``, and
+  ``examples/optimization/README.md`` so the example is visible from the
+  release landing path. The documentation explicitly labels the current profile
+  as a differentiable optimizer-steering proxy and preserves the promotion
+  boundary: accepted candidates still require completed ``sfincs_jax scan-er``
+  outputs, residual convergence, CPU/GPU agreement, convergence studies, and
+  Fortran-v3 comparison when in shared scope.
+
+Results:
+
+- The checked artifact keeps both candidates close to the design targets:
+  aspect ratio is within ``8e-4`` of ``6`` and the iota proxy is within
+  ``3.4e-4`` of ``0.42``.
+- Adding the bootstrap-current objective reduces the normalized current RMS
+  from the QA-only proxy by a factor of ``0.0269``; equivalently, the checked
+  artifact shows a ``97.3%`` RMS reduction.
+- The example runs in about one second on the local CPU and therefore is safe
+  for docs regeneration and CI-fast public-script coverage.
+
+Validation:
+
+- ``python -m ruff check examples/optimization/qa_nfp2_bootstrap_current_comparison.py tests/test_optimization_public_scripts_cli.py tests/test_optimization_real_artifacts.py``.
+- ``python -m pytest -q tests/test_optimization_public_scripts_cli.py::test_public_optimization_scripts_show_help tests/test_optimization_public_scripts_cli.py::test_qa_bootstrap_comparison_script_writes_fast_demo_artifacts tests/test_optimization_real_artifacts.py::test_qa_bootstrap_current_comparison_artifact_is_proxy_and_reduces_current``:
+  ``3 passed in 8.52s``.
+- Broader optimization gate passed:
+  ``python -m pytest -q tests/test_optimization_public_scripts_cli.py tests/test_optimization_real_artifacts.py tests/test_optimization_neoclassical_objectives.py tests/test_optimization_wave3_coverage.py tests/test_optimization_workflow.py tests/test_optimization_promotion.py tests/test_optimization_comparison.py tests/test_optimization_evidence.py tests/test_optimization_ladder.py``:
+  ``58 passed in 26.83s``.
+- Release metadata gates, research-lane gates, and QI artifact scan passed.
+- Strict docs build passed with
+  ``python -m sphinx -W --keep-going -b html docs docs/_build/html``.
+- Final full local suite passed with ``python -m pytest -q``:
+  ``1975 passed in 452.55s``.
+
+Progress:
+
+- Optimization/documentation lane: ``98%``. The new bootstrap-current example
+  closes the missing README-facing QA current-reduction figure. The remaining
+  ``2%`` is a future full VMEC/``sfincs_jax`` kinetic promotion of an optimized
+  candidate, which is explicitly outside the proxy claim.
+- Overall remaining-lane completion estimate: ``99.6%``. Exact
+  production-resolution QI convergence remains the only substantial deferred
+  research item; it is documented as non-blocking for release claims unless the
+  release scope claims production-floor QI.
+
+Best next steps:
+
+1. Run the optimization-focused test set, release metadata gates, strict docs
+   build, and full test suite.
+2. Commit and push the README/docs/example/artifact update if all gates pass.
+3. Decide the release scope explicitly: either ship with production-floor QI
+   excluded as a documented non-blocking research lane, or defer tagging until
+   a genuinely stronger global/coarse QI preconditioner converges the exact
+   ``25 x 51 x 100 x 4`` floor.

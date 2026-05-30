@@ -218,6 +218,21 @@ def test_qi_electron_root_nfp_screen_recommends_qi_nfp2_without_kinetic_claim() 
     assert "positive ambipolar root bracket from completed kinetic scan" in plan["required_gates"]
 
 
+def test_qa_bootstrap_current_comparison_artifact_is_proxy_and_reduces_current() -> None:
+    payload = _load("qa_nfp2_bootstrap_current_comparison.json")
+
+    assert payload["workflow"] == "sfincs_jax_qa_bootstrap_current_proxy_comparison"
+    assert "proxy" in payload["claim_boundary"].lower()
+    assert "not a high-fidelity SFINCS kinetic current" in payload["claim_boundary"]
+    assert payload["targets"] == {"aspect_ratio": 6.0, "iota": 0.42}
+    assert payload["comparison"]["bootstrap_current_rms_ratio"] < 0.05
+    assert payload["comparison"]["bootstrap_current_rms_reduction_fraction"] > 0.95
+    assert payload["qa_plus_bootstrap"]["bootstrap_current_rms"] < payload["qa_only"]["bootstrap_current_rms"]
+    assert abs(payload["qa_plus_bootstrap"]["metrics"]["aspect_ratio"] - 6.0) < 1.0e-3
+    assert abs(payload["qa_only"]["metrics"]["aspect_ratio"] - 6.0) < 1.0e-3
+    assert "run radial and velocity-space convergence" in " ".join(payload["promotion_plan"]["required_gates"])
+
+
 def test_qi_nfp2_lowres_kinetic_electron_root_artifacts_pass_cpu_gpu_and_reference_gates() -> None:
     cpu = _load("qi_nfp2_electron_root_lowres_cpu.json")
     gpu = _load("qi_nfp2_electron_root_lowres_gpu.json")

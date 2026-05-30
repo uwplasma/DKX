@@ -61,6 +61,51 @@ Available objective presets are:
    Combine all terms in one tradeoff objective for demonstrations and optimizer
    smoke tests.
 
+Bootstrap-Current Comparison Example
+------------------------------------
+
+The most direct way to teach the neoclassical objective is to compare two
+otherwise similar QA candidates: one optimized only for quasisymmetry,
+rotational transform, and aspect ratio, and one optimized with those same terms
+plus a small-bootstrap-current penalty.
+
+.. code-block:: bash
+
+   python examples/optimization/qa_nfp2_bootstrap_current_comparison.py \
+     --steps 160 \
+     --out-dir docs/_static/figures/optimization \
+     --stem qa_nfp2_bootstrap_current_comparison
+
+.. figure:: _static/figures/optimization/qa_nfp2_bootstrap_current_comparison.png
+   :alt: QA nfp=2 bootstrap-current optimization comparison.
+   :align: center
+   :width: 95%
+
+   QA nfp=2 bootstrap-current proxy comparison.  Panels A-B show the
+   3D last-closed-flux-surface proxy colored by normalized field strength.
+   Panel C compares LCFS cuts.  Panel D compares the normalized
+   :math:`\langle\mathbf{J}\cdot\mathbf{B}\rangle/
+   \sqrt{\langle B^2\rangle}` bootstrap-current proxy profile versus
+   normalized toroidal-flux radius.  Panels E-F show the current reduction and
+   constraint audit.  In the checked artifact, adding the bootstrap-current
+   term reduces the current RMS by 97% while keeping the QA/iota/aspect audit
+   small.
+
+The figure is intentionally labelled as a proxy.  The plotted current profile
+is a differentiable optimizer-steering observable, not a completed kinetic
+SFINCS current.  A candidate selected from this step should be written as a
+VMEC equilibrium and promoted with completed ``sfincs_jax scan-er`` outputs.
+The corresponding kinetic observable is ``FSABjHatOverRootFSAB2``, i.e.
+
+.. math::
+
+   \frac{\langle\mathbf{J}\cdot\mathbf{B}\rangle}
+        {\sqrt{\langle B^2\rangle}},
+
+which should be checked together with residual convergence, CPU/GPU agreement,
+radial and velocity-space convergence, and SFINCS Fortran v3 comparison when
+the input lies in shared model scope.
+
 Objective Terms
 ---------------
 
