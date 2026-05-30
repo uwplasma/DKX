@@ -166,6 +166,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   post-coarse, and post-residual-equation controls. This keeps environment
   parsing and correction-policy defaults out of ``v3_driver.py`` while
   preserving the existing opt-in behavior and fail-closed defaults.
+- ``sfincs_jax/rhs1_sparse_polish_policy.py`` and
+  ``sfincs_jax/rhs1_xblock_sparse_host_policy.py``:
+  bounded sparse-polish and host x-block factorization policy helpers. These
+  modules keep large RHSMode=1 FP rescue limits, override semantics, and
+  fail-closed high-resolution behavior independently testable.
 - ``sfincs_jax/rhs1_solver_diagnostics.py``:
   typed RHSMode=1 x-block correction diagnostic records and historical solver
   metadata key assembly. This keeps output-visible trace fields independently
