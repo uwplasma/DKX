@@ -64,38 +64,41 @@ Available objective presets are:
 Bootstrap-Current Comparison Example
 ------------------------------------
 
-The most direct way to teach the neoclassical objective is to compare two
-otherwise similar QA candidates: one optimized only for quasisymmetry,
-rotational transform, and aspect ratio, and one optimized with those same terms
-plus a small-bootstrap-current penalty.
+The most direct way to teach the geometry-to-transport handoff is to start from
+the real ``vmec_jax`` QA optimization output, verify that the VMEC equilibrium
+has the intended finite rotational transform, and then use that equilibrium as
+the input to kinetic ``sfincs_jax`` promotion scans.  The checked figure below
+uses ``vmec_jax/examples/optimization/QA_optimization.py``, whose public target
+is aspect ratio 5 and mean iota 0.41.
 
 .. code-block:: bash
 
    python examples/optimization/qa_nfp2_bootstrap_current_comparison.py \
-     --steps 160 \
+     --vmec-jax-root /path/to/vmec_jax \
      --out-dir docs/_static/figures/optimization \
      --stem qa_nfp2_bootstrap_current_comparison
 
 .. figure:: _static/figures/optimization/qa_nfp2_bootstrap_current_comparison.png
-   :alt: QA nfp=2 bootstrap-current optimization comparison.
+   :alt: VMEC-backed QA nfp=2 optimization current diagnostic.
    :align: center
    :width: 95%
 
-   QA nfp=2 bootstrap-current proxy comparison.  Panels A-B show the
-   3D last-closed-flux-surface proxy colored by normalized field strength.
-   Panel C compares LCFS cuts.  Panel D compares the normalized
-   :math:`\langle\mathbf{J}\cdot\mathbf{B}\rangle/
-   \sqrt{\langle B^2\rangle}` bootstrap-current proxy profile versus
-   normalized toroidal-flux radius.  Panels E-F show the current reduction and
-   constraint audit.  In the checked artifact, adding the bootstrap-current
-   term reduces the current RMS by 97% while keeping the QA/iota/aspect audit
-   small.
+   VMEC-backed QA nfp=2 optimization diagnostic.  Panels A-B show the real
+   VMEC last-closed-flux-surface and LCFS field strength.  Panel C shows LCFS
+   cuts.  Panel D shows the finite rotational-transform profile from the final
+   VMEC ``wout``.  Panel E shows the VMEC equilibrium current diagnostic
+   :math:`J\cdot B/\sqrt{B\cdot B}` versus normalized toroidal-flux radius.
+   Panel F audits the ``QA_optimization.py`` objective and the final aspect/iota
+   gate.  The checked artifact has aspect ratio 4.999999 and mean iota 0.4097.
 
-The figure is intentionally labelled as a proxy.  The plotted current profile
-is a differentiable optimizer-steering observable, not a completed kinetic
-SFINCS current.  A candidate selected from this step should be written as a
-VMEC equilibrium and promoted with completed ``sfincs_jax scan-er`` outputs.
-The corresponding kinetic observable is ``FSABjHatOverRootFSAB2``, i.e.
+Pass ``--comparison-result-dir`` to overlay a second ``vmec_jax`` result, for
+example a QA run in which ``QA_optimization.py`` has been edited to add
+``JDotB`` or ``RedlBootstrapMismatch`` to ``objective_tuples``.  That overlay is
+accepted only if it reduces the VMEC current diagnostic while preserving the
+finite-iota/aspect gate.  The plotted current profile is still not a completed
+kinetic SFINCS current.  A candidate selected from this step should be promoted
+with completed ``sfincs_jax scan-er`` outputs.  The corresponding kinetic
+observable is ``FSABjHatOverRootFSAB2``, i.e.
 
 .. math::
 
