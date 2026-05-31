@@ -6,11 +6,29 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from sfincs_jax.namelist import read_sfincs_input
 
 
 _REPO = Path(__file__).resolve().parents[1]
 _OPTIMIZATION_DIR = _REPO / "examples" / "optimization"
+
+
+def _local_vmec_jax_root() -> Path | None:
+    env_root = os.environ.get("SFINCS_JAX_VMEC_JAX_ROOT")
+    candidates = [
+        Path(env_root).expanduser() if env_root else None,
+        Path("/Users/rogeriojorge/local/vmec_jax"),
+        Path("/Users/rogeriojorge/vmec_jax"),
+    ]
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        result_dir = candidate / "examples" / "optimization" / "results" / "qa_opt" / "ess"
+        if (candidate / "vmec_jax").is_dir() and (result_dir / "wout_final.nc").is_file():
+            return candidate
+    return None
 
 
 def _run_script(script: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -44,8 +62,8 @@ def test_public_optimization_scripts_show_help() -> None:
     scripts = {
         _OPTIMIZATION_DIR / "qa_nfp2_sfincs_jax_objectives.py": ["--out-dir", "--stem"],
         _OPTIMIZATION_DIR / "qa_nfp2_bootstrap_current_comparison.py": [
-            "--bootstrap-weight",
-            "--target-aspect",
+            "--vmec-jax-root",
+            "--comparison-result-dir",
         ],
         _OPTIMIZATION_DIR / "screen_qi_electron_root_nfp.py": ["--candidates", "--target-electron-root-drive"],
         _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py": ["--out-dir", "--stem"],
@@ -92,12 +110,15 @@ def test_qa_nfp2_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> Non
 def test_qa_bootstrap_comparison_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:
     stem = "qa_bootstrap_comparison_cli"
     script = _OPTIMIZATION_DIR / "qa_nfp2_bootstrap_current_comparison.py"
+    vmec_jax_root = _local_vmec_jax_root()
+    if vmec_jax_root is None:
+        pytest.skip("vmec_jax QA_optimization.py result is not available")
 
     _run_script(
         script,
         [
-            "--steps",
-            "120",
+            "--vmec-jax-root",
+            str(vmec_jax_root),
             "--out-dir",
             str(tmp_path),
             "--stem",
@@ -106,12 +127,13 @@ def test_qa_bootstrap_comparison_script_writes_fast_demo_artifacts(tmp_path: Pat
     )
 
     payload = _assert_artifacts(tmp_path, stem)
-    assert payload["workflow"] == "sfincs_jax_qa_bootstrap_current_proxy_comparison"
+    assert payload["workflow"] == "sfincs_jax_vmec_jax_qa_optimization_current_diagnostic"
     assert payload["nfp"] == 2
-    assert payload["targets"]["aspect_ratio"] == 6.0
-    assert "not a high-fidelity SFINCS kinetic current" in payload["claim_boundary"]
-    assert payload["comparison"]["bootstrap_current_rms_ratio"] < 0.10
-    assert payload["qa_plus_bootstrap"]["bootstrap_current_rms"] < payload["qa_only"]["bootstrap_current_rms"]
+    assert payload["targets"] == {"aspect_ratio": 5.0, "iota": 0.41}
+    assert payload["qa_optimization"]["gate"]["status"] == "pass"
+    assert abs(payload["qa_optimization"]["metrics"]["mean_iota"] - 0.41) < 2.0e-2
+    assert "not a completed high-fidelity sfincs_jax kinetic bootstrap-current claim" in payload["claim_boundary"]
+    assert payload["comparison"]["status"] == "baseline_only"
     assert "sfincs_jax scan-er" in " ".join(payload["promotion_plan"]["required_gates"])
 
 
