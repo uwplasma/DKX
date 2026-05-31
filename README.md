@@ -164,21 +164,24 @@ The QA example supports `bootstrap`, `electron-root`, `flux-selective`, and
 `balanced` presets. If the QA proxy does not provide a strong electron-root
 candidate, use the QI/QA NFP screen to pick the next kinetic promotion target:
 
-For a more focused bootstrap-current teaching example, compare a QA nfp=2
-configuration optimized only for quasisymmetry, rotational transform, and aspect
-ratio 6 against the same proxy with a small-bootstrap-current objective:
+For a VMEC-backed optimization diagnostic, use the checked
+`vmec_jax/examples/optimization/QA_optimization.py` result and inspect the
+finite-iota QA equilibrium before promoting it to kinetic `sfincs_jax` scans:
 
 ```bash
-python examples/optimization/qa_nfp2_bootstrap_current_comparison.py --steps 160
+python examples/optimization/qa_nfp2_bootstrap_current_comparison.py --vmec-jax-root /path/to/vmec_jax
 ```
 
-![QA nfp=2 bootstrap-current optimization comparison](docs/_static/figures/optimization/qa_nfp2_bootstrap_current_comparison.png)
+![VMEC-backed QA nfp=2 optimization current diagnostic](docs/_static/figures/optimization/qa_nfp2_bootstrap_current_comparison.png)
 
-This proxy run reduces the normalized bootstrap-current RMS by 97% in the
-checked artifact while preserving the QA/iota/aspect audit. The plotted
-`<J.B>/sqrt(<B^2>)` profile is an optimizer-steering proxy, not a kinetic
-transport claim; promote accepted candidates with completed `sfincs_jax scan-er`
-outputs before using the current profile in a paper or design decision.
+The checked artifact is generated from the real `vmec_jax` QA optimization
+output, with target aspect ratio 5 and target mean iota 0.41. It plots the VMEC
+LCFS, `|B|`, iota profile, and VMEC `J.B/sqrt(B.B)` current diagnostic. Pass
+`--comparison-result-dir` to overlay a second `vmec_jax` result, for example a
+QA run with a `JDotB` or `RedlBootstrapMismatch` objective. The plotted current
+is an equilibrium diagnostic, not a kinetic bootstrap-current claim; accepted
+equilibria still need completed `sfincs_jax scan-er` outputs before using
+`FSABjHatOverRootFSAB2` in a paper or design decision.
 
 ```bash
 python examples/optimization/screen_qi_electron_root_nfp.py --steps 70

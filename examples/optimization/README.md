@@ -21,11 +21,11 @@ Examples:
   designs still need real `sfincs_jax scan-er` outputs before kinetic
   validation or publication claims.
 - `qa_nfp2_bootstrap_current_comparison.py` — focused teaching and README
-  figure that compares a QA nfp=2 proxy optimized for quasisymmetry/iota/aspect
-  ratio 6 against the same optimizer with a small-bootstrap-current penalty.
-  It plots 3D LCFS proxies, LCFS cuts, and
-  `<J.B>/sqrt(<B^2>)` current profiles; the current is a proxy until promoted
-  with completed `sfincs_jax scan-er` outputs.
+  figure generated from the real `vmec_jax` `QA_optimization.py` output. It
+  plots the VMEC QA nfp=2 LCFS, `|B|`, finite-iota profile, and VMEC
+  `J.B/sqrt(B.B)` current diagnostic, with an optional overlay from a second
+  `vmec_jax` result directory. The current panel is an equilibrium diagnostic
+  until promoted with completed `sfincs_jax scan-er` outputs.
 - `screen_qi_electron_root_nfp.py` — fast QA/QI screening lane for electron-root
   optimization fallback. It ranks QA and QI NFP candidates with the same
   proxy/evidence boundary, recommends QI `nfp=2` when QA remains deferred, and
