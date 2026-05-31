@@ -49,6 +49,24 @@ root-bracket refinement at `8/6/6` is tight. Single-parameter probes show that
 root. Combined `Nxi=8,Nx=7` and `Nxi=9` probes were attempted on an RTX A4000
 and are currently too expensive for this bounded documentation example.
 
+The Landreman-Paul QA Redl comparison script is a separate diagnostic file, not
+an optimizer. It evaluates the Redl bootstrap-current formula with `vmec_jax` on
+the reactor-scale Landreman-Paul QA example and can optionally run `sfincs_jax`
+on the same surfaces to compare
+`FSABjHatOverRootFSAB2 * e n_bar sqrt(2 T_bar / m_bar)` against
+`<J.B>/sqrt(<B^2>)` from the Redl fit:
+
+```bash
+python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py --skip-sfincs
+python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py --run-sfincs --r-n-values 0.5 --ntheta 5 --nzeta 5 --nxi 5 --nl 3 --nx 4
+```
+
+The default `--wout` is the reactor-scale Landreman-Paul QA reference because
+SFINCS radial-coordinate conversions require a positive VMEC `Aminor_p`. If you
+point the script at an unscaled wout with `Aminor_p = 0`, use `--skip-sfincs`
+for Redl-only plotting or provide a physically scaled wout before running the
+kinetic comparison.
+
 If `vmec_jax` is installed from a source checkout, point the example at it:
 
 ```bash

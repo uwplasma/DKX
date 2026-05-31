@@ -20,6 +20,18 @@ def _load_example_module() -> ModuleType:
     return module
 
 
+def _load_redl_compare_module() -> ModuleType:
+    repo = Path(__file__).resolve().parents[1]
+    script = repo / "examples" / "vmec_jax_finite_beta" / "compare_landreman_paul_qa_bootstrap_redl.py"
+    spec = importlib.util.spec_from_file_location("compare_landreman_paul_qa_bootstrap_redl", script)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_finite_beta_example_parses_er_values_and_names_run_dirs() -> None:
     mod = _load_example_module()
 
@@ -29,6 +41,89 @@ def test_finite_beta_example_parses_er_values_and_names_run_dirs() -> None:
     assert mod._format_er_dir(2.5) == "Er2.5"
     assert mod._format_r_dir(0.15) == "rN0p15"
     assert mod._psi_n_from_r_n(0.5) == 0.25
+
+
+def test_landreman_paul_redl_comparison_template_uses_scheme5_profile_gradients() -> None:
+    mod = _load_redl_compare_module()
+
+    text = mod._sfincs_template(
+        wout_path=Path("/tmp/wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc"),
+        r_n=0.5,
+        er=0.0,
+        nu_n=8.31565e-3,
+        n_hat=1.2,
+        t_i_hat=2.0,
+        t_e_hat=2.1,
+        dn_hat_dpsi_n=-0.3,
+        dt_i_hat_dpsi_n=-0.4,
+        dt_e_hat_dpsi_n=-0.5,
+        ntheta=5,
+        nzeta=7,
+        nxi=9,
+        nl=4,
+        nx=4,
+        solver_tolerance=1.0e-6,
+    )
+
+    assert "geometryScheme = 5" in text
+    assert 'equilibriumFile = "/tmp/wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc"' in text
+    assert "inputRadialCoordinateForGradients = 1" in text
+    assert "dNHatdpsiNs = -0.3 -0.3" in text
+    assert "dTHatdpsiNs = -0.4 -0.5" in text
+    assert "Ntheta = 5" in text
+    assert "Nzeta = 7" in text
+    assert "Nxi = 9" in text
+    assert "solverTolerance = 1e-06" in text
+
+
+def test_landreman_paul_redl_comparison_summarizes_synthetic_difference(tmp_path) -> None:
+    mod = _load_redl_compare_module()
+    args = mod._build_parser().parse_args(["--skip-sfincs", "--out-dir", str(tmp_path)])
+    redl = {
+        "r_n": np.asarray([0.5]),
+        "s": np.asarray([0.25]),
+        "jdotb_redl": np.asarray([-4.0]),
+        "j_parallel_redl_si": np.asarray([-2.0e6]),
+        "fsa_B2": np.asarray([4.0]),
+        "epsilon": np.asarray([0.1]),
+        "f_t": np.asarray([0.2]),
+        "iota": np.asarray([0.42]),
+        "nu_e_star": np.asarray([1.0]),
+        "nu_i_star": np.asarray([2.0]),
+        "L31": np.asarray([0.3]),
+        "L32": np.asarray([0.4]),
+        "L34": np.asarray([0.5]),
+    }
+    sfincs_rows = [
+        {
+            "status": "loaded",
+            "r_n": 0.5,
+            "s": 0.25,
+            "input": "/tmp/input.namelist",
+            "output": "/tmp/sfincsOutput.h5",
+            "elapsed_s": 1.0,
+            "FSABjHat": -1.0,
+            "FSABjHatOverRootFSAB2": -0.25,
+            "sfincs_j_parallel_si": -1.5e6,
+            "sfincs_jdotb_scaled": -6.0e6,
+        }
+    ]
+
+    payload = mod._write_summary(
+        path=tmp_path / "summary.json",
+        args=args,
+        vmec_input=Path("/tmp/input.LandremanPaul2021_QA_reactorScale_lowres"),
+        wout_path=Path("/tmp/wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc"),
+        redl=redl,
+        sfincs_rows=sfincs_rows,
+        scale=6.0e6,
+    )
+
+    assert payload["workflow"] == "landreman_paul_qa_sfincs_jax_redl_bootstrap_current_comparison"
+    assert payload["comparison"]["n_compared"] == 1
+    np.testing.assert_allclose(payload["comparison"]["max_abs_diff_A_per_m2"], 5.0e5)
+    np.testing.assert_allclose(payload["comparison"]["max_rel_diff"], 0.25)
+    assert "FSABjHatOverRootFSAB2" in payload["normalization"]["sfincs_si_formula"]
 
 
 def test_finite_beta_example_template_uses_vmec_scheme5_and_er() -> None:
