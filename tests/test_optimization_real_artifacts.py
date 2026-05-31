@@ -218,19 +218,21 @@ def test_qi_electron_root_nfp_screen_recommends_qi_nfp2_without_kinetic_claim() 
     assert "positive ambipolar root bracket from completed kinetic scan" in plan["required_gates"]
 
 
-def test_qa_bootstrap_current_comparison_artifact_is_proxy_and_reduces_current() -> None:
+def test_qa_bootstrap_current_comparison_artifact_is_vmec_backed_and_finite_iota() -> None:
     payload = _load("qa_nfp2_bootstrap_current_comparison.json")
 
-    assert payload["workflow"] == "sfincs_jax_qa_bootstrap_current_proxy_comparison"
-    assert "proxy" in payload["claim_boundary"].lower()
-    assert "not a high-fidelity SFINCS kinetic current" in payload["claim_boundary"]
-    assert payload["targets"] == {"aspect_ratio": 6.0, "iota": 0.42}
-    assert payload["comparison"]["bootstrap_current_rms_ratio"] < 0.05
-    assert payload["comparison"]["bootstrap_current_rms_reduction_fraction"] > 0.95
-    assert payload["qa_plus_bootstrap"]["bootstrap_current_rms"] < payload["qa_only"]["bootstrap_current_rms"]
-    assert abs(payload["qa_plus_bootstrap"]["metrics"]["aspect_ratio"] - 6.0) < 1.0e-3
-    assert abs(payload["qa_only"]["metrics"]["aspect_ratio"] - 6.0) < 1.0e-3
-    assert "run radial and velocity-space convergence" in " ".join(payload["promotion_plan"]["required_gates"])
+    assert payload["workflow"] == "sfincs_jax_vmec_jax_qa_optimization_current_diagnostic"
+    assert "vmec_jax QA_optimization.py outputs" in payload["claim_boundary"]
+    assert "not a completed high-fidelity sfincs_jax kinetic bootstrap-current claim" in payload["claim_boundary"]
+    assert payload["targets"] == {"aspect_ratio": 5.0, "iota": 0.41}
+    assert payload["comparison"]["status"] == "baseline_only"
+    qa = payload["qa_optimization"]
+    assert qa["gate"]["status"] == "pass"
+    assert abs(qa["metrics"]["aspect_ratio"] - 5.0) < 5.0e-3
+    assert abs(qa["metrics"]["mean_iota"] - 0.41) < 2.0e-2
+    assert qa["metrics"]["jdotb_over_root_bdotb_rms"] > 0.0
+    assert "preserve finite target iota" in " ".join(payload["promotion_plan"]["required_gates"])
+    assert "FSABjHatOverRootFSAB2" in " ".join(payload["promotion_plan"]["required_gates"])
 
 
 def test_qi_nfp2_lowres_kinetic_electron_root_artifacts_pass_cpu_gpu_and_reference_gates() -> None:
