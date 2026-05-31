@@ -26,6 +26,11 @@ Examples:
   `J.B/sqrt(B.B)` current diagnostic, with an optional overlay from a second
   `vmec_jax` result directory. The current panel is an equilibrium diagnostic
   until promoted with completed `sfincs_jax scan-er` outputs.
+- `QA_optimization_bootstrap_current.py` — editable `vmec_jax`-style QA
+  optimization script with all knobs at the top. It is intentionally close to
+  `vmec_jax/examples/optimization/QA_optimization.py`, uses `MAX_MODE=3` for
+  faster iteration, and adds an optional `JDotB` current objective controlled by
+  `INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE`.
 - `screen_qi_electron_root_nfp.py` — fast QA/QI screening lane for electron-root
   optimization fallback. It ranks QA and QI NFP candidates with the same
   proxy/evidence boundary, recommends QI `nfp=2` when QA remains deferred, and
