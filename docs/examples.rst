@@ -128,6 +128,42 @@ and bootstrap current:
    is an explicit resolution audit rather than a claim of asymptotic
    kinetic-space convergence.
 
+Landreman-Paul QA bootstrap-current comparison against Redl
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The finite-beta directory also includes a standalone diagnostic script for the
+reactor-scale Landreman-Paul QA example.  It is not an optimizer.  It evaluates
+the Redl bootstrap-current formula through ``vmec_jax``, writes the profile
+contract used for the comparison, and can optionally run ``sfincs_jax`` at the
+same flux surfaces.  The plotted quantity is
+
+.. math::
+
+   \frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}},
+
+with the ``sfincs_jax`` value obtained from
+``FSABjHatOverRootFSAB2 * e n_bar sqrt(2 T_bar / m_bar)`` and the Redl value
+obtained from ``vmec_jax.redl_bootstrap_jdotb``.
+
+Run a fast Redl-only plot:
+
+.. code-block:: bash
+
+   python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py --skip-sfincs
+
+Run one bounded kinetic comparison point:
+
+.. code-block:: bash
+
+   python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py \
+     --run-sfincs --r-n-values 0.5 --ntheta 5 --nzeta 5 --nxi 5 --nl 3 --nx 4
+
+The script defaults to
+``wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc`` because SFINCS
+radial-coordinate conversions need a positive VMEC ``Aminor_p``.  Redl-only
+plotting can be used with unscaled VMEC artifacts, but the kinetic comparison
+requires a physically scaled ``wout``.
+
 Plotting a generated or frozen output file:
 
 .. code-block:: bash
