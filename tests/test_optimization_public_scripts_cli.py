@@ -137,6 +137,18 @@ def test_qa_bootstrap_comparison_script_writes_fast_demo_artifacts(tmp_path: Pat
     assert "sfincs_jax scan-er" in " ".join(payload["promotion_plan"]["required_gates"])
 
 
+def test_vmec_jax_bootstrap_optimization_script_is_reviewable_max_mode3() -> None:
+    script = _OPTIMIZATION_DIR / "QA_optimization_bootstrap_current.py"
+    text = script.read_text(encoding="utf-8")
+
+    compile(text, str(script), "exec")
+    assert "MAX_MODE = 3" in text
+    assert "INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE = False" in text
+    assert "vj.JDotB" in text
+    assert "RedlBootstrapMismatch" in text
+    assert "SFINCS_JAX_VMEC_JAX_ROOT" in text
+
+
 def test_qi_screen_public_script_pivots_to_qi_nfp2_when_qa_is_deferred(tmp_path: Path) -> None:
     stem = "qi_screen_cli"
     script = _OPTIMIZATION_DIR / "screen_qi_electron_root_nfp.py"

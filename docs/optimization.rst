@@ -100,6 +100,24 @@ kinetic SFINCS current.  A candidate selected from this step should be promoted
 with completed ``sfincs_jax scan-er`` outputs.  The corresponding kinetic
 observable is ``FSABjHatOverRootFSAB2``, i.e.
 
+For a directly editable script, use
+``examples/optimization/QA_optimization_bootstrap_current.py``.  It follows the
+same workflow as ``vmec_jax/examples/optimization/QA_optimization.py`` but sets
+``MAX_MODE = 3`` for faster iteration and exposes
+``INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE`` at the top of the file.  Run once with
+the flag disabled, once with it enabled, then compare the two result
+directories:
+
+.. code-block:: bash
+
+   SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax \
+     python examples/optimization/QA_optimization_bootstrap_current.py
+
+   python examples/optimization/qa_nfp2_bootstrap_current_comparison.py \
+     --vmec-jax-root /path/to/vmec_jax \
+     --qa-result-dir results/qa_opt_bootstrap_current_maxmode3/qa_only \
+     --comparison-result-dir results/qa_opt_bootstrap_current_maxmode3/with_jdotb_current_objective
+
 .. math::
 
    \frac{\langle\mathbf{J}\cdot\mathbf{B}\rangle}
