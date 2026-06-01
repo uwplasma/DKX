@@ -135,15 +135,10 @@ The finite-beta directory also includes a standalone diagnostic script for the
 reactor-scale Landreman-Paul QA example.  It is not an optimizer.  It evaluates
 the Redl bootstrap-current formula through ``vmec_jax``, writes the profile
 contract used for the comparison, and can optionally run ``sfincs_jax`` at the
-same flux surfaces.  The plotted quantity is
-
-.. math::
-
-   \frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}},
-
-with the ``sfincs_jax`` value obtained from
-``FSABjHatOverRootFSAB2 * e n_bar sqrt(2 T_bar / m_bar)`` and the Redl value
-obtained from ``vmec_jax.redl_bootstrap_jdotb``.
+same flux surfaces.  The equilibrium is the reactor-scale version of the
+Landreman-Paul precise-quasisymmetry QA configuration
+(``Phys. Rev. Lett. 128, 035001 (2022)``,
+`doi:10.1103/PhysRevLett.128.035001 <https://doi.org/10.1103/PhysRevLett.128.035001>`_).
 
 Run a fast Redl-only plot:
 
@@ -151,18 +146,121 @@ Run a fast Redl-only plot:
 
    python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py --skip-sfincs
 
-Run one bounded kinetic comparison point:
+Run the bounded three-surface kinetic comparison used for the checked
+documentation figure:
 
 .. code-block:: bash
 
    python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py \
-     --run-sfincs --r-n-values 0.5 --ntheta 5 --nzeta 5 --nxi 5 --nl 3 --nx 4
+     --run-sfincs \
+     --r-n-values 0.3,0.5,0.7 \
+     --n-lambda 16 \
+     --ntheta 5 --nzeta 5 --nxi 5 --nl 3 --nx 4
+
+.. figure:: _static/figures/vmec_jax_finite_beta/landreman_paul_qa_bootstrap_redl_comparison.png
+   :alt: Landreman-Paul QA bootstrap-current comparison between sfincs_jax and the Redl analytic fit.
+   :width: 100%
+
+   Fast Landreman-Paul QA bootstrap-current diagnostic.  The left panel compares
+   the Redl analytic fit against low-resolution ``sfincs_jax`` RHSMode=1 kinetic
+   solves for the same profile contract and nearest VMEC surfaces.  The right
+   panel shows the relative difference.  This figure is a quick normalization
+   and trend check; it is not a production-resolution kinetic convergence claim.
+
+The plotted quantity is
+
+.. math::
+
+   \frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}},
+
+where ``<...>`` denotes a flux-surface average on
+:math:`s=\psi_N=r_N^2`.  ``sfincs_jax`` reports the dimensionless current
+diagnostic
+
+.. math::
+
+   \widehat{J}_{\parallel}
+   = \mathrm{FSABjHatOverRootFSAB2}
+   = \frac{\mathrm{FSABjHat}}{\sqrt{\mathrm{FSABHat2}}},
+   \qquad
+   \mathrm{FSABjHat}=\sum_s Z_s\,\mathrm{FSABFlow}_s .
+
+The SI value plotted by the comparison script is
+
+.. math::
+
+   \left(\frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}}\right)_{\rm SFINCS}
+   =
+   \widehat{J}_{\parallel}\,
+   e\,\bar n\,\sqrt{\frac{2\bar T}{\bar m}},
+
+with defaults :math:`\bar n=10^{20}\,\mathrm{m}^{-3}`,
+:math:`\bar T=1\,\mathrm{keV}`, and :math:`\bar m=m_p`.  These are the same
+normalization factors recorded in the JSON output.
+
+The Redl side follows the Sauter-like analytic bootstrap-current structure of
+Redl et al. (``Phys. Plasmas 28, 022502 (2021)``,
+`doi:10.1063/5.0012664 <https://doi.org/10.1063/5.0012664>`_), using
+the trapped-particle fraction, collisionalities, and :math:`Z_{\rm eff}` as the
+fit variables.  The profile contract is polynomial in :math:`s`:
+
+.. math::
+
+   n_e(s)=\sum_k a_k s^k,\qquad
+   T_e(s)=\sum_k b_k s^k,\qquad
+   T_i(s)=\sum_k c_k s^k .
+
+``vmec_jax`` computes the geometric inputs from the VMEC state.  The effective
+trapped fraction used by the script is
+
+.. math::
+
+   f_t
+   =
+   1-\frac{3}{4}\langle B^2\rangle
+   \int_0^{1/B_{\max}}
+   \frac{\lambda\,d\lambda}
+        {\left\langle \sqrt{1-\lambda B}\right\rangle},
+
+and the Redl current is assembled as
+
+.. math::
+
+   \langle J\cdot B\rangle_{\rm Redl}
+   =
+   -\frac{G e}{\psi_{\rm edge}(\iota-N)}
+   \left[
+   (n_eT_e+n_iT_i)L_{31}\frac{d\ln n_e}{ds}
+   +p_e(L_{31}+L_{32})\frac{d\ln T_e}{ds}
+   +p_i(L_{31}+\alpha L_{34})\frac{d\ln T_i}{ds}
+   \right],
+
+where :math:`N=N_{\rm fp}\,\mathrm{helicity\_n}` and this QA example uses
+``helicity_n = 0``.  The fitted functions
+:math:`L_{31}`, :math:`L_{32}`, :math:`L_{34}`, and :math:`\alpha` are the
+Redl/Sauter bootstrap coefficients; the source implementation is intentionally
+kept in ``vmec_jax.redl_bootstrap.redl_bootstrap_jdotb`` so the same algebra can
+be reused by optimization diagnostics and this ``sfincs_jax`` validation script.
+
+To make the two paths comparable, the generated SFINCS namelists use
+``inputRadialCoordinateForGradients = 1`` and write
+``dNHatdpsiNs`` / ``dTHatdpsiNs`` so the thermodynamic gradients are derivatives
+with respect to the same :math:`s=\psi_N` used by the Redl formula.  The script
+then reads ``FSABjHatOverRootFSAB2`` from each ``sfincsOutput.h5`` file and
+compares it to
+:math:`\langle J\cdot B\rangle_{\rm Redl}/\sqrt{\langle B^2\rangle}`.
 
 The script defaults to
 ``wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc`` because SFINCS
 radial-coordinate conversions need a positive VMEC ``Aminor_p``.  Redl-only
 plotting can be used with unscaled VMEC artifacts, but the kinetic comparison
 requires a physically scaled ``wout``.
+
+Main references for this diagnostic are Redl et al. 2021 for the analytic
+bootstrap fit, Sauter et al. 1999/2002 for the original tokamak fit structure,
+Landreman et al. 2014 for the SFINCS kinetic model, and Landreman & Paul 2022
+for the QA equilibrium family.  See :doc:`references` for the full citation
+list and links.
 
 Plotting a generated or frozen output file:
 

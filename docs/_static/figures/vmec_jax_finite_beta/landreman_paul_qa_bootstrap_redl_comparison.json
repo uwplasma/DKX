@@ -1,0 +1,144 @@
+{
+  "claim_boundary": "This is a normalization and trend comparison between SFINCS-JAX and the Redl bootstrap-current fit for one profile contract; it is not an optimization script.",
+  "comparison": {
+    "max_abs_diff_A_per_m2": 325851.6875623893,
+    "max_rel_diff": 0.1443846665436112,
+    "mean_rel_diff": 0.09103488825415794,
+    "n_compared": 3
+  },
+  "inputs": {
+    "Er": 0.0,
+    "ne_coeffs": [
+      3e+20,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      -2.97e+20
+    ],
+    "nu_n": 0.00831565,
+    "r_n_values": [
+      0.2857142857142857,
+      0.4948716593053935,
+      0.6998542122237652
+    ],
+    "s_values": [
+      0.08163265306122448,
+      0.24489795918367346,
+      0.4897959183673469
+    ],
+    "te_coeffs": [
+      15000.0,
+      -14850.0
+    ],
+    "ti_coeffs": null,
+    "vmec_input": "/Users/rogeriojorge/local/vmec_jax/examples/data/input.LandremanPaul2021_QA_reactorScale_lowres",
+    "wout": "/Users/rogeriojorge/local/vmec_jax/examples/data/wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc",
+    "zeff_coeffs": [
+      1.0
+    ]
+  },
+  "normalization": {
+    "density_bar_m^-3": 1e+20,
+    "mass_bar_kg": 1.67262192369e-27,
+    "sfincs_current_scale_A_per_m2": 7012642.444294794,
+    "sfincs_si_formula": "FSABjHatOverRootFSAB2 * e * n_bar * sqrt(2*T_bar/m_bar)",
+    "temperature_bar_keV": 1.0
+  },
+  "redl": {
+    "L31": [
+      0.2741416045562344,
+      0.3816854121699454,
+      0.3751747303804062
+    ],
+    "L32": [
+      0.12809192549657047,
+      0.12626654176083987,
+      0.16147549781115286
+    ],
+    "L34": [
+      0.2741416045562344,
+      0.3816854121699454,
+      0.3751747303804062
+    ],
+    "epsilon": [
+      0.029621075765187202,
+      0.05356805533238482,
+      0.07647168935283123
+    ],
+    "f_t": [
+      0.5400698786789946,
+      0.6088491632143609,
+      0.6576403333593507
+    ],
+    "fsa_B2": [
+      17.41431079212147,
+      17.31879835008797,
+      17.173629239560114
+    ],
+    "iota": [
+      0.4226133470422238,
+      0.4213076098677823,
+      0.4193611671408232
+    ],
+    "j_parallel_redl_si": [
+      -2048638.378481214,
+      -2698469.2755609164,
+      -3175415.8291334393
+    ],
+    "jdotb_redl": [
+      -8549061.668919193,
+      -11229912.060631253,
+      -13159265.422057766
+    ],
+    "nu_e_star": [
+      1.333942043079297,
+      0.8037761510899061,
+      0.9810011626031426
+    ],
+    "nu_i_star": [
+      1.1340945543089762,
+      0.6814242294721304,
+      0.8267030130142604
+    ]
+  },
+  "sfincs_jax": [
+    {
+      "FSABjHat": -1.9729591796981614,
+      "FSABjHatOverRootFSAB2": -0.3343148272922432,
+      "elapsed_s": 2.170286292000128,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p2857/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p2857/sfincsOutput.h5",
+      "r_n": 0.2857142857142857,
+      "s": 0.08163265306122448,
+      "sfincs_j_parallel_si": -2344430.3476266684,
+      "sfincs_jdotb_scaled": -13835657.284412367,
+      "status": "loaded"
+    },
+    {
+      "FSABjHat": -2.538793141222529,
+      "FSABjHatOverRootFSAB2": -0.43126695637872886,
+      "elapsed_s": 0.16583399999990434,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p4949/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p4949/sfincsOutput.h5",
+      "r_n": 0.4948716593053935,
+      "s": 0.24489795918367346,
+      "sfincs_j_parallel_si": -3024320.9631233057,
+      "sfincs_jdotb_scaled": -17803648.539421614,
+      "status": "loaded"
+    },
+    {
+      "FSABjHat": -2.6768390018736943,
+      "FSABjHatOverRootFSAB2": -0.45642000914025965,
+      "elapsed_s": 1.368271041999833,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p6999/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p6999/sfincsOutput.h5",
+      "r_n": 0.6998542122237652,
+      "s": 0.4897959183673469,
+      "sfincs_j_parallel_si": -3200710.328522403,
+      "sfincs_jdotb_scaled": -18771714.80108318,
+      "status": "loaded"
+    }
+  ],
+  "workflow": "landreman_paul_qa_sfincs_jax_redl_bootstrap_current_comparison"
+}

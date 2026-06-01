@@ -322,6 +322,56 @@ faster than GPU because the sparse factors are host-backed. The full
 `25 x 51 x 100 x 4` production floor is still documented as a larger
 algorithmic validation step rather than a closed convergence claim.
 
+### Landreman-Paul QA Bootstrap-Current Check
+
+For a fast educational comparison between a kinetic `sfincs_jax` bootstrap
+current and the Redl analytic fit, run:
+
+```bash
+python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py \
+  --run-sfincs \
+  --r-n-values 0.3,0.5,0.7 \
+  --n-lambda 16 \
+  --ntheta 5 --nzeta 5 --nxi 5 --nl 3 --nx 4
+```
+
+The script uses the reactor-scale Landreman-Paul QA example from `vmec_jax`,
+evaluates the Redl formula on the selected VMEC surfaces, runs `sfincs_jax`
+RHSMode=1 on the same surfaces, and writes JSON/PNG/PDF outputs under
+`outputs/landreman_paul_qa_bootstrap_redl/`.
+
+The plotted quantity is the flux-surface-averaged parallel current density
+projected along the magnetic field,
+
+```math
+\frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}}.
+```
+
+For `sfincs_jax`, the dimensionless diagnostic is
+
+```math
+\widehat{J}_{\parallel}
+= \mathrm{FSABjHatOverRootFSAB2}
+= \frac{\sum_s Z_s\,\mathrm{FSABFlow}_s}
+       {\sqrt{\langle \hat B^2\rangle}},
+```
+
+and the SI conversion used in the plot is
+
+```math
+\frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}}
+= \widehat{J}_{\parallel}\,
+e\,\bar n\,\sqrt{\frac{2\bar T}{\bar m}}.
+```
+
+The Redl side uses fitted bootstrap-current coefficients as a function of
+trapped-particle fraction, collisionality, and `Z_eff`. The fast README figure
+below is a low-resolution normalization/trend check, not a production-resolution
+claim; increase `Ntheta`, `Nzeta`, `Nxi`, `NL`, `Nx`, and the radial grid before
+using the comparison in a paper.
+
+![Landreman-Paul QA bootstrap-current Redl comparison](docs/_static/figures/vmec_jax_finite_beta/landreman_paul_qa_bootstrap_redl_comparison.png)
+
 ## Physics in One Page
 
 `sfincs_jax` solves the radially local, steady, linearized drift-kinetic

@@ -13,6 +13,12 @@ Core neoclassical and SFINCS literature
   `Implementation of a full linearized Fokker-Planck collision operator in SFINCS <https://arxiv.org/abs/1504.04810>`_.
 - A. H. Boozer,
   `Guiding center drift equations <https://www.osti.gov/biblio/5655342>`_.
+- A. Redl et al.,
+  `A new set of analytical formulae for the computation of the bootstrap current and the neoclassical conductivity in tokamaks <https://doi.org/10.1063/5.0012664>`_.
+- O. Sauter, C. Angioni, and Y. R. Lin-Liu,
+  `Neoclassical conductivity and bootstrap current formulas for general axisymmetric equilibria and arbitrary collisionality regime <https://doi.org/10.1063/1.873240>`_.
+- M. Landreman and E. J. Paul,
+  `Magnetic Fields with Precise Quasisymmetry for Plasma Confinement <https://doi.org/10.1103/PhysRevLett.128.035001>`_.
 
 Experimental and cross-code validation anchors
 ----------------------------------------------
