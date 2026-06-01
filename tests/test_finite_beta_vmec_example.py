@@ -126,6 +126,59 @@ def test_landreman_paul_redl_comparison_summarizes_synthetic_difference(tmp_path
     assert "FSABjHatOverRootFSAB2" in payload["normalization"]["sfincs_si_formula"]
 
 
+def test_landreman_paul_redl_comparison_errorbar_summary_uses_refinement_deltas(tmp_path) -> None:
+    mod = _load_redl_compare_module()
+    args = mod._build_parser().parse_args(["--skip-sfincs", "--with-errorbars", "--out-dir", str(tmp_path)])
+    redl = {
+        "r_n": np.asarray([0.5, 0.7]),
+        "s": np.asarray([0.25, 0.49]),
+        "jdotb_redl": np.asarray([-4.0, -5.0]),
+        "j_parallel_redl_si": np.asarray([-2.0e6, -3.0e6]),
+        "fsa_B2": np.asarray([4.0, 4.0]),
+        "epsilon": np.asarray([0.1, 0.2]),
+        "f_t": np.asarray([0.2, 0.3]),
+        "iota": np.asarray([0.42, 0.41]),
+        "nu_e_star": np.asarray([1.0, 1.1]),
+        "nu_i_star": np.asarray([2.0, 2.1]),
+        "L31": np.asarray([0.3, 0.31]),
+        "L32": np.asarray([0.4, 0.41]),
+        "L34": np.asarray([0.5, 0.51]),
+    }
+    sfincs_rows = [
+        {"sfincs_j_parallel_si": -1.5e6},
+        {"sfincs_j_parallel_si": -2.5e6},
+    ]
+    convergence = {
+        "enabled": True,
+        "definition": "synthetic",
+        "baseline_resolution": {"Ntheta": 5, "Nzeta": 5, "Nxi": 5, "NL": 3, "Nx": 4},
+        "real_space_resolution": {"Ntheta": 7, "Nzeta": 7, "Nxi": 5, "NL": 3, "Nx": 4},
+        "velocity_space_resolution": {"Ntheta": 5, "Nzeta": 5, "Nxi": 7, "NL": 4, "Nx": 5},
+        "sfincs_j_parallel_si_errorbar": [2.0e4, 5.0e4],
+        "sfincs_j_parallel_si_errorbar_rel_to_baseline": [2.0e4 / 1.5e6, 5.0e4 / 2.5e6],
+        "real_space_delta_A_per_m2": [2.0e4, 4.0e4],
+        "velocity_space_delta_A_per_m2": [1.0e4, 5.0e4],
+        "real_space": [],
+        "velocity_space": [],
+    }
+
+    payload = mod._write_summary(
+        path=tmp_path / "summary_with_errorbars.json",
+        args=args,
+        vmec_input=Path("/tmp/input.LandremanPaul2021_QA_reactorScale_lowres"),
+        wout_path=Path("/tmp/wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc"),
+        redl=redl,
+        sfincs_rows=sfincs_rows,
+        scale=6.0e6,
+        convergence=convergence,
+    )
+
+    assert payload["comparison"]["n_compared"] == 2
+    np.testing.assert_allclose(payload["comparison"]["max_errorbar_A_per_m2"], 5.0e4)
+    np.testing.assert_allclose(payload["comparison"]["max_errorbar_rel_to_sfincs"], 0.02)
+    assert payload["convergence_errorbars"]["real_space_resolution"]["Ntheta"] == 7
+
+
 def test_finite_beta_example_template_uses_vmec_scheme5_and_er() -> None:
     mod = _load_example_module()
 
