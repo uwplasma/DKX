@@ -1,10 +1,245 @@
 {
   "claim_boundary": "This is a normalization and trend comparison between SFINCS-JAX and the Redl bootstrap-current fit for one profile contract; it is not an optimization script.",
   "comparison": {
-    "max_abs_diff_A_per_m2": 325851.6875623893,
-    "max_rel_diff": 0.1443846665436112,
-    "mean_rel_diff": 0.09103488825415794,
-    "n_compared": 3
+    "max_abs_diff_A_per_m2": 607752.9187963684,
+    "max_errorbar_A_per_m2": 277512.77962513035,
+    "max_errorbar_rel_to_sfincs": 0.15746334933130873,
+    "max_rel_diff": 0.19358083821642108,
+    "mean_rel_diff": 0.1137418630470306,
+    "n_compared": 7
+  },
+  "convergence_errorbars": {
+    "baseline_resolution": {
+      "NL": 4,
+      "Ntheta": 5,
+      "Nx": 5,
+      "Nxi": 7,
+      "Nzeta": 5
+    },
+    "definition": "Error bars are the pointwise maximum absolute change in the SFINCS-JAX SI bootstrap-current diagnostic when independently refining angular real-space resolution and velocity-space resolution from the baseline grid.",
+    "enabled": true,
+    "real_space": [
+      {
+        "FSABjHat": -1.289167199429547,
+        "FSABjHatOverRootFSAB2": -0.21831491117939314,
+        "elapsed_s": 6.840988417000062,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p202/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p202/sfincsOutput.h5",
+        "r_n": 0.20203050891044214,
+        "s": 0.04081632653061224,
+        "sfincs_j_parallel_si": -1530964.4123590605,
+        "sfincs_jdotb_scaled": -9040468.620512294,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -1.5172649798486393,
+        "FSABjHatOverRootFSAB2": -0.25709011582819125,
+        "elapsed_s": 5.504853874999981,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p2857/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p2857/sfincsOutput.h5",
+        "r_n": 0.2857142857142857,
+        "s": 0.08163265306122448,
+        "sfincs_j_parallel_si": -1802881.0582654388,
+        "sfincs_jdotb_scaled": -10640036.796928653,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -1.7907922621166739,
+        "FSABjHatOverRootFSAB2": -0.3038001990754566,
+        "elapsed_s": 5.6961840419999135,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p4041/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p4041/sfincsOutput.h5",
+        "r_n": 0.40406101782088427,
+        "s": 0.16326530612244897,
+        "sfincs_j_parallel_si": -2130442.170621755,
+        "sfincs_jdotb_scaled": -12558185.826234076,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -1.9253024757552555,
+        "FSABjHatOverRootFSAB2": -0.3270189603298821,
+        "elapsed_s": 5.615201250000155,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p4949/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p4949/sfincsOutput.h5",
+        "r_n": 0.4948716593053935,
+        "s": 0.24489795918367346,
+        "sfincs_j_parallel_si": -2293267.0412984868,
+        "sfincs_jdotb_scaled": -13501457.859587153,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -2.0346224442302208,
+        "FSABjHatOverRootFSAB2": -0.34622704335821236,
+        "elapsed_s": 5.701246000000083,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p6061/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p6061/sfincsOutput.h5",
+        "r_n": 0.6060915267313264,
+        "s": 0.36734693877551017,
+        "sfincs_j_parallel_si": -2427966.459616494,
+        "sfincs_jdotb_scaled": -14268079.710523665,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -2.0938701006676697,
+        "FSABjHatOverRootFSAB2": -0.35696881176639506,
+        "elapsed_s": 5.64522179100004,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p6999/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p6999/sfincsOutput.h5",
+        "r_n": 0.6998542122237652,
+        "s": 0.4897959183673469,
+        "sfincs_j_parallel_si": -2503294.640682501,
+        "sfincs_jdotb_scaled": -14683562.340781914,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -2.0234886582648923,
+        "FSABjHatOverRootFSAB2": -0.34571340798118066,
+        "elapsed_s": 5.767941833999885,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p7954/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_real_space_refined/sfincs_jax_points/rN0p7954/sfincsOutput.h5",
+        "r_n": 0.7953949089757174,
+        "s": 0.6326530612244897,
+        "sfincs_j_parallel_si": -2424364.51837063,
+        "sfincs_jdotb_scaled": -14190002.450497508,
+        "status": "loaded"
+      }
+    ],
+    "real_space_delta_A_per_m2": [
+      24928.45946373162,
+      44457.27247863752,
+      89295.98064030288,
+      127259.24621481076,
+      153675.27320442162,
+      144550.22685403656,
+      107412.92335818848
+    ],
+    "real_space_resolution": {
+      "NL": 4,
+      "Ntheta": 7,
+      "Nx": 5,
+      "Nxi": 7,
+      "Nzeta": 7
+    },
+    "sfincs_j_parallel_si_errorbar": [
+      244996.10279792547,
+      195134.11326061585,
+      224662.3006612535,
+      265146.1305470178,
+      277512.77962513035,
+      253952.81705927942,
+      240967.02704656962
+    ],
+    "sfincs_j_parallel_si_errorbar_rel_to_baseline": [
+      0.15746334933130873,
+      0.10562987299788186,
+      0.10121117237793077,
+      0.10954069448236106,
+      0.10749469072220835,
+      0.0959092506410877,
+      0.09517701796174699
+    ],
+    "velocity_space": [
+      {
+        "FSABjHat": -1.1038397161039122,
+        "FSABjHatOverRootFSAB2": -0.18693335350233917,
+        "elapsed_s": 5.5687367919999815,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p202/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p202/sfincsOutput.h5",
+        "r_n": 0.20203050891044214,
+        "s": 0.04081632653061224,
+        "sfincs_j_parallel_si": -1310896.7690248666,
+        "sfincs_jdotb_scaled": -7740833.244848611,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -1.3904151517744712,
+        "FSABjHatOverRootFSAB2": -0.23560365876455425,
+        "elapsed_s": 4.143335166999805,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p2857/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p2857/sfincsOutput.h5",
+        "r_n": 0.2857142857142857,
+        "s": 0.08163265306122448,
+        "sfincs_j_parallel_si": -1652204.2174834604,
+        "sfincs_jdotb_scaled": -9750484.308524245,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -1.6768896833291078,
+        "FSABjHatOverRootFSAB2": -0.2844970161317605,
+        "elapsed_s": 4.241547166000146,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p4041/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p4041/sfincsOutput.h5",
+        "r_n": 0.40406101782088427,
+        "s": 0.16326530612244897,
+        "sfincs_j_parallel_si": -1995075.8506008044,
+        "sfincs_jdotb_scaled": -11759427.76771376,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -1.8093530501412014,
+        "FSABjHatOverRootFSAB2": -0.3073563459263221,
+        "elapsed_s": 4.335035583000263,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p4949/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p4949/sfincsOutput.h5",
+        "r_n": 0.4948716593053935,
+        "s": 0.24489795918367346,
+        "sfincs_j_parallel_si": -2155380.1569662797,
+        "sfincs_jdotb_scaled": -12688345.996134436,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -1.9305928677610311,
+        "FSABjHatOverRootFSAB2": -0.32856786461005616,
+        "elapsed_s": 4.444584667000072,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p6061/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p6061/sfincsOutput.h5",
+        "r_n": 0.6060915267313264,
+        "s": 0.36734693877551017,
+        "sfincs_j_parallel_si": -2304128.953195785,
+        "sfincs_jdotb_scaled": -13538557.487113815,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -2.002075461152767,
+        "FSABjHatOverRootFSAB2": -0.3413680462811608,
+        "elapsed_s": 4.382197083999927,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p6999/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p6999/sfincsOutput.h5",
+        "r_n": 0.6998542122237652,
+        "s": 0.4897959183673469,
+        "sfincs_j_parallel_si": -2393892.050477258,
+        "sfincs_jdotb_scaled": -14039839.35556097,
+        "status": "loaded"
+      },
+      {
+        "FSABjHat": -1.9117314137832522,
+        "FSABjHatOverRootFSAB2": -0.3266686463596844,
+        "elapsed_s": 4.561849707999954,
+        "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p7954/input.namelist",
+        "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points_velocity_space_refined/sfincs_jax_points/rN0p7954/sfincsOutput.h5",
+        "r_n": 0.7953949089757174,
+        "s": 0.6326530612244897,
+        "sfincs_j_parallel_si": -2290810.414682249,
+        "sfincs_jdotb_scaled": -13406288.854388129,
+        "status": "loaded"
+      }
+    ],
+    "velocity_space_delta_A_per_m2": [
+      244996.10279792547,
+      195134.11326061585,
+      224662.3006612535,
+      265146.1305470178,
+      277512.77962513035,
+      253952.81705927942,
+      240967.02704656962
+    ],
+    "velocity_space_resolution": {
+      "NL": 5,
+      "Ntheta": 5,
+      "Nx": 6,
+      "Nxi": 9,
+      "Nzeta": 5
+    }
   },
   "inputs": {
     "Er": 0.0,
@@ -18,14 +253,22 @@
     ],
     "nu_n": 0.00831565,
     "r_n_values": [
+      0.20203050891044214,
       0.2857142857142857,
+      0.40406101782088427,
       0.4948716593053935,
-      0.6998542122237652
+      0.6060915267313264,
+      0.6998542122237652,
+      0.7953949089757174
     ],
     "s_values": [
+      0.04081632653061224,
       0.08163265306122448,
+      0.16326530612244897,
       0.24489795918367346,
-      0.4897959183673469
+      0.36734693877551017,
+      0.4897959183673469,
+      0.6326530612244897
     ],
     "te_coeffs": [
       15000.0,
@@ -47,96 +290,188 @@
   },
   "redl": {
     "L31": [
+      0.18581230063384022,
       0.2741416045562344,
+      0.3503059934562666,
       0.3816854121699454,
-      0.3751747303804062
+      0.3925820539804745,
+      0.3751747303804062,
+      0.3231716627265616
     ],
     "L32": [
+      0.12550445986419034,
       0.12809192549657047,
+      0.12388889815095322,
       0.12626654176083987,
-      0.16147549781115286
+      0.1399888787247676,
+      0.16147549781115286,
+      0.18928628779086043
     ],
     "L34": [
+      0.18581230063384022,
       0.2741416045562344,
+      0.3503059934562666,
       0.3816854121699454,
-      0.3751747303804062
+      0.3925820539804745,
+      0.3751747303804062,
+      0.3231716627265616
     ],
     "epsilon": [
+      0.019407379367399787,
       0.029621075765187202,
+      0.04330085118921063,
       0.05356805533238482,
-      0.07647168935283123
+      0.06603057904598654,
+      0.07647168935283123,
+      0.08710393641835562
     ],
     "f_t": [
+      0.5001003284225481,
       0.5400698786789946,
+      0.5823961912302731,
       0.6088491632143609,
-      0.6576403333593507
+      0.6367949747222879,
+      0.6576403333593507,
+      0.6769921642600033
     ],
     "fsa_B2": [
+      17.436928716876672,
       17.41431079212147,
+      17.367057459308228,
       17.31879835008797,
-      17.173629239560114
+      17.246101198206848,
+      17.173629239560114,
+      17.089475703380476
     ],
     "iota": [
+      0.42283176210566853,
       0.4226133470422238,
+      0.42200294474390937,
       0.4213076098677823,
-      0.4193611671408232
+      0.42030265672647205,
+      0.4193611671408232,
+      0.4183160393335687
     ],
     "j_parallel_redl_si": [
+      -1565111.0998919958,
       -2048638.378481214,
+      -2463808.0222447235,
       -2698469.2755609164,
-      -3175415.8291334393
+      -2968282.3415731275,
+      -3175415.8291334393,
+      -3139530.360525187
     ],
     "jdotb_redl": [
+      -6535520.2941944655,
       -8549061.668919193,
+      -10267624.688085943,
       -11229912.060631253,
-      -13159265.422057766
+      -12326809.191743257,
+      -13159265.422057766,
+      -12978636.130583625
     ],
     "nu_e_star": [
+      2.310045065294115,
       1.333942043079297,
+      0.9055814571600956,
       0.8037761510899061,
-      0.9810011626031426
+      0.8239802211166154,
+      0.9810011626031426,
+      1.4040418465630906
     ],
     "nu_i_star": [
+      1.9651773469013334,
       1.1340945543089762,
+      0.7688809545719859,
       0.6814242294721304,
-      0.8267030130142604
+      0.6967110598217371,
+      0.8267030130142604,
+      1.1767366038301992
     ]
   },
   "sfincs_jax": [
     {
-      "FSABjHat": -1.9729591796981614,
-      "FSABjHatOverRootFSAB2": -0.3343148272922432,
-      "elapsed_s": 2.170286292000128,
-      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p2857/input.namelist",
-      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p2857/sfincsOutput.h5",
+      "FSABjHat": -1.3101385147196076,
+      "FSABjHatOverRootFSAB2": -0.22186969950087848,
+      "elapsed_s": 1.12624345800009,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p202/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p202/sfincsOutput.h5",
+      "r_n": 0.20203050891044214,
+      "s": 0.04081632653061224,
+      "sfincs_j_parallel_si": -1555892.871822792,
+      "sfincs_jdotb_scaled": -9187532.95622806,
+      "status": "loaded"
+    },
+    {
+      "FSABjHat": -1.5546305827935805,
+      "FSABjHatOverRootFSAB2": -0.26342970505319246,
+      "elapsed_s": 0.29773570899988044,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p2857/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p2857/sfincsOutput.h5",
       "r_n": 0.2857142857142857,
       "s": 0.08163265306122448,
-      "sfincs_j_parallel_si": -2344430.3476266684,
-      "sfincs_jdotb_scaled": -13835657.284412367,
+      "sfincs_j_parallel_si": -1847338.3307440763,
+      "sfincs_jdotb_scaled": -10902068.410097014,
       "status": "loaded"
     },
     {
-      "FSABjHat": -2.538793141222529,
-      "FSABjHatOverRootFSAB2": -0.43126695637872886,
-      "elapsed_s": 0.16583399999990434,
-      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p4949/input.namelist",
-      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p4949/sfincsOutput.h5",
+      "FSABjHat": -1.8657215485929708,
+      "FSABjHatOverRootFSAB2": -0.31653377010087663,
+      "elapsed_s": 0.2964917909998803,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p4041/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p4041/sfincsOutput.h5",
+      "r_n": 0.40406101782088427,
+      "s": 0.16326530612244897,
+      "sfincs_j_parallel_si": -2219738.151262058,
+      "sfincs_jdotb_scaled": -13083638.12089848,
+      "status": "loaded"
+    },
+    {
+      "FSABjHat": -2.0319323285519424,
+      "FSABjHatOverRootFSAB2": -0.34516607780032205,
+      "elapsed_s": 0.30050675000006777,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p4949/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p4949/sfincsOutput.h5",
       "r_n": 0.4948716593053935,
       "s": 0.24489795918367346,
-      "sfincs_j_parallel_si": -3024320.9631233057,
-      "sfincs_jdotb_scaled": -17803648.539421614,
+      "sfincs_j_parallel_si": -2420526.2875132975,
+      "sfincs_jdotb_scaled": -14249214.891138107,
       "status": "loaded"
     },
     {
-      "FSABjHat": -2.6768390018736943,
-      "FSABjHatOverRootFSAB2": -0.45642000914025965,
-      "elapsed_s": 1.368271041999833,
-      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p6999/input.namelist",
-      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_doc/sfincs_jax_points/rN0p6999/sfincsOutput.h5",
+      "FSABjHat": -2.163116395714499,
+      "FSABjHatOverRootFSAB2": -0.36814107568271015,
+      "elapsed_s": 0.28606300000001283,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p6061/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p6061/sfincsOutput.h5",
+      "r_n": 0.6060915267313264,
+      "s": 0.36734693877551017,
+      "sfincs_j_parallel_si": -2581641.7328209155,
+      "sfincs_jdotb_scaled": -15169161.84853747,
+      "status": "loaded"
+    },
+    {
+      "FSABjHat": -2.214462942544686,
+      "FSABjHatOverRootFSAB2": -0.377581616141105,
+      "elapsed_s": 0.29221687499989457,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p6999/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p6999/sfincsOutput.h5",
       "r_n": 0.6998542122237652,
       "s": 0.4897959183673469,
-      "sfincs_j_parallel_si": -3200710.328522403,
-      "sfincs_jdotb_scaled": -18771714.80108318,
+      "sfincs_j_parallel_si": -2647844.8675365373,
+      "sfincs_jdotb_scaled": -15529236.82220681,
+      "status": "loaded"
+    },
+    {
+      "FSABjHat": -2.112823670191028,
+      "FSABjHatOverRootFSAB2": -0.3610304477720195,
+      "elapsed_s": 0.2904139170000235,
+      "input": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p7954/input.namelist",
+      "output": "/private/tmp/sfincs_jax_landreman_paul_redl_errorbars_refined/sfincs_jax_points/rN0p7954/sfincsOutput.h5",
+      "r_n": 0.7953949089757174,
+      "s": 0.6326530612244897,
+      "sfincs_j_parallel_si": -2531777.4417288187,
+      "sfincs_jdotb_scaled": -14816476.94689231,
       "status": "loaded"
     }
   ],

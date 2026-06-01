@@ -16,9 +16,16 @@ Run a fast Redl-only plot from the ``sfincs_jax`` repository root:
 
     python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py --skip-sfincs
 
-Run the bounded SFINCS-JAX comparison too:
+Run the bounded SFINCS-JAX comparison with radial coverage and numerical
+error bars from one real-space refinement and one velocity-space refinement:
 
-    python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py --run-sfincs
+    python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py \
+      --run-sfincs --with-errorbars \
+      --r-n-values 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
+      --n-lambda 16 \
+      --ntheta 5 --nzeta 5 --nxi 7 --nl 4 --nx 5 \
+      --real-ntheta 7 --real-nzeta 7 \
+      --velocity-nxi 9 --velocity-nl 5 --velocity-nx 6
 """
 
 from __future__ import annotations
@@ -49,7 +56,7 @@ from sfincs_jax.vmec_wout import read_vmec_wout  # noqa: E402
 ELEMENTARY_CHARGE = 1.602176634e-19
 ONE_KEV_J = 1.602176634e-16
 PROTON_MASS_KG = 1.67262192369e-27
-DEFAULT_R_N_VALUES = "0.30,0.50,0.70"
+DEFAULT_R_N_VALUES = "0.20,0.30,0.40,0.50,0.60,0.70,0.80"
 DEFAULT_NE_COEFFS = "3.0e20,0.0,0.0,0.0,0.0,-2.97e20"
 DEFAULT_TE_COEFFS = "15.0e3,-14.85e3"
 
@@ -98,6 +105,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--nxi", type=int, default=9)
     parser.add_argument("--nl", type=int, default=4)
     parser.add_argument("--nx", type=int, default=4)
+    parser.add_argument(
+        "--with-errorbars",
+        action="store_true",
+        help=(
+            "Run/read two additional convergence probes and plot numerical error bars: "
+            "one real-space refinement and one velocity-space refinement."
+        ),
+    )
+    parser.add_argument("--real-ntheta", type=int, default=None, help="Real-space refinement Ntheta. Defaults to Ntheta+2.")
+    parser.add_argument("--real-nzeta", type=int, default=None, help="Real-space refinement Nzeta. Defaults to Nzeta+2.")
+    parser.add_argument("--velocity-nxi", type=int, default=None, help="Velocity-space refinement Nxi. Defaults to Nxi+2.")
+    parser.add_argument("--velocity-nl", type=int, default=None, help="Velocity-space refinement NL. Defaults to NL+1.")
+    parser.add_argument("--velocity-nx", type=int, default=None, help="Velocity-space refinement Nx. Defaults to Nx+1.")
     parser.add_argument("--solver-tolerance", type=float, default=1.0e-8)
     parser.add_argument("--ne-coeffs", default=DEFAULT_NE_COEFFS, help="Redl electron-density polynomial in s, SI units.")
     parser.add_argument("--te-coeffs", default=DEFAULT_TE_COEFFS, help="Redl electron-temperature polynomial in s, eV.")
@@ -439,6 +459,129 @@ def _run_or_read_sfincs(
     return rows
 
 
+def _scan_args_with_resolution(
+    args: argparse.Namespace,
+    *,
+    out_dir: Path,
+    ntheta: int,
+    nzeta: int,
+    nxi: int,
+    nl: int,
+    nx: int,
+) -> argparse.Namespace:
+    values = vars(args).copy()
+    values.update(
+        {
+            "out_dir": out_dir,
+            "ntheta": int(ntheta),
+            "nzeta": int(nzeta),
+            "nxi": int(nxi),
+            "nl": int(nl),
+            "nx": int(nx),
+        }
+    )
+    return argparse.Namespace(**values)
+
+
+def _resolution_dict(args: argparse.Namespace) -> dict[str, int]:
+    return {
+        "Ntheta": int(args.ntheta),
+        "Nzeta": int(args.nzeta),
+        "Nxi": int(args.nxi),
+        "NL": int(args.nl),
+        "Nx": int(args.nx),
+    }
+
+
+def _sfincs_profile_from_rows(rows: list[dict[str, Any]]) -> np.ndarray:
+    return np.asarray(
+        [np.nan if row.get("sfincs_j_parallel_si") is None else float(row["sfincs_j_parallel_si"]) for row in rows],
+        dtype=float,
+    )
+
+
+def _pointwise_max_abs_delta(reference: np.ndarray, candidates: list[np.ndarray]) -> np.ndarray:
+    error = np.full_like(reference, np.nan, dtype=float)
+    for idx, base in enumerate(reference):
+        if not np.isfinite(base):
+            continue
+        deltas = [abs(float(candidate[idx]) - float(base)) for candidate in candidates if idx < len(candidate) and np.isfinite(candidate[idx])]
+        if deltas:
+            error[idx] = max(deltas)
+    return error
+
+
+def _run_convergence_errorbars(
+    *,
+    redl: dict[str, Any],
+    args: argparse.Namespace,
+    wout_path: Path,
+    scale: float,
+    baseline_rows: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not bool(args.with_errorbars):
+        return None
+
+    real_ntheta = int(args.real_ntheta) if args.real_ntheta is not None else int(args.ntheta) + 2
+    real_nzeta = int(args.real_nzeta) if args.real_nzeta is not None else int(args.nzeta) + 2
+    velocity_nxi = int(args.velocity_nxi) if args.velocity_nxi is not None else int(args.nxi) + 2
+    velocity_nl = int(args.velocity_nl) if args.velocity_nl is not None else int(args.nl) + 1
+    velocity_nx = int(args.velocity_nx) if args.velocity_nx is not None else int(args.nx) + 1
+
+    real_args = _scan_args_with_resolution(
+        args,
+        out_dir=args.out_dir / "sfincs_jax_points_real_space_refined",
+        ntheta=real_ntheta,
+        nzeta=real_nzeta,
+        nxi=int(args.nxi),
+        nl=int(args.nl),
+        nx=int(args.nx),
+    )
+    velocity_args = _scan_args_with_resolution(
+        args,
+        out_dir=args.out_dir / "sfincs_jax_points_velocity_space_refined",
+        ntheta=int(args.ntheta),
+        nzeta=int(args.nzeta),
+        nxi=velocity_nxi,
+        nl=velocity_nl,
+        nx=velocity_nx,
+    )
+
+    print(
+        "Running/reading convergence probes: "
+        f"real-space={_resolution_dict(real_args)}, velocity-space={_resolution_dict(velocity_args)}",
+        flush=True,
+    )
+    real_rows = _run_or_read_sfincs(redl=redl, args=real_args, wout_path=wout_path, scale=scale)
+    velocity_rows = _run_or_read_sfincs(redl=redl, args=velocity_args, wout_path=wout_path, scale=scale)
+
+    baseline = _sfincs_profile_from_rows(baseline_rows)
+    real = _sfincs_profile_from_rows(real_rows)
+    velocity = _sfincs_profile_from_rows(velocity_rows)
+    real_delta = np.abs(real - baseline)
+    velocity_delta = np.abs(velocity - baseline)
+    error = _pointwise_max_abs_delta(baseline, [real, velocity])
+    rel_to_baseline = error / np.maximum(np.abs(baseline), 1.0e-300)
+
+    return {
+        "enabled": True,
+        "definition": (
+            "Error bars are the pointwise maximum absolute change in the SFINCS-JAX "
+            "SI bootstrap-current diagnostic when independently refining angular "
+            "real-space resolution and velocity-space resolution from the baseline grid."
+        ),
+        "baseline_resolution": _resolution_dict(args),
+        "real_space_resolution": _resolution_dict(real_args),
+        "velocity_space_resolution": _resolution_dict(velocity_args),
+        "sfincs_j_parallel_si_errorbar": _jsonify_array(error),
+        "sfincs_j_parallel_si_errorbar_rel_to_baseline": _jsonify_array(rel_to_baseline),
+        "real_space_delta_A_per_m2": _jsonify_array(real_delta),
+        "velocity_space_delta_A_per_m2": _jsonify_array(velocity_delta),
+        "real_space": real_rows,
+        "velocity_space": velocity_rows,
+    }
+
+
 def _jsonify_array(values: Any) -> list[float]:
     return [float(v) for v in np.asarray(values, dtype=float).reshape(-1)]
 
@@ -452,6 +595,7 @@ def _write_summary(
     redl: dict[str, Any],
     sfincs_rows: list[dict[str, Any]],
     scale: float,
+    convergence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     sfincs_values = np.asarray(
         [np.nan if row["sfincs_j_parallel_si"] is None else float(row["sfincs_j_parallel_si"]) for row in sfincs_rows],
@@ -507,6 +651,14 @@ def _write_summary(
             "mean_rel_diff": None if not np.any(mask) else float(np.mean(rel)),
         },
     }
+    if convergence is not None:
+        error = np.asarray(convergence["sfincs_j_parallel_si_errorbar"], dtype=float)
+        finite_error = error[np.isfinite(error)]
+        rel_error = np.asarray(convergence["sfincs_j_parallel_si_errorbar_rel_to_baseline"], dtype=float)
+        finite_rel_error = rel_error[np.isfinite(rel_error)]
+        payload["convergence_errorbars"] = convergence
+        payload["comparison"]["max_errorbar_A_per_m2"] = None if finite_error.size == 0 else float(np.max(finite_error))
+        payload["comparison"]["max_errorbar_rel_to_sfincs"] = None if finite_rel_error.size == 0 else float(np.max(finite_rel_error))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return payload
@@ -542,11 +694,29 @@ def _write_plot(*, payload: dict[str, Any], png_path: Path, pdf_path: Path) -> N
         ],
         dtype=float,
     )
+    errorbars = np.full_like(sfincs, np.nan, dtype=float)
+    if payload.get("convergence_errorbars") is not None:
+        raw = np.asarray(payload["convergence_errorbars"].get("sfincs_j_parallel_si_errorbar", []), dtype=float)
+        if raw.shape == sfincs.shape:
+            errorbars = raw
     rel = np.abs(sfincs - redl) / np.maximum(np.abs(redl), 1.0e-300)
+    rel_errorbars = errorbars / np.maximum(np.abs(redl), 1.0e-300)
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.7), constrained_layout=True)
     axes[0].plot(s, redl, "o-", color="#0f4c81", lw=2.4, label="Redl formula")
     if np.any(np.isfinite(sfincs)):
-        axes[0].plot(s, sfincs, "s--", color="#c0392b", lw=2.2, label="sfincs_jax")
+        if np.any(np.isfinite(errorbars)):
+            axes[0].errorbar(
+                s,
+                sfincs,
+                yerr=errorbars,
+                fmt="s--",
+                color="#c0392b",
+                lw=2.2,
+                capsize=3.0,
+                label="sfincs_jax (baseline +/- refinement)",
+            )
+        else:
+            axes[0].plot(s, sfincs, "s--", color="#c0392b", lw=2.2, label="sfincs_jax")
     else:
         axes[0].text(0.5, 0.5, "Run with --run-sfincs\nto add SFINCS-JAX points", ha="center", va="center", transform=axes[0].transAxes)
     axes[0].axhline(0.0, color="0.25", lw=0.9)
@@ -556,16 +726,25 @@ def _write_plot(*, payload: dict[str, Any], png_path: Path, pdf_path: Path) -> N
     axes[0].legend(loc="best")
 
     if np.any(np.isfinite(rel)):
-        axes[1].semilogy(s, rel, "o-", color="#1b9e77", lw=2.2)
+        if np.any(np.isfinite(rel_errorbars)):
+            axes[1].errorbar(s, rel, yerr=rel_errorbars, fmt="o-", color="#1b9e77", lw=2.2, capsize=3.0)
+            positive = rel[np.isfinite(rel) & (rel > 0.0)]
+            if positive.size:
+                axes[1].set_ylim(bottom=max(float(np.min(positive)) * 0.5, 1.0e-6))
+            axes[1].set_yscale("log")
+        else:
+            axes[1].semilogy(s, rel, "o-", color="#1b9e77", lw=2.2)
     else:
         axes[1].text(0.5, 0.5, "No SFINCS-JAX outputs loaded", ha="center", va="center", transform=axes[1].transAxes)
     axes[1].set_xlabel(r"$s=\psi_N$")
     axes[1].set_ylabel("relative difference")
     axes[1].set_title("SFINCS-JAX vs Redl")
     stats = payload["comparison"]
+    max_err = stats.get("max_errorbar_rel_to_sfincs")
     note = (
         f"compared points: {stats['n_compared']}\n"
-        f"max rel diff: {stats['max_rel_diff'] if stats['max_rel_diff'] is not None else 'n/a'}"
+        f"max rel diff: {stats['max_rel_diff'] if stats['max_rel_diff'] is not None else 'n/a'}\n"
+        f"max num. bar/SFINCS: {max_err if max_err is not None else 'n/a'}"
     )
     axes[1].text(0.03, 0.05, note, transform=axes[1].transAxes, ha="left", va="bottom", bbox={"facecolor": "white", "alpha": 0.82})
     fig.suptitle("Landreman-Paul QA bootstrap current: sfincs_jax vs Redl", fontsize=13.5)
@@ -609,6 +788,13 @@ def main() -> int:
         mass_bar_kg=float(args.mass_bar_kg),
     )
     sfincs_rows = _run_or_read_sfincs(redl=redl, args=args, wout_path=wout_path, scale=scale)
+    convergence = _run_convergence_errorbars(
+        redl=redl,
+        args=args,
+        wout_path=wout_path,
+        scale=scale,
+        baseline_rows=sfincs_rows,
+    )
 
     json_path = args.out_dir / f"{args.stem}.json"
     png_path = args.out_dir / f"{args.stem}.png"
@@ -621,6 +807,7 @@ def main() -> int:
         redl=redl,
         sfincs_rows=sfincs_rows,
         scale=scale,
+        convergence=convergence,
     )
     if not args.no_plots:
         _write_plot(payload=payload, png_path=png_path, pdf_path=pdf_path)

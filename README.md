@@ -329,16 +329,21 @@ current and the Redl analytic fit, run:
 
 ```bash
 python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py \
-  --run-sfincs \
-  --r-n-values 0.3,0.5,0.7 \
+  --run-sfincs --with-errorbars \
+  --r-n-values 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
   --n-lambda 16 \
-  --ntheta 5 --nzeta 5 --nxi 5 --nl 3 --nx 4
+  --ntheta 5 --nzeta 5 --nxi 7 --nl 4 --nx 5 \
+  --real-ntheta 7 --real-nzeta 7 \
+  --velocity-nxi 9 --velocity-nl 5 --velocity-nx 6
 ```
 
 The script uses the reactor-scale Landreman-Paul QA example from `vmec_jax`,
 evaluates the Redl formula on the selected VMEC surfaces, runs `sfincs_jax`
 RHSMode=1 on the same surfaces, and writes JSON/PNG/PDF outputs under
-`outputs/landreman_paul_qa_bootstrap_redl/`.
+`outputs/landreman_paul_qa_bootstrap_redl/`. With `--with-errorbars`, the
+plotted numerical bars are the pointwise maximum change in the kinetic
+bootstrap-current diagnostic when separately refining real space
+(`Ntheta,Nzeta`) and velocity space (`Nxi,NL,Nx`).
 
 The plotted quantity is the flux-surface-averaged parallel current density
 projected along the magnetic field,
@@ -366,8 +371,9 @@ e\,\bar n\,\sqrt{\frac{2\bar T}{\bar m}}.
 
 The Redl side uses fitted bootstrap-current coefficients as a function of
 trapped-particle fraction, collisionality, and `Z_eff`. The fast README figure
-below is a low-resolution normalization/trend check, not a production-resolution
-claim; increase `Ntheta`, `Nzeta`, `Nxi`, `NL`, `Nx`, and the radial grid before
+below is a bounded normalization/trend check with seven radial surfaces and
+refinement-based numerical error bars, not a production-resolution kinetic
+convergence claim; increase `Ntheta`, `Nzeta`, `Nxi`, `NL`, and `Nx` before
 using the comparison in a paper.
 
 ![Landreman-Paul QA bootstrap-current Redl comparison](docs/_static/figures/vmec_jax_finite_beta/landreman_paul_qa_bootstrap_redl_comparison.png)
