@@ -156,9 +156,10 @@ refinement and one velocity-space refinement:
      --run-sfincs --with-errorbars \
      --r-n-values 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
      --n-lambda 16 \
-     --ntheta 5 --nzeta 5 --nxi 7 --nl 4 --nx 5 \
-     --real-ntheta 7 --real-nzeta 7 \
-     --velocity-nxi 9 --velocity-nl 5 --velocity-nx 6
+     --ntheta 13 --nzeta 13 --nxi 13 --nl 13 --nx 13 \
+     --real-ntheta 15 --real-nzeta 15 \
+     --velocity-nxi 15 --velocity-nl 14 --velocity-nx 14 \
+     --solver-tolerance 1e-6
 
 .. figure:: _static/figures/vmec_jax_finite_beta/landreman_paul_qa_bootstrap_redl_comparison.png
    :alt: Landreman-Paul QA bootstrap-current comparison between sfincs_jax and the Redl analytic fit.
@@ -167,10 +168,11 @@ refinement and one velocity-space refinement:
    Fast Landreman-Paul QA bootstrap-current diagnostic.  The left panel compares
    the Redl analytic fit against bounded ``sfincs_jax`` RHSMode=1 kinetic
    solves for the same profile contract and nearest VMEC surfaces.  The plotted
-   ``sfincs_jax`` line uses a ``5 x 5 x 7 x 4 x 5`` baseline
+   ``sfincs_jax`` line uses a ``13 x 13 x 13 x 13 x 13`` baseline
    ``Ntheta x Nzeta x Nxi x NL x Nx`` grid.  The error bars are the pointwise
    maximum change in the current after separately refining to
-   ``7 x 7 x 7 x 4 x 5`` in real space and ``5 x 5 x 9 x 5 x 6`` in velocity
+   ``15 x 15 x 13 x 13 x 13`` in real space and
+   ``13 x 13 x 15 x 14 x 14`` in velocity
    space.  The right panel shows the relative difference with the same numerical
    bars propagated against the Redl scale.  This figure is a quick normalization
    and trend check with an explicit resolution audit; it is not a
@@ -261,8 +263,12 @@ compares it to
 When ``--with-errorbars`` is enabled, the JSON output also stores the baseline,
 real-space-refined, and velocity-space-refined rows; the plotted error bars are
 the pointwise maximum of those two refinement deltas.  The checked figure has
-seven compared surfaces, maximum relative Redl difference ``0.194``, and maximum
-numerical bar divided by the baseline ``sfincs_jax`` current ``0.157``.
+seven compared surfaces, maximum relative Redl difference ``0.484``, and maximum
+numerical bar divided by the baseline ``sfincs_jax`` current ``0.110``.  The
+larger baseline reduces the refinement-bar size relative to the lower-resolution
+README artifact, but it also shows a larger difference between this profile
+contract's kinetic current and the Redl fit; this remains a bounded
+normalization/trend diagnostic rather than a Redl-parity claim.
 
 The script defaults to
 ``wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc`` because SFINCS

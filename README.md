@@ -332,9 +332,10 @@ python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py
   --run-sfincs --with-errorbars \
   --r-n-values 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
   --n-lambda 16 \
-  --ntheta 5 --nzeta 5 --nxi 7 --nl 4 --nx 5 \
-  --real-ntheta 7 --real-nzeta 7 \
-  --velocity-nxi 9 --velocity-nl 5 --velocity-nx 6
+  --ntheta 13 --nzeta 13 --nxi 13 --nl 13 --nx 13 \
+  --real-ntheta 15 --real-nzeta 15 \
+  --velocity-nxi 15 --velocity-nl 14 --velocity-nx 14 \
+  --solver-tolerance 1e-6
 ```
 
 The script uses the reactor-scale Landreman-Paul QA example from `vmec_jax`,
@@ -370,11 +371,14 @@ e\,\bar n\,\sqrt{\frac{2\bar T}{\bar m}}.
 ```
 
 The Redl side uses fitted bootstrap-current coefficients as a function of
-trapped-particle fraction, collisionality, and `Z_eff`. The fast README figure
-below is a bounded normalization/trend check with seven radial surfaces and
-refinement-based numerical error bars, not a production-resolution kinetic
-convergence claim; increase `Ntheta`, `Nzeta`, `Nxi`, `NL`, and `Nx` before
-using the comparison in a paper.
+trapped-particle fraction, collisionality, and `Z_eff`. The README figure below
+is a bounded normalization/trend check with seven radial surfaces, a
+`13 x 13 x 13 x 13 x 13` baseline grid, and refinement-based numerical error
+bars from `15 x 15 x 13 x 13 x 13` real-space and
+`13 x 13 x 15 x 14 x 14` velocity-space probes. The checked run completed in
+about five minutes on a local CPU, with maximum numerical bar divided by the
+baseline kinetic current of `0.110`; it is still not a production-resolution
+kinetic convergence claim.
 
 ![Landreman-Paul QA bootstrap-current Redl comparison](docs/_static/figures/vmec_jax_finite_beta/landreman_paul_qa_bootstrap_redl_comparison.png)
 

@@ -23,9 +23,10 @@ error bars from one real-space refinement and one velocity-space refinement:
       --run-sfincs --with-errorbars \
       --r-n-values 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
       --n-lambda 16 \
-      --ntheta 5 --nzeta 5 --nxi 7 --nl 4 --nx 5 \
-      --real-ntheta 7 --real-nzeta 7 \
-      --velocity-nxi 9 --velocity-nl 5 --velocity-nx 6
+      --ntheta 13 --nzeta 13 --nxi 13 --nl 13 --nx 13 \
+      --real-ntheta 15 --real-nzeta 15 \
+      --velocity-nxi 15 --velocity-nl 14 --velocity-nx 14 \
+      --solver-tolerance 1e-6
 """
 
 from __future__ import annotations
@@ -741,10 +742,13 @@ def _write_plot(*, payload: dict[str, Any], png_path: Path, pdf_path: Path) -> N
     axes[1].set_title("SFINCS-JAX vs Redl")
     stats = payload["comparison"]
     max_err = stats.get("max_errorbar_rel_to_sfincs")
+    max_rel = stats.get("max_rel_diff")
+    max_rel_text = "n/a" if max_rel is None else f"{float(max_rel):.3g}"
+    max_err_text = "n/a" if max_err is None else f"{float(max_err):.3g}"
     note = (
         f"compared points: {stats['n_compared']}\n"
-        f"max rel diff: {stats['max_rel_diff'] if stats['max_rel_diff'] is not None else 'n/a'}\n"
-        f"max num. bar/SFINCS: {max_err if max_err is not None else 'n/a'}"
+        f"max rel diff: {max_rel_text}\n"
+        f"max num. bar/SFINCS: {max_err_text}"
     )
     axes[1].text(0.03, 0.05, note, transform=axes[1].transAxes, ha="left", va="bottom", bbox={"facecolor": "white", "alpha": 0.82})
     fig.suptitle("Landreman-Paul QA bootstrap current: sfincs_jax vs Redl", fontsize=13.5)

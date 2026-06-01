@@ -62,15 +62,16 @@ python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py
   --run-sfincs --with-errorbars \
   --r-n-values 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
   --n-lambda 16 \
-  --ntheta 5 --nzeta 5 --nxi 7 --nl 4 --nx 5 \
-  --real-ntheta 7 --real-nzeta 7 \
-  --velocity-nxi 9 --velocity-nl 5 --velocity-nx 6
+  --ntheta 13 --nzeta 13 --nxi 13 --nl 13 --nx 13 \
+  --real-ntheta 15 --real-nzeta 15 \
+  --velocity-nxi 15 --velocity-nl 14 --velocity-nx 14 \
+  --solver-tolerance 1e-6
 ```
 
 The `--with-errorbars` mode runs two additional bounded convergence probes.
 The plotted bars are the pointwise maximum change in
 `<J.B>/sqrt(<B^2>)` after separately refining angular real-space resolution
-and velocity-space resolution from the baseline grid.
+and velocity-space resolution from the `13 x 13 x 13 x 13 x 13` baseline grid.
 
 The default `--wout` is the reactor-scale Landreman-Paul QA reference because
 SFINCS radial-coordinate conversions require a positive VMEC `Aminor_p`. If you
