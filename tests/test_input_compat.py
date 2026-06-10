@@ -7,6 +7,7 @@ import numpy as np
 from sfincs_jax.input_compat import (
     canonical_equilibrium_override,
     effective_equilibrium_file,
+    effective_psi_n_wish,
     effective_r_n_wish,
     effective_use_iterative_linear_solver,
     infer_phi_input_radial_coordinate_for_gradients,
@@ -148,6 +149,45 @@ def test_effective_r_n_wish_supports_legacy_normradius_alias() -> None:
     )
     nml = read_sfincs_input(input_path)
     assert effective_r_n_wish(geom_params=nml.group("geometryParameters"), default=0.5) == 0.22
+
+
+def test_effective_psi_n_wish_respects_declared_input_radial_coordinate() -> None:
+    assert effective_psi_n_wish(geom_params={"INPUTRADIALCOORDINATE": 1, "PSIN_WISH": 0.2}) == 0.2
+    assert np.isclose(effective_psi_n_wish(geom_params={"INPUTRADIALCOORDINATE": 3, "RN_WISH": 0.4}), 0.16)
+    assert np.isclose(
+        effective_psi_n_wish(
+            geom_params={"INPUTRADIALCOORDINATE": 2, "RHAT_WISH": 0.3},
+            a_hat=0.6,
+        ),
+        0.25,
+    )
+    assert np.isclose(
+        effective_psi_n_wish(
+            geom_params={"INPUTRADIALCOORDINATE": 0, "PSIHAT_WISH": 0.04},
+            psi_a_hat=0.2,
+        ),
+        0.2,
+    )
+
+
+def test_er_conversion_supports_psin_selected_surface(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        "&geometryParameters\n"
+        "  geometryScheme = 1\n"
+        "  inputRadialCoordinate = 1\n"
+        "  psiN_wish = 0.25\n"
+        "  inputRadialCoordinateForGradients = 4\n"
+        "  psiAHat = 2.0\n"
+        "  aHat = 4.0\n"
+        "/\n"
+        "&physicsParameters\n"
+        "  Er = -3.0\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    nml = read_sfincs_input(input_path)
+    assert np.isclose(_dphi_hat_dpsi_hat_from_er(nml=nml, er=-3.0), 6.0)
 
 
 def test_effective_use_iterative_linear_solver_supports_legacy_alias() -> None:

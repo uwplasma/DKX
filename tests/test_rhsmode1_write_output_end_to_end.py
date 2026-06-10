@@ -40,6 +40,31 @@ def _assert_fortran_keys_and_solver_metadata(out: dict, ref: dict) -> None:
     assert "linearSolverResidualNorm" in out
 
 
+def _assert_bootstrap_current_closure(out: dict, *, atol: float) -> None:
+    n_species = int(np.asarray(out["Nspecies"]).reshape(-1)[0])
+    charges = np.asarray(out["Zs"], dtype=np.float64).reshape((n_species,))
+    flow = np.asarray(out["FSABFlow"], dtype=np.float64)
+    if flow.ndim == 1:
+        flow = flow.reshape((n_species, 1))
+    assert flow.shape[0] == n_species
+    current = np.asarray(out["FSABjHat"], dtype=np.float64).reshape((-1,))
+    expected_current = np.sum(charges[:, None] * flow, axis=0)
+
+    np.testing.assert_allclose(current, expected_current, rtol=0.0, atol=float(atol))
+    np.testing.assert_allclose(
+        np.asarray(out["FSABjHatOverB0"], dtype=np.float64).reshape((-1,)),
+        current / float(np.asarray(out["B0OverBBar"], dtype=np.float64).reshape(-1)[0]),
+        rtol=0.0,
+        atol=float(atol),
+    )
+    np.testing.assert_allclose(
+        np.asarray(out["FSABjHatOverRootFSAB2"], dtype=np.float64).reshape((-1,)),
+        current / np.sqrt(float(np.asarray(out["FSABHat2"], dtype=np.float64).reshape(-1)[0])),
+        rtol=0.0,
+        atol=float(atol),
+    )
+
+
 @pytest.mark.parametrize(
     "base",
     (
@@ -65,6 +90,7 @@ def test_write_output_rhsmode1_solution_fields_match_fortran_fixture(base: str, 
     out = read_sfincs_h5(out_path)
     ref = read_sfincs_h5(ref_path)
     _assert_fortran_keys_and_solver_metadata(out, ref)
+    _assert_bootstrap_current_closure(out, atol=5.0e-12)
 
     # Full-file numeric parity (excluding embedded input text).
     # uHat involves long FFTs/reductions and is compared with a slightly looser atol.
