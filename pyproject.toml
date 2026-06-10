@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sfincs_jax"
-version = "1.1.4"
+version = "1.1.5"
 description = "Neoclassical transport solver with CPU/GPU and differentiable JAX workflows"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -49,3 +49,4 @@ testpaths = ["tests"]
 # ordering, legacy l-index names, and staged fallback branches until they move
 # behind focused policy modules.
 "sfincs_jax/v3_driver.py" = ["E402", "E741", "F401", "F841", "E731"]
+"sfincs_jax/v3_system.py" = ["E402", "E741"]

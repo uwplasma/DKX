@@ -69,6 +69,55 @@ def test_compare_masks_vmec_reference_corruption_outliers(tmp_path: Path) -> Non
     assert all(result.ok for result in results), results
 
 
+def test_compare_ignores_undefined_analytic_classical_flux_reference(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_analytic.h5"
+    jax_path = tmp_path / "jax_analytic.h5"
+
+    undefined_fields = {
+        "gpsiHatpsiHat": np.asarray([[7.0]], dtype=np.float64),
+        "classicalHeatFluxNoPhi1_psiHat": np.asarray([2.7e-6], dtype=np.float64),
+        "classicalHeatFlux_psiHat": np.asarray([[2.7e-6]], dtype=np.float64),
+        "FSABFlow": np.asarray([[1.0]], dtype=np.float64),
+    }
+    zeroed_fields = {
+        "gpsiHatpsiHat": np.asarray([[0.0]], dtype=np.float64),
+        "classicalHeatFluxNoPhi1_psiHat": np.asarray([0.0], dtype=np.float64),
+        "classicalHeatFlux_psiHat": np.asarray([[0.0]], dtype=np.float64),
+        "FSABFlow": np.asarray([[1.0 + 1.0e-3]], dtype=np.float64),
+    }
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        geometry_scheme=1,
+        fields=undefined_fields,
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        geometry_scheme=1,
+        fields=zeroed_fields,
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=[
+            "gpsiHatpsiHat",
+            "classicalHeatFluxNoPhi1_psiHat",
+            "classicalHeatFlux_psiHat",
+            "FSABFlow",
+        ],
+        rtol=1.0e-6,
+        atol=1.0e-12,
+    )
+
+    assert [result.key for result in results] == ["FSABFlow"]
+    assert not results[0].ok
+
+
 def test_compare_preserves_rhs1_model_floor_over_tighter_case_tolerance(tmp_path: Path) -> None:
     ref_path = tmp_path / "fortran_rhs1.h5"
     jax_path = tmp_path / "jax_rhs1.h5"
@@ -481,3 +530,40 @@ def test_compare_applies_rhs1_constraint2_fsabflow_vs_x_floor(tmp_path: Path) ->
 
     assert len(results) == 1
     assert results[0].ok, results
+
+
+def test_compare_applies_rhs1_constraint2_local_jhat_floor_but_gates_fsab_current(tmp_path: Path) -> None:
+    ref_path = tmp_path / "fortran_rhs1_jhat_cs2.h5"
+    jax_path = tmp_path / "jax_rhs1_jhat_cs2.h5"
+
+    _write_compare_case_h5(
+        ref_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        fields={
+            "jHat": np.asarray([[-1.0e-9, 2.0e-3]], dtype=np.float64),
+            "FSABjHat": np.asarray([4.0e-4], dtype=np.float64),
+        },
+    )
+    _write_compare_case_h5(
+        jax_path,
+        rhs_mode=1,
+        constraint_scheme=2,
+        fields={
+            "jHat": np.asarray([[5.0e-8, 2.0e-3 + 5.0e-8]], dtype=np.float64),
+            "FSABjHat": np.asarray([4.0e-4 + 1.0e-4], dtype=np.float64),
+        },
+    )
+
+    results = compare_sfincs_outputs(
+        a_path=jax_path,
+        b_path=ref_path,
+        keys=["jHat", "FSABjHat"],
+        rtol=5.0e-4,
+        atol=1.0e-9,
+        tolerances=None,
+    )
+
+    by_key = {result.key: result for result in results}
+    assert by_key["jHat"].ok, results
+    assert not by_key["FSABjHat"].ok, results
