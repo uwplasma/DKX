@@ -251,6 +251,32 @@ def test_rhsmode1_solve_method_env_accepts_xblock_sparse_pc_gmres() -> None:
     assert any("solve method forced by env -> xblock_sparse_pc_gmres" in msg for msg in msgs)
 
 
+def test_rhsmode1_solve_method_env_accepts_structured_full_csr() -> None:
+    msgs: list[str] = []
+
+    method = _select_rhsmode1_linear_solve_method(
+        default_method="incremental",
+        env_override="structured_full_csr",
+        emit=lambda _lvl, msg: msgs.append(str(msg)),
+    )
+
+    assert method == "structured_full_csr"
+    assert any("solve method forced by env -> structured_full_csr" in msg for msg in msgs)
+
+
+def test_rhsmode1_solve_method_env_accepts_host_structured_csr() -> None:
+    msgs: list[str] = []
+
+    method = _select_rhsmode1_linear_solve_method(
+        default_method="incremental",
+        env_override="host_structured_csr",
+        emit=lambda _lvl, msg: msgs.append(str(msg)),
+    )
+
+    assert method == "host_structured_csr"
+    assert any("solve method forced by env -> host_structured_csr" in msg for msg in msgs)
+
+
 def test_rhsmode1_solve_method_env_accepts_sparse_lsmr() -> None:
     msgs: list[str] = []
 
@@ -952,6 +978,37 @@ def test_main_write_output_forwards_petsc_compat_solve_method(monkeypatch, tmp_p
 
     assert rc == 0
     assert captured["solve_method"] == "petsc_compat"
+
+
+def test_main_scan_er_forwards_structured_csr_solve_method(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run_er_scan(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr("sfincs_jax.scans.run_er_scan", _fake_run_er_scan)
+
+    rc = cli.main(
+        [
+            "scan-er",
+            "--input",
+            str(tmp_path / "input.namelist"),
+            "--out-dir",
+            str(tmp_path / "scan"),
+            "--values",
+            "0.0",
+            "--compute-solution",
+            "--solve-method",
+            "host_structured_csr",
+            "--quiet",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["compute_solution"] is True
+    assert captured["solve_method"] == "host_structured_csr"
+    assert captured["differentiable"] is False
 
 
 def test_main_write_output_reports_runtime_errors_without_traceback(monkeypatch, tmp_path: Path, capsys) -> None:

@@ -1,0 +1,96 @@
+{
+  "case": "QH",
+  "definition": "|SFINCS Fortran v3 refined - SFINCS Fortran v3 plotted-grid| in SI units",
+  "resolution_baseline": "13x13x21x5",
+  "resolution_refined": "25x39x60x7",
+  "surfaces": [
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -1626633.9487863837,
+      "jdotb_si_errorbar": 111514.68528954801,
+      "reduced_grid_jdotb_si": -1738148.6340759317,
+      "relative_to_reduced": 0.06415716303159172,
+      "s": 0.1
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -1836284.9199165532,
+      "jdotb_si_errorbar": 167318.99870816106,
+      "reduced_grid_jdotb_si": -2003603.9186247142,
+      "relative_to_reduced": 0.08350901949872898,
+      "s": 0.15
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -2200196.4209831925,
+      "jdotb_si_errorbar": 285707.82076168014,
+      "reduced_grid_jdotb_si": -2485904.2417448726,
+      "relative_to_reduced": 0.11493114495880176,
+      "s": 0.25
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -2381071.785042407,
+      "jdotb_si_errorbar": 174699.30501107033,
+      "reduced_grid_jdotb_si": -2206372.4800313367,
+      "relative_to_reduced": 0.07917942532014771,
+      "s": 0.3
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -3007944.060579711,
+      "jdotb_si_errorbar": 323209.5184437088,
+      "reduced_grid_jdotb_si": -3331153.57902342,
+      "relative_to_reduced": 0.09702630358413639,
+      "s": 0.45
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -3240570.8341842755,
+      "jdotb_si_errorbar": 314718.39470061613,
+      "reduced_grid_jdotb_si": -3555289.2288848916,
+      "relative_to_reduced": 0.08852117913324505,
+      "s": 0.5
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -3671006.536094939,
+      "jdotb_si_errorbar": 265195.58671804983,
+      "reduced_grid_jdotb_si": -3936202.1228129887,
+      "relative_to_reduced": 0.0673734677345606,
+      "s": 0.6
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -3866040.880763958,
+      "jdotb_si_errorbar": 179617.01662259083,
+      "reduced_grid_jdotb_si": -4045657.897386549,
+      "relative_to_reduced": 0.04439748025620789,
+      "s": 0.7
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -3770064.4047100362,
+      "jdotb_si_errorbar": 131369.8248636471,
+      "reduced_grid_jdotb_si": -3901434.2295736833,
+      "relative_to_reduced": 0.033672187491419564,
+      "s": 0.75
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -2914277.8822560324,
+      "jdotb_si_errorbar": 58620.986635303125,
+      "reduced_grid_jdotb_si": -2972898.8688913356,
+      "relative_to_reduced": 0.019718459732592345,
+      "s": 0.85
+    },
+    {
+      "definition": "|SFINCS Fortran v3 25x39x60x7 - SFINCS Fortran v3 13x13x21x5|",
+      "full_grid_jdotb_si": -2058912.794518727,
+      "jdotb_si_errorbar": 36135.32522709784,
+      "reduced_grid_jdotb_si": -2095048.119745825,
+      "relative_to_reduced": 0.017247969097474402,
+      "s": 0.9
+    }
+  ]
+}

@@ -173,10 +173,13 @@ running an expert study where the output ``linearSolver*`` diagnostics and
 
 The currently supported RHSMode=1 overrides are ``incremental``, ``dense``,
 ``sparse_host``, ``sparse_host_safe``, ``sparse_pc_gmres``,
-``xblock_sparse_pc_gmres``, ``sparse_lsmr``, and ``petsc_compat``. Transport
-matrix overrides include ``bicgstab``, ``batched``, ``incremental``, and
-``dense``. These names are intentionally advanced API: scripts intended for
-general users should omit them and rely on ``auto``.
+``xblock_sparse_pc_gmres``, ``fortran_reduced_pc_gmres``,
+``structured_csr``, ``host_structured_csr``, ``structured_full_csr``,
+``host_full_csr``, ``sparse_lsmr``, and
+``petsc_compat``. Transport matrix overrides include ``bicgstab``,
+``batched``, ``incremental``, and ``dense``. These names are intentionally
+advanced API: scripts intended for general users should omit them and rely on
+``auto``.
 
 .. code-block:: bash
 
@@ -203,11 +206,19 @@ but use it for research triage only unless ``linearSolverAccepted`` is true in
 the output and the acceptance criterion is the one intended for that study.
 The explicit ``xblock_sparse_pc_gmres`` lane targets nondifferentiable full-FP
 RHSMode=1 systems where compact per-x/TZ host preconditioning is preferable to a
-global sparse-pattern probe. The
+global sparse-pattern probe. The explicit ``fortran_reduced_pc_gmres`` lane
+targets large nondifferentiable full-FP ``constraintScheme=1`` systems without
+``Phi1``. It builds a simplified global preconditioner matrix analogous to the
+SFINCS Fortran v3 preconditioner operator, then checks convergence against the
+full SFINCS-JAX operator true residual. The default ``auto`` policy can select
+this route for eligible large systems, so ordinary CLI users do not need to pass
+the method name. The
 production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
-(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 4 x 100`` for
-tokamak cases, with a ``10 s`` minimum SFINCS Fortran v3 timing target for
-public production rows. Earlier ``17 x 21 x 5 x 12`` finite-beta/profile-current
+(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``33 x 1 x 12 x 140`` for
+tokamak cases; RHSMode=1 PAS/no-``E_r`` tokamak rows use
+``89 x 1 x 24 x 300``. The manifest also records a ``10 s`` minimum
+SFINCS Fortran v3 timing target for public production rows. Earlier
+``17 x 21 x 5 x 12`` finite-beta/profile-current
 timings were lower-resolution bring-up checks for this sparse-host lane, not
 public production baselines.
 
@@ -309,7 +320,28 @@ performance without changing the input file:
 
 - ``SFINCS_JAX_RHSMODE1_SOLVE_METHOD``: choose the RHSMode=1 linear solve backend:
 
-  - ``auto`` (default): GMRES with stage-2 fallback on stagnation.
+  - ``auto`` (default): choose the measured policy for the input/backend. After
+    the Zenodo QA/QH negative gate, public ``auto`` does not try the no-probe
+    structured full-CSR host lane by default; it may choose sparse-PC, dense,
+    the Fortran-reduced sparse-PC GMRES host route, BiCGStab, or matrix-free
+    GMRES according to the guarded runtime/memory/parity policies. Expert
+    benchmark runs can opt into the structured candidate with
+    ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO=1`` or force it with
+    ``--solve-method structured_csr``.
+  - ``fortran_reduced_pc_gmres``: force the simplified-global-preconditioner
+    sparse-PC GMRES route used by the large RHSMode=1 full-FP host policy. This
+    path is non-differentiable but keeps full-operator true-residual acceptance.
+    For large direct-tail active systems, the default structured-PC order is
+    ``active_fortran_v3_reduced_native_stack`` first and
+    ``active_fortran_v3_reduced_lu`` second. The native-stack candidate must
+    pass a true-residual preflight; if it fails, active LU remains the robust
+    high-memory fallback. Advanced users can override this with
+    ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER=auto``,
+    ``active_fortran_v3_reduced_native_stack``, or
+    ``active_fortran_v3_reduced_lu``.
+  - ``structured_csr`` / ``host_structured_csr``: force the no-probe full-CSR
+    host lane for supported RHSMode=1 systems. This is non-differentiable and
+    fails closed if the case is unsupported or exceeds the CSR memory cap.
   - ``bicgstab``: force BiCGStab for a low-memory Krylov solve (with GMRES fallback on stagnation).
   - ``dense``: assemble the dense operator from matvecs and solve directly (fast for tiny fixtures,
     but scales poorly).
@@ -334,6 +366,28 @@ performance without changing the input file:
 - ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN`` /
   ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``: active-DOF bounds for the audited
   CPU 3D full-FP sparse-PC GMRES auto lane. Defaults are ``300`` and ``20000``.
+
+- ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO``: opt into the automatic no-probe
+  structured full-CSR host candidate for eligible non-differentiable 3D full-FP
+  RHSMode=1 output benchmarks. The default is disabled after the Zenodo QA/QH
+  negative gate. Set to ``1`` only when reproducing a structured-CSR benchmark;
+  unsupported multi-ion/finite-beta cases and over-budget cases still fail
+  closed or fall back through the guarded policy ladder.
+
+- ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_SIZE`` /
+  ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MAX_SIZE`` /
+  ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_NXI``: active-size and pitch-grid
+  bounds for that automatic structured full-CSR lane. Defaults are ``10000``,
+  no upper size cap, and ``12``.
+
+- ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO``: enable the automatic
+  Fortran-reduced sparse-PC GMRES host route for eligible non-differentiable
+  RHSMode=1 full-FP, no-``Phi1``, ``constraintScheme=1`` systems. The default is
+  enabled. Set to ``0``/``false`` to force the older policy ladder.
+
+- ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO_MIN_SIZE``: minimum total
+  system size before the automatic Fortran-reduced route is considered
+  (default: ``10000``).
 
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC`` and
   ``SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC``: enable or disable the
@@ -556,6 +610,50 @@ performance without changing the input file:
     species×speed blocks and adds flux-surface-averaged streaming/mirror
     symbols in Fourier space. It is opt-in because the current full W7-X
     high-``nu'`` route still needs explicit sparse-direct residual rescue.
+  - ``fp_tzfft_line``/``fp_streaming_line``/``fp_block_thomas``/``fp_line``:
+    bounded FP transport candidate that replaces the dense per-Fourier-mode
+    inverse by block-Thomas factors over Legendre index with small
+    species×speed blocks. It is JAX-native in application and remains opt-in
+    until the coupled constraint/source-moment Schur correction passes the
+    strict true-residual solve gate.
+  - ``fp_tzfft_line_schur``/``fp_line_schur``: diagnostic extension of
+    ``fp_tzfft_line`` that adds a bounded source/constraint-tail Schur residual
+    equation using true operator columns. It is useful for isolating tail
+    coupling errors, but remains opt-in because the current FP production
+    probes are still limited by the kinetic residual equation.
+  - ``fp_local_geom_line``/``fp_geom_line``: diagnostic kinetic candidate that
+    keeps local, non-averaged mirror geometry in a real-space Legendre line
+    factor. It remains opt-in because the checked one-apply probes amplify the
+    full FP kinetic residual instead of reducing it.
+  - ``fp_structured_fblock_lu``/``fp_fblock_lu``: diagnostic host sparse factor
+    of the migrated kinetic f-block. It retains the full non-averaged
+    collisionless streaming/mirror and FP collision couplings, but leaves the
+    source/constraint tail to the outer Krylov residual. It remains opt-in
+    because the first larger bounded geometry-scheme-2 rung exceeds the current
+    default-promotion runtime budget.
+  - ``fp_xblock_tz_lu``/``fp_xblock_lu``/``fp_angular_xblock_lu``:
+    lower-memory FP transport factor over independent ``(species,x)`` blocks
+    with coupled ``(L,theta,zeta)`` sparse factors. It keeps non-averaged
+    angular streaming/mirror geometry and selected drift terms without building
+    the global kinetic f-block LU. It remains opt-in because the bounded
+    ``13 x 17 x 30 x 4`` all-RHS gate is still RHS-sensitive under a single
+    regularization setting.
+  - ``fp_xblock_tz_lu_schur``/``fp_xblock_lu_schur``:
+    diagnostic source/tail Schur overlay for ``fp_xblock_tz_lu``. Its default
+    compact residual equation uses ``tail_galerkin`` restriction, combining
+    source/constraint tail rows with kinetic moment test directions. It reduces
+    small-fixture tail residuals. Optional kinetic residual-error and RHS-drive
+    residual-correction columns can be enabled for research probes, but the
+    latest bounded all-RHS promotion gate still failed, so it is not an
+    ``auto`` default.
+  - ``fp_fortran_reduced_lu``/``fp_petsc_like_lu``/``fp_reduced_pmat_lu``:
+    PETSc-like FP transport preconditioner for RHSMode=2/3. The true operator
+    remains matrix-free, while a separate Fortran-reduced ``Pmat`` is
+    materialized and factored once, then reused across the transport RHS
+    columns. This is the strongest bounded residual-clean route today and is
+    now the default ``auto`` candidate for eligible non-Phi1 full-FP transport
+    cases. Set ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=0`` to disable
+    it for a benchmark campaign.
   - ``collision``: collision-diagonal preconditioner (PAS/FP + identity shift).
   - ``0``/``none``: disable.
 
@@ -588,6 +686,75 @@ performance without changing the input file:
   ``SFINCS_JAX_TRANSPORT_FP_TZFFT_PINV_RCOND``: diagonal regularization and
   pseudo-inverse cutoff for ``fp_tzfft`` setup. These are benchmark controls,
   not recommended user knobs for production scans.
+
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_AUTO``: allow ``auto`` to try
+  ``fp_tzfft_line`` for RHSMode=2/3 FP transport benchmark campaigns (default:
+  disabled). This remains off by default because the line factor improves the
+  local residual equation but does not yet close the full constraint-coupled
+  Krylov gate on the bounded geometry-scheme-2 probe.
+
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_MAX_MB`` / ``_DTYPE`` / ``_REG`` /
+  ``_PINV_RCOND``: memory cap, factor dtype, regularization, and pseudo-inverse
+  controls for ``fp_tzfft_line``.
+
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_AUTO``: allow ``auto`` to try
+  ``fp_tzfft_line_schur`` for bounded benchmark campaigns (default:
+  disabled). ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_MAX_COLS``,
+  ``_MAX_MB``, ``_DTYPE``, ``_REG``, ``_DAMPING``, and
+  ``_CORRECTION_REL_MAX`` control the compact Schur setup and apply guard.
+  ``_RESTRICTION`` can be ``tail`` (default), ``galerkin``, or
+  ``tail_galerkin`` for bounded diagnostic probes.
+
+- ``SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_AUTO``: allow ``auto`` to try the
+  local-geometry diagnostic candidate in benchmark campaigns (default:
+  disabled). ``SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_MAX_MB``, ``_DTYPE``,
+  ``_REG``, and ``_PINV_RCOND`` control setup.
+
+- ``SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_AUTO``: allow ``auto`` to try
+  the structured kinetic f-block LU diagnostic candidate in benchmark campaigns
+  (default: disabled). ``SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_MAX_MB``
+  caps CSR storage, ``_FACTOR_MAX_MB`` caps post-factor storage, ``_REG``
+  controls diagonal stabilization, and ``_FACTOR`` can be ``lu``, ``ilu``, or
+  ``jacobi`` for diagnostics.
+- ``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_AUTO``: allow ``auto`` to try the
+  lower-memory per-``(species,x)`` coupled ``(L,theta,zeta)`` sparse factor in
+  benchmark campaigns (default: disabled). ``_AUTO_MIN`` controls the
+  auto-size floor. ``_MAX_MB`` caps assembled local-block CSR storage,
+  ``_FACTOR_MAX_MB`` caps local-factor storage, ``_REG`` controls diagonal
+  stabilization, and ``_FACTOR`` can be ``lu``, ``ilu``, or ``jacobi``.
+- ``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO``: allow ``auto`` to try
+  the source/tail Schur overlay for ``fp_xblock_tz_lu`` in benchmark campaigns
+  (default: disabled). ``_MAX_COLS``, ``_MAX_MB``, ``_DTYPE``, ``_REG``,
+  ``_DAMPING``, and ``_CORRECTION_REL_MAX`` control the compact Schur setup.
+  ``_RESTRICTION`` can be ``tail``, ``galerkin``, or ``tail_galerkin``
+  (default) for diagnostic probes. ``_KINETIC_RESIDUAL=1`` adds low-order
+  kinetic residual-error directions, and ``_RHS_RESIDUAL=1`` adds
+  residual-correction columns built from the actual RHSMode=2/3 transport
+  drives. These controls are intentionally opt-in: they improve the tiny
+  fixture residual gate but did not pass the bounded ``13 x 17 x 30 x 4``
+  all-RHS promotion run.
+
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO``: controls whether
+  ``auto`` tries the global Fortran-reduced ``Pmat`` factor route for
+  RHSMode=2/3 FP transport. It is enabled by default for eligible non-Phi1
+  full-FP transport cases; set it to ``0``/``false``/``no``/``off`` to disable.
+  ``_AUTO_MIN`` controls the auto-size floor. ``_PRECONDITIONER_X``,
+  ``_PRECONDITIONER_XI``,
+  ``_PRECONDITIONER_SPECIES``, and ``_PRECONDITIONER_X_MIN_L`` control the
+  Fortran-style kinetic reduction. ``_KEEPS_THETA_ZETA`` defaults to ``1``,
+  matching Fortran v3 ``preconditioner_theta=0`` and
+  ``preconditioner_zeta=0``; setting it to ``0`` is only an angular-drop
+  diagnostic. ``_FACTOR``, ``_FACTOR_DTYPE``, ``_FACTOR_MAX_MB``, and
+  ``_SHIFT`` control factor kind, precision, memory guard, and diagonal shift.
+
+  ``fp_tzfft_line``, ``fp_tzfft_line_schur``, ``fp_local_geom_line``, and
+  ``fp_structured_fblock_lu``, ``fp_xblock_tz_lu``, and
+  ``fp_xblock_tz_lu_schur``, and ``fp_fortran_reduced_lu`` are applied as left
+  preconditioners. If
+  ``SFINCS_JAX_TRANSPORT_PRECONDITION_SIDE=right`` is set together with any of
+  these candidates, sfincs_jax overrides the side to ``left`` before the Krylov
+  solve; this avoids backend-dependent transpose failures and preserves the
+  strict true-residual acceptance gate.
 
 - ``SFINCS_JAX_XMG_STRIDE``: coarse-grid stride for ``xmg`` transport preconditioning
   (default: ``2``).

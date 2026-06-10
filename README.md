@@ -26,6 +26,15 @@ seed ladders, true differentiable device-QI closure, and single-case multi-GPU
 strong scaling; those remain bounded or deferred research lanes until their
 promotion artifacts pass.
 
+The only README figures that are not yet production-quality claims are labeled
+as such in place: the QA/QH bootstrap-current profiles use a same-resolution
+`13 x 13 x 21 x 5` documentation grid with `15 x 15 x 21 x 5` real-space and
+`13 x 13 x 25 x 6` velocity-space refinement bars, while the full
+`25 x 39 x 60 x 7` QA/QH RHSMode=1 production-grid convergence and the
+true-device QI/GPU lanes remain explicit validation targets. These reduced-grid
+figures are useful workflow and normalization checks, not replacements for the
+production-resolution gates.
+
 It is designed for:
 
 - high-performance runs on CPU/GPU,
@@ -105,12 +114,21 @@ RHSMode=1 outputs include `linearSolverMethod`, `linearSolverResidualNorm`,
 `linearSolverConverged`, `linearSolverAccepted`, and
 `linearSolverAcceptanceCriterion` in the output file so automatic choices remain
 auditable after the run.
+For large non-autodiff RHSMode=1 full-Fokker-Planck solves without `Phi1`, the
+default `auto` policy can select the Fortran-reduced sparse-PC GMRES route. This
+uses a simplified global preconditioner matrix, keeps the true residual gate on
+the full operator, and avoids the slower structured-CSR research path unless the
+user explicitly asks for it.
 The production benchmark manifest now enforces large research-scale floors:
 `25 x 51 x 4 x 100` (`Ntheta x Nzeta x Nx x Nxi`) for 3D cases and
-`25 x 1 x 4 x 100` for tokamak cases. Public production timing rows target
-SFINCS Fortran v3 runtimes of at least `10 s`; earlier `17 x 21 x 5 x 12`
-finite-beta/profile-current timings were lower-resolution bring-up checks for
-this solver lane, not public production baselines.
+`33 x 1 x 12 x 140` for tokamak cases, with the calibrated RHSMode=1
+PAS/no-`E_r` tokamak floor raised further to `89 x 1 x 24 x 300`. Public
+production timing rows target SFINCS Fortran v3 runtimes of at least `10 s`;
+earlier `17 x 21 x 5 x 12` finite-beta/profile-current timings were
+lower-resolution bring-up checks for this solver lane, not public production
+baselines. The plotting scripts still filter by the measured Fortran runtime,
+so any generated row that remains below `10 s` is validation evidence, not a
+public performance row.
 
 ## Runtime and Memory Summary
 
@@ -139,12 +157,25 @@ but sub-`10 s` Fortran rows are not shown as public performance comparisons. The
 must either be rerun from the higher-resolution benchmark tier in
 `benchmarks/production_resolution_inputs_2026-05-04` or remain CI/regression
 checks only. The production tier enforces `25 x 51 x 4 x 100` 3D grids and
-`25 x 1 x 4 x 100` tokamak grids, including public examples and optional
-user-supplied production-resolution workloads. The manual GitHub workflow
+`33 x 1 x 12 x 140` tokamak grids, with `89 x 1 x 24 x 300` for RHSMode=1
+PAS/no-`E_r` tokamak rows, including public examples and optional user-supplied
+production-resolution workloads. The manual GitHub workflow
 `Production Benchmark Inputs` validates and uploads the production input tree
 without running expensive solves; full CPU/GPU/Fortran runtime and memory sweeps
 should be launched on local, `office`, or cluster hardware with explicit
 resource budgets.
+
+Latest floor calibration: the checked-in production manifest uses
+`89 x 1 x 24 x 300` for RHSMode=1 PAS/no-`E_r` tokamak rows after the smaller
+`53 x 1 x 16 x 190` calibration proved too short for public GPU-host benchmark
+comparisons. Local CPU/GPU calibration runs were strict- or practical-parity
+clean at the new floor for the one-species PAS/no-`E_r` rows, and the bounded
+PAS/with-`E_r` office GPU shard was strict-clean at `33 x 1 x 12 x 140`. The
+refreshed 3D monoenergetic geometry-11 production row was strict-clean at the
+`25 x 51 x 4 x 100` manifest floor using the structured `tzfft` transport
+preconditioner before sparse-direct rescue. Regenerate the README plot only
+after the remaining CPU/GPU production rows are collected from the checked-in
+manifest floor.
 
 ## Optimization Lane
 
@@ -307,80 +338,191 @@ The separate finite-beta QA convergence ladder extends the finite-beta QA
 artifact to `9 x 9 x 7 x 4` at the central surface and remains explicitly
 `deferred` because it does not meet the production floor.
 A follow-up medium-resolution solver-policy probe at `17 x 21 x 12 x 4`
-validated the non-dense `xblock_sparse_pc_gmres` route for the same two-species
-finite-beta QA deck: the automatic CPU path converged in about 7 s wall time,
-matched the written Fortran-v3 output to better than `1.6e-6` relative on the
-reported current/flux observables, and avoids dense matrix materialization. The
-next `21 x 25 x 14 x 4` rung also converged on CPU and GPU and matched the
-written Fortran-v3 output to better than `2.7e-6` relative on the same
-observables. A larger `25 x 31 x 16 x 4` rung (`99,204` active unknowns) also
-converged on CPU and one office GPU, stayed parity-clean against the written
-Fortran-v3 output, and established the current default non-dense multispecies
-x-block policy window through `100,000` active unknowns and `Nxi <= 16`.
-This is still a host-factor non-differentiable route; at this rung CPU is
-faster than GPU because the sparse factors are host-backed. The full
-`25 x 51 x 100 x 4` production floor is still documented as a larger
-algorithmic validation step rather than a closed convergence claim.
+validated the older non-dense `xblock_sparse_pc_gmres` fallback route for the
+same two-species finite-beta QA deck: the automatic CPU path converged in about
+7 s wall time, matched the written Fortran-v3 output to better than `1.6e-6`
+relative on the reported current/flux observables, and avoids dense matrix
+materialization. The next `21 x 25 x 14 x 4` rung also converged on CPU and GPU
+and matched the written Fortran-v3 output to better than `2.7e-6` relative on
+the same observables. A newer no-probe structured full-CSR RHSMode=1 route can
+also solve the active projected transport system directly on the host, avoiding
+the matrix-free pattern probe that made some finite-beta QA/QH runs stall. In
+the QS-paper comparison script, the bounded runtime/non-autodiff lane now uses
+the `fortran_reduced_pc_gmres` host route with a guarded native-stack attempt
+and robust active-LU fallback. On a QH `13 x 13 x 21 x 5` diagnostic grid this
+route completes
+three selected surfaces in about `21.9 s` total and is within `9.8%` of Redl
+and `9.7%` of archived Fortran v3 on the checked surfaces. That closes the
+low-resolution residual-clean diagnostic path, but not the production-resolution
+physics parity claim. Default differentiable `auto` and GPU-native
+preconditioning are tracked separately. The full `25 x 51 x 100 x 4`
+production floor is still documented as a larger algorithmic validation step
+rather than a closed convergence claim.
 
-### Landreman-Paul QA Bootstrap-Current Check
+### SFINCS_JAX / SFINCS Fortran v3 / Redl Bootstrap-Current Check
 
-For a fast educational comparison between a kinetic `sfincs_jax` bootstrap
-current and the Redl analytic fit, run:
+The paper-backed bootstrap-current check uses the QA and QH benchmark
+configurations from the Zenodo artifact for arXiv:2205.02914. It evaluates the
+same Redl analytic formula used in that paper and overlays `sfincs_jax`
+RHSMode=1 kinetic solves on the same VMEC `wout` and profile contract. The
+included cases use `wout_new_QA_aScaling.nc` and `wout_new_QH_aScaling.nc`. If the
+archived SFINCS Fortran v3 `sfincsOutput.h5` files are present in the Zenodo
+tree, the script overlays them too; no local Fortran executable is required.
 
 ```bash
-python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py \
-  --run-sfincs --with-errorbars \
-  --r-n-values 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
-  --n-lambda 16 \
-  --ntheta 13 --nzeta 13 --nxi 13 --nl 13 --nx 13 \
+JAX_ENABLE_X64=1 \
+python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+  --ntheta 13 --nzeta 13 --nxi 21 --nx 5 \
+  --solver-tolerance 1e-6 \
+  --solve-method auto
+```
+
+For a pure `sfincs_jax` versus Redl plot without the archived Fortran overlay,
+add `--hide-fortran`. The default uses `--s-values all`, so it evaluates the
+same 39 archived radial surfaces as the SFINCS Fortran v3 benchmark. Add
+`--quick` for a three-surface smoke plot, or increase the grid beyond
+`--ntheta 13 --nzeta 13 --nxi 21 --nx 5` for convergence studies.
+
+For the fast 11-surface educational bootstrap-current profile used in the
+figures below, run:
+
+```bash
+JAX_ENABLE_X64=1 \
+python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+  --case QA \
+  --stem qs_paper_qa_same_resolution_11surface \
+  --s-values 0.1,0.15,0.25,0.3,0.45,0.5,0.6,0.7,0.75,0.85,0.9 \
+  --ntheta 13 --nzeta 13 --nxi 21 --nx 5 \
+  --with-errorbars \
   --real-ntheta 15 --real-nzeta 15 \
-  --velocity-nxi 15 --velocity-nl 14 --velocity-nx 14 \
-  --solver-tolerance 1e-6
+  --velocity-nxi 25 --velocity-nx 6 \
+  --fortran-case-root outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5 \
+  --fortran-errorbar-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface_fortran_errorbars.json \
+  --require-same-resolution \
+  --solver-tolerance 1e-6 \
+  --solve-method auto
 ```
 
-The script uses the reactor-scale Landreman-Paul QA example from `vmec_jax`,
-evaluates the Redl formula on the selected VMEC surfaces, runs `sfincs_jax`
-RHSMode=1 on the same surfaces, and writes JSON/PNG/PDF outputs under
-`outputs/landreman_paul_qa_bootstrap_redl/`. With `--with-errorbars`, the
-plotted numerical bars are the pointwise maximum change in the kinetic
-bootstrap-current diagnostic when separately refining real space
-(`Ntheta,Nzeta`) and velocity space (`Nxi,NL,Nx`).
+Use `--case QH --stem qs_paper_qh_same_resolution_11surface`,
+`--fortran-case-root outputs/qs_paper_fortran_reduced_resolution/QH_Ntheta13_Nzeta13_Nxi21_Nx5`,
+and the QH Fortran-errorbar sidecar for the quasi-helical benchmark. If the
+local reduced-resolution Fortran sidecar is absent, add `--hide-fortran` to
+generate the same `sfincs_jax`/Redl educational plot without the Fortran
+overlay.
 
-The plotted quantity is the flux-surface-averaged parallel current density
-projected along the magnetic field,
+For an apples-to-apples SFINCS_JAX/SFINCS Fortran v3 comparison, use the
+same-resolution gate:
+
+```bash
+JAX_ENABLE_X64=1 \
+python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+  --case QA --s-values 0.5 \
+  --match-fortran-resolution \
+  --require-same-resolution \
+  --verbose-sfincs \
+  --solver-tolerance 1e-6 \
+  --solve-method auto
+```
+
+The gate reads the archived Fortran grid and sets the JAX grid to the matching
+`Ntheta,Nzeta,Nxi,Nx` values before running. If the plotted JAX and Fortran
+surfaces do not have the same grid, the script fails before writing a public
+figure. JAX error bars come from `--with-errorbars` refinement probes. Fortran
+error bars are plotted only from an explicit `--fortran-errorbar-json` sidecar,
+because the archived Zenodo outputs provide one Fortran solve per surface and
+therefore do not by themselves define a convergence uncertainty.
+Use `--verbose-sfincs` or set `SFINCS_JAX_EXAMPLE_VERBOSE=1` for production-grid
+runs; the script then forwards SFINCS_JAX phase, preconditioner, and Krylov
+progress messages instead of appearing silent during long setup phases.
+
+The current apples-to-apples QA/QH check reruns SFINCS Fortran v3 at the same
+`13 x 13 x 21 x 5` grid used by the fast JAX documentation solve on 11
+surfaces, `s = 0.10, 0.15, 0.25, 0.30, 0.45, 0.50, 0.60, 0.70, 0.75, 0.85,
+0.90`. JAX refinement bars come from independent `15 x 15 x 21 x 5`
+real-space and `13 x 13 x 25 x 6` velocity-space probes. Fortran bars are
+one-sided refinement deltas against the archived `25 x 39 x 60 x 7` Fortran v3
+outputs. On this same-resolution 11-surface gate, the maximum JAX-vs-Fortran
+difference is `1.21e-3` for QA and `3.54e-3` for QH. The largest JAX refinement
+bar is `4.21%` for QA and `24.43%` for QH, so QH remains a visible reduced-grid
+convergence stress test rather than a production-resolution claim.
+
+![SFINCS_JAX / SFINCS Fortran v3 / Redl same-resolution QA comparison](docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.png)
+
+![SFINCS_JAX / SFINCS Fortran v3 / Redl same-resolution QH comparison](docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_11surface.png)
+
+For larger RHSMode=1 reruns, keep `--solve-method auto` first. Eligible
+non-autodiff finite-beta/full-FP cases now select the residual-clean
+`fortran_reduced_pc_gmres` host route automatically. Structured-CSR and
+preconditioner research paths remain forceable for debugging, but they are not
+the recommended user-facing path unless the JSON/HDF5 diagnostics show that
+their true-residual and convergence gates pass for the case being run.
+The combined `active_multiline_field_split_sparse_coarse` residual preconditioner
+is implemented and test-covered as an opt-in research path, but real QA/QH
+surface probes did not pass the strict true-residual gate, so it is not the
+default for these public figures. The direct-tail active-auto ladder now tries
+the lower-memory `active_fortran_v3_reduced_native_stack` candidate first, then
+falls back to the robust `active_fortran_v3_reduced_lu` reference route when the
+native stack fails its true-residual preflight. On the full archived
+`25 x 39 x 60 x 7` QA surface, the native stack built in `9.17 s` with a
+`5.09 GB` bounded factor estimate but worsened the one-apply residual, so
+`auto` accepted active LU without trying experimental native/coarse rescue by
+default. The latest guarded audit converged the true residual to `7.27e-16`
+in `354.6 s` wall at `tol=1e-10` without requiring any solver environment
+variables.
+
+The plotted quantity is the flux-surface-averaged bootstrap current projected
+along the magnetic field,
 
 ```math
-\frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}}.
+\langle J\cdot B\rangle .
 ```
 
-For `sfincs_jax`, the dimensionless diagnostic is
+`sfincs_jax` reports the dimensionless current
 
 ```math
-\widehat{J}_{\parallel}
-= \mathrm{FSABjHatOverRootFSAB2}
-= \frac{\sum_s Z_s\,\mathrm{FSABFlow}_s}
-       {\sqrt{\langle \hat B^2\rangle}},
+\widehat{J}
+= \mathrm{FSABjHat}
+= \sum_s Z_s\,\mathrm{FSABFlow}_s,
 ```
 
-and the SI conversion used in the plot is
+which is converted to the paper's SI units with the archived SFINCS factor
+`437695 * 1e20 * e`. The archived Fortran v3 outputs use the same `FSABjHat`
+normalization and conversion factor. The Redl side uses
+`n_e = 4.13e20 (1-s^5) m^-3`, `T_e = T_i = 12 keV (1-s)`, and `Z_eff = 1`.
+For QA the Redl geometry uses `helicity_n = 0` and
+`wout_new_QA_aScaling.nc`; for QH it uses `helicity_n = -1` and
+`wout_new_QH_aScaling.nc`.
 
-```math
-\frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}}
-= \widehat{J}_{\parallel}\,
-e\,\bar n\,\sqrt{\frac{2\bar T}{\bar m}}.
-```
+The checked whole-radius QA documentation run below is a reduced-grid diagnostic,
+`13 x 13 x 21 x 5`, on the same 39 radial surfaces as the archived Fortran v3
+benchmark. The script sets the runtime/non-autodiff solver lane for this
+benchmark, so all solves selected `fortran_reduced_pc_gmres` under `auto` and
+reached the true-residual target. The JAX run completed those 39 surfaces in
+`232.5 s` total versus `696.1 s` from the archived Fortran v3 logs. Peak solver
+memory in the plot is `109 MB` for the JAX factor/CSR estimate versus
+`12.96 GB` of effective total MUMPS factor memory across MPI ranks for the
+Fortran v3 run.
+The figure remains a mixed-grid diagnostic, not a production same-resolution
+parity claim: max QA differences are `23.95%` versus Redl and `6.94%` versus
+SFINCS Fortran v3 on this reduced JAX grid. README-facing same-resolution
+claims require the gated command above and refinement/error-bar metadata for
+both codes.
 
-The Redl side uses fitted bootstrap-current coefficients as a function of
-trapped-particle fraction, collisionality, and `Z_eff`. The README figure below
-is a bounded normalization/trend check with seven radial surfaces, a
-`13 x 13 x 13 x 13 x 13` baseline grid, and refinement-based numerical error
-bars from `15 x 15 x 13 x 13 x 13` real-space and
-`13 x 13 x 15 x 14 x 14` velocity-space probes. The checked run completed in
-about five minutes on a local CPU, with maximum numerical bar divided by the
-baseline kinetic current of `0.110`; it is still not a production-resolution
-kinetic convergence claim.
+![SFINCS_JAX / SFINCS Fortran v3 / Redl bootstrap-current comparison](docs/_static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.png)
 
-![Landreman-Paul QA bootstrap-current Redl comparison](docs/_static/figures/vmec_jax_finite_beta/landreman_paul_qa_bootstrap_redl_comparison.png)
+The same bounded QH diagnostic is also generated on all 39 archived surfaces.
+It is residual-clean and much improved after the VMEC radial-cache fix, but it
+is more sensitive to the reduced JAX grid: max QH differences are `15.31%`
+versus Redl and `18.77%` versus SFINCS Fortran v3. The JAX whole-radius scan
+completed in `261.1 s` versus `655.5 s` from the archived Fortran v3 logs, with
+the same `109 MB` JAX solver-memory estimate versus `12.80 GB` Fortran MUMPS
+effective total factor memory. This keeps the QH finite-beta
+production-resolution convergence lane open; current term-level audits point
+away from a simple stale-radius geometry, radial-gradient conversion, or
+current-assembly normalization bug, but the production-resolution convergence
+gate remains the acceptance criterion.
+
+![SFINCS_JAX / SFINCS Fortran v3 / Redl QH bootstrap-current comparison](docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.png)
 
 ## Physics in One Page
 
@@ -503,6 +645,83 @@ write_sfincs_jax_output_h5(
 )
 ```
 
+Most users should leave `--solve-method auto`; it selects only promoted
+guarded policies. For reproducibility, solver debugging, or structured-CSR
+research benchmarks,
+`solve_method="structured_csr"` or `solve_method="host_structured_csr"` forces
+the same analytic full CSR operator on the host without column probing. The
+longer aliases `structured_full_csr`, `host_full_csr`, and
+`structured_full_csr_host_gmres` refer to the same no-probe host-CSR lane.
+For large RHSMode=1 full-FP host production solves, `auto` may instead choose
+`fortran_reduced_pc_gmres`, which mirrors the simplified global preconditioner
+strategy used by SFINCS Fortran v3 while preserving SFINCS-JAX's true-residual
+acceptance check.
+For full-grid finite-beta QA/QH bootstrap-current diagnostics at
+`25 x 39 x 60 x 7`, `auto` now reaches the Fortran-reduced direct-tail path
+without user environment variables. It tests the lower-memory
+`active_fortran_v3_reduced_native_stack` candidate under the same true-residual
+gate and falls back to the high-memory active LU reference route when that gate
+fails. The checked QA auto audit converged to `9.00e-13` residual in `343.5 s`
+wall after rejecting the native stack; earlier checked QA/QH active-LU reference
+audits converge to `9.95e-13` and `8.71e-14` residual with a `13.3 GB` active LU
+factor. A stricter guarded rerun with `tol=1e-10` converged to `7.27e-16` in
+`354.6 s`, and native true-coupled rescue remains opt-in because the measured
+full-grid native/coarse probes reduce the bad one-apply residual but do not
+produce a residual-clean Krylov solve. The remaining research/performance lane
+is making the lower-memory native block/coarse factor pass the same residual
+gate so the active-LU fallback is no longer needed at full grid.
+
+```bash
+SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct \
+SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1 \
+SFINCS_JAX_RHS1_FULL_CSR_MAX_MB=1024 \
+sfincs_jax write-output \
+  --input /path/to/input.namelist \
+  --out /path/to/sfincsOutput.h5 \
+  --solve-method host_structured_csr
+```
+
+`SFINCS_JAX_RHS1_FULL_CSR_MAX_MB` caps the assembled CSR matrix. If the matrix
+would exceed that cap, the structured solve fails closed before the solve.
+`SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1` projects away inactive truncated
+pitch-angle rows before the host solve and expands the result back to the full
+output vector. For Krylov experiments, `SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER`,
+`SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB`, and
+`SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_LMAX` still control the x-block/coarse residual
+preconditioner candidates, but the residual-clean finite-beta QA/QH diagnostic
+path is currently the active projected direct solve above. Physical RHSMode=1
+`host_structured_csr` output defaults to this route; shifted operator benchmarks
+default to Krylov unless `SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct` is set.
+To evaluate a lower-memory iterative alternative, set
+`SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=gmres` or `lgmres` and
+`SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_low_l_schur`. This projected
+field-split candidate uses a sparse exact Schur residual equation over the
+full-angle low-pitch active variables and the global tail; the low-pitch
+cutoff is controlled by
+`SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LOW_L_SCHUR_LMAX`, and the sparse factor is
+bounded by `SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB`. The older
+`active_coarse` candidate remains available; it uses low-`l`/angular/tail modal
+coarse residual modes. Its default coarse equation is Galerkin;
+`SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COARSE_SOLVER=least_squares` or
+`active_coarse_ls` enables the residual-minimizing comparison. Explicit
+`active_overlap_schwarz` builds a restricted additive-Schwarz residual
+correction over overlapping speed-space patches; control its pitch cutoff and
+overlap with `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_LMAX` and
+`SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_RADIUS`. The combined
+`active_schwarz_low_l_schur` path uses that Schwarz correction as the base for
+the low-pitch Schur residual equation. Explicit `active_xblock` and
+`active_xblock_low_l_schur` probes factor active sparse blocks at fixed species
+and speed index; control their cutoff with
+`SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_LMAX`. These are retained as
+benchmark/debug routes after the first QA gate showed they are not yet a
+promotion path. Generic
+`SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_ilu` is also available and tuned with
+`SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_DROP_TOL` and
+`SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_FILL_FACTOR`. Treat this as a benchmark
+candidate for now: physical finite-beta bootstrap-current outputs should stay on
+the active direct route unless the iterative active low-L/Schwarz/xblock/coarse/ILU
+residual gate passes for the case being run.
+
 Repository examples that map directly onto common first tasks:
 
 - run the bundled solved CLI example: `sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist`
@@ -572,7 +791,7 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
 # isolate single-RHS behavior:
 CUDA_VISIBLE_DEVICES=0 \
 python examples/performance/benchmark_w7x_high_nu_preconditioners.py \
-  --preconditioners auto,fp_tzfft,xmg \
+  --preconditioners auto,fp_tzfft,fp_tzfft_line,fp_tzfft_line_schur,fp_xblock_tz_lu,fp_xblock_tz_lu_schur,xmg \
   --which-rhs 2 \
   --sparse-direct-max 40000 \
   --sparse-factor-dtype float32 \
@@ -727,7 +946,12 @@ Production-resolution inputs are generated separately with
 `bounded_local_ok` rows by default. Use `--max-run-recommendation bounded_remote`,
 `--max-run-recommendation remote_or_cluster_only`, or
 `--max-run-recommendation all` only on explicitly budgeted remote or cluster
-lanes.
+lanes. The Fortran wrapper used for reference generation defaults to one MPI
+rank so local parity runs avoid concurrent HDF5 output writes; set
+`SFINCS_FORTRAN_MPI_NP` explicitly only for a Fortran scaling study.
+If `scripts/run_reduced_upstream_suite.py` is used against a generated
+production input tree, pass `--production-inputs` so the runner uses the
+manifest decks exactly and does not substitute or promote reduced CI fixtures.
 
 <!-- BEGIN FAST_BRANCH_AUDIT -->
 Current `main` CPU audit comes from `tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak`.
@@ -750,8 +974,8 @@ Current mismatches:
 - CPU strict mismatches: none
 - GPU practical/strict mismatches: none
 
-Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the merged JSON reports. The generator emits canonical filtered rows for the plot and the table consistency gate.
-The benchmark summary JSON records production-resolution floor violations for previous frozen rows, so the table should be read as a reference-runtime-window comparison until every row has been rerun at the current production floor.
+Runtime columns match the summary plot: cold is `jax_runtime_s`; warm/logged is `jax_runtime_s_warm` when available, otherwise `jax_logged_elapsed_s`. The JAX memory columns match the plot and use profiler active RSS deltas (`jax_incremental_max_rss_mb`) when present; full process peak RSS remains available as `jax_max_rss_mb` in the merged JSON reports.
+The benchmark summary JSON records production-resolution floor violations for legacy frozen rows, so the table should be read as a reference-runtime-window comparison until every row has been rerun at the current production floor.
 README-facing runtime/memory rows are restricted to cases where the SFINCS Fortran v3 reference runtime is at least `10 s`. Excluded lower-resolution CI parity/smoke rows: `HSX_PASCollisions_DKESTrajectories` (0.994s), `HSX_PASCollisions_fullTrajectories` (2.510s), `geometryScheme4_1species_PAS_withEr_DKESTrajectories` (1.365s), `geometryScheme4_2species_PAS_noEr` (0.953s), `monoenergetic_geometryScheme1` (0.795s), `monoenergetic_geometryScheme11` (0.861s), `monoenergetic_geometryScheme5_ASCII` (1.052s), `monoenergetic_geometryScheme5_netCDF` (1.029s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories` (1.104s), `sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories` (1.706s), `tokamak_1species_FPCollisions_noEr` (7.897s), `tokamak_1species_FPCollisions_withEr_DKESTrajectories` (6.958s), `tokamak_1species_FPCollisions_withEr_fullTrajectories` (6.736s), `transportMatrix_geometryScheme11` (0.025s), `transportMatrix_geometryScheme2` (0.031s).
 
 Full per-case runtime / memory table:
@@ -781,20 +1005,6 @@ Full per-case runtime / memory table:
 | `tokamak_1species_PASCollisions_withEr_fullTrajectories` | 75.698 | 7.049 | 0.09x | 6.231 | 0.08x | 14.423 | 0.19x | 13.193 | 0.17x | 248.9 | 1319.5 | 5.30x | 1572.1 | 6.32x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_noEr` | 75.362 | 2.033 | 0.03x | 2.023 | 0.03x | 5.243 | 0.07x | 5.207 | 0.07x | 215.3 | 393.5 | 1.83x | 1168.7 | 5.43x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 9/9 | 9/9 | parity_ok | parity_ok |
 | `tokamak_2species_PASCollisions_withEr_fullTrajectories` | 76.530 | 9.435 | 0.12x | 8.669 | 0.11x | 23.369 | 0.31x | 22.264 | 0.29x | 386.6 | 1389.9 | 3.60x | 2007.0 | 5.19x | 0/212 (strict 0/212) | 0/212 (strict 0/212) | 8/9 | 8/9 | parity_ok | parity_ok |
-
-Largest CPU runtime improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
-- `tokamak_2species_PASCollisions_noEr`: 4.0s -> 2.0s (delta=2.0s)
-- `tokamak_1species_PASCollisions_noEr_Nx1`: 2.4s -> 1.3s (delta=1.1s)
-- `quick_2species_FPCollisions_noEr`: 2.1s -> 1.5s (delta=0.6s)
-- `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories`: 2.3s -> 1.8s (delta=0.5s)
-- `sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories`: 2.2s -> 1.7s (delta=0.5s)
-
-Largest CPU process peak-RSS improvements vs `tests/scaled_example_suite_recheck_cpu_frozen_2026-04-23_postkeyfix/suite_report.json`:
-- `tokamak_2species_PASCollisions_noEr`: 2088.6 MB -> 584.8 MB (delta=1503.8 MB)
-- `tokamak_1species_PASCollisions_noEr`: 612.9 MB -> 527.8 MB (delta=85.1 MB)
-- `tokamak_1species_PASCollisions_noEr_Nx1`: 520.3 MB -> 464.3 MB (delta=56.0 MB)
-- `geometryScheme5_3species_loRes`: 569.4 MB -> 540.3 MB (delta=29.1 MB)
-- `geometryScheme4_2species_withEr_fullTrajectories_withQN`: 512.4 MB -> 486.4 MB (delta=26.0 MB)
 <!-- END FAST_BRANCH_AUDIT -->
 
 ## Documentation

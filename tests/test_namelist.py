@@ -21,3 +21,16 @@ def test_parse_input_namelist_quick_example() -> None:
     assert physics["INCLUDEXDOTTERM"] is True
     assert physics["INCLUDEPHI1"] is False
 
+
+def test_parse_double_quoted_string_and_comment_marker(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        "&geometryParameters\n"
+        '  equilibriumFile = "archive/path!with_marker/wout.nc" ! external VMEC file\n'
+        "/\n",
+        encoding="utf-8",
+    )
+
+    nml = read_sfincs_input(input_path)
+
+    assert nml.group("geometryParameters")["EQUILIBRIUMFILE"] == "archive/path!with_marker/wout.nc"

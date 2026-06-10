@@ -160,6 +160,10 @@ def test_indexing_and_paths_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     resolved = resolve_existing_path('"wout.nc"', base_dir=tmp_path)
     assert resolved.path == target
     assert target in resolved.tried
+    stale_absolute = tmp_path / "missing" / "machine" / "path" / "wout.nc"
+    resolved_stale = resolve_existing_path(stale_absolute, base_dir=tmp_path)
+    assert resolved_stale.path == target
+    assert stale_absolute in resolved_stale.tried
 
 
 def test_profiling_and_verbose_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -320,7 +324,7 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         "/\n"
     )
 
-    calls: list[tuple[Path, Path, Path]] = []
+    calls: list[tuple[Path, Path, Path, str]] = []
 
     def _fake_localize(*, input_namelist: Path, overwrite: bool) -> None:
         assert overwrite is False
@@ -332,6 +336,7 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
                 Path(kwargs["input_namelist"]),
                 Path(kwargs["output_path"]),
                 Path(kwargs["solver_trace_path"]),
+                str(kwargs["solve_method"]),
             )
         )
         Path(kwargs["output_path"]).write_bytes(b"")
@@ -345,6 +350,7 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         out_dir=tmp_path / "scan",
         values=[0.5, -0.25, 1.5],
         compute_solution=True,
+        solve_method="host_structured_csr",
         jobs=1,
         emit=lambda level, msg: emits.append((level, msg)),
     )
@@ -354,7 +360,8 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
     assert all(path.exists() for path in result.outputs)
     assert [p.name for p in result.run_dirs] == ["Er1.5", "Er0.5", "Er-0.25"]
     assert len(calls) == 3
-    assert all(trace.name == "sfincsOutput.solver_trace.json" for _, _, trace in calls)
+    assert all(trace.name == "sfincsOutput.solver_trace.json" for _, _, trace, _ in calls)
+    assert {solve_method for _, _, _, solve_method in calls} == {"host_structured_csr"}
     assert any("ETA becomes available after the first completed point" in msg for _, msg in emits)
     assert any("scan-er: progress 3/3" in msg and "est_remaining=" in msg for _, msg in emits)
 

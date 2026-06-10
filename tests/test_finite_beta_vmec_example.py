@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
 
+import h5py
 import numpy as np
+import pytest
 
 
 def _load_example_module() -> ModuleType:
@@ -24,6 +27,18 @@ def _load_redl_compare_module() -> ModuleType:
     repo = Path(__file__).resolve().parents[1]
     script = repo / "examples" / "vmec_jax_finite_beta" / "compare_landreman_paul_qa_bootstrap_redl.py"
     spec = importlib.util.spec_from_file_location("compare_landreman_paul_qa_bootstrap_redl", script)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_qs_paper_redl_module() -> ModuleType:
+    repo = Path(__file__).resolve().parents[1]
+    script = repo / "examples" / "vmec_jax_finite_beta" / "compare_qs_paper_sfincs_jax_redl.py"
+    spec = importlib.util.spec_from_file_location("compare_qs_paper_sfincs_jax_redl", script)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -54,9 +69,12 @@ def test_landreman_paul_redl_comparison_template_uses_scheme5_profile_gradients(
         n_hat=1.2,
         t_i_hat=2.0,
         t_e_hat=2.1,
+        ion_mhat=2.0,
+        electron_mhat=1.0 / 1836.15267343,
         dn_hat_dpsi_n=-0.3,
         dt_i_hat_dpsi_n=-0.4,
         dt_e_hat_dpsi_n=-0.5,
+        collision_operator=1,
         ntheta=5,
         nzeta=7,
         nxi=9,
@@ -68,8 +86,10 @@ def test_landreman_paul_redl_comparison_template_uses_scheme5_profile_gradients(
     assert "geometryScheme = 5" in text
     assert 'equilibriumFile = "/tmp/wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc"' in text
     assert "inputRadialCoordinateForGradients = 1" in text
+    assert "mHats = 2 0.0005446170214876324" in text
     assert "dNHatdpsiNs = -0.3 -0.3" in text
     assert "dTHatdpsiNs = -0.4 -0.5" in text
+    assert "collisionOperator = 1" in text
     assert "Ntheta = 5" in text
     assert "Nzeta = 7" in text
     assert "Nxi = 9" in text
@@ -123,7 +143,12 @@ def test_landreman_paul_redl_comparison_summarizes_synthetic_difference(tmp_path
     assert payload["comparison"]["n_compared"] == 1
     np.testing.assert_allclose(payload["comparison"]["max_abs_diff_A_per_m2"], 5.0e5)
     np.testing.assert_allclose(payload["comparison"]["max_rel_diff"], 0.25)
+    assert "not a Redl-parity claim" in payload["claim_boundary"]
     assert "FSABjHatOverRootFSAB2" in payload["normalization"]["sfincs_si_formula"]
+    assert "sqrt(2*(bsq - p))" in payload["normalization"]["redl_geometry_B_convention"]
+    assert payload["collisionality_contract"]["sfincs_nu_n"] == args.nu_n
+    assert payload["collisionality_contract"]["redl_nu_e_star"] == [1.0]
+    assert payload["collisionality_contract"]["redl_nu_i_star"] == [2.0]
 
 
 def test_landreman_paul_redl_comparison_errorbar_summary_uses_refinement_deltas(tmp_path) -> None:
@@ -177,6 +202,349 @@ def test_landreman_paul_redl_comparison_errorbar_summary_uses_refinement_deltas(
     np.testing.assert_allclose(payload["comparison"]["max_errorbar_A_per_m2"], 5.0e4)
     np.testing.assert_allclose(payload["comparison"]["max_errorbar_rel_to_sfincs"], 0.02)
     assert payload["convergence_errorbars"]["real_space_resolution"]["Ntheta"] == 7
+
+
+def test_qs_paper_redl_comparison_patches_archived_inputs(tmp_path) -> None:
+    mod = _load_qs_paper_redl_module()
+    source = tmp_path / "source.input"
+    destination = tmp_path / "run" / "input.namelist"
+    source.write_text(
+        "&resolutionParameters\n"
+        "  Ntheta = 25\n"
+        "  Nzeta = 39\n"
+        "  Nxi = 60\n"
+        "  Nx = 7\n"
+        "/\n"
+        "&otherNumericalParameters\n"
+        "  solverTolerance = 1e-9\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    mod._write_patched_input(
+        source=source,
+        destination=destination,
+        ntheta=13,
+        nzeta=15,
+        nxi=21,
+        nx=5,
+        tolerance=1.0e-6,
+    )
+
+    text = destination.read_text(encoding="utf-8")
+    assert "Ntheta = 13" in text
+    assert "Nzeta = 15" in text
+    assert "Nxi = 21" in text
+    assert "Nx = 5" in text
+    assert "solverTolerance = 1e-06" in text
+
+
+def test_qs_paper_redl_comparison_parses_surfaces_and_names_dirs() -> None:
+    mod = _load_qs_paper_redl_module()
+
+    np.testing.assert_allclose(mod._parse_s_values("0.6,0.5,0.5"), [0.5, 0.6])
+    with pytest.raises(ValueError, match="requires a case_root"):
+        mod._parse_s_values("all")
+    assert mod._surface_dir_name(0.5) == "psiN_0.5"
+    assert mod._format_surface_label(0.55) == "s0p550"
+    args = mod._build_parser().parse_args(["--solve-method", "sparse_pc_gmres"])
+    assert args.solve_method == "sparse_pc_gmres"
+    assert args.s_values == "all"
+    assert args.verbose_sfincs is False
+    verbose_args = mod._build_parser().parse_args(["--verbose-sfincs"])
+    assert verbose_args.verbose_sfincs is True
+    quick_args = mod._build_parser().parse_args(["--quick"])
+    assert quick_args.quick is True
+    errorbar_args = mod._build_parser().parse_args(
+        [
+            "--with-errorbars",
+            "--real-ntheta",
+            "17",
+            "--real-nzeta",
+            "19",
+            "--velocity-nxi",
+            "25",
+            "--velocity-nx",
+            "6",
+        ]
+    )
+    assert errorbar_args.with_errorbars is True
+    assert errorbar_args.real_ntheta == 17
+    assert errorbar_args.real_nzeta == 19
+    assert errorbar_args.velocity_nxi == 25
+    assert errorbar_args.velocity_nx == 6
+    claim_args = mod._build_parser().parse_args(["--match-fortran-resolution", "--require-same-resolution"])
+    assert claim_args.match_fortran_resolution is True
+    assert claim_args.require_same_resolution is True
+    custom_fortran_args = mod._build_parser().parse_args(["--fortran-case-root", "/tmp/fortran_lowres"])
+    assert custom_fortran_args.fortran_case_root == Path("/tmp/fortran_lowres")
+
+
+def test_qs_paper_redl_comparison_forwards_verbose_to_sfincs_writer(tmp_path, monkeypatch) -> None:
+    mod = _load_qs_paper_redl_module()
+    source = tmp_path / "source.input"
+    source.write_text(
+        "&resolutionParameters\n"
+        "  Ntheta = 25\n"
+        "  Nzeta = 39\n"
+        "  Nxi = 60\n"
+        "  Nx = 7\n"
+        "/\n"
+        "&otherNumericalParameters\n"
+        "  solverTolerance = 1e-9\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    seen: dict[str, object] = {}
+
+    def fake_writer(**kwargs):
+        seen["verbose"] = kwargs["verbose"]
+        output_path = Path(kwargs["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with h5py.File(output_path, "w") as h5:
+            h5["FSABjHat"] = np.asarray([-1.0])
+            h5["rN"] = np.asarray([0.5])
+            h5["psiN"] = np.asarray([0.25])
+            h5["NIterations"] = np.asarray([1])
+
+    monkeypatch.setattr(mod, "write_sfincs_jax_output_h5", fake_writer)
+    args = mod._build_parser().parse_args(["--verbose-sfincs", "--force", "--out-dir", str(tmp_path)])
+
+    row = mod._run_or_read_sfincs_jax(
+        source_input=source,
+        wout_path=tmp_path / "wout.nc",
+        run_dir=tmp_path / "run",
+        args=args,
+    )
+
+    assert seen["verbose"] is True
+    assert row["status"] == "ok"
+    assert row["NIterations"] == 1
+
+
+def test_qs_paper_redl_comparison_env_can_enable_sfincs_verbose(monkeypatch) -> None:
+    mod = _load_qs_paper_redl_module()
+    args = mod._build_parser().parse_args([])
+
+    assert mod._verbose_sfincs_enabled(args) is False
+    monkeypatch.setenv("SFINCS_JAX_EXAMPLE_VERBOSE", "1")
+    assert mod._verbose_sfincs_enabled(args) is True
+
+
+def test_qs_paper_redl_comparison_discovers_all_archived_surfaces(tmp_path) -> None:
+    mod = _load_qs_paper_redl_module()
+    for value in (0.6, 0.5, 0.5):
+        surface = tmp_path / f"psiN_{value:g}"
+        surface.mkdir(parents=True, exist_ok=True)
+        (surface / "input.namelist").write_text("&general\n/\n", encoding="utf-8")
+
+    np.testing.assert_allclose(mod._parse_s_values("all", case_root=tmp_path), [0.5, 0.6])
+
+
+def test_qs_paper_redl_comparison_loads_archived_fortran_outputs(tmp_path) -> None:
+    mod = _load_qs_paper_redl_module()
+    output_path = tmp_path / "psiN_0.55" / "sfincsOutput.h5"
+    output_path.parent.mkdir(parents=True)
+    with h5py.File(output_path, "w") as h5:
+        h5["FSABjHat"] = np.asarray([-1.25])
+        h5["Ntheta"] = np.asarray(25)
+        h5["Nzeta"] = np.asarray(39)
+        h5["Nxi"] = np.asarray(60)
+        h5["Nx"] = np.asarray(7)
+        h5["NIterations"] = np.asarray(1)
+    (output_path.parent / "slurm-123.out").write_text(
+        "Done with the main solve. Time to solve: 42.5\n"
+        "Memory effectively used, total in Mbytes (INFOG(22)): 1234\n",
+        encoding="utf-8",
+    )
+
+    rows = mod._load_archived_fortran_outputs(case_root=tmp_path)
+
+    assert len(rows) == 1
+    assert rows[0]["s"] == 0.55
+    assert rows[0]["Ntheta"] == 25
+    assert rows[0]["elapsed_s"] == 42.5
+    assert rows[0]["memory_mb"] == 1234.0
+    assert rows[0]["memory_metric"] == "mumps_effective_total_mb"
+    np.testing.assert_allclose(rows[0]["jdotb_si"], -1.25 * mod.SFINCS_PAPER_CURRENT_FACTOR)
+
+
+def test_qs_paper_redl_comparison_loads_local_fortran_profile(tmp_path) -> None:
+    mod = _load_qs_paper_redl_module()
+    output_path = tmp_path / "psiN_0.5" / "sfincsOutput.h5"
+    output_path.parent.mkdir(parents=True)
+    with h5py.File(output_path, "w") as h5:
+        h5["FSABjHat"] = np.asarray([-1.0])
+        h5["Ntheta"] = np.asarray(13)
+        h5["Nzeta"] = np.asarray(13)
+        h5["Nxi"] = np.asarray(21)
+        h5["Nx"] = np.asarray(5)
+        h5["NIterations"] = np.asarray(1)
+        h5["elapsed time (s)"] = np.asarray(0.0)
+    (output_path.parent / "sfincs_fortran_stdout.txt").write_text(
+        " ** Space in MBYTES used for solve                        :       126\n"
+        " Done with the main solve.  Time to solve:    1.1787289999997483       seconds.\n",
+        encoding="utf-8",
+    )
+    (output_path.parent / "sfincs_fortran_stderr.txt").write_text(
+        "           319012864  maximum resident set size\n",
+        encoding="utf-8",
+    )
+
+    rows = mod._load_archived_fortran_outputs(case_root=tmp_path)
+
+    assert len(rows) == 1
+    assert rows[0]["elapsed_s"] == pytest.approx(1.1787289999997483)
+    assert rows[0]["memory_mb"] == 126.0
+    assert rows[0]["memory_metric"] == "mumps_solve_space_mb"
+    assert rows[0]["profile"]["max_rss_mb"] == pytest.approx(319.012864)
+
+
+def test_qs_paper_redl_comparison_same_resolution_gate_is_fail_closed() -> None:
+    mod = _load_qs_paper_redl_module()
+    selected_fortran_rows = [
+        {"status": "ok", "s": 0.5, "Ntheta": 25, "Nzeta": 39, "Nxi": 60, "Nx": 7},
+        {"status": "ok", "s": 0.7, "Ntheta": 25, "Nzeta": 39, "Nxi": 60, "Nx": 7},
+    ]
+
+    reduced_args = mod._build_parser().parse_args(["--require-same-resolution", "--ntheta", "13"])
+    comparison = mod._resolution_comparison(args=reduced_args, selected_fortran_rows=selected_fortran_rows)
+
+    assert comparison["status"] == "mixed_resolution"
+    assert comparison["same_resolution_on_compared_surfaces"] is False
+    with pytest.raises(SystemExit, match="Refusing mixed-resolution"):
+        mod._enforce_same_resolution_requirement(reduced_args, comparison)
+
+    matched_args = mod._build_parser().parse_args(["--match-fortran-resolution", "--require-same-resolution"])
+    mod._apply_matching_fortran_resolution(matched_args, selected_fortran_rows)
+    matched = mod._resolution_comparison(args=matched_args, selected_fortran_rows=selected_fortran_rows)
+
+    assert (matched_args.ntheta, matched_args.nzeta, matched_args.nxi, matched_args.nx) == (25, 39, 60, 7)
+    assert matched["status"] == "same_resolution"
+    assert matched["same_resolution_on_compared_surfaces"] is True
+    mod._enforce_same_resolution_requirement(matched_args, matched)
+
+
+def test_qs_paper_redl_comparison_fortran_errorbar_sidecar_is_explicit(tmp_path) -> None:
+    mod = _load_qs_paper_redl_module()
+    sidecar = tmp_path / "fortran_errorbars.json"
+    sidecar.write_text(
+        json.dumps(
+            {
+                "definition": "synthetic refinement bars",
+                "surfaces": [
+                    {"s": 0.5, "jdotb_si_errorbar": 1.0e5},
+                    {"s": 0.7, "errorbar_si": 2.0e5},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    rows = [{"status": "ok", "s": 0.5}, {"status": "ok", "s": 0.7}, {"status": "ok", "s": 0.9}]
+
+    errorbars = mod._load_fortran_errorbar_map(sidecar)
+    mod._apply_fortran_errorbars(rows, errorbars)
+
+    assert errorbars == {0.5: 1.0e5, 0.7: 2.0e5}
+    assert rows[0]["jdotb_si_errorbar"] == 1.0e5
+    assert rows[1]["jdotb_si_errorbar"] == 2.0e5
+    assert "jdotb_si_errorbar" not in rows[2]
+
+
+def test_qs_paper_redl_comparison_plots_synthetic_payload(tmp_path) -> None:
+    mod = _load_qs_paper_redl_module()
+    payload = {
+        "case_title": "Synthetic QA benchmark",
+        "sfincs_resolution_label": "13x13x21x5",
+        "resolution_comparison": {
+            "same_resolution_on_compared_surfaces": False,
+            "sfincs_fortran_v3_resolution_label": "25x39x60x7",
+        },
+        "redl": {
+            "s": [0.45, 0.5, 0.55, 0.6, 0.65],
+            "jdotb_si": [-8.2e6, -7.6e6, -7.45e6, -7.2e6, -6.9e6],
+        },
+        "sfincs_fortran_v3": [
+            {"status": "ok", "s": 0.5, "jdotb_si": -7.40e6, "jdotb_si_errorbar": 8.0e4},
+            {"status": "ok", "s": 0.55, "jdotb_si": -7.60e6},
+            {"status": "ok", "s": 0.6, "jdotb_si": -7.65e6},
+        ],
+        "sfincs_jax": [
+            {"status": "ok", "s": 0.5, "jdotb_si": -7.62e6},
+            {"status": "ok", "s": 0.55, "jdotb_si": -7.46e6},
+            {"status": "ok", "s": 0.6, "jdotb_si": -7.13e6},
+        ],
+        "metrics": {
+            "requested_points": 3,
+            "completed_points": 3,
+            "max_relative_difference": 0.05,
+            "max_jax_relative_difference_vs_redl": 0.05,
+            "max_jax_relative_difference_vs_fortran": 0.07,
+            "sfincs_jax_elapsed_s_sum": 12.3,
+            "max_errorbar_rel_to_baseline": 0.02,
+        },
+        "convergence_errorbars": {
+            "jdotb_si_errorbar": [1.0e5, 2.0e5, 1.5e5],
+            "jdotb_si_errorbar_rel_to_baseline": [0.01, 0.02, 0.015],
+        },
+    }
+
+    mod._plot(payload, png_path=tmp_path / "qs_redl.png", pdf_path=tmp_path / "qs_redl.pdf")
+
+    assert (tmp_path / "qs_redl.png").exists()
+    assert (tmp_path / "qs_redl.pdf").exists()
+    assert (tmp_path / "qs_redl.png").stat().st_size > 10_000
+    assert (tmp_path / "qs_redl.pdf").stat().st_size > 1_000
+
+
+def test_qs_paper_redl_comparison_errorbars_use_refinement_deltas() -> None:
+    mod = _load_qs_paper_redl_module()
+
+    baseline = np.asarray([-7.0e6, -6.0e6, np.nan])
+    real = np.asarray([-7.1e6, -5.9e6, -4.0e6])
+    velocity = np.asarray([-6.8e6, -6.4e6, -3.0e6])
+
+    error = mod._pointwise_max_abs_delta(baseline, [real, velocity])
+
+    np.testing.assert_allclose(error[:2], [2.0e5, 4.0e5])
+    assert np.isnan(error[2])
+
+
+def test_qs_paper_redl_comparison_profiles_ignore_failed_rows() -> None:
+    mod = _load_qs_paper_redl_module()
+    rows = [
+        {"status": "ok", "jdotb_si": -7.0e6},
+        {"status": "error", "jdotb_si": -99.0e6},
+        {"status": "missing"},
+    ]
+
+    profile = mod._sfincs_jdotb_profile_from_rows(rows)
+
+    np.testing.assert_allclose(profile[0], -7.0e6)
+    assert np.isnan(profile[1])
+    assert np.isnan(profile[2])
+
+
+def test_qs_paper_redl_comparison_can_hide_fortran_overlay(tmp_path) -> None:
+    mod = _load_qs_paper_redl_module()
+    payload = {
+        "case_title": "Synthetic QA benchmark",
+        "hide_fortran": True,
+        "sfincs_resolution_label": "13x13x21x5",
+        "redl": {"s": [0.5, 0.6], "jdotb_si": [-7.6e6, -7.2e6]},
+        "sfincs_fortran_v3": [{"status": "ok", "s": 0.5, "jdotb_si": -99.0e6}],
+        "sfincs_jax": [{"status": "ok", "s": 0.5, "jdotb_si": -7.62e6}],
+        "metrics": {
+            "requested_points": 1,
+            "completed_points": 1,
+            "max_jax_relative_difference_vs_redl": 0.01,
+        },
+    }
+
+    mod._plot(payload, png_path=tmp_path / "no_fortran.png", pdf_path=tmp_path / "no_fortran.pdf")
+
+    assert (tmp_path / "no_fortran.png").exists()
+    assert (tmp_path / "no_fortran.pdf").exists()
 
 
 def test_finite_beta_example_template_uses_vmec_scheme5_and_er() -> None:

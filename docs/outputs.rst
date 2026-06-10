@@ -35,7 +35,25 @@ CLI
 For RHSMode=1 solves, the output includes solver-convergence metadata in the
 main file:
 
-- ``linearSolverMethod`` records the selected solve lane.
+- ``linearSolverMethod`` records the requested solve method passed by the CLI,
+  Python API, or environment policy. ``linearSolverRequestedMethod`` repeats the
+  requested method when the selected solver reports it explicitly.
+- ``linearSolverPath`` and ``linearSolverKind`` record the selected
+  implementation route when the solver exposes it, for example
+  ``structured_full_csr_host_gmres`` and ``structured_full_csr`` for the
+  no-probe host-CSR RHSMode=1 lane.
+- ``linearSolverPreconditionerKind`` records the selected preconditioner when
+  available, for example ``xblock_tz_low_l_schur``.
+- ``linearSolverSparsePCSelectedKind`` records the direct-tail structured
+  preconditioner selected by sparse-PC solves when available, for example
+  ``active_fortran_v3_reduced_native_stack`` for a preflight-gated lower-memory
+  candidate or ``active_fortran_v3_reduced_lu`` for the robust active-LU
+  fallback. Direct-tail fields such as
+  ``linearSolverDirectTailStructuredPCMaxMB*``,
+  ``linearSolverDirectTailSupportMode*``, and
+  ``linearSolverDirectTailTrueCoupledCoarse*`` expose memory caps, preflight
+  support-mode decisions, and coarse-correction diagnostics when the selected
+  route provides them.
 - ``linearSolverResidualNorm`` and ``linearSolverResidualTarget`` record the
   true residual norm and requested target used by the output safety gate.
 - ``linearSolverResidualTargetRatio`` is residual divided by target.
@@ -56,6 +74,8 @@ main file:
 - ``linearSolverSparsePatternNnz``, ``linearSolverSparsePatternAvgRowNnz``, and
   ``linearSolverSparsePatternMaxRowNnz`` record the structural sparse pattern
   used by the explicit host sparse-PC lane.
+- ``linearSolverCsrNnz`` and ``linearSolverCsrOperatorNbytes`` record the actual
+  assembled full-CSR operator size for the no-probe structured CSR route.
 - ``linearSolverSparsePCFactorNbytesEstimate`` and
   ``linearSolverSparsePCFactorNnzEstimate`` estimate SuperLU ``L``/``U`` factor
   storage for sparse-PC routes. These are estimates of factor arrays, not full
