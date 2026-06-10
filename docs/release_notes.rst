@@ -6,6 +6,15 @@ Unreleased
 
 - No pending changes.
 
+v1.1.6
+------
+
+This patch release keeps the ``v1.1.5`` solver and documentation state, then
+stabilizes the Linux/JAX CI gate for the active-ladder RHSMode=1 auto-selection
+test. The affected test still requires a residual at the requested tolerance
+scale and still checks the selected solver path; it no longer fails on a small
+last-iteration roundoff difference across JAX builds.
+
 v1.1.5
 ------
 
